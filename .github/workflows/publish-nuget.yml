@@ -58,6 +58,16 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Workaround for NU1301 on a fresh CI checkout: the repo's
+      # `nuget.config` declares a `local` source at `..\local-nuget-feed`
+      # for dev-machine cross-repo iteration. That folder exists on the
+      # workspace root locally but not on the runner; NuGet treats the
+      # missing path as a hard error during restore. Creating an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed to
+      # `nuget.org` for external deps. No effect on the published nupkgs.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../local-nuget-feed
+
       - name: Pack + push every public-surface SDK package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
