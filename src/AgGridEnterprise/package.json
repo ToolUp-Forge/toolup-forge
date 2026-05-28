@@ -1,0 +1,15 @@
+{
+    "name": "@toolup/aggrid-enterprise",
+    "version": "1.0.0",
+    "private": true,
+    "dependencies": {
+        "ag-grid-enterprise": "35.3.0",
+        "ag-charts-enterprise": "13.3.0"
+    },
+    "peerDependencies": {
+        "ag-grid-community": "^35.0.0",
+        "ag-grid-react": "^35.0.0",
+        "ag-charts-community": "^13.0.0",
+        "ag-charts-react": "^13.0.0"
+    }
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.Oidc</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.Oidc</AssemblyName>
+    <Description>Generic OIDC server-side IAuthProvider for ToolUp.Platform: JWKS discovery + RS256 JWT validation.</Description>
+    <PackageTags>fsharp;sdk;auth;oidc;jwt;server;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="OidcAuthProvider.Jwt.fs" />
+    <Compile Include="OidcAuthProvider.Jwks.fs" />
+    <Compile Include="OidcAuthProvider.fs" />
+    <Compile Include="OidcAuthValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- AspNetCore framework reference for HttpContext visibility. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

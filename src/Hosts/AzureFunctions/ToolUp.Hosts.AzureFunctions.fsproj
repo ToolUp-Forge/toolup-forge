@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Hosts.AzureFunctions</PackageId>
+    <AssemblyName>ToolUp.Hosts.AzureFunctions</AssemblyName>
+    <Description>Azure Functions Worker host adapter for ToolUp.Platform. Bridges Functions HTTP triggers through IServerHost.Invoke so a compose-built deployment runs on Azure Functions Consumption / Premium plans without changes to its handler code.</Description>
+    <PackageTags>fsharp;sdk;serverless;azure;azure-functions;host-adapter</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AzureFunctionHost.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.AI Core — shared AI types: IAIProvider extension point, AIToolDefinition, AIAssistantMode, AISettings DTOs, AILatencyTypes. The "minimum viable consumer-of-AI" floor for downstream packages (RAG, KnowledgeBase).</Description>
+        <PackageTags>fsharp;sdk;types;ai</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+         under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.AI\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\AITypes.fs" />
+        <Compile Include="Shared\IAIProviderFactory.fs" />
+        <Compile Include="Shared\AISettingsTypes.fs" />
+        <Compile Include="Shared\AILatencyTypes.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

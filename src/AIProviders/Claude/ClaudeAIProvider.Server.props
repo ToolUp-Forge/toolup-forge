@@ -1,0 +1,11 @@
+<Project>
+  <!-- Phase 11.B follow-up companion cutover (2026-05-08): server source
+       files moved to <Compile> in ClaudeAIProvider.fsproj and ship as
+       ClaudeAIProvider.dll referenced via <ProjectReference> from the
+       consuming server project. This file is retained as an empty marker.
+       The Client.props sibling is unchanged — client-side cutover is a
+       follow-up. -->
+  <ItemGroup>
+    <!-- (Server source items removed Phase 11.B follow-up.) -->
+  </ItemGroup>
+</Project>

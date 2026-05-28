@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AI.SampleClientTool.Server</PackageId>
+    <Description>Apache-2.0 in-tree reference companion (Server tier) — registers the sample calculator as a ClientResident AI tool. Reference-only: not a production companion. Exists so the IClientToolAuthorizer + ClientToolDispatch substrate has an in-tree consumer exercising the seam end-to-end.</Description>
+    <PackageTags>fsharp;sdk;ai;sample;reference;client-resident;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Server\Compose.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.AI.SampleClientTool.Core\ToolUp.AI.SampleClientTool.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+  </ItemGroup>
+</Project>

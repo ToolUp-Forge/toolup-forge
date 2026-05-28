@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);data\**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Server.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- ToolUp.Sdk meta-manifest reference triggers NuGet restore of the
+         meta package; its build/ToolUp.Sdk.props is then auto-imported by
+         Directory.Packages.props so every ToolUp.* PackageVersion item
+         becomes available across the solution. PrivateAssets="all" keeps
+         the meta-package out of any downstream consumer dep graph (the
+         server is an Exe, so this is hygiene rather than load-bearing). -->
+    <PackageReference Include="ToolUp.Sdk" PrivateAssets="all" />
+    <PackageReference Include="ToolUp.Platform.Core" />
+    <PackageReference Include="ToolUp.Platform.Server" />
+    <ProjectReference Include="..\Modules\Starter\Starter.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Giraffe" />
+    <PackageReference Include="Fable.Remoting.Giraffe" />
+    <PackageReference Include="Fable.Remoting.Json" />
+  </ItemGroup>
+</Project>

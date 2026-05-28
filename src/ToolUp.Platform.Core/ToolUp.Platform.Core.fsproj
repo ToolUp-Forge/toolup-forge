@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform Core — shared types and interfaces (ILogger, IBlobStorage, IAuthProvider, IAIProvider, INotificationChannel, IHealthCheck, IConfigValidator, etc.). No server or client deps; the "minimum viable module" floor for downstream packages.</Description>
+        <PackageTags>fsharp;sdk;types;interfaces</PackageTags>
+    </PropertyGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+         under fable/. Core types are shared between server-tier (consumes
+         the DLL) and Fable client-tier (consumes the source) — both ship
+         in the same nupkg. Mirrors the Feliz / Fable.Elmish convention. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <!-- Phase 11.C.2 closure: pack the parent companion's README. All
+         four ToolUp.Platform tiers (Core / Server / Client / Build) ship
+         the same parent README; tier-specific detail lives in <Description>. -->
+    <ItemGroup>
+        <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\LogLevel.fs" />
+        <Compile Include="Shared\Interfaces\ILogger.fs" />
+        <!-- Phase 57 — static-prerender substrate types lifted out of
+             Client/SDK.ClientTypes.fs so ToolUp.Platform.Build can
+             consume them in the FAKE Prerender target factory without
+             a Build → Client dep that would re-introduce a Fable-tier
+             pull into the .NET-only build package. -->
+        <Compile Include="Shared\Types\PrerenderTypes.fs" />
+        <Compile Include="Shared\Types\DataManagementTypes.fs" />
+        <Compile Include="Shared\Types\ProcessedDataTypes.fs" />
+        <Compile Include="Shared\Visualisation.fs" />
+        <Compile Include="Shared\TimeManagement.fs" />
+        <Compile Include="Shared\Interfaces\IFileProcessor.fs" />
+        <Compile Include="Shared\Types\VectorKnowledgeTypes.fs" />
+        <Compile Include="Shared\Types\VectorisationTypes.fs" />
+        <Compile Include="Shared\Interfaces\IAuthProvider.fs" />
+        <Compile Include="Shared\Types\AuthConfig.fs" />
+        <Compile Include="Shared\Auth\AuthMetrics.fs" />
+        <Compile Include="Shared\Types\DataSubjectTypes.fs" />
+        <Compile Include="Shared\Types\DataSubjectApiTypes.fs" />
+        <Compile Include="Shared\Interfaces\IBlobStorage.fs" />
+        <Compile Include="Shared\Interfaces\ISecretStore.fs" />
+        <!-- Phase 11.C.5 Tier 3 — unified RetryPolicy (replaces the
+             AI-side `{ MaxRetries; BackoffMs; TimeoutMs }` and
+             audit-side `AuditReplicatorRetryPolicy` shapes). Compiled
+             before IAIProvider.fs so the provider interface references
+             the unified record. -->
+        <Compile Include="Shared\Types\RetryPolicy.fs" />
+        <Compile Include="Shared\Interfaces\IAIProvider.fs" />
+        <Compile Include="Shared\Types\StorageScope.fs" />
+        <Compile Include="Shared\EncryptionTypes.fs" />
+        <Compile Include="Shared\EntityTypes.fs" />
+        <Compile Include="Shared\EntityQueryTypes.fs" />
+        <Compile Include="Shared\EntityQuery.fs" />
+        <Compile Include="Shared\FeatureFlagTypes.fs" />
+        <Compile Include="Shared\Types\RoleTypes.fs" />
+        <Compile Include="Shared\Types\PermissionTypes.fs" />
+        <!-- Phase 66 Stream A.1 — Subject / SurfaceProfile / SurfaceRequirement
+             types compiled before AccessContext (which now carries a Subject
+             field). ShareTokenTypes hoisted alongside because Subject.ClaimBearer
+             references ShareTokenClaim. -->
+        <Compile Include="Shared\ShareTokenTypes.fs" />
+        <Compile Include="Shared\Types\SurfaceProfile.fs" />
+        <Compile Include="Shared\Types\Subject.fs" />
+        <Compile Include="Shared\Types\SurfaceRequirement.fs" />
+        <Compile Include="Shared\Types\AccessContext.fs" />
+        <Compile Include="Shared\Types\TeamTypes.fs" />
+        <Compile Include="Shared\Types\TeamRoles.fs" />
+        <Compile Include="Shared\Types\ModuleAITypes.fs" />
+        <Compile Include="Shared\Types\ConversationTypes.fs" />
+        <Compile Include="Shared\FeatureFlagApi.fs" />
+        <Compile Include="Shared\IModuleQueryBus.fs" />
+        <Compile Include="Shared\Types\ConfigTypes.fs" />
+        <Compile Include="Shared\Types\ConfigApi.fs" />
+        <Compile Include="Shared\Types\NotificationTypes.fs" />
+        <Compile Include="Shared\INotificationChannel.fs" />
+        <Compile Include="Shared\IHealthCheck.fs" />
+        <Compile Include="Shared\ISmokeTest.fs" />
+        <Compile Include="Shared\IConfigValidator.fs" />
+        <Compile Include="Shared\HealthMonitorApi.fs" />
+        <Compile Include="Shared\IJobSchedulerTelemetry.fs" />
+        <Compile Include="Shared\ServiceStatusTypes.fs" />
+        <Compile Include="Shared\ServiceStatusBoardApi.fs" />
+        <Compile Include="Shared\IDevDiagnosticsContributor.fs" />
+        <Compile Include="Shared\NarrativeTypes.fs" />
+        <Compile Include="Shared\NarrativePlaintext.fs" />
+        <Compile Include="Shared\NarrativeMarkdown.fs" />
+        <Compile Include="Shared\SDK.Shared.fs" />
+        <Compile Include="Shared\IRateLimiter.fs" />
+        <Compile Include="Shared\RateLimitDescriptor.fs" />
+        <Compile Include="Shared\AuditTypes.fs" />
+        <Compile Include="Shared\Interfaces\ISubjectResolver.fs" />
+        <Compile Include="Shared\Interfaces\IAnonymousSessionMigrator.fs" />
+        <Compile Include="Shared\IShareTokenRateLimiter.fs" />
+        <Compile Include="Shared\Types\TeamInviteTypes.fs" />
+        <Compile Include="Shared\IPendingInviteStore.fs" />
+        <Compile Include="Shared\ITeamInviteApi.fs" />
+        <Compile Include="Shared\WebhookTypes.fs" />
+        <Compile Include="Shared\WebhookApi.fs" />
+        <Compile Include="Shared\DataObjectTypes.fs" />
+        <Compile Include="Shared\ResultTypes.fs" />
+        <Compile Include="Shared\LineageTypes.fs" />
+        <Compile Include="Shared\JobTypes.fs" />
+        <Compile Include="Shared\JobApi.fs" />
+        <!-- Phase 10h — OAuth token refresh substrate types (descriptor + result DU). -->
+        <Compile Include="Shared\Types\OAuthRefreshTypes.fs" />
+        <Compile Include="Shared\DataIngestionTypes.fs" />
+        <Compile Include="Shared\DataIngestionApi.fs" />
+        <Compile Include="Shared\MaintenanceApi.fs" />
+        <Compile Include="Shared\PlatformAdminApi.fs" />
+        <Compile Include="Shared\UsageTypes.fs" />
+        <Compile Include="Shared\UsageQueryApi.fs" />
+        <Compile Include="Shared\MetricsTypes.fs" />
+        <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
+        <Compile Include="Shared\Interfaces\IProviderProfile.fs" />
+        <Compile Include="Shared\Types\I18nTypes.fs" />
+        <Compile Include="Shared\I18nDefaults.fs" />
+        <Compile Include="Shared\Interfaces\ILocaleResolver.fs" />
+        <Compile Include="Shared\Api.fs" />
+    </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

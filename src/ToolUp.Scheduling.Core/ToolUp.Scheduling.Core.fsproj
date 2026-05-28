@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Scheduling Core — booking-scheduler types (SchedulingTypes, RecurrenceExpander, iCalendar), Fable.Remoting contract.</Description>
+        <PackageTags>fsharp;sdk;types;scheduling</PackageTags>
+        <!-- Phase 11.B follow-up cross-tier cutover (2026-05-08): Scheduling
+             companion split into Core/Server. Core carries shared types
+             (SchedulingTypes, RecurrenceExpander, iCalendar, SchedulingApi,
+             SchedulingEvents). Client surface is empty today (.Client.props
+             is reserved for future Feliz components). -->
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Scheduling\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\SchedulingTypes.fs" />
+        <Compile Include="Shared\RecurrenceExpander.fs" />
+        <Compile Include="Shared\iCalendar.fs" />
+        <Compile Include="Shared\SchedulingApi.fs" />
+        <Compile Include="Shared\SchedulingEvents.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

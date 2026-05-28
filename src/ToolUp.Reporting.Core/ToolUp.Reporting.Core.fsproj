@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Reporting.Core</PackageId>
+        <Description>ToolUp.Reporting Core — shared types (ReportTemplate / PlaceholderSchema / RenderError / TemplateFormat DU) + IReportRenderer interface + the zero-dep MarkdownRenderer + HtmlRenderer. The minimum surface a Reporting consumer needs.</Description>
+        <PackageTags>fsharp;sdk;types;reporting;document-generation</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Reporting\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="ReportingTypes.fs" />
+        <Compile Include="IReportRenderer.fs" />
+        <Compile Include="PlaceholderSubstitution.fs" />
+        <Compile Include="MarkdownRenderer.fs" />
+        <Compile Include="HtmlRenderer.fs" />
+    </ItemGroup>
+</Project>

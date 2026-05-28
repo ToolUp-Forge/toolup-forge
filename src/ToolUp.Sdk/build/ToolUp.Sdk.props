@@ -1,0 +1,109 @@
+<Project>
+  <!--
+    ToolUp.Sdk meta-manifest. Imported by consuming apps' Directory.Packages.props:
+
+        <Project>
+          <PropertyGroup>
+            <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+            <ToolUpSdkVersion>0.1.0</ToolUpSdkVersion>
+          </PropertyGroup>
+          <Import Project="$(NuGetPackageRoot)toolup.sdk\$(ToolUpSdkVersion)\build\ToolUp.Sdk.props" />
+          <ItemGroup>
+            <PackageVersion Include="..." Version="..." />  <!-- non-ToolUp deps -->
+          </ItemGroup>
+        </Project>
+
+    Each consumer fsproj then adds <PackageReference Include="ToolUp.X" />
+    (no Version attribute — versions live centrally) and resolves through
+    this manifest at restore time.
+
+    Phase 11.C.2 (2026-05-08): every package shipped from this monorepo
+    is listed below. Bumping <ToolUpSdkVersion> in the consumer's
+    Directory.Packages.props upgrades all of them in lockstep. Per-package
+    overrides are still possible — declaring a more specific
+    <PackageVersion Include="ToolUp.X" Version="..." /> later in the
+    consumer's Directory.Packages.props takes precedence.
+  -->
+  <ItemGroup>
+    <!-- ToolUp.Platform — the SDK floor -->
+    <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Cross-tier companions -->
+    <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Module testing scaffold (Phase 11a) -->
+    <PackageVersion Include="ToolUp.Platform.Testing" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Public-rendering surface (Phase 38) -->
+    <PackageVersion Include="ToolUp.PublicRendering" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Asset store (Phase 39) -->
+    <PackageVersion Include="ToolUp.AssetStore" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Reporting (Phase 23 MVP — Markdown + HTML zero-dep renderers) -->
+    <PackageVersion Include="ToolUp.Reporting.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.Server" Version="$(ToolUpSdkVersion)" />
+
+    <!-- AI provider companions -->
+    <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
+
+    <!-- AI client-resident-tool sample (Phase 46.B reference companion) -->
+    <PackageVersion Include="ToolUp.AI.SampleClientTool.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.SampleClientTool.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.SampleClientTool.Client" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Embedding provider companions -->
+    <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Reranker companions (Phase 14f — ONNX cross-encoder local default) -->
+    <PackageVersion Include="ToolUp.Rerankers.Local" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Auth provider companions -->
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.ClerkUI" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Storage / Secrets / VectorStores -->
+    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.GoogleCloud" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.AwsSecretsManager" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.HashiCorpVault" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Audit sinks (Phase 11.C.5 — Platform prefix dropped 2026-05-27) -->
+    <PackageVersion Include="ToolUp.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.SplunkHec" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.DatadogLogs" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Notification channels -->
+    <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.Smtp" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.SendGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Metrics + UI -->
+    <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />
+  </ItemGroup>
+</Project>

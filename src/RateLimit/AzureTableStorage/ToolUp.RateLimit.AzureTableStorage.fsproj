@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.RateLimit.AzureTableStorage</PackageId>
+    <AssemblyName>ToolUp.RateLimit.AzureTableStorage</AssemblyName>
+    <Description>Azure Table Storage IRateLimitStore companion for ToolUp.Platform. Atomic increment-and-check via ETag retry pattern; calendar-window-aligned counters; per-key isolation.</Description>
+    <PackageTags>fsharp;sdk;rate-limit;azure;table-storage;serverless</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AzureTableRateLimitStore.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Azure.Data.Tables" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,79 @@
+# RAG retrieval-quality eval — Phase 14j CI quality gate (ACTIVE).
+#
+# Runs the standalone eval harness (src/ToolUp.RAG.Evaluation) on every
+# PR that touches the retrieval pipeline or a reranker companion, so a
+# quality regression is caught in CI instead of by reading degraded
+# chat transcripts.
+#
+# ─── Quality gate status: ACTIVE ────────────────────────────────────
+#
+# The harness runs with `--baseline fixtures/eval-baseline.json` and
+# exits non-zero on a >5% absolute Recall@5 OR nDCG@10 drop vs the
+# committed baseline (RetrievalEval.detectRegression 0.05). A regressing
+# PR fails this job.
+#
+# NOTE on the baseline path: `dotnet run --project <dir>` sets the
+# process working directory to <dir>, so the harness resolves relative
+# paths against src/ToolUp.RAG.Evaluation/, NOT the repo root. The
+# `--baseline` argument MUST be `fixtures/eval-baseline.json` (project-
+# relative). A repo-root-relative path resolves to nothing and the
+# harness then SILENTLY SKIPS the check and exits 0 — a dead gate.
+#
+# This was previously report-only because the smoke metric jittered
+# ±0.10 run-to-run (exceeding the 0.05 tolerance, so any committed
+# baseline would flake CI). That non-determinism is now fixed: every
+# collection→ranked-list transition on the scored path (the TF-IDF
+# vocab build in LocalEmbeddingProvider, fuseRRF, the InMemory vector /
+# BM25 searches, and the pipeline merge/boost sorts) uses a TOTAL-ORDER
+# key — score then a unique `(scope, chunkId)` (or `(-df, term)` for the
+# vocab) — so output no longer depends on Dictionary enumeration order
+# or F# sort stability. The harness is now byte-identical across runs
+# (verified 10+ consecutive runs), so a committed baseline is stable.
+#
+# ─── Baseline-regeneration caveat (read before "fixing" a red gate) ──
+#
+# The smoke fixture's LocalEmbeddingProvider is an *incremental*
+# TF-IDF: each query embed mutates shared df/docCount and embeds against
+# a later vocab snapshot than the seeded docs. This is deterministic
+# (the seed + query order is fixed and sequential) but it means the
+# baseline encodes that stateful coupling. A LEGITIMATE change to any
+# of the following shifts the metrics and is expected to require
+# regenerating the baseline (it is NOT a quality regression):
+#   - any of the total-order sort sites, or the embedder algorithm;
+#   - the fixture (fixtures/platform-readme.json) corpus/queries;
+#   - the harness seed order or query order / TopK / merge strategy.
+# Regenerate with:
+#   dotnet run --project src/ToolUp.RAG.Evaluation \
+#     -- --out fixtures/eval-baseline.json
+# from a clean build, confirm 10 consecutive runs are identical, and
+# commit the new baseline in the same PR as the change that moved it.
+# The fixture remains "adequate for smoke, not an absolute quality
+# target" (Phase 14j/14k) — the gate guards against *regression vs the
+# committed baseline*, not an absolute quality bar.
+
+name: rag-eval
+
+on:
+  pull_request:
+    paths:
+      - "src/ToolUp.RAG.Core/**"
+      - "src/ToolUp.RAG.Server/**"
+      - "src/ToolUp.RAG.Evaluation/**"
+      - "src/Rerankers/**"
+      - "src/EmbeddingProviders/**"
+
+jobs:
+  rag-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # `--baseline` is project-relative: `dotnet run --project` runs with
+      # cwd = src/ToolUp.RAG.Evaluation/ (see the NOTE in the header).
+      - name: Run RAG eval harness (5% Recall@5 / nDCG@10 regression gate)
+        run: dotnet run --project src/ToolUp.RAG.Evaluation -c Release -- --baseline fixtures/eval-baseline.json

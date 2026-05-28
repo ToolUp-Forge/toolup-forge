@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.KnowledgeBase Client — multi-page Feliz module (documents / notes / AI context), narrative-commit installer, KB icons. Depends on ToolUp.Platform.Client + ToolUp.KnowledgeBase.Core.</Description>
+        <PackageTags>fsharp;fable;feliz;elmish;sdk;client;knowledge-base</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <ProjectReference Include="..\ToolUp.KnowledgeBase.Core\ToolUp.KnowledgeBase.Core.fsproj" />
+    </ItemGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+         under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.KnowledgeBase\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Client\ClientModel.fs" />
+        <Compile Include="Client\Icons.fs" />
+        <Compile Include="Client\ClientView.fs" />
+        <Compile Include="Client\PlatformKnowledgeAdminUI.fs" />
+    </ItemGroup>
+    <!-- Fable.* / Feliz / FSharp.Core resolved transitively via
+         ToolUp.Platform.Client + the .NET SDK. -->
+</Project>

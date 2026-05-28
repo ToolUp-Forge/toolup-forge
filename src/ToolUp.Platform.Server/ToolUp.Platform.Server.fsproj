@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform Server — Giraffe-over-ASP.NET Core implementation surface: scope resolution, DI, default in-process implementations, ServerApp composition root, middleware. Depends on ToolUp.Platform.Core.</Description>
+        <PackageTags>fsharp;sdk;server;giraffe;asp-net-core</PackageTags>
+        <!-- Phase 11.C.4 (2026-05-10): Server-tier source-layout symmetry
+             pass — Server/, Auth/ source moved into this project's own
+             directory tree (was ../ToolUp.Platform/{Server,Auth}/ during
+             Phase 11.B + 11.C.2). Source paths below are now relative to
+             the fsproj, matching the per-tier convention established by
+             the Client-tier closure. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.B follow-up Tests fsproj migration (2026-05-08): the
+             Tests project moved from <Compile Link> source-injection of SDK
+             files to <ProjectReference> + DLL consumption. Two SDK helpers
+             are still tested directly via internal access (the duplicate-
+             notification-sink-Kind-detection in TransactionalDispatcher;
+             the rate-limit partition-key in RateLimiting); InternalsVisibleTo
+             preserves that surface for tests without exposing it on the
+             public API. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Server\Rag\IEmbeddingProvider.fs" />
+        <Compile Include="Server\IEmbeddingCache.fs" />
+        <Compile Include="Server\Rag\IVectorStore.fs" />
+        <Compile Include="Server\ISparseIndex.fs" />
+        <Compile Include="Server\IReranker.fs" />
+        <Compile Include="Server\ITextSummariser.fs" />
+        <Compile Include="Server\IOcrProvider.fs" />
+        <Compile Include="Server\ITableExtractor.fs" />
+        <Compile Include="Server\IImageEmbedder.fs" />
+        <Compile Include="Server\Rag\IRetrievalPipeline.fs" />
+        <Compile Include="Server\IRetrievalTracer.fs" />
+        <Compile Include="Server\IRagTelemetry.fs" />
+        <Compile Include="Server\IMetricsSink.fs" />
+        <Compile Include="Server\PrometheusMetricsSink.fs" />
+        <Compile Include="Server\IActivitySink.fs" />
+        <Compile Include="Server\Logger.fs" />
+        <Compile Include="Server\LoggerScope.fs" />
+        <Compile Include="Server\Infra\ConsoleLogger.fs" />
+        <Compile Include="Server\Infra\JsonConsoleLogger.fs" />
+        <Compile Include="Server\Api.fs" />
+        <Compile Include="Server\Infra\InMemoryEventStore.fs" />
+        <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
+        <Compile Include="Server\SseTraceContributor.fs" />
+        <Compile Include="Server\Notifications\NotificationChannel.fs" />
+        <Compile Include="Server\INotificationSink.fs" />
+        <Compile Include="Server\INotificationAddressBook.fs" />
+        <Compile Include="Server\NotificationAddressBook.fs" />
+        <Compile Include="Server\Notifications\NotificationHandler.fs" />
+        <!-- Phase 11.C.5 Tier 3 — server-tier `RequestContext.ofHttpContext`
+             constructor for the Core-tier `RequestContext` newtype. Must
+             precede every `IAuthProvider` impl so they can compile against
+             the shared boxing path. -->
+        <Compile Include="Server\Auth\RequestContext.fs" />
+        <Compile Include="Auth\IdentitySanitiser.fs" />
+        <Compile Include="Auth\HeaderAuthProvider.fs" />
+        <Compile Include="Auth\StaticJwtAuthProvider.fs" />
+        <!-- Phase 11.G — `AuthProvider.fromEnv` (env-var-driven dispatch). -->
+        <Compile Include="Auth\AuthProviderFromEnv.fs" />
+        <Compile Include="Server\Infra\LocalFileStorage.fs" />
+        <!-- Phase 11.G — `BlobStorage.fromEnv` (env-var-driven dispatch).
+             Module name is `BlobStorageEnv` because `BlobStorage` is
+             reserved in Core for the interface module. -->
+        <Compile Include="Server\Infra\BlobStorageFromEnv.fs" />
+        <Compile Include="Server\SecondaryIndex.fs" />
+        <Compile Include="Server\Infra\PersistentEventStore.fs" />
+        <Compile Include="Server\IDataObjectStore.fs" />
+        <Compile Include="Server\DataObjectStore.fs" />
+        <Compile Include="Server\IEntityStore.fs" />
+        <Compile Include="Server\EntityQueryExecutor.fs" />
+        <Compile Include="Server\EntityStore.fs" />
+        <Compile Include="Server\IDataCatalog.fs" />
+        <Compile Include="Server\DataCatalog.fs" />
+        <Compile Include="Server\IResultStore.fs" />
+        <Compile Include="Server\ILineageStore.fs" />
+        <Compile Include="Server\ResultStore.fs" />
+        <Compile Include="Server\LineageStore.fs" />
+        <Compile Include="Server\IJobStore.fs" />
+        <Compile Include="Server\IJobHandler.fs" />
+        <Compile Include="Server\IJobScheduler.fs" />
+        <Compile Include="Server\JobStore.fs" />
+        <Compile Include="Server\CronExpression.fs" />
+        <Compile Include="Server\JobScheduler.fs" />
+        <Compile Include="Server\JobSchedulerDiagnosticsContributor.fs" />
+        <Compile Include="Server\JobNotifyEventStore.fs" />
+        <Compile Include="Server\IDataSource.fs" />
+        <Compile Include="Server\IOAuthCredentialFlow.fs" />
+        <!-- Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate. -->
+        <Compile Include="Server\IOAuthTokenRefresher.fs" />
+        <Compile Include="Server\IOAuthStateStore.fs" />
+        <Compile Include="Server\OAuthStateStore.fs" />
+        <Compile Include="Server\IDataSourceConfigStore.fs" />
+        <Compile Include="Server\IDataIngestor.fs" />
+        <Compile Include="Server\InMemoryDataSource.fs" />
+        <Compile Include="Server\DataSourceConfigStore.fs" />
+        <Compile Include="Server\DataIngestor.fs" />
+        <Compile Include="Server\DataIngestionJobHandler.fs" />
+        <Compile Include="Server\Infra\EnvironmentSecretStore.fs" />
+        <!-- Phase 10h — `IOAuthTokenRefresher` substrate (InProcessOAuthTokenRefresher
+             uses ISecretStore + IRateLimiter; placed after the secret-store
+             infra files so all transitive dependencies have already loaded). -->
+        <Compile Include="Server\InProcessOAuthTokenRefresher.fs" />
+        <Compile Include="Server\OAuthRefreshJobHandler.fs" />
+        <Compile Include="Server\Infra\FileSecretStore.fs" />
+        <Compile Include="Server\Infra\EncryptedSecretStore.fs" />
+        <!-- Phase 11.G — `SecretStore.fromEnv` (env-var-driven dispatch
+             with cloud-companion resolver list). -->
+        <Compile Include="Server\Infra\SecretStoreFromEnv.fs" />
+        <Compile Include="Server\IBlobEncryptionKeyResolver.fs" />
+        <Compile Include="Server\EncryptedBlobStorage.fs" />
+        <Compile Include="Server\SingleKeyResolver.fs" />
+        <Compile Include="Server\AuditLog.fs" />
+        <Compile Include="Server\NoOpRateLimiter.fs" />
+        <Compile Include="Server\InProcessRateLimiter.fs" />
+        <Compile Include="Server\IDataExporter.fs" />
+        <Compile Include="Server\ErasurePipeline.fs" />
+        <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
+        <Compile Include="Server\EventStoreErasureHandler.fs" />
+        <Compile Include="Server\DataObjectStoreErasureHandler.fs" />
+        <Compile Include="Server\LineageStoreErasureHandler.fs" />
+        <Compile Include="Server\IConversationStore.fs" />
+        <Compile Include="Server\ConversationStore.fs" />
+        <Compile Include="Server\ConversationEraseHandler.fs" />
+        <Compile Include="Server\IPlatformAdminStore.fs" />
+        <Compile Include="Server\Infra\PlatformAdminStore.fs" />
+        <Compile Include="Server\IPlatformRuntimeConfigStore.fs" />
+        <Compile Include="Server\Infra\PlatformRuntimeConfigStore.fs" />
+        <Compile Include="Server\PlatformAdminDevDiagnostics.fs" />
+        <Compile Include="Server\IShareTokenStore.fs" />
+        <Compile Include="Server\ShareTokenStore.fs" />
+        <Compile Include="Server\IRateLimitStore.fs" />
+        <Compile Include="Server\InMemoryRateLimitStore.fs" />
+        <Compile Include="Server\Providers\BlobProviderProfile.fs" />
+        <Compile Include="Server\IAuditSink.fs" />
+        <Compile Include="Server\AuditReplicatorTypes.fs" />
+        <Compile Include="Server\InMemoryAuditSink.fs" />
+        <Compile Include="Server\AuditReplicator.fs" />
+        <Compile Include="Server\IUsageLog.fs" />
+        <Compile Include="Server\UsageLog.fs" />
+        <Compile Include="Server\ITeamQuotaPolicy.fs" />
+        <Compile Include="Server\PerScopeKeyResolver.fs" />
+        <Compile Include="Server\EncryptionAdminHandler.fs" />
+        <Compile Include="Server\LocalStorageEncryptionValidator.fs" />
+        <Compile Include="Server\AdminTokenValidator.fs" />
+        <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />
+        <Compile Include="Server\HealthCheck.fs" />
+        <Compile Include="Server\HealthCheckResponseWriter.fs" />
+        <Compile Include="Server\HealthCheckAggregator.fs" />
+        <Compile Include="Server\HealthCheckRunner.fs" />
+        <Compile Include="Server\ConfigValidator.fs" />
+        <Compile Include="Server\BlobStorageSelectionValidator.fs" />
+        <Compile Include="Server\ServiceStatusBoardDepsValidator.fs" />
+        <Compile Include="Server\OidcConfigCompletenessValidator.fs" />
+        <Compile Include="Server\OidcAudienceBindingValidator.fs" />
+        <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
+        <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
+        <Compile Include="Server\AuditLogModeValidator.fs" />
+        <Compile Include="Server\SurfaceCoherenceValidator.fs" />
+        <Compile Include="Server\AuditLogHealthCheck.fs" />
+        <Compile Include="Server\SmokeTests.fs" />
+        <Compile Include="Server\SmokeTestHandler.fs" />
+        <Compile Include="Server\IUserClaims.fs" />
+        <Compile Include="Server\Premium\PremiumGate.fs" />
+        <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
+        <Compile Include="Server\ConsentApiHandler.fs" />
+        <Compile Include="Server\AdAnalyticsApiHandler.fs" />
+        <!-- Phase 61 — PlatformAdmin public-utility admin endpoints
+             (ad-unit CRUD + rate-limit decisions + premium-user list).
+             Each handler gates server-side on Platform-Admin role. -->
+        <Compile Include="Server\PlatformAdmin\AdUnitConfigApi.fs" />
+        <Compile Include="Server\PlatformAdmin\RateLimitEventApi.fs" />
+        <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
+        <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />
+        <Compile Include="Server\JobSchedulerInstanceValidator.fs" />
+        <Compile Include="Server\OAuthStateStoreInstanceValidator.fs" />
+        <Compile Include="Server\RateLimitModeValidator.fs" />
+        <Compile Include="Server\RateLimitConfigValidator.fs" />
+        <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
+        <Compile Include="Server\SseAuthModeValidator.fs" />
+        <Compile Include="Server\SecurityHeaders.fs" />
+        <Compile Include="Server\SecurityHeadersValidator.fs" />
+        <Compile Include="Server\ICspContributor.fs" />
+        <Compile Include="Server\SecurityHardening.fs" />
+        <Compile Include="Server\ForwardedHeadersTrustValidator.fs" />
+        <Compile Include="Server\CsrfHardeningValidator.fs" />
+        <Compile Include="Server\StaticPathBehaviourValidator.fs" />
+        <Compile Include="Server\PeerRouteRegistry.fs" />
+        <Compile Include="Server\PeerBearerAuthMiddleware.fs" />
+        <Compile Include="Server\ShareTokenAuthMiddleware.fs" />
+        <Compile Include="Server\SurfaceEnforcementMiddleware.fs" />
+        <Compile Include="Server\PeerBearerConfigValidator.fs" />
+        <Compile Include="Server\MaxRequestBodyBytesValidator.fs" />
+        <Compile Include="Server\CorsConfigValidator.fs" />
+        <Compile Include="Server\LocalSecretFilePermissionsValidator.fs" />
+        <Compile Include="Server\OAuthFlowValidator.fs" />
+        <Compile Include="Server\ConfigValidatorAggregator.fs" />
+        <Compile Include="Server\RequestTimingMiddleware.fs" />
+        <Compile Include="Server\MetricsMiddleware.fs" />
+        <Compile Include="Server\MetricsEndpoint.fs" />
+        <Compile Include="Server\SecurityHeadersMiddleware.fs" />
+        <Compile Include="Server\CspMiddleware.fs" />
+        <Compile Include="Server\CsrfMiddleware.fs" />
+        <!-- Phase 57 — prerendered-routes middleware. Maps GET /route to
+             PublicPath/route.html when the FAKE Prerender target wrote
+             one; no-op when the file is absent. Composed ahead of
+             UseStaticFiles so the rewrite short-circuits before the
+             SPA index.html fallback. -->
+        <Compile Include="Server\Static\PrerenderedRoutesHandler.fs" />
+        <Compile Include="Server\RateLimiting.fs" />
+        <Compile Include="Server\Teams\TeamManagement.fs" />
+        <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />
+        <Compile Include="Server\Teams\PendingInviteStoreInstanceValidator.fs" />
+        <Compile Include="Server\Teams\TeamInvitationHandler.fs" />
+        <Compile Include="Server\Infra\BootstrapTeam.fs" />
+        <Compile Include="Server\TeamCreationPolicyValidator.fs" />
+        <Compile Include="Server\BootstrapTeamValidator.fs" />
+        <Compile Include="Server\JobApiHandler.fs" />
+        <Compile Include="Server\MaintenanceApiHandler.fs" />
+        <Compile Include="Server\OAuthFlowHandler.fs" />
+        <Compile Include="Server\DataIngestionApiHandler.fs" />
+        <Compile Include="Server\Scope\PermissionStore.fs" />
+        <Compile Include="Server\Config\IConfigStore.fs" />
+        <Compile Include="Server\Config\ConfigStore.fs" />
+        <Compile Include="Server\ConfigStoreErasureHandler.fs" />
+        <Compile Include="Server\TeamQuotaPolicy.fs" />
+        <Compile Include="Server\UsageQueryApi.fs" />
+        <Compile Include="Server\TransactionalDispatcher.fs" />
+        <Compile Include="Server\Config\ConfigHandler.fs" />
+        <Compile Include="Server\IWebhookRegistry.fs" />
+        <Compile Include="Server\WebhookRegistry.fs" />
+        <Compile Include="Server\WebhookDispatcher.fs" />
+        <Compile Include="Server\HookedEventStore.fs" />
+        <Compile Include="Server\WebhookUrlValidator.fs" />
+        <Compile Include="Server\WebhookApiHandler.fs" />
+        <Compile Include="Server\IFeatureFlagStore.fs" />
+        <Compile Include="Server\FeatureFlagStore.fs" />
+        <Compile Include="Server\FeatureFlagStoreErasureHandler.fs" />
+        <Compile Include="Server\BlobStorageErasureHandler.fs" />
+        <Compile Include="Server\VectorStoreErasureHandler.fs" />
+        <!-- Phase 62 — additive flag-source registry consumed by
+             FlagEvaluator.createWithSources. -->
+        <Compile Include="Server\FeatureFlagSources.fs" />
+        <Compile Include="Server\FlagEvaluator.fs" />
+        <Compile Include="Server\FeatureFlagHandler.fs" />
+        <Compile Include="Server\Scope\StorageScopeResolver.fs" />
+        <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
+        <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
+        <Compile Include="Server\Files\FileNameSanitiser.fs" />
+        <Compile Include="Server\Files\FileManagement.fs" />
+        <Compile Include="Server\INarrativeStore.fs" />
+        <Compile Include="Server\InMemoryNarrativeStore.fs" />
+        <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />
+        <Compile Include="Server\ModuleQueryBus.fs" />
+        <!-- Phase 16 + 16a — centralised process-profile gating helper.
+             Lives first in the Compose chain so every Compose helper
+             (ComposeJobs, ComposeNotifications, ComposeAudit, ...) can
+             use it; positioned before `DevDiagnosticsHandler.fs` so the
+             Phase 16a tail's `/dev/inspect` panel can reference the
+             same matrix without duplicating it. -->
+        <Compile Include="Server\Compose\ProcessProfileGate.fs" />
+        <Compile Include="Server\DevDiagnosticsHandler.fs" />
+        <Compile Include="Server\HealthMonitorApiHandler.fs" />
+        <Compile Include="Server\ServiceStatusBoardApiHandler.fs" />
+        <Compile Include="Server\HealthStateTracker.fs" />
+        <Compile Include="Server\ConfigDriftDetector.fs" />
+        <Compile Include="Server\DiagnosticBundleHandler.fs" />
+        <Compile Include="Server\Middleware.fs" />
+        <!-- Phase 56 — inbound HTTP rate-limit middleware. Composes
+             against `IRateLimitStore` (registered earlier in the build
+             order) and `ServerConfig.RateLimits`. -->
+        <Compile Include="Server\RateLimitMiddleware.fs" />
+        <Compile Include="Server\RemotingHelpers.fs" />
+        <Compile Include="Server\PlatformSchema.fs" />
+        <Compile Include="Server\PlatformApiHandler.fs" />
+        <Compile Include="Server\PlatformAdminApiHandler.fs" />
+        <Compile Include="Server\BlobXmlRepository.fs" />
+        <Compile Include="Server\LocaleResolver.fs" />
+        <!-- Phase 11.G — reference-app probe + validator list helpers. -->
+        <Compile Include="Server\HealthChecksFromEnv.fs" />
+        <Compile Include="Server\ConfigValidatorsFromEnv.fs" />
+        <Compile Include="Server\Compose\ComposeExtensions.fs" />
+        <Compile Include="Server\Compose\ConfigurePipeline.fs" />
+        <Compile Include="Server\Compose\BuildRouteHandlers.fs" />
+        <!-- Phase 15e follow-up — per-concern compose-body subdivision.
+             Pure structural helpers consumed by `compose`; each takes
+             the substrate values its inline definition captured and
+             returns the same shape. -->
+        <Compile Include="Server\Compose\ComposeAudit.fs" />
+        <Compile Include="Server\Compose\ComposeEncryption.fs" />
+        <Compile Include="Server\Compose\ComposeAuth.fs" />
+        <Compile Include="Server\Compose\ComposeNotifications.fs" />
+        <Compile Include="Server\Compose\ComposeJobs.fs" />
+        <Compile Include="Server\Compose\ComposeDevDiagnostics.fs" />
+        <Compile Include="Server\Compose\ComposeConfigValidators.fs" />
+        <!-- Phase 15e tail — runtime substrate registrations (usage
+             metering, metrics + activity + locale, outbound rate
+             limiter, health-state tracker, inbound rate-limit
+             middleware, FileManagement runtime). -->
+        <Compile Include="Server\Compose\ComposeRuntimeServices.fs" />
+        <!-- Phase 15e tail — domain state stores (entity, result,
+             lineage, conversation, config, module query bus,
+             feature flags). -->
+        <Compile Include="Server\Compose\ComposeStores.fs" />
+        <!-- Phase 15e tail — per-tenant team/invite/permission stores
+             + post-bootstrap validators (TeamCreationPolicy,
+             BootstrapTeam, PendingInviteStoreInstance,
+             SurfaceCoherence) + BootstrapTeam runtime. -->
+        <Compile Include="Server\Compose\ComposeTeamRuntime.fs" />
+        <!-- Phase 15e tail — health checks + smoke tests + first-party
+             CSP contributors. -->
+        <Compile Include="Server\Compose\ComposeHealthSmoke.fs" />
+        <!-- Phase 15e tail — per-request scope/subject/surface
+             registration block (`IStorageScopeResolver`,
+             `ISubjectResolver`, `SurfaceRequirementRegistry`,
+             `IAnonymousSessionMigrator`, scoped `AccessContext`
+             factory, `IHttpContextAccessor`, session). -->
+        <Compile Include="Server\Compose\ComposeScopeResolver.fs" />
+        <!-- Phase 16 — host abstraction returned by `compose`. -->
+        <Compile Include="Server\IServerHost.fs" />
+        <!-- Phase 15e tail — bootstrap finalisation (preflight + CSP
+             aggregate) + Build branch returning `IServerHost`. Sits
+             after `IServerHost.fs` because `buildAndRunHost` returns
+             the interface defined there. -->
+        <Compile Include="Server\Compose\ComposeBootstrap.fs" />
+        <Compile Include="Server\SDK.Server.fs" />
+        <Compile Include="Server\ServerApp.fs" />
+    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Giraffe" />
+    <PackageReference Include="Fable.Remoting.Giraffe" />
+    <PackageReference Include="Fable.Remoting.Json" />
+    <PackageReference Include="Newtonsoft.Json" />
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+  </ItemGroup>
+</Project>

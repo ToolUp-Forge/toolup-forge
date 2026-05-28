@@ -1,0 +1,375 @@
+# CLAUDE.md — ToolUp Forge SDK
+
+## What is ToolUp Platform?
+
+ToolUp Platform is a modular F# full-stack SDK for building production multi-tenant analytical applications. It ships as a set of independently-versioned NuGet packages under the `ToolUp.*` namespace; consumers compose them with their own domain modules.
+
+Core foundations:
+- **Server**: Giraffe over ASP.NET Core, Fable.Remoting.Giraffe for type-safe APIs.
+- **Client**: Fable + Elmish + Feliz (React bindings).
+- **Build**: FAKE targets in a Pack-able `ToolUp.Platform.Build` package.
+
+## Versioning
+
+`0.x.y` while the public surface is unstable. Per the SemVer-on-`0.x` policy: minor bumps may include breaking changes, patch bumps are non-breaking. `1.0.0` is declared once the surface is judged stable.
+
+Each companion package versions independently — `ToolUp.Platform.Core 0.3.0` can pair with `ToolUp.AI 0.5.0`. Compatibility documented per release. For coordinated bumps, consumers use the `ToolUp.Sdk` meta-manifest: a one-line `<ToolUpSdkVersion>` property in `Directory.Packages.props` resolves every `ToolUp.*` package at the same version.
+
+## Repo layout
+
+```
+toolup-forge/
+├── src/
+│   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK (4 packages)
+│   ├── ToolUp.AI.{Core,Server,Client}/               # AI agent loop + SSE + tools
+│   ├── ToolUp.RAG.{Core,Server}/                     # retrieval-augmented generation
+│   ├── ToolUp.KnowledgeBase.{Core,Server,Client}/    # document ingestion + extraction
+│   ├── ToolUp.Forms.{Core,Server,Client}/            # schema-driven forms + workflows
+│   ├── ToolUp.Scheduling.{Core,Server}/              # booking + recurrence
+│   ├── AIProviders/{Claude,OpenAI}/                  # LLM providers
+│   ├── EmbeddingProviders/{Local,OpenAI}/            # embedding providers
+│   ├── AuthProviders/{Oidc,OidcClient,ClerkUI}/      # auth providers
+│   ├── Storage/{AwsS3,Azure,GoogleCloud}/            # IBlobStorage companions
+│   ├── AuditSinks/{S3Archive,SplunkHec,DatadogLogs}/ # audit replication
+│   ├── NotificationChannels/{Redis,Email/...,Sms/Twilio,Push/WebPush}/
+│   ├── VectorStores/Hnsw/                            # scalable IVectorStore
+│   ├── Metrics/OpenTelemetry/                        # IMetricsSink companion
+│   ├── Secrets/AzureKeyVault/                        # ISecretStore companion
+│   ├── AgGridEnterprise/                             # AG Grid Enterprise init shim
+│   ├── ToolUp.Platform.Tests/                        # SDK contract test packs
+│   ├── ToolUp.Forms.Tests/, ToolUp.Scheduling.Tests/ # per-companion test packs
+│   ├── ToolUp.RAG.Evaluation/, ToolUp.RAG.Benchmarks/
+│   └── ToolUp.Sdk/                                   # coordinated-bump meta-manifest
+├── samples/HelloWorld/                               # runnable end-to-end sample
+├── docs/                                             # OSS docs site
+├── ToolUp.Forge.sln
+├── Directory.Packages.props                          # CPM
+├── Build.fs / Build.fsproj                           # FAKE pipeline
+├── LICENSE                                           # Apache 2.0
+├── CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
+└── CLAUDE.md                                         # this file
+```
+
+## Architecture overview
+
+### `ToolUp.Platform` — core SDK
+
+Pure infrastructure with zero domain knowledge. Per-tier packages:
+
+- **`Core`** — shared types + interfaces (`ILogger`, `IBlobStorage`, `IAuthProvider`, `IAIProvider`, `INotificationChannel`, `IHealthCheck`, `IConfigValidator`, `IEventStore`, `ISecretStore`, etc.). No server or client deps; the "minimum viable consumer" floor. Source ships in the nupkg under `fable/` for Fable consumers.
+- **`Server`** — Giraffe-over-ASP.NET Core implementation: `ServerApp` composition root, `StorageScope` / scope resolvers, `ITeamStore`, `IConfigStore`, `IPermissionStore`, `IEntityStore`, `IDataObjectStore`, `IShareTokenStore`, `IJobScheduler`, `IDataIngestor`, `IAuditLog`, transactional dispatch, rate limiting, security headers middleware, `MetricsMiddleware`, `RequestTimingMiddleware`, OAuth flow handler, encryption-at-rest decorator, default in-process implementations of every interface, etc.
+- **`Client`** — Fable + Elmish + Feliz shell: MVU, sidebar navigation, `UIToolkit`, `AgChart`/`AgGrid` Fable bindings, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`.
+- **`Build`** — FAKE pipeline targets (`Run` / `Bundle` / `Format` / `Pack` / `ThirdPartyNotices`).
+
+### `ToolUp.AI` — AI assistant companion
+
+Agent loop, SSE streaming, conversation persistence, tool registry, system-prompt composition (platform + team + module layers), `composeWithAI`. Built on `IAIProvider` (extension point in `Platform.Core`).
+
+`AIAssistantMode` DU (in `ToolUp.AI.Core/Shared/AITypes.fs`):
+- `NoAIAssistant` — no AI module or side panel (default)
+- `DefaultAIAssistant` — built-in AI module with SDK defaults
+- `ConfiguredAIAssistant of AIAssistantBranding` — built-in AI module with custom branding
+
+Apps wanting AI call `AIServerApp.run` (from `ToolUp.AI.Server/Server/AICompose.fs`); apps without AI use `ServerApp.run` directly. `AIServerApp` is a flat superset of `ServerApp` — same fluent shape, AI-specific helpers added.
+
+### `ToolUp.RAG` — retrieval-augmented generation
+
+Chunking, vector store, retrieval pipeline, ingestion + reembedding background services, `RAGPromptBuilder`, `composeWithRAG`. Built on `IEmbeddingProvider` + `IVectorStore` + `IRetrievalPipeline` extension points (in `Platform.Server`).
+
+Apps wanting RAG call `RAGServerApp.run` (from `ToolUp.RAG.Server/Server/RAGCompose.fs`); `RAGServerApp` is a flat superset of `AIServerApp`. Per-deployment tuning via `withTopK` / `withMinScore` / `withMergeStrategy` / `withSnippetCharLimit` / `withOriginFilter` / `withGroundingMode` / `withIngestionConcurrency` / `withIngestionQueueCapacity` / `withTelemetry`.
+
+### `ToolUp.KnowledgeBase` — document KB
+
+User-facing canonical consumer of `ToolUp.RAG`: document upload, multi-format extraction (PDF / PPTX / DOCX / XLSX / CSV), ingestion-status surfacing, narrative-commit, notes, AI-context. Three integration contracts external KB replacements must honour:
+1. NarrativeCommit handler — call `Toolup.NarrativeCommit.install` with a submit handler
+2. `IIngestionStatusObserver` — wired explicitly into `composeWithRAG`
+3. Notification-key contract — `"KnowledgeBase.IngestionStatus"` is the published wire format the AI side panel subscribes to.
+
+### `ToolUp.Forms` — schema-driven forms
+
+`FormSchema` / `Submission` / `WorkflowDefinition` / `FormError` types, validation engine, workflow engine, `FormsServerApp` composition. Supports publishable surveys (`FormVisibility.Publishable`) via the SDK's `IShareTokenStore` substrate (HMAC-SHA256-signed tokens, blob-backed claim store, per-token rate-limit partition).
+
+Public-form surface adds `IPublicFormApi` (token-gated submit at `/api/public/forms/`), `PublicEmbed` (`/r/{token}` standalone Feliz component), `SurveyDashboardView` / `SurveyListView`.
+
+### `ToolUp.Scheduling` — booking + recurrence
+
+`IBookingScheduler` interface (per-resource concurrency lock, conflict detector), `RecurrenceExpander`, `iCalendar` types, `SchedulingApi` Fable.Remoting contract, `SchedulingCompose`. Consumers wire it into modules that surface booking-grid UIs.
+
+## Guiding Principles
+
+A numbered design canon the SDK is built against. Source comments and docs cite these as `(GP NN)`; the definitions live here. The list is non-exhaustive — only the principles the codebase currently references are enumerated.
+
+- **GP 1 — Companion packages isolate vendor dependencies.** The SDK core (`ToolUp.Platform.*`) carries no third-party vendor SDK. Every cloud / vendor integration lives in a companion package behind an SDK interface, so the core dependency graph stays minimal and the OSS supply-chain surface stays small.
+- **GP 2 — No paid-by-default dependencies.** The default composition runs on freely-available components. Paid / enterprise components (AG Grid Enterprise, hosted auth UIs, etc.) are opt-in companions, never a default a consumer is silently billed for.
+- **GP 4 — Tenant / team isolation is non-negotiable and enforced structurally.** Scope isolation is carried by the type system and the storage-scope resolver, not by a runtime "remember to filter" convention. A handler cannot accidentally read across tenants.
+- **GP 5 — Immutable by default.** Domain and config types are immutable records; state transitions produce new values. Mutability is a documented, justified exception (e.g. hot-path metrics), never the default.
+- **GP 7 — Correlation / context rides the async chain.** Request-scoped context (correlation id, scope, principal) flows via `AsyncLocal`-backed ambient context, not threaded by hand through every signature. Handlers read it where needed without it polluting every parameter list.
+- **GP 10 — Shared request/response types live in a shared-types project or are primitives.** Types crossing the client/server boundary (Fable.Remoting contracts, DTOs) sit in a Core/shared `<Compile>` file or are primitives — never defined server-side only and leaked, which would break the Fable client compile.
+- **GP 11 — Backward-compatible defaults.** A new SDK feature defaults to off / to its prior behaviour, so an existing deployment that upgrades stays byte-for-byte identical until it opts in. `fromEnv` helpers and config records preserve prior dispatch behaviour exactly.
+- **GP 12 — The six portability rules for distributed implementations** (see [Six portability rules](#six-portability-rules-for-distributed-implementations) below).
+- **GP 13 — Advanced behaviour is opt-in; deployments that don't use it pay nothing.** Optional subsystems (RAG, AI, scheduling, transactional sinks) cost zero — no hosted service, no middleware, no allocation — when a deployment doesn't compose them in.
+
+## Six portability rules for distributed implementations
+
+Any infrastructure interface that could plausibly be implemented by a distributed task framework (`IJobScheduler`, `IJobStore`, `IModuleQueryBus`, `INotificationChannel`, `IShareTokenStore`, etc.) MUST satisfy all six rules. Violations make a second implementation impossible.
+
+1. **Identity by value.** Returns / parameters use `string`, `Guid`, or domain records — never live handles (`IActorRef`, `IGrainReference`, etc.).
+2. **Async at every boundary.** Every method returns `Async<T>` or `Task<T>`. Synchronous methods or fire-and-forget `Tell`-style signatures are violations. (Documented exception: `IMetricsSink` is sync — hot path, write-only, no return to await.)
+3. **Retry + supervision as data.** Retry, backoff, and dead-letter behaviour expressed as records (e.g. `RetryPolicy`). Callback parameters like `OnFailure: exn -> unit` leak framework semantics.
+4. **Stateless handlers between invocations.** Handlers (`IJobHandler.Execute`, `IQueryHandler.Handle`, notification subscribers) receive all state via parameters. No in-memory state between calls — Orleans can deactivate grains, Akka.Persistence can restart actors.
+5. **No cross-shard ordering promises.** Ordering guaranteed only within a `ShardKey`. Cross-shard ordering correctness is a violation.
+6. **Precision at the lower bound.** Scheduling / timing primitives declare their precision contract (e.g. `JobPrecision: Second | Minute`). Implicit sub-second promises that some implementations can't honour are violations.
+
+Additionally:
+- No framework-specific serialisation attributes (`[<Serializable>]`, `[<ProtoContract>]`, Akka `IWithUnboundedStash`) on any type in a shared `<Compile>` file.
+- No `open Akka.*` / `open Orleans.*` in any file under `ToolUp.Platform`.
+- Companion packages exist only at the SDK boundary — the SDK interface never references a companion's types.
+
+`ToolUp.Platform.Tests` ships contract test packs (`IJobSchedulerContract`, `IModuleQueryBusContract`, `IShareTokenStoreContract`, `IDataSourceContract`, `IEntityStoreContract`, etc.). Any external implementation can validate against the same conformance bar.
+
+## Module convention (consumer-facing, 4 files per module)
+
+Consumers organise their domain modules as four files. Single-fsproj — modules are not subject to the cross-tier split that applies to SDK companions. The Core/Server/Client split applies only to **publishable SDK packages** because DLL boundaries are part of their public contract; consumer modules are deployment-specific.
+
+| File | Purpose | Compiled by |
+|---|---|---|
+| `SharedTypes.fs` / contracts | API record, DTOs, domain types | Both |
+| `Server.fs` | Route handlers, data processing, `DataType` registration, AI tool metadata + executors | Server |
+| `ClientModel.fs` | Elmish Model, Msg, init, update | Fable |
+| `ClientView.fs` | Feliz view + `register()` returning `ErasedModule` | Fable |
+
+Plus `.fsproj` + `.Client.props` (MSBuild props injecting client files into the consumer's Client project — hidden from Solution Explorer).
+
+**Canonical sample**: `samples/HelloWorld/HelloWorld.Module/` shows the absolute minimum.
+
+```fsharp
+// SharedTypes.fs
+module HelloWorld.SharedTypes
+type HelloApi = { DoThing: string -> Async<string> }
+
+// Server.fs
+module HelloWorld.Server
+let routine (input: string) : string = sprintf "did: %s" input
+
+// ClientModel.fs
+module HelloWorld.ClientModel
+open Elmish
+open ToolUp.Platform
+type Model = { Text: string }
+type Msg = NoOp
+let init () : Model * Cmd<Msg> = { Text = "" }, Cmd.none
+let update _ m = m, Cmd.none
+
+// ClientView.fs
+module HelloWorld.ClientView
+open Feliz
+open ToolUp.Platform
+open HelloWorld.ClientModel
+let view (model: Model) (dispatch: Msg -> unit) =
+    Html.div [], Html.div [ Html.text model.Text ]
+let register () : ErasedModule =
+    ClientModule.create {
+        Init = init
+        Update = update
+        Name = "Hello World"
+        Icon = "/svg/chart.svg"
+    }
+    |> ClientModule.withView view
+    |> ClientModule.register
+```
+
+## Companion-authoring guide
+
+Companion packages live under named subdirectories (`AIProviders/`, `Storage/`, `AuditSinks/`, `NotificationChannels/`, etc.). Each:
+
+- Has its own `.fsproj` with `<PackageId>` (unless assembly name = desired package id).
+- Implements one or more SDK interfaces.
+- Receives `ISecretStore` (or other substrate dependencies) through its `create` function — never reads env vars or config files directly.
+- Has its own `<PackageReference>` items for vendor SDKs.
+- Ships a `README.md` (packed into the nupkg via the auto-include in `Directory.Build.props`).
+- Optionally provides `.Server.props` / `.Client.props` for source-injection delivery (used when the companion needs to inject `.fs` files into a consuming project rather than ship a DLL).
+- Adds a per-package `<PackageTags>` override to aid discoverability.
+
+For HTTP-shaped companions (audit sinks, notification sinks): use BCL `HttpClient` rather than a vendor SDK where the API is permissive. This minimises the dep graph and the OSS supply-chain surface.
+
+For stateful companions (job scheduler, vector store, etc.): document explicitly in the file header whether the impl is dev-only or distributed-ready. Distributed-ready impls must be stateless between handler calls (rule 4). Dev-only impls are clearly marked.
+
+## Props-injection pattern (legacy source-injection contract)
+
+Some Client-tier companions still inject source via `.Client.props` rather than ship a DLL nupkg. The contract: a companion's `.Client.props` file extends the `_ToolUpPlatformClientSources` item group, and `ToolUp.Platform.Client.props` (in the consuming app's MSBuild graph) prepends those items to `<Compile>` before CoreCompile.
+
+The cross-tier source-injection pattern is gradually being phased out as Client-tier companions migrate to Fable source-in-nupkg delivery (the `<Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />` convention). Both paths coexist today.
+
+## Source-in-nupkg conditional-directive rule
+
+Client-tier SDK packages ship their `.fs` files under `fable/` in the nupkg; a Fable consumer's package loader extracts the source and compiles it as part of the consumer's project. Each extracted package carries its own `.fableproj` with an empty `<DefineConstants>` — whether the consumer's defines (e.g. `DEBUG`) propagate to the extracted compilation unit is not part of Fable's documented contract. Empirically Fable 5.x walks the consumer's MSBuild graph and applies the root project's defines, so today the propagation does work; that behaviour is brittle to rely on.
+
+**Rule:** in any `.fs` file packed under `fable/`, the only acceptable compile-time gates are `#if FABLE_COMPILER` / `#if !FABLE_COMPILER` (Fable defines this constant itself, so propagation isn't a question) or gates against a constant the SDK's own `.fsproj` declares explicitly. `#if DEBUG` / `#if !DEBUG` and any custom consumer-side define MUST be checked at runtime instead — via a `BundleConstants.*` accessor, a `window?Foo`-style feature detection, or by unconditionalising the branch and accepting the production cost. A `console.warn` is cheap; a silently-skipped or silently-included branch is not.
+
+## Nullable reference types — keep disabled on Fable-touching projects
+
+F# 9+ supports nullable reference types via `<Nullable>enable</Nullable>` in a `.fsproj`. The Fable compiler itself supports nullness (Fable 5.0.0+). However, enabling nullness in a Fable consumer causes the compiler to re-compile every transitive Fable dependency in null-aware mode, and any dependency that hasn't been nullness-annotated produces a cascade of warnings (or errors, depending on configuration).
+
+As of 2026-05, the major Fable ecosystem packages this SDK depends on (Feliz, Fable.Remoting, Fable.SimpleJson, Fable.Elmish.HMR) have not been nullness-annotated, and there's no published timeline for that to land.
+
+**Rule:** do not set `<Nullable>enable</Nullable>` on any project that compiles via Fable or whose Fable-compiled output consumes Feliz / Fable.Remoting / Fable.SimpleJson / Fable.Elmish.HMR. Leave the property unset (which inherits F#'s default of `disable`), or explicitly set `<Nullable>disable</Nullable>` for projects sitting in a solution whose `Directory.Build.props` enables nullness by default. Server-only projects with no Fable involvement may enable nullness per the standard F# 10 default.
+
+This rule retires when the upstream packages ship nullness annotations.
+
+## Type erasure boundaries
+
+Type erasure (`box`/`unbox`) is contained in two sanctioned boundaries inside forge:
+1. **`ClientModule.register`** — erases per-module `'Model`/`'Msg` for the heterogeneous module list.
+2. **`DataTypeDisplay.RenderSummary`** — every data-producing module boxes its summary record in its server-side `DataType.Process` and unboxes in the client-side `RenderSummary` callback. Symmetric same-module-known-type cast on both ends.
+
+Module code outside these boundaries never sees type erasure.
+
+## Build pipeline
+
+```bash
+dotnet build ToolUp.Forge.sln       # full build
+# Tests are Expecto console runners — run EACH via `dotnet run`, not `dotnet test`:
+dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
+dotnet run --project src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj
+dotnet run --project src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj
+dotnet run --project Build.fsproj -- Pack   # produce nupkgs to ../local-nuget-feed
+dotnet run -- Format                # fantomas
+dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
+```
+
+**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus the three `dotnet run --project` suites with 0 failures.
+
+`dotnet run --project Build.fsproj -- Pack` walks every public-surface SDK fsproj (filtered against `IsPackable=false`) and packs each individually into a local feed (default `../local-nuget-feed/`). ~9 minutes for a clean cold pack of ~43 packages; subsequent packs are incremental. Point a consumer's `nuget.config` at the same folder to test unreleased changes end-to-end.
+
+The `Publish` FAKE target (`dotnet run -- Publish`) packs every public-surface SDK fsproj into a per-run `./artifacts/` directory and pushes each `.nupkg` to the `ToolUp-Forge` GitHub Packages feed at `https://nuget.pkg.github.com/ToolUp-Forge/index.json`. CI workflow is [`.github/workflows/publish-nuget.yml`](.github/workflows/publish-nuget.yml) — triggers on tag `v*.*.*` (or manual `workflow_dispatch`); the Actions-provided `GITHUB_TOKEN` carries `packages: write` permission for the push. The push is idempotent (`--skip-duplicate`) so re-runs after a transient failure skip versions already published. Local manual publishes set `GITHUB_PACKAGES_TOKEN` (a PAT with `write:packages` scope) and optionally override `TOOLUP_PUBLISH_SOURCE`. Symbol packages (`.snupkg`) remain in `./artifacts/` for local inspection but are not pushed — GitHub Packages NuGet does not accept them the way nuget.org does.
+
+### Fast iteration
+
+`dotnet build ToolUp.Forge.sln` evaluates ~50 fsprojs (~1.5–6 minutes); a one-shot Fable compile is similarly expensive. Use:
+
+```bash
+# Targeted fsproj build
+dotnet build src/ToolUp.Forms.Server/ToolUp.Forms.Server.fsproj
+
+# Watch loop for one fsproj
+dotnet watch build --project src/ToolUp.Platform.Server/
+```
+
+Full-sln verification is for end-of-task / pre-commit, not per-edit.
+
+## Build verification
+
+After every step: `dotnet build` (fast).
+At phase boundaries: full Fable JS verification — `cd samples/HelloWorld/HelloWorld.Client && dotnet fable -o output`. Spot-check the emitted JS.
+
+**When this applies:**
+- Any edit to a `Client/` source file or a file consumed by Fable.
+- Any refactor of interface signatures crossing the client/server boundary.
+- Any change to a module using `[<Erase>]`, `[<ReactComponent>]`, `inline` members, `importSideEffects`, `import`, or explicit `emitJsExpr`.
+
+**Always pass `-o output` when verifying.** Bare `dotnet fable` emits `*.fs.js` next to source and leaves `output/` stale.
+
+**`MemoizedChart` must NOT be `private`.** `AgChart.chart` is a `static member inline` on an `[<Erase>]` type; Fable inlines the method body at every call site, which means call sites import `MemoizedChart` directly. If it's `private`, Fable doesn't export it → runtime `SyntaxError: does not provide an export named 'MemoizedChart'`. Same rule for any module-level value referenced from an `inline` method on an erased type.
+
+## F# style + idioms
+
+- **Runtime**: .NET 10 (`net10.0`).
+- **Language**: F# 10 (the SDK pin in `global.json` is `10.0.203`). All workspace siblings are on the same baseline; assume F# 10 features are available without further qualification.
+- **Formatter**: Fantomas — pre-commit step. Run `dotnet fantomas <file>` BEFORE `dotnet build`.
+
+### Fantomas pitfall: indexer ambiguity
+
+**Never write `map[key] arg1 arg2` on a single line.** F# treats `map[key]` (no space) as an indexer and `map [key]` (with space) as a list-application. Fantomas can insert a space in the no-space form, breaking compilation. Extract the indexer read to its own line:
+
+```fsharp
+let pageView = map[route]
+pageView currentState dispatchMsg
+```
+
+### Lambda preference: `_.Property` over `fun x -> x.Property`
+
+F# 10 (and any version 8+) supports `_.Property` and `_.Method()`. Prefer it for one-step access:
+
+| Avoid                                              | Prefer                              |
+|----------------------------------------------------|-------------------------------------|
+| `xs \|> Array.maxBy (fun x -> x.Index)`            | `xs \|> Array.maxBy _.Index`        |
+| `opt \|> Option.map (fun e -> e.Body)`             | `opt \|> Option.map _.Body`         |
+
+Method-call lambdas need parens: `AgGrid.onGridReady (_.AutoSizeAllColumns())`.
+
+### Elmish MVU discipline
+
+- `update` functions must be pure. All side effects flow through `Cmd`.
+- No mutable global state in client code (except documented exceptions).
+- Text inputs use `React.useState` for display state. Only dispatch on submit (Enter / button click). No per-keystroke `UpdateInput` messages.
+- Modules declare what they are (`Definition`), what they need (`NeedsData`), what they provide (`ProvidesProcessedData`, `DataTypes`), and how they behave (`Init`, `Update`, `View`). The shell handles all wiring.
+
+### Serialisation
+
+- **Fable.Remoting APIs**: handled automatically by the transport.
+- **SSE / non-Remoting JSON**: must use `Fable.Remoting.Json.FableJsonConverter`. Do NOT use `Newtonsoft.Json.Converters.DiscriminatedUnionConverter` — produces a shape `Fable.SimpleJson` cannot parse. Do NOT use `CamelCasePropertyNamesContractResolver` — Fable expects PascalCase.
+- **`unit -> Async<T>` API functions**: work because of `RemotingBodyNormalizationMiddleware` in `SDK.Server.fs`. Do not remove this middleware.
+- **Consumer dependency contract**: server projects consuming `ToolUp.Platform.Server` MUST include `<PackageReference Include="Fable.Remoting.Json" />` — Newtonsoft arrives transitively.
+
+### AG Charts axes + animation
+
+- `AgChart.axes` uses a direction-keyed object (`"x"` / `"y"`), not an array (AG Charts v13+ regression).
+- `AgChart.chart` uses a memoised wrapper (`MemoizedChart`) to preserve animations on Elmish re-renders.
+- Don't add `prop.key` to the chart `Html.div` wrapper when underlying data changes — forces React remount, destroys the chart instance, prevents transition animations.
+
+## AI provider authoring
+
+A new provider goes in `src/AIProviders/<Name>/` with its own `.fsproj`, implementing `IAIProvider` and exposing a builder for `DefaultAIProviderFactory`.
+
+- Receives `ISecretStore` through its builder / `create` function.
+- Never reads env vars or config files directly.
+- Supports the streaming + tool-calling contract documented in `docs/ai/extending.md`.
+- Documents capability flags via `AIProviderResponse.Capabilities` (e.g. `SupportsPromptCaching: bool`, `SupportsVisionInput: bool`).
+
+`AIProviderResponse.Usage: TokenUsage option` reports `{ PromptTokens; CachedPromptTokens; OutputTokens; CacheCreationTokens }`. Streaming providers parse usage from terminal events (Anthropic `message_delta`; OpenAI `stream_options.include_usage=true` chunks).
+
+## Embedding provider authoring
+
+A new provider goes in `src/EmbeddingProviders/<Name>/`, implementing `IEmbeddingProvider`.
+
+- Receives `ISecretStore` through `create` for API-backed implementations.
+- Offline providers take no arguments.
+- Distributed-ready providers must be stateless between `GenerateEmbedding` calls (rule 4). `LocalEmbeddingProvider` is the documented exception — mark any new stateful provider as dev-only in its file header.
+
+## Storage / Secrets / VectorStore authoring
+
+Same pattern: implement the relevant interface (`IBlobStorage` / `ISecretStore` / `IVectorStore`), accept substrate dependencies via `create`, ship companion as its own `<PackageReference>` set, register an `IHealthCheck` probe in the same package, register an `IConfigValidator` for preflight if connection state is testable.
+
+## Audit-sink authoring
+
+`IAuditSink` is a 2-method interface (`Name` + `Deliver`). Sinks must be batch-idempotent: the dispatcher retries the entire batch on `Result.Error`, and the catch-up sweep can re-deliver after a process restart. Use vendor-specific dedup keys (Splunk `_meta.uuid`, S3 content-addressable naming, etc.).
+
+API keys / tokens always come through `ISecretStore` — no hardcoded credentials, no env-var-only sinks. Token rotation is the operator's lever; the sink reads on every `Deliver` so rotated values flow through immediately.
+
+## Notification-channel authoring
+
+Transactional sinks (`INotificationSink`) implement `Kind: NotificationKind` + `Deliver`. Per-`Kind` registry rejects duplicates at compose time. Wire via `ServerApp.withTransactionalSink`; deployments without sinks skip the dispatcher hosted-service entirely.
+
+Distributed `INotificationChannel` companions (Redis is the shipped reference) replace the default `InMemoryNotificationChannel` and provide scope-isolated pub/sub — per-scope topic, not a post-hoc filter.
+
+## Contributing
+
+- License: Apache 2.0. See [LICENSE](LICENSE).
+- Developer Certificate of Origin: every commit MUST carry a `Signed-off-by:` line. CI enforces this.
+- Contribution flow: issue → PR → review → merge. See [CONTRIBUTING.md](CONTRIBUTING.md).
+- Code of Conduct: Contributor Covenant v2.1. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- Security disclosure: see [SECURITY.md](SECURITY.md).
+
+## Commands the user is asked to run — PowerShell syntax
+
+When suggesting shell commands for the user to execute on Windows, write them in PowerShell syntax. POSIX syntax is used for Bash tool calls (which run via Git-Bash).
+
+Built-in aliases like `rm`, `cp`, `ls` exist in PowerShell but use DIFFERENT flag syntax than POSIX. Use full cmdlet names (`Remove-Item`, `Copy-Item`, `Get-ChildItem`) in suggested commands. Multi-line continuation: backtick `` ` `` not `\`.
+
+## Executing actions with care
+
+Carefully consider reversibility and blast radius. Local, reversible actions (editing files, running tests) are fine to take. Destructive operations, force-pushes, force-pushes to main, modifying CI/CD pipelines, sending messages to external systems all need explicit user confirmation. Authorisation stands for the scope specified, not beyond.
+
+## Scope
+
+The job of this `CLAUDE.md` is to support OSS contributors using Claude Code (or any AI coding assistant) to read and modify SDK source. Architectural docs live in `docs/`; per-companion deep-dives in `docs/{ai,rag,knowledge-base,forms,scheduling}/` and `docs/companions/{auth-providers,storage-providers,ai-providers,embedding-providers,notification-channels}.md`.

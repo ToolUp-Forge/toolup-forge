@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.VectorStores.Hnsw</PackageId>
+    <AssemblyName>ToolUp.VectorStores.Hnsw</AssemblyName>
+    <Description>HNSW approximate-nearest-neighbour IVectorStore for ToolUp.RAG. Lifts the ~50,000-chunk ceiling of InMemoryVectorStore.</Description>
+    <PackageTags>fsharp;sdk;rag;vector-store;hnsw;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="HnswVectorStore.fs" />
+    <Compile Include="HnswVectorStoreHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Newtonsoft.Json + Fable.Remoting.Json flow transitively from
+         ToolUp.Platform.Server. FSharp.Core is implicit via the .NET SDK.
+         HNSW is unique. -->
+    <PackageReference Include="HNSW" />
+  </ItemGroup>
+</Project>

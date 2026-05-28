@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 11.B follow-up Scheduling cross-tier cutover (2026-05-08):
+         replaced <Compile Link> entries that source-injected Platform +
+         Scheduling server files with <ProjectReference> entries to the
+         matching DLLs. The tests now exercise the production companion
+         DLLs directly. -->
+    <ItemGroup>
+        <Compile Include="InProcess\RecurrenceExpanderTests.fs" />
+        <Compile Include="InProcess\iCalendarTests.fs" />
+        <Compile Include="InProcess\BookingConflictDetectorTests.fs" />
+        <Compile Include="InProcess\InMemoryEntityStore.fs" />
+        <Compile Include="InProcess\InMemoryEventStore.fs" />
+        <Compile Include="Contracts\IBookingSchedulerContract.fs" />
+        <Compile Include="InProcess\BookingSchedulerTests.fs" />
+        <Compile Include="InProcess\WorkedExampleTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Scheduling.Core\ToolUp.Scheduling.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Scheduling.Server\ToolUp.Scheduling.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

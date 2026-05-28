@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "ToolUp.RAG.Benchmarks": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:56209;http://localhost:56211"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Web", "F#", "Giraffe", "Fable", "Elmish", "Feliz", "ToolUp" ],
+  "identity": "ToolUp.Templates.Solution",
+  "groupIdentity": "ToolUp.Templates.Solution",
+  "name": "ToolUp Platform SDK Solution",
+  "shortName": "platformsdk-solution",
+  "description": "F# full-stack ToolUp.Platform application: primary {AppName}-Server + {AppName}-Client pair, one starter module, Build.fs, Docker Compose, CI workflow.",
+  "tags": {
+    "language": "F#",
+    "type": "solution"
+  },
+  "sourceName": "MyTemplate",
+  "preferNameDirectory": true,
+  "symbols": {
+    "port-server": {
+      "type": "parameter",
+      "datatype": "integer",
+      "defaultValue": "5000",
+      "description": "Server port. Must not clash with any port already bound on the dev machine — `tools/ToolUp.PortGuard` (run via scripts/New-ToolUpApp.ps1) can scan an adjacent app tree and reject clashing values.",
+      "replaces": "5000"
+    },
+    "port-client-vite": {
+      "type": "parameter",
+      "datatype": "integer",
+      "defaultValue": "8080",
+      "description": "Vite dev-server port. Same clash-rejection contract as --port-server.",
+      "replaces": "8080"
+    },
+    "toolUpSdkVersion": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "0.2.3",
+      "description": "ToolUp.Sdk meta-manifest version (drives every transitive ToolUp.* package version).",
+      "replaces": "TOOLUP_SDK_VERSION"
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "If true, skip dotnet restore after scaffolding."
+    }
+  },
+  "primaryOutputs": [
+    { "path": "MyTemplate.sln" },
+    { "path": "src/MyTemplate-Server/MyTemplate-Server.fsproj" },
+    { "path": "src/MyTemplate-Client/MyTemplate-Client.fsproj" }
+  ],
+  "postActions": [
+    {
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages",
+      "manualInstructions": [ { "text": "Run 'dotnet restore'." } ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Web Push INotificationSink for ToolUp.Platform — RFC 8030 + VAPID via the WebPush NuGet package; private key from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;notifications;push;webpush;sink</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 6f Web Push INotificationSink companion. -->
+  <ItemGroup>
+    <Compile Include="WebPushNotificationSink.fs" />
+    <Compile Include="WebPushNotificationSinkHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. WebPush is unique. -->
+    <PackageReference Include="WebPush" />
+  </ItemGroup>
+</Project>

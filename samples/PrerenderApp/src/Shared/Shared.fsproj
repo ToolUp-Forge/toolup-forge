@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Sample sits inside the SDK repo; reaches Core via the
+             SDK source rather than a NuGet PackageReference. Real
+             consumers will reference the published ToolUp.Platform.Core
+             nupkg instead. -->
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="SharedTypes.fs" />
+    </ItemGroup>
+</Project>

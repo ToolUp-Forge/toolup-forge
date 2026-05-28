@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 11.B follow-up Tests fsproj migration (2026-05-08): replaced
+         ~100 <Compile Link> entries that hard-linked SDK + companion source
+         files with <ProjectReference> entries to the matching DLL projects.
+         The previous design kept the test project on a lean dep surface
+         ("no Saturn / Giraffe / middleware just to exercise an IBlobStorage")
+         by source-linking only the specific files under test. After Phase 11.B
+         the SDK ships as ToolUp.Platform.Server.dll, so Tests pulls the same
+         types via DLL reference. Lean-dep design intent is preserved by the
+         per-package fsproj split (Tests transitively gets only what the DLLs
+         it references actually depend on). -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <!-- Test source files (contract packs + in-process bindings + runner). -->
+    <ItemGroup>
+        <Compile Include="Contracts\IBlobStorageContract.fs" />
+        <Compile Include="Contracts\IProviderProfileContract.fs" />
+        <Compile Include="Contracts\IEventStoreContract.fs" />
+        <Compile Include="Contracts\IDataObjectStoreContract.fs" />
+        <Compile Include="Contracts\IDataCatalogContract.fs" />
+        <Compile Include="Contracts\IResultStoreContract.fs" />
+        <Compile Include="Contracts\ILineageStoreContract.fs" />
+        <Compile Include="Contracts\IJobStoreContract.fs" />
+        <Compile Include="Contracts\IJobSchedulerContract.fs" />
+        <Compile Include="Contracts\IModuleQueryBusContract.fs" />
+        <Compile Include="Contracts\IDataSourceContract.fs" />
+        <Compile Include="Contracts\IOAuthStateStoreContract.fs" />
+        <Compile Include="Contracts\IOAuthCredentialFlowContract.fs" />
+        <Compile Include="Contracts\ISecretStoreContract.fs" />
+        <Compile Include="Contracts\IPermissionStoreContract.fs" />
+        <Compile Include="Contracts\IFeatureFlagStoreContract.fs" />
+        <Compile Include="Contracts\INotificationChannelContract.fs" />
+        <Compile Include="Contracts\INotificationSinkContract.fs" />
+        <Compile Include="Contracts\INotificationAddressBookContract.fs" />
+        <Compile Include="Contracts\IHealthCheckContract.fs" />
+        <Compile Include="Contracts\ISmokeTestContract.fs" />
+        <Compile Include="Contracts\IConfigValidatorContract.fs" />
+        <Compile Include="Contracts\IEntityStoreContract.fs" />
+        <Compile Include="Contracts\IUsageLogContract.fs" />
+        <Compile Include="Contracts\ITeamQuotaPolicyContract.fs" />
+        <Compile Include="Contracts\IMetricsSinkContract.fs" />
+        <Compile Include="Contracts\IActivitySinkContract.fs" />
+        <Compile Include="Contracts\IAuditSinkContract.fs" />
+        <Compile Include="Contracts\IShareTokenStoreContract.fs" />
+        <Compile Include="Contracts\IPendingInviteStoreContract.fs" />
+        <Compile Include="Contracts\IOAuthTokenRefresherContract.fs" />
+        <Compile Include="Contracts\IReportRendererContract.fs" />
+        <Compile Include="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
+        <Compile Include="Contracts\IPeerBearerAuthContract.fs" />
+        <Compile Include="Contracts\IAuthProviderContract.fs" />
+        <Compile Include="Contracts\IRateLimiterContract.fs" />
+        <Compile Include="Contracts\IRateLimitStoreContract.fs" />
+        <Compile Include="Contracts\IClientToolAuthorizerContract.fs" />
+        <Compile Include="Contracts\IClientToolDispatchContract.fs" />
+        <Compile Include="Contracts\IConversationStoreContract.fs" />
+        <Compile Include="Contracts\IPublicContentApiContract.fs" />
+        <Compile Include="Contracts\IAssetStoreContract.fs" />
+        <Compile Include="Contracts\IConsentProviderContract.fs" />
+        <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
+        <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
+        <Compile Include="Contracts\IUserClaimsContract.fs" />
+        <!-- Phase 11a.A — module-level mutable cache reset registry.
+             Tests touching a (b)-class cache call CacheReset.invalidateAll
+             at setup. See docs/platform/testing-conventions.md. -->
+        <Compile Include="Support\CacheReset.fs" />
+        <Compile Include="InProcess\LocalFileStorageTests.fs" />
+        <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
+        <Compile Include="InProcess\PersistentEventStoreTests.fs" />
+        <Compile Include="InProcess\DataObjectStoreTests.fs" />
+        <Compile Include="InProcess\DataCatalogTests.fs" />
+        <Compile Include="InProcess\ResultStoreTests.fs" />
+        <Compile Include="InProcess\ConversationStoreTests.fs" />
+        <Compile Include="InProcess\LineageStoreTests.fs" />
+        <Compile Include="InProcess\JobStoreTests.fs" />
+        <Compile Include="InProcess\CronExpressionTests.fs" />
+        <Compile Include="InProcess\JobSchedulerTests.fs" />
+        <Compile Include="InProcess\ModuleQueryBusTests.fs" />
+        <Compile Include="InProcess\InMemoryDataSourceTests.fs" />
+        <Compile Include="InProcess\OAuthSubstrateTests.fs" />
+        <Compile Include="InProcess\FileSecretStoreTests.fs" />
+        <Compile Include="InProcess\PermissionStoreTests.fs" />
+        <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
+        <Compile Include="InProcess\FlagEvaluatorTests.fs" />
+        <Compile Include="InProcess\StorageScopeResolverTests.fs" />
+        <Compile Include="InProcess\MockOidcServer.fs" />
+        <Compile Include="InProcess\AuthProviderTests.fs" />
+        <Compile Include="InProcess\AzureBlobStorageTests.fs" />
+        <Compile Include="InProcess\AwsS3StorageTests.fs" />
+        <Compile Include="InProcess\GoogleCloudStorageTests.fs" />
+        <Compile Include="InProcess\AzureKeyVaultSecretStoreTests.fs" />
+        <Compile Include="InProcess\AwsSecretsManagerSecretStoreTests.fs" />
+        <Compile Include="InProcess\HashiCorpVaultSecretStoreTests.fs" />
+        <Compile Include="InProcess\MarkdownRendererTests.fs" />
+        <Compile Include="InProcess\HtmlRendererTests.fs" />
+        <Compile Include="InProcess\DataSubjectRequestTests.fs" />
+        <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
+        <Compile Include="InProcess\RedisNotificationChannelTests.fs" />
+        <Compile Include="InProcess\TransactionalDispatcherTests.fs" />
+        <Compile Include="InProcess\NotificationAddressBookTests.fs" />
+        <Compile Include="InProcess\SmtpNotificationSinkTests.fs" />
+        <Compile Include="InProcess\SendGridNotificationSinkTests.fs" />
+        <Compile Include="InProcess\TwilioNotificationSinkTests.fs" />
+        <Compile Include="InProcess\WebPushNotificationSinkTests.fs" />
+        <Compile Include="InProcess\HnswVectorStoreTests.fs" />
+        <Compile Include="InProcess\HealthyHealthCheckTests.fs" />
+        <Compile Include="InProcess\DegradedHealthCheckTests.fs" />
+        <Compile Include="InProcess\UnhealthyHealthCheckTests.fs" />
+        <Compile Include="InProcess\HealthCheckAggregatorTests.fs" />
+        <Compile Include="InProcess\OkConfigValidatorTests.fs" />
+        <Compile Include="InProcess\WarningConfigValidatorTests.fs" />
+        <Compile Include="InProcess\ErrorConfigValidatorTests.fs" />
+        <Compile Include="InProcess\ConfigValidatorAggregatorTests.fs" />
+        <!-- Phase 9m.A — TOOLUP_AI_PROVIDER / TOOLUP_AI_MODEL env-var
+             typo catchers. Always-on validators that self-skip with Ok
+             when the env var is unset. Pure-function tests; no
+             network. -->
+        <Compile Include="InProcess\AIProviderEnvValidatorTests.fs" />
+        <!-- Phase 9m.A — opt-in API-access startup probe.
+             TOOLUP_AI_PROBE_ON_STARTUP=1 gates registration; the
+             ProviderProbeSpec.Fetch test seam carries canned outcomes
+             so no real network is hit. -->
+        <Compile Include="InProcess\AIProviderProbeValidatorTests.fs" />
+        <Compile Include="InProcess\HealthStateTrackerTests.fs" />
+        <Compile Include="InProcess\ServiceStatusBoardApiHandlerTests.fs" />
+        <Compile Include="InProcess\RedisNotificationChannelHealthTests.fs" />
+        <Compile Include="InProcess\AIProviderHealthTests.fs" />
+        <Compile Include="InProcess\MinimumViableShapeTests.fs" />
+        <Compile Include="InProcess\RedactionAllowlistParityTests.fs" />
+        <Compile Include="InProcess\OidcSignInContractTests.fs" />
+        <Compile Include="InProcess\SSEHandshakeTests.fs" />
+        <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
+        <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
+        <Compile Include="InProcess\BlobEntityStoreTests.fs" />
+        <Compile Include="InProcess\EntityQueryTests.fs" />
+        <Compile Include="InProcess\UsageLogTests.fs" />
+        <Compile Include="InProcess\PrometheusMetricsSinkTests.fs" />
+        <Compile Include="InProcess\OtelActivitySinkTests.fs" />
+        <Compile Include="InProcess\ServerModuleMetricsTests.fs" />
+        <Compile Include="InProcess\JsonConsoleLoggerTests.fs" />
+        <Compile Include="InProcess\InMemoryAuditSinkTests.fs" />
+        <Compile Include="InProcess\S3ArchiveAuditSinkTests.fs" />
+        <Compile Include="InProcess\SplunkHecAuditSinkTests.fs" />
+        <Compile Include="InProcess\DatadogLogsAuditSinkTests.fs" />
+        <Compile Include="InProcess\AuditReplicatorTests.fs" />
+        <Compile Include="InProcess\ShareTokenStoreTests.fs" />
+        <Compile Include="InProcess\InMemoryPendingInviteStoreTests.fs" />
+        <Compile Include="InProcess\TeamInvitationTests.fs" />
+        <Compile Include="InProcess\EntraExternalIdConfigTests.fs" />
+        <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
+        <Compile Include="InProcess\SseTraceContributorTests.fs" />
+        <Compile Include="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
+        <Compile Include="InProcess\AuditLogModeValidatorTests.fs" />
+        <Compile Include="InProcess\SurfaceCoherenceValidatorTests.fs" />
+        <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
+        <Compile Include="InProcess\NotificationSilentlySkippedTests.fs" />
+        <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
+        <Compile Include="InProcess\JobSchedulerInstanceValidatorTests.fs" />
+        <!-- Phase 9b.B — pins the compose-time `registerScheduledJobDeclarations`
+             helper: NoJobScheduler warn-and-skip, single declaration
+             defaults to `_platform` scope, explicit `Scopes` list fans
+             out per scope, restart-re-registration is idempotent. -->
+        <Compile Include="InProcess\ScheduledJobDeclarationTests.fs" />
+        <Compile Include="InProcess\OAuthStateStoreInstanceValidatorTests.fs" />
+        <Compile Include="InProcess\NotificationChannelInstanceValidatorTests.fs" />
+        <Compile Include="InProcess\NotificationsExplicitOffTests.fs" />
+        <Compile Include="InProcess\RateLimitModeValidatorTests.fs" />
+        <Compile Include="InProcess\RateLimitConfigValidatorTests.fs" />
+        <Compile Include="InProcess\SseAuthModeValidatorTests.fs" />
+        <Compile Include="InProcess\OidcAudienceBindingValidatorTests.fs" />
+        <Compile Include="InProcess\SecurityHeadersValidatorTests.fs" />
+        <Compile Include="InProcess\SecurityHardeningTests.fs" />
+        <Compile Include="InProcess\ForwardedHeadersTrustValidatorTests.fs" />
+        <Compile Include="InProcess\LocalSecretFilePermissionsValidatorTests.fs" />
+        <Compile Include="InProcess\IdentitySanitiserTests.fs" />
+        <Compile Include="InProcess\FileManagementTests.fs" />
+        <Compile Include="InProcess\PeerBearerAuthTests.fs" />
+        <Compile Include="InProcess\ConversationExportAuditTests.fs" />
+        <Compile Include="InProcess\FastPathBeaconOwnershipTests.fs" />
+        <Compile Include="InProcess\FastPathSequencerTelemetryTests.fs" />
+        <Compile Include="InProcess\HnswFidelityTests.fs" />
+        <Compile Include="InProcess\PermissionStoreFailClosedTests.fs" />
+        <Compile Include="InProcess\BlobProviderProfileTests.fs" />
+        <Compile Include="InProcess\SmokeTestDefaultsTests.fs" />
+        <Compile Include="InProcess\InProcessRateLimiterTests.fs" />
+        <Compile Include="InProcess\PlatformTestingFrameworkTests.fs" />
+        <Compile Include="InProcess\I18nInfrastructureTests.fs" />
+        <Compile Include="InProcess\MultimodalAIProviderTests.fs" />
+        <Compile Include="InProcess\CitationNormaliserTests.fs" />
+        <Compile Include="InProcess\SyntheticClientToolAuthorizerTests.fs" />
+        <Compile Include="InProcess\AIAgentEngineClientResidentAuthorizationTests.fs" />
+        <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
+        <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
+        <Compile Include="InProcess\PublicRenderingTests.fs" />
+        <Compile Include="InProcess\AssetStoreTests.fs" />
+        <Compile Include="InProcess\InMemoryRateLimitStoreTests.fs" />
+        <Compile Include="InProcess\TeamCreationPolicyTests.fs" />
+        <Compile Include="InProcess\WithRequestHeadersPassthroughTests.fs" />
+        <Compile Include="InProcess\CsrfPrefetchAnonymousGateTests.fs" />
+        <Compile Include="InProcess\SvgPropTests.fs" />
+        <Compile Include="InProcess\ConsentProviderTests.fs" />
+        <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
+        <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->
+        <Compile Include="InProcess\UserClaimsTests.fs" />
+        <!-- Phase 57 follow-up — prerender determinism + hydration-mismatch
+             contract tests. Pins byte-stability of the FAKE Prerender
+             target's pure helpers (`serialiseRoutes`, `nodeScript`,
+             `routePathToFile`, `wrapHtmlDocument`, `escapeHtml`) and
+             the `toolup-prerendered` marker contract Hydration.fs reads. -->
+        <Compile Include="InProcess\PrerenderDeterminismTests.fs" />
+        <!-- Phase 55 — withGroup preflight validator. Pure decision
+             tested against hand-built ErasedModule values; render
+             machinery is never invoked. -->
+        <Compile Include="InProcess\ModuleGroupingValidatorTests.fs" />
+        <!-- Phase 55 — AnonymousMode contract pack. Pins the
+             intertwined branches of the extracted pure helper
+             `computeAccessibleModules` (Anonymous short-circuit,
+             team-mode onboarding, default RBAC intersection). -->
+        <Compile Include="InProcess\AnonymousModeContractTests.fs" />
+        <!-- Phase 66 Stream B.3 — module surface-requirement API +
+             Visibility smart constructors. Pins the additive
+             `ServerModule.DefaultSurfaceRequirement` /
+             `RoutePrefixes` / `RouteSurfaceRequirements` fields,
+             the `ServerApp.addModule` fan-out, the
+             `SurfaceRequirementRegistry.merge` semantics
+             (longest-prefix-wins, module exact wins, case
+             normalisation), and the four `Visibility` smart
+             constructors. -->
+        <Compile Include="InProcess\ModuleSurfaceRequirementTests.fs" />
+        <!-- Phase 66 Stream B.4 — pins the SDK built-in per-route
+             surface-requirement overrides folded into the
+             `SurfaceRequirementRegistry` by `fromServerConfig`.
+             Today: the five `TeamApi` team-CRUD mutating endpoints
+             declared `teamScoped` per design §3.3's "Per-endpoint
+             overrides" caveat on the `PlatformApi` row. -->
+        <Compile Include="InProcess\BuiltInModuleSurfaceTests.fs" />
+        <!-- Phase 66 Stream B.8 — client identity flow keyed on
+             SubjectKind. Pins the textual shape of UserSession.configure
+             (now takes SubjectKind), AuthUIProvider.gate (now takes
+             SubjectKind), the ClientConfig.Surfaces field + helper
+             predicates, the Vite __TOOLUP_PLATFORM_SURFACES__ parsing,
+             and the "no live config.Mode readers in SDK.Client.fs"
+             sweep. Includes the anonymous-only regression pin (AnonymousKind
+             always pass-through in the auth-UI gate). -->
+        <Compile Include="InProcess\SubjectKindClientFlowTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- SDK substrate. ToolUp.Platform.Server transitively pulls Core. -->
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <!-- Cloud storage companions. -->
+        <ProjectReference Include="..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
+        <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
+        <ProjectReference Include="..\Storage\AwsS3Storage\AwsS3Storage.fsproj" />
+        <ProjectReference Include="..\Storage\GoogleCloudStorage\GoogleCloudStorage.fsproj" />
+        <!-- Phase 2a — cloud-secret-manager companions. Contract bindings
+             are env-gated; without the activating env var each test pack
+             skips cleanly. -->
+        <ProjectReference Include="..\Secrets\AzureKeyVault\AzureKeyVault.fsproj" />
+        <ProjectReference Include="..\Secrets\AwsSecretsManager\AwsSecretsManager.fsproj" />
+        <ProjectReference Include="..\Secrets\HashiCorpVault\HashiCorpVault.fsproj" />
+        <!-- Phase 3a follow-up — OidcAuthProvider contract tests via mock
+             HttpMessageHandler (no env-gate; the handler removes the
+             need for a real OIDC issuer). -->
+        <ProjectReference Include="..\AuthProviders\Oidc\OidcAuthProvider.fsproj" />
+        <!-- Phase 3b.A — client-side id_token validation. Test pack drives
+             the pure-F# claim validators + the runtime-injectable
+             `validateIdTokenWith` orchestrator with stubbed signature
+             verifier + JWKS resolver. WebCrypto-only paths (Fable-only)
+             aren't reached in the .NET test runner. -->
+        <ProjectReference Include="..\AuthProviders\OidcClient\OidcClient.fsproj" />
+        <!-- Phase 3d — Entra External ID companion config / claim-mapping unit tests. -->
+        <ProjectReference Include="..\AuthProviders\EntraExternalId\EntraExternalId.fsproj" />
+        <!-- Phase 23 — Reporting Core (Markdown/Html renderers + IReportRenderer). -->
+        <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
+        <!-- Phase 11.B follow-up — companion DLLs replacing prior
+             <Compile Link> entries (each carries its own implementation
+             plus Health / Validator types where present). -->
+        <ProjectReference Include="..\NotificationChannels\Redis\ToolUp.NotificationChannels.Redis.fsproj" />
+        <ProjectReference Include="..\NotificationChannels\Email\Smtp\ToolUp.NotificationChannels.Email.Smtp.fsproj" />
+        <ProjectReference Include="..\NotificationChannels\Email\SendGrid\ToolUp.NotificationChannels.Email.SendGrid.fsproj" />
+        <ProjectReference Include="..\NotificationChannels\Sms\Twilio\ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
+        <ProjectReference Include="..\NotificationChannels\Push\WebPush\ToolUp.NotificationChannels.Push.WebPush.fsproj" />
+        <ProjectReference Include="..\AIProviders\Claude\ClaudeAIProvider.fsproj" />
+        <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" />
+        <ProjectReference Include="..\AuditSinks\S3Archive\ToolUp.AuditSinks.S3Archive.fsproj" />
+        <ProjectReference Include="..\AuditSinks\SplunkHec\ToolUp.AuditSinks.SplunkHec.fsproj" />
+        <ProjectReference Include="..\AuditSinks\DatadogLogs\ToolUp.AuditSinks.DatadogLogs.fsproj" />
+        <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
+        <!-- Phase 46.B — Sample client-resident-tool reference companion.
+             Tests project consumes Core + Server tiers; Client tier is
+             Fable and never reached by the .NET runner. -->
+        <ProjectReference Include="..\AI.Samples\ToolUp.AI.SampleClientTool.Core\ToolUp.AI.SampleClientTool.Core.fsproj" />
+        <ProjectReference Include="..\AI.Samples\ToolUp.AI.SampleClientTool.Server\ToolUp.AI.SampleClientTool.Server.fsproj" />
+        <!-- Phase 11a — Module Testing Framework. Tests project consumes
+             the new ToolUp.Platform.Testing fakes + harnesses via project
+             reference (in-source delivery until 11.C.2 / cloud-publish). -->
+        <ProjectReference Include="..\ToolUp.Platform.Testing\ToolUp.Platform.Testing.fsproj" />
+        <!-- Phase 6q — CitationNormaliser unit-tests need the RAG.Server
+             reference for the normaliser module + RagCitationPolicy DU. -->
+        <ProjectReference Include="..\ToolUp.RAG.Server\ToolUp.RAG.Server.fsproj" />
+        <!-- Phase 38 — public-rendering contract pack + InProcess binding. -->
+        <ProjectReference Include="..\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
+        <!-- Phase 39 — asset-store contract pack + InProcess binding. -->
+        <ProjectReference Include="..\ToolUp.AssetStore\ToolUp.AssetStore.fsproj" />
+        <!-- Phase 59 — IConsentProvider lives in ToolUp.Platform.Client
+             (consent decisions are browser-local). The contract pack
+             tests the portable .NET-reachable surface against the
+             NoOpConsentProvider impl; FundingChoicesConsentProvider's
+             CMP-event handling is Fable-only and exercised in the
+             consumer's browser tests. Precedent: AuthProviders/OidcClient
+             above ships under the same pattern (client-tier project
+             referenced into Tests for the .NET-reachable subset). -->
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <!-- Phase 57 follow-up — Build package reference brings in
+             `ToolUp.Platform.Prerender.serialiseRoutes` /
+             `nodeScript` / `PrerenderTargetOptions.defaults` for the
+             determinism tests. The Build package is .NET-only (no
+             Fable surface), so .NET tests can drive its pure helpers
+             directly without an interop boundary. -->
+        <ProjectReference Include="..\ToolUp.Platform.Build\ToolUp.Platform.Build.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <PackageReference Include="Fable.Remoting.Json" />
+        <PackageReference Include="StackExchange.Redis" />
+        <PackageReference Include="MailKit" />
+        <PackageReference Include="WebPush" />
+        <PackageReference Include="HNSW" />
+        <PackageReference Include="Newtonsoft.Json" />
+    </ItemGroup>
+</Project>

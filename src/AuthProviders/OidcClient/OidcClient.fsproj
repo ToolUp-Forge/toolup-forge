@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.Oidc.Client</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.Oidc.Client</AssemblyName>
+    <Description>Client-side OIDC sign-in UI for ToolUp.Platform: Authorization Code + PKCE flow against any OIDC-compliant issuer. (Phase 11.C.5 unified the `.Client` suffix convention: `ToolUp.AuthProviders.OidcClient` -> `.Oidc.Client`, matching `ToolUp.AIProviders.Claude.Client` and `ToolUp.AuthProviders.EntraExternalId.Client`.)</Description>
+    <PackageTags>fsharp;fable;feliz;sdk;auth;oidc;pkce;client;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="OidcTypes.fs" />
+    <Compile Include="OidcPkce.fs" />
+    <Compile Include="OidcIdTokenValidator.fs" />
+    <Compile Include="OidcDiscovery.fs" />
+    <Compile Include="OidcTokenStore.fs" />
+    <Compile Include="OidcClient.fs" />
+    <Compile Include="OidcAuthUI.fs" />
+    <Compile Include="OidcRegister.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Fable.Core / Fable.SimpleHttp / Fable.SimpleJson / Feliz /
+         FSharp.Core flow transitively from ToolUp.Platform.Client +
+         the .NET SDK. Fable.Browser.Dom is unique to OidcClient
+         (used by isCallbackUrl's URL pathname comparison). -->
+    <PackageReference Include="Fable.Browser.Dom" />
+  </ItemGroup>
+</Project>

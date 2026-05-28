@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AIProviders.Claude</PackageId>
+    <AssemblyName>ToolUp.AIProviders.Claude</AssemblyName>
+    <Description>Claude (Anthropic) IAIProvider implementation for ToolUp.AI. BYOK-capable; reads API keys from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;ai;llm;claude;anthropic;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ClaudeAIProvider.Wire.fs" />
+    <Compile Include="ClaudeAIProvider.fs" />
+    <Compile Include="ClaudeAIProviderHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

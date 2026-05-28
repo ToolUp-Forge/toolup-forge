@@ -1,0 +1,40 @@
+<Project>
+  <!--
+    Phase 11.B partial cutover (2026-05-08): SDK server source items are
+    no longer injected here — they live in ../ToolUp.Platform.Server/
+    and ship as ToolUp.Platform.Server.dll referenced via
+    <ProjectReference>. This file is now PURELY the companion-extension
+    contract: each companion's own .Server.props file extends the
+    `_ToolUpPlatformServerSources` item group, and the target below
+    converts those items to <Compile> just before CoreCompile.
+
+    Eventual end state (Phase 11.B follow-up): each companion migrates
+    its source files to <Compile> in its own fsproj + ProjectReference
+    chain, the .Server.props files are deleted, and this file goes too.
+    Until then the contract stays intact so companions don't have to
+    migrate in lockstep.
+  -->
+  <ItemGroup>
+    <!-- (SDK source items removed Phase 11.B partial cutover.
+         Companions continue extending this list via their own
+         .Server.props imports — see below.) -->
+  </ItemGroup>
+
+  <!--
+    Inject companion sources into Compile *before* the project's own files.
+    F# compile order is significant, so we must prepend, not append.
+    The target removes existing Compile items, adds companion sources first,
+    then re-adds the project's files in their original order.
+  -->
+  <Target Name="InjectToolUpPlatformServerSources" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <_ExistingCompile Include="@(Compile)" />
+      <Compile Remove="@(Compile)" />
+      <Compile Include="@(_ToolUpPlatformServerSources)">
+        <Visible>false</Visible>
+        <InProject>false</InProject>
+      </Compile>
+      <Compile Include="@(_ExistingCompile)" />
+    </ItemGroup>
+  </Target>
+</Project>

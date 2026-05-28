@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Hosts.AwsLambda</PackageId>
+    <AssemblyName>ToolUp.Hosts.AwsLambda</AssemblyName>
+    <Description>AWS Lambda host adapter for ToolUp.Platform. Bridges Lambda invocations (API Gateway REST v1, HTTP API v2, ALB, Lambda Function URLs) through IServerHost.Invoke so a compose-built deployment runs on Lambda without changes to its handler code.</Description>
+    <PackageTags>fsharp;sdk;serverless;aws;aws-lambda;api-gateway;alb;host-adapter</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AwsLambdaHost.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Amazon.Lambda.APIGatewayEvents" />
+    <PackageReference Include="Amazon.Lambda.ApplicationLoadBalancerEvents" />
+    <PackageReference Include="Amazon.Lambda.Core" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,24 @@
+# Phase 38 sample — 20 legacy URL redirects exercising the
+# `RedirectMap` middleware. Format: `from,to[,statusCode]` —
+# default status code 301. Query strings on incoming requests are
+# preserved.
+/legacy-home,/
+/old-about,/about
+/wp-about,/about
+/wp-services,/services
+/wp-pricing,/pricing
+/wp-contact,/contact
+/services-old,/services
+/pricing-old,/pricing
+/blog,/news/2026-05-22-launch
+/blog/launch,/news/2026-05-22-launch
+/blog/announcement,/news/2026-05-15-announcement
+/posts/launch,/news/2026-05-22-launch
+/2026/05/22/launch,/news/2026-05-22-launch
+/2026/05/15/announcement,/news/2026-05-15-announcement
+/legacy/services/consulting.html,/services/consulting
+/legacy/services/build.html,/services/build
+/legacy/terms.html,/terms
+/legacy/privacy.html,/privacy
+/legacy/faq.html,/faq
+/old-page-with-temp-redirect,/about,302

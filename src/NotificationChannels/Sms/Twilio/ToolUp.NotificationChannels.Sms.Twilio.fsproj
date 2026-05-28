@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Twilio SMS INotificationSink for ToolUp.Platform — pure HTTP REST against api.twilio.com; auth token from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;notifications;sms;twilio;sink</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 6f Twilio SMS INotificationSink companion. -->
+  <ItemGroup>
+    <Compile Include="TwilioNotificationSink.fs" />
+    <Compile Include="TwilioNotificationSinkHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

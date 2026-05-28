@@ -1,0 +1,218 @@
+module ToolUp.Platform.ComposeStores
+
+open Microsoft.Extensions.DependencyInjection
+open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Tracing
+
+// ─── compose phase: state stores ─────────────────────────────────────
+//
+// Conditional state-store registrations (`IEntityStore`,
+// `IResultStore`, `ILineageStore`, `IConversationStore`,
+// `IConfigStore`, `IModuleQueryBus`, `IFeatureFlagStore`,
+// `FlagEvaluator`). Extracted from `compose` for the per-concern
+// subdivision (Phase 15e follow-up tail). Each helper takes the
+// substrate values its inline definition captured and returns either
+// `unit` or the constructed substrate when downstream code needs it.
+// Zero behaviour change.
+
+/// Phase 7 / 7a — construct `IDataObjectStore` over the resolved
+/// `IBlobStorage` and the `IDataCatalog` over the supplied
+/// `(moduleName, DataType)` registrations. The catalog snapshots
+/// produce-side context (schema, producer module, object lists);
+/// `ListObjects` delegates to `IDataObjectStore`. Returned as a tuple
+/// for the caller to capture for the downstream registration chain.
+let buildDataObjectStoreAndCatalog
+    (resolvedBlobStorage: IBlobStorage)
+    (resolvedLogger: ILogger)
+    (dataTypeRegistrations: (string * DataType) list)
+    : IDataObjectStore * IDataCatalog =
+
+    let dataObjectStore: IDataObjectStore =
+        DataObjectStore.DataObjectStore(resolvedBlobStorage, resolvedLogger) :> _
+
+    let dataCatalogRegistrations: DataCatalog.DataTypeRegistration list =
+        dataTypeRegistrations
+        |> List.map (fun (m, dt) -> { ModuleName = m; DataType = dt }: DataCatalog.DataTypeRegistration)
+
+    let dataCatalog: IDataCatalog =
+        DataCatalog.DataCatalog(dataCatalogRegistrations, dataObjectStore) :> _
+
+    dataObjectStore, dataCatalog
+
+/// Phase 8 / 8a / 53 — construct the optional state-store values
+/// (`IResultStore`, `ILineageStore`, `IConversationStore`) per the
+/// matching `ServerConfig` modes. The unset defaults return `None`;
+/// downstream `registerOptionalStores` skips registration for any
+/// `None` so DI resolution returns `null` and consumers must handle
+/// absence explicitly. Lineage is constructed before result so the
+/// persistent result variant can pick it up for auto-emit.
+let buildOptionalStoreValues
+    (config: ServerConfig)
+    (eventStore: IEventStore)
+    (dataObjectStore: IDataObjectStore)
+    : ILineageStore option * IResultStore option * IConversationStore option =
+
+    let lineageStore: ILineageStore option =
+        match config.Lineage with
+        | NoLineageStore -> None
+        | EnabledLineageStore -> Some(LineageStore.EventStoreLineageStore(eventStore) :> _)
+
+    let resultStore: IResultStore option =
+        match config.ResultStore with
+        | NoResultStore -> None
+        | InMemoryResultStore ->
+            Some(ResultStore.InMemoryResultStore(eventStore = eventStore, ?lineageStore = lineageStore) :> _)
+        | PersistentResultStore ->
+            Some(
+                ResultStore.PersistentResultStore(
+                    dataObjectStore,
+                    eventStore = eventStore,
+                    ?lineageStore = lineageStore
+                )
+                :> _
+            )
+
+    let conversationStore: IConversationStore option =
+        match config.ConversationStore with
+        | NoConversationStore -> None
+        | EnabledConversationStore _ ->
+            Some(ConversationStore.PersistentConversationStore(dataObjectStore, eventStore = eventStore) :> _)
+
+    lineageStore, resultStore, conversationStore
+
+/// Phase 19 — register the entity-store substrate when
+/// `ServerConfig.EntityStore = EnabledEntityStore`. Constructs the
+/// `EntityRegistry`, runs every accumulated registration closure
+/// against it, then constructs the `BlobEntityStore` over the
+/// resolved `IBlobStorage` and `IDataObjectStore`. `NoEntityStore`
+/// (the default) skips both registrations entirely — entity store
+/// costs zero runtime when unused.
+let registerEntityStore
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (entityRegistrations: (EntityStore.EntityRegistry -> unit) list)
+    : unit =
+    match config.EntityStore with
+    | EnabledEntityStore ->
+        let entityRegistry = EntityStore.EntityRegistry()
+
+        for registerFn in entityRegistrations do
+            registerFn entityRegistry
+
+        services.AddSingleton<EntityStore.EntityRegistry>(entityRegistry) |> ignore
+
+        services.AddSingleton<IEntityStore.IEntityStore>(fun (sp: System.IServiceProvider) ->
+            let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
+            let bs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+            // IAuditLog is always registered (Phase 9 ensures even
+            // NoAuditLog mode resolves to NoOpAuditLog). Wrap in
+            // Some/None for the BlobEntityStore constructor's
+            // option parameter.
+            let auditLogObj = sp.GetService(typeof<IAuditLog>)
+
+            let auditLog =
+                if isNull auditLogObj then
+                    None
+                else
+                    Some(auditLogObj :?> IAuditLog)
+
+            EntityStore.BlobEntityStore(dos, bs, entityRegistry, auditLog) :> IEntityStore.IEntityStore)
+        |> ignore
+    | NoEntityStore -> ()
+
+/// Phase 8 / 8a / 53 — conditional store registrations. `IResultStore`
+/// is registered only when `ServerConfig.ResultStore` opts in;
+/// `ILineageStore` only when `ServerConfig.Lineage = EnabledLineageStore`;
+/// `IConversationStore` (+ role interfaces + DSR erasure handler) only
+/// when `ServerConfig.ConversationStore = EnabledConversationStore _`.
+/// The unset defaults leave DI unaware so resolution returns `null`
+/// and downstream consumers must handle absence explicitly.
+let registerOptionalStores
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (resultStore: IResultStore option)
+    (lineageStore: ILineageStore option)
+    (conversationStore: IConversationStore option)
+    : unit =
+
+    // Phase 8 conditional registration.
+    match resultStore with
+    | Some store -> services.AddSingleton<IResultStore>(store) |> ignore
+    | None -> ()
+
+    // Phase 8a conditional registration.
+    match lineageStore with
+    | Some store -> services.AddSingleton<ILineageStore>(store) |> ignore
+    | None -> ()
+
+    // Phase 53 conditional registration. `IConversationStore` is
+    // registered only when `ServerConfig.ConversationStore =
+    // EnabledConversationStore _`. The substrate also registers each
+    // role interface separately so consumers can depend on the
+    // narrowest interface they need without taking a transitive dep on
+    // the others. When DSR is also enabled (`DataSubjectRequests =
+    // Enabled _`), the conversation store contributes an
+    // `IErasureHandler` via `ConversationEraseHandler.erasureHandler`
+    // — the DSR pipeline picks it up automatically alongside the other
+    // store handlers.
+    match conversationStore with
+    | Some store ->
+        services.AddSingleton<IConversationStore>(store) |> ignore
+
+        services.AddSingleton<IConversationReader>(store :> IConversationReader)
+        |> ignore
+
+        services.AddSingleton<IConversationWriter>(store :> IConversationWriter)
+        |> ignore
+
+        services.AddSingleton<IConversationEraser>(store :> IConversationEraser)
+        |> ignore
+
+        match config.DataSubjectRequests with
+        | DataSubjectRequestMode.Enabled _ ->
+            services.AddSingleton<IErasureHandler>(ConversationEraseHandler.erasureHandler store)
+            |> ignore
+        | DataSubjectRequestMode.Disabled -> ()
+    | None -> ()
+
+/// Phase 5a per-team (and per-user) configuration store, Phase 6b
+/// module-to-module query bus, Phase 5c feature-flag store +
+/// evaluator. `IConfigStore` is registered unconditionally —
+/// `ConfigHandler` resolves the caller's scope per request and
+/// short-circuits when no scope is available (Anonymous mode); the
+/// instance is supplied by the caller (it was constructed pre-DI so
+/// the Phase 6f transactional dispatcher and DI hand out the same
+/// instance). `IModuleQueryBus` registry is built once from the
+/// accumulated `(moduleName, handler)` pairs; the bus is stateless,
+/// safe as a singleton. `IFeatureFlagStore` + `FlagEvaluator` are
+/// always registered (declared = [] still produces a working
+/// evaluator).
+let registerConfigQueryAndFlagStores
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (configStoreInstance: IConfigStore)
+    (queryHandlers: (string * ModuleQueryHandler) list)
+    (resolvedBlobStorage: IBlobStorage)
+    (resolvedLogger: ILogger)
+    (resolvedActivitySink: IActivitySink)
+    : unit =
+
+    services.AddSingleton<IConfigStore>(configStoreInstance) |> ignore
+
+    let moduleQueryBus: IModuleQueryBus =
+        let registry = ModuleQueryBus.buildRegistry queryHandlers
+        ModuleQueryBus.InMemoryModuleQueryBus(registry, resolvedLogger, resolvedActivitySink) :> _
+
+    services.AddSingleton<IModuleQueryBus>(moduleQueryBus) |> ignore
+
+    let featureFlagStore =
+        FeatureFlagStore.BlobFeatureFlagStore(resolvedBlobStorage) :> IFeatureFlagStore
+
+    let flagEvaluator =
+        FlagEvaluator.create featureFlagStore config.FeatureFlags (Some resolvedLogger)
+
+    services.AddSingleton<IFeatureFlagStore>(featureFlagStore).AddSingleton<FlagEvaluator.FlagEvaluator>(flagEvaluator)
+    |> ignore

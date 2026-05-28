@@ -1,0 +1,37 @@
+.fable/
+*.fs.js
+*.fs.js.map
+.fake/
+.farmer/
+.idea/
+.ionide/
+.vs/
+obj/
+bin/
+output/
+packages/
+paket-files/
+node_modules/
+
+# Local NuGet feed populated by `dotnet run -- Pack` (consumer-local).
+local-nuget-feed/
+
+release.cmd
+release.sh
+*.orig
+*.fsproj.user
+*.DotSettings.user
+secrets.json
+
+# Vite dotenv files (sample apps).
+**/.env.local
+**/.env.*.local
+
+# Sample-app runtime data (event store / entity store directories spun
+# up by the SDK on first run). Source content under `samples/*/content/`
+# is tracked; runtime state under `samples/*/data/` is not.
+samples/*/data/
+
+# Claude Code worktrees + per-machine settings.
+.claude/worktrees/
+.claude/settings.local.json

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.AssetStore — image-first asset substrate for ToolUp.Platform. Per-asset records with alt-text required at upload, content-hash-keyed derivative cache (thumbnail / medium / OG-image / WebP / AVIF), pluggable IDerivativeRenderer (default: SkiaSharp). Wraps IBlobStorage for originals + derivative cache. Audit emission via IAuditLog under _platform.assets.</Description>
+        <PackageTags>fsharp;sdk;server;assets;images;derivatives;cms;cdn</PackageTags>
+        <!-- Phase 39 — single-tier companion (server-only; no Fable
+             client surface in v1). README + TECHNICAL_GUIDE live
+             alongside the fsproj since there's no cross-tier sibling
+             needing a shared parent docs directory. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- SkiaSharp is the default IDerivativeRenderer backend.
+             Cross-platform, MIT-licensed, fast. Consumers targeting
+             Linux containers must additionally reference
+             SkiaSharp.NativeAssets.Linux (not declared here — kept
+             host-specific so Windows / macOS dev doesn't drag in
+             native Linux assets). -->
+        <PackageReference Include="SkiaSharp" />
+        <PackageReference Include="Fable.Remoting.Giraffe" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\AssetTypes.fs" />
+        <Compile Include="Server\IDerivativeRenderer.fs" />
+        <Compile Include="Server\IAssetStore.fs" />
+        <Compile Include="Server\SkiaSharpDerivativeRenderer.fs" />
+        <Compile Include="Server\DerivativeProfiles.fs" />
+        <Compile Include="Server\DefaultAssetStore.fs" />
+        <Compile Include="Server\AssetApi.fs" />
+        <Compile Include="Server\AssetUploadHandler.fs" />
+        <Compile Include="Server\AssetCompose.fs" />
+    </ItemGroup>
+</Project>

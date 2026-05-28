@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Redis INotificationChannel for ToolUp.Platform — scope-isolated pub/sub over StackExchange.Redis. Activated via TOOLUP_NOTIFICATION_CHANNEL=redis.</Description>
+    <PackageTags>fsharp;sdk;notifications;redis;pub-sub;channel</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="RedisNotificationChannel.fs" />
+    <Compile Include="RedisNotificationChannelHealth.fs" />
+    <Compile Include="RedisNotificationChannelValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. StackExchange.Redis
+         is unique to this companion. -->
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+</Project>

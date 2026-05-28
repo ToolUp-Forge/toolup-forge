@@ -1,0 +1,4 @@
+# BEIR datasets cached at runtime — multi-MB downloads, never checked in.
+data/
+# Default benchmark output. Operator can override with --out.
+*.csv

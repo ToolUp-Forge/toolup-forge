@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <DefineConstants Condition="'$(Configuration)' != 'Release'">FABLE_COMPILER;DEBUG</DefineConstants>
+    <DefineConstants Condition="'$(Configuration)' == 'Release'">FABLE_COMPILER</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="index.html" />
+    <None Include="index.css" />
+    <None Include="vite.config.mts" />
+    <None Include="package.json" />
+  </ItemGroup>
+  <Import Project="..\Modules\Starter\Starter.Client.props" />
+  <ItemGroup>
+    <Compile Include="Client.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ToolUp.Platform.Core" />
+    <PackageReference Include="ToolUp.Platform.Client" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Fable.Elmish" />
+    <PackageReference Include="Fable.Elmish.HMR" />
+    <PackageReference Include="Fable.Elmish.React" />
+    <PackageReference Include="Fable.Remoting.Client" />
+    <PackageReference Include="Fable.SimpleJson" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

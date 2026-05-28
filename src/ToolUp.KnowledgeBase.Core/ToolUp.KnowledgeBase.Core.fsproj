@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.KnowledgeBase Core — KnowledgeApi Fable.Remoting contract, KnowledgeDocument / IngestionStatus / KnowledgeSource / NoteSource shared types, IngestionStatusNotificationKey wire-format literal.</Description>
+        <PackageTags>fsharp;sdk;types;knowledge-base</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- KB.Core's SharedTypes.fs does not reference any RAG types —
+             only KB.Server does (IIngestionStatusObserver / IngestionJob in
+             IngestionObserver.fs). KB.Server has direct ProjectReferences
+             to RAG.Core and RAG.Server; KB.Core stays Platform-only so it
+             doesn't transitively pull RAG.Core into Fable's compilation
+             graph (RAG.Core's IngestionQueue uses System.Threading.Interlocked
+             which Fable does not support). -->
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+         under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.KnowledgeBase\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\SharedTypes.fs" />
+        <Compile Include="Shared\PlatformKnowledgeApi.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

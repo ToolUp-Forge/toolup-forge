@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Module", "F#", "ToolUp", "DataSource" ],
+  "identity": "ToolUp.Templates.DataManager",
+  "groupIdentity": "ToolUp.Templates.DataManager",
+  "name": "ToolUp Platform SDK External Data Manager",
+  "shortName": "platformsdk-datamanager",
+  "description": "Four-file module replacing FileManagerUI: registers with ExternalDataManager mode and includes an IDataSource skeleton + file-upload UI patterns.",
+  "tags": {
+    "language": "F#",
+    "type": "item"
+  },
+  "sourceName": "MyDataManager",
+  "preferNameDirectory": true,
+  "symbols": {
+    "app": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "",
+      "description": "Target application name (required when the solution has more than one application)."
+    }
+  },
+  "primaryOutputs": [
+    { "path": "MyDataManager/MyDataManager.fsproj" }
+  ],
+  "postActions": [
+    {
+      "description": "Manual integration steps.",
+      "manualInstructions": [
+        { "text": "Add the new project to your .sln (dotnet sln add path/to/MyDataManager.fsproj)." },
+        { "text": "Add <ProjectReference> + <Import .Client.props> to the target server / client fsprojs." },
+        { "text": "Register the data manager in the target Server.fs and Client.fs entry points using ExternalDataManager mode." }
+      ],
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "continueOnError": true
+    }
+  ]
+}

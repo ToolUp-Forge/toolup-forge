@@ -1,0 +1,1115 @@
+module ToolUp.Platform.Tests.InProcess.AuthProviderTests
+
+open System
+open System.Net
+open System.Net.Http
+open System.Security.Cryptography
+open System.Text
+open System.Text.Json
+open System.Threading
+open System.Threading.Tasks
+open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.Primitives
+open Expecto
+open ToolUp.Platform
+open ToolUp.Platform.Auth
+open ToolUp.Platform.Metrics
+open ToolUp.AuthProviders
+open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.InProcess.MockOidcServer
+
+// ─── Recording metrics sink (Phase 9e.A) ────────────────────────────
+//
+// Test-only `IMetricsSink` that appends every `Increment` call to an
+// internal ResizeArray so assertions can inspect per-counter / per-tag
+// emission. Mirrors the `RecordingMetricsSink` already in
+// `FormsServerHygieneTests`; kept local rather than promoted to a
+// shared fixture because the assertion shape differs slightly per
+// test pack and the type is trivially small.
+
+type private RecordingMetricsSink() =
+    let increments = ResizeArray<string * Map<string, string>>()
+
+    interface IMetricsSink with
+        member _.Record(_, _, _) = ()
+        member _.Increment(name, tags) = increments.Add(name, tags)
+        member _.SetGauge(_, _, _) = ()
+
+    member _.Increments = increments :> seq<_>
+
+// ─── HttpContext helpers ─────────────────────────────────────────────
+//
+// Per-provider tests rather than a shared contract: HeaderAuth and
+// StaticJwt disagree on what counts as "valid credentials" (header
+// presence vs HS256-signed JWT), and the interface's docstring-level
+// contract (GetUser lenient, ValidateRequest strict) isn't uniformly
+// upheld today (HeaderAuthProvider's ValidateRequest returns Ok for
+// anonymous requests). Tests pin each provider's actual behaviour.
+
+let private mkContext () = DefaultHttpContext() :> HttpContext
+
+let private withHeader (name: string) (value: string) (ctx: HttpContext) =
+    ctx.Request.Headers[name] <- StringValues value
+    ctx
+
+// Phase 11.C.5 Tier 3 — wrap an `HttpContext` for the IAuthProvider
+// boundary. `bearerCtx` applies this at construction time so most
+// callsites pass `bearerCtx token` directly to `provider.GetUser` /
+// `provider.ValidateRequest`. Callers building a custom context via
+// `mkContext () |> withHeader …` pipe through `toReq` at the end.
+let private toReq (ctx: HttpContext) =
+    ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx
+
+// ─── HS256 JWT minter (tests only) ──────────────────────────────────
+
+module private JwtMinter =
+    let private base64UrlEncode (bytes: byte[]) =
+        Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
+
+    /// Mint an HS256 JWT for a given set of claims. Claims is a list of
+    /// (name, value) — all values are serialised as strings EXCEPT `exp`
+    /// / `iat` / `nbf` which are emitted as numbers. Keep the test
+    /// fixture format narrow; the provider parses the payload with
+    /// System.Text.Json and reads the specific claims it cares about.
+    let mint (secret: string) (claims: (string * obj) list) =
+        let header = """{"alg":"HS256","typ":"JWT"}"""
+        let headerB64 = base64UrlEncode (Encoding.UTF8.GetBytes header)
+
+        let payloadObj =
+            let opts = JsonSerializerOptions()
+            let dict = System.Collections.Generic.Dictionary<string, obj>()
+
+            for k, v in claims do
+                dict[k] <- v
+
+            JsonSerializer.Serialize(dict, opts)
+
+        let payloadB64 = base64UrlEncode (Encoding.UTF8.GetBytes payloadObj)
+
+        let message = Encoding.UTF8.GetBytes $"{headerB64}.{payloadB64}"
+        use hmac = new HMACSHA256(Encoding.UTF8.GetBytes secret)
+        let signature = hmac.ComputeHash message
+        let sigB64 = base64UrlEncode signature
+
+        $"{headerB64}.{payloadB64}.{sigB64}"
+
+// ─── HeaderAuthProvider ─────────────────────────────────────────────
+
+let private headerAuthTests =
+    testList "HeaderAuthProvider" [
+        testCaseAsync "GetUser returns anonymous when X-User-Id is absent"
+        <| async {
+            let provider = HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
+            let! user = provider.GetUser(mkContext () |> toReq)
+
+            Expect.equal user.UserId "anonymous" "no header → anonymous"
+        }
+
+        testCaseAsync "GetUser populates UserId from X-User-Id header"
+        <| async {
+            let provider = HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
+            let ctx = mkContext () |> withHeader "X-User-Id" "alice" |> toReq
+            let! user = provider.GetUser ctx
+
+            Expect.equal user.UserId "alice" "UserId comes from header"
+            Expect.equal user.DisplayName "alice" "DisplayName defaults to UserId"
+        }
+
+        testCaseAsync "ValidateRequest returns Ok for any request (dev-only behaviour)"
+        <| async {
+            // HeaderAuthProvider is dev-only and lenient: ValidateRequest
+            // never returns Error. Production deployments swap in a
+            // real provider — this test pins the current dev behaviour
+            // so a future regression away from "always Ok" is caught.
+            let provider = HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
+
+            match! provider.ValidateRequest(mkContext () |> toReq) with
+            | Ok _ -> ()
+            | Error e -> failtestf "HeaderAuth ValidateRequest should be Ok; got Error: %s" e
+        }
+    ]
+
+// ─── StaticJwtAuthProvider ──────────────────────────────────────────
+
+let private testSecret = "test-secret-at-least-32-bytes-long!!"
+
+let private futureExp () =
+    DateTimeOffset.UtcNow.AddHours(1.0).ToUnixTimeSeconds() |> box
+
+let private pastExp () =
+    DateTimeOffset.UtcNow.AddHours(-1.0).ToUnixTimeSeconds() |> box
+
+let private bearerCtx (token: string) =
+    mkContext () |> withHeader "Authorization" ("Bearer " + token) |> toReq
+
+let private staticJwtTests =
+    let provider (config: StaticJwtAuthProvider.StaticJwtConfig) =
+        StaticJwtAuthProvider.StaticJwtAuthProvider(config) :> IAuthProvider
+
+    let defaultConfig: StaticJwtAuthProvider.StaticJwtConfig = {
+        Secret = testSecret
+        Issuer = None
+        Audience = None
+    }
+
+    testList "StaticJwtAuthProvider" [
+        testCaseAsync "ValidateRequest returns Error when no token is present"
+        <| async {
+            let p = provider defaultConfig
+
+            match! p.ValidateRequest(mkContext () |> toReq) with
+            | Ok _ -> failtest "Expected Error for missing bearer token"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "ValidateRequest validates a well-formed HS256 token"
+        <| async {
+            let p = provider defaultConfig
+
+            let token =
+                JwtMinter.mint testSecret [
+                    "sub", box "alice"
+                    "name", box "Alice"
+                    "email", box "alice@example.com"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok user ->
+                Expect.equal user.UserId "alice" "UserId from sub"
+                Expect.equal user.DisplayName "Alice" "DisplayName from name"
+                Expect.equal user.Email (Some "alice@example.com") "Email from email"
+        }
+
+        testCaseAsync "GetUser lenient: valid token returns the user"
+        <| async {
+            let p = provider defaultConfig
+            let token = JwtMinter.mint testSecret [ "sub", box "bob"; "exp", futureExp () ]
+            let! user = p.GetUser(bearerCtx token)
+
+            Expect.equal user.UserId "bob" "UserId from valid token"
+        }
+
+        testCaseAsync "GetUser lenient: missing token returns anonymous"
+        <| async {
+            let p = provider defaultConfig
+            let! user = p.GetUser(mkContext () |> toReq)
+
+            Expect.equal user.UserId "anonymous" "no token → anonymous"
+        }
+
+        testCaseAsync "Rejects expired tokens"
+        <| async {
+            let p = provider defaultConfig
+            let token = JwtMinter.mint testSecret [ "sub", box "alice"; "exp", pastExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for expired token"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects a token with no exp claim (no-expiry is never a safe default)"
+        <| async {
+            let p = provider defaultConfig
+            // No `exp` minted at all. Pre-hardening this was accepted
+            // ("no exp = no expiry"); now it must be refused, matching
+            // OidcAuthProvider's MissingExpiry behaviour.
+            let token = JwtMinter.mint testSecret [ "sub", box "alice" ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for token with no exp claim"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects a token whose nbf is in the future"
+        <| async {
+            let p = provider defaultConfig
+
+            let futureNbf = DateTimeOffset.UtcNow.AddHours(1.0).ToUnixTimeSeconds() |> box
+
+            let token =
+                JwtMinter.mint testSecret [ "sub", box "alice"; "exp", futureExp (); "nbf", futureNbf ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for token not yet valid (future nbf)"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Accepts a token whose nbf is in the past"
+        <| async {
+            let p = provider defaultConfig
+
+            let pastNbf = DateTimeOffset.UtcNow.AddHours(-1.0).ToUnixTimeSeconds() |> box
+
+            let token =
+                JwtMinter.mint testSecret [ "sub", box "alice"; "exp", futureExp (); "nbf", pastNbf ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok for past nbf; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "valid nbf accepted"
+        }
+
+        testCaseAsync "Rejects tokens signed with a different secret"
+        <| async {
+            let p = provider defaultConfig
+
+            let token =
+                JwtMinter.mint "wrong-secret-used-to-sign-this-token" [ "sub", box "attacker"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for bad signature"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects tokens with wrong issuer when Issuer is configured"
+        <| async {
+            let p =
+                provider {
+                    defaultConfig with
+                        Issuer = Some "https://expected.example.com"
+                }
+
+            let token =
+                JwtMinter.mint testSecret [
+                    "sub", box "alice"
+                    "iss", box "https://other.example.com"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for mismatched issuer"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects tokens with wrong audience when Audience is configured"
+        <| async {
+            let p =
+                provider {
+                    defaultConfig with
+                        Audience = Some "expected-aud"
+                }
+
+            let token =
+                JwtMinter.mint testSecret [ "sub", box "alice"; "aud", box "other-aud"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for mismatched audience"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Accepts token when Issuer + Audience claims match config"
+        <| async {
+            let p =
+                provider {
+                    defaultConfig with
+                        Issuer = Some "https://issuer.example.com"
+                        Audience = Some "my-app"
+                }
+
+            let token =
+                JwtMinter.mint testSecret [
+                    "sub", box "alice"
+                    "iss", box "https://issuer.example.com"
+                    "aud", box "my-app"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok with matching claims; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "claims matched"
+        }
+
+        testCaseAsync "Rejects malformed token"
+        <| async {
+            let p = provider defaultConfig
+            let ctx = bearerCtx "not-even-a-jwt"
+
+            match! p.ValidateRequest ctx with
+            | Ok _ -> failtest "Expected Error for malformed token"
+            | Error _ -> ()
+        }
+    ]
+
+// ─── OidcAuthProvider ───────────────────────────────────────────────
+//
+// Full-loop JWKS validation via mock-HTTP injection: `fromConfigWith`
+// accepts an `HttpClient` whose backing `HttpMessageHandler` we
+// control. The stub serves `.well-known/openid-configuration` + JWKS
+// payloads built around a fresh RSA key per fixture; JWTs are signed
+// with the private half, verified by the provider against the JWKS
+// public half. No real OIDC issuer, no Kestrel.
+//
+// Each fixture uses GUID-suffixed URLs so the module-level JWKS /
+// discovery caches in `OidcAuthProvider.Jwks` don't bleed state
+// across tests.
+
+module private OidcFixture =
+    let private base64UrlEncodeBytes (bytes: byte[]) =
+        Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
+
+    type IssuerKey = {
+        Rsa: RSA
+        Kid: string
+        IssuerUrl: string
+        JwksUrl: string
+        DiscoveryUrl: string
+    }
+
+    /// Fresh keypair + unique URLs per call. The RSA instance is
+    /// long-lived for the duration of the test; Expecto disposes it
+    /// when the test list is garbage-collected.
+    let mkKey () : IssuerKey =
+        let rsa = RSA.Create 2048
+        let unique = Guid.NewGuid().ToString("N").Substring(0, 8)
+        let issuer = $"https://oidc-fixture/{unique}"
+
+        {
+            Rsa = rsa
+            Kid = $"test-key-{unique}"
+            IssuerUrl = issuer
+            JwksUrl = $"{issuer}/jwks.json"
+            DiscoveryUrl = $"{issuer}/.well-known/openid-configuration"
+        }
+
+    let private payloadB64 (claims: (string * obj) list) =
+        let dict = System.Collections.Generic.Dictionary<string, obj>()
+
+        for k, v in claims do
+            dict[k] <- v
+
+        base64UrlEncodeBytes (Encoding.UTF8.GetBytes(JsonSerializer.Serialize dict))
+
+    let private rsaPaddingFor =
+        function
+        | RS256
+        | RS384
+        | RS512 -> RSASignaturePadding.Pkcs1
+        | PS256 -> RSASignaturePadding.Pss
+        | ES256 ->
+            // Sentinel never hit at runtime — callers route ES256
+            // through `mintEs256` which uses ECDsa, not RSA.
+            RSASignaturePadding.Pkcs1
+
+    let private hashFor =
+        function
+        | RS256
+        | PS256
+        | ES256 -> HashAlgorithmName.SHA256
+        | RS384 -> HashAlgorithmName.SHA384
+        | RS512 -> HashAlgorithmName.SHA512
+
+    /// Mint a JWT signed with an RSA-family algorithm (RS256 / RS384 /
+    /// RS512 / PS256) carrying `kid` in its header. ES256 is handled
+    /// separately via `mintEs256` because it uses an EC key. Claims is
+    /// a list of (name, value); strings, ints, and obj are all OK —
+    /// `JsonSerializer.Serialize` handles each based on its runtime
+    /// type. Exponent of int64 from `futureExp` flows through correctly
+    /// because boxed int64 serialises as a JSON number.
+    let mintRsa (alg: JwsAlgorithm) (key: IssuerKey) (claims: (string * obj) list) =
+        let algStr = JwsAlgorithm.toString alg
+        let header = $"""{{"alg":"{algStr}","typ":"JWT","kid":"{key.Kid}"}}"""
+        let headerB64 = base64UrlEncodeBytes (Encoding.UTF8.GetBytes header)
+        let pB64 = payloadB64 claims
+        let message = Encoding.UTF8.GetBytes $"{headerB64}.{pB64}"
+        let signature = key.Rsa.SignData(message, hashFor alg, rsaPaddingFor alg)
+        let sigB64 = base64UrlEncodeBytes signature
+        $"{headerB64}.{pB64}.{sigB64}"
+
+    /// Convenience shorthand for the historical RS256-only callers
+    /// — preserves the existing test bodies without churning every
+    /// site to `mintRsa RS256`.
+    let mintRs256 (key: IssuerKey) (claims: (string * obj) list) = mintRsa RS256 key claims
+
+    /// JWKS JSON containing one RSA public key. RSAParameters export
+    /// with `false` keeps the private half out of the response — the
+    /// stub serves only what a real JWKS endpoint would.
+    let buildJwks (key: IssuerKey) =
+        let p = key.Rsa.ExportParameters(false)
+        let n = base64UrlEncodeBytes p.Modulus
+        let e = base64UrlEncodeBytes p.Exponent
+        $"""{{"keys":[{{"kty":"RSA","kid":"{key.Kid}","alg":"RS256","use":"sig","n":"{n}","e":"{e}"}}]}}"""
+
+    // ─── EC (ES256) fixture ─────────────────────────────────────────
+
+    type IssuerEcKey = {
+        Ec: ECDsa
+        Kid: string
+        IssuerUrl: string
+        JwksUrl: string
+        DiscoveryUrl: string
+    }
+
+    /// Fresh P-256 keypair + unique URLs. Mirrors `mkKey` but binds an
+    /// `ECDsa` instance instead of `RSA`. Per-test isolation keeps the
+    /// module-level JWKS / discovery caches from bleeding state.
+    let mkEcKey () : IssuerEcKey =
+        let ec = ECDsa.Create(ECCurve.NamedCurves.nistP256)
+        let unique = Guid.NewGuid().ToString("N").Substring(0, 8)
+        let issuer = $"https://oidc-ec-fixture/{unique}"
+
+        {
+            Ec = ec
+            Kid = $"test-ec-key-{unique}"
+            IssuerUrl = issuer
+            JwksUrl = $"{issuer}/jwks.json"
+            DiscoveryUrl = $"{issuer}/.well-known/openid-configuration"
+        }
+
+    /// Mint an ES256 JWT carrying `kid` in its header. The signature
+    /// is emitted in IEEE-P1363 (r||s, 64 bytes for P-256) — the JWS
+    /// transport — not the DER form `ECDsa` would default to.
+    let mintEs256 (key: IssuerEcKey) (claims: (string * obj) list) =
+        let header = $"""{{"alg":"ES256","typ":"JWT","kid":"{key.Kid}"}}"""
+        let headerB64 = base64UrlEncodeBytes (Encoding.UTF8.GetBytes header)
+        let pB64 = payloadB64 claims
+        let message = Encoding.UTF8.GetBytes $"{headerB64}.{pB64}"
+
+        let signature =
+            key.Ec.SignData(message, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)
+
+        let sigB64 = base64UrlEncodeBytes signature
+        $"{headerB64}.{pB64}.{sigB64}"
+
+    /// JWKS JSON containing one EC public key. `ExportParameters false`
+    /// drops the private scalar; the JWKS stub serves only what a real
+    /// provider would. `Q.X` / `Q.Y` carry the affine coordinates the
+    /// `crv = P-256` curve binds.
+    let buildEcJwks (key: IssuerEcKey) =
+        let p = key.Ec.ExportParameters(false)
+        let x = base64UrlEncodeBytes p.Q.X
+        let y = base64UrlEncodeBytes p.Q.Y
+
+        $"""{{"keys":[{{"kty":"EC","kid":"{key.Kid}","alg":"ES256","use":"sig","crv":"P-256","x":"{x}","y":"{y}"}}]}}"""
+
+    /// Minimal OIDC discovery document — `jwks_uri` is the only field
+    /// the provider needs. Other endpoints listed for shape-realism
+    /// only.
+    let buildDiscovery (key: IssuerKey) =
+        $"""{{"issuer":"{key.IssuerUrl}","jwks_uri":"{key.JwksUrl}","authorization_endpoint":"{key.IssuerUrl}/auth","token_endpoint":"{key.IssuerUrl}/token","id_token_signing_alg_values_supported":["RS256"]}}"""
+
+/// Stub `HttpMessageHandler` that routes requests by absolute URL to
+/// pre-registered response bodies. Anything not in the map returns
+/// 404 — surfaces as `JwksUnavailable` in the provider.
+type private StubHttpHandler(routes: Map<string, string>) =
+    inherit HttpMessageHandler()
+
+    override _.SendAsync(request: HttpRequestMessage, _ct: CancellationToken) : Task<HttpResponseMessage> =
+        let url = string request.RequestUri
+
+        match routes.TryFind url with
+        | Some body ->
+            let response = new HttpResponseMessage(HttpStatusCode.OK)
+            response.Content <- new StringContent(body, Encoding.UTF8, "application/json")
+            Task.FromResult response
+        | None ->
+            let response = new HttpResponseMessage(HttpStatusCode.NotFound)
+            response.Content <- new StringContent($"no stub for {url}")
+            Task.FromResult response
+
+let private oidcTests =
+    let mkClient (routes: (string * string) list) : HttpClient =
+        new HttpClient(new StubHttpHandler(Map.ofList routes))
+
+    let mkProviderExplicit (key: OidcFixture.IssuerKey) (issuer: string option) (audience: string option) =
+        let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
+
+        let config = {
+            Issuer = issuer
+            Audience = audience
+            KeySource = JwksExplicit key.JwksUrl
+            TokenLocation = BearerHeader
+            ClockSkewSeconds = None
+            AcceptedAlgorithms = None
+        }
+
+        OidcAuthProvider.fromConfigWith client None config
+
+    let mkProviderDiscovery (key: OidcFixture.IssuerKey) (audience: string option) =
+        let client =
+            mkClient [
+                key.DiscoveryUrl, OidcFixture.buildDiscovery key
+                key.JwksUrl, OidcFixture.buildJwks key
+            ]
+
+        let config = {
+            Issuer = Some key.IssuerUrl
+            Audience = audience
+            KeySource = JwksDiscovery key.IssuerUrl
+            TokenLocation = BearerHeader
+            ClockSkewSeconds = None
+            AcceptedAlgorithms = None
+        }
+
+        OidcAuthProvider.fromConfigWith client None config
+
+    testList "OidcAuthProvider" [
+        testCaseAsync "ValidateRequest validates an RS256 token against JwksExplicit"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "alice"
+                    "name", box "Alice"
+                    "email", box "alice@example.com"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok user ->
+                Expect.equal user.UserId "alice" "UserId from sub"
+                Expect.equal user.DisplayName "Alice" "DisplayName from name"
+                Expect.equal user.Email (Some "alice@example.com") "Email from email"
+        }
+
+        testCaseAsync "ValidateRequest validates via OIDC discovery (JwksDiscovery)"
+        <| async {
+            // Exercises the .well-known fetch + jwks_uri extraction path,
+            // confirming the discovery flow uses the injected HttpClient.
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderDiscovery key None
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "bob"; "iss", box key.IssuerUrl; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "bob" "UserId from sub via discovery flow"
+        }
+
+        testCaseAsync "GetUser lenient: valid token returns the user"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+            let token = OidcFixture.mintRs256 key [ "sub", box "carol"; "exp", futureExp () ]
+            let! user = p.GetUser(bearerCtx token)
+
+            Expect.equal user.UserId "carol" "UserId from valid token"
+        }
+
+        testCaseAsync "GetUser lenient: missing token returns anonymous"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+            let! user = p.GetUser(mkContext () |> toReq)
+
+            Expect.equal user.UserId "anonymous" "no token → anonymous"
+        }
+
+        testCaseAsync "Rejects expired tokens"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", pastExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for expired token"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects tokens signed by a different key"
+        <| async {
+            // Two distinct keypairs share a kid: a forged token signed by
+            // the attacker's key carries the legitimate kid in its header
+            // but the provider verifies against the legitimate JWKS, which
+            // is the public half of the legitimate key.
+            let legitKey = OidcFixture.mkKey ()
+
+            let attackerKey = { legitKey with Rsa = RSA.Create 2048 }
+
+            let p = mkProviderExplicit legitKey None None
+
+            let token =
+                OidcFixture.mintRs256 attackerKey [ "sub", box "attacker"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for bad signature"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects tokens with wrong issuer when Issuer is configured"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key (Some "https://expected.example.com") None
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "alice"
+                    "iss", box "https://other.example.com"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for mismatched issuer"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects tokens with wrong audience when Audience is configured"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None (Some "expected-aud")
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "alice"; "aud", box "other-aud"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for mismatched audience"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Accepts token when Issuer + Audience claims match config"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key (Some key.IssuerUrl) (Some "my-app")
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "alice"
+                    "iss", box key.IssuerUrl
+                    "aud", box "my-app"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok with matching claims; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "claims matched"
+        }
+
+        testCaseAsync "Rejects tokens with unknown kid"
+        <| async {
+            // Forge a token whose kid header doesn't match any JWKS
+            // entry. The provider tries a force-refresh on kid-miss;
+            // the refresh hits the same stub (still only the legit kid)
+            // and returns UnknownKid.
+            let legitKey = OidcFixture.mkKey ()
+
+            let forgedKey = {
+                legitKey with
+                    Kid = $"forged-kid-{Guid.NewGuid():N}"
+                    Rsa = RSA.Create 2048
+            }
+
+            let p = mkProviderExplicit legitKey None None
+
+            let token =
+                OidcFixture.mintRs256 forgedKey [ "sub", box "attacker"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for unknown kid"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects tokens with no kid in the header"
+        <| async {
+            // Hand-mint a token without kid in the header. The provider
+            // requires kid to route to a JWKS entry; absence is
+            // MalformedToken "header has no kid".
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+
+            let base64UrlEncodeBytes (bytes: byte[]) =
+                Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
+
+            let header = """{"alg":"RS256","typ":"JWT"}"""
+            let headerB64 = base64UrlEncodeBytes (Encoding.UTF8.GetBytes header)
+
+            let payload =
+                let dict = System.Collections.Generic.Dictionary<string, obj>()
+                dict["sub"] <- box "alice"
+                dict["exp"] <- futureExp ()
+                JsonSerializer.Serialize dict
+
+            let payloadB64 = base64UrlEncodeBytes (Encoding.UTF8.GetBytes payload)
+            let message = Encoding.UTF8.GetBytes $"{headerB64}.{payloadB64}"
+
+            let signature =
+                key.Rsa.SignData(message, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+
+            let token = $"{headerB64}.{payloadB64}.{base64UrlEncodeBytes signature}"
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for missing kid"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects HS256-signed tokens (algorithm not RS256)"
+        <| async {
+            // The HS256 path belongs to StaticJwtAuthProvider; OIDC
+            // rejects non-RS256 algorithms outright with
+            // UnsupportedAlgorithm.
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+
+            let hs256Token =
+                JwtMinter.mint "any-secret-32-bytes-long-blah-blah!!" [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx hs256Token) with
+            | Ok _ -> failtest "Expected Error for HS256 token against OIDC provider"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects malformed token"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+            let ctx = bearerCtx "not-even-a-jwt"
+
+            match! p.ValidateRequest ctx with
+            | Ok _ -> failtest "Expected Error for malformed token"
+            | Error _ -> ()
+        }
+
+        // ─── Phase 3.A — algorithm whitelist + per-algorithm verify ──
+
+        testCaseAsync "Default config accepts RS256 only (no AcceptedAlgorithms set)"
+        <| async {
+            // The whole pre-Phase-3.A test suite above is the
+            // RS256-Ok proof for this lane. Pair it with an RS384
+            // rejection against the same default config to lock in
+            // the byte-for-byte backward-compat guarantee: today's
+            // deployments inherit `AcceptedAlgorithms = None`, which
+            // resolves to `[RS256]`.
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+
+            let rs384Token =
+                OidcFixture.mintRsa RS384 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx rs384Token) with
+            | Ok _ -> failtest "Default RS256-only whitelist should reject RS384"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "RS384 token validates when whitelist includes RS384"
+        <| async {
+            let key = OidcFixture.mkKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = Some [ RS256; RS384 ]
+            }
+
+            let p = OidcAuthProvider.fromConfigWith client None config
+
+            let token =
+                OidcFixture.mintRsa RS384 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok for RS384; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "RS384-signed token validated"
+        }
+
+        testCaseAsync "RS512 token validates when whitelist includes RS512"
+        <| async {
+            let key = OidcFixture.mkKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = Some [ RS512 ]
+            }
+
+            let p = OidcAuthProvider.fromConfigWith client None config
+
+            let token =
+                OidcFixture.mintRsa RS512 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok for RS512; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "RS512-signed token validated"
+        }
+
+        testCaseAsync "PS256 token validates when whitelist includes PS256"
+        <| async {
+            // PS256 uses the same RSA key shape as RS256 but PSS padding.
+            // Reuses the existing RSA JWKS (PSS / PKCS#1 distinction is
+            // signature-side only — the JWK key material is identical).
+            let key = OidcFixture.mkKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = Some [ PS256 ]
+            }
+
+            let p = OidcAuthProvider.fromConfigWith client None config
+
+            let token =
+                OidcFixture.mintRsa PS256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok for PS256; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "PS256-signed token validated"
+        }
+
+        testCaseAsync "ES256 token validates when whitelist includes ES256 (EC JWKS)"
+        <| async {
+            // The Cognito / Firebase-shaped path: EC JWKS, ES256
+            // signature in IEEE-P1363 form.
+            let key = OidcFixture.mkEcKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildEcJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = Some [ RS256; ES256 ]
+            }
+
+            let p = OidcAuthProvider.fromConfigWith client None config
+
+            let token = OidcFixture.mintEs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok for ES256; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "ES256-signed token validated"
+        }
+
+        testCaseAsync "ES256 token rejected when whitelist is [RS256] (operator trust set wins)"
+        <| async {
+            // The signature itself would verify against the EC JWKS —
+            // but the operator's `AcceptedAlgorithms = Some [RS256]`
+            // explicitly excludes ES256. Reject with
+            // `UnsupportedAlgorithm "ES256"`, not `InvalidSignature`,
+            // because the rejection is policy-driven, not crypto-
+            // driven.
+            let key = OidcFixture.mkEcKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildEcJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = Some [ RS256 ]
+            }
+
+            let p = OidcAuthProvider.fromConfigWith client None config
+
+            let token = OidcFixture.mintEs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Whitelist [RS256] should reject ES256 even with valid EC signature"
+            | Error e ->
+                Expect.stringContains
+                    e
+                    "ES256"
+                    "Error message should name the rejected algorithm so the operator can widen the whitelist if intentional"
+        }
+    ]
+
+// ─── OidcAuthProvider — metrics emission (Phase 9e.A) ───────────────
+//
+// Confirms the per-instance `IMetricsSink` wiring lands the canonical
+// `toolup.auth.validate.*` counters with the `provider=oidc` tag, and
+// that the no-metrics constructor path is a no-op (no module-level
+// state side effects between fixtures — the prior `setMetricsSink`
+// pattern carried that hazard).
+
+let private oidcMetricsTests =
+    let mkClient (routes: (string * string) list) : HttpClient =
+        new HttpClient(new StubHttpHandler(Map.ofList routes))
+
+    let mkConfig (key: OidcFixture.IssuerKey) : AuthConfig = {
+        Issuer = None
+        Audience = None
+        KeySource = JwksExplicit key.JwksUrl
+        TokenLocation = BearerHeader
+        ClockSkewSeconds = None
+        AcceptedAlgorithms = None
+    }
+
+    testList "OidcAuthProvider — metrics emission" [
+        testCaseAsync "Successful validation increments validate.success with provider=oidc"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
+            let sink = RecordingMetricsSink()
+
+            let provider =
+                OidcAuthProvider.fromConfigWithMetrics client None (Some(sink :> IMetricsSink)) (mkConfig key)
+
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! provider.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok _ ->
+                let entries = sink.Increments |> Seq.toList
+
+                Expect.equal entries.Length 1 "Exactly one increment expected for a single successful validation"
+
+                let counter, tags = entries.[0]
+                Expect.equal counter AuthMetrics.ValidateSuccess "Success counter name"
+
+                Expect.equal (Map.tryFind AuthMetrics.ProviderTag tags) (Some "oidc") "Provider tag identifies oidc"
+        }
+
+        testCaseAsync "Missing token increments validate.no_token"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
+            let sink = RecordingMetricsSink()
+
+            let provider =
+                OidcAuthProvider.fromConfigWithMetrics client None (Some(sink :> IMetricsSink)) (mkConfig key)
+
+            match! provider.ValidateRequest(mkContext () |> toReq) with
+            | Ok _ -> failtest "Expected Error for missing bearer token"
+            | Error _ ->
+                let counters = sink.Increments |> Seq.map fst |> Seq.toList
+
+                Expect.contains counters AuthMetrics.ValidateNoToken "no_token counter emitted"
+        }
+
+        testCaseAsync "Expired token increments validate.expired"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
+            let sink = RecordingMetricsSink()
+
+            let provider =
+                OidcAuthProvider.fromConfigWithMetrics client None (Some(sink :> IMetricsSink)) (mkConfig key)
+
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", pastExp () ]
+
+            match! provider.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for expired token"
+            | Error _ ->
+                let counters = sink.Increments |> Seq.map fst |> Seq.toList
+
+                Expect.contains counters AuthMetrics.ValidateExpired "expired counter emitted"
+        }
+
+        testCaseAsync "Provider built without a sink elides emission and does not throw"
+        <| async {
+            // Constructed via the legacy `fromConfigWith` (no metrics)
+            // — the validation path must complete identically, including
+            // the same set of outcomes a metered provider would emit.
+            // The absence of a sink is signalled by the provider running
+            // to completion without any module-level state being touched
+            // (the prior `setMetricsSink` setter pattern is retired).
+            let key = OidcFixture.mkKey ()
+            let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
+            let provider = OidcAuthProvider.fromConfigWith client None (mkConfig key)
+
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! provider.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "validation succeeds without a sink"
+        }
+
+        testCaseAsync "Two provider instances bind independent sinks (no cross-instance pollution)"
+        <| async {
+            // The setter pattern leaked sinks across providers via the
+            // module-level `metricsSink`. Per-instance binding under
+            // 9e.A removes that hazard — assert it directly: a
+            // validation against provider A's sink does not surface on
+            // provider B's sink.
+            let key = OidcFixture.mkKey ()
+            let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
+            let sinkA = RecordingMetricsSink()
+            let sinkB = RecordingMetricsSink()
+
+            let providerA =
+                OidcAuthProvider.fromConfigWithMetrics client None (Some(sinkA :> IMetricsSink)) (mkConfig key)
+
+            let providerB =
+                OidcAuthProvider.fromConfigWithMetrics client None (Some(sinkB :> IMetricsSink)) (mkConfig key)
+
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            let! _ = providerA.ValidateRequest(bearerCtx token)
+
+            Expect.equal (Seq.length sinkA.Increments) 1 "A sink saw provider A's increment"
+            Expect.equal (Seq.length sinkB.Increments) 0 "B sink saw no leakage from provider A"
+        }
+    ]
+
+// ─── OidcAuthProvider — IAuthProvider contract via mock issuer ──────
+//
+// Same provider as `oidcTests`, but driven through the reusable
+// `IAuthProviderContract` pack over a *real* Kestrel OIDC issuer +
+// genuine OIDC discovery (no `StubHttpMessageHandler`). This adds
+// real-socket / real-discovery fidelity and is the deferred Phase 3b
+// "local OIDC mock issuer for e2e testing" deliverable.
+//
+// `lazy` + `testSequenced` boot the issuer once for the whole pack;
+// the trailing teardown case stops Kestrel after the contract cases
+// (sequenced lists run in declaration order).
+
+let private oidcMockIssuerContract =
+    let server = lazy (MockOidcServer.start MockOidcConfig.defaults)
+
+    let fixture: IAuthProviderContract.AuthProviderContractFixture =
+        let s = server.Value
+
+        let config = {
+            Issuer = Some s.IssuerUrl
+            Audience = None
+            KeySource = JwksDiscovery s.IssuerUrl
+            TokenLocation = BearerHeader
+            ClockSkewSeconds = None
+            AcceptedAlgorithms = None
+        }
+
+        let provider = OidcAuthProvider.fromConfigWith (new HttpClient()) None config
+
+        {
+            Name = "OidcAuthProvider via MockOidcServer"
+            Provider = provider
+            ValidCtx = fun () -> bearerCtx (s.MintAccessToken())
+            ExpectedUserId = MockOidcConfig.defaults.Subject
+            ExpiredCtx = fun () -> bearerCtx (s.MintExpiredToken())
+            EmptyCtx = fun () -> mkContext () |> toReq
+        }
+
+    testSequenced (
+        testList "OidcAuthProvider (mock issuer)" [
+            IAuthProviderContract.tests fixture
+            testCase "teardown: stop mock issuer"
+            <| fun () ->
+                if server.IsValueCreated then
+                    (server.Value :> IDisposable).Dispose()
+        ]
+    )
+
+// ─── Aggregated ─────────────────────────────────────────────────────
+
+let tests =
+    testList "AuthProviders" [
+        headerAuthTests
+        staticJwtTests
+        oidcTests
+        oidcMetricsTests
+        oidcMockIssuerContract
+    ]

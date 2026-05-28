@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AgGridEnterprise</PackageId>
+    <AssemblyName>ToolUp.AgGridEnterprise</AssemblyName>
+    <Description>Client-side AG Grid Enterprise initialisation companion for ToolUp.Platform. Licensing-isolated from the SDK so deployments using AG Grid Community don't ship Enterprise code.</Description>
+    <PackageTags>fsharp;fable;sdk;client;ag-grid;ag-charts;enterprise</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AgGridEnterpriseTypes.fs" />
+    <Compile Include="AgGridEnterprise.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/. The library's own .fsproj + .fs files ship inside
+       the nupkg; Fable's package loader extracts and compiles source
+       directly. Mirrors the Feliz / Fable.Elmish convention. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+  <!-- Fable.Core / Feliz / FSharp.Core resolved transitively via
+       ToolUp.Platform.Client + the .NET SDK. -->
+</Project>

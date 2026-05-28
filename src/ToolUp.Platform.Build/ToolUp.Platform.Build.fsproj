@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform Build — FAKE pipeline targets (Run / Bundle / Format / Pack / ThirdPartyNotices) consumed by root Build.fs. Depends on ToolUp.Platform.Core.</Description>
+        <PackageTags>fsharp;sdk;build;fake</PackageTags>
+        <!-- Phase 11.C.4 (2026-05-10): Server-tier source-layout symmetry
+             pass — Build/ source moved into this project's own directory
+             tree (was ../ToolUp.Platform/Build/ during Phase 11.B +
+             11.C.2). Consumed by root Build.fs via ProjectReference.
+             Depends on Core for BuildOutput / config types. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Build\SDK.BuildTypes.fs" />
+        <Compile Include="Build\SDK.Build.fs" />
+        <Compile Include="Build\SDK.HostPackaging.fs" />
+        <!-- Phase 57 follow-up — FAKE Prerender target factory.
+             Consumers `open ToolUp.Platform.Build.Prerender` and
+             call `registerTarget config options routes` from
+             their `Build.fs`; the target chains after `Fable`
+             and writes prerendered HTML per declared route. -->
+        <Compile Include="Build\SDK.PrerenderTarget.fs" />
+    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Fake.Core.Target" />
+    <PackageReference Include="Fake.IO.FileSystem" />
+    <!-- Explicit FSharp.Core pin: Fake 6.1.4 brings FSharp.Core 8.0.x
+         transitively, but ToolUp.Platform.Core compiles against 10.1
+         (CPM). Without this pin the resolver picks 8.0 as "primary"
+         (MSB3277), and Build code that calls any 10-only FSharp.Core
+         API would MissingMethodException at load time. -->
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>

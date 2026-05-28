@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.EmbeddingProviders.OpenAI</PackageId>
+    <AssemblyName>ToolUp.EmbeddingProviders.OpenAI</AssemblyName>
+    <Description>OpenAI text-embedding-3-small IEmbeddingProvider for ToolUp.RAG. API key from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;rag;embedding;openai;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="OpenAIEmbeddingProvider.fs" />
+    <Compile Include="OpenAIEmbeddingProviderHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

@@ -1,0 +1,7 @@
+# Runtime artefacts created by `dotnet run` (ASP.NET data-protection
+# keys, locally-scoped blob storage). Regenerated on every boot.
+data/
+
+# .NET build output.
+bin/
+obj/

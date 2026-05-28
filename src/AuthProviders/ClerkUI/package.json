@@ -1,0 +1,12 @@
+{
+    "name": "@toolup/clerk-ui",
+    "version": "1.0.0",
+    "private": true,
+    "dependencies": {
+        "@clerk/react": "^6.6.4"
+    },
+    "peerDependencies": {
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
+    }
+}

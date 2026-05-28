@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.PublicRendering — server-side-rendered public-facing pages (marketing sites, content portals, landing pages) for ToolUp.Platform. Giraffe.ViewEngine rendering DSL + markdown content loader with YAML frontmatter + sitemap + redirect map + JSON-LD structured-data helpers. Depends on ToolUp.Platform.Server.</Description>
+        <PackageTags>fsharp;sdk;server;ssr;cms;giraffe;marketing</PackageTags>
+        <!-- Phase 38 — single-tier companion (no Fable client surface in
+             v1; SSR-only). README + TECHNICAL_GUIDE live alongside the
+             fsproj since there's no cross-tier sibling needing a shared
+             parent docs directory. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Giraffe.ViewEngine" />
+        <PackageReference Include="Markdig" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\PublicContentTypes.fs" />
+        <Compile Include="Server\IPublicContentApi.fs" />
+        <Compile Include="Server\FrontmatterParser.fs" />
+        <Compile Include="Server\MarkdownContentLoader.fs" />
+        <Compile Include="Server\EntityRegistrations.fs" />
+        <Compile Include="Server\PublicContentApiImpl.fs" />
+        <Compile Include="Server\RedirectMap.fs" />
+        <Compile Include="Server\StructuredDataHelpers.fs" />
+        <Compile Include="Server\SitemapGenerator.fs" />
+        <Compile Include="Server\PublicPageHandler.fs" />
+        <Compile Include="Server\PublicRenderingCompose.fs" />
+    </ItemGroup>
+</Project>

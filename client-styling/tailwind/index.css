@@ -1,0 +1,79 @@
+/* >>> @toolup/tailwind canonical — DO NOT EDIT between these markers <<<
+   Single source of truth for the ToolUp Tailwind v4 contract. Consumer
+   client apps embed this block verbatim and override ONLY their brand
+   --color-* values in a :root AFTER the end marker. check-drift.ps1
+   fails CI/precommit if any consumer's marked region differs from this file.
+
+   Pinned toolchain (see deps.json — exact, no ^): tailwindcss 4.3.0 +
+   @tailwindcss/vite 4.3.0. These move only by editing this package, never
+   a blanket `ncu -u` (update-all.ps1 rejects them by default). */
+@import "tailwindcss";
+
+/* The SDK shell's classes (bg-sidebar, bg-brand, text-brand-dark, …) exist
+   ONLY in Fable's compiled output/ (the shell ships in the
+   ToolUp.Platform.Client NuGet pkg, not the app source). v4's oxide scan
+   honours .gitignore and does NOT use the module graph in `vite build`, so
+   the gitignored output/ is invisible to auto-detection. This @source
+   overrides the REPO-level `output/` ignore. It is NOT sufficient on its
+   own: Fable also writes output/fable_modules/.gitignore (content: two
+   chars star-star, slash, star) which @source canNOT override — a
+   MANDATORY post-Fable build step must empty/delete that nested file on
+   every compile (see README "Fable output needs @source + a build step").
+   Universal across ToolUp Fable clients: all use `dotnet fable -o output`
+   with the Vite root at the client dir, so this path is identical
+   everywhere and drift-checked. */
+@source "./output";
+
+@theme {
+  /* The six semantic tokens the ToolUp.Platform.Client shell renders
+     against (bg-brand, bg-sidebar, border-border, text-brand-dark, ...).
+     v4 auto-generates the utilities from the --color-* namespace AND
+     emits each as a :root custom property, so an app's later :root
+     override re-skins every utility at runtime with no rebuild. Apps
+     override the VALUES, never the NAMES. Defaults = the SDK brand. */
+  --color-brand: #59229D;
+  --color-brand-dark: #371561;
+  --color-sidebar: #1A0B2E;
+  --color-bg-light: #F6F7F8;
+  --color-border: #CBCCCC;
+  --color-separator: #D1D5DB;
+
+  /* v4 changed ring defaults (width 3px->1px, color blue-500->
+     currentColor). Restore v3 so the SDK shell's + apps' existing
+     `ring`/`focus:ring` sites keep their look. (Upgrade guide §7.) */
+  --default-ring-width: 3px;
+  --default-ring-color: var(--color-blue-500);
+}
+
+/* Official v3 -> v4 compatibility base layer (upgrade guide §7). v4
+   changed several element defaults that would otherwise silently restyle
+   every consumer and the SDK shell. Deliberate, removable bridge —
+   retired incrementally in migration-plan Phase 5 alongside the
+   semantic-token cleanup. Does NOT mask two known minor deltas: the
+   shadow/rounded/blur scale was renamed one notch (cosmetic; fixed by
+   the Phase 5 class migration) and the space-y/divide selector changed
+   (migrate those sites to flex/grid `gap`). */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  dialog {
+    margin: auto;
+  }
+}
+/* >>> end @toolup/tailwind canonical <<< */

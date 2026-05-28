@@ -1,0 +1,11 @@
+{
+    "name": "@toolup/oidc-client",
+    "version": "1.0.0",
+    "private": true,
+    "comment": "No npm dependencies — the OIDC flow uses browser-native fetch and WebCrypto APIs.",
+    "dependencies": {},
+    "peerDependencies": {
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
+    }
+}

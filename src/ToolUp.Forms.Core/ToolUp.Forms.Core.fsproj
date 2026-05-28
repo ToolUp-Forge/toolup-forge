@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Forms Core — schema-driven form types (FormSchema / Submission / Workflow / AggregationTypes), Fable.Remoting contracts (IFormApi, IPublicFormApi for publishable surveys).</Description>
+        <PackageTags>fsharp;sdk;types;forms</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+         under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Forms\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\FormSchema.fs" />
+        <Compile Include="Shared\FormSubmission.fs" />
+        <Compile Include="Shared\Workflow.fs" />
+        <Compile Include="Shared\IActionLedger.fs" />
+        <Compile Include="Shared\AggregationTypes.fs" />
+        <Compile Include="Shared\FormApi.fs" />
+        <Compile Include="Shared\PublicFormApi.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

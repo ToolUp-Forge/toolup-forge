@@ -1,0 +1,21 @@
+<Project>
+  <!--
+    Phase 11.B follow-up cutover (2026-05-08): SDK client source items are
+    no longer injected here — they live in ../ToolUp.Platform.Client/ and
+    ship as ToolUp.Platform.Client.dll referenced via <ProjectReference>.
+    This file is retained as an empty marker for convention parity with
+    ToolUp.Platform.Server.props; no client-side _ToolUpPlatformClientSources
+    extension pattern exists today (Server.props's
+    InjectToolUpPlatformServerSources target is preserved because companion
+    .Server.props files extend _ToolUpPlatformServerSources; Client.props
+    has no parallel pattern, so no target is needed here).
+
+    If a future companion needs to extend client-side compile units, follow
+    the Server.props extension pattern: declare a _ToolUpPlatformClientSources
+    item-group, populate it from companion .Client.props files, and inject
+    it via a Target BeforeTargets="CoreCompile".
+  -->
+  <ItemGroup>
+    <!-- (SDK source items removed Phase 11.B follow-up cutover.) -->
+  </ItemGroup>
+</Project>

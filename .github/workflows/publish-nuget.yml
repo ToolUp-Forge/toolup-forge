@@ -1,0 +1,64 @@
+# Publish every public-surface SDK package to the toolup-forge GitHub
+# Packages NuGet feed on a release tag. Phase 11.C.3 cloud-publish path
+# (2026-05-28).
+#
+# ─── Trigger ─────────────────────────────────────────────────────────
+#
+# - `v*.*.*` tag push — coordinated SDK-wide release. Every IsPackable
+#   fsproj packs at its current <Version> (currently driven by the
+#   centralised <Version> in Directory.Build.props, lifted to
+#   <ToolUpSdkVersion> via the ToolUp.Sdk meta-manifest). Per-package
+#   independent bumps remain possible via a per-fsproj <Version>
+#   override; the tag scheme `v{Package}/{Version}` is reserved for that
+#   future shape but not yet wired here.
+# - `workflow_dispatch` — manual trigger for the first publish + any
+#   re-run after a transient CI failure. Idempotent thanks to
+#   `--skip-duplicate` in the FAKE Publish target — re-runs cleanly skip
+#   versions already pushed.
+#
+# ─── Authentication ──────────────────────────────────────────────────
+#
+# The Actions-provided `GITHUB_TOKEN` is the publish credential. The
+# `permissions: packages: write` declaration below grants it the right
+# scope automatically; no PAT is needed for CI. A PAT with
+# `write:packages` is only required for local manual publishes (set as
+# `GITHUB_PACKAGES_TOKEN` in the developer's environment).
+#
+# ─── Acceptance criteria (Phase 11.C.3) ──────────────────────────────
+#
+# After the first successful run on tag v0.3.0:
+# - Every package + `ToolUp.Sdk` meta-manifest appears under
+#   https://github.com/orgs/ToolUp-Forge/packages at version 0.3.0.
+# - A fresh checkout can `dotnet add package
+#   ToolUp.Platform.Core --version 0.3.0` from the cloud feed (with a
+#   `read:packages` PAT while the feed is private; no auth once the
+#   feed flips public).
+# - Consumers adopt the cloud source in a follow-up PR.
+
+name: publish-nuget
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Pack + push every public-surface SDK package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet run --project Build.fsproj -- Publish

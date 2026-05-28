@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AI.SampleClientTool.Client</PackageId>
+    <Description>Apache-2.0 in-tree reference companion (Client tier) — Fable browser-side handler for the sample client-resident-tool calculator. Reference-only: not a production companion. Exists so the IClientToolAuthorizer + ClientToolDispatch substrate has an in-tree consumer exercising the seam end-to-end; doubles as the ≤10-min worked example for new client-resident-companion authors.</Description>
+    <PackageTags>fsharp;fable;sdk;client;ai;sample;reference;client-resident</PackageTags>
+  </PropertyGroup>
+  <!-- Pack source for Fable consumers under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Client\SampleHandler.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.AI.SampleClientTool.Core\ToolUp.AI.SampleClientTool.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AI.Client\ToolUp.AI.Client.fsproj" />
+  </ItemGroup>
+  <!-- Fable.SimpleJson flows transitively from ToolUp.AI.Client. -->
+</Project>

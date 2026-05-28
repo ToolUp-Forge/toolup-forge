@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Module", "F#", "ToolUp" ],
+  "identity": "ToolUp.Templates.Module",
+  "groupIdentity": "ToolUp.Templates.Module",
+  "name": "ToolUp Platform SDK Module",
+  "shortName": "platformsdk-module",
+  "description": "Four-file analysis module (SharedTypes, Server, ClientModel, ClientView) plus .fsproj and .Client.props. Compiles cleanly against ToolUp.Platform.Core only — the dependency floor for minimum-viable modules.",
+  "tags": {
+    "language": "F#",
+    "type": "item"
+  },
+  "sourceName": "MyModule",
+  "preferNameDirectory": true,
+  "symbols": {
+    "app": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "",
+      "description": "Target application name (required when the solution has more than one application; the module is registered into <App>-Server's Server.fs and <App>-Client's Client.fs entry points). Leave empty for single-app solutions."
+    },
+    "datatype": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "",
+      "description": "Optional DataTypeId for file processing (informational; surfaced as a comment in Server.fs)."
+    },
+    "api": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "MyModuleApi",
+      "description": "API record name (default: {ModuleName}Api).",
+      "replaces": "MyModuleApi"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "MyModule/MyModule.fsproj" }
+  ],
+  "postActions": [
+    {
+      "description": "Manual integration steps.",
+      "manualInstructions": [
+        { "text": "Add the new project to your .sln (dotnet sln add path/to/MyModule.fsproj)." },
+        { "text": "Add <ProjectReference Include=\"..\\Modules\\MyModule\\MyModule.fsproj\" /> to the target server fsproj." },
+        { "text": "Add <Import Project=\"..\\Modules\\MyModule\\MyModule.Client.props\" /> to the target client fsproj." },
+        { "text": "Register the module in the target Server.fs and Client.fs entry points." }
+      ],
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "continueOnError": true
+    }
+  ]
+}

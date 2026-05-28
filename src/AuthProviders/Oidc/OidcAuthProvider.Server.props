@@ -1,0 +1,9 @@
+<Project>
+  <!-- Phase 11.B follow-up companion cutover (2026-05-08): source files
+       moved to <Compile> in OidcAuthProvider.fsproj and ship as
+       OidcAuthProvider.dll referenced via <ProjectReference> from the
+       consuming server project. This file is retained as an empty marker. -->
+  <ItemGroup>
+    <!-- (Source items removed Phase 11.B follow-up.) -->
+  </ItemGroup>
+</Project>

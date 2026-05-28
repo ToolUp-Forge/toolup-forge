@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.EntraExternalId.Client</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.EntraExternalId.Client</AssemblyName>
+    <Description>Client-side Microsoft Entra External ID sign-in UI for ToolUp.Platform: wraps ToolUp.AuthProviders.Oidc.Client with Entra-aware scope defaults, tenant-aware issuer construction, and sign-up / sign-in user-flow policy routing.</Description>
+    <PackageTags>fsharp;fable;feliz;sdk;auth;oidc;entra;ciam;client;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="EntraExternalIdClientConfig.fs" />
+    <Compile Include="EntraExternalIdAuthUI.fs" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <ProjectReference Include="..\OidcClient\OidcClient.fsproj" />
+  </ItemGroup>
+</Project>

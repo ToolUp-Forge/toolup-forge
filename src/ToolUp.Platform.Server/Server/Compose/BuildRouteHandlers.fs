@@ -1,0 +1,508 @@
+module ToolUp.Platform.BuildRouteHandlers
+
+open Giraffe
+open Microsoft.AspNetCore.Http
+open ToolUp.Platform
+open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.DataSubjectRequestApi
+open ToolUp.Platform.DataSubjectRequestApiHandler
+open ToolUp.Platform.FileManagement
+open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.PlatformApiHandler
+open ToolUp.Platform.PlatformSchema
+open ToolUp.Platform.RemotingHelpers
+open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Teams
+open ToolUp.Platform.Usage
+
+// ─── compose phase: route handlers ───────────────────────────────────
+//
+// The `router` thunk and the `devDiagnosticsRoutes` builder, returned
+// for `compose` to mount once `app` is built. The block is pure list
+// construction (no DI side effects); the two store-instance `ref`s are
+// captured by the MaintenanceApi thunks and populated later by the
+// infra/scheduler builders.
+type RouteHandlers = {
+    Router: HttpHandler list -> HttpHandler
+    DevDiagnosticsRoutes: DevDiagnosticsHandler.DevDiagnosticsCapture -> HttpHandler list
+}
+
+let buildRouteHandlers
+    (config: ServerConfig)
+    (handlers: HttpHandler list)
+    (dataTypes: DataType list)
+    (extensions: ComposeExtensions)
+    (transactionalSinks: INotificationSink list)
+    (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
+    (effectiveNotifications: NotificationMode)
+    (persistentEventStoreInstance: PersistentEventStore.PersistentEventStore option ref)
+    (blobJobStoreInstance: JobStore.BlobJobStore option ref)
+    : RouteHandlers =
+
+    let fileManagementHandler =
+        if dataTypes.IsEmpty then
+            []
+        else
+            [ makeApi FileManagement.fileManagementApi ]
+
+    // Configuration API is always auto-injected; the handler itself
+    // short-circuits on empty `ModuleConfigs` (ListModules returns
+    // []) and on Anonymous mode (no config scope), so registering it
+    // unconditionally is zero-cost when unused. The SDK's default
+    // `_platform` schema is merged in here so `currencySymbol` (and
+    // any future platform-level field) is visible in the admin UI
+    // without every app having to declare it. When any transactional
+    // sink is registered, the SDK-shipped `_platform.notification_prefs`
+    // schema is merged in too so the admin UI surfaces team-wide kill
+    // switches for email / SMS / push without each app re-declaring
+    // the schema.
+    let mergedModuleConfigs =
+        let withPlatform =
+            if config.IncludePlatformDefaults then
+                mergePlatformSchema config.ModuleConfigs
+            else
+                // Opt-out path: skip the SDK-shipped _platform schema
+                // prepend. Apps that opt out and supply their own
+                // `_platform` entry get plain pass-through (no merge
+                // with the SDK default fields).
+                config.ModuleConfigs
+
+        let withPrefs =
+            if List.isEmpty transactionalSinks then
+                withPlatform
+            else
+                mergeNotificationPrefsSchema withPlatform
+
+        // When usage metering is enabled, the admin UI surfaces the
+        // per-team quota tab without requiring every app to re-declare
+        // the schema. NoUsageMetering deployments skip the merge so the
+        // tab does not appear at all.
+        match config.UsageMetering with
+        | NoUsageMetering -> withPrefs
+        | EnabledUsageMetering -> mergeUsageSchema withPrefs
+
+    let configHandler = [ makeApi (ConfigHandler.configApi mergedModuleConfigs) ]
+
+    // Feature-flag API is always auto-injected; the handler short-
+    // circuits on empty `FeatureFlags` (returns an empty map) so
+    // registering unconditionally is zero-cost when unused.
+    let featureFlagHandler = [ makeApi (FeatureFlagHandler.featureFlagApi config.FeatureFlags) ]
+
+    // Webhook admin API. Mounted only when the deployment opted in via
+    // `ServerConfig.Webhooks = EnabledWebhooks`; the lightweight
+    // `NoWebhooks` default skips the route entirely so the proxy
+    // surface returns 404 and no `IWebhookRegistry` is resolved.
+    let webhookHandler: HttpHandler list =
+        match config.Webhooks with
+        | NoWebhooks -> []
+        | EnabledWebhooks -> [ makeApi WebhookApiHandler.webhookApi ]
+
+    // Cross-module query bus API. Auto-injected so client-side modules
+    // can reach the bus without extra wiring. The server resolves
+    // `AccessContext` from DI per request and forwards to the
+    // in-process `IModuleQueryBus`; permission checks happen inside the
+    // bus (not here) so the same `Ask` path covers both client→server
+    // and server→server calls. No permission guard at the HTTP layer
+    // because the bus returns `PermissionDenied` as a typed error in
+    // the response body — clients branch on it without parsing a 403.
+    let moduleQueryBusHandler: HttpHandler list = [
+        makeApi (fun (ctx: HttpContext) ->
+            let bus =
+                ctx.RequestServices.GetService(typeof<IModuleQueryBus>) :?> IModuleQueryBus
+
+            let accessContext =
+                match ctx.RequestServices.GetService(typeof<AccessContext>) with
+                | :? AccessContext as ac -> ac
+                | _ ->
+                    AccessContext.unrestricted (
+                        Subject.fromLegacyMode (ServerConfig.legacyMode config) "anonymous" None
+                    )
+
+            {
+                Ask = fun request -> bus.Ask(accessContext, request)
+            }
+            : IModuleQueryBusApi)
+    ]
+
+    // Generic real-time notification SSE endpoint. Resolves the channel
+    // and the shared `SSEConnectionManager` from DI per request so that
+    // app-replaced `INotificationChannel` implementations (Redis, NATS,
+    // future Orleans / Akka) plug in without touching the route.
+    //
+    // Skipped entirely when `effectiveNotifications = NoNotifications`
+    // so the lightweight default mounts no SSE endpoint. The DI
+    // registration falls through to the no-op channel (below) so
+    // `TeamStore` / `JobScheduler` constructors still work even though
+    // no client can subscribe.
+    let notificationRoutes: HttpHandler list =
+        match effectiveNotifications with
+        | NoNotifications
+        | NoNotificationsExplicit -> []
+        | _ -> [
+            route "/api/notifications"
+            >=> fun next ctx ->
+                let channel =
+                    ctx.RequestServices.GetService(typeof<INotificationChannel>) :?> INotificationChannel
+
+                let manager =
+                    ctx.RequestServices.GetService(typeof<SSEConnectionManager>) :?> SSEConnectionManager
+
+                NotificationHandler.notificationHandler channel manager next ctx
+          ]
+
+    // Dev diagnostics endpoint (`/dev/inspect`). Runtime-gated via
+    // `ServerConfig.EnableDevEndpoints` (default `false`); deployments
+    // that don't opt in get a clean 404 from the Giraffe terminal
+    // middleware. The capture (module snapshots, service descriptor
+    // list, total handler counts) is built later, after `services` is
+    // fully populated but before `app = builder.Build()`.
+    //
+    // The Phase 9n `/dev/bundle` endpoint composes the same capture
+    // (plus the audit log + event store + preflight snapshot + health
+    // probes resolved per-request) into a one-shot tar archive.
+    // Appended here so the same `EnableDevEndpoints` gate covers both
+    // surfaces — no second runtime config flag for what is the same
+    // operator workflow.
+    let devDiagnosticsRoutes (capture: DevDiagnosticsHandler.DevDiagnosticsCapture) : HttpHandler list =
+        if config.EnableDevEndpoints then
+            DevDiagnosticsHandler.routes config capture
+            @ [ DiagnosticBundleHandler.route config capture ]
+        else
+            []
+
+    // Encryption admin handler (POST
+    // /api/_platform/encryption/destroy-scope-key/{scopeId}). Mounted
+    // only when an `IBlobEncryptionKeyResolver` is registered. The
+    // handler internally checks whether the resolver supports per-scope
+    // destruction (only `PerScopeKeyResolver` does); other resolvers
+    // return 400 with a clear message. Token-gated via
+    // `TOOLUP_ADMIN_TOKEN` env var so this surface is locked down even
+    // on deployments that opt into encryption.
+    let encryptionAdminHandler =
+        match encryptionKeyResolver with
+        | Some _ -> EncryptionAdminHandler.routes
+        | None -> []
+
+    // Job API auto-injected when the scheduler is enabled.
+    // `NoJobScheduler` deployments skip the route entirely; clients
+    // calling the JobApi proxy on such a deployment receive a 404
+    // from the Giraffe terminal middleware (the proxy surface is
+    // optional, callers tolerate absence).
+    let jobApiHandler: HttpHandler list =
+        match config.JobScheduler with
+        | NoJobScheduler -> []
+        | InProcessJobScheduler -> [ makeApi JobApiHandler.jobApi ]
+
+    // MaintenanceApi always registered. Each method reads the
+    // typed-store cells at request time via the thunk arguments and
+    // returns a clear error when the corresponding store mode is
+    // disabled. Owner/Admin gated server-side.
+    let maintenanceApiHandler: HttpHandler list = [
+        makeApi (
+            MaintenanceApiHandler.maintenanceApi
+                (fun () -> persistentEventStoreInstance.Value |> Option.map _.Rebuild)
+                (fun () -> blobJobStoreInstance.Value |> Option.map _.Rebuild)
+        )
+    ]
+
+    // Data ingestion API auto-injected when the substrate is enabled.
+    // Mirrors the JobApi route's opt-in shape — disabled deployments
+    // return 404 to the proxy surface.
+    let dataIngestionApiHandler: HttpHandler list =
+        match config.DataIngestion with
+        | NoDataIngestion -> []
+        | EnabledDataIngestion -> [ makeApi DataIngestionApiHandler.dataIngestionApi ]
+
+    // OAuth Authorization Code endpoints. Same opt-in shape as the
+    // data-ingestion API; disabled deployments produce an empty handler
+    // list so /api/oauth/* paths 404 from the Giraffe terminal
+    // middleware. Companion `IOAuthCredentialFlow` implementations are
+    // resolved per-request inside the handler by URL `{flowName}`
+    // segment, so no route construction here depends on the flow
+    // registration order.
+    let oauthFlowRoutes: HttpHandler list =
+        match config.DataIngestion with
+        | NoDataIngestion -> []
+        | EnabledDataIngestion -> OAuthFlowHandler.routes
+
+    // HealthMonitor admin API. Always auto-injected; request-scoped
+    // Owner/Admin gate inside the handler short-circuits Anonymous and
+    // Member-role callers, so unconditional registration is zero-cost
+    // when the deployment doesn't enable the HealthMonitor sidebar
+    // entry. PlatformMode is closed over here so the handler can read
+    // it without forcing every call to re-resolve a config singleton.
+    let healthMonitorApiHandler: HttpHandler list = [
+        makeApi (HealthMonitorApiHandler.healthMonitorApi (ServerConfig.legacyMode config))
+    ]
+
+    // Phase 9p.A — ServiceStatusBoard composite admin API. Always
+    // auto-injected; request-scoped Platform-Admin gate inside the
+    // handler short-circuits non-admin callers, so unconditional
+    // registration is zero-cost when the deployment doesn't enable the
+    // ServiceStatusBoard sidebar entry. The whole `ServerConfig` is
+    // closed over so the handler reads the per-section mode fields
+    // (`JobScheduler` / `RateLimiter` / `ConfigDriftDetection` /
+    // `SmokeTest`) at compose time rather than re-resolving them per
+    // request.
+    let serviceStatusBoardApiHandler: HttpHandler list = [
+        makeApi (ServiceStatusBoardApiHandler.serviceStatusBoardApi config)
+    ]
+
+    // Usage admin route. Auto-injected unconditionally so the client
+    // dashboard's `IUsageQueryApi` proxy never 404s in mode-mismatched
+    // deployments. The default `ClientConfig.UsageDashboard =
+    // DefaultUsageDashboard` renders the sidebar entry in any
+    // non-Anonymous mode; the default `ServerConfig.UsageMetering =
+    // NoUsageMetering` resolves `IUsageLog` to `NoOpUsageLog` so the
+    // handler returns empty results — admin UI shows the "no usage
+    // records" state until a deployment opts in to
+    // `EnabledUsageMetering`. Owner / Admin gating is enforced inside
+    // the handler (`ensureReadAllowed`). Route shape:
+    // `/api/_platform/usage/*` via the shared `UsageQueryApi.routeBuilder`
+    // so admin clients can discover the endpoint by path alone.
+    let usageQueryApiHandler: HttpHandler list = [
+        Api.make (
+            UsageQueryApiHandler.usageQueryApi (ServerConfig.legacyMode config),
+            routeBuilder = UsageQueryApi.routeBuilder
+        )
+    ]
+
+    // /metrics route. Mounted only when EnabledMetricsEndpoint.
+    // NoMetricsEndpoint produces an empty list so the route does not
+    // exist on the routing table; deployments without metrics enabled
+    // get a clean 404 from the Giraffe terminal middleware, not an
+    // empty 200 response. The handler itself resolves
+    // PrometheusMetricsSink from DI per-request so route construction
+    // here doesn't depend on the sink-registration block which lives
+    // later in compose.
+    let metricsRoutes: HttpHandler list =
+        match config.MetricsEndpoint with
+        | EnabledMetricsEndpoint -> MetricsEndpoint.routes
+        | NoMetricsEndpoint -> []
+
+    let platformAdminApiHandler: HttpHandler list = [
+        makeApi (PlatformAdminApiHandler.platformAdminApi (ServerConfig.legacyMode config))
+    ]
+
+    // Phase 3d — ITeamInviteApi mount. Auto-injected unconditionally
+    // so the client `Api.makeProxy<ITeamInviteApi>` (used by the
+    // `/invite/{token}` accept page and `TeamManagerUI`'s invite UI)
+    // resolves at runtime. The handler itself gates on Owner/Admin
+    // for issue/revoke/list and on authenticated-not-anonymous for
+    // accept; Anonymous-mode callers reach the route via the existing
+    // `AuthEnforcementMiddleware` carve-out so the accept page can
+    // surface a "Sign in to accept" UI when the visitor is not yet
+    // authenticated. Resolves per-request: ITeamStore, IShareTokenStore,
+    // IAuditLog, ServerConfig (for PublicBaseUrl) all flow through DI.
+    let teamInvitationApiHandler: HttpHandler list = [
+        Api.make (
+            (fun (ctx: HttpContext) ->
+                let shareTokenStore =
+                    ctx.RequestServices.GetService(typeof<IShareTokenStore>) :?> IShareTokenStore
+
+                let teamStore = ctx.RequestServices.GetService(typeof<ITeamStore>) :?> ITeamStore
+
+                let auditLog = ctx.RequestServices.GetService(typeof<IAuditLog>) :?> IAuditLog
+
+                TeamInvitationHandler.teamInvitationApi shareTokenStore teamStore auditLog config ctx),
+            routeBuilder = TeamInviteApi.routeBuilder
+        )
+    ]
+
+    // Phase 9j — `GET /api/csrf-token`. Mounted only when hardening is
+    // opted in; `NoSecurityHardening` produces an empty list so the
+    // path 404s from the Giraffe terminal middleware (the client
+    // pre-fetch tolerates the absence — its cache stays empty and no
+    // header is attached, preserving today's behaviour).
+    let csrfTokenRoutes: HttpHandler list =
+        match config.SecurityHardening with
+        | NoSecurityHardening -> []
+        | _ -> [ Csrf.tokenRoute ]
+
+    // Phase 9o — post-deploy smoke-test endpoint
+    // (`GET /api/_internal/smoke`). Mounted only when
+    // `ServerConfig.SmokeTest = EnabledSmokeTest`; the default
+    // `NoSmokeTest` produces an empty list so the route does not
+    // exist on the routing table and deployments without smoke
+    // enabled get a clean 404 from the Giraffe terminal middleware.
+    // The handler itself gates on `TOOLUP_SMOKE_TOKEN` so even an
+    // enabled-smoke deployment is closed to anyone without the
+    // deploy script's shared secret.
+    let smokeTestRoutes: HttpHandler list =
+        match config.SmokeTest with
+        | NoSmokeTest -> []
+        | EnabledSmokeTest -> SmokeTestHandler.routes
+
+    // Phase 59 — consent-audit endpoint. Mounted only when
+    // `ServerConfig.ConsentAudit = EnabledConsentAudit`; default
+    // `NoConsentAudit` produces an empty list so the path 404s and
+    // client-side consent capture stays purely browser-local
+    // (localStorage / CMP-host state).
+    let consentAuditRoutes: HttpHandler list =
+        match config.ConsentAudit with
+        | NoConsentAudit -> []
+        | EnabledConsentAudit -> ConsentApiHandler.routes
+
+    // Phase 60 — ad analytics endpoints (impression + click). Mounted
+    // only when `ServerConfig.AdAnalytics = EnabledAdAnalytics`; the
+    // default `NoAdAnalytics` produces an empty list so client-side
+    // `ServerSinkAdAnalytics` posts 404 (the sink swallows the error,
+    // matching its best-effort contract).
+    let adAnalyticsRoutes: HttpHandler list =
+        match config.AdAnalytics with
+        | NoAdAnalytics -> []
+        | EnabledAdAnalytics -> AdAnalyticsApiHandler.routes
+
+    // Phase 62 — premium claim endpoints (read + grant + revoke).
+    // Always mounted — the read endpoint short-circuits to NotPremium
+    // for anonymous callers, the write endpoints gate themselves on
+    // Platform-Admin role inside the handler. The default
+    // NoOpUserClaims impl makes the writes succeed without touching
+    // any provider, so audit-trail captures operator intent even on
+    // deployments that haven't wired a concrete IUserClaims.
+    let premiumApiRoutes: HttpHandler list = GrantPremiumApiHandler.routes
+
+    // Phase 61 — PlatformAdmin public-utility admin endpoints.
+    // `AdUnitConfigApi` is mounted only when EntityStore is enabled
+    // (the CRUD persists to `IEntityStore<AdSlotEntity>`); disabled
+    // deployments 404 from the Giraffe terminal middleware so the
+    // client widget's substrate-stub keeps surfacing the right
+    // diagnostic. The other two endpoints always mount because their
+    // substrate (`IRateLimitStore`, `IUserClaims`) ships with a
+    // default in-process / no-op impl — the handlers gate themselves
+    // on Platform-Admin role and degrade to empty / configurable
+    // results when the deployment hasn't wired a concrete impl.
+    let adUnitConfigRoutes: HttpHandler list =
+        match config.EntityStore with
+        | NoEntityStore -> []
+        | EnabledEntityStore -> AdUnitConfigApi.routes (ServerConfig.legacyMode config)
+
+    let rateLimitEventApiRoutes: HttpHandler list =
+        RateLimitEventApi.routes (ServerConfig.legacyMode config)
+
+    let premiumUserApiRoutes: HttpHandler list =
+        PremiumUserApi.routes (ServerConfig.legacyMode config)
+
+    // Phase 9h — IDataSubjectRequestApi mount. Gated on
+    // `ServerConfig.DataSubjectRequests = Enabled <policy>`; the
+    // default `Disabled` skips the route entirely so the proxy
+    // surface returns 404 and `ClientConfig`'s auto-injection (which
+    // gates on the same config field) leaves the admin module out of
+    // the sidebar — Client + Server stay in sync without a runtime
+    // signal flowing between them.
+    //
+    // Per-request construction: the registered exporter / handler
+    // lists are resolved from DI per request (singletons accumulated
+    // via `ServerApp.withDataExporter` / `withErasureHandler` and
+    // folded into `Extensions.ServiceConfig` by `ServerApp.run`). The
+    // scope is resolved from the caller's `AccessContext` via
+    // `configScope` — Team / MultiTeam get their team scope,
+    // Individual / AuthenticatedEphemeral get their user scope.
+    // Anonymous mode has no scope, falls back to the user id (which
+    // is `"anonymous"`) so the handler can still run for tests; in
+    // practice an unauthenticated caller can't reach the API anyway
+    // (auth middleware short-circuits first).
+    //
+    // The audit callback resolves `IAuditLog` from DI and writes one
+    // `AuditEvent.DataSubjectRequest` row per transition, recorded
+    // under the resolved scope. `IAuditLog`'s best-effort contract
+    // means a sink failure cannot roll back the DSR run — the audit
+    // trail and the orchestrator outcome are durable independently.
+    let dataSubjectRequestApiHandler: HttpHandler list =
+        match config.DataSubjectRequests with
+        | DataSubjectRequestMode.Disabled -> []
+        | DataSubjectRequestMode.Enabled defaultPolicy -> [
+            makeApi (fun (ctx: HttpContext) ->
+                // `IEnumerable<T>` resolution is built into MS DI — zero
+                // registered impls yields an empty enumerable, not null.
+                let exporters =
+                    ctx.RequestServices.GetService(typeof<seq<IDataExporter>>) :?> seq<IDataExporter>
+                    |> List.ofSeq
+
+                let handlers =
+                    ctx.RequestServices.GetService(typeof<seq<IErasureHandler>>) :?> seq<IErasureHandler>
+                    |> List.ofSeq
+
+                let accessContext =
+                    match ctx.RequestServices.GetService(typeof<AccessContext>) with
+                    | :? AccessContext as ac -> ac
+                    | _ ->
+                        AccessContext.unrestricted (
+                            Subject.fromLegacyMode (ServerConfig.legacyMode config) "anonymous" None
+                        )
+
+                let scopeId =
+                    accessContext
+                    |> AccessContext.configScope
+                    |> Option.map _.ScopeId
+                    |> Option.defaultValue accessContext.UserId
+
+                let auditLog = ctx.RequestServices.GetService(typeof<IAuditLog>) :?> IAuditLog
+
+                let audit: AuditOnDsr =
+                    fun ev ->
+                        let payload: DataSubjectRequestAuditPayload = {
+                            RequestId = ev.RequestId
+                            Kind =
+                                match ev.Kind with
+                                | RequestStarted -> "RequestStarted"
+                                | PreviewCompleted -> "PreviewCompleted"
+                                | ErasureCompleted -> "ErasureCompleted"
+                                | ErasureFailed -> "ErasureFailed"
+                                | ExportCompleted -> "ExportCompleted"
+                            SubjectUserId = ev.SubjectUserId
+                            Actor = ev.Actor
+                            Reason = ev.Reason
+                            Properties = ev.Properties
+                        }
+
+                        auditLog.Record(ev.ScopeId, AuditEvent.DataSubjectRequest payload)
+
+                DataSubjectRequestApiHandler.create exporters handlers defaultPolicy scopeId accessContext.UserId audit)
+          ]
+
+    let router (devRoutes: HttpHandler list) =
+        choose (
+            [
+                platformInfoApiHandler config
+                teamApiHandler config
+                permissionApiHandler config
+                accessibilityApiHandler config
+                dataCatalogApiHandler config
+            ]
+            @ platformAdminApiHandler
+            @ teamInvitationApiHandler
+            @ configHandler
+            @ featureFlagHandler
+            @ webhookHandler
+            @ moduleQueryBusHandler
+            @ fileManagementHandler
+            @ jobApiHandler
+            @ maintenanceApiHandler
+            @ dataIngestionApiHandler
+            @ oauthFlowRoutes
+            @ healthMonitorApiHandler
+            @ serviceStatusBoardApiHandler
+            @ usageQueryApiHandler
+            @ encryptionAdminHandler
+            @ metricsRoutes
+            @ notificationRoutes
+            @ csrfTokenRoutes
+            @ smokeTestRoutes
+            @ consentAuditRoutes
+            @ adAnalyticsRoutes
+            @ premiumApiRoutes
+            @ adUnitConfigRoutes
+            @ rateLimitEventApiRoutes
+            @ premiumUserApiRoutes
+            @ dataSubjectRequestApiHandler
+            @ devRoutes
+            @ extensions.Handlers
+            @ handlers
+        )
+
+    {
+        Router = router
+        DevDiagnosticsRoutes = devDiagnosticsRoutes
+    }

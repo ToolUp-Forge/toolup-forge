@@ -1,0 +1,10 @@
+<Project>
+  <!-- Phase 11.B follow-up cross-tier cutover (2026-05-08): client source
+       files moved to <Compile> in ../ToolUp.Forms.Client/ and ship as
+       ToolUp.Forms.Client.dll referenced via <ProjectReference> from the
+       consuming Fable client project. This file is retained as an empty
+       marker. -->
+  <ItemGroup>
+    <!-- (Client source items removed Phase 11.B follow-up.) -->
+  </ItemGroup>
+</Project>

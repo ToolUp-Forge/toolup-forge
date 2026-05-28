@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.AI Server — agent loop, SSE streaming, tool registry, system-prompt composition (platform + team + module layers), AICompose. Depends on ToolUp.Platform.Server + ToolUp.AI.Core.</Description>
+        <PackageTags>fsharp;sdk;server;ai;llm</PackageTags>
+        <!-- Phase 11.B follow-up cross-tier cutover (2026-05-08): ToolUp.AI
+             Server carries the server-side AI surface (agent loop, SSE,
+             tool registry, system prompt builder, AICompose). Depends on
+             ToolUp.AI.Core for shared types and ToolUp.Platform.Server for
+             the runtime substrate. Phase 11.C.4 (2026-05-10): Server/
+             source relocated into this fsproj's own directory tree. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.AI\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Server\SystemPromptBuilder.fs" />
+        <Compile Include="Server\ToolContext.fs" />
+        <Compile Include="Server\ToolHelpers.fs" />
+        <Compile Include="Server\AIToolRegistry.fs" />
+        <Compile Include="Server\NarrativeTools.fs" />
+        <Compile Include="Server\SSEHandler.fs" />
+        <Compile Include="Server\ClientToolDispatch.fs" />
+        <Compile Include="Server\AICancellationRegistry.fs" />
+        <Compile Include="Server\AILatencyMetrics.fs" />
+        <Compile Include="Server\AIAgentEngine.fs" />
+        <Compile Include="Server\ICitationNormaliser.fs" />
+        <Compile Include="Server\AIAssistantHandler.fs" />
+        <Compile Include="Server\ConversationReplay.fs" />
+        <Compile Include="Server\AIProviderSurface.fs" />
+        <Compile Include="Server\DefaultAIProviderFactory.fs" />
+        <Compile Include="Server\AISettingsHandler.fs" />
+        <Compile Include="Server\FastPathBeaconHandler.fs" />
+        <Compile Include="Server\ConversationExportAuditHandler.fs" />
+        <Compile Include="Server\UIDecodeErrorHandler.fs" />
+        <Compile Include="Server\FastPathTelemetryHandler.fs" />
+        <Compile Include="Server\AILatencyHandler.fs" />
+        <Compile Include="Server\AIProviderUsageMiddleware.fs" />
+        <Compile Include="Server\AICancellationDispatchInstanceValidator.fs" />
+        <Compile Include="Server\AIProviderEnvValidator.fs" />
+        <Compile Include="Server\AIModelEnvValidator.fs" />
+        <Compile Include="Server\AIProviderProbeValidator.fs" />
+        <Compile Include="Server\LegacyAIConfigProviderProfile.fs" />
+        <Compile Include="Server\AICompose.fs" />
+    </ItemGroup>
+    <!-- PackageReferences flow transitively from ToolUp.Platform.Server
+         (Giraffe / Fable.Remoting.Giraffe / Fable.Remoting.Json /
+         Newtonsoft.Json all originate there). FSharp.Core is implicit
+         via the .NET SDK. -->
+</Project>

@@ -1,0 +1,214 @@
+{
+  "FixtureName": "platform-readme-smoke",
+  "QueryCount": 10,
+  "RecallAt1": 0.4,
+  "RecallAt5": 0.7,
+  "RecallAt10": 1.0,
+  "NdcgAt5": 0.5648712314377458,
+  "NdcgAt10": 0.6612975401282248,
+  "Mrr": 0.5592857142857143,
+  "AvgLatencyMs": 2.5,
+  "PerQuery": [
+    {
+      "QueryId": "q-anonymous-mode",
+      "Query": "How does anonymous mode persist data?",
+      "Found": [
+        "ai-system-prompt-builder",
+        "platform-modes-anonymous",
+        "platform-modes-individual",
+        "platform-modes-team",
+        "phase-9c-portability",
+        "rag-retrieval-pipeline",
+        "ai-companion-overview",
+        "audit-log",
+        "auth-header-provider",
+        "auth-jwt-provider"
+      ],
+      "RelevantRanks": [
+        2
+      ],
+      "LatencyMs": "+25"
+    },
+    {
+      "QueryId": "q-team-isolation",
+      "Query": "How is data isolated between teams?",
+      "Found": [
+        "ai-system-prompt-builder",
+        "notification-channel",
+        "ai-companion-overview",
+        "kb-companion-overview",
+        "platform-modes-team",
+        "platform-modes-individual",
+        "platform-modes-anonymous",
+        "phase-9c-portability",
+        "rag-retrieval-pipeline",
+        "rag-bm25-index"
+      ],
+      "RelevantRanks": [
+        5
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-jwt-auth",
+      "Query": "JWT auth provider HS256",
+      "Found": [
+        "auth-jwt-provider",
+        "ai-companion-overview",
+        "ai-system-prompt-builder",
+        "audit-log",
+        "auth-header-provider",
+        "kb-companion-overview",
+        "notification-channel",
+        "phase-9c-portability",
+        "platform-modes-anonymous",
+        "platform-modes-individual"
+      ],
+      "RelevantRanks": [
+        1
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-bm25-defaults",
+      "Query": "What are the BM25 K1 and B defaults?",
+      "Found": [
+        "ai-companion-overview",
+        "ai-system-prompt-builder",
+        "platform-modes-anonymous",
+        "auth-jwt-provider",
+        "audit-log",
+        "auth-header-provider",
+        "rag-bm25-index",
+        "kb-companion-overview",
+        "rag-tracer",
+        "rag-vector-store"
+      ],
+      "RelevantRanks": [
+        7
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-rrf-fusion",
+      "Query": "Reciprocal rank fusion constant",
+      "Found": [
+        "rag-bm25-index",
+        "rag-retrieval-pipeline",
+        "ai-companion-overview",
+        "ai-system-prompt-builder",
+        "audit-log",
+        "auth-header-provider",
+        "auth-jwt-provider",
+        "kb-companion-overview",
+        "notification-channel",
+        "phase-9c-portability"
+      ],
+      "RelevantRanks": [
+        1,
+        2
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-vector-store-persistence",
+      "Query": "Where does the vector store persist its index?",
+      "Found": [
+        "ai-companion-overview",
+        "auth-jwt-provider",
+        "ai-system-prompt-builder",
+        "platform-modes-team",
+        "platform-modes-individual",
+        "auth-header-provider",
+        "platform-modes-anonymous",
+        "rag-vector-store",
+        "notification-channel",
+        "rag-bm25-index"
+      ],
+      "RelevantRanks": [
+        8
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-knowledge-retrieved-event",
+      "Query": "KnowledgeRetrieved event privacy hashing",
+      "Found": [
+        "rag-tracer",
+        "ai-companion-overview",
+        "ai-system-prompt-builder",
+        "audit-log",
+        "auth-header-provider",
+        "auth-jwt-provider",
+        "kb-companion-overview",
+        "notification-channel",
+        "phase-9c-portability",
+        "platform-modes-anonymous"
+      ],
+      "RelevantRanks": [
+        1
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-system-prompt-builder",
+      "Query": "How is the system prompt composed for AI?",
+      "Found": [
+        "ai-companion-overview",
+        "ai-system-prompt-builder",
+        "auth-header-provider",
+        "platform-modes-team",
+        "kb-companion-overview",
+        "notification-channel",
+        "platform-modes-individual",
+        "auth-jwt-provider",
+        "platform-modes-anonymous",
+        "rag-vector-store"
+      ],
+      "RelevantRanks": [
+        2
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-knowledge-base-formats",
+      "Query": "Which file formats does the knowledge base accept?",
+      "Found": [
+        "ai-companion-overview",
+        "audit-log",
+        "auth-jwt-provider",
+        "ai-system-prompt-builder",
+        "auth-header-provider",
+        "phase-9c-portability",
+        "notification-channel",
+        "kb-companion-overview",
+        "rag-tracer",
+        "rag-bm25-index"
+      ],
+      "RelevantRanks": [
+        8
+      ],
+      "LatencyMs": "+0"
+    },
+    {
+      "QueryId": "q-portability-rules",
+      "Query": "Phase 9c portability six rules",
+      "Found": [
+        "phase-9c-portability",
+        "ai-companion-overview",
+        "ai-system-prompt-builder",
+        "audit-log",
+        "auth-header-provider",
+        "auth-jwt-provider",
+        "kb-companion-overview",
+        "notification-channel",
+        "platform-modes-anonymous",
+        "platform-modes-individual"
+      ],
+      "RelevantRanks": [
+        1
+      ],
+      "LatencyMs": "+0"
+    }
+  ]
+}

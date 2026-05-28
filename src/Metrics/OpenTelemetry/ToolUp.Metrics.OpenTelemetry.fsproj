@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>OpenTelemetry IMetricsSink for ToolUp.Platform — exposes BCL System.Diagnostics.Metrics.Meter for OTLP export. Zero NuGet deps; deployments add the OpenTelemetry SDK themselves.</Description>
+    <PackageTags>fsharp;sdk;metrics;opentelemetry;otlp</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="OtelMetricsSink.fs" />
+    <Compile Include="OtelActivitySink.fs" />
+    <!-- README packed via Directory.Build.props auto-include (sibling README.md). -->
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

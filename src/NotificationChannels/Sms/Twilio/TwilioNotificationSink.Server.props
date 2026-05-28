@@ -1,0 +1,11 @@
+<Project>
+  <!-- Phase 11.B follow-up companion cutover (2026-05-08): source files
+       moved to <Compile> in ToolUp.NotificationChannels.Sms.Twilio.fsproj
+       and ship as ToolUp.NotificationChannels.Sms.Twilio.dll referenced
+       via <ProjectReference> from the consuming server project. This file
+       is retained as an empty marker. (Phase 11.C.5 — Platform prefix
+       dropped 2026-05-27.) -->
+  <ItemGroup>
+    <!-- (Source items removed Phase 11.B follow-up.) -->
+  </ItemGroup>
+</Project>

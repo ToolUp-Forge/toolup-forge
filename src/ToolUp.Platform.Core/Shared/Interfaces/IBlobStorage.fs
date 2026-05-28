@@ -1,0 +1,202 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
+module ToolUp.Platform.BlobStorage
+
+open System
+
+/// Summary metadata for a blob. Returned by `GetMetadata` so callers can
+/// make cache / freshness / size decisions without downloading the
+/// content. Providers populate all fields where the backing store
+/// exposes them; `ContentType` is `None` when the store does not track
+/// it (e.g. local filesystem, which infers from extension at download
+/// time only).
+type BlobMetadata = {
+    /// Size of the blob in bytes.
+    Size: int64
+    /// Last modification time in UTC. For append-only stores, the time
+    /// the blob was written.
+    LastModified: DateTime
+    /// MIME type when the backing store tracks it; `None` otherwise.
+    ContentType: string option
+}
+
+/// Abstraction for blob/object storage.
+/// Implementations may target Azure Blob Storage, AWS S3, GCS, or local filesystem.
+///
+/// **Scope discipline (non-negotiable).** Container names MUST be derived from a
+/// resolved `StorageScope`, not from user input. Known scope prefixes:
+///   - `user-{userId}` — individual user scope
+///   - `team-{teamId}` — team scope
+///   - `session-{sessionId}` — anonymous/ephemeral scope
+///   - `_platform` — reserved SDK-level container (teams, memberships, permissions)
+///
+/// Callers that construct container names from any other source are bypassing team
+/// isolation and will be rejected in code review. Implementations
+/// SHOULD log or audit container names that do not match these prefixes so accidental
+/// violations surface early.
+///
+/// **`ValidatedContainer` newtype — decision: not adopted (resolved 2026-05-15).**
+/// We deferred, to the cloud-storage review, whether to make
+/// `container` a newtype constructible only from a resolved `StorageScope` so the
+/// invariant above is type-enforced rather than docstring-enforced. The
+/// cloud-storage providers have shipped (Azure / S3 / GCS) and the call is: keep
+/// `container: string`. Rationale:
+///   1. The invariant is already enforced at its single source — the server-side
+///      `IStorageScopeResolver` is the only place a scope container is minted;
+///      user input never reaches it. A newtype would re-assert at ~70 call sites
+///      a property that one chokepoint already guarantees.
+///   2. Legitimate non-scope containers exist (`_platform`, audit-sink target
+///      containers, health-probe containers). A "only from `StorageScope`"
+///      constructor would need escape hatches for these, diluting the guarantee
+///      it exists to provide.
+///   3. The cloud-storage providers all treat `container` as an opaque
+///      scope-derived prefix; none needed container-validation logic — the
+///      runtime check buys little over the resolver-level invariant.
+///   4. The contract tests already assert the scope-parameter property
+///      across every implementation.
+/// Net: the newtype is a breaking ripple through every caller and implementation
+/// for a docstring-grade invariant already covered upstream and by contract tests
+/// (added weight must justify itself). Revisit only if a future provider
+/// cannot enforce isolation at the resolver boundary.
+type IBlobStorage =
+    /// Upload content to a blob. `container` must be a scope-derived name (see type docs).
+    abstract Upload: container: string * blobName: string * content: byte[] -> Async<Result<string, string>>
+    /// Download a blob's content. `container` must be a scope-derived name (see type docs).
+    abstract Download: container: string * blobName: string -> Async<Result<byte[], string>>
+    /// Delete a blob. `container` must be a scope-derived name (see type docs).
+    /// Idempotent — deleting a non-existent blob returns `Ok`.
+    abstract Delete: container: string * blobName: string -> Async<Result<unit, string>>
+    /// List blobs in a container with optional prefix. `container` must be a scope-derived name (see type docs).
+    abstract List: container: string * prefix: string -> Async<string list>
+    /// Return whether a blob exists at the given path. Cheaper than
+    /// `Download` when callers only need existence (cache-probe, idempotent
+    /// upload checks, file-manager reload). `container` must be a
+    /// scope-derived name (see type docs).
+    abstract Exists: container: string * blobName: string -> Async<bool>
+    /// Return summary metadata for a blob without downloading its content.
+    /// `Error` when the blob does not exist or the backing store failed.
+    /// `container` must be a scope-derived name (see type docs).
+    abstract GetMetadata: container: string * blobName: string -> Async<Result<BlobMetadata, string>>
+
+    /// Phase 9h — GDPR Article 17 erasure surface. Erase (or redact)
+    /// every blob in `container` whose name starts with `prefix`,
+    /// per `policy`:
+    ///
+    ///  - `HardDelete` — delete every matching blob.
+    ///  - `Tombstone` / `RetainPerCompliance` — overwrite each
+    ///    matching blob's content with `Erasure.TombstoneMarker`
+    ///    while keeping its name. Blob bytes are opaque, so the
+    ///    store cannot structurally redact individual fields — it
+    ///    replaces the whole payload and keeps the key so the
+    ///    erasure is discoverable. Both policies behave identically
+    ///    here (raw blob storage is not the audit/event fabric, so
+    ///    neither refuses).
+    ///
+    /// **Prefix-scoped.** The caller supplies the subject prefix;
+    /// deployments that store per-subject blobs under a name prefixed
+    /// by the subject id get them erased. A blank `prefix` is a
+    /// zero-count no-op (it would otherwise match every blob in the
+    /// container — a catastrophic over-erasure).
+    ///
+    /// **Scope isolation (GP 4).** `container` is scope-derived (see
+    /// the type-level scope-discipline note); another scope's
+    /// container is structurally unreachable.
+    ///
+    /// `dryRun = true` counts matching blobs without mutating.
+    /// Default implementations delegate to `BlobStorage.eraseByPrefix`
+    /// (List + Delete / Upload over this same interface). Portability
+    /// audit (GP 12): identity by value, async at boundary, failure
+    /// as `ErasureError`, stateless, single-container, precision
+    /// declared above.
+    abstract Erase:
+        container: string * prefix: string * policy: ErasurePolicy * dryRun: bool ->
+            Async<Result<ErasureSummary, ErasureError>>
+
+/// Shared default for `IBlobStorage.Erase`. Every concrete
+/// implementation delegates to this — the algorithm is the same
+/// across Azure / S3 / GCS / local / in-memory because it is
+/// expressed purely in terms of `List` + `Delete` / `Upload`.
+/// Kept out of the interface so implementations stay free to
+/// override with a backend-native bulk delete later.
+let eraseByPrefix
+    (store: IBlobStorage)
+    (container: string)
+    (prefix: string)
+    (policy: ErasurePolicy)
+    (dryRun: bool)
+    : Async<Result<ErasureSummary, ErasureError>> =
+    async {
+        if Erasure.isBlankSubject prefix then
+            return
+                Result.Ok {
+                    HandlerName = "blobs"
+                    RecordsAffected = 0
+                    Note = Some "blank prefix — no-op (would otherwise match every blob)"
+                }
+        else
+            let! names = store.List(container, prefix)
+
+            if dryRun || List.isEmpty names then
+                let verb =
+                    match policy with
+                    | ErasurePolicy.HardDelete -> "deleted"
+                    | _ -> "tombstoned"
+
+                return
+                    Result.Ok {
+                        HandlerName = "blobs"
+                        RecordsAffected = names.Length
+                        Note = Some(sprintf "%d blob(s) would be %s under %s/%s" names.Length verb container prefix)
+                    }
+            else
+                let marker = System.Text.Encoding.UTF8.GetBytes Erasure.TombstoneMarker
+
+                let! outcomes =
+                    names
+                    |> List.map (fun name -> async {
+                        match policy with
+                        | ErasurePolicy.HardDelete ->
+                            let! r = store.Delete(container, name)
+
+                            return
+                                match r with
+                                | Ok() -> true
+                                | Error _ -> false
+                        | ErasurePolicy.Tombstone
+                        | ErasurePolicy.RetainPerCompliance ->
+                            let! r = store.Upload(container, name, marker)
+
+                            return
+                                match r with
+                                | Ok _ -> true
+                                | Error _ -> false
+                    })
+                    |> Async.Parallel
+
+                let succeeded = outcomes |> Array.filter id |> Array.length
+                let failed = outcomes.Length - succeeded
+
+                let verb =
+                    match policy with
+                    | ErasurePolicy.HardDelete -> "deleted"
+                    | _ -> "tombstoned"
+
+                let summary = {
+                    HandlerName = "blobs"
+                    RecordsAffected = succeeded
+                    Note = Some(sprintf "%d blob(s) %s under %s/%s" succeeded verb container prefix)
+                }
+
+                if failed = 0 then
+                    return Result.Ok summary
+                else
+                    return
+                        Result.Error(
+                            HandlerPartialFailure(
+                                "blobs",
+                                summary,
+                                sprintf "%d of %d blob op(s) failed" failed outcomes.Length
+                            )
+                        )
+    }

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Rerankers.Local</PackageId>
+    <Description>CPU-bound ONNX cross-encoder IReranker for ToolUp.RAG. Operator-provisioned model (recommended: mixedbread-ai/mxbai-rerank-xsmall-v1); no API key, no network at query time. Opt-in companion — the SDK core never references ONNX.</Description>
+    <PackageTags>fsharp;sdk;rag;reranker;cross-encoder;onnx</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="LocalReranker.fs" />
+    <Compile Include="LocalRerankerHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

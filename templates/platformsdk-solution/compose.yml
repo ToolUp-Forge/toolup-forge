@@ -1,0 +1,12 @@
+services:
+  # Add infrastructure containers here (Postgres, Redis, Azurite, etc.).
+  # The MyTemplate-Server itself runs via `dotnet run`, not in a
+  # container — Compose is the dev-time companion infrastructure layer.
+  #
+  # The server's HTTP port (5000) is documented here so port-clash
+  # tooling can see it.
+  MyTemplate-server:
+    image: scratch
+    profiles: [ "_ports_only" ]
+    ports:
+      - "5000:5000"

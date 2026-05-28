@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.ClerkUI</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.ClerkUI</AssemblyName>
+    <Description>Client-side Clerk sign-in UI for ToolUp.Platform.</Description>
+    <PackageTags>fsharp;fable;feliz;sdk;auth;clerk;client;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ClerkAuthUI.fs" />
+    <Compile Include="ClerkRegister.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+  <!-- Fable.Core / Feliz / FSharp.Core resolved transitively via
+       ToolUp.Platform.Client + the .NET SDK. -->
+</Project>

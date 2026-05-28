@@ -1,0 +1,127 @@
+# ToolUp Platform
+
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
+A modular F# full-stack SDK for building production multi-tenant analytical applications. Giraffe over ASP.NET Core (server); Fable + Elmish + Feliz (client); Fable.Remoting (type-safe wire).
+
+> **Status: pre-release (`0.x.y`).** SemVer-on-`0.x` policy — minor bumps may include breaking changes; `1.0.0` is declared once the surface is stable.
+
+## Why this SDK
+
+- **Multi-tenant by construction.** Scope isolation, RBAC, audit trail, per-tenant data scoping are first-class — not retrofitted.
+- **AI-augmented as a peer.** Agent loop, SSE streaming, tool calling, prompt caching, conversation persistence — drop in a provider companion and the LLM is wired.
+- **Schema-driven modules.** `FormSchema` + `WorkflowDefinition` + module convention collapses CRUD-heavy intake / approval flows.
+- **F# end to end.** Shared types cross the wire via Fable.Remoting without DTO duplication.
+- **Sector-agnostic.** The SDK ships infrastructure; you bring domain.
+
+## Quick start
+
+Add the meta-manifest to your `Directory.Packages.props`:
+
+```xml
+<PropertyGroup>
+  <ToolUpSdkVersion>0.1.0</ToolUpSdkVersion>
+</PropertyGroup>
+<ItemGroup>
+  <PackageReference Include="ToolUp.Sdk" />
+</ItemGroup>
+```
+
+`ToolUp.Sdk` is a meta-package — adding it propagates `<PackageVersion>` entries for every `ToolUp.*` package at the same version. Bumping the whole SDK is a one-line edit.
+
+Reference what you need in each consuming `.fsproj`:
+
+```xml
+<PackageReference Include="ToolUp.Platform.Server" />
+<PackageReference Include="ToolUp.Platform.Client" />
+```
+
+Minimum composition root (`Server.fs`):
+
+```fsharp
+open ToolUp.Platform
+
+[<EntryPoint>]
+let main _ =
+    ServerApp.empty
+    |> ServerApp.withConfig { ServerConfig.defaults with Port = 5000 }
+    |> ServerApp.run
+```
+
+For a runnable end-to-end sample — module + server + client — see [`samples/HelloWorld/`](samples/HelloWorld/).
+
+## Documentation
+
+The full docs site lives in [`docs/`](docs/):
+
+- [`docs/platform/`](docs/platform/) — core SDK (architecture, modules, platform modes, auth, storage, events, jobs, portability rules).
+- [`docs/ai/`](docs/ai/) — `ToolUp.AI` companion: agent loop, system-prompt composition, BYOK, capability flags.
+- [`docs/rag/`](docs/rag/) — `ToolUp.RAG` companion: vector store, retrieval pipeline, ingestion, prompt builder.
+- [`docs/knowledge-base/`](docs/knowledge-base/) — `ToolUp.KnowledgeBase`: document upload, multi-format extraction, notes, narrative-commit.
+- [`docs/forms/`](docs/forms/) — `ToolUp.Forms`: schema-driven forms, workflows, publishable surveys.
+- [`docs/scheduling/`](docs/scheduling/) — `ToolUp.Scheduling`: booking with concurrency lock, recurrence, iCalendar.
+- [`docs/companions/`](docs/companions/) — provider-companion overviews (auth, storage, AI, embedding, notifications).
+
+## Package families
+
+| Package | Purpose |
+|---|---|
+| `ToolUp.Platform.{Core,Server,Client,Build}` | Core SDK: composition root, scope resolution, default in-process implementations |
+| `ToolUp.AI.{Core,Server,Client}` | AI agent loop, SSE streaming, tool registry, system-prompt composition |
+| `ToolUp.RAG.{Core,Server}` | Retrieval-augmented generation: chunking, vector store, retrieval pipeline |
+| `ToolUp.KnowledgeBase.{Core,Server,Client}` | Document KB: upload + multi-format extraction + notes + narrative-commit |
+| `ToolUp.Forms.{Core,Server,Client}` | Schema-driven forms + workflows + publishable surveys |
+| `ToolUp.Scheduling.{Core,Server}` | Booking + recurrence + iCalendar |
+| `ToolUp.AIProviders.{Claude,OpenAI}` | LLM provider implementations |
+| `ToolUp.EmbeddingProviders.{Local,OpenAI}` | Embedding provider implementations |
+| `ToolUp.AuthProviders.{Oidc,OidcClient,ClerkUI}` | Auth providers |
+| `ToolUp.Storage.{AwsS3,Azure,GoogleCloud}` | `IBlobStorage` companions |
+| `ToolUp.AuditSinks.{S3Archive,SplunkHec,DatadogLogs}` | Audit-trail replication |
+| `ToolUp.NotificationChannels.{Redis,Email.Smtp,Email.SendGrid,Sms.Twilio,Push.WebPush}` | Real-time + transactional notification companions |
+| `ToolUp.Metrics.OpenTelemetry` | OTLP metrics export |
+| `ToolUp.Secrets.AzureKeyVault` | `ISecretStore` companion |
+| `ToolUp.VectorStores.Hnsw` | Scalable HNSW vector store |
+| `ToolUp.AgGridEnterprise` | AG Grid Enterprise initialisation shim |
+
+## Building from source
+
+```bash
+dotnet build ToolUp.Forge.sln            # full build
+# Test suites are Expecto console runners — run EACH via `dotnet run`, not `dotnet test`
+# (Expecto runners ship as `<OutputType>Exe</OutputType>`, so `dotnet test` exits 0 with no tests run — a silent false-green):
+dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
+dotnet run --project src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj
+dotnet run --project src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj
+dotnet run -- Pack                       # produce nupkgs to ../local-nuget-feed/
+dotnet run -- Format                     # fantomas
+```
+
+See [`CLAUDE.md`](CLAUDE.md) for contributor conventions when working with Claude Code.
+
+## Six portability rules
+
+Infrastructure interfaces that could plausibly be implemented by a distributed framework (`IJobScheduler`, `IModuleQueryBus`, `INotificationChannel`, `IShareTokenStore`, etc.) satisfy six rules: identity by value, async at every boundary, retry as data, stateless handlers, no cross-shard ordering promises, explicit precision floor. See [`docs/platform/portability-rules.md`](docs/platform/portability-rules.md).
+
+Contract test packs in `ToolUp.Platform.Tests` / `ToolUp.Forms.Tests` / `ToolUp.Scheduling.Tests` bind to any conforming implementation — external impls validate against the same conformance bar.
+
+## Contributing
+
+- License: [Apache 2.0](LICENSE).
+- DCO `Signed-off-by:` required on every commit — CI enforces.
+- Contribution flow + maintenance tiers: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Code of Conduct: Contributor Covenant v2.1 (shipping shortly).
+- Security disclosure: [SECURITY.md](SECURITY.md).
+- Trademark policy: [TRADEMARK.md](TRADEMARK.md).
+
+## Versioning
+
+`0.x.y` while the public surface is unstable. SemVer-on-`0.x` policy:
+- **Minor bumps** may include breaking changes.
+- **Patch bumps** are non-breaking.
+- `1.0.0` declared once the surface is stable.
+
+Each companion versions independently — `ToolUp.Platform.Core 0.3.0` can pair with `ToolUp.AI 0.5.0`. Compatibility documented per release.
+
+## License
+
+[Apache License 2.0](LICENSE). Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK).

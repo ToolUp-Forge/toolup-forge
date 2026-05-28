@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.EmbeddingProviders.Local</PackageId>
+    <AssemblyName>ToolUp.EmbeddingProviders.Local</AssemblyName>
+    <Description>In-process TF-IDF IEmbeddingProvider for ToolUp.RAG. No external API key, no network. Suitable for local dev and CI.</Description>
+    <PackageTags>fsharp;sdk;rag;embedding;provider;dev</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="LocalEmbeddingProvider.fs" />
+    <Compile Include="LocalEmbeddingProviderHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

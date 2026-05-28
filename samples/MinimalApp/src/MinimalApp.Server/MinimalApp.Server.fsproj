@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 11.G canonical reference. Anonymous-mode, no AI, no modules
+    composition root demonstrating the new `fromEnv` helper pattern
+    end-to-end. The full code is in Server.fs — 11 executable lines,
+    one screen.
+
+    This sample is server-only by design. The client-side helpers
+    (`BundleConstants` + `ClientConfigDefaults.fromBundleConstants`)
+    require a Vite-driven Fable build pipeline to verify their
+    `[<Emit>]` cross-project propagation; the canonical client-side
+    verification rides on `dotnet new platformsdk-application` (the
+    template the same SDK ships).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Server.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

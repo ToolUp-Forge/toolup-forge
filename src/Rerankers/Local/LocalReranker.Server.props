@@ -1,0 +1,9 @@
+<Project>
+  <!-- Companion ships as ToolUp.Rerankers.Local.dll referenced via
+       <ProjectReference> (Phase 11.B follow-up convention — same as
+       LocalEmbeddingProvider). This file is retained as an empty
+       marker; consuming projects no longer import it. -->
+  <ItemGroup>
+    <!-- (Source items removed — DLL-referenced companion.) -->
+  </ItemGroup>
+</Project>

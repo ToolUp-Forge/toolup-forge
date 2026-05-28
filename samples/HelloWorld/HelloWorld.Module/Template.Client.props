@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <Compile Visible="false" Include="$(MSBuildThisFileDirectory)SharedTypes.fs" />
+    <Compile Visible="false" Include="$(MSBuildThisFileDirectory)ClientModel.fs" />
+    <Compile Visible="false" Include="$(MSBuildThisFileDirectory)Icons.fs" />
+    <Compile Visible="false" Include="$(MSBuildThisFileDirectory)ClientView.fs" />
+  </ItemGroup>
+</Project>

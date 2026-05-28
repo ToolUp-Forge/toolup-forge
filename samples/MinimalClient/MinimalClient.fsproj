@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    MinimalClient — in-tree Fable smoke-test sample.
+
+    Purpose: give Client-tier SDK phases a runnable phase-boundary check.
+    From this directory: dotnet tool restore, then dotnet fable -o output
+    (with the no-cache switch) drives the Fable compiler against a real
+    in-tree consumer. Catches F# 10 / Fable-5 toolchain regressions that
+    plain dotnet build alone can't see (nullable cascades through Fable-
+    pre-nullable libraries, Erase / inline regressions, JS import-
+    statement breakage, etc.).
+
+    The sample ProjectReferences ToolUp.Platform.Client so a Fable
+    invocation here drives the full Client-tier source tree through
+    the Fable compiler — generic-erasure regressions in Platform.Client
+    surface here, not at a downstream consumer's first build.
+
+    Not in the .sln on purpose: keeps Fable-only concerns out of the
+    main dotnet build ToolUp.Forge.sln path.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+    <!-- Fable ecosystem (Feliz, Fable.Elmish.HMR, Fable.Remoting.MsgPack,
+         Fable.SimpleJson) pre-dates F# 10's nullable reference types;
+         enabling nullness here would cascade "null / not null inconsistent"
+         errors. Per `CLAUDE.md` guidance: nullable reference types
+         stay disabled on Fable-touching projects. -->
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Client.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- ProjectReference to ToolUp.Platform.Client drives the full
+         Client-tier source tree through Fable as part of this sample's
+         smoke check. The direct package references stay so Fable can
+         resolve the same versions the SDK consumes. -->
+    <ProjectReference Include="..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Fable.Elmish" />
+    <PackageReference Include="Fable.Elmish.React" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

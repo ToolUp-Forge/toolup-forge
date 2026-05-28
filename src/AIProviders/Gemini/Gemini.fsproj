@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AIProviders.Gemini</PackageId>
+    <AssemblyName>ToolUp.AIProviders.Gemini</AssemblyName>
+    <Description>Google Gemini IAIProvider implementation for ToolUp.AI. BYOK-capable; reads API keys from ISecretStore. Targets the Generative Language API (v1beta).</Description>
+    <PackageTags>fsharp;sdk;ai;llm;gemini;google;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GeminiAIProvider.Wire.fs" />
+    <Compile Include="GeminiAIProvider.fs" />
+    <Compile Include="GeminiAIProviderHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

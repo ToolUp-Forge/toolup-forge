@@ -1,0 +1,238 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <!--
+    Phase 11.C.1 (2026-05-08) Paket -> CPM migration. Versions are
+    ported verbatim from paket.lock. Add a new <PackageVersion>
+    entry here for any new dependency; consumers reference it via
+    <PackageReference Include="..." /> (no Version attribute).
+  -->
+  <ItemGroup>
+    <!-- AWS SDK for .NET v4. Core must stay >= the floor every service
+         package requires: AWSSDK.S3 4.0.23.3 and AWSSDK.SecretsManager
+         4.0.4.23 both depend on AWSSDK.Core [4.0.7.1, 5.0.0), so Core is
+         pinned at 4.0.7.1. Bump the three together — a v3 Core under a v4
+         service package is an unsupported mix. -->
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.7.1" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.23.4" />
+    <PackageVersion Include="AWSSDK.SecretsManager" Version="4.0.4.24" />
+    <!-- Phase 16 — AWS Lambda host adapter companion (src/Hosts/AwsLambda).
+         APIGatewayEvents carries the three trigger payload types
+         (APIGatewayHttpApiV2ProxyRequest/Response, APIGatewayProxyRequest/
+         Response, ApplicationLoadBalancerRequest/Response); .Core carries
+         ILambdaContext. Both target netstandard2.0 and run on net10.0. -->
+    <PackageVersion Include="Amazon.Lambda.APIGatewayEvents" Version="2.7.1" />
+    <PackageVersion Include="Amazon.Lambda.ApplicationLoadBalancerEvents" Version="3.0.0" />
+    <PackageVersion Include="Amazon.Lambda.Core" Version="2.5.1" />
+    <PackageVersion Include="Azure.Core" Version="1.55" />
+    <PackageVersion Include="Azure.Data.Tables" Version="12.10.0" />
+    <PackageVersion Include="Azure.Identity" Version="1.21" />
+    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11" />
+    <PackageVersion Include="Azure.Storage.Blobs" Version="12.28.0" />
+    <PackageVersion Include="Azure.Storage.Common" Version="12.26" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
+    <PackageVersion Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageVersion Include="DocumentFormat.OpenXml.Framework" Version="3.5.1" />
+    <PackageVersion Include="Expecto" Version="10.2.3" />
+    <PackageVersion Include="Fable.AST" Version="5.0" />
+    <PackageVersion Include="Fable.Browser.Blob" Version="1.4" />
+    <PackageVersion Include="Fable.Browser.Dom" Version="2.20" />
+    <PackageVersion Include="Fable.Browser.Event" Version="1.7" />
+    <PackageVersion Include="Fable.Browser.Gamepad" Version="1.3" />
+    <PackageVersion Include="Fable.Browser.WebStorage" Version="1.3" />
+    <PackageVersion Include="Fable.Browser.XMLHttpRequest" Version="1.4" />
+    <PackageVersion Include="Fable.Core" Version="5.0" />
+    <PackageVersion Include="Fable.Elmish" Version="5.0.2" />
+    <PackageVersion Include="Fable.Elmish.HMR" Version="9.0" />
+    <PackageVersion Include="Fable.Elmish.React" Version="5.6" />
+    <PackageVersion Include="Fable.Parsimmon" Version="4.1" />
+    <PackageVersion Include="Fable.React.Types" Version="18.4" />
+    <PackageVersion Include="Fable.ReactDom.Types" Version="18.2" />
+    <PackageVersion Include="Fable.Remoting.Client" Version="8.0" />
+    <PackageVersion Include="Fable.Remoting.Giraffe" Version="6.1" />
+    <PackageVersion Include="Fable.Remoting.Json" Version="3.0" />
+    <PackageVersion Include="Fable.Remoting.MsgPack" Version="2.0" />
+    <PackageVersion Include="Fable.Remoting.Server" Version="6.1" />
+    <PackageVersion Include="Fable.SimpleHttp" Version="3.6" />
+    <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
+    <PackageVersion Include="Fake.Core.CommandLineParsing" Version="6.1.4" />
+    <PackageVersion Include="Fake.Core.Context" Version="6.1.4" />
+    <PackageVersion Include="Fake.Core.Environment" Version="6.1.4" />
+    <PackageVersion Include="Fake.Core.FakeVar" Version="6.1.4" />
+    <PackageVersion Include="Fake.Core.Process" Version="5.23.1" />
+    <PackageVersion Include="Fake.Core.String" Version="6.1.4" />
+    <PackageVersion Include="Fake.Core.Target" Version="6.1.4" />
+    <PackageVersion Include="Fake.Core.Trace" Version="6.1.4" />
+    <PackageVersion Include="Fake.IO.FileSystem" Version="6.1.4" />
+    <PackageVersion Include="Farmer" Version="1.9.27" />
+    <PackageVersion Include="Feliz" Version="3.3.3" />
+    <PackageVersion Include="Feliz.CompilerPlugins" Version="3.1" />
+    <PackageVersion Include="FParsec" Version="1.1.1" />
+    <PackageVersion Include="FSharp.Control.Reactive" Version="5.0.5" />
+    <PackageVersion Include="FSharp.Core" Version="10.1.300" />
+    <PackageVersion Include="FSharp.SystemTextJson" Version="1.4.36" />
+    <PackageVersion Include="Giraffe" Version="8.2" />
+    <PackageVersion Include="Giraffe.ViewEngine" Version="1.4" />
+    <PackageVersion Include="Google.Api.Gax" Version="4.13.1" />
+    <PackageVersion Include="Google.Api.Gax.Rest" Version="4.13.1" />
+    <PackageVersion Include="Google.Apis" Version="1.73" />
+    <PackageVersion Include="Google.Apis.Auth" Version="1.73" />
+    <PackageVersion Include="Google.Apis.Core" Version="1.73" />
+    <PackageVersion Include="Google.Apis.Storage.v1" Version="1.73.0.4115" />
+    <!-- Phase 16 — Google Cloud Functions host adapter companion
+         (src/Hosts/GoogleCloudFunctions). Framework carries the
+         `IHttpFunction` interface the adapter implements; Hosting
+         carries the entry-point helpers consumers use to bootstrap
+         their Functions process. Both target net8.0 with computed
+         compatibility for net10.0. -->
+    <PackageVersion Include="Google.Cloud.Functions.Framework" Version="3.0.1" />
+    <PackageVersion Include="Google.Cloud.Functions.Hosting" Version="3.0.1" />
+    <PackageVersion Include="Google.Cloud.Storage.V1" Version="4.14" />
+    <PackageVersion Include="HNSW" Version="26.4.177" />
+    <PackageVersion Include="MailKit" Version="4.16" />
+    <!-- Phase 38 — markdown + YAML-frontmatter parser for the public-
+         rendering companion (`src/ToolUp.PublicRendering/`). MIT;
+         net10.0-compatible; covers CommonMark + GFM tables + the
+         `YamlFrontMatter` extension in one dep. -->
+    <PackageVersion Include="Markdig" Version="1.2.0" />
+    <PackageVersion Include="Mathnet.Numerics" Version="5.0" />
+    <PackageVersion Include="Mathnet.Numerics.FSharp" Version="5.0" />
+    <PackageVersion Include="MessagePack" Version="3.1.4" />
+    <PackageVersion Include="MessagePack.Annotations" Version="3.1.4" />
+    <PackageVersion Include="MessagePackAnalyzer" Version="3.1.4" />
+    <PackageVersion Include="Microsoft.AspNetCore.WebUtilities" Version="8.0.23" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.0.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.2.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.5" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.FileProviders.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Primitives" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Identity.Client" Version="4.84" />
+    <PackageVersion Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.84" />
+    <PackageVersion Include="Microsoft.IdentityModel.Abstractions" Version="8.18" />
+    <PackageVersion Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+    <!-- Phase 14f — ONNX cross-encoder reranker companion
+         (src/Rerankers/Local). Companion-only deps (GP 1/11): the SDK
+         core never references ONNX; only the opt-in reranker package
+         pulls these. -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
+    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
+    <PackageVersion Include="Microsoft.Net.Http.Headers" Version="8.0.23" />
+    <PackageVersion Include="Microsoft.NET.StringTools" Version="18.4" />
+    <PackageVersion Include="MimeKit" Version="4.16" />
+    <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="PdfPig" Version="0.1.14" />
+    <PackageVersion Include="Pipelines.Sockets.Unofficial" Version="2.2.8" />
+    <PackageVersion Include="Portable.BouncyCastle" Version="1.9" />
+    <!-- Phase 39 — SkiaSharp default IDerivativeRenderer for the
+         asset-store companion (`src/ToolUp.AssetStore/`). MIT;
+         net10.0-compatible; cross-platform 2D graphics. Linux
+         containers must additionally reference
+         SkiaSharp.NativeAssets.Linux at consumer level (not declared
+         on the AssetStore fsproj — kept host-specific so non-Linux
+         dev hosts don't drag in Linux natives). -->
+    <PackageVersion Include="SkiaSharp" Version="3.119.2" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.13.1" />
+    <PackageVersion Include="System.ClientModel" Version="1.11" />
+    <PackageVersion Include="System.CodeDom" Version="10.0.6" />
+    <PackageVersion Include="System.Collections.Immutable" Version="8.0" />
+    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.2" />
+    <PackageVersion Include="System.Formats.Asn1" Version="10.0.7" />
+    <PackageVersion Include="System.IO.Hashing" Version="10.0.6" />
+    <PackageVersion Include="System.IO.Packaging" Version="10.0.6" />
+    <PackageVersion Include="System.IO.Pipelines" Version="9.0.12" />
+    <PackageVersion Include="System.Management" Version="10.0.6" />
+    <PackageVersion Include="System.Memory.Data" Version="10.0.7" />
+    <PackageVersion Include="System.Reactive" Version="5.0" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.7" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.7" />
+    <PackageVersion Include="System.Text.Json" Version="8.0.6" />
+    <PackageVersion Include="WebPush" Version="1.0.13" />
+  </ItemGroup>
+
+  <!--
+    ToolUp SDK package versions. App-Server / App-Client / TestClient
+    PackageReference these names (no version), resolved against the
+    shared workspace-level NuGet feed at ../local-nuget-feed/ (see
+    nuget.config).
+
+    All versions track ToolUpSdkVersion in lockstep. Per-package overrides
+    are possible by declaring a more specific PackageVersion below the
+    bulk block (later wins).
+
+    Phase 11.C.3 will flip the consumption to the toolup-forge
+    GitHub Packages cloud feed via a one-line change in nuget.config.
+    The PackageVersion entries here are unchanged at split time.
+  -->
+  <PropertyGroup>
+    <ToolUpSdkVersion>0.3.0</ToolUpSdkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- ToolUp.Platform — the SDK floor -->
+    <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Sdk" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Cross-tier companions -->
+    <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
+
+    <!-- AI provider companions -->
+    <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Embedding provider companions -->
+    <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Auth provider companions -->
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.ClerkUI" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Storage / Secrets / VectorStores -->
+    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.GoogleCloud" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Audit sinks (Phase 11.C.5 — Platform prefix dropped 2026-05-27) -->
+    <PackageVersion Include="ToolUp.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.SplunkHec" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.DatadogLogs" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Notification channels -->
+    <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.Smtp" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.SendGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Metrics + UI -->
+    <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />
+  </ItemGroup>
+</Project>

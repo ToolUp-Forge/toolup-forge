@@ -1,0 +1,29 @@
+{
+    "private": true,
+    "engines": {
+        "node": ">=18 || >=20 || >=22 || >=24 || >=25"
+    },
+    "scripts": {},
+    "//": "Mirrors the SDK-bundle dep list every consumer app declares — the Platform.Client tier imports from each of these via Fable.Core.JsInterop. Required for Vite to bundle this sample (`npm run dev` / `vite build`); NOT required for the Fable acceptance gate (`dotnet fable -o output --noCache` resolves npm modules at bundle time, not at transpile time).",
+    "dependencies": {
+        "@clerk/react": "^6.6.4",
+        "@dnd-kit/core": "^6.3.1",
+        "@dnd-kit/sortable": "^10.0.0",
+        "@dnd-kit/utilities": "^3.2.2",
+        "ag-charts-community": "13.3.0",
+        "ag-charts-react": "13.3.0",
+        "ag-grid-community": "35.3.0",
+        "ag-grid-react": "35.3.0",
+        "react": "~19.2.6",
+        "react-dom": "~19.2.6"
+    },
+    "optionalDependencies": {
+        "ag-charts-enterprise": "13.3.0",
+        "ag-grid-enterprise": "35.3.0"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^6.0.2",
+        "vite": "^8.0.13",
+        "vite-plugin-svgr": "^5.2.0"
+    }
+}

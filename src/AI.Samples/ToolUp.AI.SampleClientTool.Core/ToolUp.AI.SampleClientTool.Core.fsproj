@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AI.SampleClientTool.Core</PackageId>
+    <Description>Apache-2.0 in-tree reference companion (Core tier) — shared types for the sample client-resident-tool calculator. Reference-only: not a production companion. Exists so the IClientToolAuthorizer + ClientToolDispatch substrate has an in-tree consumer exercising the seam end-to-end.</Description>
+    <PackageTags>fsharp;fable;sdk;ai;sample;reference;client-resident</PackageTags>
+  </PropertyGroup>
+  <!-- Pack source for Fable consumers under fable/. Shared types must
+       be Fable-source-packed because the Sample.Client tier (Fable) and
+       the Sample.Server tier (.NET) both reference them. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Shared\SampleToolTypes.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+</Project>

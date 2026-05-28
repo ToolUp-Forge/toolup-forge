@@ -1,0 +1,158 @@
+{
+  "name": "platform-readme-smoke",
+  "description": "CI smoke fixture seeded from snippets of the ToolUp.Platform docs. Each chunk is a single-paragraph excerpt covering one concept (auth provider, storage scope, RAG pipeline, etc.). Queries probe the same concepts; if cosine + BM25 hybrid retrieval cannot land the right paragraph in top-10 the harness has regressed.",
+  "corpus": [
+    {
+      "chunkId": "platform-modes-anonymous",
+      "scope": "platform",
+      "content": "Anonymous mode requires no authentication. Files and session data are scoped to the browser tab via sessionStorage, evicted after one hour of inactivity, and never persisted to blob storage. Suitable for public demos, dev, or one-shot tools where no account exists.",
+      "metadata": { "topic": "platform-mode" }
+    },
+    {
+      "chunkId": "platform-modes-individual",
+      "scope": "platform",
+      "content": "Individual mode requires authentication and persists data per user. Each authenticated user gets a private blob container; files survive server restart via LocalFileStorage. Use for single-user paid accounts where data must outlive the session.",
+      "metadata": { "topic": "platform-mode" }
+    },
+    {
+      "chunkId": "platform-modes-team",
+      "scope": "platform",
+      "content": "Team mode scopes all data to the active team. Each team has its own blob container team-{teamId}; switching teams swaps every persisted artefact (files, configs, KB documents, AI conversations). TeamScopeResolver caches active team lookups for five minutes.",
+      "metadata": { "topic": "platform-mode" }
+    },
+    {
+      "chunkId": "auth-header-provider",
+      "scope": "platform",
+      "content": "HeaderAuthProvider trusts the X-User-Id header without validation. Suitable for local development only. It accepts any user id from the client and never refuses a request.",
+      "metadata": { "topic": "auth" }
+    },
+    {
+      "chunkId": "auth-jwt-provider",
+      "scope": "platform",
+      "content": "StaticJwtAuthProvider validates HS256 JSON Web Tokens using only the .NET base class library — no external package dependencies. It checks the signature, expiry, and optional issuer / audience claims, then extracts sub, name, and email from the payload.",
+      "metadata": { "topic": "auth" }
+    },
+    {
+      "chunkId": "rag-vector-store",
+      "scope": "platform",
+      "content": "InMemoryVectorStore persists each scope's index to _rag/{scopeKey}/index.json via IBlobStorage. Vectors are pre-normalised to unit length so cosine similarity reduces to a single dot product per candidate at query time. Persistence is debounced; the store implements IDisposable for clean shutdown.",
+      "metadata": { "topic": "rag" }
+    },
+    {
+      "chunkId": "rag-bm25-index",
+      "scope": "platform",
+      "content": "InMemoryBM25Index is the sparse counterpart to InMemoryVectorStore. It applies the standard Lucene BM25 ranking with K1=1.2 and B=0.75 over a per-scope inverted index. Hybrid retrieval combines dense and sparse hits via Reciprocal Rank Fusion (k=60).",
+      "metadata": { "topic": "rag" }
+    },
+    {
+      "chunkId": "rag-retrieval-pipeline",
+      "scope": "platform",
+      "content": "RetrievalPipeline composes stages: AuthoriseScopes, EmbedQuery, dense and sparse candidate retrieval in parallel, RRF fusion, optional rerank, optional MMR diversity, adaptive top-K truncation, and trace emission. Each stage is data-only; framework-specific concerns stay out.",
+      "metadata": { "topic": "rag" }
+    },
+    {
+      "chunkId": "rag-tracer",
+      "scope": "platform",
+      "content": "IRetrievalTracer emits a KnowledgeRetrieved event after every retrieval. Queries are SHA-256 hashed before storage so traces never contain plaintext. The default EventStoreRetrievalTracer writes to the platform IEventStore under SourceModule _platform.retrieval.",
+      "metadata": { "topic": "rag" }
+    },
+    {
+      "chunkId": "ai-companion-overview",
+      "scope": "platform",
+      "content": "ToolUp.AI is the AI companion package. The agent loop, SSE streaming, conversation persistence, tool registry, and SystemPromptBuilder live in the companion. The core SDK only ships IAIProvider and module-facing tool declarations — apps that don't want AI omit the companion entirely.",
+      "metadata": { "topic": "ai" }
+    },
+    {
+      "chunkId": "ai-system-prompt-builder",
+      "scope": "platform",
+      "content": "SystemPromptBuilder receives a PromptContext with the resolved AccessContext and composes platform-, team-, and module-level system prompts. Team-aware deployments pull team profile from IConfigStore at build time so the resulting prompt is per-team without leaking data across teams.",
+      "metadata": { "topic": "ai" }
+    },
+    {
+      "chunkId": "kb-companion-overview",
+      "scope": "platform",
+      "content": "ToolUp.KnowledgeBase is a companion package providing document upload, multi-format extraction (PDF, PPTX, DOCX, XLSX, CSV), ingestion-status surfacing, and a notes interface. It is the canonical user-facing consumer of ToolUp.RAG.",
+      "metadata": { "topic": "kb" }
+    },
+    {
+      "chunkId": "notification-channel",
+      "scope": "platform",
+      "content": "INotificationChannel is the SDK's real-time push primitive. The default in-process channel ships in core; the Redis companion at src/NotificationChannels/Redis activates via TOOLUP_NOTIFICATION_CHANNEL=redis. Each scope is structurally isolated by topic, not a post-hoc filter.",
+      "metadata": { "topic": "notifications" }
+    },
+    {
+      "chunkId": "audit-log",
+      "scope": "platform",
+      "content": "AuditEvent and IAuditLog record platform operations under SourceModule _platform.audit, backed by IEventStore. Login first-seen, team membership changes, permission updates, and file mutations all emit audit events automatically through middleware and platform handlers.",
+      "metadata": { "topic": "observability" }
+    },
+    {
+      "chunkId": "phase-9c-portability",
+      "scope": "platform",
+      "content": "Phase 9c portability rules require every infrastructure interface to honour six contracts: identity by value, async at every boundary, retry as data, stateless handlers, no cross-shard ordering, and declared timing precision. These rules let an interface accept distributed-task implementations without reworking the SDK.",
+      "metadata": { "topic": "architecture" }
+    }
+  ],
+  "queries": [
+    {
+      "id": "q-anonymous-mode",
+      "query": "How does anonymous mode persist data?",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "platform-modes-anonymous" ]
+    },
+    {
+      "id": "q-team-isolation",
+      "query": "How is data isolated between teams?",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "platform-modes-team" ]
+    },
+    {
+      "id": "q-jwt-auth",
+      "query": "JWT auth provider HS256",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "auth-jwt-provider" ]
+    },
+    {
+      "id": "q-bm25-defaults",
+      "query": "What are the BM25 K1 and B defaults?",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "rag-bm25-index" ]
+    },
+    {
+      "id": "q-rrf-fusion",
+      "query": "Reciprocal rank fusion constant",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "rag-bm25-index", "rag-retrieval-pipeline" ]
+    },
+    {
+      "id": "q-vector-store-persistence",
+      "query": "Where does the vector store persist its index?",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "rag-vector-store" ]
+    },
+    {
+      "id": "q-knowledge-retrieved-event",
+      "query": "KnowledgeRetrieved event privacy hashing",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "rag-tracer" ]
+    },
+    {
+      "id": "q-system-prompt-builder",
+      "query": "How is the system prompt composed for AI?",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "ai-system-prompt-builder" ]
+    },
+    {
+      "id": "q-knowledge-base-formats",
+      "query": "Which file formats does the knowledge base accept?",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "kb-companion-overview" ]
+    },
+    {
+      "id": "q-portability-rules",
+      "query": "Phase 9c portability six rules",
+      "scopes": [ "platform" ],
+      "relevantChunkIds": [ "phase-9c-portability" ]
+    }
+  ]
+}

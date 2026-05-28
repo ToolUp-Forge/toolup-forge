@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Web", "F#", "Giraffe", "Fable", "Elmish", "Feliz", "ToolUp" ],
+  "identity": "ToolUp.Templates.Application",
+  "groupIdentity": "ToolUp.Templates.Application",
+  "name": "ToolUp Platform SDK Application (additional app pair)",
+  "shortName": "platformsdk-application",
+  "description": "Adds a Server+Client application pair under src/ to an existing platformsdk-solution. The .sln, compose.yml, and Build.fs updates are surfaced as manual instructions; --port-server and --port-client-vite MUST be supplied and MUST NOT clash with any port already bound by the existing solution.",
+  "tags": {
+    "language": "F#",
+    "type": "item"
+  },
+  "sourceName": "MyApp",
+  "preferNameDirectory": false,
+  "symbols": {
+    "port-server": {
+      "type": "parameter",
+      "datatype": "integer",
+      "isRequired": true,
+      "description": "Server port (required). Must not clash with any port already bound by the existing solution — `tools/ToolUp.PortGuard` (run via scripts/New-ToolUpApp.ps1) can scan the solution tree and reject clashing values.",
+      "replaces": "9000"
+    },
+    "port-client-vite": {
+      "type": "parameter",
+      "datatype": "integer",
+      "isRequired": true,
+      "description": "Vite dev-server port (required). Same clash-rejection contract as --port-server.",
+      "replaces": "9080"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "src/MyApp-Server/MyApp-Server.fsproj" },
+    { "path": "src/MyApp-Client/MyApp-Client.fsproj" }
+  ],
+  "postActions": [
+    {
+      "description": "Manual updates required to integrate the new app pair.",
+      "manualInstructions": [
+        { "text": "Add the new <Name>-Server.fsproj and <Name>-Client.fsproj (matching the -n you passed) to your .sln." },
+        { "text": "Add a service entry to compose.yml exposing the --port-server value you passed." },
+        { "text": "Append build targets for the new app to Build.fs (Build.fs currently ships a single-Port BuildConfig; multi-app BuildConfig extension is a planned follow-up)." }
+      ],
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "continueOnError": true
+    }
+  ]
+}

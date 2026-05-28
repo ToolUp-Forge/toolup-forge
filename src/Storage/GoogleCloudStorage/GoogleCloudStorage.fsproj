@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Storage.GoogleCloud</PackageId>
+    <AssemblyName>ToolUp.Storage.GoogleCloud</AssemblyName>
+    <Description>Google Cloud Storage IBlobStorage companion for ToolUp.Platform.</Description>
+    <PackageTags>fsharp;sdk;storage;gcp;gcs;blob-storage;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GoogleCloudStorage.fs" />
+    <Compile Include="GoogleCloudStorageHealth.fs" />
+    <Compile Include="GcsEncryptionAtRestValidator.fs" />
+</ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Google.Cloud.Storage.V1" />
+  </ItemGroup>
+</Project>

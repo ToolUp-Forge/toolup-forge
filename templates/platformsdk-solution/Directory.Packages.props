@@ -1,0 +1,58 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Coordinated SDK version — bump in one place and every transitive
+         ToolUp.* package moves in lockstep via the ToolUp.Sdk
+         meta-manifest. -->
+    <ToolUpSdkVersion>0.2.3</ToolUpSdkVersion>
+  </PropertyGroup>
+  <!--
+    The 4 ToolUp.Platform.* entries below are first-restore fallbacks:
+    on a fresh scaffold, NuGet hasn't downloaded the ToolUp.Sdk package
+    yet, so the <Import> below evaluates to a no-op (Exists() = false)
+    and CPM needs explicit PackageVersion items to satisfy the scaffold
+    fsprojs' PackageReference items. ToolUp.Sdk's own entry is the
+    bootstrap that lets MyTemplate-Server.fsproj's PackageReference
+    resolve and trigger the package download.
+
+    After first restore, build/ToolUp.Sdk.props is on disk and the
+    Import fires, pulling in every other ToolUp.* PackageVersion (the
+    full meta-manifest set — currently 51 packages: ToolUp.Platform +
+    AI + RAG + KnowledgeBase + Forms + Scheduling + Reporting +
+    Testing + AssetStore + PublicRendering + every provider companion).
+    Any of those packages can then be PackageReference'd from a new
+    fsproj without scaffold edits.
+
+    The 4 fallback entries duplicate ToolUp.Sdk's own metadata; when
+    the Import fires on later restores, MSBuild's last-write-wins
+    semantics resolve the duplication harmlessly (both reference
+    $(ToolUpSdkVersion) so versions match by construction).
+  -->
+  <ItemGroup>
+    <PackageVersion Include="ToolUp.Sdk" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
+  </ItemGroup>
+  <Import Project="$(NuGetPackageRoot)toolup.sdk\$(ToolUpSdkVersion)\build\ToolUp.Sdk.props"
+          Condition="Exists('$(NuGetPackageRoot)toolup.sdk\$(ToolUpSdkVersion)\build\ToolUp.Sdk.props')" />
+  <ItemGroup>
+    <!-- Non-ToolUp third-party deps. -->
+    <!-- Server stack -->
+    <PackageVersion Include="Giraffe" Version="8.2" />
+    <PackageVersion Include="Fable.Remoting.Giraffe" Version="6.1" />
+    <PackageVersion Include="Fable.Remoting.Json" Version="3.0" />
+    <!-- Client stack -->
+    <PackageVersion Include="Fable.Core" Version="5.0" />
+    <PackageVersion Include="Fable.Elmish" Version="5.0.2" />
+    <PackageVersion Include="Fable.Elmish.HMR" Version="9.0" />
+    <PackageVersion Include="Fable.Elmish.React" Version="5.6" />
+    <PackageVersion Include="Fable.Remoting.Client" Version="8.0" />
+    <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
+    <PackageVersion Include="Feliz" Version="3.3.3" />
+    <!-- Build -->
+    <PackageVersion Include="Fake.Core.Target" Version="6.1.4" />
+    <PackageVersion Include="FSharp.Core" Version="10.1.300" />
+  </ItemGroup>
+</Project>

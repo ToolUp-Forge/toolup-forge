@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Sdk</PackageId>
+        <Description>ToolUp SDK meta-manifest — coordinated-bump escape hatch. A consumer Directory.Packages.props imports the package's build/ToolUp.Sdk.props and sets a single ToolUpSdkVersion property; every ToolUp package then resolves at the same version. See the package's build/ToolUp.Sdk.props for the full set.</Description>
+        <PackageTags>fsharp;sdk;meta-package</PackageTags>
+        <!-- Phase 11.C.2 (2026-05-08): the meta-manifest. Empty fsproj —
+             the pack output's value is the build/ToolUp.Sdk.props file
+             which declares <PackageVersion> for every shipped ToolUp.*
+             package keyed off the ToolUpSdkVersion property. Apps add
+             one Import + one <ToolUpSdkVersion> property to their
+             Directory.Packages.props and get every ToolUp dep at the
+             same version. -->
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <!-- Content-only package, no DLL: skip symbol generation. -->
+        <IncludeSymbols>false</IncludeSymbols>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <None Include="build\ToolUp.Sdk.props" Pack="true" PackagePath="build\" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Splunk HEC IAuditSink for ToolUp.Platform — POST to /services/collector/event with HEC token from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;audit;splunk;hec;sink</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 9g Splunk HEC IAuditSink companion. No Splunk SDK
+       dependency — uses BCL HttpClient directly. -->
+  <ItemGroup>
+    <Compile Include="SplunkHecAuditSink.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- Newtonsoft.Json + Fable.Remoting.Json flow transitively from
+       ToolUp.Platform.Server. FSharp.Core is implicit via the .NET SDK. -->
+</Project>

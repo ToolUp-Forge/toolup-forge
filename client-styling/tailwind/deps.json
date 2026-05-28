@@ -1,0 +1,12 @@
+{
+  "_comment": "Canonical Tailwind v4 toolchain pin for every ToolUp client. EXACT versions (no ^) — these move only by editing this file, then re-stamping consumers. check-drift.ps1 enforces that each consumer client package.json carries exactly these. update-all.ps1 -Npm rejects these names so a blanket bump can never touch them.",
+  "devDependencies": {
+    "tailwindcss": "4.3.0",
+    "@tailwindcss/vite": "4.3.0"
+  },
+  "remove": {
+    "_comment": "Drop these when a consumer adopts the v4 @tailwindcss/vite plugin — v4 folds @import and vendor-prefixing into the engine; the JS tailwind.config.js + postcss.config.js are deleted entirely (content auto-detection replaces the content globs).",
+    "devDependencies": ["@tailwindcss/postcss", "autoprefixer", "postcss"],
+    "files": ["tailwind.config.js", "tailwind.config.cjs", "postcss.config.js", "postcss.config.cjs"]
+  }
+}

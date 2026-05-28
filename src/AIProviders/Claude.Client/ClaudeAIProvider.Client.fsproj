@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AIProviders.Claude.Client</PackageId>
+    <AssemblyName>ToolUp.AIProviders.Claude.Client</AssemblyName>
+    <Description>Client-side Anthropic Claude brand glyph for ToolUp.AI deployments using the Claude provider. Ships the typed `Icons.claude` ReactElement and the Anthropic mark SVG; Fable consumers extract source from the nupkg's `fable/` directory.</Description>
+    <PackageTags>fsharp;fable;sdk;client;ai;claude;anthropic;icon</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+    <None Include="..\Claude\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Icons.fs" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/. Mirrors AgGridEnterprise / Feliz / Fable.Elmish. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+  <!-- Fable.Core / Fable.React / FSharp.Core resolved transitively via
+       ToolUp.Platform.Client + the .NET SDK. -->
+</Project>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>SMTP transactional-email INotificationSink for ToolUp.Platform — MailKit-based; activated via TOOLUP_TRANSACTIONAL_EMAIL=smtp.</Description>
+    <PackageTags>fsharp;sdk;notifications;email;smtp;sink</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 6f Smtp INotificationSink companion. -->
+  <ItemGroup>
+    <Compile Include="SmtpNotificationSink.fs" />
+    <Compile Include="SmtpNotificationSinkHealth.fs" />
+    <Compile Include="SmtpNotificationSinkValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. MailKit is unique. -->
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+</Project>

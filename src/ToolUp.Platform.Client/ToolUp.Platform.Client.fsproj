@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform Client — Fable + Elmish + Feliz client surface: shell MVU, sidebar navigation, UIToolkit, AgChart / AgGrid bindings, AuthUIProvider, Clerk auth components. Depends on ToolUp.Platform.Core.</Description>
+        <PackageTags>fsharp;fable;feliz;elmish;sdk;client</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+         under fable/. The library's own .fsproj + .fs files ship inside
+         the nupkg; Fable's package loader extracts and compiles source
+         directly. Mirrors the Feliz / Fable.Elmish convention. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Client\Api.fs" />
+        <Compile Include="Client\Icon.fs" />
+        <!-- Phase 65 — client-tier default ILogger (ConsoleLogger) +
+             Logger module helpers. Foundational utility consumed by
+             downstream client files; placed early so every later
+             compile unit can declare `let log = Logger.forCategory`. -->
+        <Compile Include="Client\Logger.fs" />
+        <Compile Include="Client\UI\AgChart.fs" />
+        <Compile Include="Client\UI\AgGrid.fs" />
+        <Compile Include="Client\UI\AgGrid.Enterprise.fs" />
+        <Compile Include="Client\SidebarPreferences.fs" />
+        <Compile Include="Client\UI\Sidebar.fs" />
+        <Compile Include="Client\UI\SvgProp.fs" />
+        <Compile Include="Client\IAuthBridge.fs" />
+        <Compile Include="Client\SDK.ClientTypes.fs" />
+        <!-- Phase 55 — `withGroup` requirement preflight. Pure decision +
+             failwithf wrapper used by Client.boot to refuse deployments
+             whose consumer modules are entirely ungrouped (the empty-
+             sidebar shape `_other` collapses to). Sits adjacent to
+             SDK.ClientTypes.fs since it only depends on ErasedModule. -->
+        <Compile Include="Client\ModuleGroupingValidator.fs" />
+        <!-- Phase 11.G — Vite-injected constants surfaced as a single SDK
+             helper; ClientConfig builder consumes them via overrides record. -->
+        <Compile Include="Client\BundleConstants.fs" />
+        <Compile Include="Client\ClientConfigFromBundleConstants.fs" />
+        <Compile Include="Client\Icons.fs" />
+        <Compile Include="Client\UI\Toolkit\OutputFormatting.fs" />
+        <Compile Include="Client\UI\Toolkit\Tokens.fs" />
+        <Compile Include="Client\UI\Toolkit\Typography.fs" />
+        <Compile Include="Client\UI\Toolkit\Layout.fs" />
+        <Compile Include="Client\UI\Toolkit\Forms.fs" />
+        <Compile Include="Client\UI\Toolkit\Data.fs" />
+        <Compile Include="Client\NarrativeCommit.fs" />
+        <Compile Include="Client\NarrativeRenderer.fs" />
+        <Compile Include="Client\Markdown.fs" />
+        <Compile Include="Client\CsrfClient.fs" />
+        <Compile Include="Client\UserSession.fs" />
+        <Compile Include="Client\NotificationClient.fs" />
+        <Compile Include="Client\ModuleQueryClient.fs" />
+        <Compile Include="Client\ModuleStateObserver.fs" />
+        <Compile Include="Client\NavigationRequest.fs" />
+        <Compile Include="Client\RegisteredModules.fs" />
+        <Compile Include="Client\AuthUIProvider.fs" />
+        <Compile Include="Client\FeatureFlags.fs" />
+        <Compile Include="Client\I18n.fs" />
+        <Compile Include="Client\ProcessedDataContext.fs" />
+        <Compile Include="Client\GeneralUITypes.fs" />
+        <Compile Include="Client\Consent\IConsentProvider.fs" />
+        <Compile Include="Client\Consent\NoOpConsentProvider.fs" />
+        <Compile Include="Client\Consent\FundingChoicesProvider.fs" />
+        <Compile Include="Client\Consent\ConsentProvider.fs" />
+        <Compile Include="Components\ConsentGate.fs" />
+        <Compile Include="Client\AdPanel\AdScriptLoader.fs" />
+        <Compile Include="Client\AdPanel\IAdAnalyticsSink.fs" />
+        <Compile Include="Client\AdPanel\ServerSinkAdAnalytics.fs" />
+        <Compile Include="Components\AdSlot.fs" />
+        <Compile Include="Client\Premium\PremiumHook.fs" />
+        <!-- Phase 56 — typed inbound rate-limit banner. Consumers handle
+             ApiError.RateLimited and render this with the typed
+             RateLimitedError payload. -->
+        <Compile Include="Components\RateLimitedBanner.fs" />
+        <Compile Include="Components\Modal.fs" />
+        <Compile Include="Components\SvgTree.fs" />
+        <Compile Include="Components\ToastCentre.fs" />
+        <Compile Include="Client\FileManagerUI.fs" />
+        <Compile Include="Client\TeamManagerUI.fs" />
+        <Compile Include="Client\InviteAccept.fs" />
+        <Compile Include="Client\TeamConfigUI.fs" />
+        <Compile Include="Client\WebhookAdminUI.fs" />
+        <Compile Include="Client\HealthMonitorUI.fs" />
+        <Compile Include="Client\ServiceStatusBoardUI.fs" />
+        <Compile Include="Client\PlatformAdmin\PublicUtilityWidgets.fs" />
+        <Compile Include="Client\PlatformAdminUI.fs" />
+        <Compile Include="Client\PermissionsAdminUI.fs" />
+        <Compile Include="Client\UsageDashboard.fs" />
+        <Compile Include="Client\DataSourceCredentialUI.fs" />
+        <Compile Include="Client\DataIngestionUI.fs" />
+        <Compile Include="Client\DataSubjectRequestAdminUI.fs" />
+        <Compile Include="Components\ModuleBoundary.fs" />
+        <Compile Include="Client\SDK.Client.fs" />
+        <!-- Phase 57 — hydration-aware bootstrap + per-route metadata
+             hook for SPA prerender. Both opt-in; consumers compose
+             them on top of Client.run / ClientConfig.PrerenderRoutes. -->
+        <Compile Include="Client\Bootstrap\Hydration.fs" />
+        <Compile Include="Client\Bootstrap\MetadataHook.fs" />
+        <!-- Phase 57 follow-up — SDK-side prerender entry-point. Exposes
+             a `globalThis.__toolup_prerender_render` the FAKE Prerender
+             target's Node script calls per declared route. No-op in
+             the browser; only the Node-side prerender path consumes
+             the registration. -->
+        <Compile Include="Client\Bootstrap\PrerenderExport.fs" />
+    </ItemGroup>
+  <ItemGroup>
+    <!-- Explicit FSharp.Core reference: the SDK-bundled implicit
+         FSharp.Core resolves to a too-old version when this fsproj
+         is built transitively via Release-config pack of a downstream
+         consumer (string interpolation in Client/SDK.Client.fs etc.
+         needs FSharp.Core 5.0+). Pinning here forces the 10.x version
+         declared in Directory.Packages.props. -->
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Fable.Elmish" />
+    <PackageReference Include="Fable.Elmish.HMR" />
+    <PackageReference Include="Fable.Elmish.React" />
+    <PackageReference Include="Fable.Remoting.Client" />
+    <PackageReference Include="Fable.SimpleJson" />
+    <PackageReference Include="Fable.SimpleHttp" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

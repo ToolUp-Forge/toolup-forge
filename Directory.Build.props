@@ -1,0 +1,83 @@
+<Project>
+  <!--
+    Repo-wide MSBuild defaults. Imported automatically by every project
+    under this directory before the project's own .fsproj is evaluated.
+
+    NU1510 suppression removed 2026-05-08 in Phase 11.C.1 (Paket -> CPM
+    migration). Pre-migration, Paket emitted every transitive package as
+    an explicit PackageReference in obj/*.paket.props, which triggered
+    NU1510 against framework-provided packages. Post-migration, only
+    direct PackageReference items remain (versions centralised in
+    Directory.Packages.props), so NU1510 is now a meaningful signal —
+    if it ever fires, it points at an explicit reference that should be
+    pruned, not noise from generated files.
+  -->
+
+  <!--
+    Phase 11.C.2 (2026-05-08) — common NuGet pack metadata. SDK companion
+    fsprojs inherit these defaults; per-package overrides (PackageId,
+    Description, etc.) live in each fsproj's <PropertyGroup>. Non-public-
+    surface projects (App composition roots, modules, test harnesses,
+    test packs, commercial-internal) opt out with <IsPackable>false</IsPackable>
+    in their own fsproj.
+
+    Initial version 0.1.0 across the board. SemVer-on-0.x policy: minor
+    bumps may include breaking changes during 0.x; patch bumps remain
+    non-breaking. Per-package <Version> overrides where a package needs
+    to advance independently.
+  -->
+  <PropertyGroup>
+    <Authors>Andrew J. Willshire</Authors>
+    <Company>ToolUp Analytics Ltd (UK)</Company>
+    <Copyright>Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/ToolUp-Forge/toolup-forge</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/ToolUp-Forge/toolup-forge</PackageProjectUrl>
+    <PackageTags>fsharp;full-stack;giraffe;fable;elmish;feliz</PackageTags>
+    <Version>0.3.0</Version>
+    <!--
+      IsPackable defaults to true for SDK-style projects that produce a
+      DLL. Non-publishable projects (App composition roots, modules,
+      test packs, commercial-internal) opt out per-fsproj.
+    -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!--
+      Phase 11.C.2 closure (2026-05-11) — packed-README default. Every
+      packable SDK fsproj inherits <PackageReadmeFile>. Single-side
+      companions where README.md is a sibling of the fsproj are auto-
+      included via the <ItemGroup> below; cross-tier companions add
+      an explicit per-fsproj <None Include="..\ToolUp.X\README.md"...>
+      so all tiers share one parent README.
+    -->
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!--
+      Shared brand icon — single source of truth at repo-root icon.png.
+      128x128 transparent PNG (NuGet's recommended display size). The
+      packed <None Include> in the ItemGroup below ships the byte
+      payload into every IsPackable nupkg; this property references it
+      by filename so re-cutting the icon is one-file churn, not 48.
+    -->
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <!--
+    Auto-include a sibling README.md for packable projects that have
+    one. Cross-tier companions (where README.md lives in the parent
+    docs directory, not next to the fsproj) add their own explicit
+    <None Include="..\X\README.md" Pack="true" PackagePath="\" />.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false' And Exists('$(MSBuildProjectDirectory)\README.md')">
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!--
+    Pack the shared brand icon into every IsPackable nupkg. <PackageIcon>
+    in the PropertyGroup above references it by filename; this ItemGroup
+    ships the byte payload from the single repo-root icon.png.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+</Project>

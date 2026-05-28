@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Reporting.Server</PackageId>
+        <Description>ToolUp.Reporting Server — IReportTemplateStore (over IEntityStore), in-process RendererRegistry, ReportApi Fable.Remoting interface + handler factory, ReportingCompose. Depends on ToolUp.Platform.Server + ToolUp.Reporting.Core.</Description>
+        <PackageTags>fsharp;sdk;server;reporting;document-generation</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Reporting\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="ReportingApi.fs" />
+        <Compile Include="RendererRegistry.fs" />
+        <Compile Include="IReportTemplateStore.fs" />
+        <Compile Include="EntityBackedTemplateStore.fs" />
+        <Compile Include="ReportApiHandler.fs" />
+        <Compile Include="ReportingCompose.fs" />
+    </ItemGroup>
+</Project>

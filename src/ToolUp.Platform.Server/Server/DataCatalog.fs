@@ -1,0 +1,73 @@
+module ToolUp.Platform.DataCatalog
+
+open ToolUp.Platform
+open DataManagementTypes
+open ToolUp.Platform.FileProcessor
+
+// ─── DataCatalog ─────────────────────────────────────────────────
+//
+// In-process implementation of `IDataCatalog`. The registration set
+// is fixed at construction time (modules are loaded once at server
+// startup and never added later), so the catalog stores the
+// `(moduleName, DataType) list` directly and answers queries by
+// scanning it. No background refresh, no DI lookups per call.
+//
+// The catalog deduplicates by `Info.Id` for `ListTypes` — if two
+// modules both declare a type with the same `Id`, the catalog
+// surfaces it once with both module names in `GetProducers`.
+//
+// `ListObjects` delegates to `IDataObjectStore.ListObjects` and
+// filters by `DataType`. The catalog has no opinion on the
+// `IDataObjectStore` implementation — it composes through the
+// interface, so a distributed object store would slot in without
+// touching this file.
+
+/// `(moduleName, DataType)` pairs accumulated by the compose flow,
+/// one entry per data type each `ServerModule` registered.
+type DataTypeRegistration = {
+    ModuleName: string
+    DataType: DataType
+}
+
+type DataCatalog(registrations: DataTypeRegistration list, objectStore: IDataObjectStore) =
+
+    /// Index by `Info.Id` for O(1) schema and producer lookups.
+    /// Multiple producers per id are preserved as a list.
+    let byId = registrations |> List.groupBy (fun r -> r.DataType.Info.Id) |> Map.ofList
+
+    interface IDataCatalog with
+        member _.ListTypes() = async {
+            // Preserve declaration order across modules; deduplicate
+            // by `Id` keeping the first declaration's `Info`.
+            let seen = System.Collections.Generic.HashSet<string>()
+
+            let unique =
+                registrations
+                |> List.choose (fun r ->
+                    if seen.Add r.DataType.Info.Id then
+                        Some r.DataType.Info
+                    else
+                        None)
+
+            return unique
+        }
+
+        member _.GetSchema(typeId) = async {
+            return
+                byId
+                |> Map.tryFind typeId
+                |> Option.bind (fun rs -> rs |> List.tryPick (fun r -> r.DataType.Info.Schema))
+        }
+
+        member _.GetProducers(typeId) = async {
+            return
+                byId
+                |> Map.tryFind typeId
+                |> Option.map (fun rs -> rs |> List.map (fun r -> r.ModuleName) |> List.distinct)
+                |> Option.defaultValue []
+        }
+
+        member _.ListObjects(scopeId, typeId) = async {
+            let! all = objectStore.ListObjects scopeId
+            return all |> List.filter (fun obj -> obj.DataType = typeId)
+        }

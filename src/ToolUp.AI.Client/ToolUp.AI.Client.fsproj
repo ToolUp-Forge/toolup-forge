@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.AI Client — Fable + Elmish + Feliz AI surface: side-panel MVU, SSE client, AI assistant UI, AISettings UI, AIClientConfig wrapper. Depends on ToolUp.Platform.Client + ToolUp.AI.Core.</Description>
+        <PackageTags>fsharp;fable;feliz;elmish;sdk;client;ai</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+    </ItemGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+         under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.AI\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Client\AIClientTypes.fs" />
+        <Compile Include="Client\ClientToolRuntime.fs" />
+        <Compile Include="Client\FastPathBridge.fs" />
+        <Compile Include="Client\SSEClient.fs" />
+        <Compile Include="Client\SidePanelExtensions.fs" />
+        <Compile Include="Client\ConversationPanel.fs" />
+        <Compile Include="Client\Icons.fs" />
+        <Compile Include="Client\AIAssistantUI.fs" />
+        <Compile Include="Client\AISettingsUI.fs" />
+        <Compile Include="Client\AIClientConfig.fs" />
+    </ItemGroup>
+    <!-- Fable.Core / Fable.Elmish.* / Fable.Remoting.Client / Fable.SimpleJson
+         / Fable.SimpleHttp / Feliz flow transitively from ToolUp.Platform.Client.
+         FSharp.Core is implicit via the .NET SDK. -->
+</Project>

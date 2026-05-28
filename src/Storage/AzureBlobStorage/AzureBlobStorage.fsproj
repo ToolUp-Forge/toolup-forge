@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Storage.AzureBlob</PackageId>
+    <AssemblyName>ToolUp.Storage.AzureBlob</AssemblyName>
+    <Description>Azure Blob Storage IBlobStorage companion for ToolUp.Platform. (Phase 11.C.5 renamed `ToolUp.Storage.Azure` -> `.AzureBlob` for orthogonal coexistence with a future `.AzureFiles` / `.AzureTables` companion.)</Description>
+    <PackageTags>fsharp;sdk;storage;azure;azure-blob;blob-storage;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AzureBlobStorage.fs" />
+    <Compile Include="AzureBlobStorageHealth.fs" />
+    <Compile Include="AzureBlobEncryptionAtRestValidator.fs" />
+</ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Azure.Storage.Blobs" />
+  </ItemGroup>
+</Project>

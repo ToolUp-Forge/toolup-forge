@@ -1,0 +1,8 @@
+<Project>
+  <!-- Client-side scheduling sources injected into Fable-compiled
+       projects. Shared/SchedulingTypes.fs and Shared/RecurrenceExpander.fs
+       flow here once they land so the Feliz components can use them.
+       Client scheduling sources are added in subsequent commits. -->
+  <ItemGroup>
+  </ItemGroup>
+</Project>

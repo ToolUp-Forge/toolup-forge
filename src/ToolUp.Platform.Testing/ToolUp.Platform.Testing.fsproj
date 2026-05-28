@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform Testing — unit-test infrastructure for ToolUp modules. In-memory fakes for every SDK interface, ModuleHarness for Elmish testing, ServerHarness for HTTP-free API tests, DataTypeTestKit for Detect/Process assertions, plus a DEBUG-only ModuleHotReload watcher. Built on Expecto.</Description>
+        <PackageTags>fsharp;sdk;testing;expecto;fakes</PackageTags>
+    </PropertyGroup>
+    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Testing\Fakes.fs" />
+        <Compile Include="Testing\ModuleHarness.fs" />
+        <Compile Include="Testing\ServerHarness.fs" />
+        <Compile Include="Testing\DataTypeTestKit.fs" />
+        <Compile Include="Testing\ModuleHotReload.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <PackageReference Include="Fable.Elmish" />
+    </ItemGroup>
+</Project>
