@@ -119,41 +119,41 @@ let private corsConfigConstructors =
 let private autoDetectionRules =
     testList "NotificationMode.resolve" [
         test "NotificationsAuto + Anonymous + NoJobScheduler + no consumers → NoNotifications" {
-            let result = NotificationMode.resolve NotificationsAuto NoJobScheduler Anonymous []
+            let result = NotificationMode.resolve NotificationsAuto NoJobScheduler false []
 
             Expect.equal result NoNotifications "fully lightweight shape resolves to NoNotifications"
         }
 
         test "NotificationsAuto + InProcessJobScheduler → InMemoryNotifications" {
             let result =
-                NotificationMode.resolve NotificationsAuto InProcessJobScheduler Anonymous []
+                NotificationMode.resolve NotificationsAuto InProcessJobScheduler false []
 
             Expect.equal result InMemoryNotifications "job scheduler publishes dead-letter notifications"
         }
 
         test "NotificationsAuto + MultiTeam mode → InMemoryNotifications" {
-            let result = NotificationMode.resolve NotificationsAuto NoJobScheduler MultiTeam []
+            let result = NotificationMode.resolve NotificationsAuto NoJobScheduler true []
 
             Expect.equal result InMemoryNotifications "MultiTeam fires membership-change events"
         }
 
         test "NotificationsAuto + AI consumer declared → InMemoryNotifications" {
             let result =
-                NotificationMode.resolve NotificationsAuto NoJobScheduler Anonymous [ "AI" ]
+                NotificationMode.resolve NotificationsAuto NoJobScheduler false [ "AI" ]
 
             Expect.equal result InMemoryNotifications "companion-declared consumer flips auto-detection"
         }
 
         test "NotificationsAuto + RAG + AI consumers → InMemoryNotifications" {
             let result =
-                NotificationMode.resolve NotificationsAuto NoJobScheduler Individual [ "AI"; "RAG" ]
+                NotificationMode.resolve NotificationsAuto NoJobScheduler false [ "AI"; "RAG" ]
 
             Expect.equal result InMemoryNotifications "multi-consumer composition still resolves to InMemory"
         }
 
         test "Explicit NoNotifications overrides auto-detect even with consumers" {
             let result =
-                NotificationMode.resolve NoNotifications InProcessJobScheduler MultiTeam [ "AI" ]
+                NotificationMode.resolve NoNotifications InProcessJobScheduler true [ "AI" ]
 
             Expect.equal
                 result
@@ -162,15 +162,14 @@ let private autoDetectionRules =
         }
 
         test "Explicit InMemoryNotifications passes through unchanged" {
-            let result =
-                NotificationMode.resolve InMemoryNotifications NoJobScheduler Anonymous []
+            let result = NotificationMode.resolve InMemoryNotifications NoJobScheduler false []
 
             Expect.equal result InMemoryNotifications "explicit value bypasses auto-detection"
         }
 
         test "Explicit RedisNotifications passes through unchanged" {
             let result =
-                NotificationMode.resolve (RedisNotifications "redis://localhost:6379") NoJobScheduler Anonymous []
+                NotificationMode.resolve (RedisNotifications "redis://localhost:6379") NoJobScheduler false []
 
             Expect.equal
                 result

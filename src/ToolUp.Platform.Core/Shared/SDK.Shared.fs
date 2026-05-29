@@ -533,8 +533,11 @@ module NotificationMode =
     /// Other modes pass through unchanged. Rules:
     ///   - `JobScheduler <> NoJobScheduler` → publishes dead-letter
     ///     notifications, so notifications need to flow.
-    ///   - `Mode = MultiTeam` → membership-change events feed the
-    ///     client team-switch reset path.
+    ///   - `hasMultiTeamSwitcher` → membership-change events feed the
+    ///     client team-switch reset path (Phase 66 Stream B.5: was
+    ///     `Mode = MultiTeam`; the caller now passes
+    ///     `DeploymentConfig.hasMultiTeamSwitcher config`, dropping the
+    ///     dependency on the retiring `PlatformMode`).
     ///   - Any consumer in `notificationConsumers` (typically
     ///     `composeWithAI` / `composeWithRAG` declaring themselves) →
     ///     publishes through the channel.
@@ -542,14 +545,14 @@ module NotificationMode =
     let resolve
         (declared: NotificationMode)
         (jobScheduler: JobSchedulerMode)
-        (platformMode: PlatformMode)
+        (hasMultiTeamSwitcher: bool)
         (notificationConsumers: string list)
         : NotificationMode =
         match declared with
         | NotificationsAuto ->
             let needs =
                 jobScheduler <> NoJobScheduler
-                || platformMode = MultiTeam
+                || hasMultiTeamSwitcher
                 || not (List.isEmpty notificationConsumers)
 
             if needs then InMemoryNotifications else NoNotifications
@@ -2176,6 +2179,19 @@ module DeploymentConfig =
         config.Surfaces
         |> List.exists (function
             | SurfaceProfile.Team _ -> true
+            | _ -> false)
+
+    /// True iff the deployment supports multi-team switching — any
+    /// `Team` surface whose `Switching = HeaderSwitcher`. The pre-66
+    /// `PlatformMode.MultiTeam` shape maps 1:1 to this predicate
+    /// (single-team `Team { Switching = NoSwitcher }` is excluded).
+    /// Used by `NotificationMode.resolve`: membership-change events
+    /// feed the client team-switch reset path, which only exists when
+    /// the switcher is present.
+    let hasMultiTeamSwitcher (config: ServerConfig) : bool =
+        config.Surfaces
+        |> List.exists (function
+            | SurfaceProfile.Team { Switching = HeaderSwitcher } -> true
             | _ -> false)
 
     /// True iff the deployment supports the `ClaimBearer` subject

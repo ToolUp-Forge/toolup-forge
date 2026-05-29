@@ -156,7 +156,7 @@ let compose
         NotificationMode.resolve
             config.Notifications
             config.JobScheduler
-            (ServerConfig.legacyMode config)
+            (DeploymentConfig.hasMultiTeamSwitcher config)
             extensions.NotificationConsumers
 
     // Typed cells for the concrete `PersistentEventStore` /

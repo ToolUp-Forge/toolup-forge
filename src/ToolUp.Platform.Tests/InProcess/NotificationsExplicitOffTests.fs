@@ -46,7 +46,7 @@ let tests =
 
         test "NotificationMode.resolve passes NoNotificationsExplicit through unchanged" {
             let resolved =
-                NotificationMode.resolve NoNotificationsExplicit InProcessJobScheduler MultiTeam [ "ai" ]
+                NotificationMode.resolve NoNotificationsExplicit InProcessJobScheduler true [ "ai" ]
 
             // Even with a job scheduler, MultiTeam mode, and a
             // declared consumer — all triggers that would flip
@@ -58,7 +58,7 @@ let tests =
 
         test "NotificationMode.resolve passes NoNotificationsExplicit through under the lightweight defaults" {
             let resolved =
-                NotificationMode.resolve NoNotificationsExplicit NoJobScheduler Individual []
+                NotificationMode.resolve NoNotificationsExplicit NoJobScheduler false []
 
             Expect.equal resolved NoNotificationsExplicit "explicit pin preserved when no auto trigger fires"
         }
