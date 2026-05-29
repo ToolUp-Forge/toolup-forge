@@ -189,6 +189,7 @@
         <Compile Include="Server\OAuthStateStoreInstanceValidator.fs" />
         <Compile Include="Server\RateLimitModeValidator.fs" />
         <Compile Include="Server\RateLimitConfigValidator.fs" />
+        <Compile Include="Server\RateLimiterInstanceValidator.fs" />
         <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />

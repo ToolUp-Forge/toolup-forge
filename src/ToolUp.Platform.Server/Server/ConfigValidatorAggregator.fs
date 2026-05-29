@@ -182,6 +182,7 @@ let securityClassValidatorNames: Set<string> =
         "encrypted-secret-store-mode" // plaintext secrets in an auth Mode
         "oauth-state-store-instance" // in-memory OAuth state under multi-instance
         "per-scope-key-resolver-distributed" // crypto-shred key resolver under multi-instance
+        "auto-bootstrap-dev-admin-mode" // first sign-in auto-promotes to Platform Admin (privilege-escalation surface) — warning must survive the SkipPreflight bypass lever
     ]
 
 let private isSecurityClass (v: IConfigValidator) =

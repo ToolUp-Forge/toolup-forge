@@ -69,6 +69,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (NotificationChannelInstanceValidator.NotificationChannelInstanceValidator(config)) // warn in-memory notification channel under multi-instance
     addConfigValidator (RateLimitModeValidator.RateLimitModeValidator(config)) // warn internet-facing authenticated deployment with no rate-limiting
     addConfigValidator (RateLimitConfigValidator.RateLimitConfigValidator(config)) // range-check ServerConfig.RateLimit (out-of-range = cannot serve)
+    addConfigValidator (RateLimiterInstanceValidator.RateLimiterInstanceValidator(config)) // warn in-process/in-memory rate limiters under multi-instance (effective limit is N×)
     addConfigValidator (SseAuthModeValidator.SseAuthModeValidator(config)) // refuse SseAuthMode = QueryParamFallback in authenticated modes
     addConfigValidator (SecurityHeadersValidator.SecurityHeadersValidator(config)) // warn internet-facing auth-mode deployment with no security headers
     addConfigValidator (StaticPathBehaviourValidator.StaticPathBehaviourValidator(config)) // warn dev StaticPathBehaviour in a production-shaped deployment
