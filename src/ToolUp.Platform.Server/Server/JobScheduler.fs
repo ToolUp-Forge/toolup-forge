@@ -227,13 +227,22 @@ type InProcessJobScheduler
     /// layer; handlers that need a specific principal capture it in
     /// their payload and re-resolve.
     let buildSystemContext (scopeId: string) : AccessContext =
-        let teamId =
-            match ServerConfig.legacyMode config with
-            | Team
-            | MultiTeam -> Some scopeId
-            | _ -> None
+        // The run's subject shape derives from the deployment's
+        // surfaces, not a caller (there is none). Team-scoped
+        // deployments bind the run to the job's scope as a team;
+        // auth-required deployments use a plain authenticated system
+        // principal; anonymous-only deployments use a session subject.
+        // `AccessContext` stays unrestricted regardless — the Subject
+        // only carries scope identity here, not module authority.
+        let subject =
+            if DeploymentConfig.hasTeamScope config then
+                TeamMember(SystemUserId, scopeId)
+            elif DeploymentConfig.requiresAnyAuth config then
+                AuthenticatedUser SystemUserId
+            else
+                AnonymousSession SystemUserId
 
-        AccessContext.unrestricted (Subject.fromLegacyMode (ServerConfig.legacyMode config) SystemUserId teamId)
+        AccessContext.unrestricted subject
 
     // ─── Lifecycle event emission ────────────────────────────────
 
