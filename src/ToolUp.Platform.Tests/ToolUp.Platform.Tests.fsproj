@@ -173,6 +173,7 @@
         <Compile Include="InProcess\NotificationsExplicitOffTests.fs" />
         <Compile Include="InProcess\RateLimitModeValidatorTests.fs" />
         <Compile Include="InProcess\RateLimitConfigValidatorTests.fs" />
+        <Compile Include="InProcess\RateLimitConfigHelpersTests.fs" />
         <Compile Include="InProcess\SseAuthModeValidatorTests.fs" />
         <Compile Include="InProcess\OidcAudienceBindingValidatorTests.fs" />
         <Compile Include="InProcess\SecurityHeadersValidatorTests.fs" />

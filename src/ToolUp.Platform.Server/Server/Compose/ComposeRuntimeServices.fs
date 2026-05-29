@@ -411,14 +411,13 @@ let registerHealthStateTracker
 /// the Phase 9 limiter consumes a token.
 let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerConfig) : unit =
     // Phase 9 rate limiting. Opt-in via `ServerConfig.RateLimit`.
-    // When `None` the limiter is not registered and the middleware
-    // won't run, preserving backward-compatibility for deployments
-    // that don't want a per-scope cap.
-    match config.RateLimit with
-    | Some rateLimitConfig ->
-        services.AddRateLimiter(fun options -> RateLimiting.configure rateLimitConfig options)
+    // `RateLimitConfig.none` (default) registers no limiter and the
+    // middleware won't run, preserving backward-compatibility for
+    // deployments that don't want a per-scope cap (GP 11). Phase 66
+    // Stream C.3: any default or per-shape policy enables it.
+    if RateLimitConfig.isEnabled config.RateLimit then
+        services.AddRateLimiter(fun options -> RateLimiting.configure config.RateLimit options)
         |> ignore
-    | None -> ()
 
     // Phase 56 — inbound rate-limit substrate. Distinct from the
     // Phase 9 fixed-window team-keyed `RateLimit` above:

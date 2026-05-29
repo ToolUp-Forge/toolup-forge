@@ -610,15 +610,103 @@ type StaticPathBehaviour =
     /// end, etc.) and the warning is noise.
     | SkipSilent
 
-/// Fixed-window rate-limit knobs. `PermitLimit` requests are allowed
-/// per `WindowSeconds`; the next `QueueLimit` requests queue rather
-/// than being rejected outright. Beyond that, the limiter returns
-/// `429 Too Many Requests` with a `Retry-After` header.
-type RateLimitConfig = {
+/// Phase 66 Stream C.3 (design §3.10 + D21). A single fixed-window
+/// rate-limit policy: `PermitLimit` requests are allowed per
+/// `WindowSeconds`; the next `QueueLimit` requests queue rather than
+/// being rejected outright. Beyond that, the limiter returns `429 Too
+/// Many Requests` with a `Retry-After` header.
+///
+/// **Divergence from the design's `Window: TimeSpan`.** The shipped
+/// shape keeps `WindowSeconds: int` (the pre-C.3 field name) rather
+/// than the design §3.10 `Window: TimeSpan`. `TimeSpan` is awkward in
+/// a Core shared type (Fable surface), and keeping seconds-as-int
+/// leaves env parsing, the middleware's `TimeSpan.FromSeconds`
+/// conversion, the validators, and the existing tests unchanged. The
+/// middleware converts to `TimeSpan` at the .NET rate-limiter boundary.
+type RateLimitPolicy = {
     PermitLimit: int
     WindowSeconds: int
     QueueLimit: int
 }
+
+module RateLimitPolicy =
+    /// Partition key for a subject under the fixed-window limiter. The
+    /// partition is implied by subject kind: anonymous traffic
+    /// partitions on client IP (the session id is client-minted and
+    /// unbounded, so it can't be the limiter key), authenticated users
+    /// on user id, team members on team id (one shared budget across a
+    /// team's members), claim-bearers on token id.
+    ///
+    /// `clientIp` is passed in rather than read off the subject because
+    /// `AnonymousSession` carries only a client-minted session id, not
+    /// the remote IP — the middleware supplies the resolved remote IP.
+    /// Pure (no `HttpContext` dependency) so the D.7 test pack can
+    /// exercise every branch directly.
+    let partitionFor (clientIp: string) (subject: Subject) : string =
+        match subject with
+        | AnonymousSession _ -> sprintf "ip:%s" clientIp
+        | AuthenticatedUser uid -> sprintf "user:%s" uid
+        | TeamMember(_, tid) -> sprintf "team:%s" tid
+        | ClaimBearer claim -> sprintf "token:%s" claim.TokenId
+
+/// Phase 66 Stream C.3 (design §3.10 + D21) — per-subject-kind rate
+/// limiting. `Default` applies to any subject kind without a `PerShape`
+/// override; `PerShape` carries per-kind policies (e.g. a tight window
+/// for `AnonymousKind`, a looser one for `UserKind`). A subject-kind
+/// lookup that misses `PerShape` falls back to `Default`; when
+/// `Default` is also `None`, that kind is unlimited.
+///
+/// **Default = no rate limiting.** `RateLimitConfig.none` (both
+/// `Default = None` and `PerShape = Map.empty`) registers no limiter
+/// at all — byte-for-byte the pre-C.3 `RateLimit = None` behaviour
+/// (GP 11 backward-compatible default).
+type RateLimitConfig = {
+    /// Policy for any subject kind without a `PerShape` entry. `None` =
+    /// no default limit (only `PerShape` kinds are limited).
+    Default: RateLimitPolicy option
+    /// Per-subject-kind policy overrides. A kind present here uses its
+    /// policy; a kind absent falls back to `Default`.
+    PerShape: Map<SubjectKind, RateLimitPolicy>
+}
+
+module RateLimitConfig =
+    /// No rate limiting — no default, no per-shape overrides. The
+    /// `ServerConfig` default; byte-for-byte the pre-C.3 pipeline (no
+    /// `UseRateLimiter`, GP 11).
+    let none: RateLimitConfig = { Default = None; PerShape = Map.empty }
+
+    /// One policy for every subject kind. `PerShape` stays empty; every
+    /// kind resolves to `policy` via the `Default` fallback.
+    let uniform (policy: RateLimitPolicy) : RateLimitConfig = {
+        Default = Some policy
+        PerShape = Map.empty
+    }
+
+    /// Per-kind policies only, no default. Subject kinds absent from `m`
+    /// are unlimited.
+    let perShape (m: Map<SubjectKind, RateLimitPolicy>) : RateLimitConfig = { Default = None; PerShape = m }
+
+    /// A default policy plus per-kind overrides. Kinds in `overrides`
+    /// use their policy; all others fall back to `defaultPolicy`.
+    let withOverrides
+        (defaultPolicy: RateLimitPolicy)
+        (overrides: Map<SubjectKind, RateLimitPolicy>)
+        : RateLimitConfig =
+        {
+            Default = Some defaultPolicy
+            PerShape = overrides
+        }
+
+    /// Resolve the policy for a subject kind: a `PerShape` entry wins,
+    /// otherwise `Default`. `None` = that kind is unlimited.
+    let policyFor (config: RateLimitConfig) (kind: SubjectKind) : RateLimitPolicy option =
+        config.PerShape |> Map.tryFind kind |> Option.orElse config.Default
+
+    /// `true` when this config would register a limiter at all — any
+    /// default or any per-shape entry. `RateLimitConfig.none` returns
+    /// `false` (the pre-C.3 "no `UseRateLimiter`" path).
+    let isEnabled (config: RateLimitConfig) : bool =
+        config.Default.IsSome || not (Map.isEmpty config.PerShape)
 
 /// Typed CORS allowlist for the SDK's built-in CORS middleware.
 /// Maps to `Microsoft.AspNetCore.Cors.Infrastructure.CorsPolicyBuilder`
@@ -1412,15 +1500,18 @@ type ServerConfig = {
     /// `IConfigStore` are a follow-up — the quota resolver shape on
     /// `SessionFileStore` already supports them.
     DefaultTeamStorageQuotaBytes: int64 option
-    /// Per-team rate-limit configuration. `None` (default) disables
-    /// rate limiting — deployments opt in by populating this record.
-    /// When enabled, `app.UseRateLimiter()` is registered with a
-    /// fixed-window policy that partitions on the resolved
-    /// `AccessContext.TeamId` (or `userId` for non-team modes, or
-    /// remote IP for `Anonymous`). `/health`, `/ready`, and
-    /// `/api/notifications` (SSE) are excluded — long-lived and probe
+    /// Phase 66 Stream C.3 — per-subject-kind rate-limit configuration.
+    /// `RateLimitConfig.none` (default) disables rate limiting —
+    /// deployments opt in via `RateLimitConfig.uniform` /
+    /// `.perShape` / `.withOverrides`. When enabled, `app.UseRateLimiter()`
+    /// is registered with a fixed-window policy whose partition is
+    /// implied by the resolved `Subject` kind (`team:` / `user:` /
+    /// `token:` / `ip:` — see `RateLimitPolicy.partitionFor`), and whose
+    /// limits resolve per kind via `RateLimitConfig.policyFor`.
+    /// `/health`, `/ready`, `/api/notifications` (SSE), and
+    /// `/api/ai/events` (SSE) are excluded — long-lived and probe
     /// traffic must not be capped.
-    RateLimit: RateLimitConfig option
+    RateLimit: RateLimitConfig
     /// Result-store selection. Default: `NoResultStore` —
     /// no `IResultStore` is registered. Modules that produce
     /// analytical outputs only persist them when the deployment opts
@@ -1843,10 +1934,10 @@ type ServerConfig = {
     AcceptStickyRoutedAiInMultiInstance: bool
 
     /// Explicit opt-in to running an authenticated,
-    /// HTTPS-required deployment with `RateLimit = None`. Default
-    /// `false` — `RateLimitModeValidator` emits a `Warning` (not
+    /// HTTPS-required deployment with `RateLimit = RateLimitConfig.none`.
+    /// Default `false` — `RateLimitModeValidator` emits a `Warning` (not
     /// `Error`) since legitimate deployments behind a rate-limiting
-    /// proxy want `RateLimit = None`. Setting this flag silences the
+    /// proxy want no in-process limiter. Setting this flag silences the
     /// warning so the operator's `/dev/inspect` Validators panel /
     /// HealthMonitorUI Preflight tab stays clean.
     ///
@@ -2325,7 +2416,7 @@ module ServerConfig =
         SlowRequestThreshold = TimeSpan.FromSeconds 1.0
         SlowRequestThresholdOverrides = Map.empty
         DefaultTeamStorageQuotaBytes = None
-        RateLimit = None
+        RateLimit = RateLimitConfig.none
         ResultStore = NoResultStore
         Lineage = NoLineageStore
         JobScheduler = NoJobScheduler
@@ -2487,23 +2578,27 @@ module ServerConfig =
                     logger.Warn $"{name}={raw} not a positive integer. Rate limit disabled."
                     None
 
+        // Phase 66 Stream C.3 — the env-var path configures a single
+        // uniform policy (one limit for every subject kind). Per-shape
+        // overrides are a code-level concern (`RateLimitConfig.perShape`
+        // / `.withOverrides`), not expressible via three scalar env vars.
         match
             parsePositive "TOOLUP_RATE_LIMIT_PERMITS",
             parsePositive "TOOLUP_RATE_LIMIT_WINDOW_SECONDS",
             parsePositive "TOOLUP_RATE_LIMIT_QUEUE"
         with
         | Some permits, Some windowSeconds, Some queue ->
-            Some {
+            RateLimitConfig.uniform {
                 PermitLimit = permits
                 WindowSeconds = windowSeconds
                 QueueLimit = queue
             }
-        | None, None, None -> None
+        | None, None, None -> RateLimitConfig.none
         | _ ->
             logger.Warn
                 "Rate limit requires all three of TOOLUP_RATE_LIMIT_PERMITS / _WINDOW_SECONDS / _QUEUE. Partial configuration ignored — rate limit disabled."
 
-            None
+            RateLimitConfig.none
 
     let private parseDefaultTeamStorageQuotaBytes (logger: ILogger) =
         match envVar "TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES" with

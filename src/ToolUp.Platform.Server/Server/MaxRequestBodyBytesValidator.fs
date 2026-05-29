@@ -45,7 +45,7 @@ type MaxRequestBodyBytesValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
             let internetFacing = config.RequireHttps
-            let hasRateLimit = config.RateLimit.IsSome
+            let hasRateLimit = RateLimitConfig.isEnabled config.RateLimit
 
             let effectiveBytes =
                 config.MaxRequestBodyBytes |> Option.defaultValue kestrelDefaultBytes

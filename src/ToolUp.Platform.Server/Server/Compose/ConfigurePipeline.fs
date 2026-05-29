@@ -232,11 +232,12 @@ let configurePipeline
         app.UseMiddleware<RateLimitMiddleware.InboundRateLimitMiddleware>(config)
         |> ignore
 
-    // Per-scope rate limit. Sits after auth (so identity is resolved
-    // and the partition key is stable across a session) and before the
-    // remoting body normaliser (so a 429 short-circuits before any body
-    // work). Skipped when `ServerConfig.RateLimit` is `None`.
-    if config.RateLimit.IsSome then
+    // Per-subject-kind rate limit. Sits after scope resolution (so the
+    // `Subject` is resolved and the partition key is stable across a
+    // session) and before the remoting body normaliser (so a 429
+    // short-circuits before any body work). Skipped when
+    // `ServerConfig.RateLimit` registers no limiter (`RateLimitConfig.none`).
+    if RateLimitConfig.isEnabled config.RateLimit then
         app.UseRateLimiter() |> ignore
 
     app.UseMiddleware<RemotingBodyNormalizationMiddleware>() |> ignore

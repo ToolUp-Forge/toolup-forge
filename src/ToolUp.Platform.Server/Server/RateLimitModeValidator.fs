@@ -46,16 +46,57 @@ type RateLimitModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
             let internetFacing = config.RequireHttps || config.TrustForwardedHeaders
-            let rateLimitOff = config.RateLimit.IsNone
+            let rateLimitOff = not (RateLimitConfig.isEnabled config.RateLimit)
             let escapeHatch = config.AcceptNoRateLimitWhenAuthRequired
 
-            if requiresAuth && internetFacing && rateLimitOff && not escapeHatch then
-                return
-                    Warning(
+            // Rule 1 (Phase 6l.G, retained) — an internet-facing
+            // authenticated deployment running no limiter at all is a
+            // trivial-cost DoS surface. Warning, not Error: behind-proxy
+            // deployments legitimately run no in-process limiter; the
+            // escape hatch silences it.
+            let dosWarning =
+                if requiresAuth && internetFacing && rateLimitOff && not escapeHatch then
+                    Some(
                         sprintf
-                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + RateLimit = None. An internet-facing authenticated deployment with no rate limit can be DoSed by a single client running a tight request loop — CPU, upload quota, and AI-token spend are all unbounded. Enable the SDK's per-scope fixed-window limiter by setting ServerConfig.RateLimit = Some { PermitLimit = <reqs>; WindowSeconds = <window>; QueueLimit = <queued> } (e.g. { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 }), or set ServerConfig.AcceptNoRateLimitWhenAuthRequired = true (TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1) if your deployment sits behind a rate-limiting proxy that enforces per-client limits upstream."
+                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + RateLimit = RateLimitConfig.none. An internet-facing authenticated deployment with no rate limit can be DoSed by a single client running a tight request loop — CPU, upload quota, and AI-token spend are all unbounded. Enable the SDK's per-subject-kind fixed-window limiter by setting ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 } (or RateLimitConfig.withOverrides for per-shape limits), or set ServerConfig.AcceptNoRateLimitWhenAuthRequired = true (TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1) if your deployment sits behind a rate-limiting proxy that enforces per-client limits upstream."
                             (DeploymentConfig.surfacesLabel config)
                     )
-            else
-                return Ok
+                else
+                    None
+
+            // Rule 2 (Phase 66 Stream C.3, new) — a PerShape policy keyed
+            // on a SubjectKind that no Surface admits is dead config: no
+            // request ever resolves to that kind, so the policy never
+            // fires. Almost always a copy-paste / surface-trim slip.
+            let admittedKinds =
+                config.Surfaces
+                |> List.map (function
+                    | SurfaceProfile.Anonymous _ -> AnonymousKind
+                    | SurfaceProfile.AuthenticatedUser _ -> UserKind
+                    | SurfaceProfile.Team _ -> TeamMemberKind
+                    | SurfaceProfile.ClaimBearer _ -> ClaimBearerKind)
+                |> Set.ofList
+
+            let orphanKinds =
+                config.RateLimit.PerShape
+                |> Map.toList
+                |> List.map fst
+                |> List.filter (fun k -> not (Set.contains k admittedKinds))
+
+            let orphanWarning =
+                match orphanKinds with
+                | [] -> None
+                | kinds ->
+                    let kindNames = kinds |> List.map (sprintf "%A") |> String.concat ", "
+
+                    Some(
+                        sprintf
+                            "ServerConfig.RateLimit.PerShape carries a policy for subject kind(s) [%s] that no entry in ServerConfig.Surfaces (= %s) admits. These policies are dead config — no request resolves to a subject kind outside the surface list, so the limiter never fires for them. Remove the orphaned PerShape entries or add the matching SurfaceProfile."
+                            kindNames
+                            (DeploymentConfig.surfacesLabel config)
+                    )
+
+            match List.choose id [ dosWarning; orphanWarning ] with
+            | [] -> return Ok
+            | warnings -> return Warning(String.concat " " warnings)
         }

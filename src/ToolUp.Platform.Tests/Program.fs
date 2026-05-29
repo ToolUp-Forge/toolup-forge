@@ -92,6 +92,7 @@ let allTests =
         NotificationsExplicitOffTests.tests
         RateLimitModeValidatorTests.tests
         RateLimitConfigValidatorTests.tests
+        RateLimitConfigHelpersTests.tests
         SseAuthModeValidatorTests.tests
         OidcAudienceBindingValidatorTests.tests
         SecurityHeadersValidatorTests.tests

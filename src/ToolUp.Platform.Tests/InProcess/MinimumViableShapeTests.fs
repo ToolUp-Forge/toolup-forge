@@ -63,8 +63,10 @@ let private defaultsAreLightweight =
             Expect.equal ServerConfig.defaults.Lineage NoLineageStore "lightweight default skips lineage store"
         }
 
-        test "RateLimit default is None" {
-            Expect.isNone ServerConfig.defaults.RateLimit "lightweight default does not register rate limiter"
+        test "RateLimit default is none (no limiter registered)" {
+            Expect.isFalse
+                (RateLimitConfig.isEnabled ServerConfig.defaults.RateLimit)
+                "lightweight default does not register rate limiter"
         }
 
         test "EnableDevEndpoints default is false" {

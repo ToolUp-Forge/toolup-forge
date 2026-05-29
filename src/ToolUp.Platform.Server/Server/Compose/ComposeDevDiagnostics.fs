@@ -124,7 +124,7 @@ let buildDevDiagnosticsCapture
             | NoDataIngestion -> "NoDataIngestion"
             | EnabledDataIngestion -> "EnabledDataIngestion"
 
-        let rateLimitActive = config.RateLimit.IsSome
+        let rateLimitActive = RateLimitConfig.isEnabled config.RateLimit
 
         [
             entry "Webhooks" webhookMode (config.Webhooks = EnabledWebhooks) "ServerConfig.Webhooks"
