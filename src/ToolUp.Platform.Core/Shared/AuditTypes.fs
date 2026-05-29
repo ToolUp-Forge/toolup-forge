@@ -1354,6 +1354,33 @@ type TeamInviteRedeemedPayload = {
     RemainingUses: int
 }
 
+/// Phase 66 Stream C.1 (continuation) — an `IAnonymousSessionMigrator`
+/// ran on the first authenticated request following an anonymous
+/// session in the same browser. Emitted by
+/// `AnonymousSessionMigrationMiddleware` on `Ok`, `PartialFailure`, and
+/// `InfrastructureFailed` (the benign `NotEligible` outcome is not
+/// audited — it fires on every unwired / no-data deployment and would
+/// drown the trail). `Outcome` is the machine-readable discriminator
+/// (`"ok"` / `"partial_failure"` / `"infrastructure_failed"`); the
+/// migrated-volume counts come from the `MigrationSummary` (zero for
+/// the infrastructure-failure case where nothing landed). `FailedItems`
+/// + `Error` carry the partial / infrastructure diagnostic so a
+/// runbook can correlate a stuck migration without re-deriving from
+/// logs. PII-free: `AnonymousSessionId` is an opaque session token and
+/// `TargetUserId` matches the convention of the existing
+/// `UserLoggedInPayload`. Reserved `SourceModule = "_platform.subject"`.
+type AnonymousSessionMigratedPayload = {
+    AnonymousSessionId: string
+    TargetUserId: string
+    Outcome: string
+    ItemsMigrated: int
+    BytesMigrated: int64
+    Modules: string list
+    FailedItems: int
+    Error: string option
+    OccurredAt: DateTimeOffset
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableJsonConverter` (matches the
@@ -1644,6 +1671,11 @@ type AuditEvent =
     /// Phase 61 — operator deleted an `AdSlotConfig`. Same
     /// `SourceModule` as `AdSlotConfigCreated`.
     | AdSlotConfigDeleted of slotId: string * actor: string * occurredAt: DateTimeOffset
+    /// Phase 66 Stream C.1 (continuation) — anonymous-session data was
+    /// migrated into an authenticated subject's scope on the first
+    /// authenticated request following an anonymous session. Reserved
+    /// `SourceModule = "_platform.subject"`.
+    | AnonymousSessionMigrated of AnonymousSessionMigratedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1724,6 +1756,7 @@ module AuditEvent =
         | AdSlotConfigCreated _ -> "AdSlotConfigCreated"
         | AdSlotConfigUpdated _ -> "AdSlotConfigUpdated"
         | AdSlotConfigDeleted _ -> "AdSlotConfigDeleted"
+        | AnonymousSessionMigrated _ -> "AnonymousSessionMigrated"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

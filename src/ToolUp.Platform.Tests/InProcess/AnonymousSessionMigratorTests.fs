@@ -10,8 +10,8 @@ open ToolUp.Platform
 // combinator (NotEligible-skip / InfrastructureFailed-bail /
 // PartialFailure-fold). The remaining two D.6 bullets — trigger-detection
 // logic and the SemaphoreSlim-per-userId double-migration guard — live in
-// the middleware that the C.1 continuation will ship; they are not testable
-// against the substrate slice and are deferred with it.
+// the middleware shipped by the C.1 continuation; their coverage is in
+// `AnonymousSessionMigrationMiddlewareTests.fs`.
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

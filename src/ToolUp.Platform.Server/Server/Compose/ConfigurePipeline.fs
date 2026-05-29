@@ -7,6 +7,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.FileProviders
 open ToolUp.Platform
+open ToolUp.Platform.AnonymousSessionMigration
 open ToolUp.Platform.Middleware
 open ToolUp.Platform.PeerBearerAuthMiddleware
 open ToolUp.Platform.ShareTokenAuth
@@ -203,6 +204,16 @@ let configurePipeline
     // route `SurfaceRequirement` from the composition-time registry,
     // then applies the 7-row response-code matrix (design §3.1).
     app.UseMiddleware<SurfaceEnforcementMiddleware>() |> ignore
+    // Phase 66 Stream C.1 (continuation) — anonymous→authenticated
+    // session-migration trigger. Sits AFTER SurfaceEnforcementMiddleware
+    // so only requests that pass the per-route surface gate can fire a
+    // migration (an anonymous caller 401'd above never triggers one).
+    // Reads the resolved `Subject` + inbound `X-User-Id`, invokes the
+    // registered `IAnonymousSessionMigrator` once per (user, session-id)
+    // pair (guarded by IMemoryCache LastSeen + a per-user-id semaphore),
+    // then always continues the pipeline. No-op when the default
+    // NoOpAnonymousSessionMigrator is wired (every Migrate → NotEligible).
+    app.UseMiddleware<AnonymousSessionMigrationMiddleware>() |> ignore
     // MetricsMiddleware — sits before RequestTimingMiddleware so it
     // observes the same downstream span. The two middlewares serve
     // different audiences (operator dashboards vs. log lines) and stay

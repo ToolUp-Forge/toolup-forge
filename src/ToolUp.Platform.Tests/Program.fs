@@ -148,6 +148,7 @@ let allTests =
         DefaultSubjectResolverTests.tests
         CsrfCarveOutDerivationTests.tests
         SurfaceEnforcementMiddlewareTests.tests
+        AnonymousSessionMigrationMiddlewareTests.tests
     ]
 
 [<EntryPoint>]

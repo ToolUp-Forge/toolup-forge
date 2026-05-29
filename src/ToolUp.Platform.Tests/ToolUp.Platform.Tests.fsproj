@@ -271,6 +271,11 @@
              resolve → evaluate → writeRejection JSON), one test per design
              §3.1 row plus the folded evaluate branches + path scoping. -->
         <Compile Include="InProcess\SurfaceEnforcementMiddlewareTests.fs" />
+        <!-- Phase 66 Stream D.6 — AnonymousSessionMigrationMiddleware trigger
+             detection (design §3.7 six-step outcome matrix) + the SemaphoreSlim
+             double-migration guard. Complements AnonymousSessionMigratorTests'
+             substrate coverage (interface + compose + NoOp default). -->
+        <Compile Include="InProcess\AnonymousSessionMigrationMiddlewareTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

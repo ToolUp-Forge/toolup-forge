@@ -280,6 +280,11 @@
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
+        <!-- Phase 66 Stream C.1 (continuation) — anonymous→authenticated
+             session-migration trigger middleware. Registered in the
+             pipeline after SurfaceEnforcementMiddleware; depends on
+             NoOpAnonymousSessionMigrator (compiled earlier). -->
+        <Compile Include="Server\AnonymousSessionMigrationMiddleware.fs" />
         <!-- Phase 56 — inbound HTTP rate-limit middleware. Composes
              against `IRateLimitStore` (registered earlier in the build
              order) and `ServerConfig.RateLimits`. -->

@@ -234,7 +234,8 @@ let private extractEventScopeId (audit: AuditEvent) : string option =
     | PremiumRevoked _
     | AdSlotConfigCreated _
     | AdSlotConfigUpdated _
-    | AdSlotConfigDeleted _ ->
+    | AdSlotConfigDeleted _
+    | AnonymousSessionMigrated _ ->
         // Wave 10 — public-utility audit cases carry the
         // anonymous-user / subject-user identity but no tenant
         // ScopeId (`_platform.consent` / `_platform.ads` /
