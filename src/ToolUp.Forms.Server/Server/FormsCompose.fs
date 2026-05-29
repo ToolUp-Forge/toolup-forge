@@ -510,17 +510,16 @@ module FormsServerApp =
         // `InMemoryActionLedger` per process when the consumer didn't
         // opt in via `withActionLedger`. The default is correct for
         // dev / single-process deployments; distributed deployments
-        // must wire a durable ledger explicitly. Warn loudly in
-        // non-`Anonymous` modes so an operator deploying with
-        // workflow-bearing forms in production sees a clear signal
+        // must wire a durable ledger explicitly. Warn loudly whenever
+        // the deployment exposes any authenticated surface (Phase 66:
+        // the pre-66 non-`Anonymous` modes) so an operator deploying
+        // with workflow-bearing forms in production sees a clear signal
         // they need a durable ledger.
         let resolvedActionLedger: IActionLedger =
             match app.ActionLedger with
             | Some ledger -> ledger
             | None ->
-                match ServerConfig.legacyMode app.Base.Config with
-                | Anonymous -> ()
-                | _ ->
+                if DeploymentConfig.requiresAnyAuth app.Base.Config then
                     // The standard SDK preflight (`/dev/inspect` +
                     // startup-log) surfaces resolved interfaces; this
                     // Console.Error.WriteLine is intentionally
