@@ -223,7 +223,15 @@ module RedisRateLimitStore =
                         let! value = db.StringGetAsync(RedisKey.op_Implicit redisKey) |> Async.AwaitTask
 
                         if value.IsNullOrEmpty then return 0 else return int value
-                with _ ->
+                with ex ->
+                    // Read-path fail-open: GetCurrent backs observability
+                    // (dashboards, the recent-decisions panel), not
+                    // enforcement — returning 0 keeps those surfaces alive
+                    // when Redis blips. Log so a persistent backend outage
+                    // is visible rather than silently reporting "0 used"
+                    // for every window. The enforcement path
+                    // (IncrementAndCheck) already logs + returns Error.
+                    logger.Warn(sprintf "[RedisRateLimitStore] GetCurrent failed (returning 0): %s" ex.Message)
                     return 0
             }
 

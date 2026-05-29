@@ -8,6 +8,7 @@ open Microsoft.AspNetCore.Http
 open Newtonsoft.Json
 open Giraffe
 open ToolUp.AI
+open ToolUp.Platform
 
 /// Phase 6g.A: in-memory registry of pending client-resident tool
 /// calls. The agent loop registers a `TaskCompletionSource<string>`
@@ -86,6 +87,21 @@ let private resultJsonSettings =
 /// is the load-bearing protection.)
 let clientToolResultHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {
+        // Observational logger; silent no-op when DI has none (tests
+        // bypassing `compose`). Used only to surface why a tool-result
+        // POST was rejected — never logs the body (tool results may
+        // carry sensitive payloads).
+        let logger: ILogger =
+            match ctx.RequestServices.GetService(typeof<ILogger>) with
+            | :? ILogger as l -> l
+            | _ ->
+                { new ILogger with
+                    member _.Debug _ = ()
+                    member _.Info _ = ()
+                    member _.Warn _ = ()
+                    member _.Error(_, _) = ()
+                }
+
         try
             use reader = new StreamReader(ctx.Request.Body)
             let! body = reader.ReadToEndAsync()
@@ -104,7 +120,12 @@ let clientToolResultHandler: HttpHandler =
             else
                 ctx.Response.StatusCode <- 404
                 return! next ctx
-        with _ ->
+        with ex ->
+            // Malformed/undeserializable tool-result POST. Was a silent
+            // blanket 400 — log the exception type/message (not the body)
+            // so a client serialization regression is diagnosable instead
+            // of presenting as an opaque 400.
+            logger.Warn(sprintf "[ClientToolDispatch] tool-result POST rejected (400): %s" ex.Message)
             ctx.Response.StatusCode <- 400
             return! next ctx
     }
