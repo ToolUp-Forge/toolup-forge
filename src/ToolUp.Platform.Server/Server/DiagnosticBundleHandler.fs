@@ -439,13 +439,7 @@ let private buildManifest
     let payload = {|
         Schema = bundleSchema
         Generated = DateTime.UtcNow.ToString("o")
-        PlatformMode =
-            match ServerConfig.legacyMode config with
-            | Anonymous -> "Anonymous"
-            | AuthenticatedEphemeral -> "AuthenticatedEphemeral"
-            | Individual -> "Individual"
-            | Team -> "Team"
-            | MultiTeam -> "MultiTeam"
+        PlatformMode = DeploymentConfig.surfacesLabel config
         Caller = {|
             UserId = callerUserId
             ScopeId = callerScopeId

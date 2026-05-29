@@ -304,14 +304,6 @@ let snapshotServices (services: IServiceCollection) : ServiceDescriptorSnapshot 
 
 // ─── Per-request builders ────────────────────────────────────────────
 
-let private modeName (mode: PlatformMode) =
-    match mode with
-    | Anonymous -> "Anonymous"
-    | AuthenticatedEphemeral -> "AuthenticatedEphemeral"
-    | Individual -> "Individual"
-    | Team -> "Team"
-    | MultiTeam -> "MultiTeam"
-
 let private permissionName (perm: ModulePermission) =
     match perm with
     | ModulePermission.Read -> "Read"
@@ -397,7 +389,21 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
     let accessContext =
         match ctx.RequestServices.GetService(typeof<AccessContext>) with
         | :? AccessContext as ac -> ac
-        | _ -> AccessContext.unrestricted (Subject.fromLegacyMode (ServerConfig.legacyMode config) user.UserId teamId)
+        | _ ->
+            // Defensive fallback when the Scoped AccessContext is absent
+            // (no ScopeResolutionMiddleware in the pipeline). Reconstruct
+            // the caller's subject from the resolved identity + the
+            // deployment surfaces — team-scoped + a resolved team →
+            // `TeamMember`; any authenticated surface → `AuthenticatedUser`;
+            // anonymous-only → `AnonymousSession`. Mirrors the dominant-
+            // surface mapping a real request would have produced.
+            let fallbackSubject =
+                match teamId with
+                | Some tid when DeploymentConfig.hasTeamScope config -> TeamMember(user.UserId, tid)
+                | _ when DeploymentConfig.requiresAnyAuth config -> AuthenticatedUser user.UserId
+                | _ -> AnonymousSession user.UserId
+
+            AccessContext.unrestricted fallbackSubject
 
     let permissions =
         accessContext.ModulePermissions
@@ -407,7 +413,7 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
         UserId = user.UserId
         IsAnonymous = AuthenticatedUser.isAnonymous user
         TeamId = accessContext.TeamId |> Option.orElse teamId
-        Mode = modeName (ServerConfig.legacyMode config)
+        Mode = DeploymentConfig.surfacesLabel config
         StorageScope = scopeSummary
         StorageScopeError = scopeError
         Permissions = permissions
@@ -648,7 +654,7 @@ let buildReport
         return {
             Generated = DateTime.UtcNow.ToString("o")
             BuildMode = buildMode
-            PlatformMode = modeName (ServerConfig.legacyMode config)
+            PlatformMode = DeploymentConfig.surfacesLabel config
             Caller = caller
             Modules = modules
             TotalRouteHandlers = capture.TotalRouteHandlers
