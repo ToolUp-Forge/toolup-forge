@@ -172,14 +172,29 @@ let registerScopeResolution
                 // Phase 66 A.6 stashed a resolved `Subject` on
                 // `HttpContext.Items["ToolUp.Subject"]` upstream
                 // (`ScopeResolutionMiddleware` → `ISubjectResolver`).
-                // Prefer that when present; otherwise fall back to
-                // the legacy-shape bridge driven by the dominant
-                // `PlatformMode` derived from `Surfaces` (Stream B.5
-                // rewrites the remaining call sites).
+                // Prefer that when present; otherwise reconstruct the
+                // Subject from the per-request `userId` / `teamId` we
+                // already resolved above, branched on the deployment's
+                // surfaces (Stream B.5 — drops the `ServerConfig.legacyMode`
+                // read). For a single-surface deployment this is
+                // byte-identical to the retiring
+                // `Subject.fromLegacyMode (legacyMode config) userId teamId`
+                // bridge: `hasTeamScope` + `Some teamId` ⇒ `TeamMember`
+                // (== legacy Team / MultiTeam with a team scope),
+                // `requiresAnyAuth` ⇒ `AuthenticatedUser` (== Individual
+                // / AuthenticatedEphemeral, and team surfaces without a
+                // resolved team), else `AnonymousSession` (== Anonymous).
+                // For a mixed-mode deployment it is more honest — the
+                // per-request `teamId` decides team membership, not the
+                // deployment-wide dominant surface.
                 let subject =
                     match ctx.Items.TryGetValue "ToolUp.Subject" with
                     | true, (:? Subject as s) -> s
-                    | _ -> Subject.fromLegacyMode (ServerConfig.legacyMode config) userId teamId
+                    | _ ->
+                        match teamId with
+                        | Some tid when DeploymentConfig.hasTeamScope config -> TeamMember(userId, tid)
+                        | _ when DeploymentConfig.requiresAnyAuth config -> AuthenticatedUser userId
+                        | _ -> AnonymousSession userId
 
                 {
                     UserId = userId
