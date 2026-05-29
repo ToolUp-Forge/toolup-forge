@@ -27,6 +27,17 @@ let private mkRequest scopeId resourceKind resourceId attributedHandle : ShareTo
     RateLimit = None
 }
 
+let private mkRequestBy scopeId resourceKind resourceId issuedBy : ShareTokenIssueRequest = {
+    ScopeId = scopeId
+    ResourceKind = resourceKind
+    ResourceId = resourceId
+    AttributedHandle = None
+    IssuedBy = issuedBy
+    ExpiresAt = None
+    UseLimit = None
+    RateLimit = None
+}
+
 let private okOrFail label result =
     match result with
     | Ok v -> v
@@ -231,6 +242,62 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
 
             let! fromB = store.ListByResource(scopeB, "forms.publishable", "form-iso")
             Expect.equal fromB.Length 0 "scopeB sees none of scopeA's tokens"
+        }
+
+        // ─── ListByIssuer (Phase 66 C.4) ──────────────────────────
+
+        testCaseAsync "ListByIssuer returns only the named issuer's claims across resources"
+        <| async {
+            let store, scopeA, _ = factory ()
+            // Three resources, two issuers — alice issues two (across
+            // distinct resources), bob issues one. ListByIssuer must
+            // return exactly alice's two regardless of resource.
+            let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-1" "alice")
+            let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-2" "alice")
+            let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-3" "bob")
+
+            let! aliceClaims = store.ListByIssuer(scopeA, "alice")
+            Expect.equal aliceClaims.Length 2 "alice issued two tokens"
+
+            Expect.all aliceClaims (fun c -> c.IssuedBy = "alice") "every returned claim is alice's"
+
+            let resourceIds = aliceClaims |> List.map _.ResourceId |> List.sort
+            Expect.equal resourceIds [ "form-1"; "form-2" ] "both of alice's resources present"
+
+            let! bobClaims = store.ListByIssuer(scopeA, "bob")
+            Expect.equal bobClaims.Length 1 "bob issued one token"
+        }
+
+        testCaseAsync "ListByIssuer includes revoked claims (callers filter)"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! issued = store.Issue(mkRequestBy scopeA "forms.publishable" "form-rev" "carol")
+            let token = okOrFail "Issue" issued
+
+            let! revoked = store.Revoke(scopeA, token.Claim.TokenId, "admin")
+            okOrFail "Revoke" revoked
+
+            let! claims = store.ListByIssuer(scopeA, "carol")
+            Expect.equal claims.Length 1 "revoked claim still enumerated"
+            Expect.isTrue (claims |> List.forall _.Revoked) "the listed claim is revoked"
+        }
+
+        testCaseAsync "ListByIssuer scope-isolates — scopeA issuer not visible from scopeB"
+        <| async {
+            let store, scopeA, scopeB = factory ()
+            let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-iso-issuer" "dave")
+
+            let! fromB = store.ListByIssuer(scopeB, "dave")
+            Expect.equal fromB.Length 0 "scopeB sees none of scopeA's issuer tokens"
+        }
+
+        testCaseAsync "ListByIssuer returns empty for an unknown issuer"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-known" "erin")
+
+            let! claims = store.ListByIssuer(scopeA, "nobody")
+            Expect.equal claims.Length 0 "unknown issuer has no claims"
         }
 
         // ─── Cross-resource splice rejection ──────────────────────

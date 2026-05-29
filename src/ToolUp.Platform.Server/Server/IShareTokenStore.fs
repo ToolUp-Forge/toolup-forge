@@ -53,3 +53,15 @@ type IShareTokenStore =
     /// callers filter as needed. Used by admin UIs ("which tokens
     /// have I issued for this form?") and aggregation views.
     abstract ListByResource: scopeId: string * resourceKind: string * resourceId: string -> Async<ShareTokenClaim list>
+
+    /// Enumerate every claim within `scopeId` that was issued by
+    /// `issuerUserId` (matched against `ShareTokenClaim.IssuedBy`).
+    /// Returns both active and revoked tokens — callers filter as
+    /// needed. Drives the `RevokeOnIssuerRemoved` companion (Phase 66
+    /// §3.11): when a team member is removed, the companion enumerates
+    /// the leaver's outstanding claims and revokes each, so a departed
+    /// issuer's share-links stop minting access. There is no
+    /// per-issuer index blob — the default impl scans the scope's
+    /// token blobs and filters in memory, which is acceptable for the
+    /// membership-change cadence this method serves.
+    abstract ListByIssuer: scopeId: string * issuerUserId: string -> Async<ShareTokenClaim list>

@@ -48,6 +48,8 @@ let private resourceIndexPrefix (scopeId: string) (resourceKind: string) (resour
     let h = resourceHash resourceKind resourceId
     $"share-tokens/{scopeId}/_by-resource/{h}/"
 
+let private tokensPrefix (scopeId: string) = $"share-tokens/{scopeId}/"
+
 // ─── JSON ────────────────────────────────────────────────────────────
 
 module private Json =
@@ -459,6 +461,61 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
                 |> Async.Parallel
 
             return claims |> Array.choose id |> Array.toList |> List.sortByDescending _.IssuedAt
+        }
+
+        member _.ListByIssuer(scopeId, issuerUserId) = async {
+            // No per-issuer index blob exists (unlike `_by-resource/`).
+            // Scan the scope's token blobs directly and filter on
+            // `IssuedBy` in memory — the membership-change cadence this
+            // serves (a leaver's claims, enumerated once on removal)
+            // does not warrant a second index to keep in sync on every
+            // issue. The prefix `share-tokens/{scopeId}/` also covers
+            // the `_by-resource/` index subtree, so direct token blobs
+            // are isolated by requiring a `.json` extension AND no `/`
+            // in the path segment after the prefix.
+            let prefix = tokensPrefix scopeId
+            let! blobs = storage.List(platformContainer, prefix)
+
+            let tokenIds =
+                blobs
+                |> List.choose (fun blobName ->
+                    let normalised = blobName.Replace('\\', '/')
+
+                    if normalised.StartsWith prefix && normalised.EndsWith ".json" then
+                        let trimmed = normalised.Substring(prefix.Length)
+
+                        // A `/` here means the blob lives under a
+                        // sub-prefix (`_by-resource/`), not a top-level
+                        // token blob — skip it.
+                        if trimmed.Contains '/' then
+                            None
+                        else
+                            Some(trimmed.Substring(0, trimmed.Length - 5))
+                    else
+                        None)
+
+            let! claims =
+                tokenIds
+                |> List.map (fun tid -> async {
+                    let! r = readClaim scopeId tid
+
+                    return
+                        match r with
+                        | Ok claim -> Some claim
+                        | Error _ ->
+                            logger.Warn
+                                $"share-token blob unreadable during ListByIssuer: scope=%s{scopeId} token=%s{tid}"
+
+                            None
+                })
+                |> Async.Parallel
+
+            return
+                claims
+                |> Array.choose id
+                |> Array.filter (fun c -> c.IssuedBy = issuerUserId)
+                |> Array.toList
+                |> List.sortByDescending _.IssuedAt
         }
 
 /// Convenience constructor mirroring `JobStore.BlobJobStore` /
