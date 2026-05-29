@@ -94,6 +94,18 @@ module private Http =
     // by base address) is sufficient; ToolUp deployments use one
     // Vault per process.
     let buildClient (config: VaultConfig) =
+        // Validate the address up front. `Uri config.Address` below throws
+        // a generic UriFormatException on a malformed value; this names the
+        // offending config (VAULT_ADDR) and the expected shape instead.
+        match Uri.TryCreate(config.Address, UriKind.Absolute) with
+        | true, uri when uri.Scheme = Uri.UriSchemeHttp || uri.Scheme = Uri.UriSchemeHttps -> ()
+        | _ ->
+            invalidArg
+                "Address"
+                (sprintf
+                    "VaultConfig.Address (VAULT_ADDR) = '%s' is not a valid absolute http(s):// URL (expected e.g. https://vault.example.com:8200)."
+                    config.Address)
+
         let client = new HttpClient()
         client.BaseAddress <- Uri config.Address
         client.DefaultRequestHeaders.Add("X-Vault-Token", config.Token)

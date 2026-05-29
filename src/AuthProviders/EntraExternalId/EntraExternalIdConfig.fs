@@ -106,11 +106,19 @@ module EntraExternalIdConfig =
                 CustomDomain = envVar "TOOLUP_ENTRA_EXTERNAL_ID_CUSTOM_DOMAIN"
                 Audience = audience
                 ClockSkewSeconds =
+                    // A SET-but-unparseable / out-of-range value previously
+                    // fell through to None and silently used the 60s default
+                    // — a typo'd clock skew became a security-relevant
+                    // setting nobody knew was being ignored. Fail fast on a
+                    // bad value; leaving the var unset still uses the default.
                     envVar "TOOLUP_ENTRA_EXTERNAL_ID_CLOCK_SKEW_SECONDS"
-                    |> Option.bind (fun s ->
+                    |> Option.map (fun s ->
                         match Int32.TryParse s with
-                        | true, n -> Some n
-                        | _ -> None)
+                        | true, n when n >= 0 && n <= 3600 -> n
+                        | _ ->
+                            failwithf
+                                "TOOLUP_ENTRA_EXTERNAL_ID_CLOCK_SKEW_SECONDS = '%s' is not a valid clock skew. Expected an integer 0-3600 (seconds); leave the variable unset to use the 60s default."
+                                s)
                 SignUpPolicyId = envVar "TOOLUP_ENTRA_EXTERNAL_ID_SIGN_UP_POLICY"
                 SignInPolicyId = envVar "TOOLUP_ENTRA_EXTERNAL_ID_SIGN_IN_POLICY"
             }

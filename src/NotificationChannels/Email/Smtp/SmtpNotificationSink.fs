@@ -81,8 +81,8 @@ module SmtpSettings =
 
         let port =
             match Int32.TryParse(readRequired "TOOLUP_SMTP_PORT") with
-            | true, n -> n
-            | false, _ -> failwithf "Phase 6f Smtp: TOOLUP_SMTP_PORT must be an integer"
+            | true, n when n >= 1 && n <= 65535 -> n
+            | _ -> failwithf "Phase 6f Smtp: TOOLUP_SMTP_PORT must be an integer in 1-65535"
 
         let useTls =
             match read "TOOLUP_SMTP_TLS" with

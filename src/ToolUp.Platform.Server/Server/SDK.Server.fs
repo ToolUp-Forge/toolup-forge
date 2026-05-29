@@ -188,6 +188,18 @@ let compose
         | "" -> string config.Port
         | port -> port
 
+    // Fail fast on an out-of-range / non-numeric port. Without this the
+    // raw string flows into `UseUrls($"http://0.0.0.0:{serverPort}")` and
+    // Kestrel rejects it with an opaque bind-time error far from the
+    // actual cause (a typo'd SERVER_PORT env var or an out-of-range
+    // ServerConfig.Port). Surfacing it here names the offending value.
+    match Int32.TryParse serverPort with
+    | true, p when p >= 1 && p <= 65535 -> ()
+    | _ ->
+        failwithf
+            "SERVER_PORT / ServerConfig.Port = %s is not a valid TCP port. Expected an integer in 1-65535 (set the SERVER_PORT environment variable or ServerConfig.Port to a valid port)."
+            serverPort
+
     let culture = CultureInfo "en-GB"
     CultureInfo.DefaultThreadCurrentCulture <- culture
     CultureInfo.DefaultThreadCurrentUICulture <- culture

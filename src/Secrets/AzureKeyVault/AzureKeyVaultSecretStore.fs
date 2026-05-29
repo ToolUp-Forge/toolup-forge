@@ -110,6 +110,19 @@ module private Naming =
 /// per instance; the underlying Azure SDK client is thread-safe and
 /// designed for reuse.
 type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
+    // Validate the vault URL up front. `Uri config.VaultUrl` below throws
+    // a generic UriFormatException on a malformed value; this names the
+    // offending config and the expected shape instead.
+    do
+        match Uri.TryCreate(config.VaultUrl, UriKind.Absolute) with
+        | true, uri when uri.Scheme = Uri.UriSchemeHttps -> ()
+        | _ ->
+            invalidArg
+                "VaultUrl"
+                (sprintf
+                    "AzureKeyVaultConfig.VaultUrl = '%s' is not a valid absolute https:// URL (expected e.g. https://<vault-name>.vault.azure.net/)."
+                    config.VaultUrl)
+
     let credential = DefaultAzureCredential() :> Core.TokenCredential
     let client = SecretClient(Uri config.VaultUrl, credential)
 
