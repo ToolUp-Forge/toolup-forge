@@ -266,6 +266,11 @@
              `SurfaceRequirementRegistry.merge` declaration path (complement to
              SecurityHardeningTests' `fromServerConfig` bridge coverage). -->
         <Compile Include="InProcess\CsrfCarveOutDerivationTests.fs" />
+        <!-- Phase 66 Stream D.2 — SurfaceEnforcementMiddleware response-code
+             matrix driven end to end through DefaultHttpContext (registry
+             resolve → evaluate → writeRejection JSON), one test per design
+             §3.1 row plus the folded evaluate branches + path scoping. -->
+        <Compile Include="InProcess\SurfaceEnforcementMiddlewareTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

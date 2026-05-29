@@ -147,6 +147,7 @@ let allTests =
         AnonymousSessionMigratorTests.tests
         DefaultSubjectResolverTests.tests
         CsrfCarveOutDerivationTests.tests
+        SurfaceEnforcementMiddlewareTests.tests
     ]
 
 [<EntryPoint>]
