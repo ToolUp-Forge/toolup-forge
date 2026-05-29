@@ -262,6 +262,10 @@
         <Compile Include="InProcess\RevokeOnIssuerRemovedTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigratorTests.fs" />
         <Compile Include="InProcess\DefaultSubjectResolverTests.fs" />
+        <!-- Phase 66 Stream D.4 — CSRF carve-out derivation over the per-module
+             `SurfaceRequirementRegistry.merge` declaration path (complement to
+             SecurityHardeningTests' `fromServerConfig` bridge coverage). -->
+        <Compile Include="InProcess\CsrfCarveOutDerivationTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

@@ -146,6 +146,7 @@ let allTests =
         RevokeOnIssuerRemovedTests.tests
         AnonymousSessionMigratorTests.tests
         DefaultSubjectResolverTests.tests
+        CsrfCarveOutDerivationTests.tests
     ]
 
 [<EntryPoint>]
