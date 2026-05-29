@@ -67,6 +67,8 @@
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
         <Compile Include="Contracts\IUserClaimsContract.fs" />
+        <!-- Phase 66 Stream D.1 — ISubjectResolver four-step resolution contract. -->
+        <Compile Include="Contracts\ISubjectResolverContract.fs" />
         <!-- Phase 11a.A — module-level mutable cache reset registry.
              Tests touching a (b)-class cache call CacheReset.invalidateAll
              at setup. See docs/platform/testing-conventions.md. -->
@@ -259,6 +261,7 @@
              actor. Reuses ShareTokenStoreTests' public InMemorySecretStore. -->
         <Compile Include="InProcess\RevokeOnIssuerRemovedTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigratorTests.fs" />
+        <Compile Include="InProcess\DefaultSubjectResolverTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

@@ -145,6 +145,7 @@ let allTests =
         SubjectKindClientFlowTests.tests
         RevokeOnIssuerRemovedTests.tests
         AnonymousSessionMigratorTests.tests
+        DefaultSubjectResolverTests.tests
     ]
 
 [<EntryPoint>]
