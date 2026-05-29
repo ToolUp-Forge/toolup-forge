@@ -258,6 +258,7 @@
              revoke each → emit ShareTokenRevoked audit with the system
              actor. Reuses ShareTokenStoreTests' public InMemorySecretStore. -->
         <Compile Include="InProcess\RevokeOnIssuerRemovedTests.fs" />
+        <Compile Include="InProcess\AnonymousSessionMigratorTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

@@ -144,6 +144,7 @@ let allTests =
         CsrfPrefetchAnonymousGateTests.tests
         SubjectKindClientFlowTests.tests
         RevokeOnIssuerRemovedTests.tests
+        AnonymousSessionMigratorTests.tests
     ]
 
 [<EntryPoint>]
