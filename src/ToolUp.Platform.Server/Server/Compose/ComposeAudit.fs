@@ -30,6 +30,7 @@ open ToolUp.Platform.BlobStorage
 let buildAuditReplicatorSubsystem
     (auditSinks: IAuditSink list)
     (auditReplicatorOptions: AuditReplicatorOptions option)
+    (auditSamplingPolicy: AuditSamplingPolicy)
     (resolvedBlobStorage: IBlobStorage)
     (innerEventStore: IEventStore)
     (resolvedLogger: ILogger)
@@ -76,6 +77,7 @@ let buildAuditReplicatorSubsystem
                 innerEventStore,
                 replicatorAuditLog,
                 options,
+                auditSamplingPolicy,
                 resolvedLogger
             )
 

@@ -86,6 +86,11 @@
         <Compile Include="Shared\NarrativeTypes.fs" />
         <Compile Include="Shared\NarrativePlaintext.fs" />
         <Compile Include="Shared\NarrativeMarkdown.fs" />
+        <!-- Phase 66 Stream C.2 — AuditSubjectKind + AuditSamplingPolicy
+             compiled before SDK.Shared.fs so ServerConfig can carry an
+             AuditSamplingPolicy field. Depends only on Guid; AuditTypes.fs
+             (after SDK.Shared.fs, needs ModuleEvent) references it back. -->
+        <Compile Include="Shared\Types\AuditSampling.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
         <Compile Include="Shared\RateLimitDescriptor.fs" />

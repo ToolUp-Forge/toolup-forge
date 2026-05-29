@@ -1585,6 +1585,16 @@ type ServerConfig = {
     /// debugging). Pair with `EventStore = PersistentBlobBacked _`
     /// for durability.
     AuditLog: AuditLogMode
+    /// Phase 66 Stream C.2 — per-subject-kind audit sampling consulted
+    /// by `AuditReplicator` before delivering each event to its
+    /// `IAuditSink`s. Default: `AuditSamplingPolicy.none` (keep every
+    /// event for every subject kind) — byte-for-byte the pre-C.2
+    /// pipeline. Operators on anonymous-heavy public surfaces opt in to
+    /// thinning (e.g. keep 100% authenticated, 10% anonymous) to bound
+    /// sink cost without losing the higher-value authenticated trail.
+    /// Central, not per-sink (design D17): the decision is taken once
+    /// per event in the replicator and applies to every registered sink.
+    AuditSamplingPolicy: AuditSamplingPolicy
     /// Notification-channel selection. Default:
     /// `NotificationsAuto` — `compose` infers `InMemoryNotifications`
     /// when any feature that publishes notifications is active and
@@ -2333,6 +2343,7 @@ module ServerConfig =
         MetricsSink = MetricsSinkConfig.defaults
         Webhooks = NoWebhooks
         AuditLog = NoAuditLog
+        AuditSamplingPolicy = AuditSamplingPolicy.none
         Notifications = NotificationsAuto
         SecurityHeaders = Map.empty
         SecurityHardening = NoSecurityHardening

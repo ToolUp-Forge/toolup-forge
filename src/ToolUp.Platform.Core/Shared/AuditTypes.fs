@@ -57,15 +57,10 @@ type AuditSubject =
     /// deliberate — sinks query on these four fields directly.
     | ClaimAudit of tokenId: string * attributedHandle: string option * resourceKind: string * resourceId: string
 
-/// Lightweight kind tag for `AuditSubject`. Mirrors `SubjectKind` (the
-/// four-case discriminator for the request-side `Subject`) so audit-side
-/// downstream code can call the same `kind` projection without
-/// disambiguating which DU it holds.
-type AuditSubjectKind =
-    | AnonymousAuditKind
-    | UserAuditKind
-    | TeamAuditKind
-    | ClaimAuditKind
+// `AuditSubjectKind` is defined in `Shared/Types/AuditSampling.fs`
+// (compiled before SDK.Shared.fs so `ServerConfig` can carry an
+// `AuditSamplingPolicy`). The `kind` / `kindString` projections below
+// reference it from that earlier file.
 
 module AuditSubject =
     /// Project an `AuditSubject` to its lightweight kind tag. Used by
@@ -141,6 +136,10 @@ module AuditSubject =
             TeamAudit(DispatcherSentinelUserId, scopeId.Substring 5)
         else
             UserAudit scopeId
+
+// `AuditSamplingPolicy` (Phase 66 Stream C.2) is defined in
+// `Shared/Types/AuditSampling.fs`, compiled before SDK.Shared.fs so
+// `ServerConfig` can carry it as a field.
 
 /// First-seen-this-session login. The middleware that resolves the
 /// caller's identity emits one of these on each user's first request

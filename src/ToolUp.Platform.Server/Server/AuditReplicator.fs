@@ -186,6 +186,7 @@ type AuditReplicator
         eventStore: IEventStore,
         auditLog: IAuditLog,
         options: AuditReplicatorOptions,
+        samplingPolicy: AuditSamplingPolicy,
         logger: ILogger
     ) =
     inherit BackgroundService()
@@ -574,59 +575,100 @@ type AuditReplicator
                     // `SchemaVersion = LatestAuditSchemaVersion` (2) read
                     // these envelopes natively; future schema-version
                     // mismatches would be detected and translated here.
+                    // Phase 66 Stream C.2 — apply the central
+                    // `AuditSamplingPolicy` before delivery. The keep/skip
+                    // decision is deterministic on the event id (per subject
+                    // kind), so a sampled-out event stays sampled-out across
+                    // the live-hook path and every catch-up re-read — it can
+                    // never flicker into delivery on a sweep. Skipped events
+                    // still advance the cursor below (via `ordered |>
+                    // List.last`), so they are not re-attempted. The default
+                    // policy (`AuditSamplingPolicy.none`, all kinds 1.0)
+                    // takes the `shouldDeliver` fast path and keeps every
+                    // event — byte-for-byte the pre-C.2 pipeline.
                     let envelopes =
                         decodedPairs
-                        |> List.map (fun (modEvt, audit) ->
-                            AuditEnvelope.fromScopeId modEvt.ScopeId modEvt.OccurredAt audit)
+                        |> List.choose (fun (modEvt, audit) ->
+                            let env = AuditEnvelope.fromScopeId modEvt.ScopeId modEvt.OccurredAt audit
+
+                            if
+                                AuditSamplingPolicy.shouldDeliver
+                                    samplingPolicy
+                                    (AuditSubject.kind env.Subject)
+                                    modEvt.Id
+                            then
+                                Some env
+                            else
+                                None)
 
                     let batchSize = List.length envelopes
 
-                    // Retry loop. On `Result.Error`, emit `AuditSinkFailed`
-                    // for that attempt and back off per `RetryPolicy`. After
-                    // `MaxAttempts` exhausted, emit `AuditSinkDeadLettered`
-                    // and advance the cursor PAST the failed batch (so
-                    // subsequent events still flow). Operators investigate
-                    // the dead-letter event.
-                    let mutable attempt = 1
-                    let mutable lastError = ""
-                    let mutable succeeded = false
+                    if List.isEmpty envelopes then
+                        // Every decoded event in this batch was sampled out.
+                        // Advance the cursor past the batch (so these events
+                        // are not re-read) and skip both `sink.Deliver` and
+                        // the `AuditSinkDelivered` emission — delivering an
+                        // empty batch would emit a `batchSize = 0` row and
+                        // some sinks reject empty payloads.
+                        let lastEvt = ordered |> List.last
 
-                    while attempt <= options.RetryPolicy.MaxAttempts && not succeeded do
-                        let delay = RetryPolicy.delayFor options.RetryPolicy attempt
+                        let newCursor: AuditReplicatorCursor = {
+                            LastDeliveredAt = lastEvt.OccurredAt
+                            LastDeliveredEventId = lastEvt.Id
+                        }
 
-                        if delay > TimeSpan.Zero then
-                            do! Async.Sleep delay
-
-                        let! result = sink.Deliver envelopes
-
-                        match result with
-                        | Ok() -> succeeded <- true
-                        | Error msg ->
-                            lastError <- msg
-
-                            do! emitFailed sink.Name scopeId batchSize attempt msg
-
-                            attempt <- attempt + 1
-
-                    let lastEvt = ordered |> List.last
-
-                    let newCursor: AuditReplicatorCursor = {
-                        LastDeliveredAt = lastEvt.OccurredAt
-                        LastDeliveredEventId = lastEvt.Id
-                    }
-
-                    if succeeded then
                         do! cursorStore.Save(sink.Name, scopeId, newCursor)
-                        do! emitDelivered sink.Name scopeId batchSize lastEvt.OccurredAt
+                        return ()
                     else
-                        // Dead-letter: advance cursor anyway so the failed
-                        // batch doesn't block subsequent batches. The
-                        // dead-letter audit event is the operator's signal.
-                        do! cursorStore.Save(sink.Name, scopeId, newCursor)
+                        // Retry loop. On `Result.Error`, emit `AuditSinkFailed`
+                        // for that attempt and back off per `RetryPolicy`. After
+                        // `MaxAttempts` exhausted, emit `AuditSinkDeadLettered`
+                        // and advance the cursor PAST the failed batch (so
+                        // subsequent events still flow). Operators investigate
+                        // the dead-letter event.
+                        let mutable attempt = 1
+                        let mutable lastError = ""
+                        let mutable succeeded = false
 
-                        do! emitDeadLettered sink.Name scopeId batchSize options.RetryPolicy.MaxAttempts lastError
+                        while attempt <= options.RetryPolicy.MaxAttempts && not succeeded do
+                            let delay = RetryPolicy.delayFor options.RetryPolicy attempt
 
-                    return ()
+                            if delay > TimeSpan.Zero then
+                                do! Async.Sleep delay
+
+                            let! result = sink.Deliver envelopes
+
+                            match result with
+                            | Ok() -> succeeded <- true
+                            | Error msg ->
+                                lastError <- msg
+
+                                do! emitFailed sink.Name scopeId batchSize attempt msg
+
+                                attempt <- attempt + 1
+
+                        // Cursor advances to the last RAW event in the batch
+                        // (not the last delivered envelope) — sampled-out and
+                        // delivered events alike are now behind the cursor.
+                        let lastEvt = ordered |> List.last
+
+                        let newCursor: AuditReplicatorCursor = {
+                            LastDeliveredAt = lastEvt.OccurredAt
+                            LastDeliveredEventId = lastEvt.Id
+                        }
+
+                        if succeeded then
+                            do! cursorStore.Save(sink.Name, scopeId, newCursor)
+                            do! emitDelivered sink.Name scopeId batchSize lastEvt.OccurredAt
+                        else
+                            // Dead-letter: advance cursor anyway so the failed
+                            // batch doesn't block subsequent batches. The
+                            // dead-letter audit event is the operator's signal.
+                            do! cursorStore.Save(sink.Name, scopeId, newCursor)
+
+                            do! emitDeadLettered sink.Name scopeId batchSize options.RetryPolicy.MaxAttempts lastError
+
+                        return ()
     }
 
     /// Acquire the per-(sinkName, scopeId) semaphore, run `work`, release.

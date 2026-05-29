@@ -322,6 +322,7 @@ let compose
         buildAuditReplicatorSubsystem
             auditSinks
             auditReplicatorOptions
+            config.AuditSamplingPolicy
             resolvedBlobStorage
             innerEventStore
             resolvedLogger

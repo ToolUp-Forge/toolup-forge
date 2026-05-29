@@ -142,6 +142,82 @@ let tests =
 
             Expect.isFalse (AuditReplicatorCursor.isAfter cursor evtAtCursor) "cursor's own position is not 'after'"
 
+        // ─── Phase 66 C.2 — AuditSamplingPolicy ────────────────────
+
+        testCase "AuditSamplingPolicy.none keeps every event for every kind"
+        <| fun _ ->
+            let kinds = [ AnonymousAuditKind; UserAuditKind; TeamAuditKind; ClaimAuditKind ]
+
+            for kind in kinds do
+                for _ in 1..50 do
+                    Expect.isTrue
+                        (AuditSamplingPolicy.shouldDeliver AuditSamplingPolicy.none kind (Guid.NewGuid()))
+                        $"default policy keeps every {kind} event (GP 11 backward-compat)"
+
+        testCase "AuditSamplingPolicy rate 0.0 drops every event for that kind"
+        <| fun _ ->
+            let policy = {
+                AuditSamplingPolicy.none with
+                    Anonymous = 0.0
+            }
+
+            for _ in 1..50 do
+                Expect.isFalse
+                    (AuditSamplingPolicy.shouldDeliver policy AnonymousAuditKind (Guid.NewGuid()))
+                    "rate 0.0 drops all anonymous events"
+
+        testCase "AuditSamplingPolicy keep/skip decision is deterministic per event id"
+        <| fun _ ->
+            let policy = {
+                AuditSamplingPolicy.none with
+                    Anonymous = 0.5
+            }
+
+            let id = Guid.NewGuid()
+            let first = AuditSamplingPolicy.shouldDeliver policy AnonymousAuditKind id
+
+            for _ in 1..20 do
+                Expect.equal
+                    (AuditSamplingPolicy.shouldDeliver policy AnonymousAuditKind id)
+                    first
+                    "same event id yields the same decision on every call (stable across live-hook + catch-up sweep)"
+
+        testCase "AuditSamplingPolicy rates are independent per subject kind"
+        <| fun _ ->
+            // Anonymous fully dropped, everything else fully kept.
+            let policy = {
+                AuditSamplingPolicy.none with
+                    Anonymous = 0.0
+            }
+
+            for _ in 1..50 do
+                let id = Guid.NewGuid()
+                Expect.isFalse (AuditSamplingPolicy.shouldDeliver policy AnonymousAuditKind id) "anonymous dropped"
+                Expect.isTrue (AuditSamplingPolicy.shouldDeliver policy UserAuditKind id) "user kept"
+                Expect.isTrue (AuditSamplingPolicy.shouldDeliver policy TeamAuditKind id) "team kept"
+                Expect.isTrue (AuditSamplingPolicy.shouldDeliver policy ClaimAuditKind id) "claim kept"
+
+        testCase "AuditSamplingPolicy keeps approximately the configured fraction over many ids"
+        <| fun _ ->
+            // Validates the hash distribution: a 0.1 rate over 20k random
+            // ids should keep ~10%. Generous tolerance (±3%) — this guards
+            // against a degenerate hash (all-keep / all-drop / heavily
+            // skewed), not a precise statistical claim.
+            let policy = {
+                AuditSamplingPolicy.none with
+                    Anonymous = 0.1
+            }
+
+            let n = 20000
+
+            let kept =
+                seq { 1..n }
+                |> Seq.filter (fun _ -> AuditSamplingPolicy.shouldDeliver policy AnonymousAuditKind (Guid.NewGuid()))
+                |> Seq.length
+
+            let fraction = float kept / float n
+            Expect.isTrue (fraction > 0.07 && fraction < 0.13) $"kept fraction {fraction} is near the 0.1 target"
+
         // ─── BlobAuditReplicatorCursorStore round-trip ─────────────
 
         testCaseAsync "BlobAuditReplicatorCursorStore.Load returns empty when blob missing"
@@ -234,7 +310,15 @@ let tests =
             }
 
             let replicator =
-                new AuditReplicator([ sink :> IAuditSink ], cursorStore, innerStore, auditLog, options, silentLogger)
+                new AuditReplicator(
+                    [ sink :> IAuditSink ],
+                    cursorStore,
+                    innerStore,
+                    auditLog,
+                    options,
+                    AuditSamplingPolicy.none,
+                    silentLogger
+                )
 
             // Wrap inner store with the replicator's hook decorator.
             let hookedStore =
@@ -298,7 +382,15 @@ let tests =
             }
 
             let replicator =
-                new AuditReplicator([ sink :> IAuditSink ], cursorStore, innerStore, auditLog, options, silentLogger)
+                new AuditReplicator(
+                    [ sink :> IAuditSink ],
+                    cursorStore,
+                    innerStore,
+                    auditLog,
+                    options,
+                    AuditSamplingPolicy.none,
+                    silentLogger
+                )
 
             let hookedStore =
                 AuditReplicationHookedEventStore(innerStore, replicator.Enqueue) :> IEventStore
