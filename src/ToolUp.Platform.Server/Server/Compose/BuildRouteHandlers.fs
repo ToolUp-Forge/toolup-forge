@@ -114,10 +114,7 @@ let buildRouteHandlers
             let accessContext =
                 match ctx.RequestServices.GetService(typeof<AccessContext>) with
                 | :? AccessContext as ac -> ac
-                | _ ->
-                    AccessContext.unrestricted (
-                        Subject.fromLegacyMode (ServerConfig.legacyMode config) "anonymous" None
-                    )
+                | _ -> AccessContext.unrestricted (Subject.fromLegacyMode Anonymous "anonymous" None)
 
             {
                 Ask = fun request -> bus.Ask(accessContext, request)
@@ -419,10 +416,7 @@ let buildRouteHandlers
                 let accessContext =
                     match ctx.RequestServices.GetService(typeof<AccessContext>) with
                     | :? AccessContext as ac -> ac
-                    | _ ->
-                        AccessContext.unrestricted (
-                            Subject.fromLegacyMode (ServerConfig.legacyMode config) "anonymous" None
-                        )
+                    | _ -> AccessContext.unrestricted (Subject.fromLegacyMode Anonymous "anonymous" None)
 
                 let scopeId =
                     accessContext

@@ -142,12 +142,12 @@ let registerScopeResolution
             match httpCtxAccessor.HttpContext with
             | null ->
                 // Out-of-request fallback (e.g. resolved during
-                // startup, hosted-service composition). Synthesise a
-                // `Subject` via the transitional `legacyMode` bridge
-                // until Stream B.5 finishes rewriting downstream
-                // consumers to read `Subject` directly without the
-                // PlatformMode-shaped intermediary.
-                AccessContext.unrestricted (Subject.fromLegacyMode (ServerConfig.legacyMode config) "anonymous" None)
+                // startup, hosted-service composition). No HttpContext
+                // means no resolved Subject, so synthesise the
+                // anonymous floor directly — there is no caller to
+                // attribute, and an unrestricted anonymous context is
+                // the safe default for the rare out-of-request resolve.
+                AccessContext.unrestricted (Subject.fromLegacyMode Anonymous "anonymous" None)
             | ctx ->
                 let userId =
                     match ctx.Items.TryGetValue "ToolUp.UserId" with
