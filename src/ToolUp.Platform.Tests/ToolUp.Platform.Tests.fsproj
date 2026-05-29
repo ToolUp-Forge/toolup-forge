@@ -250,6 +250,13 @@
              sweep. Includes the anonymous-only regression pin (AnonymousKind
              always pass-through in the auth-UI gate). -->
         <Compile Include="InProcess\SubjectKindClientFlowTests.fs" />
+        <!-- Phase 66 Stream D.8 — RevokeOnIssuerRemoved integration tests.
+             End-to-end exercise of the C.5 share-token decorator over a
+             real BlobShareTokenStore: subscribe → react to
+             MembershipChanged.Removed → enumerate the leaver's claims →
+             revoke each → emit ShareTokenRevoked audit with the system
+             actor. Reuses ShareTokenStoreTests' public InMemorySecretStore. -->
+        <Compile Include="InProcess\RevokeOnIssuerRemovedTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -327,6 +334,9 @@
              Fable surface), so .NET tests can drive its pure helpers
              directly without an interop boundary. -->
         <ProjectReference Include="..\ToolUp.Platform.Build\ToolUp.Platform.Build.fsproj" />
+        <!-- Phase 66 Stream C.5 / D.8 — RevokeOnIssuerRemoved share-token
+             decorator companion, exercised by the D.8 integration tests. -->
+        <ProjectReference Include="..\ShareTokenStoreDecorators\RevokeOnIssuerRemoved\ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />

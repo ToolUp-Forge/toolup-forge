@@ -142,6 +142,7 @@ let allTests =
         SurfaceCoherenceValidatorTests.tests
         CsrfPrefetchAnonymousGateTests.tests
         SubjectKindClientFlowTests.tests
+        RevokeOnIssuerRemovedTests.tests
     ]
 
 [<EntryPoint>]
