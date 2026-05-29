@@ -27,9 +27,9 @@ open ToolUp.Platform.ConfigValidation
 //     considers distributed (regression check — easy to accidentally
 //     drop a case from the `isDistributed` discriminator).
 
-let private cfg (mode: PlatformMode) (replicas: int) (notifications: NotificationMode) : ServerConfig = {
+let private cfg (surfaces: SurfaceProfile list) (replicas: int) (notifications: NotificationMode) : ServerConfig = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         ReplicaCount = replicas
         Notifications = notifications
 }
@@ -65,7 +65,7 @@ let tests =
 
         test "Validator: Single instance with NoNotificationsExplicit → Ok" {
             Expect.equal
-                (validate (cfg Team 1 NoNotificationsExplicit))
+                (validate (cfg Surfaces.team 1 NoNotificationsExplicit))
                 Ok
                 "single instance has no cross-replica problem regardless of channel"
         }
@@ -77,7 +77,7 @@ let tests =
             // across replicas. The validator must catch this with the
             // same warning shape it emits for `InMemoryNotifications`
             // and the lightweight `NoNotifications` default.
-            match validate (cfg Team 3 NoNotificationsExplicit) with
+            match validate (cfg Surfaces.team 3 NoNotificationsExplicit) with
             | Warning msg ->
                 Expect.stringContains msg "Team" "names the mode"
                 Expect.stringContains msg "RedisNotifications" "points at the distributed fix"
@@ -88,7 +88,7 @@ let tests =
         test "Validator: Multi-instance MultiTeam + NoNotificationsExplicit → Warning" {
             // MultiTeam shares the team-scope shape with Team; the
             // validator must catch both.
-            match validate (cfg MultiTeam 2 NoNotificationsExplicit) with
+            match validate (cfg Surfaces.multiTeam 2 NoNotificationsExplicit) with
             | Warning msg -> Expect.stringContains msg "MultiTeam" "names the mode"
             | other -> failtestf "expected Warning, got %A" other
         }
@@ -98,7 +98,7 @@ let tests =
             // evict, so the cross-replica-propagation concern does
             // not apply regardless of the channel choice.
             Expect.equal
-                (validate (cfg Individual 4 NoNotificationsExplicit))
+                (validate (cfg Surfaces.individual 4 NoNotificationsExplicit))
                 Ok
                 "membership cache is Team/MultiTeam only"
         }
@@ -115,12 +115,12 @@ let tests =
                     NoNotificationsExplicit
                     InMemoryNotifications
                 ] do
-                match validate (cfg Team 3 mode) with
+                match validate (cfg Surfaces.team 3 mode) with
                 | Warning _ -> ()
                 | other -> failtestf "expected Warning for non-distributed mode %A, got %A" mode other
 
             Expect.equal
-                (validate (cfg Team 3 (RedisNotifications "localhost:6379")))
+                (validate (cfg Surfaces.team 3 (RedisNotifications "localhost:6379")))
                 Ok
                 "Redis is the lone distributed mode"
         }

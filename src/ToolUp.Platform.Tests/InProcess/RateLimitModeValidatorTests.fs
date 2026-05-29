@@ -5,14 +5,14 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 
 let private cfg
-    (mode: PlatformMode)
+    (surfaces: SurfaceProfile list)
     (requireHttps: bool)
     (rateLimit: RateLimitConfig)
     (escapeHatch: bool)
     : ServerConfig =
     {
         ServerConfig.defaults with
-            Surfaces = Surfaces.fromLegacyMode mode
+            Surfaces = surfaces
             RequireHttps = requireHttps
             RateLimit = rateLimit
             AcceptNoRateLimitWhenAuthRequired = escapeHatch
@@ -36,12 +36,12 @@ let tests =
     testList "Phase 6l.G — RateLimit mode validator" [
 
         test "Anonymous mode + RequireHttps + no rate limit → Ok (anonymous never warned)" {
-            let result = validate (cfg Anonymous true RateLimitConfig.none false)
+            let result = validate (cfg Surfaces.anonymous true RateLimitConfig.none false)
             Expect.equal result Ok "anonymous mode is exempt"
         }
 
         test "Individual mode + no HTTPS + no forwarded headers + no rate limit → Ok (not internet-facing)" {
-            let result = validate (cfg Individual false RateLimitConfig.none false)
+            let result = validate (cfg Surfaces.individual false RateLimitConfig.none false)
             Expect.equal result Ok "internet-facing heuristic requires RequireHttps or TrustForwardedHeaders"
         }
 
@@ -61,12 +61,12 @@ let tests =
         }
 
         test "Individual mode + RequireHttps + rate limit set → Ok" {
-            let result = validate (cfg Individual true rl false)
+            let result = validate (cfg Surfaces.individual true rl false)
             Expect.equal result Ok "rate limit configured satisfies the validator"
         }
 
         test "Individual mode + RequireHttps + no rate limit + no escape hatch → Warning" {
-            let result = validate (cfg Individual true RateLimitConfig.none false)
+            let result = validate (cfg Surfaces.individual true RateLimitConfig.none false)
 
             match result with
             | Warning msg ->
@@ -84,7 +84,7 @@ let tests =
         }
 
         test "Team mode + RequireHttps + no rate limit → Warning" {
-            let result = validate (cfg Team true RateLimitConfig.none false)
+            let result = validate (cfg Surfaces.team true RateLimitConfig.none false)
 
             match result with
             | Warning msg -> Expect.stringContains msg "Team" "names the offending mode"
@@ -92,7 +92,7 @@ let tests =
         }
 
         test "MultiTeam mode + RequireHttps + no rate limit → Warning" {
-            let result = validate (cfg MultiTeam true RateLimitConfig.none false)
+            let result = validate (cfg Surfaces.multiTeam true RateLimitConfig.none false)
 
             match result with
             | Warning msg -> Expect.stringContains msg "MultiTeam" "names the offending mode"
@@ -100,7 +100,7 @@ let tests =
         }
 
         test "AuthenticatedEphemeral mode + RequireHttps + no rate limit → Warning" {
-            let result = validate (cfg AuthenticatedEphemeral true RateLimitConfig.none false)
+            let result = validate (cfg Surfaces.trial true RateLimitConfig.none false)
 
             match result with
             | Warning msg -> Expect.stringContains msg "AuthenticatedEphemeral" "names the offending mode"
@@ -108,7 +108,7 @@ let tests =
         }
 
         test "Individual mode + RequireHttps + no rate limit + escape hatch → Ok" {
-            let result = validate (cfg Individual true RateLimitConfig.none true)
+            let result = validate (cfg Surfaces.individual true RateLimitConfig.none true)
             Expect.equal result Ok "explicit opt-in silences the warning"
         }
 
@@ -146,7 +146,7 @@ let tests =
 
         test "Validator metadata is well-formed" {
             let v =
-                RateLimitModeValidator.RateLimitModeValidator(cfg Individual true RateLimitConfig.none false)
+                RateLimitModeValidator.RateLimitModeValidator(cfg Surfaces.individual true RateLimitConfig.none false)
                 :> IConfigValidator
 
             Expect.equal v.Name "rate-limit-mode" "stable identifier"

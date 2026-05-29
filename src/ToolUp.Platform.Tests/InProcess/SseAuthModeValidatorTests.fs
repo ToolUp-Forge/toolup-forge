@@ -4,9 +4,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 
-let private cfg (mode: PlatformMode) (sseAuth: SseAuthMode) (escapeHatch: bool) : ServerConfig = {
+let private cfg (surfaces: SurfaceProfile list) (sseAuth: SseAuthMode) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         SseAuthMode = sseAuth
         AcceptQueryParamSseAuthWhenAuthRequired = escapeHatch
 }
@@ -21,17 +21,17 @@ let tests =
     testList "Phase 6l.I — SSE auth mode validator" [
 
         test "Anonymous mode + QueryParamFallback → Ok (anonymous never refused)" {
-            let result = validate (cfg Anonymous QueryParamFallback false)
+            let result = validate (cfg Surfaces.anonymous QueryParamFallback false)
             Expect.equal result Ok "anonymous mode is exempt — userId is a session marker"
         }
 
         test "Individual mode + CookieRequired → Ok" {
-            let result = validate (cfg Individual CookieRequired false)
+            let result = validate (cfg Surfaces.individual CookieRequired false)
             Expect.equal result Ok "cookie auth is the production path"
         }
 
         test "Individual mode + QueryParamFallback + no escape hatch → Error" {
-            let result = validate (cfg Individual QueryParamFallback false)
+            let result = validate (cfg Surfaces.individual QueryParamFallback false)
 
             match result with
             | Error msg ->
@@ -45,7 +45,7 @@ let tests =
         }
 
         test "Team mode + QueryParamFallback → Error" {
-            let result = validate (cfg Team QueryParamFallback false)
+            let result = validate (cfg Surfaces.team QueryParamFallback false)
 
             match result with
             | Error msg -> Expect.stringContains msg "Team" "names the offending mode"
@@ -53,7 +53,7 @@ let tests =
         }
 
         test "MultiTeam mode + QueryParamFallback → Error" {
-            let result = validate (cfg MultiTeam QueryParamFallback false)
+            let result = validate (cfg Surfaces.multiTeam QueryParamFallback false)
 
             match result with
             | Error msg -> Expect.stringContains msg "MultiTeam" "names the offending mode"
@@ -61,7 +61,7 @@ let tests =
         }
 
         test "AuthenticatedEphemeral mode + QueryParamFallback → Error" {
-            let result = validate (cfg AuthenticatedEphemeral QueryParamFallback false)
+            let result = validate (cfg Surfaces.trial QueryParamFallback false)
 
             match result with
             | Error msg -> Expect.stringContains msg "AuthenticatedEphemeral" "names the offending mode"
@@ -69,13 +69,14 @@ let tests =
         }
 
         test "Individual mode + QueryParamFallback + escape hatch → Ok" {
-            let result = validate (cfg Individual QueryParamFallback true)
+            let result = validate (cfg Surfaces.individual QueryParamFallback true)
             Expect.equal result Ok "explicit opt-in passes"
         }
 
         test "Validator metadata is well-formed" {
             let v =
-                SseAuthModeValidator.SseAuthModeValidator(cfg Individual QueryParamFallback false) :> IConfigValidator
+                SseAuthModeValidator.SseAuthModeValidator(cfg Surfaces.individual QueryParamFallback false)
+                :> IConfigValidator
 
             Expect.equal v.Name "sse-auth-mode" "stable identifier"
             Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"

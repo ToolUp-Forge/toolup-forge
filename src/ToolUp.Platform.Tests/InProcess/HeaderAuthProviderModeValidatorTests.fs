@@ -7,9 +7,9 @@ open ToolUp.Platform.ConfigValidation
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-let private cfg (mode: PlatformMode) (escapeHatch: bool) = {
+let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         AcceptHeaderAuthWhenAuthRequired = escapeHatch
 }
 
@@ -41,7 +41,7 @@ let tests =
     testList "Phase 6l.A — HeaderAuthProvider mode validator" [
 
         test "Anonymous mode + HeaderAuthProvider → Ok (dev default keeps working)" {
-            let result = validate (cfg Anonymous false) (headerAuthProvider ())
+            let result = validate (cfg Surfaces.anonymous false) (headerAuthProvider ())
             Expect.equal result Ok "Anonymous mode is the explicit no-auth path"
         }
 
@@ -49,7 +49,7 @@ let tests =
             // The headline regression: production deployment in
             // Individual mode with the dev-default header provider.
             // Pre-6l.A this would boot with spoofable auth.
-            let result = validate (cfg Individual false) (headerAuthProvider ())
+            let result = validate (cfg Surfaces.individual false) (headerAuthProvider ())
 
             match result with
             | Error msg ->
@@ -64,7 +64,7 @@ let tests =
         }
 
         test "Team mode + HeaderAuthProvider → Error" {
-            let result = validate (cfg Team false) (headerAuthProvider ())
+            let result = validate (cfg Surfaces.team false) (headerAuthProvider ())
 
             match result with
             | Error msg -> Expect.stringContains msg "Team" "names the offending Mode"
@@ -72,7 +72,7 @@ let tests =
         }
 
         test "MultiTeam mode + HeaderAuthProvider → Error" {
-            let result = validate (cfg MultiTeam false) (headerAuthProvider ())
+            let result = validate (cfg Surfaces.multiTeam false) (headerAuthProvider ())
 
             match result with
             | Error msg -> Expect.stringContains msg "MultiTeam" "names the offending Mode"
@@ -80,7 +80,7 @@ let tests =
         }
 
         test "AuthenticatedEphemeral mode + HeaderAuthProvider → Error" {
-            let result = validate (cfg AuthenticatedEphemeral false) (headerAuthProvider ())
+            let result = validate (cfg Surfaces.trial false) (headerAuthProvider ())
 
             match result with
             | Error msg -> Expect.stringContains msg "AuthenticatedEphemeral" "names the offending Mode"
@@ -91,7 +91,7 @@ let tests =
             // Behind-mTLS deployments with a verified-identity proxy
             // get to opt in. The validator passes; the operator owns
             // the trust boundary.
-            let result = validate (cfg Individual true) (headerAuthProvider ())
+            let result = validate (cfg Surfaces.individual true) (headerAuthProvider ())
             Expect.equal result Ok "escape hatch passes"
         }
 
@@ -99,14 +99,14 @@ let tests =
             // A deployment running OIDC / StaticJwt / a custom
             // provider in Individual mode is the production path
             // we WANT — must not be refused.
-            let result = validate (cfg Individual false) (alternativeAuthProvider ())
+            let result = validate (cfg Surfaces.individual false) (alternativeAuthProvider ())
             Expect.equal result Ok "non-HeaderAuth providers are not refused"
         }
 
         test "Validator name is stable + non-empty" {
             let v =
                 HeaderAuthProviderModeValidator.HeaderAuthProviderModeValidator(
-                    cfg Anonymous false,
+                    cfg Surfaces.anonymous false,
                     headerAuthProvider ()
                 )
                 :> IConfigValidator

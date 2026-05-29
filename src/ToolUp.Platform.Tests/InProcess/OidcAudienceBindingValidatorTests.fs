@@ -10,9 +10,9 @@ open ToolUp.Platform.ConfigValidation
 // OidcConfigCompletenessValidator). Env vars are process-global, so the
 // list is `testSequenced` and every case saves/restores the two vars.
 
-let private cfg (mode: PlatformMode) (escapeHatch: bool) : ServerConfig = {
+let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         AcceptUnboundAudienceWhenAuthRequired = escapeHatch
 }
 
@@ -47,22 +47,24 @@ let tests =
     <| testList "OIDC audience binding validator" [
 
         test "Anonymous mode + oidc + no audience → Ok (anonymous is exempt)" {
-            let result = validateWithEnv (Some "oidc") None (cfg Anonymous false)
+            let result = validateWithEnv (Some "oidc") None (cfg Surfaces.anonymous false)
             Expect.equal result Ok "no real identity in Anonymous mode — nothing to confuse"
         }
 
         test "Individual mode + auth mode unset → Ok (only fires for oidc)" {
-            let result = validateWithEnv None None (cfg Individual false)
+            let result = validateWithEnv None None (cfg Surfaces.individual false)
             Expect.equal result Ok "non-oidc auth modes are out of scope for this validator"
         }
 
         test "Individual mode + oidc + audience set → Ok" {
-            let result = validateWithEnv (Some "oidc") (Some "my-app") (cfg Individual false)
+            let result =
+                validateWithEnv (Some "oidc") (Some "my-app") (cfg Surfaces.individual false)
+
             Expect.equal result Ok "a bound audience is the production path"
         }
 
         test "Individual mode + oidc + audience unset + no escape hatch → Error" {
-            let result = validateWithEnv (Some "oidc") None (cfg Individual false)
+            let result = validateWithEnv (Some "oidc") None (cfg Surfaces.individual false)
 
             match result with
             | Error msg ->
@@ -75,7 +77,7 @@ let tests =
         }
 
         test "Team mode + oidc + audience unset → Error" {
-            let result = validateWithEnv (Some "oidc") None (cfg Team false)
+            let result = validateWithEnv (Some "oidc") None (cfg Surfaces.team false)
 
             match result with
             | Error msg -> Expect.stringContains msg "Team" "names the offending mode"
@@ -83,7 +85,7 @@ let tests =
         }
 
         test "MultiTeam mode + oidc + audience unset → Error" {
-            let result = validateWithEnv (Some "oidc") None (cfg MultiTeam false)
+            let result = validateWithEnv (Some "oidc") None (cfg Surfaces.multiTeam false)
 
             match result with
             | Error msg -> Expect.stringContains msg "MultiTeam" "names the offending mode"
@@ -91,7 +93,7 @@ let tests =
         }
 
         test "AuthenticatedEphemeral mode + oidc + audience unset → Error" {
-            let result = validateWithEnv (Some "oidc") None (cfg AuthenticatedEphemeral false)
+            let result = validateWithEnv (Some "oidc") None (cfg Surfaces.trial false)
 
             match result with
             | Error msg -> Expect.stringContains msg "AuthenticatedEphemeral" "names the offending mode"
@@ -99,12 +101,12 @@ let tests =
         }
 
         test "Individual mode + oidc + audience unset + escape hatch → Ok" {
-            let result = validateWithEnv (Some "oidc") None (cfg Individual true)
+            let result = validateWithEnv (Some "oidc") None (cfg Surfaces.individual true)
             Expect.equal result Ok "explicit opt-in passes"
         }
 
         test "Case-insensitive auth mode (OIDC) still fires" {
-            let result = validateWithEnv (Some "OIDC") None (cfg Individual false)
+            let result = validateWithEnv (Some "OIDC") None (cfg Surfaces.individual false)
 
             match result with
             | Error _ -> ()
@@ -113,7 +115,8 @@ let tests =
 
         test "Validator metadata is well-formed" {
             let v =
-                OidcAudienceBindingValidator.OidcAudienceBindingValidator(cfg Individual false) :> IConfigValidator
+                OidcAudienceBindingValidator.OidcAudienceBindingValidator(cfg Surfaces.individual false)
+                :> IConfigValidator
 
             Expect.equal v.Name "oidc-audience-binding" "stable identifier"
             Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"

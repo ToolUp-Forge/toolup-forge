@@ -4,9 +4,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 
-let private cfg (mode: PlatformMode) (requireHttps: bool) (headers: Map<string, string>) : ServerConfig = {
+let private cfg (surfaces: SurfaceProfile list) (requireHttps: bool) (headers: Map<string, string>) : ServerConfig = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         RequireHttps = requireHttps
         SecurityHeaders = headers
 }
@@ -22,12 +22,12 @@ let tests =
     testList "Phase 6l.K — SecurityHeaders mode validator" [
 
         test "Anonymous mode + RequireHttps + empty headers → Ok (anonymous never warned)" {
-            let result = validate (cfg Anonymous true Map.empty)
+            let result = validate (cfg Surfaces.anonymous true Map.empty)
             Expect.equal result Ok "anonymous mode is exempt"
         }
 
         test "Individual mode + no HTTPS + no forwarded headers + empty headers → Ok (not internet-facing)" {
-            let result = validate (cfg Individual false Map.empty)
+            let result = validate (cfg Surfaces.individual false Map.empty)
             Expect.equal result Ok "internet-facing heuristic requires RequireHttps or TrustForwardedHeaders"
         }
 
@@ -46,12 +46,14 @@ let tests =
         }
 
         test "Individual mode + RequireHttps + productionDefaults → Ok" {
-            let result = validate (cfg Individual true SecurityHeaders.productionDefaults)
+            let result =
+                validate (cfg Surfaces.individual true SecurityHeaders.productionDefaults)
+
             Expect.equal result Ok "production-defaults map satisfies the validator"
         }
 
         test "Individual mode + RequireHttps + empty headers → Warning" {
-            let result = validate (cfg Individual true Map.empty)
+            let result = validate (cfg Surfaces.individual true Map.empty)
 
             match result with
             | Warning msg ->
@@ -63,7 +65,7 @@ let tests =
         }
 
         test "Team mode + RequireHttps + empty headers → Warning" {
-            let result = validate (cfg Team true Map.empty)
+            let result = validate (cfg Surfaces.team true Map.empty)
 
             match result with
             | Warning msg -> Expect.stringContains msg "Team" "names the offending mode"
@@ -71,7 +73,7 @@ let tests =
         }
 
         test "MultiTeam mode + RequireHttps + empty headers → Warning" {
-            let result = validate (cfg MultiTeam true Map.empty)
+            let result = validate (cfg Surfaces.multiTeam true Map.empty)
 
             match result with
             | Warning msg -> Expect.stringContains msg "MultiTeam" "names the offending mode"
@@ -79,7 +81,8 @@ let tests =
         }
 
         test "Individual mode + RequireHttps + non-empty (single header) → Ok" {
-            let result = validate (cfg Individual true (Map.ofList [ "X-Custom-Header", "v" ]))
+            let result =
+                validate (cfg Surfaces.individual true (Map.ofList [ "X-Custom-Header", "v" ]))
 
             Expect.equal result Ok "any non-empty map satisfies the validator"
         }
@@ -94,7 +97,8 @@ let tests =
 
         test "Validator metadata is well-formed" {
             let v =
-                SecurityHeadersValidator.SecurityHeadersValidator(cfg Individual true Map.empty) :> IConfigValidator
+                SecurityHeadersValidator.SecurityHeadersValidator(cfg Surfaces.individual true Map.empty)
+                :> IConfigValidator
 
             Expect.equal v.Name "security-headers-mode" "stable identifier"
             Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"

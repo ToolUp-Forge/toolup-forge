@@ -4,9 +4,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 
-let private cfg (mode: PlatformMode) (trustForwarded: bool) (requireHttps: bool) : ServerConfig = {
+let private cfg (surfaces: SurfaceProfile list) (trustForwarded: bool) (requireHttps: bool) : ServerConfig = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         TrustForwardedHeaders = trustForwarded
         RequireHttps = requireHttps
 }
@@ -22,22 +22,22 @@ let tests =
     testList "Phase 6l.K — ForwardedHeaders trust validator" [
 
         test "Anonymous mode + TrustForwardedHeaders + no HTTPS → Ok (anonymous exempt)" {
-            let result = validate (cfg Anonymous true false)
+            let result = validate (cfg Surfaces.anonymous true false)
             Expect.equal result Ok "anonymous mode is exempt"
         }
 
         test "Individual mode + no TrustForwardedHeaders → Ok (no spoof surface)" {
-            let result = validate (cfg Individual false false)
+            let result = validate (cfg Surfaces.individual false false)
             Expect.equal result Ok "validator only fires when forwarded headers are trusted"
         }
 
         test "Individual mode + TrustForwardedHeaders + RequireHttps → Ok (TLS enforced)" {
-            let result = validate (cfg Individual true true)
+            let result = validate (cfg Surfaces.individual true true)
             Expect.equal result Ok "RequireHttps closes the spoof surface"
         }
 
         test "Individual mode + TrustForwardedHeaders + no HTTPS → Warning" {
-            let result = validate (cfg Individual true false)
+            let result = validate (cfg Surfaces.individual true false)
 
             match result with
             | Warning msg ->
@@ -52,7 +52,7 @@ let tests =
         }
 
         test "Team mode + TrustForwardedHeaders + no HTTPS → Warning" {
-            let result = validate (cfg Team true false)
+            let result = validate (cfg Surfaces.team true false)
 
             match result with
             | Warning msg -> Expect.stringContains msg "Team" "names the offending mode"
@@ -60,7 +60,7 @@ let tests =
         }
 
         test "MultiTeam mode + TrustForwardedHeaders + no HTTPS → Warning" {
-            let result = validate (cfg MultiTeam true false)
+            let result = validate (cfg Surfaces.multiTeam true false)
 
             match result with
             | Warning msg -> Expect.stringContains msg "MultiTeam" "names the offending mode"
@@ -69,7 +69,7 @@ let tests =
 
         test "Validator metadata is well-formed" {
             let v =
-                ForwardedHeadersTrustValidator.ForwardedHeadersTrustValidator(cfg Individual true false)
+                ForwardedHeadersTrustValidator.ForwardedHeadersTrustValidator(cfg Surfaces.individual true false)
                 :> IConfigValidator
 
             Expect.equal v.Name "forwarded-headers-trust" "stable identifier"

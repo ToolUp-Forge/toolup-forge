@@ -40,9 +40,9 @@ let private withSecretStore (value: string option) (body: unit -> unit) =
 let private validKey () =
     EncryptedSecretStore.generateMasterKey ()
 
-let private cfg (mode: PlatformMode) (escapeHatch: bool) = {
+let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         AcceptPlaintextSecretsWhenAuthRequired = escapeHatch
 }
 
@@ -67,13 +67,13 @@ let tests =
 
         test "Anonymous mode + no master key → Ok (dev path)" {
             withMasterKey None (fun () ->
-                let result = validate (cfg Anonymous false)
+                let result = validate (cfg Surfaces.anonymous false)
                 Expect.equal result Ok "anon dev path passes")
         }
 
         test "Individual mode + no master key + no escape hatch → Error" {
             withMasterKey None (fun () ->
-                let result = validate (cfg Individual false)
+                let result = validate (cfg Surfaces.individual false)
 
                 match result with
                 | Error msg ->
@@ -87,7 +87,7 @@ let tests =
 
         test "Team mode + no master key → Error" {
             withMasterKey None (fun () ->
-                let result = validate (cfg Team false)
+                let result = validate (cfg Surfaces.team false)
 
                 match result with
                 | Error _ -> ()
@@ -96,19 +96,19 @@ let tests =
 
         test "Individual mode + master key set → Ok (production path)" {
             withMasterKey (Some(validKey ())) (fun () ->
-                let result = validate (cfg Individual false)
+                let result = validate (cfg Surfaces.individual false)
                 Expect.equal result Ok "production path passes")
         }
 
         test "Individual mode + no master key + escape hatch → Ok" {
             withMasterKey None (fun () ->
-                let result = validate (cfg Individual true)
+                let result = validate (cfg Surfaces.individual true)
                 Expect.equal result Ok "escape hatch passes")
         }
 
         test "MultiTeam mode + no master key → Error" {
             withMasterKey None (fun () ->
-                let result = validate (cfg MultiTeam false)
+                let result = validate (cfg Surfaces.multiTeam false)
 
                 match result with
                 | Error _ -> ()
@@ -117,7 +117,10 @@ let tests =
 
         test "Validator metadata is well-formed" {
             let v =
-                EncryptedSecretStoreModeValidator.EncryptedSecretStoreModeValidator(cfg Anonymous false, dummyStore ())
+                EncryptedSecretStoreModeValidator.EncryptedSecretStoreModeValidator(
+                    cfg Surfaces.anonymous false,
+                    dummyStore ()
+                )
                 :> IConfigValidator
 
             Expect.equal v.Name "encrypted-secret-store-mode" "stable identifier"
@@ -131,7 +134,7 @@ let tests =
 
         test "Individual mode + master key set but not valid base64 → Error names parse failure" {
             withMasterKey (Some "not-valid-base64-!!!") (fun () ->
-                let result = validate (cfg Individual false)
+                let result = validate (cfg Surfaces.individual false)
 
                 match result with
                 | Error msg ->
@@ -151,7 +154,7 @@ let tests =
             let shortKey = Convert.ToBase64String(Array.zeroCreate 16)
 
             withMasterKey (Some shortKey) (fun () ->
-                let result = validate (cfg Individual false)
+                let result = validate (cfg Surfaces.individual false)
 
                 match result with
                 | Error msg ->
@@ -205,28 +208,28 @@ let tests =
         test "Individual mode + no master key + TOOLUP_SECRET_STORE=azure-key-vault → Ok" {
             withMasterKey None (fun () ->
                 withSecretStore (Some "azure-key-vault") (fun () ->
-                    let result = validate (cfg Individual false)
+                    let result = validate (cfg Surfaces.individual false)
                     Expect.equal result Ok "cloud-KMS path bypasses master-key gate"))
         }
 
         test "Individual mode + no master key + TOOLUP_SECRET_STORE=AWS-Secrets-Manager (case-insensitive) → Ok" {
             withMasterKey None (fun () ->
                 withSecretStore (Some "AWS-Secrets-Manager") (fun () ->
-                    let result = validate (cfg Individual false)
+                    let result = validate (cfg Surfaces.individual false)
                     Expect.equal result Ok "case-insensitive recognition"))
         }
 
         test "Individual mode + no master key + TOOLUP_SECRET_STORE=vault → Ok" {
             withMasterKey None (fun () ->
                 withSecretStore (Some "vault") (fun () ->
-                    let result = validate (cfg Individual false)
+                    let result = validate (cfg Surfaces.individual false)
                     Expect.equal result Ok "Vault recognised"))
         }
 
         test "Individual mode + no master key + TOOLUP_SECRET_STORE=encrypted → Error (still gated)" {
             withMasterKey None (fun () ->
                 withSecretStore (Some "encrypted") (fun () ->
-                    let result = validate (cfg Individual false)
+                    let result = validate (cfg Surfaces.individual false)
 
                     match result with
                     | Error _ -> ()
@@ -236,7 +239,7 @@ let tests =
         test "Individual mode + no master key + TOOLUP_SECRET_STORE=file → Error (still gated)" {
             withMasterKey None (fun () ->
                 withSecretStore (Some "file") (fun () ->
-                    let result = validate (cfg Individual false)
+                    let result = validate (cfg Surfaces.individual false)
 
                     match result with
                     | Error _ -> ()
@@ -246,7 +249,7 @@ let tests =
         test "Error message documents cloud-KMS as a third resolution option" {
             withMasterKey None (fun () ->
                 withSecretStore None (fun () ->
-                    let result = validate (cfg Individual false)
+                    let result = validate (cfg Surfaces.individual false)
 
                     match result with
                     | Error msg ->
