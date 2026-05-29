@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>IShareTokenStore decorator for ToolUp.Platform — revokes a departed team member's outstanding share-tokens on MembershipChanged.Removed.</Description>
+    <PackageTags>fsharp;sdk;share-token;revocation;membership;decorator</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 66 Stream C.5 RevokeOnIssuerRemoved companion. No vendor
+       SDK dependency — subscribes to INotificationChannel and decorates
+       IShareTokenStore, both from ToolUp.Platform. -->
+  <ItemGroup>
+    <Compile Include="RevokeOnIssuerRemovedStore.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>
