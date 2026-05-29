@@ -459,11 +459,14 @@ let permissionApiHandler (_config: ServerConfig) =
 /// full `HttpContext` per case.
 ///
 /// Branches in priority order:
-///   1. `ServerConfig.Mode = Anonymous` → every Managed module is
-///      Accessible. Anonymous deployments chose anonymous-traffic-only
-///      by construction; `AccessContext.canAccessModule` would
-///      otherwise return `false` for every module (no user → no
-///      permissions), hiding the entire sidebar.
+///   1. Anonymous subject → every Managed module is Accessible. An
+///      anonymous caller has no user identity, so
+///      `AccessContext.canAccessModule` would otherwise return `false`
+///      for every module (no user → no permissions), hiding the entire
+///      sidebar. Keys off the caller's `AccessContext`, not a
+///      deployment-wide mode, so a mixed-mode deployment serving both
+///      anonymous and authenticated surfaces resolves each request on
+///      its own subject.
 ///   2. `noActiveTeamInTeamMode` (team-scoped Mode with no active
 ///      team) → Accessible is empty. The freshly-signed-up case
 ///      where every team-scoped API call would fail with
@@ -479,7 +482,7 @@ let computeAccessibleModules
     (noActiveTeamInTeamMode: bool)
     : AccessibleModulesResponse =
     let accessible =
-        if (ServerConfig.legacyMode config = Anonymous) then
+        if AccessContext.isAnonymous accessCtx then
             config.ModuleNames
         elif noActiveTeamInTeamMode then
             []
@@ -509,10 +512,7 @@ let accessibilityApiHandler (config: ServerConfig) =
                     let accessCtx =
                         match ctx.RequestServices.GetService(typeof<AccessContext>) with
                         | :? AccessContext as ac -> ac
-                        | _ ->
-                            AccessContext.unrestricted (
-                                Subject.fromLegacyMode (ServerConfig.legacyMode config) userId None
-                            )
+                        | _ -> AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
 
                     // Team-mode onboarding: a freshly-signed-up user has
                     // no active team yet. Every team-scoped API call
