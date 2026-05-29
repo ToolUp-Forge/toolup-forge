@@ -29,7 +29,7 @@ let private jsonSettings =
     s.Converters.Add(FableJsonConverter())
     s
 
-let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : AccessContext =
+let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
@@ -38,7 +38,7 @@ let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : Acces
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        AccessContext.unrestricted (Subject.fromLegacyMode mode userId None)
+        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
 
 let private resolveUserClaims (ctx: HttpContext) : IUserClaims =
     match ctx.RequestServices.GetService(typeof<IUserClaims>) with
@@ -57,9 +57,9 @@ let private writeJson (ctx: HttpContext) (statusCode: int) (payload: 'T) : HttpF
     return! ctx.WriteTextAsync json
 }
 
-let private listPremiumUsersHandler (mode: PlatformMode) : HttpHandler =
+let private listPremiumUsersHandler: HttpHandler =
     fun _next (ctx: HttpContext) -> task {
-        let accessContext = resolveAccessContext ctx mode
+        let accessContext = resolveAccessContext ctx
 
         if not (AccessContext.canModifyPlatformConfig accessContext) then
             return! writeError ctx 403 "platform admin role required"
@@ -76,8 +76,6 @@ let private listPremiumUsersHandler (mode: PlatformMode) : HttpHandler =
 /// Platform-Admin role server-side; the default `NoOpUserClaims`
 /// returns `Ok []` for deployments that haven't wired a concrete
 /// auth-provider claim reader.
-let routes (mode: PlatformMode) : HttpHandler list = [
-    GET
-    >=> route "/api/_platform/admin/premium-users"
-    >=> listPremiumUsersHandler mode
+let routes: HttpHandler list = [
+    GET >=> route "/api/_platform/admin/premium-users" >=> listPremiumUsersHandler
 ]

@@ -28,7 +28,7 @@ open ToolUp.Platform.Usage
 // structural — `IUsageLog`'s blob layout keys on `ScopeId` and never
 // enumerates outside the requested scope.
 
-let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : AccessContext =
+let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
@@ -42,7 +42,7 @@ let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : Acces
             | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
             | _ -> None
 
-        AccessContext.unrestricted (Subject.fromLegacyMode mode userId teamId)
+        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
 
 let private ensureReadAllowed (ctx: HttpContext) (accessContext: AccessContext) : Async<Result<unit, string>> = async {
     match accessContext.Subject with
@@ -73,8 +73,8 @@ let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : s
 
 /// Build the `IUsageQueryApi` Fable.Remoting handler. Resolves
 /// `IUsageLog` and `AccessContext` lazily from DI per request.
-let usageQueryApi (mode: PlatformMode) (ctx: HttpContext) : IUsageQueryApi =
-    let accessContext = resolveAccessContext ctx mode
+let usageQueryApi (ctx: HttpContext) : IUsageQueryApi =
+    let accessContext = resolveAccessContext ctx
     let scopeId = resolveScopeId ctx accessContext
 
     let resolveStore () =

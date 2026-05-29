@@ -30,7 +30,7 @@ open ToolUp.Platform.RemotingHelpers
 /// unrestricted context for tests that bypass `ScopeResolutionMiddleware`
 /// — production paths always populate the scoped DI service via the
 /// middleware.
-let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : AccessContext =
+let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
@@ -39,7 +39,7 @@ let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : Acces
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        AccessContext.unrestricted (Subject.fromLegacyMode mode userId None)
+        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
 
 /// Resolve `IPlatformAdminStore` from DI. Returns `Error` when the
 /// service is unavailable — should never happen in production because
@@ -60,8 +60,8 @@ let private resolveRuntimeConfig (ctx: HttpContext) : Result<IPlatformRuntimeCon
 /// Build the `PlatformAdminApi` handler. Services are resolved lazily
 /// from `ctx.RequestServices` at request time — mirrors the existing
 /// `platformApiHandler` / `healthMonitorApi` pattern.
-let platformAdminApi (mode: PlatformMode) (ctx: HttpContext) : PlatformAdminApi =
-    let accessContext = resolveAccessContext ctx mode
+let platformAdminApi (ctx: HttpContext) : PlatformAdminApi =
+    let accessContext = resolveAccessContext ctx
 
     let withGate (work: IPlatformAdminStore -> Async<Result<unit, string>>) = async {
         if not (AccessContext.canModifyPlatformConfig accessContext) then

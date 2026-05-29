@@ -50,7 +50,7 @@ let private jsonSettings =
     s.Converters.Add(FableJsonConverter())
     s
 
-let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : AccessContext =
+let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
@@ -59,7 +59,7 @@ let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : Acces
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        AccessContext.unrestricted (Subject.fromLegacyMode mode userId None)
+        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
 
 let private resolveStore (ctx: HttpContext) : IRateLimitStore option =
     match ctx.RequestServices.GetService(typeof<IRateLimitStore>) with
@@ -86,9 +86,9 @@ let private parseCount (ctx: HttpContext) : int =
         | _ -> 100
     | _ -> 100
 
-let private recentDecisionsHandler (mode: PlatformMode) : HttpHandler =
+let private recentDecisionsHandler: HttpHandler =
     fun _next (ctx: HttpContext) -> task {
-        let accessContext = resolveAccessContext ctx mode
+        let accessContext = resolveAccessContext ctx
 
         if not (AccessContext.canModifyPlatformConfig accessContext) then
             return! writeError ctx 403 "platform admin role required"
@@ -105,6 +105,4 @@ let private recentDecisionsHandler (mode: PlatformMode) : HttpHandler =
 /// Platform-Admin role server-side, so unconditional registration is
 /// zero-cost when the deployment doesn't enable rate-limit policies
 /// (the default `InMemoryRateLimitStore` returns an empty event list).
-let routes (mode: PlatformMode) : HttpHandler list = [
-    GET >=> route "/api/_platform/admin/rate-limits" >=> recentDecisionsHandler mode
-]
+let routes: HttpHandler list = [ GET >=> route "/api/_platform/admin/rate-limits" >=> recentDecisionsHandler ]

@@ -38,7 +38,7 @@ open ToolUp.Platform.ConfigValidatorAggregator
 /// `Anonymous` context for tests that bypass `ScopeResolutionMiddleware`
 /// — production paths always populate the scoped DI service via the
 /// middleware.
-let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : AccessContext =
+let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
@@ -52,7 +52,7 @@ let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : Acces
             | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
             | _ -> None
 
-        AccessContext.unrestricted (Subject.fromLegacyMode mode userId teamId)
+        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
 
 /// Platform-admin read gate. Returns `Ok ()` only when the caller
 /// holds `PlatformRole.PlatformAdmin`; everyone else (including Team
@@ -72,8 +72,8 @@ let private ensureReadAllowed (accessContext: AccessContext) : Async<Result<unit
 /// `IHealthCheck`s, `IPreflightSnapshot`, and `AccessContext` lazily
 /// from DI per request — same idiom as `WebhookApiHandler.webhookApi`
 /// and `ConfigHandler.configApi`.
-let healthMonitorApi (mode: PlatformMode) (ctx: HttpContext) : IHealthMonitorApi =
-    let accessContext = resolveAccessContext ctx mode
+let healthMonitorApi (ctx: HttpContext) : IHealthMonitorApi =
+    let accessContext = resolveAccessContext ctx
 
     let withGate (work: unit -> Async<Result<'T, string>>) = async {
         let! gate = ensureReadAllowed accessContext

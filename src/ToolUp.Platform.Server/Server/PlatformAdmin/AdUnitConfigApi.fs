@@ -83,7 +83,7 @@ let private jsonSettings =
     s.Converters.Add(FableJsonConverter())
     s
 
-let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : AccessContext =
+let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
@@ -92,7 +92,7 @@ let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : Acces
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        AccessContext.unrestricted (Subject.fromLegacyMode mode userId None)
+        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
 
 let private resolveEntityStore (ctx: HttpContext) : IEntityStore option =
     match ctx.RequestServices.GetService(typeof<IEntityStore>) with
@@ -133,8 +133,8 @@ let private writeError (ctx: HttpContext) (statusCode: int) (message: string) : 
     return! ctx.WriteTextAsync message
 }
 
-let private ensurePlatformAdmin (mode: PlatformMode) (ctx: HttpContext) : Result<AccessContext, string> =
-    let accessContext = resolveAccessContext ctx mode
+let private ensurePlatformAdmin (ctx: HttpContext) : Result<AccessContext, string> =
+    let accessContext = resolveAccessContext ctx
 
     if AccessContext.canModifyPlatformConfig accessContext then
         Ok accessContext
@@ -160,12 +160,11 @@ let private recordAudit (ctx: HttpContext) (event: AuditEvent) : unit =
     |> Option.iter (fun log -> log.Record(PlatformAdsConfigScope, event) |> Async.Start)
 
 let private withSubstrate
-    (mode: PlatformMode)
     (ctx: HttpContext)
     (work: AccessContext -> IEntityStore -> EntityRegistry -> HttpFuncResult)
     : HttpFuncResult =
     task {
-        match ensurePlatformAdmin mode ctx with
+        match ensurePlatformAdmin ctx with
         | Error msg -> return! writeError ctx 403 msg
         | Ok ac ->
             match resolveEntityStore ctx, resolveRegistry ctx with
@@ -175,9 +174,9 @@ let private withSubstrate
             | _ -> return! writeError ctx 503 "entity store substrate not configured"
     }
 
-let private listHandler (mode: PlatformMode) : HttpHandler =
+let private listHandler: HttpHandler =
     fun _next (ctx: HttpContext) ->
-        withSubstrate mode ctx (fun _ac store _registry -> task {
+        withSubstrate ctx (fun _ac store _registry -> task {
             // `ListAll` returns refs sorted by id ascending. Page through with
             // a generous take — admin UIs paginate client-side and the deployment
             // is unlikely to host more than a few hundred slot configs.
@@ -202,9 +201,9 @@ let private listHandler (mode: PlatformMode) : HttpHandler =
             return! writeJson ctx 200 configs
         })
 
-let private getHandler (mode: PlatformMode) (slotId: string) : HttpHandler =
+let private getHandler (slotId: string) : HttpHandler =
     fun _next (ctx: HttpContext) ->
-        withSubstrate mode ctx (fun _ac store _registry -> task {
+        withSubstrate ctx (fun _ac store _registry -> task {
             let! result =
                 store.Get<AdSlotEntity>(PlatformAdsConfigScope, AdSlotEntityType, slotId)
                 |> Async.StartAsTask
@@ -215,9 +214,9 @@ let private getHandler (mode: PlatformMode) (slotId: string) : HttpHandler =
             | Error err -> return! writeError ctx 500 (EntityError.message err)
         })
 
-let private upsertHandler (mode: PlatformMode) (auditEventFor: string -> string -> AuditEvent) : HttpHandler =
+let private upsertHandler (auditEventFor: string -> string -> AuditEvent) : HttpHandler =
     fun _next (ctx: HttpContext) ->
-        withSubstrate mode ctx (fun ac store _registry -> task {
+        withSubstrate ctx (fun ac store _registry -> task {
             let! body = readBody ctx
 
             match tryDeserialise<AdSlotConfig> body with
@@ -236,19 +235,19 @@ let private upsertHandler (mode: PlatformMode) (auditEventFor: string -> string 
                 | Error err -> return! writeError ctx 500 (EntityError.message err)
         })
 
-let private createHandler (mode: PlatformMode) : HttpHandler =
-    upsertHandler mode (fun slotId actor -> AdSlotConfigCreated(slotId, actor, DateTimeOffset.UtcNow))
+let private createHandler: HttpHandler =
+    upsertHandler (fun slotId actor -> AdSlotConfigCreated(slotId, actor, DateTimeOffset.UtcNow))
 
-let private updateHandler (mode: PlatformMode) (_slotId: string) : HttpHandler =
+let private updateHandler (_slotId: string) : HttpHandler =
     // The PUT route's `{slotId}` segment is informational; the body is
     // authoritative (the entity carries its own `SlotId`). A mismatch
     // between the path segment and the body's `SlotId` is rare and the
     // store would happily honour the body — we keep the body as truth.
-    upsertHandler mode (fun slotId actor -> AdSlotConfigUpdated(slotId, actor, DateTimeOffset.UtcNow))
+    upsertHandler (fun slotId actor -> AdSlotConfigUpdated(slotId, actor, DateTimeOffset.UtcNow))
 
-let private deleteHandler (mode: PlatformMode) (slotId: string) : HttpHandler =
+let private deleteHandler (slotId: string) : HttpHandler =
     fun next (ctx: HttpContext) ->
-        withSubstrate mode ctx (fun ac store _registry -> task {
+        withSubstrate ctx (fun ac store _registry -> task {
             let! result =
                 store.Delete(PlatformAdsConfigScope, AdSlotEntityType, slotId)
                 |> Async.StartAsTask
@@ -263,10 +262,10 @@ let private deleteHandler (mode: PlatformMode) (slotId: string) : HttpHandler =
 
 /// Routes table. Mounted by `compose` only when
 /// `ServerConfig.EntityStore = EnabledEntityStore`.
-let routes (mode: PlatformMode) : HttpHandler list = [
-    GET >=> route "/api/_platform/admin/ad-units" >=> listHandler mode
-    GET >=> routef "/api/_platform/admin/ad-units/%s" (getHandler mode)
-    POST >=> route "/api/_platform/admin/ad-units" >=> createHandler mode
-    PUT >=> routef "/api/_platform/admin/ad-units/%s" (updateHandler mode)
-    DELETE >=> routef "/api/_platform/admin/ad-units/%s" (deleteHandler mode)
+let routes: HttpHandler list = [
+    GET >=> route "/api/_platform/admin/ad-units" >=> listHandler
+    GET >=> routef "/api/_platform/admin/ad-units/%s" getHandler
+    POST >=> route "/api/_platform/admin/ad-units" >=> createHandler
+    PUT >=> routef "/api/_platform/admin/ad-units/%s" updateHandler
+    DELETE >=> routef "/api/_platform/admin/ad-units/%s" deleteHandler
 ]

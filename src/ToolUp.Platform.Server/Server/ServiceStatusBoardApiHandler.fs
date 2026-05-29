@@ -45,7 +45,7 @@ let private capDetails (maxItems: int) (items: string list) : string list =
         let head = items |> List.truncate maxItems
         head @ [ sprintf "… (+%d more)" (items.Length - maxItems) ]
 
-let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : AccessContext =
+let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
@@ -59,7 +59,7 @@ let private resolveAccessContext (ctx: HttpContext) (mode: PlatformMode) : Acces
             | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
             | _ -> None
 
-        AccessContext.unrestricted (Subject.fromLegacyMode mode userId teamId)
+        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
 
 let private ensureReadAllowed (accessContext: AccessContext) : Async<Result<unit, string>> = async {
     if AccessContext.canModifyPlatformConfig accessContext then
@@ -422,7 +422,7 @@ let private buildSnapshot (config: ServerConfig) (ctx: HttpContext) : Async<Serv
 /// the section-disable mode fields without re-resolving a config
 /// singleton per request.
 let serviceStatusBoardApi (config: ServerConfig) (ctx: HttpContext) : IServiceStatusBoardApi =
-    let accessContext = resolveAccessContext ctx (ServerConfig.legacyMode config)
+    let accessContext = resolveAccessContext ctx
 
     let withGate (work: unit -> Async<Result<'T, string>>) = async {
         let! gate = ensureReadAllowed accessContext

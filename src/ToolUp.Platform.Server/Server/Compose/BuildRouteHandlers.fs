@@ -230,11 +230,10 @@ let buildRouteHandlers
     // Owner/Admin gate inside the handler short-circuits Anonymous and
     // Member-role callers, so unconditional registration is zero-cost
     // when the deployment doesn't enable the HealthMonitor sidebar
-    // entry. PlatformMode is closed over here so the handler can read
-    // it without forcing every call to re-resolve a config singleton.
-    let healthMonitorApiHandler: HttpHandler list = [
-        makeApi (HealthMonitorApiHandler.healthMonitorApi (ServerConfig.legacyMode config))
-    ]
+    // entry. The handler resolves the per-request `AccessContext` from
+    // `HttpContext.Items` (Subject-first model), so no deployment-wide
+    // mode needs to be closed over here.
+    let healthMonitorApiHandler: HttpHandler list = [ makeApi HealthMonitorApiHandler.healthMonitorApi ]
 
     // Phase 9p.A — ServiceStatusBoard composite admin API. Always
     // auto-injected; request-scoped Platform-Admin gate inside the
@@ -262,10 +261,7 @@ let buildRouteHandlers
     // `/api/_platform/usage/*` via the shared `UsageQueryApi.routeBuilder`
     // so admin clients can discover the endpoint by path alone.
     let usageQueryApiHandler: HttpHandler list = [
-        Api.make (
-            UsageQueryApiHandler.usageQueryApi (ServerConfig.legacyMode config),
-            routeBuilder = UsageQueryApi.routeBuilder
-        )
+        Api.make (UsageQueryApiHandler.usageQueryApi, routeBuilder = UsageQueryApi.routeBuilder)
     ]
 
     // /metrics route. Mounted only when EnabledMetricsEndpoint.
@@ -281,9 +277,7 @@ let buildRouteHandlers
         | EnabledMetricsEndpoint -> MetricsEndpoint.routes
         | NoMetricsEndpoint -> []
 
-    let platformAdminApiHandler: HttpHandler list = [
-        makeApi (PlatformAdminApiHandler.platformAdminApi (ServerConfig.legacyMode config))
-    ]
+    let platformAdminApiHandler: HttpHandler list = [ makeApi PlatformAdminApiHandler.platformAdminApi ]
 
     // Phase 3d — ITeamInviteApi mount. Auto-injected unconditionally
     // so the client `Api.makeProxy<ITeamInviteApi>` (used by the
@@ -376,13 +370,11 @@ let buildRouteHandlers
     let adUnitConfigRoutes: HttpHandler list =
         match config.EntityStore with
         | NoEntityStore -> []
-        | EnabledEntityStore -> AdUnitConfigApi.routes (ServerConfig.legacyMode config)
+        | EnabledEntityStore -> AdUnitConfigApi.routes
 
-    let rateLimitEventApiRoutes: HttpHandler list =
-        RateLimitEventApi.routes (ServerConfig.legacyMode config)
+    let rateLimitEventApiRoutes: HttpHandler list = RateLimitEventApi.routes
 
-    let premiumUserApiRoutes: HttpHandler list =
-        PremiumUserApi.routes (ServerConfig.legacyMode config)
+    let premiumUserApiRoutes: HttpHandler list = PremiumUserApi.routes
 
     // Phase 9h — IDataSubjectRequestApi mount. Gated on
     // `ServerConfig.DataSubjectRequests = Enabled <policy>`; the
