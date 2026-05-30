@@ -35,7 +35,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/ToolUp-Forge/toolup-forge</PackageProjectUrl>
     <PackageTags>fsharp;full-stack;giraffe;fable;elmish;feliz</PackageTags>
-    <Version>0.3.2</Version>
+    <Version>0.3.3</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

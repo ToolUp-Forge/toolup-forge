@@ -68,12 +68,25 @@ type ICspContributor =
 // ─── First-party default contributors ────────────────────────────────
 
 /// OIDC issuer → `connect-src`. The browser-side auth client performs
-/// discovery / token / JWKS fetches against the issuer origin; without
+/// discovery / token / JWKS fetches against the issuer host; without
 /// it in `connect-src` an enforced CSP breaks sign-in. Reads
 /// `TOOLUP_OIDC_ISSUER` (the same env var `OidcConfigCompletenessValidator`
 /// keys on) rather than the OIDC companion's config type — keeping the
 /// SDK↔companion boundary clean. Inert when the variable is unset
 /// (HeaderAuthProvider dev deployments contribute nothing).
+///
+/// Contributes the issuer's **origin only** (scheme + host + port) rather
+/// than the raw issuer URL. CSP source matching is exact-match on path
+/// unless the source path ends in `/`, so a raw issuer like
+/// `https://login.microsoftonline.com/{tenant}/v2.0` (no trailing slash)
+/// matches only that exact path — blocking discovery at
+/// `{issuer}/.well-known/openid-configuration` and the token endpoint
+/// at `/{tenant}/oauth2/v2.0/token` (different path prefix from the
+/// `/v2.0` issuer). Stripping to the origin matches every path on the
+/// issuer host, which is what OIDC sign-in actually needs.
+///
+/// Falls back to the raw issuer (pre-Phase 3b.C behaviour) if the
+/// value is not a parseable URI — keeps the contributor inert-safe.
 type OidcIssuerCspContributor() =
     static member val EnvVar = "TOOLUP_OIDC_ISSUER" with get
 
@@ -82,7 +95,21 @@ type OidcIssuerCspContributor() =
             match Environment.GetEnvironmentVariable OidcIssuerCspContributor.EnvVar with
             | null
             | "" -> []
-            | issuer -> [ ConnectSrc(issuer.Trim()) ]
+            | issuer ->
+                let trimmed = issuer.Trim()
+
+                let connectSrc =
+                    try
+                        let uri = System.Uri(trimmed)
+
+                        if uri.IsDefaultPort then
+                            sprintf "%s://%s" uri.Scheme uri.Host
+                        else
+                            sprintf "%s://%s:%d" uri.Scheme uri.Host uri.Port
+                    with _ ->
+                        trimmed
+
+                [ ConnectSrc connectSrc ]
 
 /// Built-in AI provider API hosts → `connect-src`. The
 /// `ToolUp.AI`/`AIProviders` companions stream completions directly
