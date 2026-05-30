@@ -221,6 +221,12 @@
              UseStaticFiles so the rewrite short-circuits before the
              SPA index.html fallback. -->
         <Compile Include="Server\Static\PrerenderedRoutesHandler.fs" />
+        <!-- Phase 3b.D — SPA shell fallback. Runs after UseStaticFiles
+             and serves PublicPath/index.html for any GET that didn't
+             match a static file or prerendered route, so OIDC callback
+             URLs and SPA deep links don't 404 server-side before the
+             SPA's client-side router can take over. -->
+        <Compile Include="Server\Static\SpaFallbackMiddleware.fs" />
         <Compile Include="Server\RateLimiting.fs" />
         <Compile Include="Server\Teams\TeamManagement.fs" />
         <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />

@@ -141,6 +141,18 @@ let configurePipeline
     if System.IO.Directory.Exists(publicPath) then
         app.UseStaticFiles(StaticFileOptions(FileProvider = new PhysicalFileProvider(publicPath)))
         |> ignore
+
+        // Phase 3b.D — SPA shell fallback. Runs immediately after
+        // `UseStaticFiles` so real static assets (`/main.js`,
+        // `/logo.svg`, …) short-circuit upstream; anything left that
+        // is a non-API, no-extension GET resolves to
+        // `{PublicPath}/index.html` and lets the SPA's client-side
+        // router handle the rest. Critical for OIDC callbacks
+        // (`/auth/callback?code=…`) and SPA deep links that would
+        // otherwise 404 before the SPA can load. Registered only when
+        // `publicPath` exists — dev-mode runs (Vite-served) skip both
+        // `UseStaticFiles` and this fallback.
+        app.UseMiddleware<SpaFallbackMiddleware>(config) |> ignore
     else
         match config.StaticPathBehaviour with
         | Warn ->
