@@ -118,10 +118,22 @@ let EntraExternalIdShell (config: EntraExternalIdClientConfig) (shell: ReactElem
                 match! OidcClient.handleCallback oidcConfig with
                 | Ok() -> enterSignedIn ()
                 | Error e -> setAuthState (Failed e)
-            elif hasAccessToken () then
-                enterSignedIn ()
             else
-                setAuthState SignedOut
+                // Phase 3b.B — see OidcAuthUI for the rationale; the
+                // External ID shell rides the same generic OIDC token
+                // store, so the same stored-token-validity classification
+                // applies. Stale token → refresh attempt → clear-and-
+                // SignedOut on refresh failure.
+                match OidcClient.classifyStoredToken oidcConfig with
+                | OidcClient.NoToken -> setAuthState SignedOut
+                | OidcClient.FreshJwt
+                | OidcClient.OpaqueToken -> enterSignedIn ()
+                | OidcClient.StaleJwt ->
+                    match! OidcClient.refreshAccessToken oidcConfig with
+                    | Ok() -> enterSignedIn ()
+                    | Error _ ->
+                        clearAll ()
+                        setAuthState SignedOut
         }
         |> Async.StartImmediate)
 

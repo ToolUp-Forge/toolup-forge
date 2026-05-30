@@ -100,10 +100,28 @@ let OidcShell (cfg: OidcUIConfig) (shell: ReactElement) : ReactElement =
                 match! OidcClient.handleCallback cfg with
                 | Ok() -> enterSignedIn ()
                 | Error e -> setAuthState (Failed e)
-            elif hasAccessToken () then
-                enterSignedIn ()
             else
-                setAuthState SignedOut
+                // Phase 3b.B — classify the stored token before assuming
+                // SignedIn. A token left over from a previous OIDC
+                // provider (Clerk → Entra swap, tenant migration) carries
+                // the wrong `iss`; an unrefreshed token is past `exp`.
+                // Either way the server-side validator rejects it on
+                // every request, and the pre-fix presence-only check
+                // would have rendered the shell into a 401 storm.
+                // `Fresh` / `Opaque` short-circuit straight through;
+                // `Stale` attempts a refresh against the current issuer
+                // (Clerk-era refresh tokens will be rejected) and falls
+                // to `SignedOut` if the refresh fails.
+                match OidcClient.classifyStoredToken cfg with
+                | OidcClient.NoToken -> setAuthState SignedOut
+                | OidcClient.FreshJwt
+                | OidcClient.OpaqueToken -> enterSignedIn ()
+                | OidcClient.StaleJwt ->
+                    match! OidcClient.refreshAccessToken cfg with
+                    | Ok() -> enterSignedIn ()
+                    | Error _ ->
+                        clearAll ()
+                        setAuthState SignedOut
         }
         |> Async.StartImmediate)
 

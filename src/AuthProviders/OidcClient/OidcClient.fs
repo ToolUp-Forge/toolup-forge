@@ -677,6 +677,82 @@ let private tokenExpiryEpochSeconds (token: string) : float option =
     with _ ->
         None
 
+// ─── Phase 3b.B — stored-token validity probe ────────────────────────
+//
+// Pre-Phase 3b.B the shells short-circuited to `SignedIn` whenever
+// `OidcTokenStore.hasAccessToken ()` returned true — presence only,
+// no validity check. A consumer that switched OIDC providers (Clerk →
+// Entra, issuer rotation, tenant migration) left every previously
+// signed-in user with a token the new server-side validator rejects
+// on every request, but the client still rendered the shell — yielding
+// a 401 storm behind a misleadingly populated UI. `classifyStoredToken`
+// extracts the `iss` + `exp` claims from the stored token (if it is a
+// JWT) and reports `StaleJwt` when they don't match the active config;
+// callers refresh-or-clear-and-resignin in response. Opaque (non-JWT)
+// access tokens carry no claims and fall through as `OpaqueToken` —
+// the server's auth provider validates them via introspection / JWKS
+// and will 401 a stale opaque token at request time, same as today.
+//
+// The check is local-only: no network round-trip, ~µs per render.
+
+type StoredTokenState =
+    | NoToken
+    | OpaqueToken
+    | FreshJwt
+    | StaleJwt
+
+let private tokenIssuer (token: string) : string option =
+    try
+        let parts = token.Split('.')
+
+        if parts.Length < 2 then
+            None
+        else
+            let payload = parts[1].Replace('-', '+').Replace('_', '/')
+            let pad = (4 - payload.Length % 4) % 4
+            let json = atob (payload + System.String('=', pad))
+            let parsed = JS.JSON.parse json
+            let issValue = parsed?iss
+
+            if isNullOrUndefined issValue then
+                None
+            else
+                Some(unbox<string> issValue)
+    with _ ->
+        None
+
+/// Classify the access token currently in `OidcTokenStore` against the
+/// active `OidcUIConfig`. Returns `NoToken` when nothing is stored,
+/// `OpaqueToken` for non-JWT shapes (handed off to the server),
+/// `FreshJwt` when both `iss` matches the configured issuer AND `exp`
+/// is in the future, `StaleJwt` otherwise. Shells use this on mount
+/// to decide between SignedIn (Fresh / Opaque), refresh attempt
+/// (Stale), or SignedOut (None).
+///
+/// Issuer comparison trims trailing slashes on both sides so a config
+/// authored without `/` doesn't mis-match a token whose `iss` includes
+/// it (and vice versa) — a known Entra / Auth0 quirk.
+let classifyStoredToken (cfg: OidcUIConfig) : StoredTokenState =
+    match getAccessToken () with
+    | None -> NoToken
+    | Some token ->
+        let parts = token.Split('.')
+
+        if parts.Length < 3 then
+            OpaqueToken
+        else
+            let issuerOk =
+                match tokenIssuer token with
+                | None -> false
+                | Some iss -> iss.TrimEnd('/') = cfg.Issuer.TrimEnd('/')
+
+            let expOk =
+                match tokenExpiryEpochSeconds token with
+                | None -> false
+                | Some expEpoch -> expEpoch > nowMs () / 1000.0
+
+            if issuerOk && expOk then FreshJwt else StaleJwt
+
 // OIDC pre-expiry refresh timer — a single browser timer handle.
 // Documented client-side mutable: a background-timer handle is not
 // Elmish model state; it must survive React re-renders to stay
