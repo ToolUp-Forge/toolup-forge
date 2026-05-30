@@ -1432,7 +1432,14 @@ module Client =
     /// / `NoAuthUI` pass through unchanged; other subject kinds
     /// delegate to a companion (OidcClient, ClerkUI) that has called
     /// `AuthUIProvider.register` at load time.
-    let private viewWithSignIn (config: ClientConfig) modules chrome (model: Model) dispatch =
+    ///
+    /// Public from Phase 3b.B so outer composers (`AIClientConfig.withSidePanel`
+    /// + custom composition roots that build their own Elmish program over
+    /// `Client.view`) can wrap the shell with the same auth gate `program`
+    /// applies. Calling `Client.view` directly from an outer view bypasses
+    /// the gate entirely — the OIDC sign-in screen never renders and the
+    /// shell drops into a 401 storm for any unauthenticated visit.
+    let viewWithSignIn (config: ClientConfig) modules chrome (model: Model) dispatch =
         let resolvedSubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
 
         view config modules chrome model dispatch

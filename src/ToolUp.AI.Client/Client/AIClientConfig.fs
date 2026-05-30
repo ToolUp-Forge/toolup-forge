@@ -738,7 +738,15 @@ let withSidePanel
                     sidePanelDispatch
         }
 
-        Client.view config allModules chrome model.Shell (ShellMsg >> dispatch)
+        // Phase 3b.B — route through `viewWithSignIn` (not the raw
+        // `Client.view`) so the configured `AuthUI` gates this composer's
+        // shell too. Calling `Client.view` directly bypassed
+        // `AuthUIProvider.gate` entirely, so a deployment that opted into
+        // OIDC sign-in via `ClientConfig.AuthUI = OidcAuthUI _` while
+        // wiring AI via `AIClientConfig.run` never rendered the sign-in
+        // screen — the shell loaded straight through for unauthenticated
+        // visitors and every Remoting call 401'd behind it.
+        Client.viewWithSignIn config allModules chrome model.Shell (ShellMsg >> dispatch)
 
     let prog = Program.mkProgram outerInit outerUpdate outerView
 
