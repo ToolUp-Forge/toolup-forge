@@ -86,7 +86,13 @@ let private buildContextApi : HttpHandler =
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromContextAsync (fun ctx -> async {
         let! subject = resolveSubject ctx
-        return { WhoAmI = fun () -> async { return subject } }
+        return
+            { WhoAmI = fun () -> async { return subject }
+              WhereAreWe = fun () -> async {
+                  // Phase 69b.D — read ambient correlation id without
+                  // threading. AsyncLocal flows through Async naturally.
+                  return CallContext.correlationId () |> Option.defaultValue "<absent>"
+              } }
        })
     |> Remoting.withErrorHandler errorHandler
     |> Remoting.buildHttpHandler

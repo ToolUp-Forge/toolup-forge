@@ -48,9 +48,9 @@
     production-shape consumer of the ToolUp.Remoting package family.
   -->
   <ItemGroup>
-    <PackageReference Include="ToolUp.Remoting.Server" Version="0.1.3" />
-    <PackageReference Include="ToolUp.Remoting.Json" Version="0.1.3" />
-    <PackageReference Include="ToolUp.Remoting.Giraffe" Version="0.1.3" />
+    <PackageReference Include="ToolUp.Remoting.Server" Version="0.1.4" />
+    <PackageReference Include="ToolUp.Remoting.Json" Version="0.1.4" />
+    <PackageReference Include="ToolUp.Remoting.Giraffe" Version="0.1.4" />
   </ItemGroup>
 
   <ItemGroup>

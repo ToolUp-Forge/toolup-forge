@@ -17,8 +17,13 @@ type IHarnessApi = {
 /// async resolver, and surfaced via `WhoAmI`. Demonstrates the resolver
 /// runs per request (different `X-Subject` values from different
 /// requests produce different `WhoAmI` responses).
+///
+/// Phase 69b.D coverage — `WhereAreWe` returns the ambient correlation
+/// id without the handler threading it manually. Proves
+/// `CallContext.correlationId()` flows through Async transparently.
 type IContextApi = {
     WhoAmI: unit -> Async<string>
+    WhereAreWe: unit -> Async<string>
 }
 
 /// Route shape. Mirrors the forge default

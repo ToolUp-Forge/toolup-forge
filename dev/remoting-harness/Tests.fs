@@ -166,6 +166,60 @@ let tests =
                 | MethodOutcome.Succeeded ->
                     failtest "Expected Failed outcome, got Succeeded"
 
+        // ---- Phase 69b.D coverage: correlation-id ambient propagation ----
+
+        testCase "WhereAreWe: provided x-correlation-id flows into ambient context"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IContextApi/WhereAreWe")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("x-correlation-id", "abc-123-xyz")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
+                let body = readBody response
+                Expect.equal body "\"abc-123-xyz\"" "Handler reads ambient correlation id without threading"
+                // Server stamps it back on the response so the client correlates end-to-end.
+                let echoed =
+                    if response.Headers.Contains("x-correlation-id") then
+                        response.Headers.GetValues("x-correlation-id") |> Seq.head
+                    else "<missing>"
+                Expect.equal echoed "abc-123-xyz" "Server stamps correlation id back on response header"
+
+        testCase "WhereAreWe: missing x-correlation-id gets a generated GUID + response header"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IContextApi/WhereAreWe")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
+                let body = readBody response
+                // Body is the generated GUID, quoted as a JSON string.
+                Expect.isGreaterThan body.Length 20 "Generated correlation id should be a non-trivial GUID string"
+                Expect.notEqual body "\"<absent>\"" "Dispatcher generates a correlation id when header absent"
+                let echoed =
+                    if response.Headers.Contains("x-correlation-id") then
+                        response.Headers.GetValues("x-correlation-id") |> Seq.head
+                    else "<missing>"
+                // The echoed header should match the body value (sans JSON quotes).
+                Expect.equal ("\"" + echoed + "\"") body "Generated correlation id is consistent between body and response header"
+
+        testCase "Telemetry: MethodTelemetry includes the correlation id from the request"
+        <| fun _ ->
+            withTelemetryClient
+            <| fun sink client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IHarnessApi/Echo")
+                req.Content <- new StringContent("[\"corr-test\"]", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("x-correlation-id", "cid-42")
+                let _ = client.SendAsync(req).Result
+                let events = sink.Events
+                Expect.equal events.Length 1 "One event"
+                Expect.equal events.[0].CorrelationId (Some "cid-42") "Telemetry carries the request's correlation id"
+
         testCase "Telemetry: three sequential calls produce three events in order"
         <| fun _ ->
             withTelemetryClient
