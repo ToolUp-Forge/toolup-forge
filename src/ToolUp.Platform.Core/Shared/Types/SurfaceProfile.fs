@@ -4,9 +4,7 @@
 namespace ToolUp.Platform
 
 /// Whether a storage scope persists beyond the request lifetime.
-/// Drives `StorageScope.Persist` per the resolved Subject's profile —
-/// the per-deployment lever that today's `PlatformMode` collapses
-/// into the mode value is here lifted to a per-shape decision.
+/// Drives `StorageScope.Persist` per the resolved Subject's profile.
 type Persistence =
     | Ephemeral
     | Persistent
@@ -18,11 +16,9 @@ type Persistence =
 /// the header team-switcher and runs the `TeamSwitched` reset path.
 type TeamSwitchingUX =
     /// One team per user; no header switcher in the client shell.
-    /// Equivalent to the retiring `PlatformMode.Team` UX intent.
     | NoSwitcher
     /// Users belong to many teams and switch in-session; the shell
     /// renders the header dropdown and runs `TeamSwitched` reset.
-    /// Equivalent to the retiring `PlatformMode.MultiTeam` UX intent.
     | HeaderSwitcher
 
 /// Per-shape config for the `Anonymous` surface. `Persistence`
@@ -81,8 +77,7 @@ type ClaimBearerConfig = {
 /// B.2) refuses startup on duplicate constructors or an empty list.
 ///
 /// `[<RequireQualifiedAccess>]` because the case names collide
-/// with the `Subject` DU (`AuthenticatedUser` / `ClaimBearer`) and
-/// with the retiring `PlatformMode` DU (`Anonymous` / `Team`).
+/// with the `Subject` DU (`AuthenticatedUser` / `ClaimBearer`).
 /// Callers write `SurfaceProfile.Anonymous c` to disambiguate.
 [<RequireQualifiedAccess>]
 type SurfaceProfile =
@@ -91,13 +86,12 @@ type SurfaceProfile =
     | Team of TeamConfig
     | ClaimBearer of ClaimBearerConfig
 
-/// Named convenience constructors mapping the old `PlatformMode`
-/// values to the new `SurfaceProfile` shape, plus a few additional
-/// variants surfaced by the new model (`anonymousPersistent`,
-/// `claimBearer`).
+/// Named convenience constructors for the canonical single-shape
+/// surface profiles. Mixed-mode deployments compose these into a list
+/// directly; the `Surfaces` module below carries common single-shape
+/// + paired helpers.
 module SurfaceProfile =
     /// Ephemeral anonymous sessions, 60-minute idle eviction.
-    /// Equivalent to the retiring `PlatformMode.Anonymous`.
     let anonymous =
         SurfaceProfile.Anonymous {
             Persistence = Ephemeral
@@ -112,16 +106,14 @@ module SurfaceProfile =
             SessionEvictionMinutes = None
         }
 
-    /// Authenticated, ephemeral storage. Equivalent to the
-    /// retiring `PlatformMode.AuthenticatedEphemeral`.
+    /// Authenticated, ephemeral storage (trial / try-before-you-buy).
     let trial =
         SurfaceProfile.AuthenticatedUser {
             Persistence = Ephemeral
             SessionEvictionMinutes = Some 60
         }
 
-    /// Authenticated, persistent per-user storage. Equivalent to
-    /// the retiring `PlatformMode.Individual`.
+    /// Authenticated, persistent per-user storage.
     let individual =
         SurfaceProfile.AuthenticatedUser {
             Persistence = Persistent
@@ -129,15 +121,13 @@ module SurfaceProfile =
         }
 
     /// Team scope, single team per user (no header switcher).
-    /// Equivalent to the retiring `PlatformMode.Team`.
     let team =
         SurfaceProfile.Team {
             Persistence = Persistent
             Switching = NoSwitcher
         }
 
-    /// Team scope, header switcher active. Equivalent to the
-    /// retiring `PlatformMode.MultiTeam`.
+    /// Team scope, header switcher active.
     let multiTeam =
         SurfaceProfile.Team {
             Persistence = Persistent
@@ -152,19 +142,6 @@ module SurfaceProfile =
             DefaultLifetimeDays = 30
             DefaultUseLimit = Some 1
         }
-
-    /// Phase 66 Stream A.2 — transitional bridge that maps a retiring
-    /// `PlatformMode` to the matching single-shape `SurfaceProfile`.
-    /// Used by tests + handlers / validators authored against the
-    /// per-mode shape until Stream B.5 rewrites them. Retires alongside
-    /// `PlatformMode`.
-    let fromLegacyMode (mode: PlatformMode) : SurfaceProfile =
-        match mode with
-        | Anonymous -> anonymous
-        | AuthenticatedEphemeral -> trial
-        | Individual -> individual
-        | Team -> team
-        | MultiTeam -> multiTeam
 
 /// Pre-named one-line `Surfaces` lists. Single-shape deployments
 /// use the single-named helper (`Surfaces.individual`); common
@@ -191,9 +168,3 @@ module Surfaces =
     /// Common mixed-mode — team scope plus share-token public
     /// embed (e.g. publishable Forms over a team account).
     let teamWithShareTokens = [ SurfaceProfile.team; SurfaceProfile.claimBearer ]
-
-    /// Phase 66 Stream A.2 — transitional one-shape list derived from
-    /// a retiring `PlatformMode`. Mirrors `SurfaceProfile.fromLegacyMode`.
-    /// Used by `ServerConfig.fromEnv` until the env-var contract retires
-    /// `TOOLUP_PLATFORM_MODE` parsing alongside the type.
-    let fromLegacyMode (mode: PlatformMode) : SurfaceProfile list = [ SurfaceProfile.fromLegacyMode mode ]

@@ -534,10 +534,8 @@ module NotificationMode =
     ///   - `JobScheduler <> NoJobScheduler` → publishes dead-letter
     ///     notifications, so notifications need to flow.
     ///   - `hasMultiTeamSwitcher` → membership-change events feed the
-    ///     client team-switch reset path (Phase 66 Stream B.5: was
-    ///     `Mode = MultiTeam`; the caller now passes
-    ///     `DeploymentConfig.hasMultiTeamSwitcher config`, dropping the
-    ///     dependency on the retiring `PlatformMode`).
+    ///     client team-switch reset path; the caller passes
+    ///     `DeploymentConfig.hasMultiTeamSwitcher config`.
     ///   - Any consumer in `notificationConsumers` (typically
     ///     `composeWithAI` / `composeWithRAG` declaring themselves) →
     ///     publishes through the channel.
@@ -1381,18 +1379,11 @@ type ServerConfig = {
     /// to set the proxy target.
     Port: int
     PublicPath: string
-    /// Phase 66 Stream A.2 — declared subject shapes this deployment
-    /// supports. Non-empty list — `SurfaceCoherenceValidator` refuses
-    /// startup on an empty `Surfaces`. A single-shape deployment
-    /// declares one entry (e.g. `Surfaces.individual`); mixed-mode
-    /// deployments declare two or more (e.g.
-    /// `Surfaces.anonymousAndIndividual`).
-    ///
-    /// Replaces the retiring `Mode: PlatformMode` field. The
-    /// transitional helper `ServerConfig.legacyMode` derives a single
-    /// dominant `PlatformMode` from `Surfaces` for handlers / validators
-    /// authored against the old shape; Stream B.5 rewrites the remaining
-    /// pattern-match sites and Stream A.1 finish retires the type.
+    /// Declared subject shapes this deployment supports. Non-empty
+    /// list — `SurfaceCoherenceValidator` refuses startup on an empty
+    /// `Surfaces`. A single-shape deployment declares one entry (e.g.
+    /// `Surfaces.individual`); mixed-mode deployments declare two or
+    /// more (e.g. `Surfaces.anonymousAndIndividual`).
     Surfaces: SurfaceProfile list
     /// Names of the modules this deployment exposes — used by the
     /// permission system (to report "what modules exist?" and filter
@@ -2256,12 +2247,9 @@ module ServerConfigOverrides =
             SecurityHardening = Some DefaultSecurityHardening
     }
 
-/// Phase 66 Stream A.2 — canonical predicates over the per-deployment
-/// `Surfaces` list. Replace the retiring per-mode helpers
-/// (`PlatformMode.requiresAuth` / `PlatformMode.isTeamScoped`) for new
-/// code. The transitional `ServerConfig.legacyMode` derivation bridges
-/// the remaining call sites until Stream B.1 / B.5 finish rewriting
-/// validators and handlers.
+/// Canonical predicates over the per-deployment `Surfaces` list.
+/// Validators / handlers / composition-root branches consult these
+/// instead of pattern-matching directly on `config.Surfaces`.
 module DeploymentConfig =
     /// True iff any declared surface requires the request to carry
     /// authenticated credentials. Anonymous is the only surface
@@ -2286,12 +2274,10 @@ module DeploymentConfig =
             | _ -> false)
 
     /// True iff the deployment supports multi-team switching — any
-    /// `Team` surface whose `Switching = HeaderSwitcher`. The pre-66
-    /// `PlatformMode.MultiTeam` shape maps 1:1 to this predicate
-    /// (single-team `Team { Switching = NoSwitcher }` is excluded).
-    /// Used by `NotificationMode.resolve`: membership-change events
-    /// feed the client team-switch reset path, which only exists when
-    /// the switcher is present.
+    /// `Team` surface whose `Switching = HeaderSwitcher`. Used by
+    /// `NotificationMode.resolve`: membership-change events feed the
+    /// client team-switch reset path, which only exists when the
+    /// switcher is present.
     let hasMultiTeamSwitcher (config: ServerConfig) : bool =
         config.Surfaces
         |> List.exists (function
@@ -2332,12 +2318,10 @@ module DeploymentConfig =
             | _ -> false)
 
     /// One-line label for diagnostic / error messages naming the
-    /// deployment shape. Single-surface deployments produce the
-    /// matching retiring `PlatformMode` case name (`"Individual"` /
-    /// `"Team"` / `"MultiTeam"` / `"AuthenticatedEphemeral"` /
-    /// `"Anonymous"`) so existing single-shape validator-message
-    /// substring assertions remain stable; mixed-mode deployments
-    /// produce a `+`-joined list of per-shape labels (e.g.
+    /// deployment shape. Single-surface deployments produce a single
+    /// name (`"Individual"` / `"Team"` / `"MultiTeam"` /
+    /// `"AuthenticatedEphemeral"` / `"Anonymous"`); mixed-mode
+    /// deployments produce a `+`-joined list (e.g.
     /// `"Anonymous + Individual"`).
     let surfacesLabel (config: ServerConfig) : string =
         let labelOne =
@@ -2352,55 +2336,6 @@ module DeploymentConfig =
         config.Surfaces |> List.map labelOne |> String.concat " + "
 
 module ServerConfig =
-    /// Phase 66 Stream A.2 — transitional bridge for handlers /
-    /// validators / pattern-match sites still authored against the
-    /// retiring `PlatformMode` shape. Derives a single dominant
-    /// `PlatformMode` from `Surfaces` by picking the most-authenticated
-    /// surface present:
-    ///
-    /// * Any `Team` surface → `MultiTeam` if `Switching = HeaderSwitcher`,
-    ///   else `Team`.
-    /// * Else any `AuthenticatedUser` surface → `AuthenticatedEphemeral`
-    ///   if `Persistence = Ephemeral`, else `Individual`.
-    /// * Else any `Anonymous` surface → `Anonymous`.
-    /// * Else (only `ClaimBearer` declared, rare) → `Anonymous`.
-    ///
-    /// Single-surface deployments map 1:1 to their pre-66 `Mode` value.
-    /// Mixed-mode deployments collapse to their most-authenticated
-    /// shape — preserves auth-requirement semantics for legacy
-    /// validators that decide "does this deployment require auth at
-    /// all?" (a mixed `[anonymous; individual]` deployment legitimately
-    /// requires plaintext-secret / OIDC-audience hardening, since its
-    /// authenticated surface is still exposed).
-    ///
-    /// Stream B.1 / B.5 rewrite the callers; this helper retires
-    /// alongside `PlatformMode` (Stream A.1 finish).
-    let legacyMode (config: ServerConfig) : PlatformMode =
-        let pickTeam =
-            config.Surfaces
-            |> List.tryPick (function
-                | SurfaceProfile.Team cfg -> Some cfg
-                | _ -> None)
-
-        match pickTeam with
-        | Some teamCfg ->
-            match teamCfg.Switching with
-            | HeaderSwitcher -> MultiTeam
-            | NoSwitcher -> Team
-        | None ->
-            let pickUser =
-                config.Surfaces
-                |> List.tryPick (function
-                    | SurfaceProfile.AuthenticatedUser cfg -> Some cfg
-                    | _ -> None)
-
-            match pickUser with
-            | Some userCfg ->
-                match userCfg.Persistence with
-                | Ephemeral -> AuthenticatedEphemeral
-                | Persistent -> Individual
-            | None -> Anonymous
-
     let defaults = {
         Port = 5000
         PublicPath = "deploy/public"

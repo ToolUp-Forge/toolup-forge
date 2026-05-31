@@ -164,7 +164,7 @@ module KnowledgeApiDeps =
         let accessContext =
             match ctx.RequestServices.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
-            | _ -> AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
+            | _ -> AccessContext.unrestricted (AnonymousSession userId)
 
         let publishInventory () =
             publishInventoryUpdate storage notifications logger userId scope.Container

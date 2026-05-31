@@ -38,7 +38,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
+        AccessContext.unrestricted (AnonymousSession userId)
 
 let private resolveUserClaims (ctx: HttpContext) : IUserClaims =
     match ctx.RequestServices.GetService(typeof<IUserClaims>) with

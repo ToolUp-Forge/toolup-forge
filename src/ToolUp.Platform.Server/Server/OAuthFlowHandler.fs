@@ -102,7 +102,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
             | _ -> None
 
-        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+        AccessContext.unrestricted (AnonymousSession userId)
 
 /// Resolve a service from DI; `None` when the service isn't
 /// registered.

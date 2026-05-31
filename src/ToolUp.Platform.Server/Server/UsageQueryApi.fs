@@ -42,7 +42,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
             | _ -> None
 
-        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+        AccessContext.unrestricted (AnonymousSession userId)
 
 let private ensureReadAllowed (ctx: HttpContext) (accessContext: AccessContext) : Async<Result<unit, string>> = async {
     match accessContext.Subject with

@@ -121,7 +121,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                 | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
                 | _ -> None
 
-            AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+            AccessContext.unrestricted (AnonymousSession userId)
 
     let scopeOpt = AccessContext.configScope accessContext
 

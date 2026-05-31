@@ -108,7 +108,6 @@ let platformInfoApiHandler (config: ServerConfig) =
         GetPlatformInfo =
             fun () -> async {
                 return {
-                    Mode = ServerConfig.legacyMode config
                     RequiresAuth = DeploymentConfig.requiresAnyAuth config
                 }
             }
@@ -512,7 +511,7 @@ let accessibilityApiHandler (config: ServerConfig) =
                     let accessCtx =
                         match ctx.RequestServices.GetService(typeof<AccessContext>) with
                         | :? AccessContext as ac -> ac
-                        | _ -> AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
+                        | _ -> AccessContext.unrestricted (AnonymousSession userId)
 
                     // Team-mode onboarding: a freshly-signed-up user has
                     // no active team yet. Every team-scoped API call

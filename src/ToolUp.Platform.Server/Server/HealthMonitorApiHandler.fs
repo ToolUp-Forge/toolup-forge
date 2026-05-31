@@ -23,7 +23,7 @@ open ToolUp.Platform.ConfigValidatorAggregator
 // re-gate kept an Anonymous-mode short-circuit ("Health monitor is not
 // available in this mode") as Phase 9p belt-and-suspenders. That was
 // outdated by Phase 4b: `IPlatformAdminStore.IsPlatformAdmin` resolves
-// the role for any non-anonymous caller regardless of `PlatformMode`,
+// the role for any non-anonymous caller regardless of the deployment shape,
 // so a bootstrapped admin in any mode (including `Anonymous` with a
 // dev-bootstrapped admin) legitimately holds the role and should reach
 // the health panels — viewing health is a load-bearing part of the
@@ -52,7 +52,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
             | _ -> None
 
-        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+        AccessContext.unrestricted (AnonymousSession userId)
 
 /// Platform-admin read gate. Returns `Ok ()` only when the caller
 /// holds `PlatformRole.PlatformAdmin`; everyone else (including Team
@@ -60,7 +60,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 /// AND anonymous callers in `Anonymous` mode) receives
 /// `Error "platform admin role required"`. Mode-agnostic — a
 /// bootstrapped admin in any mode reaches the panels because the
-/// role gate accepts them regardless of `PlatformMode`.
+/// role gate accepts them regardless of the deployment shape.
 let private ensureReadAllowed (accessContext: AccessContext) : Async<Result<unit, string>> = async {
     if AccessContext.canModifyPlatformConfig accessContext then
         return Ok()

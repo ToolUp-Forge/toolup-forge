@@ -79,8 +79,8 @@ module ModuleConfigSchema =
 
 /// Context handed to a module's `Init`. Carries the config values
 /// the shell has fetched for this module plus the platform-level
-/// lane, along with the resolved identity and mode fields modules
-/// typically need.
+/// lane, along with the resolved identity fields modules typically
+/// need.
 ///
 /// The raw per-field map shape mirrors the persistence format —
 /// modules that declared a schema can read typed values by matching
@@ -109,13 +109,12 @@ type ClientModuleContext = {
     /// snapshot exists so `Init` can branch on a flag without
     /// triggering a React re-render.
     Flags: Map<string, FlagValue>
-    /// Authenticated user's identifier. `"anonymous"` in Anonymous
-    /// mode.
+    /// Authenticated user's identifier. `"anonymous"` for an
+    /// `AnonymousSession` subject.
     UserId: string
-    /// Active team identifier in Team mode; `None` otherwise.
+    /// Active team identifier when the active subject is a
+    /// `TeamMember`; `None` otherwise.
     TeamId: string option
-    /// Platform mode the client is running in.
-    Mode: PlatformMode
     /// Cross-module query bus for in-browser / HTTP-fallback dispatch.
     /// Modules use this to ask other modules for data
     /// without importing them — see `ModuleQueryClient.ask` for the
@@ -129,10 +128,9 @@ type ClientModuleContext = {
     /// `AccessibleModules`, refetch them all against the new team,
     /// and re-init the active module). Set by the shell to
     /// `Some (fun teamId -> dispatch (TeamSwitched teamId))` in
-    /// `Team` and `MultiTeam` modes; `None` otherwise. The built-in
-    /// `TeamManagerUI` invokes this from its `ActiveTeamSwitched`
-    /// and `TeamCreated` handlers; custom team-management UIs should
-    /// do the same.
+    /// `Team` surfaces; `None` otherwise. The built-in `TeamManagerUI`
+    /// invokes this from its `ActiveTeamSwitched` and `TeamCreated`
+    /// handlers; custom team-management UIs should do the same.
     OnTeamSwitched: (string -> unit) option
 }
 
@@ -156,7 +154,6 @@ module ClientModuleContext =
         Flags = Map.empty
         UserId = "anonymous"
         TeamId = None
-        Mode = Anonymous
         QueryBus = NoOpModuleQueryBus() :> IModuleQueryBus
         OnTeamSwitched = None
     }

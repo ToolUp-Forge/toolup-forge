@@ -87,7 +87,7 @@ type DurabilityRig = {
 }
 
 let private accessContext userId : AccessContext =
-    AccessContext.unrestricted (Subject.fromLegacyMode Individual userId (Some "team-test"))
+    AccessContext.unrestricted (Subject.AuthenticatedUser userId)
 
 let private buildRig (policy: ActionFailurePolicy) (initialState: string) : DurabilityRig =
     let entityStore = InMemoryEntityStore() :> IEntityStore

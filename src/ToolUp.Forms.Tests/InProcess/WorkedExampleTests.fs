@@ -184,8 +184,7 @@ let tests =
             let! _ = formStore.SaveSubmission(scope, criticalBug)
 
             // 6. Drive through the workflow.
-            let aliceCtx =
-                AccessContext.unrestricted (Subject.fromLegacyMode Individual "alice" (Some "team-bugtracker"))
+            let aliceCtx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
 
             let! triageResult = engine.Apply(scope, "bug-1", "triage", aliceCtx)
 

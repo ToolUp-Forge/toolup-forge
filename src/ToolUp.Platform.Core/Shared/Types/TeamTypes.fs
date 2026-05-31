@@ -25,10 +25,7 @@ type TeamMembership = {
 // ─── Platform info ────────────────────────────────────────────────
 
 /// Platform info returned to the client.
-type PlatformInfo = {
-    Mode: PlatformMode
-    RequiresAuth: bool
-}
+type PlatformInfo = { RequiresAuth: bool }
 
 /// Phase 5f — who may call `TeamApi.CreateTeam` on a `Team` /
 /// `MultiTeam` deployment. Secure-by-default flip: closed-roster

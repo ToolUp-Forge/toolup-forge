@@ -475,13 +475,6 @@ module Client =
             Flags = model.ResolvedFlags
             UserId = UserSession.getUserId ()
             TeamId = model.ActiveTeamId
-            // Phase 66 Stream B.8 — `ClientModuleContext.Mode` is a
-            // consumer-facing record field; populated via the
-            // transitional `legacyMode` bridge until consumer-side
-            // sweeps retire the field. Single-surface deployments
-            // (the pre-66 norm) collapse to their pre-66 mode value
-            // byte-for-byte.
-            Mode = ClientConfig.legacyMode config
             QueryBus = queryBus
             OnTeamSwitched = buildOnTeamSwitched config
         }
@@ -556,7 +549,6 @@ module Client =
             Flags = Map.empty
             UserId = UserSession.getUserId ()
             TeamId = None
-            Mode = ClientConfig.legacyMode _config
             QueryBus = queryBus
             OnTeamSwitched = buildOnTeamSwitched _config
         }

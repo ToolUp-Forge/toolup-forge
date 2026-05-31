@@ -51,7 +51,7 @@ let configApi (entries: ModuleConfigEntry list) (ctx: HttpContext) : IConfigApi 
                 | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
                 | _ -> None
 
-            AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+            AccessContext.unrestricted (AnonymousSession userId)
 
     let scopeOpt = AccessContext.configScope accessContext
 

@@ -501,7 +501,7 @@ let aiAssistantApi
                 | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
                 | _ -> None
 
-            AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+            AccessContext.unrestricted (AnonymousSession userId)
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 

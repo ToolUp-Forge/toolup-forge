@@ -80,19 +80,6 @@ let inline ask<'TRequest, 'TResponse>
             |> Option.map (Result.map (fun r -> Json.deserialize<'TResponse> r.Payload))
     }
 
-// ─── Client-side access context ───────────────────────────────────
-
-/// Best-effort `AccessContext` for in-browser short-circuit dispatch.
-/// Permissions are `Map.empty` (unrestricted) — the client cannot
-/// enforce RBAC, and any cross-module call that matters for security
-/// falls through to the server where the real permission check lives.
-/// Handlers that need team identity read `ctx.TeamId`; the shell
-/// leaves this `None` because per-request team resolution is a
-/// server concern (see the note on `SDK.Client.buildContext`).
-let currentAccessContext (mode: PlatformMode) : AccessContext =
-    let userId = UserSession.getUserId ()
-    AccessContext.unrestricted (Subject.fromLegacyMode mode userId None)
-
 // ─── Client bus implementation ────────────────────────────────────
 
 /// Client-side `IModuleQueryBus`. Tries the in-browser registry first

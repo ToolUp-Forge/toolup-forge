@@ -53,7 +53,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
             | _ -> None
 
-        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+        AccessContext.unrestricted (AnonymousSession userId)
 
 let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : string =
     match ctx.Items.TryGetValue "ToolUp.StorageScope" with

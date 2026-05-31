@@ -22,11 +22,14 @@ open ToolUp.Platform.SurfaceEnforcement
 
 /// Build + register the per-request scope-resolution substrate:
 ///
-///   - `IStorageScopeResolver` — picked from `ServerConfig.legacyMode`:
-///     `AnonymousScopeResolver` / `AuthenticatedEphemeralScopeResolver`
-///     / `AuthenticatedScopeResolver` for the no-team modes, or a
-///     `TeamScopeResolver` over the shared `ITeamStore` for the team
-///     modes.
+///   - `IStorageScopeResolver` — picked from the deployment's
+///     `Surfaces`: `TeamScopeResolver` over the shared `ITeamStore`
+///     when any `Team` surface is declared; otherwise the dominant
+///     `AuthenticatedUser` surface's `Persistence` chooses
+///     `AuthenticatedEphemeralScopeResolver` / `AuthenticatedScopeResolver`;
+///     otherwise `AnonymousScopeResolver`. Byte-identical mapping to
+///     the retiring `ServerConfig.legacyMode` 5-arm dispatch for every
+///     single-surface deployment.
 ///   - `ISubjectResolver` — `DefaultSubjectResolver` over
 ///     `config.Surfaces`. Post-Phase-66-Stream-A.2 the canonical shape
 ///     lives on `ServerConfig` directly (no per-Mode bridge derivation).
@@ -59,18 +62,24 @@ let registerScopeResolution
     : unit =
 
     let scopeResolver: IStorageScopeResolver =
-        match ServerConfig.legacyMode config with
-        | Anonymous -> AnonymousScopeResolver()
-        | AuthenticatedEphemeral -> AuthenticatedEphemeralScopeResolver()
-        | Individual -> AuthenticatedScopeResolver()
-        | Team
-        | MultiTeam ->
+        if DeploymentConfig.hasTeamScope config then
             new TeamScopeResolver(
                 teamStoreOpt.Value :> ITeamStore,
                 new MemoryCache(MemoryCacheOptions()),
                 resolvedNotificationChannel,
                 resolvedLogger
             )
+        else
+            let pickUserPersistence =
+                config.Surfaces
+                |> List.tryPick (function
+                    | SurfaceProfile.AuthenticatedUser cfg -> Some cfg.Persistence
+                    | _ -> None)
+
+            match pickUserPersistence with
+            | Some Ephemeral -> AuthenticatedEphemeralScopeResolver()
+            | Some Persistent -> AuthenticatedScopeResolver()
+            | None -> AnonymousScopeResolver()
 
     // Phase 66 Stream A.6 + A.2 — `ISubjectResolver` +
     // `SurfaceRequirementRegistry` wiring. Both Singletons sit
@@ -147,7 +156,7 @@ let registerScopeResolution
                 // anonymous floor directly — there is no caller to
                 // attribute, and an unrestricted anonymous context is
                 // the safe default for the rare out-of-request resolve.
-                AccessContext.unrestricted (Subject.fromLegacyMode Anonymous "anonymous" None)
+                AccessContext.unrestricted (AnonymousSession "anonymous")
             | ctx ->
                 let userId =
                     match ctx.Items.TryGetValue "ToolUp.UserId" with
@@ -175,16 +184,9 @@ let registerScopeResolution
                 // Prefer that when present; otherwise reconstruct the
                 // Subject from the per-request `userId` / `teamId` we
                 // already resolved above, branched on the deployment's
-                // surfaces (Stream B.5 — drops the `ServerConfig.legacyMode`
-                // read). For a single-surface deployment this is
-                // byte-identical to the retiring
-                // `Subject.fromLegacyMode (legacyMode config) userId teamId`
-                // bridge: `hasTeamScope` + `Some teamId` ⇒ `TeamMember`
-                // (== legacy Team / MultiTeam with a team scope),
-                // `requiresAnyAuth` ⇒ `AuthenticatedUser` (== Individual
-                // / AuthenticatedEphemeral, and team surfaces without a
-                // resolved team), else `AnonymousSession` (== Anonymous).
-                // For a mixed-mode deployment it is more honest — the
+                // surfaces. `hasTeamScope` + `Some teamId` ⇒ `TeamMember`,
+                // `requiresAnyAuth` ⇒ `AuthenticatedUser`, else
+                // `AnonymousSession`. For a mixed-mode deployment the
                 // per-request `teamId` decides team membership, not the
                 // deployment-wide dominant surface.
                 let subject =

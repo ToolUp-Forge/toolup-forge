@@ -88,7 +88,7 @@ let featureFlagApi (declared: FeatureFlag list) (ctx: HttpContext) : IFeatureFla
                 | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
                 | _ -> None
 
-            AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId teamId)
+            AccessContext.unrestricted (AnonymousSession userId)
 
     let findDeclared (key: string) =
         declared |> List.tryFind (fun f -> f.Key = key)

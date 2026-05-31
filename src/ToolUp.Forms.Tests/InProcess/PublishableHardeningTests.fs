@@ -36,9 +36,9 @@ let private mkPublishableSchema (id: string) : FormSchema = {
         Visibility = Publishable
 }
 
-let private mkConfig (mode: PlatformMode) (acceptUnsigned: bool) : ServerConfig = {
+let private mkConfig (surfaces: SurfaceProfile list) (acceptUnsigned: bool) : ServerConfig = {
     ServerConfig.defaults with
-        Surfaces = Surfaces.fromLegacyMode mode
+        Surfaces = surfaces
         ShareTokenStore = NoShareTokenStore
         PublicBaseUrl = Some "https://example.test"
         AcceptUnsignedPublishable = acceptUnsigned
@@ -59,8 +59,13 @@ let private h2ValidatorTests =
         <| async {
             let schemas = Map.ofList [ "s1", mkPublishableSchema "s1" ]
 
-            for mode in [ Individual; Team; MultiTeam ] do
-                let config = mkConfig mode false
+            for (label, surfaces) in
+                [
+                    "Individual", Surfaces.individual
+                    "Team", Surfaces.team
+                    "MultiTeam", Surfaces.multiTeam
+                ] do
+                let config = mkConfig surfaces false
                 let! result = runValidator config schemas
 
                 match result with
@@ -68,14 +73,14 @@ let private h2ValidatorTests =
                     Expect.stringContains
                         msg
                         "AcceptUnsignedPublishable"
-                        (sprintf "%A Error message names the escape hatch" mode)
-                | other -> failwithf "expected Error for mode %A, got %A" mode other
+                        (sprintf "%s Error message names the escape hatch" label)
+                | other -> failwithf "expected Error for surfaces %s, got %A" label other
         }
 
         testCaseAsync "Production-shape mode + AcceptUnsignedPublishable=true → Warning"
         <| async {
             let schemas = Map.ofList [ "s1", mkPublishableSchema "s1" ]
-            let config = mkConfig MultiTeam true
+            let config = mkConfig Surfaces.multiTeam true
             let! result = runValidator config schemas
 
             match result with
@@ -83,23 +88,23 @@ let private h2ValidatorTests =
             | other -> failwithf "expected Warning with escape hatch, got %A" other
         }
 
-        testCaseAsync "Anonymous / AuthenticatedEphemeral modes preserve Warning regardless of escape hatch"
+        testCaseAsync "Anonymous / AuthenticatedEphemeral surfaces preserve Warning regardless of escape hatch"
         <| async {
             let schemas = Map.ofList [ "s1", mkPublishableSchema "s1" ]
 
-            for mode in [ Anonymous; AuthenticatedEphemeral ] do
+            for (label, surfaces) in [ "Anonymous", Surfaces.anonymous; "AuthenticatedEphemeral", Surfaces.trial ] do
                 for accept in [ false; true ] do
-                    let config = mkConfig mode accept
+                    let config = mkConfig surfaces accept
                     let! result = runValidator config schemas
 
                     match result with
                     | ConfigValidation.Warning _ -> ()
-                    | other -> failwithf "expected Warning for mode %A accept=%b, got %A" mode accept other
+                    | other -> failwithf "expected Warning for surfaces %s accept=%b, got %A" label accept other
         }
 
-        testCaseAsync "No Publishable schemas → Ok regardless of mode + escape hatch"
+        testCaseAsync "No Publishable schemas → Ok regardless of surfaces + escape hatch"
         <| async {
-            let config = mkConfig MultiTeam false
+            let config = mkConfig Surfaces.multiTeam false
             let! result = runValidator config Map.empty
 
             match result with

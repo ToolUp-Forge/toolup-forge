@@ -22,8 +22,7 @@ open Expecto
 //   * `Client/SDK.ClientTypes.fs` — `ClientConfig.Surfaces` field
 //     replaces `Mode`; defaults to `Surfaces.anonymous`; helper
 //     module exposes `resolveSubjectKind`, `requiresAnyAuth`,
-//     `hasTeamScope`, `hasMultiTeamSwitcher`, `isClaimBearerOnly`,
-//     and `legacyMode`.
+//     `hasTeamScope`, `hasMultiTeamSwitcher`, and `isClaimBearerOnly`.
 //   * `Client/ClientConfigFromBundleConstants.fs` — the override
 //     record carries `Surfaces: SurfaceProfile list option` (not
 //     `Mode`); `fromBundleConstantValues` parses
@@ -216,7 +215,6 @@ let tests =
                     "let hasTeamScope (config: ClientConfig)"
                     "let hasMultiTeamSwitcher (config: ClientConfig)"
                     "let isClaimBearerOnly (config: ClientConfig)"
-                    "let legacyMode (config: ClientConfig) : PlatformMode"
                     "let resolveSubjectKind (activeTeamId: string option) (config: ClientConfig) : SubjectKind"
                 ] do
                 Expect.stringContains

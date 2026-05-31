@@ -9,11 +9,10 @@ namespace ToolUp.Platform
 /// the load-bearing pivot: storage scope, persistence, permissions,
 /// and audit attribution all derive from it.
 ///
-/// Replaces the per-deployment `PlatformMode` decision with a
-/// per-request one — a single deployment whose `Surfaces` includes
-/// multiple shapes resolves a different `Subject` per request,
-/// without the per-feature exemption-list workarounds the old
-/// model required.
+/// A single deployment whose `Surfaces` includes multiple shapes
+/// resolves a different `Subject` per request, without the per-feature
+/// exemption-list workarounds the prior per-deployment-wide mode model
+/// required.
 ///
 /// Case constructors stay unqualified — every handler that
 /// pattern-matches on the resolved subject reads at the natural
@@ -63,29 +62,3 @@ module Subject =
         | AuthenticatedUser _ -> UserKind
         | TeamMember _ -> TeamMemberKind
         | ClaimBearer _ -> ClaimBearerKind
-
-    /// Phase 66 Stream A.1 — transitional bridge that constructs a
-    /// `Subject` from the retiring `(PlatformMode, userId, teamId)`
-    /// triple. Used by handler / test / composition-root sites that
-    /// still receive a `PlatformMode` until Stream A.2 ships the
-    /// `Surfaces`-driven `ServerConfig` migration. Retires alongside
-    /// `PlatformMode`.
-    ///
-    /// Mapping:
-    /// - `Anonymous` → `AnonymousSession userId` (the legacy "anonymous"
-    ///   placeholder is treated as the session id).
-    /// - `AuthenticatedEphemeral` / `Individual` → `AuthenticatedUser userId`.
-    /// - `Team` / `MultiTeam` → `TeamMember(userId, teamId)` when `teamId`
-    ///   is `Some`; falls back to `AuthenticatedUser userId` otherwise (the
-    ///   pre-team-resolution shape; the request-pipeline resolver upgrades
-    ///   once the active team is known).
-    let fromLegacyMode (mode: PlatformMode) (userId: string) (teamId: string option) : Subject =
-        match mode with
-        | Anonymous -> AnonymousSession userId
-        | AuthenticatedEphemeral
-        | Individual -> AuthenticatedUser userId
-        | Team
-        | MultiTeam ->
-            match teamId with
-            | Some tid -> TeamMember(userId, tid)
-            | None -> AuthenticatedUser userId

@@ -439,7 +439,7 @@ let private buildManifest
     let payload = {|
         Schema = bundleSchema
         Generated = DateTime.UtcNow.ToString("o")
-        PlatformMode = DeploymentConfig.surfacesLabel config
+        Surfaces = DeploymentConfig.surfacesLabel config
         Caller = {|
             UserId = callerUserId
             ScopeId = callerScopeId

@@ -39,7 +39,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
+        AccessContext.unrestricted (AnonymousSession userId)
 
 /// Resolve `IPlatformAdminStore` from DI. Returns `Error` when the
 /// service is unavailable — should never happen in production because

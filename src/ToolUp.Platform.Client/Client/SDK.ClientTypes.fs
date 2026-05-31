@@ -929,16 +929,14 @@ type ClientConfig = {
     /// `ClerkAuthUI` needs ClerkUI. Default `NoAuthUI` — no SDK-provided
     /// sign-in flow, the app takes responsibility for obtaining tokens.
     AuthUI: AuthUIMode
-    /// Phase 66 Stream B.8 — declared subject shapes this deployment
-    /// supports. Mirrors `ServerConfig.Surfaces` (the server-side
-    /// non-empty list of `SurfaceProfile`). Single-shape deployments
-    /// declare one entry (e.g. `Surfaces.individual`); mixed-mode
-    /// deployments declare two or more (e.g.
-    /// `Surfaces.anonymousAndIndividual`). Replaces the retiring
-    /// `Mode: PlatformMode` field — the per-deployment-wide flag
-    /// becomes a per-shape list, and the client derives the active
-    /// `SubjectKind` per render from the list + auth state + active
-    /// team scope (see `ClientConfig.resolveSubjectKind`).
+    /// Declared subject shapes this deployment supports. Mirrors
+    /// `ServerConfig.Surfaces` (the server-side non-empty list of
+    /// `SurfaceProfile`). Single-shape deployments declare one entry
+    /// (e.g. `Surfaces.individual`); mixed-mode deployments declare
+    /// two or more (e.g. `Surfaces.anonymousAndIndividual`). The
+    /// client derives the active `SubjectKind` per render from the
+    /// list + auth state + active team scope (see
+    /// `ClientConfig.resolveSubjectKind`).
     Surfaces: SurfaceProfile list
     /// AG Grid module configuration for the AgGridProvider (Variant B).
     /// When set, the SDK wraps the app in AgGridProvider with these modules.
@@ -1209,38 +1207,6 @@ module ClientConfig =
             | SurfaceProfile.ClaimBearer _ -> true
             | _ -> false)
         && not (List.isEmpty config.Surfaces)
-
-    /// Phase 66 Stream B.8 — transitional bridge. Collapses `Surfaces`
-    /// to a dominant `PlatformMode` by picking the most-authenticated
-    /// surface present, mirroring `ServerConfig.legacyMode`. Used to
-    /// populate `ClientModuleContext.Mode` for consumer modules still
-    /// authored against the retiring shape — retires alongside
-    /// `PlatformMode` once consumer-side B.5 sweeps land.
-    let legacyMode (config: ClientConfig) : PlatformMode =
-        let pickTeam =
-            config.Surfaces
-            |> List.tryPick (function
-                | SurfaceProfile.Team cfg -> Some cfg
-                | _ -> None)
-
-        match pickTeam with
-        | Some teamCfg ->
-            match teamCfg.Switching with
-            | HeaderSwitcher -> MultiTeam
-            | NoSwitcher -> Team
-        | None ->
-            let pickUser =
-                config.Surfaces
-                |> List.tryPick (function
-                    | SurfaceProfile.AuthenticatedUser cfg -> Some cfg
-                    | _ -> None)
-
-            match pickUser with
-            | Some userCfg ->
-                match userCfg.Persistence with
-                | Ephemeral -> AuthenticatedEphemeral
-                | Persistent -> Individual
-            | None -> Anonymous
 
     /// Phase 66 Stream B.8 — derive the effective `SubjectKind` for
     /// shell-render decisions (storage selection, sign-in UI mount,

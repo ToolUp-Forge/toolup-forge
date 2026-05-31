@@ -92,7 +92,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        AccessContext.unrestricted (Subject.fromLegacyMode Anonymous userId None)
+        AccessContext.unrestricted (AnonymousSession userId)
 
 let private resolveEntityStore (ctx: HttpContext) : IEntityStore option =
     match ctx.RequestServices.GetService(typeof<IEntityStore>) with

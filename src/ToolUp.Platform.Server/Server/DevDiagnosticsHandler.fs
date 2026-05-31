@@ -162,7 +162,7 @@ type ProcessProfileSummary = {
 type DevDiagnosticsReport = {
     Generated: string
     BuildMode: string
-    PlatformMode: string
+    Surfaces: string
     Caller: CallerSummary
     Modules: ModuleSummary list
     TotalRouteHandlers: int
@@ -654,7 +654,7 @@ let buildReport
         return {
             Generated = DateTime.UtcNow.ToString("o")
             BuildMode = buildMode
-            PlatformMode = DeploymentConfig.surfacesLabel config
+            Surfaces = DeploymentConfig.surfacesLabel config
             Caller = caller
             Modules = modules
             TotalRouteHandlers = capture.TotalRouteHandlers
@@ -711,10 +711,10 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
     let header =
         sprintf
-            """<p class="muted">Generated %s · build %s · mode %s</p>"""
+            """<p class="muted">Generated %s · build %s · surfaces %s</p>"""
             (encode report.Generated)
             (encode report.BuildMode)
-            (encode report.PlatformMode)
+            (encode report.Surfaces)
 
     sb.AppendLine header |> ignore
 
