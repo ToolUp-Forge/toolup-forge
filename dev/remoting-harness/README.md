@@ -1,6 +1,6 @@
 # ToolUp.Remoting harness — private dev tool
 
-A small, runnable test harness inside `toolup-forge/dev/` that exercises **ToolUp.Remoting** (currently the upstream Fable.Remoting fork on the workspace `Fable.Remoting/` sibling, `stj-json-converter-port` branch) against **forge's integration patterns** — `Api.make` wrapper shape, body normalisation, error envelope, per-request context, telemetry hooks — *before* we flip forge's SDK companions over in [Phase 69a](../../../ToolUp-Diametrical/roadmap/phases/69a-forge-sdk-adoption-toolup-remoting.md).
+A small, runnable test harness inside `toolup-forge/dev/` that exercises **ToolUp.Remoting** (the workspace `toolup-remoting/` sibling, published as `ToolUp.Remoting.* v0.1.0` to `local-nuget-feed/` post Phase 69 ship) against **forge's integration patterns** — `Api.make` wrapper shape, body normalisation, error envelope, per-request context, telemetry hooks — *before* we flip forge's SDK companions over in [Phase 69a](../../../ToolUp-Diametrical/roadmap/phases/69a-forge-sdk-adoption-toolup-remoting.md).
 
 The harness is **private** — `<IsPackable>false</IsPackable>`, not in `ToolUp.Forge.sln`, has its own `ToolUp.Remoting.Harness.sln`. It does not ship in any forge nupkg. The OSS publication boundary still applies (no Diametrical / Concord / Fern / Xcelsys / cookbook-apps references).
 
@@ -44,9 +44,11 @@ dotnet run
 
 Expecto console runner — exits non-zero on any failure. Add `--summary` for verbose output, `--filter <test-name>` to run a single test.
 
-## How it consumes the fork
+## How it consumes ToolUp.Remoting
 
-`ProjectReference`s the `Fable.Remoting.{Server,Json,Giraffe}` projects on the workspace sibling `Fable.Remoting/` via `../../../Fable.Remoting/Fable.Remoting.<X>/`. The sibling carries the verified `stj-json-converter-port` branch (704 tests upstream). When Phase 69 ships and renames everything to `ToolUp.Remoting.*`, the harness's `open` lines and `ProjectReference` paths sweep alongside.
+`PackageReference`s `ToolUp.Remoting.{Server,Json,Giraffe} v0.1.0`, resolved via the forge [`nuget.config`](../../nuget.config) `local` source (`../local-nuget-feed/`). Phase 69 packed the family into the local feed; subsequent Phase 69b–69k seam work iterates by packing fresh into the same local feed (`dotnet pack` in `toolup-remoting/`), bumping a per-package version when needed, and rebuilding the harness.
+
+Pre-Phase 69 the harness consumed via `ProjectReference` to the fork sibling. The flip to `PackageReference` post-Phase-69 means the harness exercises the production-shape consumption path forge SDK companions will use after Phase 69a's adoption sweep — same code path the eventual GH Packages cloud feed will hit.
 
 ## What's not here
 

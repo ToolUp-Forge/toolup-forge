@@ -41,19 +41,16 @@
   </ItemGroup>
 
   <!--
-    ProjectReferences to the Fable.Remoting fork sibling — the
-    stj-json-converter-port branch's verified work. At Phase 69 ship,
-    the sibling renames to `toolup-remoting/` and these paths sweep
-    to `..\..\..\toolup-remoting\ToolUp.Remoting.<X>\...`.
-
-    Note: Fable.Remoting fsprojs target net8.0; this harness targets
-    net10.0. A net10.0 app consuming net8.0 libraries is a supported
-    .NET cross-version pairing.
+    PackageReferences to ToolUp.Remoting v0.1.0 (Phase 69 ship). Resolved
+    from `../local-nuget-feed/` via the forge nuget.config (`local` source).
+    Before Phase 69 ship the harness consumed via ProjectReferences to the
+    Fable.Remoting fork sibling; post-Phase-69 the harness is the canonical
+    production-shape consumer of the ToolUp.Remoting package family.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Fable.Remoting\Fable.Remoting.Server\Fable.Remoting.Server.fsproj" />
-    <ProjectReference Include="..\..\..\Fable.Remoting\Fable.Remoting.Json\Fable.Remoting.Json.fsproj" />
-    <ProjectReference Include="..\..\..\Fable.Remoting\Fable.Remoting.Giraffe\Fable.Remoting.Giraffe.fsproj" />
+    <PackageReference Include="ToolUp.Remoting.Server" Version="0.1.0" />
+    <PackageReference Include="ToolUp.Remoting.Json" Version="0.1.0" />
+    <PackageReference Include="ToolUp.Remoting.Giraffe" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>

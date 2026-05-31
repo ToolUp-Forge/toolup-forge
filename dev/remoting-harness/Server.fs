@@ -9,8 +9,8 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
-open Fable.Remoting.Server
-open Fable.Remoting.Giraffe
+open ToolUp.Remoting.Server
+open ToolUp.Remoting.Giraffe
 open Giraffe
 open ToolUp.Remoting.Harness.Shared
 
