@@ -49,10 +49,11 @@
     <PackageVersion Include="Fable.Parsimmon" Version="4.1" />
     <PackageVersion Include="Fable.React.Types" Version="18.4" />
     <PackageVersion Include="Fable.ReactDom.Types" Version="18.2" />
-    <PackageVersion Include="ToolUp.Remoting.Client" Version="0.1.5" />
-    <PackageVersion Include="ToolUp.Remoting.Giraffe" Version="0.1.5" />
-    <PackageVersion Include="ToolUp.Remoting.Json" Version="0.1.5" />
-    <PackageVersion Include="ToolUp.Remoting.Server" Version="0.1.5" />
+    <PackageVersion Include="Fable.Remoting.Client" Version="8.0" />
+    <PackageVersion Include="Fable.Remoting.Giraffe" Version="6.1" />
+    <PackageVersion Include="Fable.Remoting.Json" Version="3.0" />
+    <PackageVersion Include="Fable.Remoting.MsgPack" Version="2.0" />
+    <PackageVersion Include="Fable.Remoting.Server" Version="6.1" />
     <PackageVersion Include="Fable.SimpleHttp" Version="3.6" />
     <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
     <PackageVersion Include="Fake.Core.CommandLineParsing" Version="6.1.4" />

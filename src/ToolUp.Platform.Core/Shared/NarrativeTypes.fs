@@ -79,7 +79,7 @@ type NarrativeProvenance = {
 }
 
 /// The top-level narrative document returned by a module's narrative
-/// generator. Crosses the server/client boundary via ToolUp.Remoting.
+/// generator. Crosses the server/client boundary via Fable.Remoting.
 ///
 /// `Provenance` is optional because pure narrative libraries produce
 /// documents without knowing the request context. The composition root

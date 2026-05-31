@@ -46,7 +46,7 @@ let private rollingWindow = TimeSpan.FromMinutes 60.0
 
 let private payloadJsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
     s
 
 // ─── Wire shape (kept local — duplicates `AILatencyRecord` /

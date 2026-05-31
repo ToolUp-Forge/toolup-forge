@@ -388,9 +388,10 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
         }
         :> System.Threading.Tasks.Task
 
-// Phase 69a — `emptyArrayJsonBytes` removed along with the retired
-// `RemotingBodyNormalizationMiddleware`. The buffer was only used by
-// that middleware; the equivalent is now inside ToolUp.Remoting.Giraffe.
+/// Pre-encoded `[]` JSON body for Fable.Remoting `unit -> Async<T>` calls.
+/// `MemoryStream` does not write to its backing array on read paths, so a
+/// shared module-level buffer is safe across concurrent requests.
+let private emptyArrayJsonBytes = Text.Encoding.UTF8.GetBytes("[]")
 
 /// Gap audit pass-2 #7 — request-id middleware. Generates a per-
 /// request id (or accepts a validated client-supplied
@@ -451,8 +452,33 @@ type RequestIdMiddleware(next: RequestDelegate) =
         }
         :> System.Threading.Tasks.Task
 
-// Phase 69a + 69b.A — `RemotingBodyNormalizationMiddleware` retired.
-// The body-normalisation behaviour folded into the ToolUp.Remoting.Giraffe
-// dispatcher at the Phase 69b.A ship (default `Enabled`; opt-out via
-// `Remoting.withoutBodyNormalisation`). No registration in
-// `ConfigurePipeline.fs` after Phase 69a's sweep.
+/// ASP.NET Core middleware that normalizes empty request bodies for
+/// Fable.Remoting unit functions. The Fable.Remoting client may send
+/// GET (no body) or POST with "" body for `unit -> Async<T>` functions,
+/// but Fable.Remoting.Server expects a JSON array body [].
+type RemotingBodyNormalizationMiddleware(next: RequestDelegate) =
+    member _.InvokeAsync(ctx: HttpContext) =
+        task {
+            let isRemotingRequest = ctx.Request.Headers.ContainsKey("x-remoting-proxy")
+
+            if isRemotingRequest then
+                ctx.Request.EnableBuffering()
+
+                use reader =
+                    new IO.StreamReader(ctx.Request.Body, Text.Encoding.UTF8, leaveOpen = true)
+
+                let! body = reader.ReadToEndAsync()
+                ctx.Request.Body.Position <- 0L
+
+                let trimmed = body.Trim()
+
+                if trimmed = "" || trimmed = "\"\"" || trimmed = "null" then
+                    ctx.Request.Body <- new IO.MemoryStream(emptyArrayJsonBytes)
+                    ctx.Request.ContentLength <- System.Nullable(int64 emptyArrayJsonBytes.Length)
+
+                    if ctx.Request.Method = "GET" then
+                        ctx.Request.Method <- "POST"
+
+            do! next.Invoke(ctx)
+        }
+        :> System.Threading.Tasks.Task

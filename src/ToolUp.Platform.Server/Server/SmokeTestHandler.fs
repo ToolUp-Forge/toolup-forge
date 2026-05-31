@@ -3,7 +3,7 @@ module ToolUp.Platform.SmokeTestHandler
 open System
 open System.Diagnostics
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection

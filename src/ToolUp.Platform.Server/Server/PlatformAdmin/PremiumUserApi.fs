@@ -6,7 +6,7 @@ module ToolUp.Platform.PremiumUserApi
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 
 // ─── Phase 61 — Premium-user list admin endpoint ──────────────────

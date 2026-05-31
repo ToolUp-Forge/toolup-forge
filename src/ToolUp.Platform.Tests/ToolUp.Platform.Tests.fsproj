@@ -373,7 +373,7 @@
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Expecto" />
-        <PackageReference Include="ToolUp.Remoting.Json" />
+        <PackageReference Include="Fable.Remoting.Json" />
         <PackageReference Include="StackExchange.Redis" />
         <PackageReference Include="MailKit" />
         <PackageReference Include="WebPush" />

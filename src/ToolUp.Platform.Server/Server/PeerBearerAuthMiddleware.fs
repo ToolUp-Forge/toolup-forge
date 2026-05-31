@@ -5,7 +5,7 @@ open System.Security.Cryptography
 open System.Text
 open Microsoft.AspNetCore.Http
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 

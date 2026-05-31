@@ -6,7 +6,7 @@ module ClientModel
 open ToolUp.Platform
 open Elmish
 open SharedTypes
-open ToolUp.Remoting.Client
+open Fable.Remoting.Client
 
 /// Which note the editor panel is currently authoring. `CreateNew`
 /// means the editor was opened from the "New note" button; `EditExisting`

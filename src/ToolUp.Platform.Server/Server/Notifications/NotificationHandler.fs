@@ -5,7 +5,7 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Giraffe
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 
 // ─── JSON serialization ──────────────────────────────────────────

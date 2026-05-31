@@ -3,7 +3,7 @@ module ToolUp.Platform.NotificationChannels.Redis
 open System
 open System.Collections.Concurrent
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open StackExchange.Redis
 open ToolUp.Platform
 

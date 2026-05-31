@@ -3,7 +3,7 @@ module ToolUp.Platform.WebhookApiHandler
 open System
 open Microsoft.AspNetCore.Http
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.TeamManagement
 open ToolUp.Platform.WebhookDispatcher

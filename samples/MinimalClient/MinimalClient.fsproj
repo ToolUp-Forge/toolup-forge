@@ -23,7 +23,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
-    <!-- Fable ecosystem (Feliz, Fable.Elmish.HMR, ToolUp.Remoting.MsgPack,
+    <!-- Fable ecosystem (Feliz, Fable.Elmish.HMR, Fable.Remoting.MsgPack,
          Fable.SimpleJson) pre-dates F# 10's nullable reference types;
          enabling nullness here would cascade "null / not null inconsistent"
          errors. Per `CLAUDE.md` guidance: nullable reference types

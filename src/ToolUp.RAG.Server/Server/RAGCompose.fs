@@ -143,7 +143,7 @@ let private makeVectorisationHook
 
     let jsonSettings =
         let s = Newtonsoft.Json.JsonSerializerSettings()
-        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
+        s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
         s
 
     let writeEvent (scopeId: string) (eventName: string) (payload: obj) = async {

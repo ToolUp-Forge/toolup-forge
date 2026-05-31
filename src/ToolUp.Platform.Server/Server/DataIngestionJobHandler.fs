@@ -1,7 +1,7 @@
 module ToolUp.Platform.DataIngestionJobHandler
 
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 
 // ─── DataIngestionJobHandler ─────────────────────────────────────

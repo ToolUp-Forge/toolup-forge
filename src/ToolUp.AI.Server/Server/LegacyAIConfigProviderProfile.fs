@@ -6,7 +6,7 @@ module ToolUp.AI.LegacyAIConfigProviderProfile
 open System
 open System.Text
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers

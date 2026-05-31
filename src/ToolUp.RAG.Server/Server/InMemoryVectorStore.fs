@@ -69,7 +69,7 @@ let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/index.json
 
 let private jsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
     s
 
 let private toJson o =

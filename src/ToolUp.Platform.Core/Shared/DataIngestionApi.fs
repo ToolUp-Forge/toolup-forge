@@ -8,7 +8,7 @@ namespace ToolUp.Platform
 // Client-callable API for managing data sources, triggering refreshes,
 // and inspecting ingestion history through the SDK's data-ingestion
 // substrate. Lives in the shared layer so a Fable client
-// (admin UI module, future) can call it via ToolUp.Remoting.
+// (admin UI module, future) can call it via Fable.Remoting.
 //
 // **Scope discipline.** Every method validates the caller's resolved
 // `AccessContext`'s `configScope` server-side. Callers cannot pass an

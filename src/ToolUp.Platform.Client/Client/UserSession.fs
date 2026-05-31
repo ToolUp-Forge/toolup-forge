@@ -5,7 +5,7 @@ module UserSession
 
 open Fable.Core
 open Fable.Core.JsInterop
-open ToolUp.Remoting.Client
+open Fable.Remoting.Client
 open ToolUp.Platform
 
 // ─── Storage keys ───────────────────────────────────────────────────

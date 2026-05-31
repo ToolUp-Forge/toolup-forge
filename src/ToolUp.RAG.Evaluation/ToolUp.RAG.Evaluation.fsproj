@@ -33,7 +33,7 @@
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Giraffe" />
-    <PackageReference Include="ToolUp.Remoting.Giraffe" />
-    <PackageReference Include="ToolUp.Remoting.Json" />
+    <PackageReference Include="Fable.Remoting.Giraffe" />
+    <PackageReference Include="Fable.Remoting.Json" />
   </ItemGroup>
 </Project>

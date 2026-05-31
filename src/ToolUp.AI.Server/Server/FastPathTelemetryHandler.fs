@@ -195,7 +195,7 @@ let private buildBreakdown (events: (FastPathEventPayload * DateTime) list) : Ti
 
 let private payloadJsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
     s
 
 let private decodePayload (evt: ModuleEvent) : (FastPathEventPayload * DateTime) option =

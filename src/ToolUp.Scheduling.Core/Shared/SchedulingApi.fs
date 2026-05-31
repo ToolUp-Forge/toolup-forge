@@ -35,7 +35,7 @@ type SlotSearchRequest = {
 }
 
 /// Fable.Remoting record-of-functions. Each call goes over HTTP via
-/// `ToolUp.Remoting.Client` proxy; server-side handler in
+/// `Fable.Remoting.Client` proxy; server-side handler in
 /// `Server/SchedulingApiHandler.fs` resolves the AccessContext,
 /// applies write gating, and delegates to `IBookingScheduler`.
 type ISchedulingApi = {

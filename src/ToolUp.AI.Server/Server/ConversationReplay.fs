@@ -7,7 +7,7 @@ open System
 open System.Security.Cryptography
 open System.Text
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI

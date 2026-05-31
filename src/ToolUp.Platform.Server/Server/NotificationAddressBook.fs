@@ -2,7 +2,7 @@ module ToolUp.Platform.NotificationAddressBook
 
 open System.Text
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 

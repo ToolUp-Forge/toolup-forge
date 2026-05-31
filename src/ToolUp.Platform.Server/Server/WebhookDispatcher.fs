@@ -128,7 +128,7 @@ let private serialiseOutbound (payload: WebhookDeliveryPayload) : byte[] =
 /// admin UI deserialises them via Fable.Remoting/SimpleJson.
 let private auditJsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
     s
 
 let private toAuditJson (value: 'T) =

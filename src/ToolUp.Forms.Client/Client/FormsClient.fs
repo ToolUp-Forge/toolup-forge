@@ -11,7 +11,7 @@ open ToolUp.Forms.FormApi
 // Thin wrapper over `Api.makeProxy<IFormApi>` so callers don't have
 // to import `UserSession.withRequestHeaders` themselves. The proxy
 // shape mirrors `IFormApi` exactly; every method goes over HTTP via
-// `ToolUp.Remoting.Client`.
+// `Fable.Remoting.Client`.
 //
 // Header injection: `UserSession.withRequestHeaders` adds the auth
 // token (Bearer) or `X-User-Id` header per the platform's

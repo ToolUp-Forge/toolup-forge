@@ -352,7 +352,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     }
 
 /// Fable.Remoting route handler wrapping `teamApi`. Route mount path is
-/// derived from the `TeamApi` record's namespace by ToolUp.Remoting.
+/// derived from the `TeamApi` record's namespace by Fable.Remoting.
 let teamApiHandler (config: ServerConfig) = makeApi (teamApi config)
 
 // ─── PermissionApi — RBAC management (3 methods, Owner/Admin only) ──

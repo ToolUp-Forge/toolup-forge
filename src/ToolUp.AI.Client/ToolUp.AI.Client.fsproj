@@ -31,7 +31,7 @@
         <Compile Include="Client\AISettingsUI.fs" />
         <Compile Include="Client\AIClientConfig.fs" />
     </ItemGroup>
-    <!-- Fable.Core / Fable.Elmish.* / ToolUp.Remoting.Client / Fable.SimpleJson
+    <!-- Fable.Core / Fable.Elmish.* / Fable.Remoting.Client / Fable.SimpleJson
          / Fable.SimpleHttp / Feliz flow transitively from ToolUp.Platform.Client.
          FSharp.Core is implicit via the .NET SDK. -->
 </Project>

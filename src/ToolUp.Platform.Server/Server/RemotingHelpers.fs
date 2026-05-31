@@ -13,7 +13,7 @@ open ToolUp.Platform.FileManagement
 /// never sees a missing service when the request was reached through
 /// the standard composition pipeline. Extracted so the plain `makeApi`
 /// and the permission-guarded variant share the same diagnostic path.
-let private logApiError ex (routeInfo: ToolUp.Remoting.Server.RouteInfo<HttpContext>) =
+let private logApiError ex (routeInfo: Fable.Remoting.Server.RouteInfo<HttpContext>) =
     let logger =
         ServiceProviderServiceExtensions.GetRequiredService<ILogger>(routeInfo.httpContext.RequestServices)
 
@@ -25,7 +25,7 @@ let private logApiError ex (routeInfo: ToolUp.Remoting.Server.RouteInfo<HttpCont
 /// logging at `Error` with a stack trace. Today this is just the
 /// "file not in session" case (user clicked Run before uploading); add
 /// new cases here as more user-error classes get typed exceptions.
-let private tryClassifyUserError ex (routeInfo: ToolUp.Remoting.Server.RouteInfo<HttpContext>) =
+let private tryClassifyUserError ex (routeInfo: Fable.Remoting.Server.RouteInfo<HttpContext>) =
     match ex with
     | FileNotFoundInSessionException msg ->
         routeInfo.httpContext.Response.StatusCode <- 400
@@ -34,7 +34,7 @@ let private tryClassifyUserError ex (routeInfo: ToolUp.Remoting.Server.RouteInfo
             ServiceProviderServiceExtensions.GetRequiredService<ILogger>(routeInfo.httpContext.RequestServices)
 
         logger.Warn($"Fable.Remoting user error on {routeInfo.path}: {msg}")
-        Some(ToolUp.Remoting.Server.ErrorResult.Propagate msg)
+        Some(Fable.Remoting.Server.ErrorResult.Propagate msg)
     | _ -> None
 
 /// Create a Fable.Remoting API handler with standard error handling.
@@ -46,7 +46,7 @@ let makeApi api =
         | Some result -> result
         | None ->
             logApiError ex routeInfo
-            ToolUp.Remoting.Server.ErrorResult.Propagate ex
+            Fable.Remoting.Server.ErrorResult.Propagate ex
 
     Api.make (api, errorHandler = errorHandler)
 
@@ -70,16 +70,16 @@ let makePermissionGuardedApi<'T> (moduleName: string) (apiBuilder: HttpContext -
             raise (UnauthorizedAccessException($"Access denied to module '{moduleName}'"))
         | _ -> apiBuilder ctx
 
-    let errorHandler (ex: exn) (routeInfo: ToolUp.Remoting.Server.RouteInfo<HttpContext>) =
+    let errorHandler (ex: exn) (routeInfo: Fable.Remoting.Server.RouteInfo<HttpContext>) =
         match ex with
         | :? UnauthorizedAccessException ->
             routeInfo.httpContext.Response.StatusCode <- 403
-            ToolUp.Remoting.Server.ErrorResult.Propagate ex.Message
+            Fable.Remoting.Server.ErrorResult.Propagate ex.Message
         | _ ->
             match tryClassifyUserError ex routeInfo with
             | Some result -> result
             | None ->
                 logApiError ex routeInfo
-                ToolUp.Remoting.Server.ErrorResult.Propagate ex
+                Fable.Remoting.Server.ErrorResult.Propagate ex
 
     Api.make (guardedBuilder, errorHandler = errorHandler)

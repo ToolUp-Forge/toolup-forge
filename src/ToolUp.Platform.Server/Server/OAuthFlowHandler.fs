@@ -6,7 +6,7 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage

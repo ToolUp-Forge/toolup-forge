@@ -3,7 +3,7 @@ module ToolUp.Platform.DevDiagnosticsHandler
 open System
 open System.Text
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection

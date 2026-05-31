@@ -6,7 +6,7 @@ open System.IO
 open System.Text
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection

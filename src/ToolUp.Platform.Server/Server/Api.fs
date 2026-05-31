@@ -10,11 +10,11 @@ namespace ToolUp.Platform
 //
 // This file is injected via ToolUp.Platform.Server.props into every
 // server-hosting project; ToolUp.Platform.dll itself intentionally
-// does not depend on ToolUp.Remoting.Giraffe.
+// does not depend on Fable.Remoting.Giraffe.
 
 open Microsoft.AspNetCore.Http
-open ToolUp.Remoting.Server
-open ToolUp.Remoting.Giraffe
+open Fable.Remoting.Server
+open Fable.Remoting.Giraffe
 open Giraffe
 
 /// Server-side Fable Remoting helper. Mirrors SAFE.Api.make so server

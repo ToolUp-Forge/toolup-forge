@@ -9,14 +9,14 @@ open ToolUp.Platform.StorageScopeResolver
 open ToolUp.AI
 
 // ─── JSON serialization ──────────────────────────────────────────
-// Uses FableJsonConverter (from ToolUp.Remoting.Json) so that F# DUs are
+// Uses FableJsonConverter (from Fable.Remoting.Json) so that F# DUs are
 // serialized in the format Fable.SimpleJson expects on the client:
 //   {"CaseName": [field1, field2]}
 // NOT Newtonsoft's DiscriminatedUnionConverter format:
 //   {"Case":"CaseName","Fields":[field1, field2]}
 
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 
 let private jsonSettings =
     let s = JsonSerializerSettings()

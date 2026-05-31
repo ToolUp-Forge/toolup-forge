@@ -7,7 +7,7 @@ open System
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open Fable.Remoting.Json
 open ToolUp.Platform
 
 // ─── Phase 60 — server-side ad-analytics endpoint ─────────────────

@@ -13,13 +13,13 @@ open ToolUp.Platform
 // it, calls the module's pure routines, and returns a serialised JSON
 // result. These helpers handle the recurring boilerplate (argument
 // extraction with clear error messages; F#-DU-aware serialisation via
-// `ToolUp.Remoting.Json`) so the module's `aiTools` definition stays
+// `Fable.Remoting.Json`) so the module's `aiTools` definition stays
 // focused on the actual tool logic.
 //
 // **Two JSON stacks deliberately:**
 //   - `System.Text.Json` for walking the incoming args (`JsonElement`) —
 //     fast and allocation-light for primitive property access.
-//   - `Newtonsoft.Json` + `ToolUp.Remoting.Json.FableJsonConverter` for
+//   - `Newtonsoft.Json` + `Fable.Remoting.Json.FableJsonConverter` for
 //     any (de)serialisation that touches F# discriminated unions, option
 //     types, or records containing them. `System.Text.Json` has no DU
 //     converter and silently produces "F# discriminated union
@@ -46,7 +46,7 @@ exception ToolArgumentError of message: string
 
 let private fableJsonSettings =
     let s = Newtonsoft.Json.JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
     s
 
 /// Serialise a value to JSON using `FableJsonConverter` so F#

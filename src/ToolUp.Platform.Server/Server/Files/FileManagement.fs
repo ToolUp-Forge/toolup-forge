@@ -136,7 +136,7 @@ let processFile (dataTypes: DataType list) (fileName: string) (dataTypeId: DataT
 // boundary uses today.
 module ProcessedEntryStore =
     open Newtonsoft.Json
-    open ToolUp.Remoting.Json
+    open Fable.Remoting.Json
 
     [<Literal>]
     let private Prefix = "_processed_entry__"

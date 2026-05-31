@@ -24,7 +24,7 @@
     <PackageReference Include="Fable.Elmish" />
     <PackageReference Include="Fable.Elmish.HMR" />
     <PackageReference Include="Fable.Elmish.React" />
-    <PackageReference Include="ToolUp.Remoting.Client" />
+    <PackageReference Include="Fable.Remoting.Client" />
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Feliz" />
   </ItemGroup>
