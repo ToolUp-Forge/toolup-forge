@@ -7,6 +7,7 @@ open System.Text
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.Hosting
 open Expecto
+open ToolUp.Remoting.Server
 open ToolUp.Remoting.Harness.Server
 
 // ---- Test fixture: in-memory TestServer + HttpClient ------------------------
@@ -16,10 +17,17 @@ open ToolUp.Remoting.Harness.Server
 // shared-fixture is safe.
 
 let private withClient (test: HttpClient -> unit) : unit =
-    use host = buildHost ()
+    use host = buildHost None
     host.Start()
     use client = host.GetTestClient()
     test client
+
+let private withTelemetryClient (test: RecordingTelemetry -> HttpClient -> unit) : unit =
+    let sink = RecordingTelemetry.create ()
+    use host = buildHost (Some (sink :> IRemotingTelemetry))
+    host.Start()
+    use client = host.GetTestClient()
+    test sink client
 
 let private postRemoting (client: HttpClient) (path: string) (body: string) : HttpResponseMessage =
     use req = new HttpRequestMessage(HttpMethod.Post, path)
@@ -126,6 +134,49 @@ let tests =
                 Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
                 let body = readBody response
                 Expect.equal body "\"anonymous\"" "Async resolver default branch fires when header absent"
+
+        // ---- Phase 69b.C coverage: telemetry hook emission ----
+
+        testCase "Telemetry: success call emits one Succeeded MethodTelemetry"
+        <| fun _ ->
+            withTelemetryClient
+            <| fun sink client ->
+                let response = postRemoting client "/api/IHarnessApi/Echo" "[\"hello\"]"
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
+                let events = sink.Events
+                Expect.equal events.Length 1 "Exactly one telemetry event expected per call"
+                let evt = events.[0]
+                Expect.equal evt.MethodName "Echo" "MethodName should reflect the invoked method"
+                Expect.equal evt.Outcome MethodOutcome.Succeeded "Successful invocation should record Succeeded outcome"
+                Expect.isGreaterThanOrEqual evt.ElapsedMs 0 "ElapsedMs should be non-negative"
+
+        testCase "Telemetry: exception emits Failed outcome carrying the exn"
+        <| fun _ ->
+            withTelemetryClient
+            <| fun sink client ->
+                let response = postRemoting client "/api/IHarnessApi/Boom" "[\"fuse-blown\"]"
+                Expect.equal response.StatusCode HttpStatusCode.InternalServerError "500 expected"
+                let events = sink.Events
+                Expect.equal events.Length 1 "One telemetry event expected for the failing call"
+                let evt = events.[0]
+                Expect.equal evt.MethodName "Boom" "MethodName captured even on failure"
+                match evt.Outcome with
+                | MethodOutcome.Failed ex ->
+                    Expect.stringContains ex.Message "fuse-blown" "Exception carries the original reason"
+                | MethodOutcome.Succeeded ->
+                    failtest "Expected Failed outcome, got Succeeded"
+
+        testCase "Telemetry: three sequential calls produce three events in order"
+        <| fun _ ->
+            withTelemetryClient
+            <| fun sink client ->
+                let _ = postRemoting client "/api/IHarnessApi/Echo" "[\"first\"]"
+                let _ = postRemoting client "/api/IHarnessApi/Echo" "[\"second\"]"
+                let _ = postRemoting client "/api/IHarnessApi/Heartbeat" ""
+                let events = sink.Events
+                Expect.equal events.Length 3 "Three calls = three telemetry events"
+                let methodNames = events |> List.map _.MethodName |> List.sort
+                Expect.equal methodNames [ "Echo"; "Echo"; "Heartbeat" ] "All three methods recorded by name"
 
         testCase "WhoAmI: two sequential requests on same client get distinct per-call resolution"
         <| fun _ ->

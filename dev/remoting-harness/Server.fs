@@ -32,17 +32,37 @@ let private handlers = {
 let private errorHandler (ex: exn) (routeInfo: RouteInfo<HttpContext>) : ErrorResult =
     Propagate(box (sprintf "%s: %s" routeInfo.methodName ex.Message))
 
+// ---- Phase 69b.C — recording telemetry sink for the harness ----------------
+//
+// In-memory sink that captures every MethodTelemetry event for assertion.
+// One sink is created per test (via `RecordingTelemetry.create`) so tests
+// don't leak state through a shared mutable.
+
+type RecordingTelemetry() =
+    let events = System.Collections.Concurrent.ConcurrentBag<MethodTelemetry>()
+    member _.Events = events |> Seq.toList
+    interface IRemotingTelemetry with
+        member _.OnMethodCompleted t = events.Add t
+
+module RecordingTelemetry =
+    let create () = RecordingTelemetry()
+
 // ---- Forge-shaped Api.make wrapper ------------------------------------------
 //
 // Mirrors `Api.make` at
 // toolup-forge/src/ToolUp.Platform.Server/Server/Api.fs:26 so the
 // harness's composition path matches what forge SDK consumers exercise.
 
-let private buildHarnessApi (api: HttpContext -> IHarnessApi) : HttpHandler =
+let private buildHarnessApi (telemetry: IRemotingTelemetry option) (api: HttpContext -> IHarnessApi) : HttpHandler =
+    let withMaybeTelemetry options =
+        match telemetry with
+        | Some sink -> Remoting.withTelemetry sink options
+        | None -> options
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromContext api
     |> Remoting.withErrorHandler errorHandler
+    |> withMaybeTelemetry
     |> Remoting.buildHttpHandler
 
 // ---- Phase 69b.B — per-request async-resolver wrapper -----------------------
@@ -78,7 +98,7 @@ let private buildContextApi : HttpHandler =
 // context resolution (the eventual Phase 69b seam) can be exercised
 // here as it lands.
 
-let buildHost () : IHost =
+let buildHost (telemetry: IRemotingTelemetry option) : IHost =
     Host
         .CreateDefaultBuilder()
         .ConfigureWebHostDefaults(fun webHost ->
@@ -91,7 +111,7 @@ let buildHost () : IHost =
                     // registration required.
                     let api : HttpHandler =
                         choose [
-                            buildHarnessApi (fun _ -> handlers)
+                            buildHarnessApi telemetry (fun _ -> handlers)
                             buildContextApi
                         ]
                     app.UseGiraffe api)
