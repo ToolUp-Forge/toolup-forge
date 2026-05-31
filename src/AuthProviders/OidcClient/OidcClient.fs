@@ -12,6 +12,7 @@ open ToolUp.AuthProviders.Oidc.OidcIdTokenValidator
 open ToolUp.AuthProviders.Oidc.OidcPkce
 open ToolUp.AuthProviders.Oidc.OidcTokenStore
 open ToolUp.AuthProviders.Oidc.AuthTracer
+open ToolUp.AuthProviders.Oidc.OidcStateMachine
 
 // ─── OIDC Authorization Code + PKCE orchestration ────────────────────
 //
@@ -461,127 +462,123 @@ let validateIdToken (cfg: OidcUIConfig) (idToken: string) : Async<Result<unit, A
 }
 
 let handleCallback (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = async {
+    // Stage walk: `Booting → InCallback`. The shell's `useEffectOnce`
+    // jumps straight here when `isCallbackUrl` matched; `Booting` is
+    // the brief render before that decision; tracing the edge makes
+    // the entry visible alongside the cold-start arm.
+    walk Booting InCallback
+
     let callback = readCallbackParams ()
+    let pending = readPendingSignIn ()
 
-    match callback.Error with
-    | Some err -> return Error(IssuerError(err, callback.ErrorDescription))
-    | None ->
-        match callback.Code, callback.State with
-        | None, _ -> return Error MissingCode
-        | Some _, None -> return Error InvalidState
-        | Some code, Some returnedState ->
-            let pending = readPendingSignIn ()
+    let inputs: CallbackInputs = {
+        UrlCode = callback.Code
+        UrlState = callback.State
+        UrlError = callback.Error
+        UrlErrorDescription = callback.ErrorDescription
+        StashedVerifier = pending.Verifier
+        StashedState = pending.State
+        StashedNonce = pending.Nonce
+    }
 
-            match pending.Verifier, pending.State with
-            | _, None
-            | None, _ -> return Error InvalidState
-            | Some _, Some stashedState when stashedState <> returnedState -> return Error InvalidState
-            | Some verifier, Some _ ->
-                match! fetchDiscovery cfg.Issuer with
-                | Error e -> return Error e
-                | Ok doc ->
-                    match! exchangeCodeForTokens doc.TokenEndpoint cfg.ClientId cfg.RedirectUri code verifier with
-                    | Error e -> return Error e
-                    | Ok tokens ->
-                        // Phase 3b / Cluster B1 — nonce binding. OIDC
-                        // spec mandates that when nonce was sent on
-                        // the authorize request (we always do), the
-                        // returned id_token's `nonce` claim MUST equal
-                        // the value we stashed. Without this check
-                        // the id_token is not bound to *this* sign-in
-                        // attempt — a previously-issued id_token
-                        // could be replayed at the callback URL.
+    // Pure callback-start decision: issuer-error / missing code /
+    // state mismatch / missing PKCE verifier. Exhaustively covered
+    // by `OidcStateMachineTests`.
+    match decideCallbackStart inputs with
+    | Error e ->
+        walk InCallback (Stage.Failed e)
+        return Error e
+    | Ok start ->
+        match! fetchDiscovery cfg.Issuer with
+        | Error e ->
+            walk InCallback (Stage.Failed e)
+            return Error e
+        | Ok doc ->
+            walk InCallback ExchangingCode
+
+            match! exchangeCodeForTokens doc.TokenEndpoint cfg.ClientId cfg.RedirectUri start.Code start.Verifier with
+            | Error e ->
+                walk ExchangingCode (Stage.Failed e)
+                return Error e
+            | Ok tokens ->
+                walk ExchangingCode ValidatingIdToken
+
+                // Pure nonce-binding decision (Phase 3b / Cluster B1).
+                // OIDC spec mandates that when nonce was sent on the
+                // authorize request (we always do), the id_token's
+                // `nonce` claim MUST match. Cases:
+                //   (a) stashed nonce + matching id_token nonce: ok.
+                //   (b) stashed nonce + mismatched or missing id_token
+                //       nonce: reject (replay defence).
+                //   (c) stashed nonce + no id_token at all: reject
+                //       (issuer spec violation — we requested
+                //       `openid`).
+                // `decideNonceValidity` is injected with
+                // `fixedTimeStringEquals` so the comparison resists
+                // timing attacks; tests pass plain `(=)`.
+                let nonceInputs: NonceInputs = {
+                    StashedNonce = start.ExpectedNonce
+                    IdTokenPresent = Option.isSome tokens.IdToken
+                    IdTokenNonce = tokens.IdToken |> Option.bind readIdTokenNonce
+                }
+
+                match decideNonceValidity fixedTimeStringEquals nonceInputs with
+                | Error e ->
+                    clearAll ()
+                    walk ValidatingIdToken (Stage.Failed e)
+                    return Error e
+                | Ok() ->
+                    // Phase 3b.A — opt-in client-side id_token
+                    // validation. When `cfg.ValidateIdToken = Some
+                    // true` AND the issuer returned an id_token, verify
+                    // signature + issuer + audience + expiry before
+                    // persisting any local state. Failure → clear +
+                    // surface the typed error; success / opt-out falls
+                    // through to the persist path.
+                    let! idTokenResult = async {
+                        match cfg.ValidateIdToken, tokens.IdToken with
+                        | Some true, Some idToken ->
+                            let! r = validateIdToken cfg idToken
+                            return r
+                        | _ -> return Ok()
+                    }
+
+                    match idTokenResult with
+                    | Error e ->
+                        clearAll ()
+                        walk ValidatingIdToken (Stage.Failed e)
+                        return Error e
+                    | Ok() ->
+                        walk ValidatingIdToken PersistingTokens
+                        persistTokens tokens.AccessToken tokens.RefreshToken
+                        clearPendingSignIn ()
+
+                        // Stage walk: `PersistingTokens → RebootingToRoot`.
+                        // The reboot is a NAMED EDGE of the state machine,
+                        // not a hidden side-effect at function exit. The
+                        // target MUST be `origin + "/"`, not the current
+                        // pathname: the pathname IS the redirect URI
+                        // (`/auth/callback`), so reloading onto it
+                        // re-satisfies `isCallbackUrl` on remount, the
+                        // shell re-enters `handleCallback` with the
+                        // `?code` already consumed, and the second pass
+                        // fails with `MissingCode`. Landing on `/` makes
+                        // the reboot take the `classifyStoredToken`
+                        // branch instead, see the just-persisted token
+                        // as fresh, and enter `Established`.
                         //
-                        // Three cases:
-                        //   (a) we sent a nonce AND the id_token is
-                        //       present AND its nonce matches: ok.
-                        //   (b) we sent a nonce AND the id_token is
-                        //       present AND its nonce does NOT match:
-                        //       reject with NonceMismatch + clear
-                        //       local state.
-                        //   (c) we sent a nonce AND the id_token is
-                        //       absent or its nonce claim is absent:
-                        //       reject with NonceMismatch too — the
-                        //       issuer either didn't honour the nonce
-                        //       parameter (spec violation) or didn't
-                        //       return an id_token at all (which we
-                        //       requested via the openid scope).
-                        let nonceOk =
-                            match pending.Nonce, tokens.IdToken with
-                            | None, _ ->
-                                // We did not send a nonce (shouldn't
-                                // happen — stashPendingSignIn always
-                                // populates it — but defensively
-                                // accept). Pending.Nonce being None
-                                // means the substrate didn't stash it
-                                // either, so we have nothing to bind
-                                // to.
-                                true
-                            | Some _, None ->
-                                // We sent a nonce but the issuer
-                                // returned no id_token. Spec violation;
-                                // reject.
-                                false
-                            | Some stashed, Some idToken ->
-                                match readIdTokenNonce idToken with
-                                | None -> false
-                                | Some returned -> fixedTimeStringEquals stashed returned
-
-                        if not nonceOk then
-                            clearAll ()
-                            return Error NonceMismatch
-                        else
-                            // Phase 3b.A — opt-in client-side id_token
-                            // validation. When `cfg.ValidateIdToken =
-                            // Some true` AND the issuer returned an
-                            // id_token, verify signature + issuer +
-                            // audience + expiry before persisting any
-                            // local state. Failure → clear + surface
-                            // the typed error; success / opt-out falls
-                            // through to the existing persist path.
-                            let! idTokenResult = async {
-                                match cfg.ValidateIdToken, tokens.IdToken with
-                                | Some true, Some idToken ->
-                                    let! r = validateIdToken cfg idToken
-                                    return r
-                                | _ -> return Ok()
-                            }
-
-                            match idTokenResult with
-                            | Error e ->
-                                clearAll ()
-                                return Error e
-                            | Ok() ->
-                                persistTokens tokens.AccessToken tokens.RefreshToken
-                                clearPendingSignIn ()
-                                // Full-document navigation to the app ROOT (not
-                                // history.replaceState, and NOT the current
-                                // pathname) so the shell re-boots with the token
-                                // already in localStorage. The Elmish program
-                                // fires its authenticated init fetches
-                                // (ListModules, perms, flags) at mount; a
-                                // same-document URL rewrite leaves those fetches
-                                // having already raced ahead of this persist
-                                // with no Bearer (401, never retried).
-                                //
-                                // The target MUST be a non-callback path. The
-                                // current pathname is the redirect URI
-                                // (`/auth/callback`); reloading onto it
-                                // re-satisfies `isCallbackUrl` on reboot, so
-                                // `OidcShell` re-enters `handleCallback` — now
-                                // with the `?code` already consumed/dropped —
-                                // and fails with `MissingCode` ("No
-                                // authorization code received from the identity
-                                // provider"). Landing on `/` makes the reboot
-                                // take the `classifyStoredToken` branch instead,
-                                // which sees the just-persisted token as
-                                // `FreshJwt` and enters SignedIn. `.replace`
-                                // (not `.assign`) keeps the `?code` URL out of
-                                // history.
-                                let cleanUrl = Browser.Dom.window.location.origin + "/"
-
-                                Browser.Dom.window.location.replace cleanUrl
-                                return Ok()
+                        // A full-document reload is the serialisation
+                        // point for the Elmish init fetches (ListModules,
+                        // perms, flags) — a same-document
+                        // `history.replaceState` leaves them having
+                        // already raced ahead of `persistTokens` with no
+                        // Bearer (401, never retried). `.replace` (not
+                        // `.assign`) keeps the now-stale `?code` URL out
+                        // of session history.
+                        walk PersistingTokens RebootingToRoot
+                        let cleanUrl = Browser.Dom.window.location.origin + "/"
+                        Browser.Dom.window.location.replace cleanUrl
+                        return Ok()
 }
 
 // ─── Phase 3: sign-out ───────────────────────────────────────────────
