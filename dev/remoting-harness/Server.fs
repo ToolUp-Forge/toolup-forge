@@ -38,10 +38,36 @@ let private errorHandler (ex: exn) (routeInfo: RouteInfo<HttpContext>) : ErrorRe
 // toolup-forge/src/ToolUp.Platform.Server/Server/Api.fs:26 so the
 // harness's composition path matches what forge SDK consumers exercise.
 
-let private buildApi (api: HttpContext -> IHarnessApi) : HttpHandler =
+let private buildHarnessApi (api: HttpContext -> IHarnessApi) : HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromContext api
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.buildHttpHandler
+
+// ---- Phase 69b.B — per-request async-resolver wrapper -----------------------
+//
+// Demonstrates `Remoting.fromContextAsync`: the resolver runs per request
+// (not snapshotted at composition time), so per-request inputs feed into
+// the API impl without each handler having to re-read them.
+
+let private resolveSubject (ctx: HttpContext) : Async<string> =
+    async {
+        let mutable values : Microsoft.Extensions.Primitives.StringValues =
+            Microsoft.Extensions.Primitives.StringValues.Empty
+        if ctx.Request.Headers.TryGetValue("X-Subject", &values) then
+            return values.ToString()
+        else
+            return "anonymous"
+    }
+
+let private buildContextApi : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromContextAsync (fun ctx -> async {
+        let! subject = resolveSubject ctx
+        return { WhoAmI = fun () -> async { return subject } }
+       })
     |> Remoting.withErrorHandler errorHandler
     |> Remoting.buildHttpHandler
 
@@ -63,6 +89,11 @@ let buildHost () : IHost =
                     // Phase 69b.A — body normalisation is now built into the
                     // ToolUp.Remoting.Giraffe adapter; no separate middleware
                     // registration required.
-                    app.UseGiraffe(buildApi (fun _ -> handlers)))
+                    let api : HttpHandler =
+                        choose [
+                            buildHarnessApi (fun _ -> handlers)
+                            buildContextApi
+                        ]
+                    app.UseGiraffe api)
             |> ignore)
         .Build()
