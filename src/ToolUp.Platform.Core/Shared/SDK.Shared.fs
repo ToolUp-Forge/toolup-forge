@@ -1536,8 +1536,11 @@ type ServerConfig = {
     JobScheduler: JobSchedulerMode
     /// Phase 9b.A — opt-in back-fill of `OnEvent`-triggered jobs after
     /// detected scheduler tick drift. Default: `false` — a missed
-    /// minute boundary surfaces as a `JobSchedulerTickMissed` audit
-    /// event + a `HealthMonitorUI` counter, but no work re-fires.
+    /// minute boundary surfaces as a `JobSchedulerTickMissed`
+    /// operational event under `_platform.jobs` (deliberately a
+    /// separate stream from the `AuditEvent` DU; correlatable by
+    /// `ScopeId + OccurredAt` if a sink needs both) + a
+    /// `HealthMonitorUI` counter, but no work re-fires.
     /// When `true`, the in-process scheduler re-fires each active
     /// `OnEvent`-triggered job once on drift recovery. Cron jobs are
     /// NOT back-filled regardless (cron semantics expect "fire on the
