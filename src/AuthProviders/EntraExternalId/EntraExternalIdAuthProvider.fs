@@ -13,6 +13,23 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.Metrics
 open ToolUp.AuthProviders.EntraExternalIdConfig
 
+// ─── DEPRECATED in 0.4.0 ────────────────────────────────────────────
+//
+// New deployments use the generic `ToolUp.AuthProviders.Oidc` server
+// provider paired with an `OidcAppConfig` produced by
+// `OidcPresets.entraExternalId` on the client side. See
+// `docs/migrations/0.4.0-entra-external-id-deprecation.md` for the
+// migration walk-through.
+//
+// This module stays compiling for one minor cycle (consumer migration
+// window) and is scheduled for removal at 0.Y.0. The use case where
+// it remains the right answer is the `oid` -> `UserId` /
+// `tid` -> `TenantId` claim-mapping decorator below — the generic
+// `OidcAuthProvider` does not yet expose claim remapping as a
+// first-class option, so deployments whose downstream code depends
+// on the stable `oid` user-id stay on this wrapper until the
+// substrate gains a claim-mapping seam (tracked separately).
+
 // ─── Entra External ID auth-provider companion ──────────────────────
 //
 // Thin wrapper that delegates JWT signature + claim validation to the

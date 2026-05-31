@@ -11,6 +11,23 @@ open ToolUp.AuthProviders.Oidc.OidcTokenStore
 open ToolUp.AuthProviders.Oidc
 open ToolUp.AuthProviders.EntraExternalId.EntraExternalIdClientConfig
 
+// ─── DEPRECATED in 0.4.0 ────────────────────────────────────────────
+//
+// New deployments use `OidcPresets.entraExternalId` (or
+// `entraExternalIdWithDomain` for a custom CIAM host) which returns a
+// unified `OidcAppConfig` consumed by the standard `OidcAuthUI` shell.
+// No `CustomAuthUI` wrapping required. See
+// `docs/migrations/0.4.0-entra-external-id-deprecation.md` for the
+// migration walk-through.
+//
+// This module stays compiling for one minor cycle (consumer migration
+// window) and is scheduled for removal at 0.Y.0. The use case where
+// it remains the right answer is the **sign-up / sign-in user-flow
+// policy routing** surface below (`SignUpPolicyId` /
+// `SignInPolicyId`) — the single-call preset does not expose that
+// affordance and consumers needing the sign-up button stay on this
+// wrapper until the preset gains a policy-routing variant.
+
 // ─── Entra External ID sign-in shell ─────────────────────────────────
 //
 // Wraps the generic `ToolUp.AuthProviders.Oidc` client-side primitives
