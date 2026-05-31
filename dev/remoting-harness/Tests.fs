@@ -319,6 +319,36 @@ let tests =
                 let _ = client.SendAsync(req).Result
                 Expect.equal emitter.Events.Length 0 "Method without [<Audit>] emits nothing"
 
+        // ---- Phase 69j coverage: schema-versioned envelopes ----
+
+        testCase "SchemaVersion: every categorised error envelope carries __schema_version"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                // Trigger a categorised envelope (Phase 69b.E categorised path) via
+                // the harness's BoomCategorised handler. Verify the envelope carries
+                // the version field — the substrate that future wire evolutions hang
+                // off without breaking older clients (additive JSON field).
+                let response = postRemoting client "/api/IHarnessApi/BoomCategorised" "[\"vtest\"]"
+                Expect.equal response.StatusCode HttpStatusCode.InternalServerError "500 expected"
+                let body = readBody response
+                Expect.stringContains body "\"__schema_version\":1" "Default schema version 1 stamped on envelope"
+                Expect.stringContains body "\"category\":\"user\"" "Existing category field preserved"
+                Expect.stringContains body "vtest" "Existing error payload preserved"
+
+        testCase "SchemaVersion: idempotency-missing-key envelope also carries the version"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IIdempotentApi/Charge")
+                req.Content <- new StringContent("[1]", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("X-Subject", "user-schema-" + System.Guid.NewGuid().ToString("N"))
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "400 expected"
+                let body = readBody response
+                Expect.stringContains body "\"__schema_version\":1" "Dispatcher-emitted envelope carries the version"
+
         // ---- Phase 69f coverage: idempotency keys ----
 
         testCase "Idempotency: missing X-Idempotency-Key on [<Idempotent>] method returns 400+user envelope"
