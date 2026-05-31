@@ -8,8 +8,8 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
-open Fable.Remoting.Server
-open Fable.Remoting.Giraffe
+open ToolUp.Remoting.Server
+open ToolUp.Remoting.Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage

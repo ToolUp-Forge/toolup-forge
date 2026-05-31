@@ -184,7 +184,7 @@ type ErasedModule = {
     /// Client-side `ModuleQueryBus` handlers this module publishes.
     /// Collected by `SDK.Client.run` into the per-module registry of the
     /// `ClientModuleQueryBus`, which prefers local dispatch before
-    /// falling back to the server over Fable.Remoting. Default `[]` —
+    /// falling back to the server over ToolUp.Remoting. Default `[]` —
     /// modules that only make queries (or that only answer from the
     /// server) declare nothing.
     ClientQueryHandlers: ModuleQueryHandler list

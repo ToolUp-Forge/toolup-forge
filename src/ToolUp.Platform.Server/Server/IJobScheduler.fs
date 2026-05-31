@@ -156,7 +156,7 @@ type ScheduledJobDeclaration = {
     /// Pre-serialised payload string handed to every dispatch
     /// attempt. Empty for parameter-less jobs (the SDK's existing
     /// internal handlers use empty payloads). Handlers serialise via
-    /// `Fable.Remoting.Json.FableJsonConverter` to keep the persisted
+    /// `ToolUp.Remoting.Json.FableJsonConverter` to keep the persisted
     /// shape Fable-compatible.
     Payload: string
     /// Scopes to schedule the job under. Empty defaults to

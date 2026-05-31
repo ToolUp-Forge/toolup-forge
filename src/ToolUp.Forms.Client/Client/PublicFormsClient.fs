@@ -3,7 +3,7 @@
 
 module ToolUp.Forms.PublicFormsClient
 
-open Fable.Remoting.Client
+open ToolUp.Remoting.Client
 open ToolUp.Forms.PublicFormApi
 
 // ─── Phase 21b — Public-form Fable.Remoting client proxy ────────────

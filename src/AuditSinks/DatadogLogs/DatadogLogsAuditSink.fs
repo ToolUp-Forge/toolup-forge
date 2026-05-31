@@ -4,7 +4,7 @@ open System
 open System.Net.Http
 open System.Text
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 

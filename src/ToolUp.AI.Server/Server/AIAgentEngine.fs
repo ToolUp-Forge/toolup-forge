@@ -223,7 +223,7 @@ let private ProviderSendTimeoutMs = 50_000
 /// `IEventStore.Write` persisted.
 let private latencyJsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
     s
 
 /// Resolve the caller's storage scope from the request. Mirrors the

@@ -7,7 +7,7 @@ open System
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 
 // ─── Phase 61 — RateLimit recent-decisions admin endpoint ─────────

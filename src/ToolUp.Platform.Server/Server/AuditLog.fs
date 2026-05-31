@@ -2,7 +2,7 @@ module ToolUp.Platform.AuditLog
 
 open System
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 
 // ─── Audit log default implementation ────────────────────────────

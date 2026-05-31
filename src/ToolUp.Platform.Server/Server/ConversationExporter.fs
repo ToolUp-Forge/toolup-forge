@@ -5,7 +5,7 @@ module ToolUp.Platform.ConversationExporter
 
 open System.Text
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.IDataExporter
 

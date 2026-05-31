@@ -33,7 +33,7 @@ open KnowledgeBase.ServerIndexStorage
 
 let private fableJsonSettings =
     let s = Newtonsoft.Json.JsonSerializerSettings()
-    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
     s
 
 let private fableSerialize (value: obj) : string =

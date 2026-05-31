@@ -64,7 +64,7 @@ type ClientToolDispatchRegistry() =
 /// way out — see `SSEHandler.fableJsonSettings`).
 let private resultJsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
     s
 
 /// Phase 6g.A: Giraffe handler for `/api/ai/tool-result`. Browsers

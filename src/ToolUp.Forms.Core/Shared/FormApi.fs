@@ -225,7 +225,7 @@ type DispatchSummary = {
 }
 
 /// Fable.Remoting record-of-functions. Each call goes over HTTP via
-/// `Fable.Remoting.Client` proxy; server-side handler in
+/// `ToolUp.Remoting.Client` proxy; server-side handler in
 /// `Server/FormApiHandler.fs` resolves the AccessContext, applies
 /// permission gating, and delegates to `IFormStore` / `IWorkflowEngine`.
 type IFormApi = {

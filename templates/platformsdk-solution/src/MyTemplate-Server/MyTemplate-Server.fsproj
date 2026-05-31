@@ -23,7 +23,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />
-    <PackageReference Include="Fable.Remoting.Giraffe" />
-    <PackageReference Include="Fable.Remoting.Json" />
+    <PackageReference Include="ToolUp.Remoting.Giraffe" />
+    <PackageReference Include="ToolUp.Remoting.Json" />
   </ItemGroup>
 </Project>

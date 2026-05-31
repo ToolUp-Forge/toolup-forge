@@ -3,7 +3,7 @@ module ToolUp.Platform.LineageStore
 open System
 open System.Collections.Generic
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 
 // ─── EventStoreLineageStore ──────────────────────────────────────

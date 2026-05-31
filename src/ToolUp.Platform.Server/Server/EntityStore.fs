@@ -5,7 +5,7 @@ open System.Collections.Concurrent
 open System.Text
 open Microsoft.FSharp.Reflection
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.SecondaryIndex

@@ -39,7 +39,7 @@ type ExportAuditRequest = {
 
 let private jsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
     s
 
 let private resolveScope (ctx: HttpContext) : StorageScope =

@@ -24,7 +24,7 @@
              host-specific so Windows / macOS dev doesn't drag in
              native Linux assets). -->
         <PackageReference Include="SkiaSharp" />
-        <PackageReference Include="Fable.Remoting.Giraffe" />
+        <PackageReference Include="ToolUp.Remoting.Giraffe" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\AssetTypes.fs" />
