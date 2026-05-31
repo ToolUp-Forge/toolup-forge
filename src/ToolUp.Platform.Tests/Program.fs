@@ -103,6 +103,7 @@ let allTests =
         FileManagementTests.tests
         PeerBearerAuthTests.tests
         ConversationExportAuditTests.tests
+        ConversationExporterTests.tests
         FastPathBeaconOwnershipTests.tests
         FastPathSequencerTelemetryTests.tests
         HnswFidelityTests.tests
@@ -149,6 +150,7 @@ let allTests =
         CsrfCarveOutDerivationTests.tests
         SurfaceEnforcementMiddlewareTests.tests
         AnonymousSessionMigrationMiddlewareTests.tests
+        SubjectWildcardAnalyzerTests.tests
     ]
 
 [<EntryPoint>]

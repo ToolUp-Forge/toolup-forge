@@ -73,6 +73,13 @@
              Tests touching a (b)-class cache call CacheReset.invalidateAll
              at setup. See docs/platform/testing-conventions.md. -->
         <Compile Include="Support\CacheReset.fs" />
+        <!-- Phase 66 §6.3 OQ3 follow-up — text-based analyser that
+             flags Subject pattern-match wildcards whose body shares a
+             function-call identifier with a sibling Subject-constructor
+             arm (the §4.1 E3 cross-shape leak shape). Origin: TIDY-UP
+             Unbundled item "Handler `match Subject` wildcard-fallback
+             linter for Phase 66 cross-shape safety". -->
+        <Compile Include="Support\SubjectWildcardAnalyzer.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />
@@ -186,6 +193,7 @@
         <Compile Include="InProcess\FileManagementTests.fs" />
         <Compile Include="InProcess\PeerBearerAuthTests.fs" />
         <Compile Include="InProcess\ConversationExportAuditTests.fs" />
+        <Compile Include="InProcess\ConversationExporterTests.fs" />
         <Compile Include="InProcess\FastPathBeaconOwnershipTests.fs" />
         <Compile Include="InProcess\FastPathSequencerTelemetryTests.fs" />
         <Compile Include="InProcess\HnswFidelityTests.fs" />
@@ -276,6 +284,11 @@
              double-migration guard. Complements AnonymousSessionMigratorTests'
              substrate coverage (interface + compose + NoOp default). -->
         <Compile Include="InProcess\AnonymousSessionMigrationMiddlewareTests.fs" />
+        <!-- Phase 66 §6.3 OQ3 follow-up — fixture tests pinning the
+             §4.1 E3 demonstrative leak pair plus a live-source
+             self-audit that ratchets against future cross-shape
+             wildcard fallbacks. -->
+        <Compile Include="InProcess\SubjectWildcardAnalyzerTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
