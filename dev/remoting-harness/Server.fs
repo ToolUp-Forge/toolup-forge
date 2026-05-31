@@ -91,6 +91,44 @@ let private resolveSubject (ctx: HttpContext) : Async<string> =
             return "anonymous"
     }
 
+// ---- Phase 69d — IAuthContext implementation + secure API composition ------
+
+type private HarnessAuthContext(roles: Set<string>, anonymous: bool) =
+    interface IAuthContext with
+        member _.HasRole(role: string) = roles.Contains role
+        member _.HasClaim(_, _) = false
+        member _.HasTenant() = false
+        member _.IsAnonymous() = anonymous
+
+let private resolveAuthFromHeaders (ctx: HttpContext) : Async<IAuthContext> =
+    async {
+        let mutable values : Microsoft.Extensions.Primitives.StringValues =
+            Microsoft.Extensions.Primitives.StringValues.Empty
+        if ctx.Request.Headers.TryGetValue("X-Roles", &values) then
+            let raw = values.ToString()
+            let roles =
+                if System.String.IsNullOrWhiteSpace raw then Set.empty
+                else raw.Split(',') |> Array.map _.Trim() |> Set.ofArray
+            let anonymous = roles.IsEmpty
+            return HarnessAuthContext(roles, anonymous) :> IAuthContext
+        else
+            return HarnessAuthContext(Set.empty, true) :> IAuthContext
+    }
+
+let private secureHandlers = {
+    AdminOnly = fun () -> async { return "admin-secret" }
+    OpenToAll = fun () -> async { return "everyone-welcome" }
+    PublicOnly = fun () -> async { return "public-info" }
+}
+
+let private buildSecureApi : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromValue secureHandlers
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.withAuthContext resolveAuthFromHeaders
+    |> Remoting.buildHttpHandler
+
 let private buildContextApi : HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
@@ -129,6 +167,7 @@ let buildHost (telemetry: IRemotingTelemetry option) : IHost =
                         choose [
                             buildHarnessApi telemetry (fun _ -> handlers)
                             buildContextApi
+                            buildSecureApi
                         ]
                     app.UseGiraffe api)
             |> ignore)

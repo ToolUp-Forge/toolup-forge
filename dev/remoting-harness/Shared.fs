@@ -1,6 +1,7 @@
 module ToolUp.Remoting.Harness.Shared
 
 open System
+open ToolUp.Remoting.Server
 
 /// Representative API record for v0 of the harness. Exercises three
 /// method shapes that load-bear most of the Phase 69 / 69a / 69b
@@ -25,6 +26,20 @@ type IHarnessApi = {
 type IContextApi = {
     WhoAmI: unit -> Async<string>
     WhereAreWe: unit -> Async<string>
+}
+
+/// Phase 69d coverage — three classifications exercise the dispatcher's
+/// auth pre-flight. The harness wires a resolver that reads `X-Roles`
+/// from request headers; tests verify each classification's behaviour.
+type ISecureApi = {
+    [<RequiresRole("Admin")>]
+    AdminOnly: unit -> Async<string>
+
+    [<AllowAnonymous>]
+    OpenToAll: unit -> Async<string>
+
+    [<PublicEndpoint>]
+    PublicOnly: unit -> Async<string>
 }
 
 /// Route shape. Mirrors the forge default

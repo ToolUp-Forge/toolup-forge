@@ -207,6 +207,68 @@ let tests =
                 // The echoed header should match the body value (sans JSON quotes).
                 Expect.equal ("\"" + echoed + "\"") body "Generated correlation id is consistent between body and response header"
 
+        // ---- Phase 69d coverage: authorisation metadata ----
+
+        testCase "AdminOnly: caller with Admin role gets through"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/ISecureApi/AdminOnly")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("X-Roles", "Admin")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "Admin caller authorised"
+                let body = readBody response
+                Expect.equal body "\"admin-secret\"" "Body returns the handler's value"
+
+        testCase "AdminOnly: caller without Admin role is denied with category=auth"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/ISecureApi/AdminOnly")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("X-Roles", "User")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.Unauthorized "401 expected on auth deny"
+                let body = readBody response
+                Expect.stringContains body "\"category\":\"auth\"" "Categorised auth envelope"
+
+        testCase "AdminOnly: anonymous caller (no X-Roles header) is denied"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/ISecureApi/AdminOnly")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.Unauthorized "Anonymous denied on RequiresRole method"
+
+        testCase "OpenToAll: AllowAnonymous method always returns success"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/ISecureApi/OpenToAll")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "AllowAnonymous always passes"
+                let body = readBody response
+                Expect.equal body "\"everyone-welcome\"" "Handler invoked"
+
+        testCase "PublicOnly: PublicEndpoint method passes without resolver invocation"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/ISecureApi/PublicOnly")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "PublicEndpoint always passes"
+                let body = readBody response
+                Expect.equal body "\"public-info\"" "Handler invoked"
+
         // ---- Phase 69b.E coverage: error envelope categorisation ----
 
         testCase "BoomCategorised: handler maps UserError → ErrorCategory.User wire envelope"
