@@ -7,7 +7,9 @@ open System.Text
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.Hosting
 open Expecto
+open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
+open ToolUp.Remoting.Harness.Shared
 open ToolUp.Remoting.Harness.Server
 
 // ---- Test fixture: in-memory TestServer + HttpClient ------------------------
@@ -318,6 +320,64 @@ let tests =
                 req.Headers.Add("x-remoting-proxy", "true")
                 let _ = client.SendAsync(req).Result
                 Expect.equal emitter.Events.Length 0 "Method without [<Audit>] emits nothing"
+
+        // ---- Phase 69c coverage: server-sent streaming ----
+
+        testCase "Streaming: dispatcher emits text/event-stream content type"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IStreamingApi/Tokens")
+                req.Content <- new StringContent("[\"world\"]", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
+                let contentType =
+                    response.Content.Headers.ContentType.MediaType
+                Expect.equal contentType "text/event-stream" "Content-Type signals SSE"
+
+        testCase "Streaming: emits chunk events + terminal complete event in order"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IStreamingApi/Tokens")
+                req.Content <- new StringContent("[\"world\"]", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
+                let body = response.Content.ReadAsStringAsync().Result
+                // SSE shape: each event prefixed `event: chunk\ndata: <json>\n\n`
+                Expect.stringContains body "event: chunk" "Has chunk frames"
+                Expect.stringContains body "\"Hello\"" "First chunk carries Hello"
+                Expect.stringContains body "\"world\"" "Argument echoed in stream"
+                Expect.stringContains body "event: complete" "Has terminal complete frame"
+                // Order check: complete must come after the last chunk.
+                let completeIdx = body.IndexOf "event: complete"
+                let lastChunkIdx = body.LastIndexOf "event: chunk"
+                Expect.isGreaterThan completeIdx lastChunkIdx "Complete event comes after last chunk"
+
+        // ---- Phase 69k coverage: source-generator dispatch substrate ----
+
+        testCase "GeneratedDispatchRegistry: register + tryGet round-trip"
+        <| fun _ ->
+            // Hand-rolled IGeneratedDispatchTable<HttpContext, IJobReportApi>.
+            // In production the source-generator emits this from the API record.
+            let table : IGeneratedDispatchTable<HttpContext, IJobReportApi> =
+                { new IGeneratedDispatchTable<HttpContext, IJobReportApi> with
+                    member _.ApiType = typeof<IJobReportApi>
+                    member _.RouteHandlers () = [] }
+            GeneratedDispatchRegistry.register<IJobReportApi> (box table)
+            let resolved = GeneratedDispatchRegistry.tryGet<IJobReportApi> ()
+            Expect.isTrue resolved.IsSome "Generated table resolves after registration"
+            let cast = resolved.Value :?> IGeneratedDispatchTable<HttpContext, IJobReportApi>
+            Expect.equal cast.ApiType typeof<IJobReportApi> "Table ApiType matches the registered record"
+
+        testCase "GeneratedDispatchRegistry: isRegistered = false for unregistered impls"
+        <| fun _ ->
+            Expect.equal
+                (GeneratedDispatchRegistry.isRegistered<IStreamingApi> ())
+                false
+                "Streaming API has no generated table → isRegistered = false"
 
         // ---- Phase 69i coverage: long-running operation typed handles ----
 

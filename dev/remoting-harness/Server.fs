@@ -166,6 +166,40 @@ let private buildAuditedApi (emitter: IAuditEmitter) : HttpHandler =
     |> Remoting.withAudit emitter
     |> Remoting.buildHttpHandler
 
+// ---- Phase 69c — streaming API ---------------------------------------------
+
+/// Hand-rolled IAsyncEnumerable for harness demo — no FSharp.Control.AsyncSeq
+/// or FSharp.Control.TaskSeq dependency needed.
+type private SimpleAsyncEnumerable<'T>(items: 'T seq) =
+    interface System.Collections.Generic.IAsyncEnumerable<'T> with
+        member _.GetAsyncEnumerator(_: System.Threading.CancellationToken) =
+            let inner = items.GetEnumerator()
+            { new System.Collections.Generic.IAsyncEnumerator<'T> with
+                member _.Current = inner.Current
+                member _.MoveNextAsync() = System.Threading.Tasks.ValueTask<bool>(inner.MoveNext())
+                member _.DisposeAsync() = System.Threading.Tasks.ValueTask() }
+
+let private streamingHandlers : IStreamingApi = {
+    Tokens =
+        fun (prompt: string) ->
+            let parts =
+                seq {
+                    yield "Hello"
+                    yield ", "
+                    yield prompt
+                    yield "!"
+                }
+            SimpleAsyncEnumerable<string>(parts)
+            :> System.Collections.Generic.IAsyncEnumerable<string>
+}
+
+let private buildStreamingApi : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromValue streamingHandlers
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.buildHttpHandler
+
 // ---- Phase 69i — job-handle API --------------------------------------------
 
 let private jobDispatcher : IJobDispatcher = InMemoryJobDispatcher() :> _
@@ -308,7 +342,8 @@ let buildHost (telemetry: IRemotingTelemetry option) (auditEmitter: IAuditEmitte
                               buildRateLimitedApi
                               buildIdempotentApi
                               buildValidatedApi
-                              buildJobReportApi ]
+                              buildJobReportApi
+                              buildStreamingApi ]
                             @ audited
                         )
                     app.UseGiraffe api)

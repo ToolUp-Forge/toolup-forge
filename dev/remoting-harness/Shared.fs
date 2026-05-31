@@ -97,6 +97,14 @@ type IJobReportApi = {
     GetReportStatus: JobHandle<string> -> Async<JobStatus<string>>
 }
 
+/// Phase 69c coverage — streaming method returning IAsyncEnumerable.
+/// The dispatcher bypasses the proxy for this method and emits
+/// SSE-framed chunks. v0 uses a non-async outer shape since the
+/// streaming dispatch path doesn't yet bridge Async<IAsyncEnumerable>.
+type IStreamingApi = {
+    Tokens: string -> System.Collections.Generic.IAsyncEnumerable<string>
+}
+
 /// Phase 69f coverage — call counter that proves idempotent replays
 /// don't re-invoke the handler. Wired as a module-level counter from
 /// Server.fs.
