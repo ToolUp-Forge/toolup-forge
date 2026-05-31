@@ -1,0 +1,13 @@
+{
+  "name": "mixed-dim-text-image-500",
+  "description": "Phase 14k WS5 multi-dimension fixture. Declares a 500-chunk corpus (250 text + 250 image) at mismatched dimensionalities, plus an anchor-perturbed query set (10 text + 10 image). Vectors are not inlined — the fixture carries the seed + counts + dims and is expanded deterministically at load time via the matching loader (`HnswVectorStore`-test side: `Support/MixedDimFixture.fs`; benchmark side: `Runner/MixedDimFixture.fs`). The two loaders use the same algorithm so HNSW recall-fidelity tests and HNSW latency benchmarks see byte-identical corpora. Real-world deployments pair text@384 + image@512 (BGE-small + CLIP ViT-B/32); this fixture uses text@96 + image@192 to keep test wall-clock sub-second while preserving the 2x asymmetric ratio. Co-located with eval-baseline.json per the Phase 14k WS5 unblock criterion.",
+  "seed": 14500500,
+  "scope": "team:mixed-dim-eval",
+  "textDim": 96,
+  "imageDim": 192,
+  "textCount": 250,
+  "imageCount": 250,
+  "queryCountPerKind": 10,
+  "queryNoiseScale": 0.05,
+  "queryAnchorStride": 25
+}

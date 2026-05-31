@@ -80,6 +80,11 @@
              Unbundled item "Handler `match Subject` wildcard-fallback
              linter for Phase 66 cross-shape safety". -->
         <Compile Include="Support\SubjectWildcardAnalyzer.fs" />
+        <!-- Phase 14k WS5 Item 2 — fixture loader for the mixed-dim
+             recall-fidelity test. Co-located with the JSON fixture
+             under `ToolUp.RAG.Evaluation/fixtures/eval-mixed-dim.json`;
+             this loader is the canonical deterministic generator. -->
+        <Compile Include="Support\MixedDimFixture.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />
@@ -369,6 +374,14 @@
         <!-- Phase 66 Stream C.5 / D.8 — RevokeOnIssuerRemoved share-token
              decorator companion, exercised by the D.8 integration tests. -->
         <ProjectReference Include="..\ShareTokenStoreDecorators\RevokeOnIssuerRemoved\ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved.fsproj" />
+    </ItemGroup>
+    <!-- Phase 14k WS5 Item 2 — mixed-dim fixture JSON co-located with the
+         existing eval-baseline.json in the RAG.Evaluation project. Linked
+         into Tests' output so the loader finds it at runtime. -->
+    <ItemGroup>
+        <None Include="..\ToolUp.RAG.Evaluation\fixtures\eval-mixed-dim.json"
+              Link="fixtures\eval-mixed-dim.json"
+              CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />

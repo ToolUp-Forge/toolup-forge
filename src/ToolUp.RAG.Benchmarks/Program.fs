@@ -1,6 +1,7 @@
 module ToolUp.RAG.Benchmarks.Program
 
 open System
+open System.IO
 open ToolUp.RAG.Benchmarks.PipelineFactory
 open ToolUp.RAG.Benchmarks.BenchmarkRunner
 open ToolUp.RAG.Benchmarks.ReportWriter
@@ -9,6 +10,7 @@ open ToolUp.RAG.Benchmarks.ReportWriter
 
 type private CliArgs = {
     Dataset: string option
+    MixedDimFixture: string option
     Embedder: EmbedderChoice
     VectorStore: VectorStoreChoice
     RerankerOn: bool
@@ -20,6 +22,7 @@ type private CliArgs = {
 
 let private defaults: CliArgs = {
     Dataset = None
+    MixedDimFixture = None
     Embedder = Local
     VectorStore = Flat
     RerankerOn = false
@@ -62,6 +65,13 @@ let private parseArgs (argv: string array) : Result<CliArgs, string> =
         match argv[i] with
         | "--dataset" when i + 1 < argv.Length ->
             args <- { args with Dataset = Some argv[i + 1] }
+
+            i <- i + 2
+        | "--mixed-dim-fixture" when i + 1 < argv.Length ->
+            args <- {
+                args with
+                    MixedDimFixture = Some argv[i + 1]
+            }
 
             i <- i + 2
         | "--embedder" when i + 1 < argv.Length ->
@@ -110,17 +120,19 @@ let private parseArgs (argv: string array) : Result<CliArgs, string> =
     match error with
     | Some msg -> Error msg
     | None ->
-        match args.Dataset with
-        | None -> Error "--dataset is required (e.g. --dataset scifact)"
-        | Some _ -> Ok args
+        match args.Dataset, args.MixedDimFixture with
+        | None, None -> Error "--dataset or --mixed-dim-fixture is required (e.g. --dataset scifact)"
+        | Some _, Some _ -> Error "--dataset and --mixed-dim-fixture are mutually exclusive"
+        | _ -> Ok args
 
 let private printUsage () =
     eprintfn "ToolUp.RAG.Benchmarks — BEIR retrieval benchmark runner"
     eprintfn ""
     eprintfn "Usage: dotnet run --project src/ToolUp.RAG.Benchmarks -- [options]"
     eprintfn ""
-    eprintfn "Required:"
+    eprintfn "Required (one of):"
     eprintfn "  --dataset <name>           BEIR dataset id (e.g. scifact, nfcorpus, fiqa)"
+    eprintfn "  --mixed-dim-fixture <path> Mixed-dim fixture JSON (Phase 14k WS5 Item 3 — drives HNSW directly)"
     eprintfn ""
     eprintfn "Optional:"
     eprintfn "  --embedder local|openai    default: local"
@@ -131,8 +143,9 @@ let private printUsage () =
     eprintfn "  --replicate <int>          default: 1 (>1 suppresses quality metrics)"
     eprintfn "  --out <path>               default: bench-results.csv"
     eprintfn ""
-    eprintfn "Example:"
+    eprintfn "Examples:"
     eprintfn "  dotnet run --project src/ToolUp.RAG.Benchmarks -- --dataset scifact"
+    eprintfn "  dotnet run --project src/ToolUp.RAG.Benchmarks -- --mixed-dim-fixture fixtures/eval-mixed-dim.json"
     eprintfn ""
     eprintfn "OpenAI embedder reads OPENAI_API_KEY (or openai-api-key) from env."
     eprintfn "BEIR datasets are downloaded to data/beir/ on first use (override via TOOLUP_BEIR_CACHE)."
@@ -148,25 +161,42 @@ let main argv =
         printUsage ()
         1
     | Ok args ->
-        let dataset = args.Dataset.Value
-
         if args.RerankerOn then
             eprintfn "[bench] --reranker on requested but no concrete reranker is wired in v1; ignoring."
 
-        let cfg: RunConfig = {
-            DatasetName = dataset
-            Build = {
-                Embedder = args.Embedder
-                VectorStore = args.VectorStore
-                EnableMmr = args.MmrOn
-                MmrLambda = 0.5
-            }
-            TopK = args.TopK
-            Replicate = args.Replicate
-        }
+        let resolveFixturePath (raw: string) =
+            // Allow the caller to pass a bare filename (defaults to the
+            // copy MSBuild drops next to the runner under fixtures/).
+            if File.Exists raw then
+                raw
+            else
+                let runner = Path.Combine(AppContext.BaseDirectory, "fixtures", raw)
+                if File.Exists runner then runner else raw
 
         try
-            let row = runOne cfg |> Async.RunSynchronously
+            let row =
+                match args.MixedDimFixture with
+                | Some path ->
+                    let resolved = resolveFixturePath path
+
+                    MixedDimBenchmark.run resolved args.TopK args.Replicate
+                    |> Async.RunSynchronously
+                | None ->
+                    let dataset = args.Dataset.Value
+
+                    let cfg: RunConfig = {
+                        DatasetName = dataset
+                        Build = {
+                            Embedder = args.Embedder
+                            VectorStore = args.VectorStore
+                            EnableMmr = args.MmrOn
+                            MmrLambda = 0.5
+                        }
+                        TopK = args.TopK
+                        Replicate = args.Replicate
+                    }
+
+                    runOne cfg |> Async.RunSynchronously
 
             printfn ""
 

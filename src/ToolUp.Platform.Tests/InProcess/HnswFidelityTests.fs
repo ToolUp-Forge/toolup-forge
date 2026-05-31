@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Tests.Support
 open ToolUp.RAG.VectorStores.Hnsw
 
 // ─── Phase 14k WS5 — HNSW recall-fidelity + latency smoke ───────
@@ -234,6 +235,98 @@ let tests =
                 Expect.isFalse
                     intruderRanked
                     "96-dim intruder must not surface in 48-dim query results — mismatched-length cosineDistance returns 1.0, ranking it last and out of the top-K window"
+            finally
+                dispose.Dispose()
+        }
+
+        testAsync "mixed-dim fixture: HNSW recall-fidelity matches flat scan, cross-dim purity holds" {
+            // Phase 14k WS5 Item 2 — fixture-driven multi-dim recall-fidelity.
+            // Loads `eval-mixed-dim.json` (250 text@96 + 250 image@192
+            // chunks under a single scope; 10 anchor-perturbed queries
+            // per kind), seeds HNSW with the entire mixed-dim corpus,
+            // and asserts three things:
+            //
+            //   1. HNSW's top-10 matches the same-dim flat-scan top-10
+            //      within a 0.6 mean-overlap floor (same shape as the
+            //      overlap@10 vs exact cosine test above, computed
+            //      against the matching-dim subset of the corpus only —
+            //      mismatched-dim chunks are filtered by cosineDistance
+            //      returning 1.0 and never reach the flat top-10).
+            //   2. HNSW's anchor recall@10 is within the Phase 14k
+            //      acceptance budget of the flat-scan anchor recall@10.
+            //      Phase 14k pins the absolute bound at 2% on a 500k
+            //      corpus with tuned efSearch; this 500-chunk smoke
+            //      uses a 10% absolute-gap budget to absorb the noise
+            //      a default-M / untuned-efSearch HNSW exhibits on
+            //      synthetic 96-dim random vectors.
+            //   3. NO text-kind chunk surfaces in any image-query
+            //      top-10, and vice versa. This is the structural
+            //      cross-dim purity check at 500-chunk scale — the
+            //      existing 21-chunk dimension-mismatch defence test
+            //      above pins the same property at smoke scale.
+            let fixture = MixedDimFixture.load (MixedDimFixture.defaultPath ())
+            let store, dispose = newStore ()
+
+            try
+                let scope = Team(fixture.Metadata.scope.Substring("team:".Length))
+                let metadata = Map.empty
+
+                for c in fixture.Corpus do
+                    let chunk: TextChunk = {
+                        Content = c.ChunkId
+                        Metadata = metadata
+                    }
+
+                    do! store.Upsert scope c.ChunkId c.Vector chunk
+
+                let mutable hnswAnchorHits = 0
+                let mutable flatAnchorHits = 0
+                let mutable overlapSum = 0.0
+                let mutable crossDimLeakSeen = false
+
+                for q in fixture.Queries do
+                    let! hits = store.Search [ scope ] q.Vector 10
+                    let hitIds = hits |> List.map _.ChunkId
+                    let hitSet = Set.ofList hitIds
+
+                    let flat = MixedDimFixture.exactTopK fixture.Corpus q.Kind q.Vector 10
+
+                    if hitSet.Contains q.AnchorChunkId then
+                        hnswAnchorHits <- hnswAnchorHits + 1
+
+                    if flat.Contains q.AnchorChunkId then
+                        flatAnchorHits <- flatAnchorHits + 1
+
+                    let overlap = float (Set.count (Set.intersect flat hitSet)) / 10.0
+                    overlapSum <- overlapSum + overlap
+
+                    let oppositeKindPrefix =
+                        match q.Kind with
+                        | MixedDimFixture.Text -> "image-"
+                        | MixedDimFixture.Image -> "text-"
+
+                    if hitIds |> List.exists (fun id -> id.StartsWith oppositeKindPrefix) then
+                        crossDimLeakSeen <- true
+
+                let queryCount = float fixture.Queries.Length
+                let hnswAnchorRecall = float hnswAnchorHits / queryCount
+                let flatAnchorRecall = float flatAnchorHits / queryCount
+                let recallGap = flatAnchorRecall - hnswAnchorRecall
+                let meanOverlap = overlapSum / queryCount
+
+                Expect.isGreaterThanOrEqual
+                    meanOverlap
+                    0.6
+                    $"mean overlap@10 vs same-dim flat scan was {meanOverlap:F3} — below the recall-fidelity floor on the mixed-dim corpus"
+
+                Expect.isLessThanOrEqual
+                    recallGap
+                    0.10
+                    $"HNSW anchor recall@10 {hnswAnchorRecall:F3} lagged flat-scan anchor recall@10 {flatAnchorRecall:F3} by {recallGap:F3} — outside the Phase 14k recall-fidelity budget"
+
+                Expect.isFalse
+                    crossDimLeakSeen
+                    "cross-dim leakage: a same-dim query surfaced an opposite-kind chunk in its top-10 (mixed-dim purity invariant violated)"
             finally
                 dispose.Dispose()
         }

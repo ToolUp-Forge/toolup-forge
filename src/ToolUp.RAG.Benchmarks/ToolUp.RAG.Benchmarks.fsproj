@@ -14,6 +14,11 @@
     <Compile Include="Metrics\LatencyMetrics.fs" />
     <Compile Include="Runner\PipelineFactory.fs" />
     <Compile Include="Runner\BenchmarkRunner.fs" />
+    <!-- Phase 14k WS5 Item 3 — fixture-driven mixed-dim latency
+         benchmark. Bypasses IRetrievalPipeline (which expects text
+         content + embedder) and drives HnswVectorStore directly with
+         the pre-computed mixed-dim vectors. -->
+    <Compile Include="Runner\MixedDimBenchmark.fs" />
     <Compile Include="Runner\ReportWriter.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -32,6 +37,14 @@
     <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" />
     <ProjectReference Include="..\EmbeddingProviders\OpenAI\OpenAIEmbeddingProvider.fsproj" />
     <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
+  </ItemGroup>
+  <!-- Phase 14k WS5 Item 3 — mixed-dim fixture JSON, linked from the
+       co-located RAG.Evaluation/fixtures/ directory into the benchmark
+       runner's output so the loader finds it at runtime. -->
+  <ItemGroup>
+    <None Include="..\ToolUp.RAG.Evaluation\fixtures\eval-mixed-dim.json"
+          Link="fixtures\eval-mixed-dim.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
