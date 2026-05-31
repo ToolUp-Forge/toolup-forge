@@ -62,6 +62,28 @@ type IAuditedApi = {
     NoAudit: unit -> Async<string>
 }
 
+/// Phase 69e coverage — input record carrying validation attributes.
+/// The dispatcher rejects requests with field violations before
+/// invoking the handler; success path returns a stable string so
+/// tests can assert end-to-end shape.
+type CreateUserRequest = {
+    [<NotEmpty>]
+    [<MinLength(3)>]
+    [<MaxLength(40)>]
+    Name: string
+
+    [<Range(13.0, 130.0)>]
+    Age: int
+
+    [<Email>]
+    Email: string
+}
+
+type IValidatedApi = {
+    [<AllowAnonymous>]
+    CreateUser: CreateUserRequest -> Async<string>
+}
+
 /// Phase 69f coverage — call counter that proves idempotent replays
 /// don't re-invoke the handler. Wired as a module-level counter from
 /// Server.fs.

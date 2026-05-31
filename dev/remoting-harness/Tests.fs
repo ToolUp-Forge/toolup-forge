@@ -319,6 +319,66 @@ let tests =
                 let _ = client.SendAsync(req).Result
                 Expect.equal emitter.Events.Length 0 "Method without [<Audit>] emits nothing"
 
+        // ---- Phase 69e coverage: typed validation on input records ----
+
+        testCase "Validation: valid input record passes through to handler"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let body = """[{"Name":"Andrew","Age":42,"Email":"andrew@example.com"}]"""
+                let response = postRemoting client "/api/IValidatedApi/CreateUser" body
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected on valid input"
+                let respBody = readBody response
+                Expect.stringContains respBody "created:Andrew/42/andrew@example.com" "Handler executed with deserialised record"
+
+        testCase "Validation: short Name fails MinLength + NotEmpty hits, returns 400 + categorised Validation envelope"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let body = """[{"Name":"A","Age":42,"Email":"andrew@example.com"}]"""
+                let response = postRemoting client "/api/IValidatedApi/CreateUser" body
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "400 expected on validation failure"
+                let respBody = readBody response
+                Expect.stringContains respBody "\"category\":\"validation\"" "Categorised validation envelope"
+                Expect.stringContains respBody "\"Path\":\"Name\"" "Violation cites the failing field path"
+                Expect.stringContains respBody "MinLength" "Violation code names the failing rule"
+
+        testCase "Validation: Age outside Range fails with structured envelope"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let body = """[{"Name":"Andrew","Age":200,"Email":"andrew@example.com"}]"""
+                let response = postRemoting client "/api/IValidatedApi/CreateUser" body
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "400 expected"
+                let respBody = readBody response
+                Expect.stringContains respBody "\"Path\":\"Age\"" "Age field violation"
+                Expect.stringContains respBody "Range" "Range rule code surfaced"
+                Expect.stringContains respBody "200" "Actual value mentioned in message"
+
+        testCase "Validation: malformed email fails with Email-rule violation"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let body = """[{"Name":"Andrew","Age":42,"Email":"not-an-email"}]"""
+                let response = postRemoting client "/api/IValidatedApi/CreateUser" body
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "400 expected"
+                let respBody = readBody response
+                Expect.stringContains respBody "\"Path\":\"Email\"" "Email field violation"
+                Expect.stringContains respBody "Email" "Email rule code present"
+
+        testCase "Validation: multiple field violations surface in one envelope"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                // Name too short AND age too low AND bad email
+                let body = """[{"Name":"x","Age":5,"Email":"bad"}]"""
+                let response = postRemoting client "/api/IValidatedApi/CreateUser" body
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "400 expected"
+                let respBody = readBody response
+                Expect.stringContains respBody "\"Path\":\"Name\"" "Name violation surfaced"
+                Expect.stringContains respBody "\"Path\":\"Age\"" "Age violation surfaced"
+                Expect.stringContains respBody "\"Path\":\"Email\"" "Email violation surfaced"
+
         // ---- Phase 69j coverage: schema-versioned envelopes ----
 
         testCase "SchemaVersion: every categorised error envelope carries __schema_version"

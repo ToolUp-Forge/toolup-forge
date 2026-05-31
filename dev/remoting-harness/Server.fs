@@ -166,6 +166,22 @@ let private buildAuditedApi (emitter: IAuditEmitter) : HttpHandler =
     |> Remoting.withAudit emitter
     |> Remoting.buildHttpHandler
 
+// ---- Phase 69e — validated input API ---------------------------------------
+
+let private validatedHandlers = {
+    CreateUser = fun req -> async {
+        return sprintf "created:%s/%d/%s" req.Name req.Age req.Email
+    }
+}
+
+let private buildValidatedApi : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromValue validatedHandlers
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.withAuthContext resolveAuthFromHeaders
+    |> Remoting.buildHttpHandler
+
 // ---- Phase 69f — idempotency-keyed API -------------------------------------
 
 /// Module-level counter the handlers increment per invocation. The
@@ -266,7 +282,8 @@ let buildHost (telemetry: IRemotingTelemetry option) (auditEmitter: IAuditEmitte
                               buildContextApi
                               buildSecureApi
                               buildRateLimitedApi
-                              buildIdempotentApi ]
+                              buildIdempotentApi
+                              buildValidatedApi ]
                             @ audited
                         )
                     app.UseGiraffe api)
