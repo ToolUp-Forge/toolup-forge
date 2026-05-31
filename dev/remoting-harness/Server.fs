@@ -22,40 +22,6 @@ let private handlers = {
     Boom = fun reason -> async { return failwithf "Boom requested: %s" reason }
 }
 
-// ---- Forge-shaped middleware: body normalisation for unit methods ------------
-//
-// Mirrors `RemotingBodyNormalizationMiddleware` at
-// toolup-forge/src/ToolUp.Platform.Server/Server/Middleware.fs:459.
-// Phase 69b will fold this behaviour into the dispatcher itself; until
-// then, the harness reproduces forge's current registration so the
-// `unit -> Async<T>` path under test sees the same byte-shape the SDK
-// composes today.
-
-let private emptyArrayJsonBytes = Encoding.UTF8.GetBytes "[]"
-
-type RemotingBodyNormalizationMiddleware(next: RequestDelegate) =
-    member _.InvokeAsync(ctx: HttpContext) =
-        task {
-            let isRemotingRequest = ctx.Request.Headers.ContainsKey "x-remoting-proxy"
-
-            if isRemotingRequest then
-                ctx.Request.EnableBuffering()
-                use reader = new StreamReader(ctx.Request.Body, Encoding.UTF8, leaveOpen = true)
-                let! body = reader.ReadToEndAsync()
-                ctx.Request.Body.Position <- 0L
-                let trimmed = body.Trim()
-
-                if trimmed = "" || trimmed = "\"\"" || trimmed = "null" then
-                    ctx.Request.Body <- new MemoryStream(emptyArrayJsonBytes)
-                    ctx.Request.ContentLength <- Nullable(int64 emptyArrayJsonBytes.Length)
-
-                    if ctx.Request.Method = "GET" then
-                        ctx.Request.Method <- "POST"
-
-            do! next.Invoke ctx
-        }
-        :> System.Threading.Tasks.Task
-
 // ---- Error-handler ----------------------------------------------------------
 //
 // Phase 69b will introduce categorised envelopes (`RemotingError.User`,
@@ -94,7 +60,9 @@ let buildHost () : IHost =
                 .UseTestServer()
                 .ConfigureServices(fun services -> services.AddGiraffe() |> ignore)
                 .Configure(fun (app: IApplicationBuilder) ->
-                    app.UseMiddleware<RemotingBodyNormalizationMiddleware>() |> ignore
+                    // Phase 69b.A — body normalisation is now built into the
+                    // ToolUp.Remoting.Giraffe adapter; no separate middleware
+                    // registration required.
                     app.UseGiraffe(buildApi (fun _ -> handlers)))
             |> ignore)
         .Build()
