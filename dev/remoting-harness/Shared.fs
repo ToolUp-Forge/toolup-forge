@@ -84,6 +84,19 @@ type IValidatedApi = {
     CreateUser: CreateUserRequest -> Async<string>
 }
 
+/// Phase 69i coverage — long-running operation pattern. `StartReport`
+/// kicks off a job via the IJobDispatcher and returns the typed
+/// handle; `GetReportStatus` polls. Demonstrates the typed-handle
+/// round-trip on the wire (handle serialises as a record carrying
+/// `jobId`).
+type IJobReportApi = {
+    [<AllowAnonymous>]
+    StartReport: int -> Async<JobHandle<string>>
+
+    [<AllowAnonymous>]
+    GetReportStatus: JobHandle<string> -> Async<JobStatus<string>>
+}
+
 /// Phase 69f coverage — call counter that proves idempotent replays
 /// don't re-invoke the handler. Wired as a module-level counter from
 /// Server.fs.

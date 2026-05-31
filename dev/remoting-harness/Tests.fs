@@ -319,6 +319,52 @@ let tests =
                 let _ = client.SendAsync(req).Result
                 Expect.equal emitter.Events.Length 0 "Method without [<Audit>] emits nothing"
 
+        // ---- Phase 69i coverage: long-running operation typed handles ----
+
+        testCase "JobHandle: StartReport returns a typed handle the wire serialises as a single-case DU"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let response = postRemoting client "/api/IJobReportApi/StartReport" "[7]"
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
+                let body = readBody response
+                // F# single-case DU `JobHandle of jobId` round-trips as
+                // `{"JobHandle":"<id>"}` — the Fable.SimpleJson DU encoding.
+                Expect.stringContains body "JobHandle" "Wire shape names the DU case"
+
+        testCase "JobHandle: Round-trip — Start + poll until Succeeded"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let startResp = postRemoting client "/api/IJobReportApi/StartReport" "[42]"
+                Expect.equal startResp.StatusCode HttpStatusCode.OK "Start OK"
+                let startBody = readBody startResp
+
+                // Poll up to 30 times with 50ms between, asserting we eventually see Succeeded.
+                let mutable status = ""
+                let mutable attempts = 0
+                let pollBody = sprintf "[%s]" startBody
+                while not (status.Contains "Succeeded") && attempts < 30 do
+                    System.Threading.Thread.Sleep 50
+                    let response = postRemoting client "/api/IJobReportApi/GetReportStatus" pollBody
+                    Expect.equal response.StatusCode HttpStatusCode.OK "Poll OK"
+                    status <- readBody response
+                    attempts <- attempts + 1
+                Expect.stringContains status "Succeeded" (sprintf "Status reached Succeeded within %d polls — last: %s" attempts status)
+                Expect.stringContains status "report-of-size-42" "Result payload preserved typed"
+
+        testCase "JobHandle: unknown handle returns Failed status (not 500)"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                // Hand-craft a JobHandle DU on the wire: {"JobHandle":"<id>"}.
+                let body = """[{"JobHandle":"does-not-exist-xyz"}]"""
+                let response = postRemoting client "/api/IJobReportApi/GetReportStatus" body
+                Expect.equal response.StatusCode HttpStatusCode.OK "OK — not-found is a Failed status, not a 500"
+                let respBody = readBody response
+                Expect.stringContains respBody "Failed" "Unknown handle returns Failed status"
+                Expect.stringContains respBody "job-not-found" "Diagnostic message present"
+
         // ---- Phase 69e coverage: typed validation on input records ----
 
         testCase "Validation: valid input record passes through to handler"

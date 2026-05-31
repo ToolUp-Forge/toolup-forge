@@ -166,6 +166,30 @@ let private buildAuditedApi (emitter: IAuditEmitter) : HttpHandler =
     |> Remoting.withAudit emitter
     |> Remoting.buildHttpHandler
 
+// ---- Phase 69i — job-handle API --------------------------------------------
+
+let private jobDispatcher : IJobDispatcher = InMemoryJobDispatcher() :> _
+
+let private jobReportHandlers = {
+    StartReport = fun reportSize -> async {
+        // Background work simulates a delayed report build.
+        let work = async {
+            do! Async.Sleep(50)
+            return sprintf "report-of-size-%d" reportSize
+        }
+        return! jobDispatcher.Enqueue work
+    }
+    GetReportStatus = fun handle -> jobDispatcher.GetStatus handle
+}
+
+let private buildJobReportApi : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromValue jobReportHandlers
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.withAuthContext resolveAuthFromHeaders
+    |> Remoting.buildHttpHandler
+
 // ---- Phase 69e — validated input API ---------------------------------------
 
 let private validatedHandlers = {
@@ -283,7 +307,8 @@ let buildHost (telemetry: IRemotingTelemetry option) (auditEmitter: IAuditEmitte
                               buildSecureApi
                               buildRateLimitedApi
                               buildIdempotentApi
-                              buildValidatedApi ]
+                              buildValidatedApi
+                              buildJobReportApi ]
                             @ audited
                         )
                     app.UseGiraffe api)
