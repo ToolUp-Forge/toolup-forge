@@ -27,7 +27,9 @@ open ToolUp.AuthProviders.Oidc.AuthTracer
 //    from query string, validates state against the stashed value,
 //    POSTs to the token endpoint with the verifier, and on success
 //    persists access + refresh tokens, clears sessionStorage, and
-//    replaces the URL (no reload) to strip the callback query string.
+//    navigates the document to the app root (`location.replace` to
+//    `origin + "/"`) so the shell re-boots with the token in place and
+//    off the callback route.
 //
 // 3. `refreshAccessToken` — called proactively (not yet — Phase 3b
 //    ships the plumbing but not the background timer) when the access
@@ -552,19 +554,31 @@ let handleCallback (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = async 
                             | Ok() ->
                                 persistTokens tokens.AccessToken tokens.RefreshToken
                                 clearPendingSignIn ()
-                                // Full-document navigation to the clean URL
-                                // (not history.replaceState) so the shell
-                                // re-boots with the token already in
-                                // localStorage. The Elmish program fires its
-                                // authenticated init fetches (ListModules,
-                                // perms, flags) at mount; a same-document URL
-                                // rewrite leaves those fetches having already
-                                // raced ahead of this persist with no Bearer
-                                // (401, never retried). `.replace` rather than
-                                // `.assign` so the `?code` URL isn't left in
-                                // history, and drops the now-stale code.
-                                let cleanUrl =
-                                    Browser.Dom.window.location.origin + Browser.Dom.window.location.pathname
+                                // Full-document navigation to the app ROOT (not
+                                // history.replaceState, and NOT the current
+                                // pathname) so the shell re-boots with the token
+                                // already in localStorage. The Elmish program
+                                // fires its authenticated init fetches
+                                // (ListModules, perms, flags) at mount; a
+                                // same-document URL rewrite leaves those fetches
+                                // having already raced ahead of this persist
+                                // with no Bearer (401, never retried).
+                                //
+                                // The target MUST be a non-callback path. The
+                                // current pathname is the redirect URI
+                                // (`/auth/callback`); reloading onto it
+                                // re-satisfies `isCallbackUrl` on reboot, so
+                                // `OidcShell` re-enters `handleCallback` — now
+                                // with the `?code` already consumed/dropped —
+                                // and fails with `MissingCode` ("No
+                                // authorization code received from the identity
+                                // provider"). Landing on `/` makes the reboot
+                                // take the `classifyStoredToken` branch instead,
+                                // which sees the just-persisted token as
+                                // `FreshJwt` and enters SignedIn. `.replace`
+                                // (not `.assign`) keeps the `?code` URL out of
+                                // history.
+                                let cleanUrl = Browser.Dom.window.location.origin + "/"
 
                                 Browser.Dom.window.location.replace cleanUrl
                                 return Ok()
