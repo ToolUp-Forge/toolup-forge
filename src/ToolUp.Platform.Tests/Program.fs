@@ -60,6 +60,7 @@ let allTests =
         AIProviderHealthTests.openAiTests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
+        OidcClassifyTokenTests.tests
         OidcSignInContractTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests

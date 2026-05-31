@@ -713,25 +713,71 @@ type StoredTokenState =
     | FreshJwt
     | StaleJwt
 
-let private tokenIssuer (token: string) : string option =
-    try
+/// Subset of JWT payload claims the freshness check needs. Decoders
+/// return this in lieu of the full parsed payload so the test-doubles
+/// entry below can drive the decision logic from .NET-side Expecto
+/// without dragging in a browser base64 / JSON shim.
+type JwtClaimsExtract = {
+    Iss: string option
+    Exp: float option
+}
+
+/// Test-doubles entry point for `classifyStoredToken`. Takes the stored
+/// token + a payload-decoding function explicitly so .NET-side tests
+/// can drive the decision logic without browser APIs (`atob`,
+/// `JS.JSON.parse`, `localStorage`-backed `getAccessToken`). The
+/// production browser wrapper below supplies a decoder built from
+/// `atob` + `JS.JSON.parse`; tests supply a stub.
+///
+/// The decoder returns `Some` when the token's payload was successfully
+/// base64-decoded *and* JSON-parsed (regardless of whether the claims
+/// of interest are present — those are nested option fields on the
+/// extract record). It returns `None` when the payload could not be
+/// decoded at all. The canonical case is Microsoft Graph's encrypted
+/// "nord" access tokens — three dot-segments (so a naive segment-count
+/// check sees a JWT shape) but the middle segment is encrypted, so
+/// base64-then-JSON-parse fails. A 3-segment-but-non-decodable token
+/// is classified as `OpaqueToken` rather than `StaleJwt`: the
+/// server-side validator decides validity, and the client does not
+/// trigger a doomed refresh against a token whose claims it never read.
+///
+/// Issuer comparison trims trailing slashes on both sides so a config
+/// authored without `/` doesn't mis-match a token whose `iss` includes
+/// it (and vice versa) — a known Entra / Auth0 quirk.
+let classifyStoredTokenWith
+    (cfg: OidcUIConfig)
+    (nowEpochSeconds: float)
+    (storedToken: string option)
+    (tryDecodePayload: string -> JwtClaimsExtract option)
+    : StoredTokenState =
+    match storedToken with
+    | None -> NoToken
+    | Some token ->
         let parts = token.Split('.')
 
-        if parts.Length < 2 then
-            None
+        if parts.Length < 3 then
+            OpaqueToken
         else
-            let payload = parts[1].Replace('-', '+').Replace('_', '/')
-            let pad = (4 - payload.Length % 4) % 4
-            let json = atob (payload + System.String('=', pad))
-            let parsed = JS.JSON.parse json
-            let issValue = parsed?iss
+            match tryDecodePayload token with
+            | None ->
+                // 3-segment-shaped but payload not decodable —
+                // encrypted-body JWE / Microsoft Graph "nord" tokens /
+                // arbitrary opaque tokens that happen to contain dots.
+                // Defer validity to the server rather than triggering a
+                // doomed refresh.
+                OpaqueToken
+            | Some claims ->
+                let issuerOk =
+                    match claims.Iss with
+                    | None -> false
+                    | Some iss -> iss.TrimEnd('/') = cfg.Issuer.TrimEnd('/')
 
-            if isNullOrUndefined issValue then
-                None
-            else
-                Some(unbox<string> issValue)
-    with _ ->
-        None
+                let expOk =
+                    match claims.Exp with
+                    | None -> false
+                    | Some e -> e > nowEpochSeconds
+
+                if issuerOk && expOk then FreshJwt else StaleJwt
 
 /// Classify the access token currently in `OidcTokenStore` against the
 /// active `OidcUIConfig`. Returns `NoToken` when nothing is stored,
@@ -740,30 +786,34 @@ let private tokenIssuer (token: string) : string option =
 /// is in the future, `StaleJwt` otherwise. Shells use this on mount
 /// to decide between SignedIn (Fresh / Opaque), refresh attempt
 /// (Stale), or SignedOut (None).
-///
-/// Issuer comparison trims trailing slashes on both sides so a config
-/// authored without `/` doesn't mis-match a token whose `iss` includes
-/// it (and vice versa) — a known Entra / Auth0 quirk.
 let classifyStoredToken (cfg: OidcUIConfig) : StoredTokenState =
-    match getAccessToken () with
-    | None -> NoToken
-    | Some token ->
-        let parts = token.Split('.')
+    let decodePayload (token: string) : JwtClaimsExtract option =
+        try
+            let parts = token.Split('.')
 
-        if parts.Length < 3 then
-            OpaqueToken
-        else
-            let issuerOk =
-                match tokenIssuer token with
-                | None -> false
-                | Some iss -> iss.TrimEnd('/') = cfg.Issuer.TrimEnd('/')
+            if parts.Length < 2 then
+                None
+            else
+                let payload = parts[1].Replace('-', '+').Replace('_', '/')
+                let pad = (4 - payload.Length % 4) % 4
+                let json = atob (payload + System.String('=', pad))
+                let parsed = JS.JSON.parse json
 
-            let expOk =
-                match tokenExpiryEpochSeconds token with
-                | None -> false
-                | Some expEpoch -> expEpoch > nowMs () / 1000.0
+                let iss =
+                    let v = parsed?iss
 
-            if issuerOk && expOk then FreshJwt else StaleJwt
+                    if isNullOrUndefined v then None else Some(unbox<string> v)
+
+                let exp =
+                    let v = parsed?exp
+
+                    if isNullOrUndefined v then None else Some(unbox<float> v)
+
+                Some { Iss = iss; Exp = exp }
+        with _ ->
+            None
+
+    classifyStoredTokenWith cfg (nowMs () / 1000.0) (getAccessToken ()) decodePayload
 
 // OIDC pre-expiry refresh timer — a single browser timer handle.
 // Documented client-side mutable: a background-timer handle is not
