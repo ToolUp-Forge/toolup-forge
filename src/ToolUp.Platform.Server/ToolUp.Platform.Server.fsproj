@@ -135,6 +135,7 @@
         <Compile Include="Server\IConversationStore.fs" />
         <Compile Include="Server\ConversationStore.fs" />
         <Compile Include="Server\ConversationEraseHandler.fs" />
+        <Compile Include="Server\ConversationExporter.fs" />
         <Compile Include="Server\IPlatformAdminStore.fs" />
         <Compile Include="Server\Infra\PlatformAdminStore.fs" />
         <Compile Include="Server\IPlatformRuntimeConfigStore.fs" />

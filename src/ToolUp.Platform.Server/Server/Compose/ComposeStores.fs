@@ -156,8 +156,9 @@ let registerOptionalStores
     // the others. When DSR is also enabled (`DataSubjectRequests =
     // Enabled _`), the conversation store contributes an
     // `IErasureHandler` via `ConversationEraseHandler.erasureHandler`
-    // — the DSR pipeline picks it up automatically alongside the other
-    // store handlers.
+    // AND an `IDataExporter` via `ConversationExporter.exporter` —
+    // the DSR pipeline picks both up automatically alongside the
+    // other store handlers / exporters.
     match conversationStore with
     | Some store ->
         services.AddSingleton<IConversationStore>(store) |> ignore
@@ -174,6 +175,9 @@ let registerOptionalStores
         match config.DataSubjectRequests with
         | DataSubjectRequestMode.Enabled _ ->
             services.AddSingleton<IErasureHandler>(ConversationEraseHandler.erasureHandler store)
+            |> ignore
+
+            services.AddSingleton<IDataExporter>(ConversationExporter.exporter (store :> IConversationReader))
             |> ignore
         | DataSubjectRequestMode.Disabled -> ()
     | None -> ()
