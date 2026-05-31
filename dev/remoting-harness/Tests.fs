@@ -269,6 +269,80 @@ let tests =
                 let body = readBody response
                 Expect.equal body "\"public-info\"" "Handler invoked"
 
+        // ---- Phase 69g coverage: rate-limit attribution ----
+
+        testCase "RateLimited: Unlimited method passes any number of calls"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                for _ in 1..5 do
+                    let req = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Unlimited")
+                    req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                    req.Headers.Add("x-remoting-proxy", "true")
+                    req.Headers.Add("X-Subject", "user-rate-unlimited")
+                    let response = client.SendAsync(req).Result
+                    Expect.equal response.StatusCode HttpStatusCode.OK "Unlimited never throttles"
+
+        testCase "RateLimited: Fast method denies the 4th call within window with 429 + Retry-After"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let postFast () =
+                    let req = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Fast")
+                    req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                    req.Headers.Add("x-remoting-proxy", "true")
+                    req.Headers.Add("X-Subject", "user-rate-fast-test-" + System.Guid.NewGuid().ToString("N"))
+                    client.SendAsync(req).Result
+                // First 3 calls — same subject — should all pass.
+                let req1 = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Fast")
+                req1.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req1.Headers.Add("x-remoting-proxy", "true")
+                req1.Headers.Add("X-Subject", "ratefast-fixed")
+                let r1 = client.SendAsync(req1).Result
+                let req2 = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Fast")
+                req2.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req2.Headers.Add("x-remoting-proxy", "true")
+                req2.Headers.Add("X-Subject", "ratefast-fixed")
+                let r2 = client.SendAsync(req2).Result
+                let req3 = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Fast")
+                req3.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req3.Headers.Add("x-remoting-proxy", "true")
+                req3.Headers.Add("X-Subject", "ratefast-fixed")
+                let r3 = client.SendAsync(req3).Result
+                Expect.equal r1.StatusCode HttpStatusCode.OK "1st call within budget"
+                Expect.equal r2.StatusCode HttpStatusCode.OK "2nd call within budget"
+                Expect.equal r3.StatusCode HttpStatusCode.OK "3rd call within budget"
+                // 4th call exceeds the 3-per-minute budget for this subject.
+                let req4 = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Fast")
+                req4.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req4.Headers.Add("x-remoting-proxy", "true")
+                req4.Headers.Add("X-Subject", "ratefast-fixed")
+                let r4 = client.SendAsync(req4).Result
+                Expect.equal r4.StatusCode HttpStatusCode.TooManyRequests "4th call denied — budget exhausted"
+                Expect.isTrue (r4.Headers.Contains "Retry-After") "Retry-After header present on deny"
+                let body = r4.Content.ReadAsStringAsync().Result
+                Expect.stringContains body "\"category\":\"ratelimit\"" "Categorised ratelimit envelope"
+
+        testCase "RateLimited: budgets are per-subject (different X-Subject doesn't share bucket)"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                // Subject A exhausts its Fast budget.
+                for _ in 1..3 do
+                    let req = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Fast")
+                    req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                    req.Headers.Add("x-remoting-proxy", "true")
+                    req.Headers.Add("X-Subject", "alice-iso")
+                    let _ = client.SendAsync(req).Result
+                    ()
+                // Subject B's first call should still pass — different bucket.
+                let req = new HttpRequestMessage(HttpMethod.Post, "/api/IRateLimitedApi/Fast")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("X-Subject", "bob-iso")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "Bob's bucket is independent of Alice's"
+
         // ---- Phase 69b.E coverage: error envelope categorisation ----
 
         testCase "BoomCategorised: handler maps UserError → ErrorCategory.User wire envelope"

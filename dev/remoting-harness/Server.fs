@@ -93,26 +93,37 @@ let private resolveSubject (ctx: HttpContext) : Async<string> =
 
 // ---- Phase 69d — IAuthContext implementation + secure API composition ------
 
-type private HarnessAuthContext(roles: Set<string>, anonymous: bool) =
+type private HarnessAuthContext(subjectId: string, roles: Set<string>, anonymous: bool) =
     interface IAuthContext with
         member _.HasRole(role: string) = roles.Contains role
         member _.HasClaim(_, _) = false
         member _.HasTenant() = false
         member _.IsAnonymous() = anonymous
+        member _.SubjectId = subjectId
 
 let private resolveAuthFromHeaders (ctx: HttpContext) : Async<IAuthContext> =
     async {
         let mutable values : Microsoft.Extensions.Primitives.StringValues =
             Microsoft.Extensions.Primitives.StringValues.Empty
+        // Subject id derives from X-Subject if present; else uses the
+        // X-Roles bag for stable identification of test callers; else
+        // "anonymous". Real consumers derive from a verified token.
+        let subjectId =
+            let mutable sub : Microsoft.Extensions.Primitives.StringValues =
+                Microsoft.Extensions.Primitives.StringValues.Empty
+            if ctx.Request.Headers.TryGetValue("X-Subject", &sub) && not (System.String.IsNullOrWhiteSpace(sub.ToString())) then
+                sub.ToString()
+            else
+                "anonymous"
         if ctx.Request.Headers.TryGetValue("X-Roles", &values) then
             let raw = values.ToString()
             let roles =
                 if System.String.IsNullOrWhiteSpace raw then Set.empty
                 else raw.Split(',') |> Array.map _.Trim() |> Set.ofArray
             let anonymous = roles.IsEmpty
-            return HarnessAuthContext(roles, anonymous) :> IAuthContext
+            return HarnessAuthContext(subjectId, roles, anonymous) :> IAuthContext
         else
-            return HarnessAuthContext(Set.empty, true) :> IAuthContext
+            return HarnessAuthContext(subjectId, Set.empty, true) :> IAuthContext
     }
 
 let private secureHandlers = {
@@ -127,6 +138,28 @@ let private buildSecureApi : HttpHandler =
     |> Remoting.fromValue secureHandlers
     |> Remoting.withErrorHandler errorHandler
     |> Remoting.withAuthContext resolveAuthFromHeaders
+    |> Remoting.buildHttpHandler
+
+// ---- Phase 69g — rate-limited API ------------------------------------------
+
+let private rateLimitedHandlers = {
+    Fast = fun () -> async { return "fast-pass" }
+    Burst = fun () -> async { return "burst-pass" }
+    Unlimited = fun () -> async { return "always-on" }
+}
+
+/// Module-level singleton so all per-test hosts share the rate-limit
+/// state. The InMemoryRateLimitStore is process-local; sharing it lets
+/// the sequential test calls accumulate against the same budget bucket.
+let private rateLimitStore : IRateLimitStore = InMemoryRateLimitStore() :> _
+
+let private buildRateLimitedApi : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromValue rateLimitedHandlers
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.withAuthContext resolveAuthFromHeaders
+    |> Remoting.withRateLimitStore rateLimitStore
     |> Remoting.buildHttpHandler
 
 let private buildContextApi : HttpHandler =
@@ -168,6 +201,7 @@ let buildHost (telemetry: IRemotingTelemetry option) : IHost =
                             buildHarnessApi telemetry (fun _ -> handlers)
                             buildContextApi
                             buildSecureApi
+                            buildRateLimitedApi
                         ]
                     app.UseGiraffe api)
             |> ignore)

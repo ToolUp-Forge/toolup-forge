@@ -42,6 +42,26 @@ type ISecureApi = {
     PublicOnly: unit -> Async<string>
 }
 
+/// Phase 69g coverage — three rate-limit shapes:
+/// - `Fast` carries a tight 3-per-2-seconds budget (single attribute).
+/// - `Burst` carries TWO budgets — 2/sec AND 4/min — exercising AND
+///   semantics across multiple attributes on one method.
+/// - `Unlimited` carries no budget at all — proves the per-call cost
+///   stays zero when the dispatcher's rate-limit pre-flight skips.
+type IRateLimitedApi = {
+    [<AllowAnonymous>]
+    [<RateLimit(3, RateLimitWindow.perMinute)>]
+    Fast: unit -> Async<string>
+
+    [<AllowAnonymous>]
+    [<RateLimit(2, RateLimitWindow.perSecond)>]
+    [<RateLimit(4, RateLimitWindow.perMinute)>]
+    Burst: unit -> Async<string>
+
+    [<AllowAnonymous>]
+    Unlimited: unit -> Async<string>
+}
+
 /// Route shape. Mirrors the forge default
 /// (`toolup-forge/src/ToolUp.Platform.Server/Server/Api.fs` line 33)
 /// so the harness exercises the same path layout downstream consumers see.
