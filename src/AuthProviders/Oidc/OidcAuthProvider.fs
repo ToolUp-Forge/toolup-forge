@@ -370,7 +370,15 @@ let private buildProvider
                 // Missing-token is the expected case for unauthenticated
                 // endpoints and would be noisy at Warn.
                 match e with
-                | NoToken -> ()
+                | NoToken ->
+                    // No credential on the request. This is the expected,
+                    // high-volume case for genuinely unauthenticated
+                    // endpoints, so it stays off the Warn channel. Logged at
+                    // Debug so a 401 on an endpoint that *should* have carried
+                    // a Bearer can be traced to "no token arrived" by raising
+                    // the log level — rather than requiring client-bundle
+                    // archaeology to prove no Authorization header was sent.
+                    log.Debug "OIDC auth (lenient): no token in request → anonymous"
                 | _ -> log.Warn $"OIDC auth failed (lenient): {JwtValidationError.toMessage e}"
 
                 return AuthenticatedUser.anonymous

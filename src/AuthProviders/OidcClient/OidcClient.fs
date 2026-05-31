@@ -233,12 +233,6 @@ let private exchangeCodeForTokens
             return Error(NetworkError ex.Message)
     }
 
-/// Rewrite the URL to remove the callback query string without
-/// triggering a reload. Uses `history.replaceState` rather than
-/// `location.replace` to preserve the React tree.
-[<Emit("window.history.replaceState({}, '', $0)")>]
-let private replaceUrl (url: string) : unit = jsNative
-
 // `atob` (base64 decoder) is browser-native; also reused by the
 // scheduleRefresh block below to read the access-token `exp` claim.
 // Declared here so the id_token nonce check at the top of the file
@@ -538,13 +532,21 @@ let handleCallback (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = async 
                             | Ok() ->
                                 persistTokens tokens.AccessToken tokens.RefreshToken
                                 clearPendingSignIn ()
-                                // Strip the callback query string so a
-                                // reload doesn't re-enter the callback
-                                // flow with a stale code.
+                                // Full-document navigation to the clean URL
+                                // (not history.replaceState) so the shell
+                                // re-boots with the token already in
+                                // localStorage. The Elmish program fires its
+                                // authenticated init fetches (ListModules,
+                                // perms, flags) at mount; a same-document URL
+                                // rewrite leaves those fetches having already
+                                // raced ahead of this persist with no Bearer
+                                // (401, never retried). `.replace` rather than
+                                // `.assign` so the `?code` URL isn't left in
+                                // history, and drops the now-stale code.
                                 let cleanUrl =
                                     Browser.Dom.window.location.origin + Browser.Dom.window.location.pathname
 
-                                replaceUrl cleanUrl
+                                Browser.Dom.window.location.replace cleanUrl
                                 return Ok()
 }
 
