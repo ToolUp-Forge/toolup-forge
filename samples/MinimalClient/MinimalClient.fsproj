@@ -41,8 +41,8 @@
     <ProjectReference Include="..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
-    <PackageReference Include="Fable.Elmish" />
-    <PackageReference Include="Fable.Elmish.React" />
+    <PackageReference Include="ToolUp.Elmish" />
+    <PackageReference Include="ToolUp.Elmish.React" />
     <PackageReference Include="Feliz" />
   </ItemGroup>
 </Project>

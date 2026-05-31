@@ -121,9 +121,9 @@
          declared in Directory.Packages.props. -->
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
-    <PackageReference Include="Fable.Elmish" />
-    <PackageReference Include="Fable.Elmish.HMR" />
-    <PackageReference Include="Fable.Elmish.React" />
+    <PackageReference Include="ToolUp.Elmish" />
+    <PackageReference Include="ToolUp.Elmish.HMR" />
+    <PackageReference Include="ToolUp.Elmish.React" />
     <PackageReference Include="ToolUp.Remoting.Client" />
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Fable.SimpleHttp" />

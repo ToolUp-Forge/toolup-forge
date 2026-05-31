@@ -45,9 +45,9 @@
     <PackageVersion Include="Fable.Remoting.Json" Version="3.0" />
     <!-- Client stack -->
     <PackageVersion Include="Fable.Core" Version="5.0" />
-    <PackageVersion Include="Fable.Elmish" Version="5.0.2" />
-    <PackageVersion Include="Fable.Elmish.HMR" Version="9.0" />
-    <PackageVersion Include="Fable.Elmish.React" Version="5.6" />
+    <PackageVersion Include="ToolUp.Elmish" Version="0.4.0" />
+    <PackageVersion Include="ToolUp.Elmish.HMR" Version="0.4.0" />
+    <PackageVersion Include="ToolUp.Elmish.React" Version="0.4.0" />
     <PackageVersion Include="Fable.Remoting.Client" Version="8.0" />
     <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
     <PackageVersion Include="Feliz" Version="3.3.3" />

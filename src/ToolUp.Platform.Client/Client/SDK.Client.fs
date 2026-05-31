@@ -373,7 +373,14 @@ module Client =
     /// `UserSession.currentSubjectKind` and `NotificationClient.handlers`
     /// — documented in the platform README's "No new side effects"
     /// exceptions list.
-    let mutable private shellDispatch: (Msg -> unit) option = None
+    ///
+    /// Typed via `IDispatcher<Msg>` (ToolUp.Elmish primitive — replaces
+    /// the legacy `(Msg -> unit) option` shape). Captured at program-start
+    /// via `Program.withDispatcherHandle`; `IsActive` flips to `false`
+    /// when `withTermination` triggers, so background callbacks check
+    /// before dispatching and no-op cleanly on hot-reload / teardown
+    /// rather than spraying messages at a dead loop.
+    let mutable private shellDispatcher: IDispatcher<Msg> option = None
 
     /// Optional caller-supplied UI to inject into the shell. Companion
     /// packages (notably ToolUp.AI) fill these slots from their own
@@ -459,7 +466,11 @@ module Client =
     /// team surface is declared.
     let private buildOnTeamSwitched (config: ClientConfig) : (string -> unit) option =
         if ClientConfig.hasTeamScope config then
-            Some(fun teamId -> shellDispatch |> Option.iter (fun d -> d (TeamSwitched(Some teamId))))
+            Some(fun teamId ->
+                shellDispatcher
+                |> Option.iter (fun d ->
+                    if d.IsActive then
+                        d.Dispatch(TeamSwitched(Some teamId))))
         else
             None
 
@@ -597,12 +608,13 @@ module Client =
             else
                 []
 
-        // Capture the Elmish dispatch into the module-level mutable so
-        // `OnTeamSwitched` callbacks installed on `ClientModuleContext`
-        // can reach the shell from inside any module's update. Same
-        // capture-via-effect pattern used by the notification
-        // subscription below.
-        let captureDispatch = Cmd.ofEffect (fun dispatch -> shellDispatch <- Some dispatch)
+        // Shell dispatcher capture lives at the `Program.run` site via
+        // `Program.withDispatcherHandle` (ToolUp.Elmish primitive) — see
+        // the run call below. The previous `Cmd.ofEffect`-capture pattern
+        // (running once at init, writing the raw `Dispatch<Msg>` into a
+        // mutable) is no longer needed: `IDispatcher<Msg>` is captured
+        // before `init`'s commands fire, so background callbacks reading
+        // it from the very first dispatch will see a live handle.
 
         // Subscribe to the shared per-tab notification stream and route
         // `ModuleAction` envelopes into the shell as `ModuleActionReceived`
@@ -650,7 +662,6 @@ module Client =
                 loadConfigs
                 loadFlags
                 Cmd.OfAsync.perform (fun () -> loadPlatformRole) () PlatformRoleLoaded
-                captureDispatch
                 subscribeNotifications
                 subscribeNavigationRequests
             ]
@@ -2010,5 +2021,6 @@ module Client =
             ()
         else
             program config modules
+            |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
             |> Program.withReactSynchronous "elmish-app"
             |> Program.run
