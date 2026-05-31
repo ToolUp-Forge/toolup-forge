@@ -13,8 +13,8 @@ namespace ToolUp.Platform
 //
 // The proxy-building helpers (`Api.makeProxy` client, `Api.make` server)
 // live in Client/Api.fs and Server/Api.fs respectively so that the core
-// ToolUp.Platform.dll does not take a Fable.Remoting.Client or
-// Fable.Remoting.Giraffe dependency. Each is injected into the consuming
+// ToolUp.Platform.dll does not take a ToolUp.Remoting.Client or
+// ToolUp.Remoting.Giraffe dependency. Each is injected into the consuming
 // project via ToolUp.Platform.Client.props / .Server.props.
 
 /// Used commonly to model asynchronous calls to the server (or any other external service) within an Elmish message instead of two separate messages e.g. `LoadData` and `DataLoaded`. `Start` represents the initial request (command); `Finished` contains the resultant data on the callback.

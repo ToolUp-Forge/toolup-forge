@@ -24,7 +24,7 @@ open ToolUp.Platform.Narrative
 // impossible (GP 4 / GP 12 rule 5).
 //
 // Each blob is a `NarrativeEntry` JSON-serialised via
-// `Fable.Remoting.Json.FableJsonConverter`. `NarrativeDocument`
+// `ToolUp.Remoting.Json.FableJsonConverter`. `NarrativeDocument`
 // carries DUs whose round-trip identity matters; the FableJsonConverter
 // is the canonical SDK choice for DU-bearing persisted blobs and
 // matches what other stores in `_platform` use (see CLAUDE.md
@@ -45,7 +45,7 @@ let private blobName (scopeId: string) (entry: NarrativeEntry) =
 
 let private jsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
     s
 
 let private serialize (entry: NarrativeEntry) : byte[] =

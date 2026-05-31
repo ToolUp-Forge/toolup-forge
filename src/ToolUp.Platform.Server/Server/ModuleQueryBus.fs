@@ -1,7 +1,7 @@
 module ToolUp.Platform.ModuleQueryBus
 
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.Tracing
 

@@ -6,7 +6,7 @@ module ToolUp.Platform.BlobProviderProfile
 open System
 open System.Text
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers

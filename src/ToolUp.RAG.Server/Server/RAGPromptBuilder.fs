@@ -20,7 +20,7 @@ let private MissThreshold = 2
 
 let private jsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
     s
 
 let private tryDeserialise<'T> (json: string) =

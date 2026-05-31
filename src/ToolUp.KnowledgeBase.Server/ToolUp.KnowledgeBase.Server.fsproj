@@ -46,7 +46,7 @@
         <Compile Include="Server\AICompose.fs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Giraffe / Fable.Remoting.Giraffe / Fable.Remoting.Json /
+        <!-- Giraffe / ToolUp.Remoting.Giraffe / ToolUp.Remoting.Json /
              Newtonsoft.Json flow transitively from ToolUp.Platform.Server
              + ToolUp.AI.Server. FSharp.Core is implicit via the .NET SDK.
              PdfPig + DocumentFormat.OpenXml are unique to KB. -->

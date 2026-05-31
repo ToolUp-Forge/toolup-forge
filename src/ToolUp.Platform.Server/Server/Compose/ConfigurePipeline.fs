@@ -263,7 +263,12 @@ let configurePipeline
     if RateLimitConfig.isEnabled config.RateLimit then
         app.UseRateLimiter() |> ignore
 
-    app.UseMiddleware<RemotingBodyNormalizationMiddleware>() |> ignore
+    // Phase 69b.A — body normalisation for `unit -> Async<T>` methods is
+    // now built into ToolUp.Remoting.Giraffe's dispatcher (default
+    // `Enabled`; opt-out via `Remoting.withoutBodyNormalisation`). The
+    // separate middleware retired in Phase 69a — same behaviour, no
+    // double-normalisation (the dispatcher path is idempotent for
+    // requests already shaped as `[]`).
 
     // Health endpoints. Mapped before `UseGiraffe` so the ASP.NET Core
     // endpoint routing matches and short-circuits before the Giraffe

@@ -10,7 +10,7 @@ open System.Net
 open System.Net.Http
 open System.Text
 open System.Threading.Tasks
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
 open ToolUp.Platform.Metrics

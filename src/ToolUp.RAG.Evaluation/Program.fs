@@ -78,7 +78,7 @@ let private writeReport (path: string) (report: EvalReport) =
     let settings =
         let s = JsonSerializerSettings()
         s.Formatting <- Formatting.Indented
-        s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
         s
 
     let json = JsonConvert.SerializeObject(report, settings)
@@ -146,7 +146,7 @@ let main argv =
 
                     let settings =
                         let s = JsonSerializerSettings()
-                        s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+                        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
                         s
 
                     let baseline = JsonConvert.DeserializeObject<EvalReport>(json, settings)

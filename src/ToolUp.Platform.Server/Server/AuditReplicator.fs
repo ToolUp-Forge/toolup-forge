@@ -5,7 +5,7 @@ open System.Threading
 open System.Threading.Channels
 open Microsoft.Extensions.Hosting
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 

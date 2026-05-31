@@ -8,7 +8,7 @@ namespace ToolUp.Platform
 // Client-callable API for scheduling, listing, cancelling, and
 // triggering jobs through the SDK's background-job substrate.
 // Lives in the shared layer so a Fable client (admin UI or in-app
-// scheduler control) can call it via Fable.Remoting.
+// scheduler control) can call it via ToolUp.Remoting.
 //
 // **Scope discipline.** Every method that takes a `scopeId`
 // validates it against the caller's resolved `AccessContext` —

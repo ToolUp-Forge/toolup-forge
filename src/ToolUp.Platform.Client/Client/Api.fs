@@ -13,9 +13,9 @@ namespace ToolUp.Platform
 //
 // This file is injected via ToolUp.Platform.Client.props into every
 // Fable-compiled client project; ToolUp.Platform.dll itself
-// intentionally does not depend on Fable.Remoting.Client.
+// intentionally does not depend on ToolUp.Remoting.Client.
 
-open Fable.Remoting.Client
+open ToolUp.Remoting.Client
 
 /// Client-side Fable Remoting helper. Mirrors SAFE.Api.makeProxy so
 /// client call sites keep using `Api.makeProxy<T> (customOptions = ...)`.

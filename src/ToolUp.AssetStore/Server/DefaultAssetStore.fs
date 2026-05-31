@@ -6,7 +6,7 @@ namespace ToolUp.AssetStore
 open System
 open System.Security.Cryptography
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 

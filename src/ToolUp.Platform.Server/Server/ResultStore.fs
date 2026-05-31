@@ -5,7 +5,7 @@ open System.Collections.Concurrent
 open System.Text
 open System.Text.Json
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open ToolUp.Platform
 
 // ─── ResultStore implementations ────────────────────────────────

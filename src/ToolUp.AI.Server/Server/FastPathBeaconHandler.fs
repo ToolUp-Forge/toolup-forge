@@ -116,7 +116,7 @@ let private MaxBeaconTextLen = 16384
 
 let private jsonSettings =
     let s = JsonSerializerSettings()
-    s.Converters.Add(Fable.Remoting.Json.FableJsonConverter())
+    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
     s
 
 let private toJson obj =

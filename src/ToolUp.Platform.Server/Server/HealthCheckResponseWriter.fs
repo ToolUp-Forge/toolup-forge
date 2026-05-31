@@ -3,7 +3,7 @@ module ToolUp.Platform.HealthCheckResponseWriter
 open System
 open System.Threading.Tasks
 open Newtonsoft.Json
-open Fable.Remoting.Json
+open ToolUp.Remoting.Json
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Diagnostics.HealthChecks
 
