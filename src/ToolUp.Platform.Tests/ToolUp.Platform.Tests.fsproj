@@ -152,6 +152,7 @@
         <Compile Include="InProcess\OidcDiagnoseTests.fs" />
         <Compile Include="InProcess\OidcTracerTests.fs" />
         <Compile Include="InProcess\OidcStateMachineTests.fs" />
+        <Compile Include="InProcess\OidcPresetsTests.fs" />
         <Compile Include="InProcess\OidcSignInContractTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
