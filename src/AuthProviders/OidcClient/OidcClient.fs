@@ -42,6 +42,17 @@ let private fetchPost (url: string) (opts: obj) : JS.Promise<obj> = jsNative
 [<Emit("new URLSearchParams($0).toString()")>]
 let private urlEncode (form: obj) : string = jsNative
 
+// Read a single query-string parameter. `URLSearchParams.get` returns
+// `string | null`; we hand it back as `obj` so the call site can
+// null-check before unboxing. MUST be an `[<Emit>]` (not
+// `createNew (jsNative?URLSearchParams) …`) — `jsNative` is Fable's
+// "throws if evaluated" placeholder, so dereferencing it emits a stub
+// that throws `A function supposed to be replaced by native code has
+// been called` the instant the OAuth callback is parsed, aborting
+// sign-in before the code/state are read.
+[<Emit("new URLSearchParams($0).get($1)")>]
+let private searchParamValue (search: string) (name: string) : obj = jsNative
+
 [<Emit("window.location.origin")>]
 let private pageOrigin () : string = jsNative
 
@@ -147,8 +158,7 @@ let private readCallbackParams
     let search = Browser.Dom.window.location.search
 
     let getParam (name: string) : string option =
-        let p = createNew (jsNative?URLSearchParams) [| box search |]
-        let v = p?get (name)
+        let v = searchParamValue search name
 
         if isNullOrUndefined v then None else Some(unbox<string> v)
 
