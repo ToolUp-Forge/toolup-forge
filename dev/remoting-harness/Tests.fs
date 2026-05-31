@@ -207,6 +207,29 @@ let tests =
                 // The echoed header should match the body value (sans JSON quotes).
                 Expect.equal ("\"" + echoed + "\"") body "Generated correlation id is consistent between body and response header"
 
+        // ---- Phase 69b.E coverage: error envelope categorisation ----
+
+        testCase "BoomCategorised: handler maps UserError → ErrorCategory.User wire envelope"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let response = postRemoting client "/api/IHarnessApi/BoomCategorised" "[\"bad-input\"]"
+                Expect.equal response.StatusCode HttpStatusCode.InternalServerError "500 expected"
+                let body = readBody response
+                Expect.stringContains body "\"category\":\"user\"" "Categorised envelope carries category field"
+                Expect.stringContains body "User-fault" "Original error payload preserved in `error` body"
+                Expect.stringContains body "bad-input" "Original reason preserved through envelope"
+
+        testCase "Boom: uncategorised exception path stays wire-compatible (no category field)"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let response = postRemoting client "/api/IHarnessApi/Boom" "[\"old-style\"]"
+                Expect.equal response.StatusCode HttpStatusCode.InternalServerError "500 expected"
+                let body = readBody response
+                Expect.isFalse (body.Contains "\"category\"") "Legacy Propagate path emits no category field — backwards-compatible wire shape"
+                Expect.stringContains body "old-style" "Original reason preserved"
+
         testCase "Telemetry: MethodTelemetry includes the correlation id from the request"
         <| fun _ ->
             withTelemetryClient

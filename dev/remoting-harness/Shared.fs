@@ -10,6 +10,7 @@ type IHarnessApi = {
     Echo: string -> Async<string>
     Heartbeat: unit -> Async<DateTimeOffset>
     Boom: string -> Async<int>
+    BoomCategorised: string -> Async<int>
 }
 
 /// Phase 69b.B coverage — exercises `Remoting.fromContextAsync`. The

@@ -16,10 +16,15 @@ open ToolUp.Remoting.Harness.Shared
 
 // ---- Handler implementations -------------------------------------------------
 
+/// Phase 69b.E — distinguished exception types the error handler maps to
+/// `ErrorCategory.User` so the wire envelope carries a category field.
+exception UserError of string
+
 let private handlers = {
     Echo = fun input -> async { return input }
     Heartbeat = fun () -> async { return DateTimeOffset.UtcNow }
     Boom = fun reason -> async { return failwithf "Boom requested: %s" reason }
+    BoomCategorised = fun reason -> async { return raise (UserError(sprintf "User-fault: %s" reason)) }
 }
 
 // ---- Error-handler ----------------------------------------------------------
@@ -30,7 +35,12 @@ let private handlers = {
 // Phase 69b test additions will swap to the categorised form.
 
 let private errorHandler (ex: exn) (routeInfo: RouteInfo<HttpContext>) : ErrorResult =
-    Propagate(box (sprintf "%s: %s" routeInfo.methodName ex.Message))
+    // Phase 69b.E — map domain-distinguished exceptions to categorised
+    // envelopes; everything else falls through to the legacy uncategorised
+    // path (which forge consumers can adopt incrementally).
+    match ex with
+    | UserError msg -> PropagateCategorised(ErrorCategory.User, box (sprintf "%s: %s" routeInfo.methodName msg))
+    | _ -> Propagate(box (sprintf "%s: %s" routeInfo.methodName ex.Message))
 
 // ---- Phase 69b.C — recording telemetry sink for the harness ----------------
 //
