@@ -81,3 +81,27 @@ type AuthState =
     /// An error occurred during callback handling or refresh. Renders
     /// an error screen with a retry button that resets to `SignedOut`.
     | Failed of AuthError
+
+// ─── Developer-facing diagnostic ─────────────────────────────────────
+//
+// `describeError` produces the user-facing message — deliberately
+// opaque for failures whose sub-cause must not be revealed to a
+// tampering attacker (signature, nonce, issuer, audience). `diagnose`
+// is its developer-facing counterpart: stable `Kind` tag for log
+// filtering / metric tagging, free-text `SubCause` carrying the
+// withheld detail, optional `Hint` referencing the provider quirk
+// or app-registration knob most likely to be the root cause.
+//
+// Tracer + structured logs consume `diagnose`. UI code MUST NOT.
+
+type AuthDiagnostic = {
+    /// Stable machine-readable category. UPPERCASE_SNAKE_CASE; safe
+    /// to use as a metric tag or log field key.
+    Kind: string
+    /// Developer-facing explanation. May reveal information the
+    /// user-facing `describeError` withholds. Never pass to the UI.
+    SubCause: string option
+    /// Optional actionable hint — provider quirk, env-var, or
+    /// app-registration knob most likely to fix the failure.
+    Hint: string option
+}

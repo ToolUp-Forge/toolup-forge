@@ -131,3 +131,108 @@ let describeError (err: AuthError) : string =
     | IdTokenIssuerInvalid -> "Sign-in token came from an unexpected identity provider. Please try again."
     | IdTokenAudienceInvalid -> "Sign-in token was not issued for this application. Please try again."
     | IdTokenExpired -> "Sign-in token has expired. Please try again."
+
+// ─── Developer-facing diagnostic ─────────────────────────────────────
+//
+// `diagnose` is the structured counterpart to `describeError`. It
+// returns a `{ Kind; SubCause; Hint }` record consumed by the auth
+// tracer + structured log emission paths — never by the UI.
+//
+// User-facing strings (above) stay deliberately opaque on the
+// security-sensitive branches (signature, nonce, issuer, audience
+// validation) so a tampering attacker can't probe the validator by
+// reading the rendered message. The developer log carries the
+// withheld sub-cause and, where applicable, a hint referencing the
+// provider quirk or app-registration knob most likely to be at fault.
+
+let diagnose (err: AuthError) : AuthDiagnostic =
+    match err with
+    | DiscoveryFailed m -> {
+        Kind = "DISCOVERY_FAILED"
+        SubCause = Some m
+        Hint =
+            Some
+                "Verify the issuer URL is correct and reachable from the browser. For workforce Entra the form is `https://login.microsoftonline.com/{tenantGuid}/v2.0` — tenant GUID, not domain."
+      }
+    | InvalidState -> {
+        Kind = "PKCE_STATE_MISMATCH"
+        SubCause =
+            Some
+                "The `state` query parameter on the callback URL did not match the value stashed in sessionStorage before the authorize redirect."
+        Hint =
+            Some
+                "Indicates a tab-hop, an interrupted sign-in, sessionStorage eviction, or potential tampering. Restart sign-in from scratch."
+      }
+    | MissingCode -> {
+        Kind = "CALLBACK_MISSING_CODE"
+        SubCause = Some "Callback URL had no `code` query parameter."
+        Hint =
+            Some
+                "Check the `error` and `error_description` query parameters on the callback URL — the issuer may have returned an error instead of a code."
+      }
+    | IssuerError(code, desc) ->
+        let detail =
+            match desc with
+            | Some d -> sprintf "Issuer returned error code `%s`: %s" code d
+            | None -> sprintf "Issuer returned error code `%s`." code
+
+        {
+            Kind = "ISSUER_RETURNED_ERROR"
+            SubCause = Some detail
+            Hint = Some "Consult the identity provider's documentation for the meaning of this error code."
+        }
+    | TokenExchangeFailed m -> {
+        Kind = "TOKEN_EXCHANGE_FAILED"
+        SubCause = Some m
+        Hint =
+            Some
+                "The `/token` endpoint rejected the authorization code. Common causes: code already redeemed, code expired, `redirect_uri` mismatch with the app registration, `client_id` mismatch, PKCE verifier missing or wrong."
+      }
+    | NetworkError m -> {
+        Kind = "NETWORK_ERROR"
+        SubCause = Some m
+        Hint = Some "The browser could not complete the fetch — CORS, DNS, offline, or the issuer is unreachable."
+      }
+    | NonceMismatch -> {
+        Kind = "ID_TOKEN_NONCE_MISMATCH"
+        SubCause =
+            Some "The `nonce` claim on the returned id_token did not match the value sent on the authorize request."
+        Hint =
+            Some
+                "Indicates a replay against a previously-issued token, or an issuer misbehaving around nonce. OIDC spec REQUIRES nonce validation — this is a hard fail."
+      }
+    | MalformedIdToken -> {
+        Kind = "ID_TOKEN_MALFORMED"
+        SubCause =
+            Some
+                "id_token did not parse as a JWS — not three base64url segments, payload not JSON, or header missing required fields."
+        Hint = None
+      }
+    | IdTokenSignatureInvalid -> {
+        Kind = "ID_TOKEN_SIGNATURE_INVALID"
+        SubCause =
+            Some
+                "id_token signature did not verify against the JWKS key matching the header `kid` (or no key matched after a forced refresh, or the JWKS fetch itself failed)."
+        Hint =
+            Some
+                "Check that the issuer's JWKS endpoint is reachable and the app registration's key set is current. The user-facing message is deliberately opaque (anti-tampering stance) — only this developer log carries the sub-cause."
+      }
+    | IdTokenIssuerInvalid -> {
+        Kind = "ID_TOKEN_ISSUER_INVALID"
+        SubCause = Some "id_token `iss` claim did not match the configured `OidcUIConfig.Issuer`."
+        Hint =
+            Some
+                "For workforce Entra: confirm the issuer is `https://login.microsoftonline.com/{tenantGuid}/v2.0` (tenant GUID, not domain) and that the app registration's `requestedAccessTokenVersion` is 2."
+      }
+    | IdTokenAudienceInvalid -> {
+        Kind = "ID_TOKEN_AUDIENCE_INVALID"
+        SubCause = Some "id_token `aud` claim did not contain the configured `OidcUIConfig.ClientId`."
+        Hint =
+            Some
+                "For workforce Entra: the `api://{clientId}/access_as_user` scope must be requested at sign-in time; without it the access token is addressed to Microsoft Graph and server-side audience validation fails."
+      }
+    | IdTokenExpired -> {
+        Kind = "ID_TOKEN_EXPIRED"
+        SubCause = Some "id_token `exp` claim is in the past (beyond the 60-second clock-skew tolerance)."
+        Hint = Some "Check system clock drift on the device and the issuer's clock-skew policy."
+      }

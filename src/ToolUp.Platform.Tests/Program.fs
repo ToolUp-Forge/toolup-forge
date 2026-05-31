@@ -61,6 +61,7 @@ let allTests =
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
+        OidcDiagnoseTests.tests
         OidcSignInContractTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
