@@ -319,6 +319,86 @@ let tests =
                 let _ = client.SendAsync(req).Result
                 Expect.equal emitter.Events.Length 0 "Method without [<Audit>] emits nothing"
 
+        // ---- Phase 69f coverage: idempotency keys ----
+
+        testCase "Idempotency: missing X-Idempotency-Key on [<Idempotent>] method returns 400+user envelope"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IIdempotentApi/Charge")
+                req.Content <- new StringContent("[100]", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("X-Subject", "user-idem-missing-" + System.Guid.NewGuid().ToString("N"))
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "400 when X-Idempotency-Key is absent"
+                let body = readBody response
+                Expect.stringContains body "\"category\":\"user\"" "Categorised user envelope"
+                Expect.stringContains body "missing-idempotency-key" "Diagnostic mentions the missing header"
+
+        testCase "Idempotency: replay returns byte-identical response + sets x-idempotency-replay header"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                // Unique subject per-test so parallel test execution doesn't
+                // alias cache slots. Body equality is the strong replay signal
+                // — the handler's response embeds an incrementing call counter,
+                // so a real re-invocation produces a DIFFERENT body string.
+                let subject = "user-idem-replay-" + System.Guid.NewGuid().ToString("N")
+                let postWithKey key =
+                    let r = new HttpRequestMessage(HttpMethod.Post, "/api/IIdempotentApi/Charge")
+                    r.Content <- new StringContent("[42]", Encoding.UTF8, "application/json")
+                    r.Headers.Add("x-remoting-proxy", "true")
+                    r.Headers.Add("X-Subject", (subject: string))
+                    r.Headers.Add("X-Idempotency-Key", (key: string))
+                    client.SendAsync(r).Result
+                let first = postWithKey "key-stable-1"
+                Expect.equal first.StatusCode HttpStatusCode.OK "First call OK"
+                let body1 = readBody first
+
+                let second = postWithKey "key-stable-1"
+                Expect.equal second.StatusCode HttpStatusCode.OK "Replay returns 200"
+                let body2 = readBody second
+                Expect.equal body2 body1 "Replay returns byte-identical body — handler NOT re-invoked"
+                Expect.isTrue (second.Headers.Contains "x-idempotency-replay") "Replay marker header present on cache hit"
+                Expect.isFalse (first.Headers.Contains "x-idempotency-replay") "First call has no replay header"
+
+        testCase "Idempotency: different X-Subject with same key is a different cache slot (security)"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                let postAs subject key =
+                    let r = new HttpRequestMessage(HttpMethod.Post, "/api/IIdempotentApi/Charge")
+                    r.Content <- new StringContent("[7]", Encoding.UTF8, "application/json")
+                    r.Headers.Add("x-remoting-proxy", "true")
+                    r.Headers.Add("X-Subject", (subject: string))
+                    r.Headers.Add("X-Idempotency-Key", (key: string))
+                    client.SendAsync(r).Result
+                // Two different subjects, SAME key — must produce two distinct
+                // cache slots. The handler returns a per-call body, so different
+                // bodies confirm independent handler runs (not a shared replay).
+                let sharedKey = "shared-key-" + System.Guid.NewGuid().ToString("N")
+                let alice = postAs ("alice-security-" + System.Guid.NewGuid().ToString("N")) sharedKey
+                let bob = postAs ("bob-security-" + System.Guid.NewGuid().ToString("N")) sharedKey
+                Expect.equal alice.StatusCode HttpStatusCode.OK "Alice OK"
+                Expect.equal bob.StatusCode HttpStatusCode.OK "Bob OK"
+                Expect.notEqual (readBody alice) (readBody bob) "Different cache slots → different bodies (handler ran twice)"
+                Expect.isFalse (alice.Headers.Contains "x-idempotency-replay") "Alice's first call is no replay"
+                Expect.isFalse (bob.Headers.Contains "x-idempotency-replay") "Bob's first call is no replay (different subject)"
+
+        testCase "Idempotency: method without [<Idempotent>] ignores X-Idempotency-Key"
+        <| fun _ ->
+            withClient
+            <| fun client ->
+                resetIdempotencyHarness ()
+                let r = new HttpRequestMessage(HttpMethod.Post, "/api/IIdempotentApi/NoKey")
+                r.Content <- new StringContent("[5]", Encoding.UTF8, "application/json")
+                r.Headers.Add("x-remoting-proxy", "true")
+                r.Headers.Add("X-Subject", "user-no-key")
+                r.Headers.Add("X-Idempotency-Key", "unused-but-present")
+                let response = client.SendAsync(r).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "Non-idempotent method ignores the header entirely"
+                Expect.isFalse (response.Headers.Contains "x-idempotency-replay") "No replay header on non-idempotent path"
+
         // ---- Phase 69g coverage: rate-limit attribution ----
 
         testCase "RateLimited: Unlimited method passes any number of calls"

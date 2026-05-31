@@ -62,6 +62,18 @@ type IAuditedApi = {
     NoAudit: unit -> Async<string>
 }
 
+/// Phase 69f coverage — call counter that proves idempotent replays
+/// don't re-invoke the handler. Wired as a module-level counter from
+/// Server.fs.
+type IIdempotentApi = {
+    [<AllowAnonymous>]
+    [<Idempotent>]
+    Charge: int -> Async<string>
+
+    [<AllowAnonymous>]
+    NoKey: int -> Async<string>
+}
+
 type IRateLimitedApi = {
     [<AllowAnonymous>]
     [<RateLimit(3, RateLimitWindow.perMinute)>]

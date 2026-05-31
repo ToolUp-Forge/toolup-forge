@@ -166,6 +166,40 @@ let private buildAuditedApi (emitter: IAuditEmitter) : HttpHandler =
     |> Remoting.withAudit emitter
     |> Remoting.buildHttpHandler
 
+// ---- Phase 69f — idempotency-keyed API -------------------------------------
+
+/// Module-level counter the handlers increment per invocation. The
+/// dispatcher's idempotency cache hit MUST NOT increment this — that's
+/// the test of "the cached response replayed, the handler did not run".
+let private chargeInvocationCount = ref 0
+
+let private idempotentHandlers = {
+    Charge = fun amount -> async {
+        System.Threading.Interlocked.Increment chargeInvocationCount |> ignore
+        return sprintf "charged-%d-call-%d" amount chargeInvocationCount.Value
+    }
+    NoKey = fun amount -> async { return sprintf "no-key-handler-%d" amount }
+}
+
+let private idempotencyStore : IIdempotencyStore = InMemoryIdempotencyStore() :> _
+
+let private buildIdempotentApi : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromValue idempotentHandlers
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.withAuthContext resolveAuthFromHeaders
+    |> Remoting.withIdempotencyStore idempotencyStore
+    |> Remoting.buildHttpHandler
+
+/// Test helper: resets counter + store fresh per test invocation.
+let resetIdempotencyHarness () =
+    chargeInvocationCount.Value <- 0
+    // The in-memory store doesn't expose a Clear; the per-test
+    // composite key uniqueness gives us isolation in practice.
+
+let currentChargeCount () = chargeInvocationCount.Value
+
 // ---- Phase 69g — rate-limited API ------------------------------------------
 
 let private rateLimitedHandlers = {
@@ -231,7 +265,8 @@ let buildHost (telemetry: IRemotingTelemetry option) (auditEmitter: IAuditEmitte
                             [ buildHarnessApi telemetry (fun _ -> handlers)
                               buildContextApi
                               buildSecureApi
-                              buildRateLimitedApi ]
+                              buildRateLimitedApi
+                              buildIdempotentApi ]
                             @ audited
                         )
                     app.UseGiraffe api)
