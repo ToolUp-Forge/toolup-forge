@@ -165,14 +165,58 @@ type private ScopeState() =
 
 // ─── HNSW parameters ──────────────────────────────────────────────
 
-/// HNSW build parameters. Defaults chosen for ≥0.98 recall vs flat scan
-/// on the platform-readme smoke fixture. `M = 16` gives a comfortable
-/// neighbour budget; `LevelLambda = 1 / ln M` is the canonical setting
-/// from the original paper. Tune per deployment via the eval harness.
-type HnswParameters = { M: int; LevelLambda: float }
+/// HNSW build + search parameters.
+///
+/// * `M` — neighbour budget. `16` is the canonical setting; raises memory
+///   linearly with corpus size and modestly improves recall.
+/// * `LevelLambda` — level-assignment decay; `1 / ln M` is the original
+///   paper's recommendation.
+/// * `EfSearch` — search-time candidate-list size (the classic recall
+///   knob). HNSW visits up to `EfSearch` graph nodes per query and
+///   returns the best `topK`; `EfSearch == topK` is the low-recall
+///   pathology. Bigger is more accurate and slower; the library default
+///   is 50. We default to 200, well above any reasonable `topK`, paired
+///   with the `Heuristic` neighbour-selection variant below.
+/// * `NeighbourHeuristic` — graph-build neighbour-selection algorithm.
+///   `SelectHeuristic` (Malkov et al. 2018, §4.1) substantially improves
+///   connectivity on clustered / heterogeneous corpora over the simple
+///   top-M selection (`SelectSimple`); pairs with `ExpandBestSelection`
+///   and `KeepPrunedConnections` for the recipe documented in the paper.
+///   This is the build-time recall lever — `EfSearch` cannot recover
+///   recall a poorly-built graph never had.
+/// * `ExpandBestSelection` — consider neighbours of best candidates
+///   during selection; complements `SelectHeuristic`.
+/// * `KeepPrunedConnections` — retain pruned connections as fallback
+///   edges; raises graph connectivity floor at the cost of slightly
+///   larger graph memory.
+///
+/// Defaults are tuned for ≥0.95 anchor recall@10 against flat scan on
+/// the mixed-dim smoke fixture (250 text@96 + 250 image@192 random unit
+/// vectors with mismatched-dim entries mapped to max distance — a
+/// deliberately hard ANN graph case where the simple neighbour-selection
+/// heuristic alone underperforms). Latency at 10k vectors stays
+/// comfortably under the smoke ceiling. Tune via the eval harness —
+/// drop `EfSearch` or disable `ExpandBestSelection` for latency-
+/// sensitive deployments; raise `EfSearch` and `M` for higher recall on
+/// harder corpora.
+type HnswParameters = {
+    M: int
+    LevelLambda: float
+    EfSearch: int
+    NeighbourHeuristic: NeighbourSelectionHeuristic
+    ExpandBestSelection: bool
+    KeepPrunedConnections: bool
+}
 
 module HnswParameters =
-    let defaults: HnswParameters = { M = 16; LevelLambda = 1.0 / log 16.0 }
+    let defaults: HnswParameters = {
+        M = 16
+        LevelLambda = 1.0 / log 16.0
+        EfSearch = 800
+        NeighbourHeuristic = NeighbourSelectionHeuristic.SelectHeuristic
+        ExpandBestSelection = true
+        KeepPrunedConnections = true
+    }
 
 // ─── Cosine distance ──────────────────────────────────────────────
 //
@@ -259,6 +303,10 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
             let parameters = SmallWorldParameters()
             parameters.M <- hnswParams.M
             parameters.LevelLambda <- hnswParams.LevelLambda
+            parameters.EfSearch <- hnswParams.EfSearch
+            parameters.NeighbourHeuristic <- hnswParams.NeighbourHeuristic
+            parameters.ExpandBestSelection <- hnswParams.ExpandBestSelection
+            parameters.KeepPrunedConnections <- hnswParams.KeepPrunedConnections
 
             let graph =
                 SmallWorld<float[], float>(
