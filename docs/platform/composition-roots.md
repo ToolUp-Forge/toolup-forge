@@ -97,12 +97,12 @@ Three SDK helpers — `BundleConstants`, `ClientConfigDefaults.fromBundleConstan
 
 ## When to use the helpers vs roll your own
 
-**Use the helpers when:** the deployment honours the standard `TOOLUP_*` env var contract documented in [`platform-modes.md`](platform-modes.md) + each substrate's doc.
+**Use the helpers when:** the deployment honours the standard `TOOLUP_*` env var contract documented in [`surfaces.md`](surfaces.md) + each substrate's doc.
 
 **Roll your own when:** the deployment has a non-standard env-var scheme (different prefix, custom dispatch), needs synchronous bootstrap-time validation the helpers don't perform, or composes substrates that don't fit the resolver-list shape (e.g. multi-storage layering). Helpers are additive — you can call them for the dimensions that fit the standard pattern and hand-roll the dimensions that don't.
 
 ## See also
 
-- [`platform-modes.md`](platform-modes.md) — env-var matrix per `PlatformMode`.
+- [`surfaces.md`](surfaces.md) — the Subject / `SurfaceProfile` / `SurfaceRequirement` model and the `TOOLUP_PLATFORM_SURFACES` env-var contract.
 - [`../migrations/11g-fromenv-helpers.md`](../migrations/11g-fromenv-helpers.md) — full before/after diffs for the reference consumer migration.
 - [`../../samples/MinimalApp/`](../../samples/MinimalApp/) — runnable Anonymous-mode sample showing the pattern end-to-end.

@@ -226,7 +226,7 @@ Three categories of code branch on `Mode` *outside* the middleware and validator
 
 **(c) Diagnostic / health surfaces.** `DevDiagnosticsHandler`, `DiagnosticBundleHandler`, `ServiceStatusBoardApiHandler`, `HealthMonitorApiHandler`, `UsageQueryApi` all report Mode info; some restrict access based on `PlatformRole.PlatformAdmin` (which itself is only resolvable in authenticated modes).
 
-**(d) AI in Anonymous mode.** No hard refusal. The `Anonymous`-mode caveat documented in [`platform-modes.md:130-136`](../platform/platform-modes.md) is operator-policy, not enforced — `AIServerApp.run` accepts `ServerConfig.Mode = Anonymous`. The deployment owns the cost-control responsibility.
+**(d) AI in Anonymous mode.** No hard refusal. The `Anonymous`-mode caveat documented in [`surfaces.md` "Pure-Anonymous public portal"](../platform/surfaces.md#pure-anonymous-public-portal) is operator-policy, not enforced — `AIServerApp.run` accepts a deployment with `Surfaces = Surfaces.anonymous`. The deployment owns the cost-control responsibility.
 
 ### 1.10 Consumer snapshot
 

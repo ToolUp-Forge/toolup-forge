@@ -84,9 +84,9 @@ See [`architecture.md`](architecture.md) for the full architecture overview — 
 
 See [`modules.md`](modules.md) for the 4-file module pattern.
 
-## Platform modes
+## Surfaces — the auth, scope, and persistence model
 
-See [`platform-modes.md`](platform-modes.md) for how `Anonymous` / `AuthenticatedEphemeral` / `Individual` / `Team` / `MultiTeam` change the auth, scoping, and persistence shape.
+See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRequirement` model — how a deployment declares which subject shapes it supports (anonymous sessions, authenticated users, team members, share-token bearers), how per-route requirements gate access, and how single-shape and mixed-shape deployments share the same shape.
 
 ## Other reference
 
