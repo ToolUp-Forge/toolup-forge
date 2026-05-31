@@ -4,18 +4,23 @@
 module ToolUp.AuthProviders.Oidc.OidcCoherenceValidator
 
 open System
-open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.AuthProviders.Oidc.OidcPresets
+open ToolUp.AuthProviders.Oidc.OidcAppConfig
 
 // ─── OIDC coherence validator ────────────────────────────────────────
 //
-// Validates an `OidcUIConfig` + (optional) `PresetMetadata` against a
-// rule set that catches the deploy-time misconfigurations
-// hand-rolled OIDC consumers most often trip over.  Modelled on
-// `SurfaceCoherenceValidator` (Phase 66 Stream B.2): one
-// `ValidationResult` per `Validate ()` call, aggregating per-rule
-// outcomes (Error wins, then Warning, else Ok).
+// Validates an `OidcAppConfig` against a rule set that catches the
+// deploy-time misconfigurations hand-rolled OIDC consumers most often
+// trip over.  Modelled on `SurfaceCoherenceValidator` (Phase 66
+// Stream B.2): one `ValidationResult` per `Validate ()` call,
+// aggregating per-rule outcomes (Error wins, then Warning, else Ok).
+//
+// 0.4.0 BREAKING — `evaluate` and the `OidcCoherenceValidator`
+// constructor previously took `(OidcUIConfig * PresetMetadata option)`.
+// They now take a single `OidcAppConfig` whose `Preset: PresetKind
+// option` field carries the same provenance.  Rules that previously
+// relied on `PresetMetadata.AutoAddedScopes` / `.Notes` now derive
+// the same data from `PresetKind` via the helpers in `OidcAppConfig`.
 //
 // Rules (11):
 //
@@ -37,25 +42,16 @@ open ToolUp.AuthProviders.Oidc.OidcPresets
 //               a custom-domain v2.0 path that isn't workforce).
 //   9. WARN     Preset `auth0` declared but Issuer contains
 //               `microsoftonline.com`.
-//  10. WARN     Preset's `AutoAddedScopes` not all present in
+//  10. WARN     Preset's `autoAddedScopes` not all present in
 //               `Scopes`. Catches the common "consumer override
 //               of Scopes dropped a load-bearing preset scope"
-//               regression — for `entra-workforce` losing
+//               regression — for `EntraWorkforce` losing
 //               `api://{clientId}/access_as_user` breaks every
 //               authenticated request after sign-in.
-//  11. Ok-info  When a preset is supplied, a single Ok-class
-//               outcome records the preset name + applied
+//  11. Ok-info  When a preset is declared on the config, a single
+//               Ok-class outcome records the preset name + applied
 //               quirks for the boot log / `/dev/inspect`
 //               validators panel.
-//
-// Additive on 0.3.x.  Consumers register with the server-side
-// `ConfigValidatorAggregator` (aborts startup on Error) and / or
-// call the pure `evaluate` function from client-side composition to
-// surface findings in the browser console at boot.  At the
-// coordinated 0.X.0 minor bump, additional cross-side rules land
-// (client + server `Surfaces` agreement; audience-binding
-// completeness) once the unified `OidcAppConfig` record gives the
-// validator visibility of both sides at once.
 
 /// Per-rule outcome.  Aggregator collapses these into a single
 /// `ValidationResult`; `evaluate` exposes the raw list for tests +
@@ -102,30 +98,30 @@ let private looksLikeCiam (issuer: string) =
     issuer.Contains "ciamlogin.com"
     || (issuer.Contains "/v2.0" && not (issuer.Contains "login.microsoftonline.com"))
 
-let private collectRules (cfg: OidcUIConfig) (presetMeta: PresetMetadata option) : RuleOutcome list = [
+let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
     // ─── Rule 1 — Issuer empty ──────────────────────────────
     if String.IsNullOrWhiteSpace cfg.Issuer then
         yield
             RuleError
-                "OidcUIConfig.Issuer is empty. Provide the identity provider's issuer URL — via OidcPresets.entraWorkforce / .entraExternalId / .auth0 / .generic, or assigned directly."
+                "OidcAppConfig.Issuer is empty. Provide the identity provider's issuer URL — via OidcPresets.entraWorkforce / .entraExternalId / .auth0 / .generic, or via OidcAppConfig.create."
 
     // ─── Rule 2 — ClientId empty ────────────────────────────
     if String.IsNullOrWhiteSpace cfg.ClientId then
         yield
             RuleError
-                "OidcUIConfig.ClientId is empty. Provide the app-registration client id (this also becomes the access-token audience the server-side validator binds against)."
+                "OidcAppConfig.ClientId is empty. Provide the app-registration client id (defaults the access-token audience the server-side validator binds against)."
 
     // ─── Rule 3 — RedirectUri empty ─────────────────────────
     if String.IsNullOrWhiteSpace cfg.RedirectUri then
         yield
             RuleError
-                "OidcUIConfig.RedirectUri is empty. Provide the registered callback URL (e.g. `https://app.example.com/auth/callback`)."
+                "OidcAppConfig.RedirectUri is empty. Provide the registered callback URL (e.g. `https://app.example.com/auth/callback`)."
 
     // ─── Rule 4 — `openid` scope missing ────────────────────
     if not (List.contains "openid" cfg.Scopes) then
         yield
             RuleError
-                "OidcUIConfig.Scopes does not contain `openid`. The OIDC spec requires it on every authorize request; the issuer will reject sign-in (and the nonce-binding check in handleCallback assumes an id_token is returned, which requires the `openid` scope)."
+                "OidcAppConfig.Scopes does not contain `openid`. The OIDC spec requires it on every authorize request; the issuer will reject sign-in (and the nonce-binding check in handleCallback assumes an id_token is returned, which requires the `openid` scope)."
 
     // ─── Rule 5 — Issuer not HTTPS ──────────────────────────
     if
@@ -136,7 +132,7 @@ let private collectRules (cfg: OidcUIConfig) (presetMeta: PresetMetadata option)
         yield
             RuleWarning(
                 sprintf
-                    "OidcUIConfig.Issuer (`%s`) is not `https://`. Production OIDC deployments require TLS — the issuer's discovery document and JWKS endpoint are fetched over the wire on every JWKS refresh."
+                    "OidcAppConfig.Issuer (`%s`) is not `https://`. Production OIDC deployments require TLS — the issuer's discovery document and JWKS endpoint are fetched over the wire on every JWKS refresh."
                     cfg.Issuer
             )
 
@@ -149,54 +145,57 @@ let private collectRules (cfg: OidcUIConfig) (presetMeta: PresetMetadata option)
         yield
             RuleWarning(
                 sprintf
-                    "OidcUIConfig.RedirectUri (`%s`) is not `https://`. Production OIDC issuers reject non-localhost http:// redirect URIs at the authorize endpoint as a phishing-defence."
+                    "OidcAppConfig.RedirectUri (`%s`) is not `https://`. Production OIDC issuers reject non-localhost http:// redirect URIs at the authorize endpoint as a phishing-defence."
                     cfg.RedirectUri
             )
 
     // ─── Preset-aware rules (7–11) ──────────────────────────
-    match presetMeta with
+    match cfg.Preset with
     | None -> ()
-    | Some meta ->
+    | Some kind ->
+        let label = PresetKind.label kind
+
         // Rule 7 — entra-workforce + non-workforce issuer.
         if
-            meta.Name = "entra-workforce"
+            label = "entra-workforce"
             && not (cfg.Issuer.Contains "login.microsoftonline.com")
         then
             yield
                 RuleWarning(
                     sprintf
-                        "Preset `entra-workforce` declared but OidcUIConfig.Issuer is `%s`, which does not contain `login.microsoftonline.com`. `OidcPresets.entraWorkforce` is for workforce Entra ID / Azure AD only — for Entra External ID use `OidcPresets.entraExternalId`."
+                        "Preset `entra-workforce` declared but OidcAppConfig.Issuer is `%s`, which does not contain `login.microsoftonline.com`. `OidcPresets.entraWorkforce` is for workforce Entra ID / Azure AD only — for Entra External ID use `OidcPresets.entraExternalId`."
                         cfg.Issuer
                 )
 
         // Rule 8 — entra-external-id + non-CIAM issuer.
-        if meta.Name = "entra-external-id" && not (looksLikeCiam cfg.Issuer) then
+        if label = "entra-external-id" && not (looksLikeCiam cfg.Issuer) then
             yield
                 RuleWarning(
                     sprintf
-                        "Preset `entra-external-id` declared but OidcUIConfig.Issuer is `%s`, which doesn't look like a CIAM issuer (`{tenant}.ciamlogin.com/{tenant}/v2.0` or a custom-domain equivalent). Verify the preset matches your identity provider."
+                        "Preset `entra-external-id` declared but OidcAppConfig.Issuer is `%s`, which doesn't look like a CIAM issuer (`{tenant}.ciamlogin.com/{tenant}/v2.0` or a custom-domain equivalent). Verify the preset matches your identity provider."
                         cfg.Issuer
                 )
 
         // Rule 9 — auth0 preset but Microsoft-shaped issuer.
-        if meta.Name = "auth0" && cfg.Issuer.Contains "microsoftonline.com" then
+        if label = "auth0" && cfg.Issuer.Contains "microsoftonline.com" then
             yield
                 RuleWarning(
                     sprintf
-                        "Preset `auth0` declared but OidcUIConfig.Issuer is `%s`, which is a Microsoft Entra issuer. Did you mean `OidcPresets.entraWorkforce`?"
+                        "Preset `auth0` declared but OidcAppConfig.Issuer is `%s`, which is a Microsoft Entra issuer. Did you mean `OidcPresets.entraWorkforce`?"
                         cfg.Issuer
                 )
 
         // Rule 10 — preset auto-added scopes dropped by override.
-        let missing =
-            meta.AutoAddedScopes |> List.filter (fun s -> not (List.contains s cfg.Scopes))
+        let added = PresetKind.autoAddedScopes kind cfg.ClientId
+
+        let missing = added |> List.filter (fun s -> not (List.contains s cfg.Scopes))
 
         if not (List.isEmpty missing) then
             yield
                 RuleWarning(
                     sprintf
-                        "Preset `%s` declares AutoAddedScopes [%s] but OidcUIConfig.Scopes does not include them. A consumer override likely dropped the preset's contribution — for `entra-workforce` the `api://{clientId}/access_as_user` scope is load-bearing (Entra issues an opaque Microsoft Graph token without it and server-side audience validation rejects every authenticated request after sign-in)."
-                        meta.Name
+                        "Preset `%s` auto-adds scope(s) [%s] but OidcAppConfig.Scopes does not include them. A consumer override likely dropped the preset's contribution — for `entra-workforce` the `api://{clientId}/access_as_user` scope is load-bearing (Entra issues an opaque Microsoft Graph token without it and server-side audience validation rejects every authenticated request after sign-in)."
+                        label
                         (String.concat "; " missing)
                 )
 
@@ -205,10 +204,10 @@ let private collectRules (cfg: OidcUIConfig) (presetMeta: PresetMetadata option)
             RuleOk(
                 sprintf
                     "preset `%s` applied (issuer form: %s; auto-added scopes: [%s]; expects decodable access token: %b)"
-                    meta.Name
-                    meta.IssuerForm
-                    (String.concat "; " meta.AutoAddedScopes)
-                    meta.ExpectsDecodableAccessToken
+                    label
+                    (PresetKind.issuerForm kind)
+                    (String.concat "; " added)
+                    (PresetKind.expectsDecodableAccessToken kind)
             )
 ]
 
@@ -239,15 +238,12 @@ let private aggregate (outcomes: RuleOutcome list) : ValidationResult =
 /// configuration.  Used by tests + the future `/dev/inspect`
 /// validators panel so per-rule structure is visible without parsing
 /// the aggregated `ValidationResult` message.
-let evaluate (cfg: OidcUIConfig) (presetMeta: PresetMetadata option) : RuleOutcome list = collectRules cfg presetMeta
+let evaluate (cfg: OidcAppConfig) : RuleOutcome list = collectRules cfg
 
 /// `IConfigValidator` implementation.  Register with the server-side
 /// `ConfigValidatorAggregator` so the validator runs at compose time
-/// and aborts startup on `Error`.  Client-side composition can also
-/// call `evaluate` directly for early-warning surfacing in the
-/// browser console (the SDK does not currently auto-wire an
-/// equivalent client-side aggregator — Phase C.1 considers that).
-type OidcCoherenceValidator(cfg: OidcUIConfig, presetMeta: PresetMetadata option, ?timeout: TimeSpan) =
+/// and aborts startup on `Error`.
+type OidcCoherenceValidator(cfg: OidcAppConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
     interface IConfigValidator with
@@ -255,6 +251,6 @@ type OidcCoherenceValidator(cfg: OidcUIConfig, presetMeta: PresetMetadata option
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let outcomes = collectRules cfg presetMeta
+            let outcomes = collectRules cfg
             return aggregate outcomes
         }

@@ -4,12 +4,12 @@
 module ToolUp.Platform.Tests.InProcess.OidcCoherenceValidatorTests
 
 open Expecto
-open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.AuthProviders.Oidc.OidcAppConfig
 open ToolUp.AuthProviders.Oidc.OidcPresets
 open ToolUp.AuthProviders.Oidc.OidcCoherenceValidator
 
-// ─── OidcCoherenceValidator ──────────────────────────────────────────
+// ─── OidcCoherenceValidator (0.4.0 — OidcAppConfig) ──────────────────
 //
 // Per-rule coverage of the 11 rules. Each test asserts the expected
 // per-rule outcome from `evaluate` rather than parsing the
@@ -18,17 +18,13 @@ open ToolUp.AuthProviders.Oidc.OidcCoherenceValidator
 // reads, and pinning rule-level behaviour here keeps the
 // aggregator's wording flexible.
 //
-// Aggregation behaviour itself (Error wins, Warning next, Ok else)
-// is verified by a separate small test list at the bottom.
+// 0.4.0 BREAKING — validator now takes `OidcAppConfig` directly
+// (preset provenance is on the config itself). Same 11 rules; tests
+// reshaped to construct OidcAppConfig values instead of
+// `OidcUIConfig * PresetMetadata option`.
 
-let private validCfg: OidcUIConfig = {
-    Issuer = "https://issuer.example.test"
-    ClientId = "test-client-id"
-    RedirectUri = "https://app.example.test/auth/callback"
-    Scopes = [ "openid"; "profile"; "email" ]
-    PostLogoutRedirectUri = None
-    ValidateIdToken = None
-}
+let private validCfg =
+    OidcAppConfig.create "https://issuer.example.test" "test-client-id" "https://app.example.test/auth/callback"
 
 let private hasErrorMatching (substring: string) (outcomes: RuleOutcome list) : bool =
     outcomes
@@ -56,30 +52,30 @@ let tests: Test =
         testCase "Rule 1: empty Issuer → ERROR"
         <| fun () ->
             let cfg = { validCfg with Issuer = "" }
-            let outcomes = evaluate cfg None
-            Expect.isTrue (hasErrorMatching "OidcUIConfig.Issuer is empty" outcomes) ""
+            let outcomes = evaluate cfg
+            Expect.isTrue (hasErrorMatching "OidcAppConfig.Issuer is empty" outcomes) ""
 
         testCase "Rule 1: whitespace Issuer → ERROR"
         <| fun () ->
             let cfg = { validCfg with Issuer = "   " }
-            let outcomes = evaluate cfg None
-            Expect.isTrue (hasErrorMatching "OidcUIConfig.Issuer is empty" outcomes) ""
+            let outcomes = evaluate cfg
+            Expect.isTrue (hasErrorMatching "OidcAppConfig.Issuer is empty" outcomes) ""
 
         // ─── Rule 2 — ClientId empty ────────────────────────────
 
         testCase "Rule 2: empty ClientId → ERROR"
         <| fun () ->
             let cfg = { validCfg with ClientId = "" }
-            let outcomes = evaluate cfg None
-            Expect.isTrue (hasErrorMatching "OidcUIConfig.ClientId is empty" outcomes) ""
+            let outcomes = evaluate cfg
+            Expect.isTrue (hasErrorMatching "OidcAppConfig.ClientId is empty" outcomes) ""
 
         // ─── Rule 3 — RedirectUri empty ─────────────────────────
 
         testCase "Rule 3: empty RedirectUri → ERROR"
         <| fun () ->
             let cfg = { validCfg with RedirectUri = "" }
-            let outcomes = evaluate cfg None
-            Expect.isTrue (hasErrorMatching "OidcUIConfig.RedirectUri is empty" outcomes) ""
+            let outcomes = evaluate cfg
+            Expect.isTrue (hasErrorMatching "OidcAppConfig.RedirectUri is empty" outcomes) ""
 
         // ─── Rule 4 — `openid` scope missing ────────────────────
 
@@ -90,13 +86,13 @@ let tests: Test =
                     Scopes = [ "profile"; "email" ]
             }
 
-            let outcomes = evaluate cfg None
+            let outcomes = evaluate cfg
             Expect.isTrue (hasErrorMatching "does not contain `openid`" outcomes) ""
 
         testCase "Rule 4: empty Scopes → ERROR (no openid)"
         <| fun () ->
             let cfg = { validCfg with Scopes = [] }
-            let outcomes = evaluate cfg None
+            let outcomes = evaluate cfg
             Expect.isTrue (hasErrorMatching "does not contain `openid`" outcomes) ""
 
         // ─── Rule 5 — Issuer not HTTPS ──────────────────────────
@@ -108,10 +104,10 @@ let tests: Test =
                     Issuer = "http://issuer.example.test"
             }
 
-            let outcomes = evaluate cfg None
+            let outcomes = evaluate cfg
 
             Expect.isTrue
-                (hasWarningMatching "OidcUIConfig.Issuer" outcomes
+                (hasWarningMatching "OidcAppConfig.Issuer" outcomes
                  && hasWarningMatching "is not `https://`" outcomes)
                 "non-https issuer must warn"
 
@@ -122,13 +118,12 @@ let tests: Test =
                     Issuer = "http://localhost:5000/auth"
             }
 
-            let outcomes = evaluate cfg None
-            // Make sure NO warning specifically about the Issuer
-            // being non-https is present.
+            let outcomes = evaluate cfg
+
             let hasIssuerHttpsWarn =
                 outcomes
                 |> List.exists (function
-                    | RuleWarning m -> m.Contains "OidcUIConfig.Issuer" && m.Contains "is not `https://`"
+                    | RuleWarning m -> m.Contains "OidcAppConfig.Issuer" && m.Contains "is not `https://`"
                     | _ -> false)
 
             Expect.isFalse hasIssuerHttpsWarn "localhost dev exception must NOT warn"
@@ -140,12 +135,12 @@ let tests: Test =
                     Issuer = "http://127.0.0.1:5000"
             }
 
-            let outcomes = evaluate cfg None
+            let outcomes = evaluate cfg
 
             let hasIssuerHttpsWarn =
                 outcomes
                 |> List.exists (function
-                    | RuleWarning m -> m.Contains "OidcUIConfig.Issuer" && m.Contains "is not `https://`"
+                    | RuleWarning m -> m.Contains "OidcAppConfig.Issuer" && m.Contains "is not `https://`"
                     | _ -> false)
 
             Expect.isFalse hasIssuerHttpsWarn ""
@@ -159,12 +154,12 @@ let tests: Test =
                     RedirectUri = "http://app.example.test/cb"
             }
 
-            let outcomes = evaluate cfg None
+            let outcomes = evaluate cfg
 
             let hasRedirectHttpsWarn =
                 outcomes
                 |> List.exists (function
-                    | RuleWarning m -> m.Contains "OidcUIConfig.RedirectUri" && m.Contains "is not `https://`"
+                    | RuleWarning m -> m.Contains "OidcAppConfig.RedirectUri" && m.Contains "is not `https://`"
                     | _ -> false)
 
             Expect.isTrue hasRedirectHttpsWarn ""
@@ -176,12 +171,12 @@ let tests: Test =
                     RedirectUri = "http://localhost:8080/auth/callback"
             }
 
-            let outcomes = evaluate cfg None
+            let outcomes = evaluate cfg
 
             let hasRedirectHttpsWarn =
                 outcomes
                 |> List.exists (function
-                    | RuleWarning m -> m.Contains "OidcUIConfig.RedirectUri" && m.Contains "is not `https://`"
+                    | RuleWarning m -> m.Contains "OidcAppConfig.RedirectUri" && m.Contains "is not `https://`"
                     | _ -> false)
 
             Expect.isFalse hasRedirectHttpsWarn ""
@@ -190,22 +185,20 @@ let tests: Test =
 
         testCase "Rule 7: workforce preset + non-workforce issuer → WARN"
         <| fun () ->
-            // Preset declared but consumer overrode Issuer to point
-            // at External ID — paste-mistake the validator catches.
-            let presetCfg, meta = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
+            let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
 
             let badIssuerCfg = {
-                presetCfg with
+                cfg with
                     Issuer = "https://mytenant.ciamlogin.com/mytenant/v2.0"
             }
 
-            let outcomes = evaluate badIssuerCfg (Some meta)
+            let outcomes = evaluate badIssuerCfg
             Expect.isTrue (hasWarningMatching "Preset `entra-workforce` declared" outcomes) ""
 
         testCase "Rule 7: workforce preset + matching issuer → no rule-7 warning"
         <| fun () ->
-            let cfg, meta = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
-            let outcomes = evaluate cfg (Some meta)
+            let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
+            let outcomes = evaluate cfg
 
             let hasRule7Warn =
                 outcomes
@@ -219,20 +212,20 @@ let tests: Test =
 
         testCase "Rule 8: external-id preset + workforce-shaped issuer → WARN"
         <| fun () ->
-            let presetCfg, meta = entraExternalId "mytenant" "client-id" "https://app/cb"
+            let cfg = entraExternalId "mytenant" "client-id" "https://app/cb"
 
             let badIssuerCfg = {
-                presetCfg with
+                cfg with
                     Issuer = "https://login.microsoftonline.com/tenant-guid/v2.0"
             }
 
-            let outcomes = evaluate badIssuerCfg (Some meta)
+            let outcomes = evaluate badIssuerCfg
             Expect.isTrue (hasWarningMatching "Preset `entra-external-id` declared" outcomes) ""
 
         testCase "Rule 8: external-id preset + ciamlogin issuer → no rule-8 warning"
         <| fun () ->
-            let cfg, meta = entraExternalId "mytenant" "client-id" "https://app/cb"
-            let outcomes = evaluate cfg (Some meta)
+            let cfg = entraExternalId "mytenant" "client-id" "https://app/cb"
+            let outcomes = evaluate cfg
 
             let hasRule8Warn =
                 outcomes
@@ -244,12 +237,10 @@ let tests: Test =
 
         testCase "Rule 8: external-id preset + custom-domain issuer → no rule-8 warning"
         <| fun () ->
-            // Custom-domain v2.0 issuer should be accepted by the
-            // looksLikeCiam heuristic (contains /v2.0 + NOT workforce).
-            let cfg, meta =
+            let cfg =
                 entraExternalIdWithDomain "mytenant" "login.mybrand.com" "client-id" "https://app/cb"
 
-            let outcomes = evaluate cfg (Some meta)
+            let outcomes = evaluate cfg
 
             let hasRule8Warn =
                 outcomes
@@ -263,20 +254,20 @@ let tests: Test =
 
         testCase "Rule 9: auth0 preset + Microsoft issuer → WARN"
         <| fun () ->
-            let _, meta = auth0 "mytenant.auth0.com" "client-id" "https://app/cb"
+            let cfg = auth0 "mytenant.auth0.com" "client-id" "https://app/cb"
 
             let pasted = {
-                validCfg with
+                cfg with
                     Issuer = "https://login.microsoftonline.com/tenant/v2.0"
             }
 
-            let outcomes = evaluate pasted (Some meta)
+            let outcomes = evaluate pasted
             Expect.isTrue (hasWarningMatching "Preset `auth0` declared" outcomes) ""
 
         testCase "Rule 9: auth0 preset + auth0 issuer → no rule-9 warning"
         <| fun () ->
-            let cfg, meta = auth0 "mytenant.auth0.com" "client-id" "https://app/cb"
-            let outcomes = evaluate cfg (Some meta)
+            let cfg = auth0 "mytenant.auth0.com" "client-id" "https://app/cb"
+            let outcomes = evaluate cfg
 
             let hasRule9Warn =
                 outcomes
@@ -292,60 +283,60 @@ let tests: Test =
         <| fun () ->
             // The single most dangerous regression — consumer
             // override of Scopes dropped the load-bearing scope.
-            let presetCfg, meta = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
+            let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
 
             let stripped = {
-                presetCfg with
+                cfg with
                     Scopes = [ "openid"; "profile"; "email" ]
             }
 
-            let outcomes = evaluate stripped (Some meta)
+            let outcomes = evaluate stripped
 
             Expect.isTrue
-                (hasWarningMatching "AutoAddedScopes" outcomes
+                (hasWarningMatching "auto-adds" outcomes
                  && hasWarningMatching "access_as_user" outcomes)
                 "missing api scope must surface as a warning that names it"
 
         testCase "Rule 10: workforce preset + intact Scopes → no rule-10 warning"
         <| fun () ->
-            let cfg, meta = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
-            let outcomes = evaluate cfg (Some meta)
+            let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
+            let outcomes = evaluate cfg
 
             let hasRule10Warn =
                 outcomes
                 |> List.exists (function
-                    | RuleWarning m -> m.Contains "AutoAddedScopes"
+                    | RuleWarning m -> m.Contains "auto-adds"
                     | _ -> false)
 
             Expect.isFalse hasRule10Warn ""
 
         testCase "Rule 10: External-ID preset + dropped offline_access → WARN"
         <| fun () ->
-            let presetCfg, meta = entraExternalId "mytenant" "client-id" "https://app/cb"
+            let cfg = entraExternalId "mytenant" "client-id" "https://app/cb"
 
             let stripped = {
-                presetCfg with
+                cfg with
                     Scopes = [ "openid"; "profile"; "email" ]
             }
 
-            let outcomes = evaluate stripped (Some meta)
+            let outcomes = evaluate stripped
 
             Expect.isTrue
-                (hasWarningMatching "AutoAddedScopes" outcomes
+                (hasWarningMatching "auto-adds" outcomes
                  && hasWarningMatching "offline_access" outcomes)
                 ""
 
         // ─── Rule 11 — preset-applied provenance (Ok) ──────────
 
-        testCase "Rule 11: preset supplied → Ok-class outcome records the name"
+        testCase "Rule 11: preset on config → Ok-class outcome records the name"
         <| fun () ->
-            let cfg, meta = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
-            let outcomes = evaluate cfg (Some meta)
+            let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
+            let outcomes = evaluate cfg
             Expect.isTrue (hasOkMatching "preset `entra-workforce` applied" outcomes) ""
 
-        testCase "Rule 11: no preset → no Ok-info outcome"
+        testCase "Rule 11: Preset = None → no Ok-info outcome"
         <| fun () ->
-            let outcomes = evaluate validCfg None
+            let outcomes = evaluate validCfg
 
             let hasPresetOk =
                 outcomes
@@ -353,13 +344,13 @@ let tests: Test =
                     | RuleOk m -> m.Contains "preset"
                     | _ -> false)
 
-            Expect.isFalse hasPresetOk "without preset metadata, no provenance Ok message emitted"
+            Expect.isFalse hasPresetOk "without Preset on config, no provenance Ok message emitted"
 
         // ─── Happy path ─────────────────────────────────────────
 
         testCase "happy path: valid cfg + no preset → no errors or warnings"
         <| fun () ->
-            let outcomes = evaluate validCfg None
+            let outcomes = evaluate validCfg
             let errors = outcomes |> List.filter RuleOutcome.isError
             let warnings = outcomes |> List.filter RuleOutcome.isWarning
             Expect.isEmpty errors "no errors expected"
@@ -367,8 +358,8 @@ let tests: Test =
 
         testCase "happy path: preset + matching cfg → only Rule 11 Ok-info outcome"
         <| fun () ->
-            let cfg, meta = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
-            let outcomes = evaluate cfg (Some meta)
+            let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
+            let outcomes = evaluate cfg
             let errors = outcomes |> List.filter RuleOutcome.isError
             let warnings = outcomes |> List.filter RuleOutcome.isWarning
             Expect.isEmpty errors ""
@@ -386,7 +377,7 @@ let tests: Test =
                         ClientId = ""
                 }
 
-                let v = OidcCoherenceValidator(cfg, None) :> IConfigValidator
+                let v = OidcCoherenceValidator(cfg) :> IConfigValidator
                 let result = v.Validate() |> Async.RunSynchronously
 
                 match result with
@@ -401,9 +392,9 @@ let tests: Test =
                 let cfg = {
                     validCfg with
                         Issuer = "http://issuer.example.test"
-                } // rule 5 warn
+                }
 
-                let v = OidcCoherenceValidator(cfg, None) :> IConfigValidator
+                let v = OidcCoherenceValidator(cfg) :> IConfigValidator
                 let result = v.Validate() |> Async.RunSynchronously
 
                 match result with
@@ -412,23 +403,19 @@ let tests: Test =
 
             testCase "no findings → ValidationResult.Ok"
             <| fun () ->
-                let v = OidcCoherenceValidator(validCfg, None) :> IConfigValidator
+                let v = OidcCoherenceValidator(validCfg) :> IConfigValidator
                 let result = v.Validate() |> Async.RunSynchronously
                 Expect.equal result ValidationResult.Ok ""
 
             testCase "Error trumps Warning when both present"
             <| fun () ->
-                // An empty Issuer (Error) AND http://-redirect-uri
-                // (Warning) — aggregate must surface Error, not
-                // Warning. Production deployments rely on this
-                // priority to abort startup on hard misconfig.
                 let cfg = {
                     validCfg with
                         Issuer = ""
                         RedirectUri = "http://app.example.test/cb"
                 }
 
-                let v = OidcCoherenceValidator(cfg, None) :> IConfigValidator
+                let v = OidcCoherenceValidator(cfg) :> IConfigValidator
                 let result = v.Validate() |> Async.RunSynchronously
 
                 match result with
@@ -437,7 +424,7 @@ let tests: Test =
 
             testCase "validator Name = \"oidc-coherence\""
             <| fun () ->
-                let v = OidcCoherenceValidator(validCfg, None) :> IConfigValidator
+                let v = OidcCoherenceValidator(validCfg) :> IConfigValidator
                 Expect.equal v.Name "oidc-coherence" ""
         ]
     ]

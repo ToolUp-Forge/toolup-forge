@@ -30,6 +30,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AuthProviders.Oidc.Shared\ToolUp.AuthProviders.Oidc.Shared.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Fable.Core / Fable.SimpleHttp / Fable.SimpleJson / Feliz /

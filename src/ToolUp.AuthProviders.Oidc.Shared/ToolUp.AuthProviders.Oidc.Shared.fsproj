@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.Oidc.Shared</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.Oidc.Shared</AssemblyName>
+    <Description>Shared OIDC types consumed by both client (sign-in UI, classifier, presets, coherence validator) and server (auth provider, audience-binding validator) sides of the ToolUp.AuthProviders.Oidc family. Owns `OidcAppConfig` — the unified one-declaration record that both sides project from. Phase C.1 / 0.4.0 introduction.</Description>
+    <PackageTags>fsharp;fable;sdk;auth;oidc;shared</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Shared\OidcAppConfig.fs" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/.  OidcAppConfig is consumed by Fable-compiled client
+       code (OidcAuthUI, OidcShell) so source-in-nupkg delivery is
+       required. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+</Project>
