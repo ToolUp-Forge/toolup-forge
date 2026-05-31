@@ -140,6 +140,32 @@ let private buildSecureApi : HttpHandler =
     |> Remoting.withAuthContext resolveAuthFromHeaders
     |> Remoting.buildHttpHandler
 
+// ---- Phase 69h — audit emission --------------------------------------------
+
+type RecordingAuditEmitter() =
+    let events = System.Collections.Concurrent.ConcurrentBag<AuditEvent>()
+    member _.Events = events |> Seq.toList
+    interface IAuditEmitter with
+        member _.Emit evt = async { events.Add evt }
+
+module RecordingAuditEmitter =
+    let create () = RecordingAuditEmitter()
+
+let private auditedHandlers = {
+    UpdatePolicy = fun () -> async { return "policy-v2" }
+    CustomExport = fun () -> async { return "export-done" }
+    NoAudit = fun () -> async { return "no-trace" }
+}
+
+let private buildAuditedApi (emitter: IAuditEmitter) : HttpHandler =
+    Remoting.createApi ()
+    |> Remoting.withRouteBuilder routeBuilder
+    |> Remoting.fromValue auditedHandlers
+    |> Remoting.withErrorHandler errorHandler
+    |> Remoting.withAuthContext resolveAuthFromHeaders
+    |> Remoting.withAudit emitter
+    |> Remoting.buildHttpHandler
+
 // ---- Phase 69g — rate-limited API ------------------------------------------
 
 let private rateLimitedHandlers = {
@@ -185,7 +211,7 @@ let private buildContextApi : HttpHandler =
 // context resolution (the eventual Phase 69b seam) can be exercised
 // here as it lands.
 
-let buildHost (telemetry: IRemotingTelemetry option) : IHost =
+let buildHost (telemetry: IRemotingTelemetry option) (auditEmitter: IAuditEmitter option) : IHost =
     Host
         .CreateDefaultBuilder()
         .ConfigureWebHostDefaults(fun webHost ->
@@ -197,12 +223,17 @@ let buildHost (telemetry: IRemotingTelemetry option) : IHost =
                     // ToolUp.Remoting.Giraffe adapter; no separate middleware
                     // registration required.
                     let api : HttpHandler =
-                        choose [
-                            buildHarnessApi telemetry (fun _ -> handlers)
-                            buildContextApi
-                            buildSecureApi
-                            buildRateLimitedApi
-                        ]
+                        let audited =
+                            match auditEmitter with
+                            | Some em -> [ buildAuditedApi em ]
+                            | None -> []
+                        choose (
+                            [ buildHarnessApi telemetry (fun _ -> handlers)
+                              buildContextApi
+                              buildSecureApi
+                              buildRateLimitedApi ]
+                            @ audited
+                        )
                     app.UseGiraffe api)
             |> ignore)
         .Build()

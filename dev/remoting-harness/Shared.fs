@@ -48,6 +48,20 @@ type ISecureApi = {
 ///   semantics across multiple attributes on one method.
 /// - `Unlimited` carries no budget at all — proves the per-call cost
 ///   stays zero when the dispatcher's rate-limit pre-flight skips.
+/// Phase 69h coverage — audit-emission demonstration.
+type IAuditedApi = {
+    [<AllowAnonymous>]
+    [<Audit("PolicyChanged")>]
+    UpdatePolicy: unit -> Async<string>
+
+    [<AllowAnonymous>]
+    [<Audit("Custom:HarnessExport")>]
+    CustomExport: unit -> Async<string>
+
+    [<AllowAnonymous>]
+    NoAudit: unit -> Async<string>
+}
+
 type IRateLimitedApi = {
     [<AllowAnonymous>]
     [<RateLimit(3, RateLimitWindow.perMinute)>]

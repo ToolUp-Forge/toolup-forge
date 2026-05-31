@@ -17,17 +17,24 @@ open ToolUp.Remoting.Harness.Server
 // shared-fixture is safe.
 
 let private withClient (test: HttpClient -> unit) : unit =
-    use host = buildHost None
+    use host = buildHost None None
     host.Start()
     use client = host.GetTestClient()
     test client
 
 let private withTelemetryClient (test: RecordingTelemetry -> HttpClient -> unit) : unit =
     let sink = RecordingTelemetry.create ()
-    use host = buildHost (Some (sink :> IRemotingTelemetry))
+    use host = buildHost (Some (sink :> IRemotingTelemetry)) None
     host.Start()
     use client = host.GetTestClient()
     test sink client
+
+let private withAuditClient (test: RecordingAuditEmitter -> HttpClient -> unit) : unit =
+    let emitter = RecordingAuditEmitter.create ()
+    use host = buildHost None (Some (emitter :> IAuditEmitter))
+    host.Start()
+    use client = host.GetTestClient()
+    test emitter client
 
 let private postRemoting (client: HttpClient) (path: string) (body: string) : HttpResponseMessage =
     use req = new HttpRequestMessage(HttpMethod.Post, path)
@@ -268,6 +275,49 @@ let tests =
                 Expect.equal response.StatusCode HttpStatusCode.OK "PublicEndpoint always passes"
                 let body = readBody response
                 Expect.equal body "\"public-info\"" "Handler invoked"
+
+        // ---- Phase 69h coverage: audit emission ----
+
+        testCase "Audit: UpdatePolicy emits AuditEvent with PolicyChanged kind"
+        <| fun _ ->
+            withAuditClient
+            <| fun emitter client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IAuditedApi/UpdatePolicy")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("X-Subject", "auditor-alice")
+                req.Headers.Add("x-correlation-id", "corr-policy-1")
+                let response = client.SendAsync(req).Result
+                Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
+                let events = emitter.Events
+                Expect.equal events.Length 1 "One audit event per call"
+                let evt = events.[0]
+                Expect.equal evt.Kind AuditKind.PolicyChanged "Kind from [<Audit>] attribute"
+                Expect.equal evt.MethodName "UpdatePolicy" "Method name captured"
+                Expect.equal evt.SubjectId "auditor-alice" "Subject id from auth context"
+                Expect.equal evt.CorrelationId (Some "corr-policy-1") "Correlation id propagated"
+
+        testCase "Audit: Custom kind round-trips through the encoded form"
+        <| fun _ ->
+            withAuditClient
+            <| fun emitter client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IAuditedApi/CustomExport")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                req.Headers.Add("X-Subject", "exporter")
+                let _ = client.SendAsync(req).Result
+                let evt = emitter.Events.[0]
+                Expect.equal evt.Kind (AuditKind.Custom "HarnessExport") "Custom:HarnessExport encoded round-trip"
+
+        testCase "Audit: NoAudit method emits no event (opt-in only)"
+        <| fun _ ->
+            withAuditClient
+            <| fun emitter client ->
+                use req = new HttpRequestMessage(HttpMethod.Post, "/api/IAuditedApi/NoAudit")
+                req.Content <- new StringContent("", Encoding.UTF8, "application/json")
+                req.Headers.Add("x-remoting-proxy", "true")
+                let _ = client.SendAsync(req).Result
+                Expect.equal emitter.Events.Length 0 "Method without [<Audit>] emits nothing"
 
         // ---- Phase 69g coverage: rate-limit attribution ----
 
