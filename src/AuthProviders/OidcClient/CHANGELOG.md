@@ -7,6 +7,13 @@ SemVer-on-0.x policy (see the repository `CLAUDE.md` "Versioning"
 section), during `0.x` a minor bump may carry breaking changes while a
 patch bump stays non-breaking.
 
+## [0.3.8] - 2026-05-31
+
+- **Fixed** post-callback navigation in `handleCallback`: after persisting tokens the shell now does a full-document `location.replace` to the app **root** (`origin + "/"`) rather than the current pathname. The current pathname is the redirect URI (e.g. `/auth/callback`); reloading onto it re-satisfied `isCallbackUrl` on reboot, so `OidcShell` re-entered `handleCallback` with the `?code` already consumed and failed with `MissingCode`. Landing on the root makes the reboot take the `classifyStoredToken` branch, see the just-persisted token as fresh, and enter `SignedIn`.
+- **Changed** `classifyStoredToken`: a 3-segment-shaped token whose payload cannot be base64-decoded + JSON-parsed is now classified as `OpaqueToken` (deferred to the server validator) rather than `StaleJwt` (which would trigger a doomed client-side refresh). Covers encrypted-body JWE / Microsoft Graph "nord" access tokens. Adds the `classifyStoredTokenWith` test seam and `OidcClassifyTokenTests` coverage.
+- **Added** `diagnose : AuthError -> AuthDiagnostic` helper for structured, human-readable failure classification.
+- **Added** `AuthTracer` — correlation-id stash + per-edge trace emits across the sign-in / callback / refresh state transitions for high-fidelity auth-flow logging.
+
 ## [0.3.0]
 
 - **Renamed** package id `ToolUp.AuthProviders.OidcClient` → `ToolUp.AuthProviders.Oidc.Client` (Phase 11.C.5 — unifies the `.Client` suffix convention with `ToolUp.AIProviders.Claude.Client` and `ToolUp.AuthProviders.EntraExternalId.Client`). Consumer migration: rewrite the `<PackageVersion>` / `<PackageReference Include="...">` entry; F# `module` names inside the package are unchanged (still `ToolUp.AuthProviders.Oidc.OidcClient` / `ToolUp.AuthProviders.Oidc.OidcRegister` / etc.).
