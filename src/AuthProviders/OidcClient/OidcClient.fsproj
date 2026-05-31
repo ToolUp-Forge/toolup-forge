@@ -13,6 +13,7 @@
     <Compile Include="OidcIdTokenValidator.fs" />
     <Compile Include="OidcDiscovery.fs" />
     <Compile Include="OidcTokenStore.fs" />
+    <Compile Include="AuthTracer.fs" />
     <Compile Include="OidcClient.fs" />
     <Compile Include="OidcAuthUI.fs" />
     <Compile Include="OidcRegister.fs" />

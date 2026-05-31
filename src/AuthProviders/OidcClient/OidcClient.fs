@@ -11,6 +11,7 @@ open ToolUp.AuthProviders.Oidc.OidcDiscovery
 open ToolUp.AuthProviders.Oidc.OidcIdTokenValidator
 open ToolUp.AuthProviders.Oidc.OidcPkce
 open ToolUp.AuthProviders.Oidc.OidcTokenStore
+open ToolUp.AuthProviders.Oidc.AuthTracer
 
 // ─── OIDC Authorization Code + PKCE orchestration ────────────────────
 //
@@ -108,8 +109,14 @@ let isCallbackUrl (cfg: OidcUIConfig) : bool =
 /// helper does not enforce this; callers are responsible for
 /// choosing provider-specific keys outside the standard set.
 let beginSignInWithExtras (cfg: OidcUIConfig) (extraParams: (string * string) list) : Async<Result<unit, AuthError>> = async {
+    let corrId = generateState ()
+    stashCorrelationId corrId
+    emitOk (Some corrId) "begin-sign-in" None
+
     match! fetchDiscovery cfg.Issuer with
-    | Error e -> return Error e
+    | Error e ->
+        emitErr (Some corrId) "discovery-failed" (diagnose e)
+        return Error e
     | Ok doc ->
         let verifier = generateCodeVerifier ()
         let! challenge = generateCodeChallenge verifier |> Async.AwaitPromise
@@ -135,6 +142,7 @@ let beginSignInWithExtras (cfg: OidcUIConfig) (extraParams: (string * string) li
         let query = createObj (standardParams @ extras)
 
         let url = doc.AuthorizationEndpoint + "?" + urlEncode query
+        emitOk (Some corrId) "authorize-redirect" None
         Browser.Dom.window.location.assign url
         // `location.assign` navigates away — this Async never resumes.
         return Ok()
@@ -190,6 +198,9 @@ let private exchangeCodeForTokens
        >
     =
     async {
+        let corrId = readCorrelationId ()
+        emitOk corrId "token-exchange-start" None
+
         try
             let form =
                 createObj [
@@ -217,11 +228,18 @@ let private exchangeCodeForTokens
                     getStringField json "error"
                     |> Option.defaultValue (sprintf "HTTP %d" (unbox<int> response?status))
 
-                return Error(TokenExchangeFailed err)
+                let e = TokenExchangeFailed err
+                emitErr corrId "token-exchange-failed" (diagnose e)
+                return Error e
             else
                 match getStringField json "access_token" with
-                | None -> return Error(TokenExchangeFailed "token endpoint response missing access_token")
+                | None ->
+                    let e = TokenExchangeFailed "token endpoint response missing access_token"
+                    emitErr corrId "token-exchange-failed" (diagnose e)
+                    return Error e
                 | Some at ->
+                    emitOk corrId "token-exchange-ok" None
+
                     return
                         Ok {|
                             AccessToken = at
@@ -230,7 +248,9 @@ let private exchangeCodeForTokens
                             IdToken = getStringField json "id_token"
                         |}
         with ex ->
-            return Error(NetworkError ex.Message)
+            let e = NetworkError ex.Message
+            emitErr corrId "token-exchange-network-error" (diagnose e)
+            return Error e
     }
 
 // `atob` (base64 decoder) is browser-native; also reused by the
@@ -553,6 +573,7 @@ let handleCallback (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = async 
 // ─── Phase 3: sign-out ───────────────────────────────────────────────
 
 let signOut (cfg: OidcUIConfig) : Async<unit> = async {
+    emitOk None "sign-out" None
     clearAll ()
 
     match! fetchDiscovery cfg.Issuer with
@@ -588,11 +609,18 @@ let signOut (cfg: OidcUIConfig) : Async<unit> = async {
 /// observe a 401 from the server can invoke this manually in the
 /// meantime.
 let refreshAccessToken (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = async {
+    emitOk None "refresh-start" None
+
     match getRefreshToken () with
-    | None -> return Error(TokenExchangeFailed "no refresh token stored")
+    | None ->
+        let e = TokenExchangeFailed "no refresh token stored"
+        emitErr None "refresh-no-token" (diagnose e)
+        return Error e
     | Some refreshToken ->
         match! fetchDiscovery cfg.Issuer with
-        | Error e -> return Error e
+        | Error e ->
+            emitErr None "refresh-discovery-failed" (diagnose e)
+            return Error e
         | Ok doc ->
             try
                 let form =
@@ -619,18 +647,26 @@ let refreshAccessToken (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = as
                     // next sign-in attempt is fresh.
                     clearAll ()
                     let err = getStringField json "error" |> Option.defaultValue "refresh rejected"
-                    return Error(TokenExchangeFailed err)
+                    let e = TokenExchangeFailed err
+                    emitErr None "refresh-rejected" (diagnose e)
+                    return Error e
                 else
                     match getStringField json "access_token" with
-                    | None -> return Error(TokenExchangeFailed "refresh response missing access_token")
+                    | None ->
+                        let e = TokenExchangeFailed "refresh response missing access_token"
+                        emitErr None "refresh-missing-access-token" (diagnose e)
+                        return Error e
                     | Some at ->
                         // Some issuers rotate the refresh token on
                         // each refresh; honour it if present.
                         let newRefresh = getStringField json "refresh_token"
                         persistTokens at newRefresh
+                        emitOk None "refresh-ok" None
                         return Ok()
             with ex ->
-                return Error(NetworkError ex.Message)
+                let e = NetworkError ex.Message
+                emitErr None "refresh-network-error" (diagnose e)
+                return Error e
 }
 
 // ─── Phase 3b follow-up: automatic pre-expiry refresh timer ───────────
@@ -813,7 +849,18 @@ let classifyStoredToken (cfg: OidcUIConfig) : StoredTokenState =
         with _ ->
             None
 
-    classifyStoredTokenWith cfg (nowMs () / 1000.0) (getAccessToken ()) decodePayload
+    let result =
+        classifyStoredTokenWith cfg (nowMs () / 1000.0) (getAccessToken ()) decodePayload
+
+    let label =
+        match result with
+        | NoToken -> "no-token"
+        | OpaqueToken -> "opaque"
+        | FreshJwt -> "fresh-jwt"
+        | StaleJwt -> "stale-jwt"
+
+    emitOk (readCorrelationId ()) (sprintf "classify-stored:%s" label) None
+    result
 
 // OIDC pre-expiry refresh timer — a single browser timer handle.
 // Documented client-side mutable: a background-timer handle is not

@@ -46,6 +46,7 @@ let private refreshTokenKey = "toolup-oidc-refresh-token"
 let private verifierKey = "toolup-oidc-code-verifier"
 let private stateKey = "toolup-oidc-state"
 let private nonceKey = "toolup-oidc-nonce"
+let private correlationIdKey = "toolup-oidc-correlation-id"
 
 let stashPendingSignIn (verifier: string) (state: string) (nonce: string) : unit =
     Browser.Dom.window.sessionStorage.setItem (verifierKey, verifier)
@@ -76,6 +77,27 @@ let clearPendingSignIn () : unit =
     Browser.Dom.window.sessionStorage.removeItem verifierKey
     Browser.Dom.window.sessionStorage.removeItem stateKey
     Browser.Dom.window.sessionStorage.removeItem nonceKey
+    Browser.Dom.window.sessionStorage.removeItem correlationIdKey
+
+// ─── Correlation id (for the AuthTracer) ─────────────────────────────
+//
+// A per-sign-in-flow correlation id is generated at `beginSignIn` and
+// stashed alongside the PKCE state. Downstream tracer emits read it
+// here so every line of one flow shares the same id without the
+// orchestration code having to thread the value through every async
+// helper's parameter list. Cleared with the rest of the PKCE state at
+// `clearPendingSignIn` (callback success, sign-out, irrecoverable
+// failure) — emits that fire after a clear (cold-start classify,
+// refresh) read as `None`.
+
+let stashCorrelationId (correlationId: string) : unit =
+    Browser.Dom.window.sessionStorage.setItem (correlationIdKey, correlationId)
+
+let readCorrelationId () : string option =
+    match Browser.Dom.window.sessionStorage.getItem correlationIdKey with
+    | null
+    | "" -> None
+    | v -> Some v
 
 // ─── Access + refresh tokens ─────────────────────────────────────────
 

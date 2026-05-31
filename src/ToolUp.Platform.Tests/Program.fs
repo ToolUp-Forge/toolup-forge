@@ -62,6 +62,7 @@ let allTests =
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
         OidcDiagnoseTests.tests
+        OidcTracerTests.tests
         OidcSignInContractTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests

@@ -150,6 +150,7 @@
         <Compile Include="InProcess\RedactionAllowlistParityTests.fs" />
         <Compile Include="InProcess\OidcClassifyTokenTests.fs" />
         <Compile Include="InProcess\OidcDiagnoseTests.fs" />
+        <Compile Include="InProcess\OidcTracerTests.fs" />
         <Compile Include="InProcess\OidcSignInContractTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
