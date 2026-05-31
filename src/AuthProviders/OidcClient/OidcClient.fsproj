@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="OidcTypes.fs" />
     <Compile Include="OidcPresets.fs" />
+    <Compile Include="OidcCoherenceValidator.fs" />
     <Compile Include="OidcPkce.fs" />
     <Compile Include="OidcIdTokenValidator.fs" />
     <Compile Include="OidcDiscovery.fs" />

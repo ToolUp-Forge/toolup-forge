@@ -65,6 +65,7 @@ let allTests =
         OidcTracerTests.tests
         OidcStateMachineTests.tests
         OidcPresetsTests.tests
+        OidcCoherenceValidatorTests.tests
         OidcSignInContractTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
