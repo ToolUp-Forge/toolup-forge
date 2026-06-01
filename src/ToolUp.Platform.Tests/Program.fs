@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.Program
 
 open Expecto
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
 
 let allTests =
@@ -157,6 +158,7 @@ let allTests =
         SurfaceEnforcementMiddlewareTests.tests
         AnonymousSessionMigrationMiddlewareTests.tests
         SubjectWildcardAnalyzerTests.tests
+        IAIProviderContract.tests
     ]
 
 [<EntryPoint>]
