@@ -146,6 +146,84 @@ let private implTests =
             Expect.isSome (loader.GetPage "custom/path") "leading slash stripped"
             Expect.isNone (loader.GetPage "source") "path-derived slug is replaced"
 
+        testCase "Attribution: generatorMeta emits the expected meta tag"
+        <| fun _ ->
+            let rendered =
+                Giraffe.ViewEngine.RenderView.AsString.xmlNode Attribution.generatorMeta
+
+            Expect.stringContains rendered "name=\"generator\"" "name attribute present"
+
+            Expect.stringContains rendered "ToolUp Forge" "content attribute names ToolUp Forge"
+
+        testCase "Attribution: poweredByBadge with defaults emits both wordmark variants + correct link"
+        <| fun _ ->
+            let rendered =
+                Giraffe.ViewEngine.RenderView.AsString.xmlNode Attribution.poweredByBadge
+
+            Expect.stringContains rendered "https://toolup-forge.io/" "link points at the project home"
+
+            Expect.stringContains
+                rendered
+                "/repo/icon-wordmark-transparent-dark-text-1024.png"
+                "light-mode wordmark referenced (default <img>)"
+
+            Expect.stringContains
+                rendered
+                "/repo/icon-wordmark-transparent-1024.png"
+                "dark-mode wordmark referenced (<source srcset>)"
+
+            Expect.stringContains
+                rendered
+                "(prefers-color-scheme: dark)"
+                "<picture> dark-mode source media query present"
+
+            Expect.stringContains rendered "Powered by" "leading label rendered"
+
+            Expect.stringContains rendered "alt=\"ToolUp Forge\"" "wordmark img alt text is ToolUp Forge"
+
+        testCase "Attribution: poweredByBadgeWith honours custom LinkTo + AssetPrefix"
+        <| fun _ ->
+            let opts: Attribution.Options = {
+                Attribution.Options.defaults with
+                    LinkTo = "https://example.com/"
+                    AssetPrefix = "https://cdn.example.com/forge-brand/"
+            }
+
+            let rendered =
+                Giraffe.ViewEngine.RenderView.AsString.xmlNode (Attribution.poweredByBadgeWith opts)
+
+            Expect.stringContains rendered "https://example.com/" "custom link target honoured"
+
+            Expect.stringContains
+                rendered
+                "https://cdn.example.com/forge-brand/icon-wordmark-transparent-dark-text-1024.png"
+                "custom asset prefix honoured (light variant)"
+
+            Expect.stringContains
+                rendered
+                "https://cdn.example.com/forge-brand/icon-wordmark-transparent-1024.png"
+                "custom asset prefix honoured (dark variant)"
+
+            Expect.isFalse (rendered.Contains "/repo/icon-wordmark") "default /repo/ prefix is replaced, not appended"
+
+        testCase "Attribution: poweredByBadgeWith trims trailing slash on AssetPrefix"
+        <| fun _ ->
+            // Both `"/repo"` and `"/repo/"` should produce the same path.
+            let rendered =
+                Giraffe.ViewEngine.RenderView.AsString.xmlNode (
+                    Attribution.poweredByBadgeWith {
+                        Attribution.Options.defaults with
+                            AssetPrefix = "/repo"
+                    }
+                )
+
+            Expect.stringContains
+                rendered
+                "/repo/icon-wordmark-transparent-dark-text-1024.png"
+                "no double slash regardless of trailing-slash input"
+
+            Expect.isFalse (rendered.Contains "/repo//") "no double slash regardless of trailing-slash input"
+
         testCase "MarkdownContentLoader: empty slug override falls back to path-derived slug"
         <| fun _ ->
             let dir = mkFixtureDir ()
