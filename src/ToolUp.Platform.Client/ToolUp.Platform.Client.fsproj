@@ -55,6 +55,12 @@
         <Compile Include="Client\NarrativeCommit.fs" />
         <Compile Include="Client\NarrativeRenderer.fs" />
         <Compile Include="Client\Markdown.fs" />
+        <!-- Auth-observability A4 — generic client-side auth tracer (lifted
+             from the OIDC provider's AuthTracer so every auth-relevant
+             code path can emit through the same seam). Module-scoped
+             mutable tracer slot; default nullTracer; build-time gated
+             via __TOOLUP_AUTH_TRACE__ Vite define. -->
+        <Compile Include="Client\AuthDiagnostics.fs" />
         <Compile Include="Client\CsrfClient.fs" />
         <!-- 0.4.1 — Cmd.OfRemoting.IRemotingInterceptor bridge. Parses
              ToolUp.Remoting's Phase 69b.E CategorisedErrorResult envelope

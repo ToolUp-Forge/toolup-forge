@@ -376,11 +376,75 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                         ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin
                                 | _ -> ()
                         | Error _ -> ()
-                    with _ ->
-                        // Infrastructure error — handlers see missing Items and
-                        // fall back to anonymous. Avoid bringing the whole
-                        // request path down for a DI or cache hiccup.
-                        ()
+                    with ex ->
+                        // Auth-observability A1 — infrastructure error in
+                        // the scope-resolution pipeline (DI hiccup, store
+                        // throw, cache miss-and-throw). Pre-A1 this catch
+                        // was silent: handlers downstream saw missing
+                        // Items and fell back to anonymous, and operators
+                        // had no signal to distinguish "no credentials"
+                        // from "resolver crashed."
+                        //
+                        // The fail-closed behaviour is preserved (we
+                        // don't re-raise — bringing the request path down
+                        // for a DI hiccup would be worse). What changes
+                        // is observability: structured log + best-effort
+                        // audit event so a spike in
+                        // `ScopeResolutionFailed` is visible on dashboards
+                        // and per-incident triage has a query path.
+                        //
+                        // Every observability call is itself wrapped in a
+                        // local try/with — a logger / audit failure
+                        // during the auth-failure path MUST NOT itself
+                        // bring the request down.
+
+                        let exceptionKind = ex.GetType().Name
+                        let methodName = ctx.Request.Method
+                        let pathStr = string ctx.Request.Path
+
+                        try
+                            match ctx.RequestServices.GetService(typeof<ILogger>) with
+                            | :? ILogger as log ->
+                                log.Error(
+                                    sprintf
+                                        "ScopeResolutionMiddleware swallowed %s on %s %s — request fell through to anonymous: %s"
+                                        exceptionKind
+                                        methodName
+                                        pathStr
+                                        ex.Message,
+                                    Some ex
+                                )
+                            | _ -> ()
+                        with _ ->
+                            ()
+
+                        try
+                            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+                            | :? IAuditLog as auditLog ->
+                                let truncatedMessage =
+                                    let m = ex.Message
+
+                                    if isNull m then "(null)"
+                                    elif m.Length <= 512 then m
+                                    else m.Substring(0, 512)
+
+                                let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+
+                                auditLog.Record(
+                                    "_platform",
+                                    AuthScopeResolutionFailed {
+                                        Method = methodName
+                                        Path = pathStr
+                                        ExceptionKind = exceptionKind
+                                        Message = truncatedMessage
+                                        CorrelationId = correlationId
+                                        OccurredAt = DateTimeOffset.UtcNow
+                                    }
+                                )
+                                |> Async.Start
+                            | _ -> ()
+                        with _ ->
+                            ()
 
                 do! next.Invoke(ctx)
             finally
@@ -393,20 +457,29 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 // that middleware; the equivalent is now inside ToolUp.Remoting.Giraffe.
 
 /// Gap audit pass-2 #7 — request-id middleware. Generates a per-
-/// request id (or accepts a validated client-supplied
-/// `X-Request-Id` header), stores it on `HttpContext.Items`, and
-/// stamps `X-Request-Id` on the response. Operators correlate audit
-/// trail entries / dispatcher logs / request timing logs against the
-/// id when investigating "why did request X fail at 14:32".
+/// request id, stores it on `HttpContext.Items`, and stamps both
+/// `X-Request-Id` AND `x-correlation-id` headers on the response.
+/// Operators correlate audit trail entries / dispatcher logs / request
+/// timing logs against the id when investigating "why did request X
+/// fail at 14:32".
 ///
-/// Client-supplied id is accepted only when it matches a strict
+/// Auth-observability A3 — unified correlation id. The middleware
+/// now reuses any inbound `x-correlation-id` (the ToolUp.Remoting
+/// client-side seam stamps it per Phase 69b.D) so a single id stitches
+/// client → server → audit. If neither `x-correlation-id` nor a
+/// validated `X-Request-Id` is present, a fresh GUID is minted. The
+/// resulting id is published as BOTH headers on the response so legacy
+/// readers of either name see the same value.
+///
+/// Both inbound headers are accepted only when they match a strict
 /// shape: 8–64 chars of `[A-Za-z0-9_-]`. Anything else (overlong,
 /// wrong character class, non-ASCII) is rejected silently and a
-/// fresh id is generated. Defends against log-injection attacks
-/// where an attacker passes `X-Request-Id: \r\nfake-log-line` and
-/// pollutes log output.
+/// fresh id is generated. Defends against log-injection attacks where
+/// an attacker passes `X-Request-Id: \r\nfake-log-line` and pollutes
+/// log output.
 type RequestIdMiddleware(next: RequestDelegate) =
-    static let HeaderName = "X-Request-Id"
+    static let RequestIdHeader = "X-Request-Id"
+    static let CorrelationIdHeader = "x-correlation-id"
     static let ContextItemKey = "ToolUp.RequestId"
 
     static let isValidClientId (id: string) =
@@ -420,30 +493,38 @@ type RequestIdMiddleware(next: RequestDelegate) =
                || c = '-'
                || c = '_')
 
+    static let tryReadHeader (ctx: HttpContext) (headerName: string) : string option =
+        match ctx.Request.Headers.TryGetValue headerName with
+        | true, values when values.Count > 0 ->
+            let raw = string values[0]
+
+            if isValidClientId raw then Some raw else None
+        | _ -> None
+
     member _.InvokeAsync(ctx: HttpContext) =
         task {
+            // A3 — prefer the unified `x-correlation-id`, fall back to
+            // the legacy `X-Request-Id`, finally mint a fresh GUID.
+            // Single id stitches all three observability surfaces.
             let requestId =
-                match ctx.Request.Headers.TryGetValue HeaderName with
-                | true, values when values.Count > 0 ->
-                    let raw = string values[0]
-
-                    if isValidClientId raw then
-                        raw
-                    else
-                        Guid.NewGuid().ToString("N")
-                | _ -> Guid.NewGuid().ToString("N")
+                match tryReadHeader ctx CorrelationIdHeader with
+                | Some id -> id
+                | None ->
+                    match tryReadHeader ctx RequestIdHeader with
+                    | Some id -> id
+                    | None -> Guid.NewGuid().ToString("N")
 
             ctx.Items[ContextItemKey] <- box requestId
 
-            // Stamp the header on the response BEFORE the body is
-            // sent. `OnStarting` fires immediately before the response
-            // headers are written; setting the header from inside this
-            // middleware (which runs before the body has been
-            // generated) is also valid because the response hasn't
-            // started yet at this point.
+            // Stamp BOTH headers on the response so consumers of either
+            // name see the same value. Legacy `X-Request-Id` readers
+            // continue to work; new consumers grep `x-correlation-id`.
             ctx.Response.OnStarting(fun () ->
-                if not (ctx.Response.Headers.ContainsKey HeaderName) then
-                    ctx.Response.Headers[HeaderName] <- Microsoft.Extensions.Primitives.StringValues requestId
+                if not (ctx.Response.Headers.ContainsKey RequestIdHeader) then
+                    ctx.Response.Headers[RequestIdHeader] <- Microsoft.Extensions.Primitives.StringValues requestId
+
+                if not (ctx.Response.Headers.ContainsKey CorrelationIdHeader) then
+                    ctx.Response.Headers[CorrelationIdHeader] <- Microsoft.Extensions.Primitives.StringValues requestId
 
                 System.Threading.Tasks.Task.CompletedTask)
 

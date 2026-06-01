@@ -235,14 +235,19 @@ let private extractEventScopeId (audit: AuditEvent) : string option =
     | AdSlotConfigCreated _
     | AdSlotConfigUpdated _
     | AdSlotConfigDeleted _
-    | AnonymousSessionMigrated _ ->
-        // Wave 10 — public-utility audit cases carry the
-        // anonymous-user / subject-user identity but no tenant
-        // ScopeId (`_platform.consent` / `_platform.ads` /
-        // `_platform.ads.config` / `_platform.users` are
-        // deployment-wide). Datadog queries filter via the
-        // EventStore-level scope, same posture as the Phase 39
-        // asset cases.
+    | AnonymousSessionMigrated _
+    // Auth-observability A1 + A2 — `_platform.auth` SourceModule.
+    // No tenant ScopeId on these (deployment-wide observability
+    // events; the request that triggered the denial had a
+    // resolvable Subject, but the audit row is emitted under the
+    // `_platform` scope so a per-tenant Datadog filter sees them
+    // alongside other system-level rows).
+    | AuthScopeResolutionFailed _
+    | SurfaceDenied _ ->
+        // Wave 10 + auth-observability — public-utility audit cases
+        // carry anonymous-user / subject-user identity but no tenant
+        // ScopeId. Datadog queries filter via the EventStore-level
+        // scope, same posture as the Phase 39 asset cases.
         None
 
 /// Sanitise a tag value for Datadog's CSV tag list. Datadog reserves

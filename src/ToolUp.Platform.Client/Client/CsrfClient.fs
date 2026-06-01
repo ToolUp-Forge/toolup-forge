@@ -5,6 +5,7 @@ module CsrfClient
 
 open Fable.Core
 open Fable.Core.JsInterop
+open ToolUp.Platform
 
 // ─── Phase 9j / Phase 13a — client-side request-header seam ──────────
 //
@@ -131,13 +132,22 @@ let mutable private guardInstalled = false
 // One-time wrap of BOTH `XMLHttpRequest.prototype.{open,send}` and
 // `window.fetch`. $0 = CSRF-token getter, $1 = identity-pairs getter
 // (`[[k,v],...]`), $2 = configured-API-origin getter ("" = unset),
-// $3 = per-request correlation-id getter (returns fresh string per call).
+// $3 = per-request correlation-id getter (returns fresh string per call),
+// $4 = warnOnce sink callback (called as `sink(kind, message)` on the
+// first occurrence of each kind — A6 routes these through F#-side
+// AuthDiagnostics + Logger).
 // Reads the getters at send time, so it is correct regardless of when
 // the calling proxy/closure was built. Never throws; the original
 // transport is always invoked; idempotent via sentinels.
-[<Emit("""(function(getTok, getIdent, getApiOrigin, getCorrId){
+[<Emit("""(function(getTok, getIdent, getApiOrigin, getCorrId, warnOnceSink){
   var WARNED = {};
-  function warnOnce(k, msg){ if (!WARNED[k]) { WARNED[k] = true; try { console.warn('[ToolUp request-guard] ' + msg); } catch(e){} } }
+  function warnOnce(k, msg){
+    if (!WARNED[k]) {
+      WARNED[k] = true;
+      try { console.warn('[ToolUp request-guard] ' + msg); } catch(e){}
+      try { warnOnceSink(k, msg); } catch(e){}
+    }
+  }
   function eligible(method, urlStr){
     var u;
     try { u = new URL(String(urlStr), window.location.href); } catch(e){ return null; }
@@ -216,12 +226,13 @@ let mutable private guardInstalled = false
     wrapped.__toolupReqGuard = true;
     window.fetch = wrapped;
   }
-})($0, $1, $2, $3)""")>]
+})($0, $1, $2, $3, $4)""")>]
 let private installGuardJs
     (tokenGetter: unit -> string)
     (identityGetter: unit -> (string * string)[])
     (apiOriginGetter: unit -> string)
     (correlationGetter: unit -> string)
+    (warnOnceSink: string -> string -> unit)
     : unit =
     jsNative
 
@@ -251,8 +262,24 @@ let installRequestGuard
     if not guardInstalled then
         guardInstalled <- true
 
+        // A6 — the JS `warnOnce` call also fans out to F# AuthDiagnostics
+        // + Logger so structured observability (Datadog forwarder, audit
+        // dashboards) sees the same one-time warnings devtools-only
+        // operators read in `console.warn`.
+        let warnSink (kind: string) (msg: string) =
+            try
+                let log = Logger.forCategory "client.auth.guard"
+                log.Warn(sprintf "[%s] %s" kind msg)
+            with _ ->
+                ()
+
+            try
+                AuthDiagnostics.emitErr None (sprintf "csrf-guard:%s" kind) { Kind = kind; SubCause = None }
+            with _ ->
+                ()
+
         try
-            installGuardJs tokenOrEmpty identityGetter apiOriginGetter correlationGetter
+            installGuardJs tokenOrEmpty identityGetter apiOriginGetter correlationGetter warnSink
         with _ ->
             ()
 

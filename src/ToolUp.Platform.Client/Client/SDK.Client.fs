@@ -1957,8 +1957,28 @@ module Client =
         // it can refresh JWTs into localStorage + the SSE auth cookie
         // before the first request goes out. No-op when None — the
         // existing X-User-Id / ?userId= path keeps working.
+        //
+        // A7 — wrap the call in try/with so a throwing bridge
+        // constructor emits a structured diagnostic (via
+        // `AuthDiagnostics`) AND still surfaces as a fatal SDK boot
+        // error. Distinguishing a bridge defect from a generic init
+        // defect was previously manual log triage; now the operator
+        // grep `bridge-install-failed` in the auth tracer output.
         match config.AuthBridge with
-        | Some bridge -> UserSession.installBridge bridge
+        | Some bridge ->
+            try
+                UserSession.installBridge bridge
+                AuthDiagnostics.emitOk None "bridge-install-ok" None
+            with ex ->
+                AuthDiagnostics.emitException None "bridge-install-failed" "BridgeInstallFailed" ex
+
+                // Re-raise — a failed bridge install is a fatal SDK
+                // boot error. The diagnostic emission above gives
+                // operators the structured signal; the re-raise gives
+                // the consumer's unhandled-error path the chance to
+                // present a meaningful UI ("authentication is
+                // unavailable; refresh to retry").
+                reraise ()
         | None -> ()
 
         // Phase 13a — boot-line summary log so operators can verify

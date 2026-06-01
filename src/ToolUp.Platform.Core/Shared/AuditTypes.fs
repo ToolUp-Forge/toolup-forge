@@ -1381,6 +1381,70 @@ type AnonymousSessionMigratedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Auth-observability phase A — `ScopeResolutionMiddleware` infrastructure
+/// failure. Fires when the catch-all in `ScopeResolutionMiddleware` traps
+/// an exception (DI resolution failure, cache failure, store throw) and
+/// the request falls through to anonymous-subject behaviour. Pre-A1 the
+/// catch was silent; operators had no signal to distinguish "no
+/// credentials" from "resolver crashed."
+///
+/// Reserved `SourceModule = "_platform.auth"`. `ScopeId` for the
+/// emission is the literal `"_platform"` (the scope is unresolvable —
+/// that's precisely the failure we're recording).
+type ScopeResolutionFailedPayload = {
+    /// Request method (`GET` / `POST` / …) at the moment of failure.
+    Method: string
+    /// Request path (unparameterised — operators read this when triaging,
+    /// PII risk is low for `/api/*` shapes).
+    Path: string
+    /// Concrete .NET exception type name (`NullReferenceException`,
+    /// `SocketException`, etc.). Operators correlate spikes to infra.
+    ExceptionKind: string
+    /// Human-readable message from the exception. Bounded — middleware
+    /// truncates to 512 chars to keep audit-row size predictable.
+    Message: string
+    /// Correlation id (read from `CallContext.correlationId()` if set,
+    /// otherwise `None`). Stitches this event to the request log + the
+    /// client-side trace.
+    CorrelationId: string option
+    OccurredAt: DateTimeOffset
+}
+
+/// Auth-observability phase A — `SurfaceEnforcementMiddleware` denial.
+/// Fires on every `writeRejection` so operator dashboards see denial
+/// rates (rate-limit on a scripted enumeration, recent surface-config
+/// changes that flipped legit calls to denied). Pre-A2 these were
+/// completely silent — the middleware wrote a 401/403 JSON body but
+/// emitted no audit.
+///
+/// Reserved `SourceModule = "_platform.auth"`. `ScopeId` is `_platform`
+/// (denials are deployment-wide observability, not tenant-scoped).
+type SurfaceDeniedPayload = {
+    /// Request method.
+    Method: string
+    /// Request path. **Unparameterised path** today; future evolution
+    /// will template (`/api/teams/{id}/members`) once the route registry
+    /// exposes the template. For now operators query on path prefix.
+    Path: string
+    /// `Subject` kind at denial time (`anonymous` / `user` / `team` /
+    /// `claim`). The full subject is available in `SubjectId` when not
+    /// anonymous.
+    SubjectKind: string
+    /// Stable identifier of the denied subject. `None` for anonymous.
+    SubjectId: string option
+    /// Machine-readable denial code (`authentication_required` /
+    /// `team_required` / `claim_bearer_not_admitted` / etc.) — matches
+    /// the `error` field in the response body.
+    DenialCode: string
+    /// Optional caller-visible hint that accompanies the denial code
+    /// (`select_team` etc.).
+    Hint: string option
+    /// Correlation id (set by `installRequestSeam` client-side or by the
+    /// dispatcher's per-request generator).
+    CorrelationId: string option
+    OccurredAt: DateTimeOffset
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableJsonConverter` (matches the
@@ -1676,6 +1740,20 @@ type AuditEvent =
     /// authenticated request following an anonymous session. Reserved
     /// `SourceModule = "_platform.subject"`.
     | AnonymousSessionMigrated of AnonymousSessionMigratedPayload
+    /// Auth-observability A1 — `ScopeResolutionMiddleware` infra failure
+    /// (DI hiccup, store throw, cache miss-and-throw). The request fell
+    /// through to anonymous-subject behaviour; this event is the audit
+    /// trail of the failure. Reserved
+    /// `SourceModule = "_platform.auth"`. Named `Auth` prefix to
+    /// disambiguate from `ScopeResolutionError.ScopeResolutionFailed`
+    /// (`Types/StorageScope.fs` — different DU, same short name).
+    | AuthScopeResolutionFailed of ScopeResolutionFailedPayload
+    /// Auth-observability A2 — `SurfaceEnforcementMiddleware` denied
+    /// the request. One event per denial; rate spikes indicate either
+    /// a scripted enumeration or a recent surface-config change that
+    /// flipped legit calls to denied. Reserved
+    /// `SourceModule = "_platform.auth"`.
+    | SurfaceDenied of SurfaceDeniedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1757,6 +1835,8 @@ module AuditEvent =
         | AdSlotConfigUpdated _ -> "AdSlotConfigUpdated"
         | AdSlotConfigDeleted _ -> "AdSlotConfigDeleted"
         | AnonymousSessionMigrated _ -> "AnonymousSessionMigrated"
+        | AuthScopeResolutionFailed _ -> "AuthScopeResolutionFailed"
+        | SurfaceDenied _ -> "SurfaceDenied"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

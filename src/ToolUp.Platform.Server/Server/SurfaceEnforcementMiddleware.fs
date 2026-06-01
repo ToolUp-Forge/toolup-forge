@@ -337,17 +337,85 @@ module SurfaceEnforcement =
                 // an attack-surface probe). 403; no hint.
                 Reject(403, "claim_bearer_not_admitted", None)
 
-let private writeRejection (ctx: HttpContext) (statusCode: int) (errorCode: string) (hint: string option) = task {
-    ctx.Response.StatusCode <- statusCode
-    ctx.Response.ContentType <- "application/json"
+/// Auth-observability A2 — emit `SurfaceDenied` to `IAuditLog` when a
+/// request is rejected. Pre-A2 these denials were structurally invisible
+/// (the response body told the client about the denial but no audit row
+/// was emitted, so operator dashboards couldn't see denial rates).
+///
+/// All observability calls are wrapped in local `try/with` — a logger or
+/// audit failure on the denial path MUST NOT itself stall the response.
+/// Best-effort emission: when no `IAuditLog` is registered, the denial
+/// silently propagates exactly as it did pre-A2.
+///
+/// Skips emission for CSRF denials — `CsrfMiddleware` is upstream of
+/// this and emits its own observability when wired.
+let private emitDenialAudit
+    (ctx: HttpContext)
+    (subject: Subject)
+    (statusCode: int)
+    (errorCode: string)
+    (hint: string option)
+    : unit =
+    try
+        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+        | :? IAuditLog as auditLog ->
+            let subjectKindStr =
+                match Subject.kind subject with
+                | AnonymousKind -> "anonymous"
+                | UserKind -> "user"
+                | TeamMemberKind -> "team"
+                | ClaimBearerKind -> "claim"
 
-    let body =
-        match hint with
-        | Some h -> sprintf "{\"error\":\"%s\",\"status\":%d,\"hint\":\"%s\"}" errorCode statusCode h
-        | None -> sprintf "{\"error\":\"%s\",\"status\":%d}" errorCode statusCode
+            let subjectId =
+                match subject with
+                | AnonymousSession _ -> None
+                | AuthenticatedUser uid -> Some uid
+                | TeamMember(uid, _) -> Some uid
+                | ClaimBearer claim -> Some claim.TokenId
 
-    do! ctx.Response.WriteAsync body
-}
+            let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+
+            auditLog.Record(
+                "_platform",
+                SurfaceDenied {
+                    Method = ctx.Request.Method
+                    Path = string ctx.Request.Path
+                    SubjectKind = subjectKindStr
+                    SubjectId = subjectId
+                    DenialCode = errorCode
+                    Hint = hint
+                    CorrelationId = correlationId
+                    OccurredAt = DateTimeOffset.UtcNow
+                }
+            )
+            |> Async.Start
+        | _ -> ()
+    with _ ->
+        ()
+
+let private writeRejection
+    (ctx: HttpContext)
+    (subject: Subject)
+    (statusCode: int)
+    (errorCode: string)
+    (hint: string option)
+    =
+    task {
+        // Phase A2 — emit the audit row BEFORE we write the body so the
+        // event order in the audit trail matches the wire-order observable
+        // from the client.
+        emitDenialAudit ctx subject statusCode errorCode hint
+
+        ctx.Response.StatusCode <- statusCode
+        ctx.Response.ContentType <- "application/json"
+
+        let body =
+            match hint with
+            | Some h -> sprintf "{\"error\":\"%s\",\"status\":%d,\"hint\":\"%s\"}" errorCode statusCode h
+            | None -> sprintf "{\"error\":\"%s\",\"status\":%d}" errorCode statusCode
+
+        do! ctx.Response.WriteAsync body
+    }
 
 /// ASP.NET Core middleware enforcing per-route `SurfaceRequirement`
 /// against the resolved `Subject`. The canonical authentication /
@@ -389,6 +457,6 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
 
                     match SurfaceEnforcement.evaluate subject requirement with
                     | Pass -> do! next.Invoke(ctx)
-                    | Reject(statusCode, errorCode, hint) -> do! writeRejection ctx statusCode errorCode hint
+                    | Reject(statusCode, errorCode, hint) -> do! writeRejection ctx subject statusCode errorCode hint
         }
         :> System.Threading.Tasks.Task
