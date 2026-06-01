@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Cloud.Gcp</PackageId>
+    <Description>GCP cloud umbrella for ToolUp.Platform — transitively pulls ToolUp.Storage.GoogleCloud, ToolUp.Secrets.GcpSecretManager, ToolUp.AuditSinks.GcsArchive, ToolUp.Metrics.OpenTelemetry, plus the OTLP exporter for sending metrics to a Cloud Operations collector. One PackageReference replaces five per-cloud entries.</Description>
+    <PackageTags>fsharp;sdk;cloud;gcp;google-cloud;umbrella;meta-package</PackageTags>
+    <!-- Phase 16c (2026-06-01) — empty meta-package. Same shape as
+         ToolUp.Sdk: no F# source, skip empty-assembly artefact, skip
+         symbols, suppress NU5128. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeSymbols>false</IncludeSymbols>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Storage\GoogleCloudStorage\GoogleCloudStorage.fsproj" />
+    <ProjectReference Include="..\..\Secrets\GcpSecretManager\ToolUp.Secrets.GcpSecretManager.fsproj" />
+    <ProjectReference Include="..\..\AuditSinks\GcsArchive\ToolUp.AuditSinks.GcsArchive.fsproj" />
+    <ProjectReference Include="..\..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- GCP's recommended metrics path is OTLP-to-collector (Google
+         Cloud Operations exporter on the collector side). The umbrella
+         ships the OTLP exporter; consumer's Program.fs calls
+         .AddOtlpExporter(), optionally gated on
+         TOOLUP_OTEL_EXPORTER=gcp-operations. -->
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+</Project>

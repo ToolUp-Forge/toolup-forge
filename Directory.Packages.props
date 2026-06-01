@@ -29,6 +29,14 @@
     <PackageVersion Include="Azure.Data.Tables" Version="12.10.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11" />
+    <!-- Phase 16c — Azure Monitor OTel distro for the
+         ToolUp.Cloud.Azure umbrella. First-party Microsoft-published
+         all-in-one Azure Monitor exporter; bundles metric + trace
+         exporters with a single configure call
+         (.AddAzureMonitorMetricExporter() /
+         .UseAzureMonitor() in builder code). Pulled by the umbrella
+         only — consumers without the umbrella don't see it. -->
+    <PackageVersion Include="Azure.Monitor.OpenTelemetry.AspNetCore" Version="1.2.0" />
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.28.0" />
     <PackageVersion Include="Azure.Storage.Common" Version="12.26" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
@@ -148,6 +156,17 @@
     <PackageVersion Include="MimeKit" Version="4.16" />
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <!-- Phase 16c — OTLP exporter for the cloud umbrella packages.
+         Pulled by all three (ToolUp.Cloud.Azure / .Aws / .Gcp) as
+         the universal collector-side metrics path. Consumers configure
+         the collector endpoint via OTEL_EXPORTER_OTLP_ENDPOINT and
+         the umbrella's TOOLUP_OTEL_EXPORTER convention. Version
+         pinned to the most recent stable that clears the
+         NU1902 advisories on the 1.9.x / 1.10.x / 1.12.x line
+         (GHSA-g94r-2vxg-569j on OpenTelemetry.Api +
+         GHSA-4625-4j76-fww9 / GHSA-8785-wc3w-h8q6 on the
+         exporter). -->
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
     <PackageVersion Include="PdfPig" Version="0.1.14" />
     <PackageVersion Include="Pipelines.Sockets.Unofficial" Version="2.2.8" />
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9" />
@@ -244,6 +263,13 @@
     <PackageVersion Include="ToolUp.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AuditSinks.SplunkHec" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AuditSinks.DatadogLogs" Version="$(ToolUpSdkVersion)" />
+    <!-- Phase 16c — Azure / GCP audit-sink parity with S3Archive.
+         Both companions write through the abstract IBlobStorage (no
+         vendor SDK in the audit-sink package itself); the cloud-
+         specific WORM mechanism (Azure Blob Immutability Policy /
+         GCS Bucket Lock retention) is documented per companion. -->
+    <PackageVersion Include="ToolUp.AuditSinks.AzureBlobArchive" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.GcsArchive" Version="$(ToolUpSdkVersion)" />
 
     <!-- Notification channels -->
     <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
@@ -255,5 +281,15 @@
     <!-- Metrics + UI -->
     <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Phase 16c — Cloud umbrella packages. One PackageReference per
+         cloud transitively pulls Storage + Secrets + AuditSinks +
+         Metrics.OpenTelemetry + the cloud's recommended OTel exporter
+         package. Pure meta-packages (no F# source); consumers can
+         drop the umbrella and add the inner packages individually
+         with no behavioural difference. -->
+    <PackageVersion Include="ToolUp.Cloud.Azure" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Aws" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Gcp" Version="$(ToolUpSdkVersion)" />
   </ItemGroup>
 </Project>

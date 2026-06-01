@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Cloud.Azure</PackageId>
+    <Description>Azure cloud umbrella for ToolUp.Platform — transitively pulls ToolUp.Storage.AzureBlob, ToolUp.Secrets.AzureKeyVault, ToolUp.AuditSinks.AzureBlobArchive, ToolUp.Metrics.OpenTelemetry, plus the Azure Monitor OTel exporter. One PackageReference replaces five per-cloud entries; consumers drop the umbrella with no behavioural change to reference the individual companions instead.</Description>
+    <PackageTags>fsharp;sdk;cloud;azure;umbrella;meta-package</PackageTags>
+    <!-- Phase 16c (2026-06-01) — empty meta-package. The pack output's
+         value is the transitive dependency closure declared below;
+         no F# source compiles in. Same shape as ToolUp.Sdk: skip the
+         empty-assembly artefact, skip symbols, suppress NU5128
+         ("package contains no lib content"). -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeSymbols>false</IncludeSymbols>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
+    <ProjectReference Include="..\..\Secrets\AzureKeyVault\AzureKeyVault.fsproj" />
+    <ProjectReference Include="..\..\AuditSinks\AzureBlobArchive\ToolUp.AuditSinks.AzureBlobArchive.fsproj" />
+    <ProjectReference Include="..\..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- OTel exporters bundled for Azure-targeting consumers. The
+         consumer's Program.fs calls .AddAzureMonitorMetricExporter()
+         and/or .AddOtlpExporter(); the umbrella ensures the packages
+         are on the dependency graph. TOOLUP_OTEL_EXPORTER=azure-monitor
+         is a documented convention the consumer's startup code can
+         read to switch between exporters at runtime. -->
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+</Project>
