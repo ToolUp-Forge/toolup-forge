@@ -52,9 +52,9 @@
       sites compile against ToolUp.Elmish with no source edits.
       See ../toolup-elmish/MIGRATION.md for the migration story.
     -->
-    <PackageVersion Include="ToolUp.Elmish" Version="0.4.0" />
-    <PackageVersion Include="ToolUp.Elmish.HMR" Version="0.4.0" />
-    <PackageVersion Include="ToolUp.Elmish.React" Version="0.4.0" />
+    <PackageVersion Include="ToolUp.Elmish" Version="0.4.1" />
+    <PackageVersion Include="ToolUp.Elmish.HMR" Version="0.4.1" />
+    <PackageVersion Include="ToolUp.Elmish.React" Version="0.4.1" />
     <PackageVersion Include="Fable.Parsimmon" Version="4.1" />
     <PackageVersion Include="Fable.React.Types" Version="18.4" />
     <PackageVersion Include="Fable.ReactDom.Types" Version="18.2" />
