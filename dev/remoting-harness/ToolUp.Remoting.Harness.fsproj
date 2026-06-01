@@ -41,16 +41,27 @@
   </ItemGroup>
 
   <!--
-    PackageReferences to ToolUp.Remoting v0.1.0 (Phase 69 ship). Resolved
-    from `../local-nuget-feed/` via the forge nuget.config (`local` source).
-    Before Phase 69 ship the harness consumed via ProjectReferences to the
-    Fable.Remoting fork sibling; post-Phase-69 the harness is the canonical
-    production-shape consumer of the ToolUp.Remoting package family.
+    0.4.4 — ToolUp.Remoting.{Server,Json,Giraffe} were folded into
+    ToolUp.Platform.{Core,Server}. The harness PackageReferences are
+    replaced with ProjectReferences to the folded source so the
+    Expecto suite stays a live regression check on the wire shape:
+    any future edit to Server/Remoting/ in Platform.Server breaks
+    the harness in the same `dotnet build` pass.
+
+    Pre-fold lineage (kept as a comment for the next archaeologist):
+    Phase 69 ship onward, this harness consumed via PackageReferences
+    to ToolUp.Remoting.* 0.1.x from ../../../local-nuget-feed/.
+    Before Phase 69, it consumed via ProjectReferences to the
+    Fable.Remoting fork sibling. With 0.4.4 the source lives inside
+    this repo, so ProjectReferences are the natural shape again.
+
+    Namespaces ToolUp.Remoting.Server / .Json / .Giraffe are preserved
+    across the folded files, so the harness's `open ToolUp.Remoting.Server`
+    / `.Json` / `.Giraffe` sites compile unchanged.
   -->
   <ItemGroup>
-    <PackageReference Include="ToolUp.Remoting.Server" Version="0.1.16" />
-    <PackageReference Include="ToolUp.Remoting.Json" Version="0.1.16" />
-    <PackageReference Include="ToolUp.Remoting.Giraffe" Version="0.1.16" />
+    <ProjectReference Include="..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
   </ItemGroup>
 
   <ItemGroup>
