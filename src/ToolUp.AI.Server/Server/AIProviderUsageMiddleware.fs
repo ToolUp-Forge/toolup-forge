@@ -120,6 +120,7 @@ type MeteringProviderFactory(inner: IAIProviderFactory, usageLog: IUsageLog, pro
 
     interface IAIProviderFactory with
         member _.Available = inner.Available
+        member _.PlatformDescriptors = inner.PlatformDescriptors
         member _.PlatformDescriptor = inner.PlatformDescriptor
 
         member _.Resolve(ctx) = async {
@@ -186,6 +187,7 @@ type QuotaEnforcingProviderFactory(inner: IAIProviderFactory, quota: ITeamQuotaP
 
     interface IAIProviderFactory with
         member _.Available = inner.Available
+        member _.PlatformDescriptors = inner.PlatformDescriptors
         member _.PlatformDescriptor = inner.PlatformDescriptor
 
         member _.Resolve(ctx) = async {

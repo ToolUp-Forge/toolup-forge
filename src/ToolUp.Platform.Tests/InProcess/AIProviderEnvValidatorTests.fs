@@ -41,6 +41,7 @@ let private fakeFactory
     : IAIProviderFactory =
     { new IAIProviderFactory with
         member _.Available = available
+        member _.PlatformDescriptors = platform |> Option.toList
         member _.PlatformDescriptor = platform
         member _.Resolve _ctx = async { return Result.Error NoProviderConfigured }
         member _.TryResolveByLabel(_ctx, _label) = async { return Result.Error NoProviderConfigured }

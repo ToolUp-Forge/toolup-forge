@@ -65,6 +65,7 @@ let tests (name: string) (factory: unit -> IProviderProfile) =
         ]
         Fallback = { Ordered = [ "primary"; "backup" ] }
         SurfaceModelOverrides = [ "ai.platform", "claude-sonnet-4-5" ]
+        SurfaceProviderOverrides = [ "ai.platform.provider", "anthropic-claude" ]
         UpdatedAt = ts
     }
 

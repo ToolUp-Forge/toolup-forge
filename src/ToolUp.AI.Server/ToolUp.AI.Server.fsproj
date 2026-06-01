@@ -39,6 +39,7 @@
         <Compile Include="Server\ConversationReplay.fs" />
         <Compile Include="Server\AIProviderSurface.fs" />
         <Compile Include="Server\DefaultAIProviderFactory.fs" />
+        <Compile Include="Server\BlobPlatformAIKeyStore.fs" />
         <Compile Include="Server\AISettingsHandler.fs" />
         <Compile Include="Server\FastPathBeaconHandler.fs" />
         <Compile Include="Server\ConversationExportAuditHandler.fs" />

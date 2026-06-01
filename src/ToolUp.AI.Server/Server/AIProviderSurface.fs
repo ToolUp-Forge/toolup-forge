@@ -31,3 +31,11 @@ let aiAssistant = "ai.assistant"
 /// `AIUserConfig.PlatformModelOverride` under this key.
 [<Literal>]
 let platformModelKey = "ai.platform"
+
+/// Phase 70: `SurfaceProviderOverrides` key carrying the user's
+/// preferred provider id among the deployment's wired
+/// `PlatformDescriptors` (e.g. when the deployment wires Anthropic +
+/// OpenAI + Gemini, the user picks one). `None` semantics → use the
+/// first descriptor.
+[<Literal>]
+let platformProviderKey = "ai.platform.provider"

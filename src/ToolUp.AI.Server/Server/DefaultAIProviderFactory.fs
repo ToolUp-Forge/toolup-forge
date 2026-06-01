@@ -6,42 +6,49 @@ open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
 
-// ─── Platform-provider bundle ────────────────────────────────────
+// ─── Platform-provider bundle (Phase 70 shape) ───────────────────
 
-/// Wraps the deployment's pre-built platform provider with an
-/// optional rebuilder. The rebuilder lets the factory honour a
-/// user's platform-model override under `PlatformOnly` (and
-/// `PermissiveWithPlatformFallback`) — when `Some rebuild`, Resolve
-/// calls `rebuild overrideModel` to produce a provider bound to the
-/// user-chosen model; when `None`, the pre-built `Provider` is used
-/// unchanged and any stored override is silently ignored.
+/// One wired platform provider. Phase 70 promotes the previous
+/// `{ Descriptor; Provider; Rebuild }` shape — where `Provider` was
+/// pre-built at startup with the API key baked in — to a
+/// `{ Descriptor; Build; BootstrapKeyFromEnv }` shape where the key
+/// is resolved at request time via `IPlatformAIKeyStore`.
 ///
-/// Deployments build the rebuilder by closing over the same
-/// API-key source as `Provider` (usually `ISecretStore`) — see
-/// `ClaudeAIProvider.createWithModel` for the canonical shape.
+/// `Build` is curried `apiKey -> model -> IAIProvider` so the same
+/// `createWithApiKeyAndModel` helper each vendor companion exports
+/// can populate it directly. The factory invokes `Build` once per
+/// resolution with the API key resolved from
+/// `IPlatformAIKeyStore` (team-scope, then platform-scope) or
+/// `BootstrapKeyFromEnv` as a final fallback.
+///
+/// `BootstrapKeyFromEnv` is the migration shim — when the deployment
+/// boots from an env-var-supplied key (the v0.4 shape) and the
+/// Platform Admin keys store has no key recorded yet, the factory
+/// uses this value. Setting a key via the Platform Admin module
+/// thereafter takes precedence (the store is read first).
 type AIPlatformProvider = {
     Descriptor: AIProviderDescriptor
-    Provider: IAIProvider
-    Rebuild: (string -> IAIProvider) option
+    Build: string -> string -> IAIProvider
+    BootstrapKeyFromEnv: string option
 }
 
-// ─── Simple adapters (retained from Phase A) ─────────────────────
+// ─── Simple adapters ─────────────────────────────────────────────
 
-/// Wrap a single IAIProvider as a factory. Every Resolve returns the
-/// same provider, regardless of context. Phase A migration adapter —
-/// use `create` instead when the deployment wants user-configurable
-/// providers.
+/// Wrap a single pre-built `IAIProvider` as a factory. Every Resolve
+/// returns the same provider, regardless of context. Retained as a
+/// thin shim for tests + the deployment shape that wants to bypass
+/// the key store entirely. Use `create` instead for deployments that
+/// want user-configurable providers or Platform-Admin-managed keys.
 let singleProvider (descriptor: AIProviderDescriptor) (provider: IAIProvider) : IAIProviderFactory =
     { new IAIProviderFactory with
         member _.Available = [ descriptor ]
+
+        member _.PlatformDescriptors = [ descriptor ]
 
         member _.PlatformDescriptor = Some descriptor
 
         member _.Resolve _accessContext = async { return Ok provider }
 
-        // The single-provider adapter ignores label semantics — any
-        // test-connection request resolves to the one provider this
-        // factory wraps.
         member _.TryResolveByLabel(_accessContext, _label) = async { return Ok provider }
     }
 
@@ -52,6 +59,8 @@ let empty: IAIProviderFactory =
     { new IAIProviderFactory with
         member _.Available = []
 
+        member _.PlatformDescriptors = []
+
         member _.PlatformDescriptor = None
 
         member _.Resolve _accessContext = async { return Error NoProviderConfigured }
@@ -59,94 +68,167 @@ let empty: IAIProviderFactory =
         member _.TryResolveByLabel(_accessContext, _label) = async { return Error NoProviderConfigured }
     }
 
-// ─── Full factory with provider-profile store + fallback policy ──
+// ─── Full factory with provider-profile store + key store ────────
+
+/// Resolve the user's preferred platform provider from the
+/// `IProviderProfile` `ai.platform.provider` surface override. Falls
+/// back to the first descriptor when the user hasn't picked, when
+/// they picked a provider no longer wired, or when no persistent
+/// scope is available (Anonymous).
+let private resolvePlatformProvider
+    (descriptors: AIPlatformProvider list)
+    (providerProfile: IProviderProfile)
+    (ctx: AccessContext)
+    =
+    async {
+        let firstOpt = descriptors |> List.tryHead
+
+        match AccessContext.configScope ctx with
+        | None -> return firstOpt
+        | Some scope ->
+            let! profile = providerProfile.Get scope
+
+            let overrideId =
+                profile
+                |> Option.bind (ProviderProfile.surfaceProviderOverride AIProviderSurface.platformProviderKey)
+
+            match overrideId with
+            | Some id ->
+                match descriptors |> List.tryFind (fun b -> b.Descriptor.Id = id) with
+                | Some matched -> return Some matched
+                | None -> return firstOpt
+            | None -> return firstOpt
+    }
+
+/// Resolve the model override the user has set against the
+/// `ai.platform` surface, validated against the active provider's
+/// supported models. Returns the active provider's `DefaultModel`
+/// when no override is set or the stored value is no longer valid
+/// for the active provider (e.g. the user previously chose Anthropic
+/// + Opus, then switched provider to OpenAI — the Opus model is
+/// silently ignored).
+let private resolvePlatformModel (active: AIPlatformProvider) (providerProfile: IProviderProfile) (ctx: AccessContext) = async {
+    match AccessContext.configScope ctx with
+    | None -> return active.Descriptor.DefaultModel
+    | Some scope ->
+        let! profile = providerProfile.Get scope
+
+        let overrideModel =
+            profile
+            |> Option.bind (ProviderProfile.surfaceModelOverride AIProviderSurface.platformModelKey)
+
+        match overrideModel with
+        | Some m when
+            active.Descriptor.SupportedModels |> List.contains m
+            || m = active.Descriptor.DefaultModel
+            ->
+            return m
+        | _ -> return active.Descriptor.DefaultModel
+}
+
+/// Resolve the API key for the active platform provider against the
+/// Phase 70 four-step chain: team-scope key store → platform-scope
+/// key store → `BootstrapKeyFromEnv` → `None` (caller surfaces
+/// `MissingApiKey`).
+let private resolvePlatformApiKey
+    (active: AIPlatformProvider)
+    (keyStore: IPlatformAIKeyStore option)
+    (ctx: AccessContext)
+    =
+    async {
+        let providerId = active.Descriptor.Id
+
+        match keyStore with
+        | None -> return active.BootstrapKeyFromEnv
+        | Some store ->
+            let! teamKey =
+                match ctx.TeamId with
+                | Some tid -> store.GetTeamKey(tid, providerId)
+                | None -> async { return None }
+
+            match teamKey with
+            | Some k -> return Some k
+            | None ->
+                let! platformKey = store.GetPlatformKey providerId
+
+                match platformKey with
+                | Some k -> return Some k
+                | None -> return active.BootstrapKeyFromEnv
+    }
 
 /// Build a factory that resolves user/team-configured AI providers
 /// against the canonical platform `IProviderProfile` store (Phase
-/// 43.A — this replaces the removed `IUserAIConfigStore` shim;
-/// resolution behaviour and the persisted blob are unchanged), honours
-/// the deployment's `AIFallbackPolicy`, and looks up API keys from
-/// `ISecretStore` scoped to the same container as the profile.
+/// 43.A) AND the Phase 70 platform-managed key store. Honours the
+/// deployment's `AIFallbackPolicy` and looks up BYOK keys from
+/// `ISecretStore` scoped to the request scope.
 ///
-/// Resolution chain (per-request):
-/// 1. Compute scope from `AccessContext.Mode`. Anonymous + Team-
+/// **BYOK resolution chain** (unchanged from Phase 43.A):
+/// 1. Compute scope from `AccessContext.Subject`. Anonymous + Team-
 ///    without-a-team yield no scope — fall back per policy.
-/// 2. Resolve the entry routed for surface `AIProviderSurface.aiAssistant`
-///    (the shim's `ActiveProviderLabel` is now the `{ Surface =
-///    "ai.assistant"; Context = None }` routing rule). Missing profile
-///    / no matching rule / stale label → fall back per policy.
-/// 3. Look up the entry's `ProviderId` in `builders`. Unknown →
-///    `UnknownProvider`.
-/// 4. Fetch the API key from the secret store at the same scope.
-///    Missing → `MissingApiKey`.
-/// 5. Invoke the builder with (apiKey, resolved model) and return Ok.
+/// 2. Resolve the entry routed for surface
+///    `AIProviderSurface.aiAssistant`. Missing profile / no matching
+///    rule / stale label → fall back per policy.
+/// 3. Look up the entry's `ProviderId` in `builders`; fetch the key
+///    from `secretStore` at the same scope; build the provider.
 ///
-/// `platformProvider` is the deployment-provided fallback bundle used
-/// under `PlatformOnly` (always) and `PermissiveWithPlatformFallback`
-/// (when no entry is routed). `StrictBYOK` never returns the platform
-/// provider; missing config surfaces `NoProviderConfigured` to the UI.
-/// When the bundle's `Rebuild` is `Some` and the user has a platform-
-/// model override (`SurfaceModelOverrides["ai.platform"]`), Resolve
-/// returns `rebuild model` instead of the pre-built `Provider`.
+/// **Platform-fallback resolution chain** (Phase 70 extension):
+/// 1. Pick the user's preferred platform provider from
+///    `PlatformDescriptors` via the `ai.platform.provider` surface
+///    override; fall back to the first descriptor.
+/// 2. Resolve the active provider's API key via
+///    `IPlatformAIKeyStore` — team-scope first, then platform-scope.
+/// 3. Fall back to `BootstrapKeyFromEnv` from the wired bundle.
+/// 4. If still no key → `MissingApiKey`.
+/// 5. Resolve the model via the `ai.platform` surface override
+///    (validated against the active provider's `SupportedModels`).
+/// 6. Build the provider via `bundle.Build apiKey model`.
+///
+/// `platformProviders` is the deployment's wired-platform-provider
+/// list. Under `PlatformOnly` users always get one of these; under
+/// `PermissiveWithPlatformFallback` they're the fallback when no
+/// BYOK entry is routed. `StrictBYOK` never returns a platform
+/// provider; missing config surfaces `NoProviderConfigured` to the
+/// UI.
 ///
 /// The `Available` view reflects policy:
-/// - `PlatformOnly`: empty (no user-configurable providers) — the
-///   settings UI hides the configuration surface entirely and
-///   instead exposes a minimal model-picker from `PlatformDescriptor`.
+/// - `PlatformOnly`: empty (no user-configurable BYOK providers) —
+///   the settings UI surfaces a platform-provider+model picker
+///   driven by `PlatformDescriptors`.
 /// - `PermissiveWithPlatformFallback` / `StrictBYOK`: all builders'
-///   descriptors (what the user can actually pick).
+///   descriptors (what the user can configure via BYOK).
 let create
     (builders: AIProviderBuilder list)
     (providerProfile: IProviderProfile)
     (secretStore: ISecretStore)
     (fallbackPolicy: AIFallbackPolicy)
-    (platformProvider: AIPlatformProvider option)
+    (platformProviders: AIPlatformProvider list)
+    (platformKeyStore: IPlatformAIKeyStore option)
     : IAIProviderFactory =
 
     let builderById = builders |> List.map (fun b -> b.Descriptor.Id, b) |> Map.ofList
 
-    /// Resolve the platform provider for a given access context,
-    /// applying the user's platform-model override when one is set and
-    /// the bundle supports rebuild. When the bundle doesn't support
-    /// rebuild, or no override exists, the pre-built `Provider` is
-    /// returned unchanged.
-    let platformWithOverride (ctx: AccessContext) (bundle: AIPlatformProvider) = async {
-        match bundle.Rebuild with
-        | None -> return bundle.Provider
-        | Some rebuild ->
-            match AccessContext.configScope ctx with
-            | None ->
-                // No persistent scope (Anonymous) — no override possible.
-                return bundle.Provider
-            | Some scope ->
-                let! profile = providerProfile.Get scope
-
-                let overrideModel =
-                    profile
-                    |> Option.bind (ProviderProfile.surfaceModelOverride AIProviderSurface.platformModelKey)
-
-                match overrideModel with
-                | Some model when
-                    bundle.Descriptor.SupportedModels |> List.contains model
-                    || model = bundle.Descriptor.DefaultModel
-                    ->
-                    return rebuild model
-                | Some _
-                | None -> return bundle.Provider
-    }
+    let platformDescriptors = platformProviders |> List.map _.Descriptor
 
     let fallback (ctx: AccessContext) : Async<Result<IAIProvider, ProviderResolutionError>> = async {
-        match fallbackPolicy, platformProvider with
+        match fallbackPolicy, platformProviders with
         | StrictBYOK, _ -> return Error NoProviderConfigured
-        | PlatformOnly, Some bundle
-        | PermissiveWithPlatformFallback, Some bundle ->
-            let! provider = platformWithOverride ctx bundle
-            return Ok provider
-        | PlatformOnly, None
-        | PermissiveWithPlatformFallback, None ->
-            // Deployment misconfigured: policy allows fallback but
-            // no platform provider supplied.
+        | (PlatformOnly | PermissiveWithPlatformFallback), [] ->
+            // Deployment misconfigured: policy allows fallback but no
+            // platform providers were wired.
             return Error NoProviderConfigured
+        | (PlatformOnly | PermissiveWithPlatformFallback), _ ->
+            let! activeOpt = resolvePlatformProvider platformProviders providerProfile ctx
+
+            match activeOpt with
+            | None -> return Error NoProviderConfigured
+            | Some active ->
+                let! apiKeyOpt = resolvePlatformApiKey active platformKeyStore ctx
+
+                match apiKeyOpt with
+                | None -> return Error(MissingApiKey(active.Descriptor.Id, ""))
+                | Some apiKey ->
+                    let! model = resolvePlatformModel active providerProfile ctx
+                    return Ok(active.Build apiKey model)
     }
 
     let buildFromEntry (entry: ProviderEntry) (scope: StorageScope) = async {
@@ -170,14 +252,16 @@ let create
             | PermissiveWithPlatformFallback
             | StrictBYOK -> builders |> List.map _.Descriptor
 
-        member _.PlatformDescriptor = platformProvider |> Option.map _.Descriptor
+        member _.PlatformDescriptors = platformDescriptors
+
+        member _.PlatformDescriptor = platformDescriptors |> List.tryHead
 
         member _.Resolve ctx = async {
             match fallbackPolicy with
             | PlatformOnly ->
-                // Profile ignored for provider identity by design,
-                // but a user-chosen model override is honoured if the
-                // deployment supplied a rebuilder.
+                // Profile ignored for provider identity in PlatformOnly
+                // mode (no BYOK), but the user's platform-provider and
+                // platform-model overrides are honoured via `fallback`.
                 return! fallback ctx
             | PermissiveWithPlatformFallback
             | StrictBYOK ->
@@ -187,11 +271,6 @@ let create
                     // Team-without-team). Fall back per policy.
                     return! fallback ctx
                 | Some scope ->
-                    // ResolveEntry encapsulates Get + routing-rule
-                    // lookup with the same None-on-stale semantics the
-                    // shim's `AIUserConfig.activeInstance` had: no
-                    // profile, no `ai.assistant` rule, or a rule whose
-                    // label points at a deleted entry all yield None.
                     let! entry = providerProfile.ResolveEntry(scope, AIProviderSurface.aiAssistant, None)
 
                     match entry with
@@ -202,9 +281,7 @@ let create
         member _.TryResolveByLabel(ctx, label) = async {
             // Bypasses the routing-rule gate — used by the
             // test-connection flow to verify a specific entry's key
-            // without routing to it first. Still honours the
-            // mode → scope rules (Team mode reads team scope, etc.)
-            // and the builder-lookup / secret-resolution chain.
+            // without routing to it first.
             match AccessContext.configScope ctx with
             | None -> return Error NoProviderConfigured
             | Some scope ->

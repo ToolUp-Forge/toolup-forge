@@ -137,6 +137,14 @@ type ProviderProfile = {
     /// consistency. The AI shim stores AIUserConfig.PlatformModelOverride
     /// under key "ai.platform".
     SurfaceModelOverrides: (string * string) list
+    /// Phase 70: per-surface provider-id override carrying the user's
+    /// preferred provider among a deployment's wired multi-platform-
+    /// provider list. Sibling of SurfaceModelOverrides; same assoc-
+    /// list shape for the same FableJsonConverter round-trip reason.
+    /// The AI surface stores the user's PlatformProviderOverride under
+    /// key "ai.platform.provider"; the factory consults this when
+    /// PlatformOnly mode wires multiple platform providers.
+    SurfaceProviderOverrides: (string * string) list
     UpdatedAt: DateTime
 }
 
@@ -147,6 +155,7 @@ module ProviderProfile =
         Routing = []
         Fallback = FallbackChain.empty
         SurfaceModelOverrides = []
+        SurfaceProviderOverrides = []
         UpdatedAt = DateTime.UtcNow
     }
 
@@ -218,4 +227,29 @@ module ProviderProfile =
         {
             profile with
                 SurfaceModelOverrides = updated
+        }
+
+    /// Phase 70 — Read a surface provider-id override.
+    let surfaceProviderOverride (surface: string) (profile: ProviderProfile) : string option =
+        profile.SurfaceProviderOverrides
+        |> List.tryFind (fun (k, _) -> k = surface)
+        |> Option.map snd
+
+    /// Phase 70 — Upsert a surface provider-id override; None clears it.
+    let withSurfaceProviderOverride
+        (surface: string)
+        (providerId: string option)
+        (profile: ProviderProfile)
+        : ProviderProfile =
+        let kept =
+            profile.SurfaceProviderOverrides |> List.filter (fun (k, _) -> k <> surface)
+
+        let updated =
+            match providerId with
+            | Some id -> kept @ [ (surface, id) ]
+            | None -> kept
+
+        {
+            profile with
+                SurfaceProviderOverrides = updated
         }

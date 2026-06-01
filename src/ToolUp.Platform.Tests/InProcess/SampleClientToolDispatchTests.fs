@@ -46,6 +46,7 @@ open ToolUp.Platform.Tests.Contracts
 type private StubProviderFactory() =
     interface IAIProviderFactory with
         member _.Available = []
+        member _.PlatformDescriptors = []
         member _.PlatformDescriptor = None
         member _.Resolve _ = async { return Error(ProviderResolutionError.NoProviderConfigured) }
 

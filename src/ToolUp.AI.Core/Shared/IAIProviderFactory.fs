@@ -127,14 +127,21 @@ type IAIProviderFactory =
     /// stored configurations against the known set.
     abstract Available: AIProviderDescriptor list
 
-    /// Descriptor for the platform-configured provider, when the
-    /// deployment has one wired up. Exposed so the settings UI can
-    /// offer a minimal model-picker under `PlatformOnly` (where
-    /// `Available` is empty by design but the user is still allowed
-    /// to choose from the platform provider's supported models —
-    /// provider identity and API-key source stay locked). Returns
-    /// `None` for deployments without a platform provider (StrictBYOK,
-    /// or PlatformOnly misconfigured to have no provider at all).
+    /// Descriptors for every platform-configured provider the
+    /// deployment has wired up. Phase 70: this replaces the singular
+    /// `PlatformDescriptor` as the source of truth — under
+    /// `PlatformOnly` a deployment may wire Anthropic + OpenAI +
+    /// Gemini together and surface all three to the user. An empty
+    /// list means the deployment has no platform provider at all
+    /// (strict BYOK, or misconfigured `PlatformOnly`).
+    abstract PlatformDescriptors: AIProviderDescriptor list
+
+    /// Backward-compatible accessor returning the first entry from
+    /// `PlatformDescriptors` (or `None` when empty). Existing callers
+    /// that pre-date Phase 70's multi-provider surface keep working;
+    /// new callers should prefer `PlatformDescriptors` and respect
+    /// the user's `PlatformProviderOverride` (Phase 70 Stream B) when
+    /// picking from the list.
     abstract PlatformDescriptor: AIProviderDescriptor option
 
     /// Resolve the concrete provider for a request, given the resolved

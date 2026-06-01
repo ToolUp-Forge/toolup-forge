@@ -100,6 +100,7 @@ let private toProfile (cfg: LegacyConfig) : ProviderProfile =
         Routing = []
         Fallback = FallbackChain.empty
         SurfaceModelOverrides = []
+        SurfaceProviderOverrides = []
         UpdatedAt = cfg.UpdatedAt
     }
 
