@@ -55,6 +55,12 @@ let PinnedKey = "_pinned"
 [<Literal>]
 let OtherKey = "_other"
 
+// Vite's default-export of a non-`?react` asset import is the file's
+// built URL — usable directly as an `<img src>`. The PNG is the
+// transparent-bg brand mark from `Brand Assets/logos/iconset/repo/`
+// (1024×1024 master; downsamples cleanly to the 20px footer slot).
+let private toolupForgeLogoUrl: string = importDefault "../icons/toolup-forge.png"
+
 let private toSidebarModule (pinned: Set<string>) (m: SidebarModuleView) : SidebarModule = {
     Id = m.Id
     Name = m.Name
@@ -573,19 +579,26 @@ let Sidebar
             // headers, per-section collapse, and cross-section DndContext.
             wrappedList
 
-            // Powered by ToolUp
-            Html.div [
+            // Powered by ToolUp-Forge — click-through to https://toolup-forge.io
+            Html.a [
+                prop.href "https://toolup-forge.io"
+                prop.target "_blank"
+                prop.rel "noopener noreferrer"
                 prop.className [
-                    "py-3 border-t border-white/10 flex items-center"
+                    "py-3 border-t border-white/10 flex items-center hover:bg-white/5 transition-colors"
                     if isExpanded then "px-7" else "justify-center"
                 ]
                 prop.children [
-                    Html.div [
-                        prop.className "w-5 h-5 flex-shrink-0 opacity-50"
-                        prop.children [ Html.img [ prop.src "favicon.png" ] ]
+                    Html.img [
+                        prop.src toolupForgeLogoUrl
+                        prop.alt "ToolUp-Forge"
+                        prop.className "w-5 h-5 flex-shrink-0 object-contain"
                     ]
                     if isExpanded then
-                        Html.span [ prop.className "ml-2 text-white/40 text-xs"; prop.text "Powered by ToolUp" ]
+                        Html.span [
+                            prop.className "ml-2 text-white/40 text-xs"
+                            prop.text "Powered by ToolUp-Forge"
+                        ]
                 ]
             ]
         ]

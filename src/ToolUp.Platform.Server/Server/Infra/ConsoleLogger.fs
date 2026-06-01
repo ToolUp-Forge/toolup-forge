@@ -101,6 +101,14 @@ let envSettings () : LogLevel * Set<string> =
 
 /// Build the default `ConsoleLogger` from env. Equivalent to
 /// `let l, c = envSettings () in ConsoleLogger(l, c) :> ILogger`.
+///
+/// Emits a "Powered by ToolUp-Forge" attribution line as the first
+/// Info-level entry so the platform's substrate-summary block in the
+/// startup log carries a clear SDK identifier above the per-substrate
+/// "Auth provider:", "Blob storage:", "Secret store:", "Notification
+/// channel:" lines that follow.
 let fromEnv () : ILogger =
     let level, categories = envSettings ()
-    ConsoleLogger(level, categories) :> ILogger
+    let logger = ConsoleLogger(level, categories) :> ILogger
+    logger.Info "Powered by ToolUp-Forge — https://toolup-forge.io"
+    logger
