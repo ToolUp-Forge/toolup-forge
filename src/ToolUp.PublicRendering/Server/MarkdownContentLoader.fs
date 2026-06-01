@@ -21,10 +21,20 @@ open ToolUp.Platform
 /// Top-level `pages/` collapses to root; every other top-level
 /// subdirectory becomes the page's collection.
 ///
+/// An explicit frontmatter `slug:` value overrides the path-derived
+/// slug — useful for folder-index landings (`docs/forms/README.md`
+/// can declare `slug: docs/forms` so it lives at the natural folder
+/// URL rather than `/docs/forms/README`). The override is normalised:
+/// any leading `/` is stripped so `slug: /docs/forms` and
+/// `slug: docs/forms` are equivalent. The `Collection` field stays
+/// path-derived — the override only affects the URL key, not the
+/// page's collection membership.
+///
 /// Frontmatter (well-known keys):
 ///   - `title`        → `PublicPage.Title`         (defaults to the slug)
 ///   - `description`  → `PublicPage.Description`   (defaults to `""`)
 ///   - `layout`       → `PublicPage.Layout`        (defaults to `"page"`)
+///   - `slug`         → overrides the path-derived slug (see above)
 ///   - `date`         → `PublicPage.PublishedAt`   (ISO 8601 / `DateTimeOffset.Parse`)
 ///   - `sitemap`      → controls inclusion (`"exclude"` drops the page from `/sitemap.xml`)
 ///   - arbitrary keys → preserved in `PublicPage.Frontmatter`
@@ -79,9 +89,27 @@ type MarkdownContentLoader(root: ContentRoot, logger: ILogger, hotReload: bool) 
 
     let parsePage (file: string) (relativePath: string) : PublicPage =
         let text = File.ReadAllText(file)
-        let slug, collection = deriveSlugAndCollection relativePath
+        let pathDerivedSlug, collection = deriveSlugAndCollection relativePath
         let yamlText, body = splitFrontmatter text
         let frontmatter = FrontmatterParser.parse yamlText
+
+        // A `slug:` override in frontmatter wins over the path-derived
+        // slug; `Collection` stays path-derived so the override only
+        // changes the URL key, not collection membership. Empty values
+        // and whitespace-only values are ignored (treat as absent).
+        // Leading `/` stripped so `slug: /docs/forms` and
+        // `slug: docs/forms` are equivalent.
+        let slug =
+            frontmatter
+            |> Map.tryFind "slug"
+            |> Option.bind (fun s ->
+                let trimmed = s.Trim().TrimStart('/')
+
+                if String.IsNullOrEmpty trimmed then
+                    None
+                else
+                    Some(Slug trimmed))
+            |> Option.defaultValue pathDerivedSlug
 
         let title =
             frontmatter

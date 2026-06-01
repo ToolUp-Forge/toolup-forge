@@ -111,6 +111,52 @@ let private implTests =
 
             Expect.equal page.Collection (Some "news") "first segment is collection"
 
+        testCase "MarkdownContentLoader: slug frontmatter overrides path-derived slug"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            // A README that uses the slug override to land at the folder
+            // URL instead of `docs/forms/README`.
+            writeFile
+                (Path.Combine(dir, "docs/forms/README.md"))
+                "---\ntitle: Forms\nlayout: doc\nslug: docs/forms\n---\n\nForms overview."
+
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+            use loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
+
+            Expect.isSome (loader.GetPage "docs/forms") "override slug resolves"
+
+            Expect.isNone (loader.GetPage "docs/forms/README") "path-derived slug is replaced (not duplicated)"
+
+            let page = (loader.GetPage "docs/forms").Value
+            Expect.equal (Slug.value page.Slug) "docs/forms" "Slug field reflects override"
+
+            Expect.equal page.Collection (Some "docs") "Collection stays path-derived even when slug is overridden"
+
+        testCase "MarkdownContentLoader: slug override accepts leading / and trims whitespace"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+
+            writeFile
+                (Path.Combine(dir, "pages/source.md"))
+                "---\ntitle: T\nlayout: page\nslug: /custom/path\n---\n\nBody."
+
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+            use loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
+
+            Expect.isSome (loader.GetPage "custom/path") "leading slash stripped"
+            Expect.isNone (loader.GetPage "source") "path-derived slug is replaced"
+
+        testCase "MarkdownContentLoader: empty slug override falls back to path-derived slug"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+
+            writeFile (Path.Combine(dir, "pages/keep.md")) "---\ntitle: T\nlayout: page\nslug: \n---\n\nBody."
+
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+            use loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
+
+            Expect.isSome (loader.GetPage "keep") "empty override is ignored, path-derived wins"
+
         testCase "MarkdownContentLoader: Reload() picks up new content"
         <| fun _ ->
             let dir = mkFixtureDir ()
