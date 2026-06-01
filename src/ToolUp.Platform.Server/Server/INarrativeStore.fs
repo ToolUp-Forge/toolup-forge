@@ -113,6 +113,20 @@ type INarrativeStore =
     /// should treat `None` as a normal outcome, not an error.
     abstract member Get: scopeId: string * id: NarrativeId -> Async<NarrativeEntry option>
 
+    /// Fetch a single section from a narrative by section id. Useful when
+    /// the assistant only needs one part of a long analysis — saves the
+    /// round-trip cost of returning a multi-kilobyte document body when
+    /// a single section answers the question. Returns `None` when the
+    /// narrative does not exist in `scopeId` or has no section with that
+    /// id.
+    ///
+    /// The standard implementations fall back to `Get` plus a list
+    /// lookup; stores backed by a structured persistence layer can
+    /// override with a targeted fetch that avoids deserialising the full
+    /// document.
+    abstract member GetSection:
+        scopeId: string * id: NarrativeId * sectionId: string -> Async<NarrativeSection option>
+
     /// Delete every entry visible to `scopeId`. Returns the count of
     /// deleted entries (0 if the scope had no entries). Idempotent —
     /// calling on an empty scope returns 0 without error. Used by
@@ -201,6 +215,17 @@ module NarrativePublisher =
         | Some store ->
             let scopeId = resolveScopeId ctx
             return! store.Get(scopeId, id)
+        | None -> return None
+    }
+
+    /// Fetch a single section from a narrative within the current
+    /// request's scope. Returns `None` when no store is registered, the
+    /// entry does not exist, or the section is not present.
+    let getSection (ctx: HttpContext) (id: NarrativeId) (sectionId: string) : Async<NarrativeSection option> = async {
+        match resolveStore ctx with
+        | Some store ->
+            let scopeId = resolveScopeId ctx
+            return! store.GetSection(scopeId, id, sectionId)
         | None -> return None
     }
 

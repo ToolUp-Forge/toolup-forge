@@ -92,6 +92,18 @@ type InMemoryNarrativeStore(maxPerScope: int) =
             | false, _ -> return None
         }
 
+        member _.GetSection(scopeId, id, sectionId) = async {
+            match entriesByScope.TryGetValue scopeId with
+            | true, bucket ->
+                let snapshot = lock bucket (fun () -> bucket.ToArray())
+
+                return
+                    snapshot
+                    |> Array.tryFind (fun e -> e.Id = id)
+                    |> Option.bind (fun e -> e.Document.Sections |> List.tryFind (fun s -> s.Id = sectionId))
+            | false, _ -> return None
+        }
+
         member _.DeleteScope(scopeId) = async {
             match entriesByScope.TryRemove scopeId with
             | true, bucket -> return lock bucket (fun () -> bucket.Count)

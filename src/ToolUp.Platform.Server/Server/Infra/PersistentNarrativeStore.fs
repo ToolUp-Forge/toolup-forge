@@ -179,7 +179,7 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, maxPerScope: int) =
             return all |> List.truncate (max 0 limit) |> List.map toInfo
         }
 
-        member _.Get(scopeId, id) = async {
+        member this.Get(scopeId, id) = async {
             // Optimisation: filter blob names by id suffix before
             // downloading, so Get is O(N) names + O(1) download instead
             // of O(N) downloads. The blob name format embeds `{id:N}`
@@ -198,6 +198,14 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, maxPerScope: int) =
                     match result with
                     | Ok bytes -> deserialize bytes
                     | Error _ -> None
+        }
+
+        member this.GetSection(scopeId, id, sectionId) = async {
+            let! entry = (this :> INarrativeStore).Get(scopeId, id)
+
+            return
+                entry
+                |> Option.bind (fun e -> e.Document.Sections |> List.tryFind (fun s -> s.Id = sectionId))
         }
 
         member _.DeleteScope(scopeId) = async {
