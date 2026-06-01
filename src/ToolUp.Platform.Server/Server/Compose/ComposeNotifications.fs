@@ -211,8 +211,20 @@ let buildNotificationStack
     // from whatever storage backend they wire in. Retention is governed
     // by `ServerConfig.NarrativeRetention`; the default policy caps each
     // scope at 100 entries with no age limit.
+    //
+    // Wrap the persistent store in `NotifyingNarrativeStore` so every
+    // successful write fans an SSE event out under
+    // `NarrativeNotifications.PublishedKey` /  `ScopeResetKey`.
+    // Subscribers (UI list views, custom dashboards) receive the
+    // notification through the same `INotificationChannel` SSE pipeline
+    // every other server-driven event uses; scope routing is preserved
+    // by the channel's per-scope topic.
     let narrativeStore: INarrativeStore =
-        PersistentNarrativeStore.PersistentNarrativeStore(resolvedBlobStorage, config.NarrativeRetention) :> _
+        let baseStore =
+            PersistentNarrativeStore.PersistentNarrativeStore(resolvedBlobStorage, config.NarrativeRetention)
+            :> INarrativeStore
+
+        NotifyingNarrativeStore(baseStore, resolvedNotificationChannel) :> _
 
     {
         SseConnectionManager = sseConnectionManager

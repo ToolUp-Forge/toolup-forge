@@ -272,6 +272,7 @@
         <Compile Include="Server\INarrativeStore.fs" />
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
         <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />
+        <Compile Include="Server\NotifyingNarrativeStore.fs" />
         <Compile Include="Server\ModuleQueryBus.fs" />
         <!-- Phase 16 + 16a — centralised process-profile gating helper.
              Lives first in the Compose chain so every Compose helper
