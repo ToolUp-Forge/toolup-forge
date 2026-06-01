@@ -777,13 +777,28 @@ type ClientRequestSeam = {
     /// warns once on cross-origin `/api/` requests that don't match.
     /// Returns `Some origin` for split-origin deployments.
     ApiOrigin: unit -> string option
+
+    /// 0.4.1 — per-request correlation-id provider. Called fresh on
+    /// every eligible `/api/*` request; the returned value is attached
+    /// as the `x-correlation-id` header so server-side observability
+    /// can stitch client → server traces (the Giraffe dispatcher reads
+    /// `x-correlation-id` on entry per Phase 69b.D and stamps it back
+    /// on the response).
+    ///
+    /// Default `None` — the SDK generates a fresh `Guid.NewGuid().ToString("N")`
+    /// per request. Apps with an existing logical-trace id (an OIDC
+    /// session correlation, a per-tab span id) override by setting
+    /// `Some readMyTraceId`.
+    CorrelationIdProvider: (unit -> string) option
 }
 
 module ClientRequestSeam =
-    /// No consumer-supplied header providers; same-origin only.
+    /// No consumer-supplied header providers; same-origin only;
+    /// SDK-default correlation id (fresh GUID per request).
     let empty: ClientRequestSeam = {
         HeaderProviders = []
         ApiOrigin = fun () -> None
+        CorrelationIdProvider = None
     }
 
 /// Snapshot-at-run-time companion handler registry. Companions export

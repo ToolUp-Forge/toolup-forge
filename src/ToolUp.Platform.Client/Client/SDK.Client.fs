@@ -1874,7 +1874,26 @@ module Client =
         // mutables).
         let identityGetter = composeIdentityGetter config
         let apiOriginGetter = composeApiOriginGetter config
-        CsrfClient.installRequestGuard identityGetter apiOriginGetter
+
+        // 0.4.1 — per-request correlation id. Default: a fresh
+        // `Guid.NewGuid().ToString("N")` per call. Consumers with an
+        // existing logical trace id (an OIDC session correlation, a
+        // per-tab span id) override via
+        // `ClientConfig.RequestSeam.CorrelationIdProvider`. The header
+        // is read by the Giraffe dispatcher's `CallContext.beginRequest`
+        // per Phase 69b.D and stamped back on the response.
+        let correlationGetter: unit -> string =
+            match config.RequestSeam.CorrelationIdProvider with
+            | Some provider -> provider
+            | None -> fun () -> System.Guid.NewGuid().ToString("N")
+
+        CsrfClient.installRequestGuard identityGetter apiOriginGetter correlationGetter
+
+        // 0.4.1 — install the SDK's standard `Cmd.OfRemoting`
+        // interceptor chain (categorised-error bridge + telemetry).
+        // Idempotent: re-registering the same interceptor instance
+        // no-ops via the underlying registry's reference check.
+        RemotingInterceptors.install ()
 
         // Phase 9j — pre-fetch the per-session CSRF token so the
         // request-guard can attach it to the first mutating call.

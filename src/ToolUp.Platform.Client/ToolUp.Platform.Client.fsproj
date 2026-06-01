@@ -56,6 +56,13 @@
         <Compile Include="Client\NarrativeRenderer.fs" />
         <Compile Include="Client\Markdown.fs" />
         <Compile Include="Client\CsrfClient.fs" />
+        <!-- 0.4.1 — Cmd.OfRemoting.IRemotingInterceptor bridge. Parses
+             ToolUp.Remoting's Phase 69b.E CategorisedErrorResult envelope
+             into a typed RemotingCategorisedException + ErrorCategory DU
+             so downstream ofError handlers can pattern-match without
+             reading message strings. Registered at boot from
+             SDK.Client.installRequestSeam. -->
+        <Compile Include="Client\RemotingInterceptors.fs" />
         <Compile Include="Client\UserSession.fs" />
         <Compile Include="Client\NotificationClient.fs" />
         <Compile Include="Client\ModuleQueryClient.fs" />

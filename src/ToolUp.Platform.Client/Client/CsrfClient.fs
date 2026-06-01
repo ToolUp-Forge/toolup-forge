@@ -130,11 +130,12 @@ let mutable private guardInstalled = false
 
 // One-time wrap of BOTH `XMLHttpRequest.prototype.{open,send}` and
 // `window.fetch`. $0 = CSRF-token getter, $1 = identity-pairs getter
-// (`[[k,v],...]`), $2 = configured-API-origin getter ("" = unset).
+// (`[[k,v],...]`), $2 = configured-API-origin getter ("" = unset),
+// $3 = per-request correlation-id getter (returns fresh string per call).
 // Reads the getters at send time, so it is correct regardless of when
 // the calling proxy/closure was built. Never throws; the original
 // transport is always invoked; idempotent via sentinels.
-[<Emit("""(function(getTok, getIdent, getApiOrigin){
+[<Emit("""(function(getTok, getIdent, getApiOrigin, getCorrId){
   var WARNED = {};
   function warnOnce(k, msg){ if (!WARNED[k]) { WARNED[k] = true; try { console.warn('[ToolUp request-guard] ' + msg); } catch(e){} } }
   function eligible(method, urlStr){
@@ -155,6 +156,17 @@ let mutable private guardInstalled = false
     for (var i = 0; i < pairs.length; i++) {
       var k = pairs[i][0], v = pairs[i][1];
       if (k && v != null && !hasHeader(k)) { try { setHeader(k, v); } catch(e){} }
+    }
+    // 0.4.1 — x-correlation-id attached to every eligible request so
+    // server-side observability (Giraffe adapter reads the header per
+    // Phase 69b.D) can stitch client -> server traces. Each call to
+    // getCorrId() returns a fresh value (the SDK default generates a
+    // GUID per request; consumers can override via
+    // ClientConfig.RequestSeam.CorrelationIdProvider).
+    if (!hasHeader('x-correlation-id')) {
+      var corrId = '';
+      try { corrId = getCorrId() || ''; } catch(e){}
+      if (corrId) { try { setHeader('x-correlation-id', corrId); } catch(e){} }
     }
     if (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'PATCH' || ctx.method === 'DELETE') {
       var tok = '';
@@ -204,11 +216,12 @@ let mutable private guardInstalled = false
     wrapped.__toolupReqGuard = true;
     window.fetch = wrapped;
   }
-})($0, $1, $2)""")>]
+})($0, $1, $2, $3)""")>]
 let private installGuardJs
     (tokenGetter: unit -> string)
     (identityGetter: unit -> (string * string)[])
     (apiOriginGetter: unit -> string)
+    (correlationGetter: unit -> string)
     : unit =
     jsNative
 
@@ -230,12 +243,16 @@ let private installGuardJs
 ///
 /// Idempotent: subsequent calls are no-ops (the install sentinel
 /// inside `installGuardJs` guards against double-wrapping).
-let installRequestGuard (identityGetter: unit -> (string * string)[]) (apiOriginGetter: unit -> string) : unit =
+let installRequestGuard
+    (identityGetter: unit -> (string * string)[])
+    (apiOriginGetter: unit -> string)
+    (correlationGetter: unit -> string)
+    : unit =
     if not guardInstalled then
         guardInstalled <- true
 
         try
-            installGuardJs tokenOrEmpty identityGetter apiOriginGetter
+            installGuardJs tokenOrEmpty identityGetter apiOriginGetter correlationGetter
         with _ ->
             ()
 
