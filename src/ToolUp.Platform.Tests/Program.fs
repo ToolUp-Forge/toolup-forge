@@ -85,6 +85,7 @@ let allTests =
         AuditReplicatorTests.tests
         ShareTokenStoreTests.tests
         InMemoryPendingInviteStoreTests.tests
+        BlobPlatformAIKeyStoreTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         SseTraceContributorTests.tests

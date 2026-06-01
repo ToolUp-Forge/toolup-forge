@@ -50,6 +50,9 @@
         <Compile Include="Contracts\IAuditSinkContract.fs" />
         <Compile Include="Contracts\IShareTokenStoreContract.fs" />
         <Compile Include="Contracts\IPendingInviteStoreContract.fs" />
+        <!-- Phase 70 — IPlatformAIKeyStore contract pack. Six portability
+             rules + platform-vs-team-scope isolation invariants. -->
+        <Compile Include="Contracts\IPlatformAIKeyStoreContract.fs" />
         <Compile Include="Contracts\IOAuthTokenRefresherContract.fs" />
         <Compile Include="Contracts\IReportRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
@@ -173,6 +176,9 @@
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="InProcess\InMemoryPendingInviteStoreTests.fs" />
+        <!-- Phase 70 — BlobPlatformAIKeyStore over an in-memory ISecretStore.
+             Binds the IPlatformAIKeyStoreContract pack to the default impl. -->
+        <Compile Include="InProcess\BlobPlatformAIKeyStoreTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\EntraExternalIdConfigTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
