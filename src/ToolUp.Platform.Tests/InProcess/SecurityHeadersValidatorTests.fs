@@ -8,6 +8,12 @@ let private cfg (surfaces: SurfaceProfile list) (requireHttps: bool) (headers: M
     ServerConfig.defaults with
         Surfaces = surfaces
         RequireHttps = requireHttps
+        // Phase 16d — `TrustForwardedHeaders` flipped default-on. The
+        // `cfg` helper pins it false so the `requireHttps` parameter
+        // is the sole knob controlling the internet-facing heuristic
+        // for these tests; the proxied-topology case below inline-
+        // builds its own `ServerConfig` and doesn't use this helper.
+        TrustForwardedHeaders = false
         SecurityHeaders = headers
 }
 

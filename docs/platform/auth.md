@@ -189,7 +189,7 @@ Every event carries the actor's userId, the affected userId (if different), the 
 ## Hardening checklist for production
 
 - `ServerConfig.RequireHttps = true` — registers `app.UseHttpsRedirection()`.
-- `ServerConfig.TrustForwardedHeaders = true` — required behind a TLS-terminating proxy so secure-cookie scoping and `Url.IsAbsoluteUri` see the originating scheme.
+- `ServerConfig.TrustForwardedHeaders = true` — default-on since Phase 16d. Behind a TLS-terminating proxy this is needed so secure-cookie scoping and `Url.IsAbsoluteUri` see the originating scheme. Direct-bind dev shells with no proxy opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0`.
 - `ServerConfig.SecurityHeaders = StrictSecurityHeaders` — emits CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy.
 - `ServerConfig.RateLimit` — configure a per-team / per-user / per-IP partition with a sensible fixed-window cap. `/health`, `/ready`, and `/api/notifications` are excluded by default.
 - `ServerConfig.CorsConfig` — explicit allow-list for cross-origin browser callers; reject `*` for credentialed requests.

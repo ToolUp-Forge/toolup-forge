@@ -1458,10 +1458,13 @@ type ServerConfig = {
     /// `X-Forwarded-Proto` value rather than the proxy-to-origin scheme.
     RequireHttps: bool
     /// Register `app.UseForwardedHeaders(...)` honouring `X-Forwarded-Proto`
-    /// and `X-Forwarded-For`. Default `false` — only enable when running
-    /// behind a trusted reverse proxy. Without this, `Url.IsAbsoluteUri`
-    /// checks see plain HTTP, secure-cookie scoping breaks, and OIDC
-    /// `RedirectUri` generation produces wrong URLs.
+    /// and `X-Forwarded-For`. Default `true` (Phase 16d) — containerised
+    /// and serverless deploys are almost always behind a TLS-terminating
+    /// ingress (Cloud Run, ALB, App Service Front Door, AKS Ingress,
+    /// function gateway), and without forwarded-headers trust the SDK
+    /// misreports client IPs in audit logs and rejects HTTPS redirects.
+    /// Set `false` (or `TOOLUP_TRUST_FORWARDED_HEADERS=0`) on a direct-
+    /// bind dev shell with no proxy hop.
     TrustForwardedHeaders: bool
     /// What to do when `PublicPath` doesn't exist on disk at startup.
     /// Default `Warn` (backward-compatible — local dev appropriate).
@@ -2358,7 +2361,7 @@ module ServerConfig =
         FeatureFlags = []
         ModuleFilter = None
         RequireHttps = false
-        TrustForwardedHeaders = false
+        TrustForwardedHeaders = true
         StaticPathBehaviour = Warn
         SlowRequestThreshold = TimeSpan.FromSeconds 1.0
         SlowRequestThresholdOverrides = Map.empty
@@ -2444,6 +2447,28 @@ module ServerConfig =
         match envVar name |> Option.map _.ToLowerInvariant() with
         | Some("1" | "true" | "yes" | "on") -> true
         | _ -> false
+
+    /// Phase 16d — parse a boolean env var with an explicit
+    /// `defaultWhenMissing` and **fail loud** on any unrecognised
+    /// value. Used for flags whose silently-wrong values are dangerous
+    /// (forwarded-headers trust silently off in a containerised deploy
+    /// misreports client IPs and breaks HTTPS redirects). Missing →
+    /// `defaultWhenMissing`. Recognised: `1` / `true` / `yes` / `on`
+    /// → `true`; `0` / `false` / `no` / `off` → `false` (all case-
+    /// insensitive). Any other value throws at startup, mirroring the
+    /// `SERVER_PORT` fail-fast pattern in `SDK.Server.compose` — names
+    /// the offending value and points at the recognised set.
+    let private envFlagOrFail (name: string) (defaultWhenMissing: bool) =
+        match envVar name |> Option.map _.ToLowerInvariant() with
+        | None -> defaultWhenMissing
+        | Some("1" | "true" | "yes" | "on") -> true
+        | Some("0" | "false" | "no" | "off") -> false
+        | Some other ->
+            failwithf
+                "%s=%s is not a recognised boolean value. Expected one of: 1, true, yes, on (case-insensitive) → on; 0, false, no, off → off. Unset the variable to use the default (%b)."
+                name
+                other
+                defaultWhenMissing
 
     /// Phase 66 Stream A.8 — parse a single token from
     /// `TOOLUP_PLATFORM_SURFACES` into a `SurfaceProfile`. Accepts
@@ -2682,7 +2707,7 @@ module ServerConfig =
                 Surfaces = surfaces
                 ModuleFilter = envVar "TOOLUP_MODULE"
                 RequireHttps = envFlag "TOOLUP_REQUIRE_HTTPS"
-                TrustForwardedHeaders = envFlag "TOOLUP_TRUST_FORWARDED_HEADERS"
+                TrustForwardedHeaders = envFlagOrFail "TOOLUP_TRUST_FORWARDED_HEADERS" defaults.TrustForwardedHeaders
                 StaticPathBehaviour = parseStaticPathBehaviour logger
                 SlowRequestThresholdOverrides =
                     overrides.SlowRequestThresholdOverrides

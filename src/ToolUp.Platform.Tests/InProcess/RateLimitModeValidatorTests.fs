@@ -14,6 +14,13 @@ let private cfg
         ServerConfig.defaults with
             Surfaces = surfaces
             RequireHttps = requireHttps
+            // Phase 16d — `TrustForwardedHeaders` flipped default-on. The
+            // `cfg` helper pins it false so the `requireHttps` parameter
+            // is the sole knob controlling the internet-facing heuristic
+            // for these tests; the two cases that exercise the
+            // proxied-topology branch inline-build their own
+            // `ServerConfig` and don't use this helper.
+            TrustForwardedHeaders = false
             RateLimit = rateLimit
             AcceptNoRateLimitWhenAuthRequired = escapeHatch
     }

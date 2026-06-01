@@ -397,7 +397,7 @@ SSE has its own auth caveat — `EventSource` can't send custom headers, so OIDC
 
 - Real auth provider (not `HeaderAuthProvider`).
 - `ServerConfig.RequireHttps = true`.
-- `ServerConfig.TrustForwardedHeaders = true` (behind a TLS-terminating proxy).
+- `ServerConfig.TrustForwardedHeaders = true` (the Phase 16d default — opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0` only on a direct-bind dev shell).
 - `ServerConfig.SecurityHeaders = StrictSecurityHeaders`.
 - `ServerConfig.CorsConfig` — explicit allow-list for browser callers.
 - `TOOLUP_INITIAL_PLATFORM_ADMIN` set for the bootstrap admin user.
