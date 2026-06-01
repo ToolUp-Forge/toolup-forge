@@ -21,4 +21,13 @@
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
   </ItemGroup>
+  <!-- 0.4.4 — Directory.Build.props pins `<PackageReadmeFile>README.md</PackageReadmeFile>`
+       globally. This fsproj has no sibling README.md (the auto-include
+       in Directory.Build.props doesn't fire) so the pack failed
+       NU5039 on every CI publish run that reached this project.
+       Pointing at the OIDC server-side companion's README keeps the
+       package self-explanatory without duplicating content. -->
+  <ItemGroup>
+    <None Include="..\AuthProviders\Oidc\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 </Project>
