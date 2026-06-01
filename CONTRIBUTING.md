@@ -13,7 +13,8 @@ maintenance commitment, and how to sign your work.
 4. [Contribution flow by type](#contribution-flow-by-type)
 5. [Promotion from community to first-party](#promotion-from-community-to-first-party)
 6. [Style and conventions](#style-and-conventions)
-7. [Where to ask questions](#where-to-ask-questions)
+7. [Maintainer setup](#maintainer-setup)
+8. [Where to ask questions](#where-to-ask-questions)
 
 ---
 
@@ -174,6 +175,29 @@ Highlights:
 - **Tests:** Server-side tests run on Expecto. Each public-surface
   interface should have a contract test pack that companion
   implementations can run against themselves.
+
+## Maintainer setup
+
+These steps apply only when publishing NuGet packages — most
+contributors never need this.
+
+### Publishing NuGet packages
+
+CI publishes to [GitHub Packages](https://github.com/orgs/ToolUp-Forge/packages)
+via [`publish-nuget.yml`](.github/workflows/publish-nuget.yml) on every
+`v*.*.*` tag push, using the Actions-provided `GITHUB_TOKEN`. No
+contributor-side token setup is needed for that path.
+
+For a **local manual publish** (e.g. testing the publish path before
+tagging), the FAKE `Publish` target reads `GITHUB_PACKAGES_TOKEN` from
+the environment. Generate a [GitHub PAT](https://github.com/settings/tokens)
+with the `write:packages` scope, then:
+
+    $env:GITHUB_PACKAGES_TOKEN = "<your-pat>"
+    dotnet run --project Build.fsproj -- Publish
+
+The target is idempotent (`--skip-duplicate`) — re-running after a
+transient failure cleanly skips versions already published.
 
 ## Where to ask questions
 
