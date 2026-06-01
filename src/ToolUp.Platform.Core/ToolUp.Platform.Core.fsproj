@@ -92,7 +92,10 @@
         <Compile Include="Shared\NarrativeTypes.fs" />
         <Compile Include="Shared\NarrativePlaintext.fs" />
         <Compile Include="Shared\NarrativeMarkdown.fs" />
+        <Compile Include="Shared\NarrativeHtml.fs" />
         <Compile Include="Shared\NarrativeBuilder.fs" />
+        <Compile Include="Shared\INarrativeRenderer.fs" />
+        <Compile Include="Shared\NarrativeRenderers.fs" />
         <!-- Phase 66 Stream C.2 — AuditSubjectKind + AuditSamplingPolicy
              compiled before SDK.Shared.fs so ServerConfig can carry an
              AuditSamplingPolicy field. Depends only on Guid; AuditTypes.fs
