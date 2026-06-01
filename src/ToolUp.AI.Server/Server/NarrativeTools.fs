@@ -33,7 +33,7 @@ let private fableSerialize (value: obj) : string =
 let private listDefinition: AIToolDefinition = {
     Name = "list_narratives"
     Description =
-        "List narrative outputs the user has generated on other pages in this session (or earlier sessions for persistent deployments). Returns an id, module, page, title, optional subtitle and publication timestamp for each entry. Use this before `get_narrative` to discover what is available. Results are scoped to the current user/team — the assistant cannot see other users' narratives."
+        "List narrative outputs the user has generated on other pages in this session (or earlier sessions for persistent deployments). Returns an id, module, page, title, optional subtitle, publication timestamp and tags for each entry. Use this before `get_narrative` to discover what is available. Pass `tag` to surface only entries carrying that classification label (case-sensitive whole-string match). Results are scoped to the current user/team — the assistant cannot see other users' narratives."
     Parameters = [
         {
             Name = "limit"
@@ -43,6 +43,14 @@ let private listDefinition: AIToolDefinition = {
             Required = false
             Default = Some "20"
         }
+        {
+            Name = "tag"
+            Type = "string"
+            Description =
+                "Optional classification tag to filter by. Returns only entries whose `tags` list contains this exact string."
+            Required = false
+            Default = None
+        }
     ]
     SourceModule = "ToolUp.Platform"
     EmitsActions = None
@@ -51,17 +59,28 @@ let private listDefinition: AIToolDefinition = {
 }
 
 let private executeList (ctx: HttpContext) (argsJson: string) : Async<string> = async {
-    let limit =
+    let limit, tagFilter =
         try
             let doc = JsonDocument.Parse(argsJson)
 
-            match doc.RootElement.TryGetProperty("limit") with
-            | true, v when v.ValueKind = JsonValueKind.Number -> v.GetInt32()
-            | _ -> 20
-        with _ ->
-            20
+            let l =
+                match doc.RootElement.TryGetProperty("limit") with
+                | true, v when v.ValueKind = JsonValueKind.Number -> v.GetInt32()
+                | _ -> 20
 
-    let! entries = NarrativePublisher.list ctx limit
+            let t =
+                match doc.RootElement.TryGetProperty("tag") with
+                | true, v when v.ValueKind = JsonValueKind.String ->
+                    let s = v.GetString()
+
+                    if System.String.IsNullOrWhiteSpace s then None else Some s
+                | _ -> None
+
+            l, t
+        with _ ->
+            20, None
+
+    let! entries = NarrativePublisher.listByTag ctx limit tagFilter
     return fableSerialize entries
 }
 

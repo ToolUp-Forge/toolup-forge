@@ -32,55 +32,83 @@ type InMemoryNarrativeStore(maxPerScope: int) =
         Title = e.Title
         Subtitle = e.Subtitle
         PublishedAt = e.PublishedAt
+        Tags = e.Tags
+    }
+
+    let publishInternal (scopeId, moduleId, pageRoute, document, tags) = async {
+        let bucket = getOrCreate scopeId
+        let id = Guid.NewGuid()
+
+        let entry: NarrativeEntry = {
+            Id = id
+            ModuleId = moduleId
+            PageRoute = pageRoute
+            Title = document.Title
+            Subtitle = document.Subtitle
+            PublishedAt = DateTime.UtcNow
+            Tags = tags
+            Document = document
+        }
+
+        lock bucket (fun () ->
+            bucket.Insert(0, entry)
+            trim bucket)
+
+        return id
+    }
+
+    let replaceLatestInternal (scopeId, moduleId, pageRoute, subtitleKey, document, tags) = async {
+        let bucket = getOrCreate scopeId
+
+        lock bucket (fun () ->
+            let matches (e: NarrativeEntry) =
+                e.ModuleId = moduleId
+                && e.PageRoute = pageRoute
+                && (match subtitleKey with
+                    | None -> true
+                    | Some _ -> e.Subtitle = subtitleKey)
+
+            let survivors = bucket |> Seq.filter (matches >> not) |> Seq.toList
+            bucket.Clear()
+            bucket.AddRange(survivors))
+
+        return! publishInternal (scopeId, moduleId, pageRoute, document, tags)
     }
 
     new() = InMemoryNarrativeStore(100)
 
     interface INarrativeStore with
-        member _.Publish(scopeId, moduleId, pageRoute, document) = async {
-            let bucket = getOrCreate scopeId
-            let id = Guid.NewGuid()
+        member _.Publish(scopeId, moduleId, pageRoute, document) =
+            publishInternal (scopeId, moduleId, pageRoute, document, [])
 
-            let entry: NarrativeEntry = {
-                Id = id
-                ModuleId = moduleId
-                PageRoute = pageRoute
-                Title = document.Title
-                Subtitle = document.Subtitle
-                PublishedAt = DateTime.UtcNow
-                Document = document
-            }
+        member _.PublishTagged(scopeId, moduleId, pageRoute, document, tags) =
+            publishInternal (scopeId, moduleId, pageRoute, document, tags)
 
-            lock bucket (fun () ->
-                bucket.Insert(0, entry)
-                trim bucket)
+        member _.ReplaceLatest(scopeId, moduleId, pageRoute, subtitleKey, document) =
+            replaceLatestInternal (scopeId, moduleId, pageRoute, subtitleKey, document, [])
 
-            return id
-        }
-
-        member this.ReplaceLatest(scopeId, moduleId, pageRoute, subtitleKey, document) = async {
-            let bucket = getOrCreate scopeId
-
-            lock bucket (fun () ->
-                let matches (e: NarrativeEntry) =
-                    e.ModuleId = moduleId
-                    && e.PageRoute = pageRoute
-                    && (match subtitleKey with
-                        | None -> true
-                        | Some _ -> e.Subtitle = subtitleKey)
-
-                let survivors = bucket |> Seq.filter (matches >> not) |> Seq.toList
-                bucket.Clear()
-                bucket.AddRange(survivors))
-
-            return! (this :> INarrativeStore).Publish(scopeId, moduleId, pageRoute, document)
-        }
+        member _.ReplaceLatestTagged(scopeId, moduleId, pageRoute, subtitleKey, document, tags) =
+            replaceLatestInternal (scopeId, moduleId, pageRoute, subtitleKey, document, tags)
 
         member _.List(scopeId, limit) = async {
             match entriesByScope.TryGetValue scopeId with
             | true, bucket ->
                 let snapshot = lock bucket (fun () -> bucket.ToArray())
                 return snapshot |> Array.truncate (max 0 limit) |> Array.map toInfo |> Array.toList
+            | false, _ -> return []
+        }
+
+        member _.ListByTag(scopeId, limit, tagFilter) = async {
+            match entriesByScope.TryGetValue scopeId with
+            | true, bucket ->
+                let snapshot = lock bucket (fun () -> bucket.ToArray())
+
+                let filtered =
+                    match tagFilter with
+                    | None -> snapshot
+                    | Some tag -> snapshot |> Array.filter (fun e -> e.Tags |> List.contains tag)
+
+                return filtered |> Array.truncate (max 0 limit) |> Array.map toInfo |> Array.toList
             | false, _ -> return []
         }
 

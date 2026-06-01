@@ -92,6 +92,7 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, maxPerScope: int) =
         Title = e.Title
         Subtitle = e.Subtitle
         PublishedAt = e.PublishedAt
+        Tags = e.Tags
     }
 
     /// List every narrative blob for `scopeId`, deserialise each, drop
@@ -118,65 +119,89 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, maxPerScope: int) =
         return entries |> Array.choose id |> Array.toList
     }
 
-    new(blobStorage: IBlobStorage) = PersistentNarrativeStore(blobStorage, 100)
+    let publishInternal (scopeId, moduleId, pageRoute, document, tags) = async {
+        let id = Guid.NewGuid()
 
-    interface INarrativeStore with
-        member _.Publish(scopeId, moduleId, pageRoute, document) = async {
-            let id = Guid.NewGuid()
-
-            let entry: NarrativeEntry = {
-                Id = id
-                ModuleId = moduleId
-                PageRoute = pageRoute
-                Title = document.Title
-                Subtitle = document.Subtitle
-                PublishedAt = DateTime.UtcNow
-                Document = document
-            }
-
-            let name = blobName scopeId entry
-            let bytes = serialize entry
-            let! uploadResult = blobStorage.Upload(platformContainer, name, bytes)
-            uploadResult |> throwOnError "Upload" |> ignore
-
-            // Trim oldest entries past the cap. Best-effort: a failed
-            // delete leaves a stale blob but does not break the publish.
-            let! all = listEntries scopeId
-
-            if all.Length > maxPerScope then
-                let toDelete = all |> List.skip maxPerScope
-
-                for old in toDelete do
-                    let oldName = blobName scopeId old
-                    let! _ = blobStorage.Delete(platformContainer, oldName)
-                    ()
-
-            return id
+        let entry: NarrativeEntry = {
+            Id = id
+            ModuleId = moduleId
+            PageRoute = pageRoute
+            Title = document.Title
+            Subtitle = document.Subtitle
+            PublishedAt = DateTime.UtcNow
+            Tags = tags
+            Document = document
         }
 
-        member this.ReplaceLatest(scopeId, moduleId, pageRoute, subtitleKey, document) = async {
-            let! all = listEntries scopeId
+        let name = blobName scopeId entry
+        let bytes = serialize entry
+        let! uploadResult = blobStorage.Upload(platformContainer, name, bytes)
+        uploadResult |> throwOnError "Upload" |> ignore
 
-            let matches (e: NarrativeEntry) =
-                e.ModuleId = moduleId
-                && e.PageRoute = pageRoute
-                && (match subtitleKey with
-                    | None -> true
-                    | Some _ -> e.Subtitle = subtitleKey)
+        // Trim oldest entries past the cap. Best-effort: a failed
+        // delete leaves a stale blob but does not break the publish.
+        let! all = listEntries scopeId
 
-            let toRemove = all |> List.filter matches
+        if all.Length > maxPerScope then
+            let toDelete = all |> List.skip maxPerScope
 
-            for old in toRemove do
+            for old in toDelete do
                 let oldName = blobName scopeId old
                 let! _ = blobStorage.Delete(platformContainer, oldName)
                 ()
 
-            return! (this :> INarrativeStore).Publish(scopeId, moduleId, pageRoute, document)
-        }
+        return id
+    }
+
+    let replaceLatestInternal (scopeId, moduleId, pageRoute, subtitleKey, document, tags) = async {
+        let! all = listEntries scopeId
+
+        let matches (e: NarrativeEntry) =
+            e.ModuleId = moduleId
+            && e.PageRoute = pageRoute
+            && (match subtitleKey with
+                | None -> true
+                | Some _ -> e.Subtitle = subtitleKey)
+
+        let toRemove = all |> List.filter matches
+
+        for old in toRemove do
+            let oldName = blobName scopeId old
+            let! _ = blobStorage.Delete(platformContainer, oldName)
+            ()
+
+        return! publishInternal (scopeId, moduleId, pageRoute, document, tags)
+    }
+
+    new(blobStorage: IBlobStorage) = PersistentNarrativeStore(blobStorage, 100)
+
+    interface INarrativeStore with
+        member _.Publish(scopeId, moduleId, pageRoute, document) =
+            publishInternal (scopeId, moduleId, pageRoute, document, [])
+
+        member _.PublishTagged(scopeId, moduleId, pageRoute, document, tags) =
+            publishInternal (scopeId, moduleId, pageRoute, document, tags)
+
+        member _.ReplaceLatest(scopeId, moduleId, pageRoute, subtitleKey, document) =
+            replaceLatestInternal (scopeId, moduleId, pageRoute, subtitleKey, document, [])
+
+        member _.ReplaceLatestTagged(scopeId, moduleId, pageRoute, subtitleKey, document, tags) =
+            replaceLatestInternal (scopeId, moduleId, pageRoute, subtitleKey, document, tags)
 
         member _.List(scopeId, limit) = async {
             let! all = listEntries scopeId
             return all |> List.truncate (max 0 limit) |> List.map toInfo
+        }
+
+        member _.ListByTag(scopeId, limit, tagFilter) = async {
+            let! all = listEntries scopeId
+
+            let filtered =
+                match tagFilter with
+                | None -> all
+                | Some tag -> all |> List.filter (fun e -> e.Tags |> List.contains tag)
+
+            return filtered |> List.truncate (max 0 limit) |> List.map toInfo
         }
 
         member this.Get(scopeId, id) = async {
