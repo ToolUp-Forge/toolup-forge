@@ -23,7 +23,9 @@ maintenance commitment, and how to sign your work.
 2. **Clone your fork** and create a branch off `main` for your change.
 3. **Make your change.** Follow the [Style and conventions](#style-and-conventions) guidance.
 4. **Sign each commit** with `Signed-off-by:` — see [DCO](#developer-certificate-of-origin-dco).
-   Unsigned commits will be rejected at review time; a CI check enforcing this is planned.
+   Unsigned commits will be rejected at review time and by the
+   [`checks.yml`](.github/workflows/checks.yml) CI workflow, which scans every PR
+   commit for a `Signed-off-by:` trailer matching the commit author.
 5. **Run the build** locally:
    ```
    dotnet build

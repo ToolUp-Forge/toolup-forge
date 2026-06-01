@@ -1,0 +1,130 @@
+# Per-push / per-PR validation. Phase 11.C.3 — wires the three
+# contributor-claimed gates from CONTRIBUTING.md as CI:
+#   1. Apache-2.0 SPDX header on every Fable-packed source file
+#      (`dotnet run -- AddHeaders --check`; file set auto-derived from
+#      `PackagePath="fable"` fsprojs by SDK.Build.fs).
+#   2. Fantomas formatting (`dotnet fantomas --check .` — the workspace
+#      formatting mandate; same command contributors run locally).
+#   3. DCO Signed-off-by trailer on every commit in a PR — required by
+#      CONTRIBUTING.md §"Quick start" Step 4. Strict-match against the
+#      commit author per the DCO spec (no anonymous / pseudonymous).
+#
+# ─── Triggers ────────────────────────────────────────────────────────
+#
+# - `push` to `main` — runs the two repo-state gates (SPDX, Fantomas).
+#   The DCO job is conditional on `pull_request` and is skipped here;
+#   direct-to-main signed-off discipline relies on the operator's local
+#   commit-template / `format.signoff` config.
+# - `pull_request` against `main` — runs all three gates.
+#
+# The concurrency group cancels superseded runs (PR force-push, branch
+# updates) so CI minutes don't pile up on rapid iteration. Pattern
+# borrowed from the workspace `batch IaC during debug sessions` lesson:
+# `cancel-in-progress: true` is the cheap auto-cancel of stale CI.
+#
+# ─── Authentication ──────────────────────────────────────────────────
+#
+# No write scope. `contents: read` for checkout; `pull-requests: read`
+# is reserved for future enhancements (e.g. posting check-run summaries).
+
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  spdx-headers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Same CI workaround as publish-nuget.yml: the workspace-shared
+      # local-feed at ../local-nuget-feed is referenced by nuget.config
+      # for dev-machine iteration; the runner has no such folder. An
+      # empty dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../local-nuget-feed
+
+      - name: Check Apache-2.0 SPDX headers
+        run: dotnet run --project Build.fsproj -- AddHeaders --check
+
+  fantomas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore .NET local tools
+        run: dotnet tool restore
+
+      - name: Check formatting
+        run: dotnet fantomas --check .
+
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # CONTRIBUTING.md §"Developer Certificate of Origin (DCO)" — every
+      # commit in the PR must carry a `Signed-off-by:` trailer whose
+      # name + email match the commit author. Merge commits are skipped
+      # (they have no patch-author of their own). The implementation
+      # avoids external Marketplace actions per the in-tree-tooling
+      # stance — same posture as the rest of the workspace's build /
+      # CI scripts.
+      - name: Verify Signed-off-by on every PR commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=()
+          shas=$(git rev-list --no-merges "${BASE_SHA}..${HEAD_SHA}")
+          if [ -z "${shas}" ]; then
+            echo "No non-merge commits between base and head — nothing to check."
+            exit 0
+          fi
+          for sha in ${shas}; do
+            author=$(git log -1 --format='%an <%ae>' "${sha}")
+            if ! git log -1 --format=%B "${sha}" \
+                | grep -qFx "Signed-off-by: ${author}"; then
+              missing+=("${sha}")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Commits missing a Signed-off-by trailer matching the commit author:"
+            for sha in "${missing[@]}"; do
+              author=$(git log -1 --format='%an <%ae>' "${sha}")
+              subject=$(git log -1 --format='%s' "${sha}")
+              echo "  ${sha:0:12}  ${author}  ${subject}"
+            done
+            echo
+            echo "Fix: run \`git rebase --signoff ${BASE_SHA}\` to retroactively sign"
+            echo "every commit in this PR. See CONTRIBUTING.md for the full DCO spec."
+            exit 1
+          fi
+          count=$(echo "${shas}" | wc -l | tr -d ' ')
+          echo "All ${count} commit(s) carry a Signed-off-by trailer matching the author."
