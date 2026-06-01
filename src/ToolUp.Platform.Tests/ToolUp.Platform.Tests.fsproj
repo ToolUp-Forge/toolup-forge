@@ -179,6 +179,19 @@
         <!-- Phase 70 — BlobPlatformAIKeyStore over an in-memory ISecretStore.
              Binds the IPlatformAIKeyStoreContract pack to the default impl. -->
         <Compile Include="InProcess\BlobPlatformAIKeyStoreTests.fs" />
+        <!-- Phase 70 Stream E.2 — DefaultAIProviderFactory four-step
+             resolution-chain tests (BYOK route → team-scope key →
+             platform-scope key → BootstrapKeyFromEnv) under every
+             AccessContext.Subject shape + the byte-identical-state
+             single-provider regression bar. -->
+        <Compile Include="AI\MultiPlatformProviderResolutionTests.fs" />
+        <!-- Phase 70 Stream E.3 — PlatformAIKeysApi handler RBAC tests.
+             Pins the canModifyPlatformConfig gate across all 10 API
+             methods (write methods → Error "platform admin role
+             required"; read methods → empty list short-circuit) plus
+             admin-pass-through coverage for the underlying validation
+             error paths. -->
+        <Compile Include="AI\PlatformAIKeysHandlerRbacTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\EntraExternalIdConfigTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />

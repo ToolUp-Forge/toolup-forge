@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Program
 open Expecto
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Tests.AI
 
 let allTests =
     testList "ToolUp.Platform.Tests" [
@@ -86,6 +87,8 @@ let allTests =
         ShareTokenStoreTests.tests
         InMemoryPendingInviteStoreTests.tests
         BlobPlatformAIKeyStoreTests.tests
+        MultiPlatformProviderResolutionTests.tests
+        PlatformAIKeysHandlerRbacTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         SseTraceContributorTests.tests
