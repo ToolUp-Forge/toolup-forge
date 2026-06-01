@@ -22,16 +22,19 @@ type IFeatureFlagApi = {
     /// every declared flag for the deployment; values are the result
     /// of `FlagEvaluator.Resolve` per key — already coerced to match
     /// the declared shape (`Bool` / `Variant`).
+    [<AllowAnonymous>]
     GetResolvedFlags: unit -> Async<Map<string, FlagValue>>
     /// Flags declared at `register()` / `ServerConfig.FeatureFlags`,
     /// in registration order. Drives the admin UI's flag list and lets
     /// the client surface owner / description / declared default
     /// without re-evaluating.
+    [<AllowAnonymous>]
     ListDeclared: unit -> Async<FeatureFlag list>
     /// Overrides currently set at the caller's admin scope (Team for
     /// Team mode, User otherwise). Keyed by flag key. Missing keys mean
     /// the scope has no override — reads fall through to the next
     /// layer. `Error` when the caller has no admin scope (Anonymous).
+    [<RequiresClaim "scope">]
     GetOverrides: unit -> Async<Result<Map<string, FlagValue>, string>>
     /// Upsert one override at the caller's admin scope. Validates:
     /// - key is declared (unknown-key writes rejected);
@@ -39,9 +42,11 @@ type IFeatureFlagApi = {
     /// - for `Variant`, value is in the declared option list.
     /// In Team mode additionally requires Owner/Admin
     /// (`TeamRoles.canWriteTeamConfig`).
+    [<RequiresClaim "scope">]
     SetOverride: string * FlagValue -> Async<Result<unit, string>>
     /// Remove one override at the caller's admin scope — subsequent
     /// reads fall through. Idempotent. In Team mode requires Owner/Admin.
+    [<RequiresClaim "scope">]
     ClearOverride: string -> Async<Result<unit, string>>
 }
 

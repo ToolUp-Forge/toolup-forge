@@ -2068,6 +2068,15 @@ module Client =
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
     /// the full shell bootstrap (the dispatcher has rendered its own program).
     /// Returns `false` otherwise — the caller should bootstrap the full shell.
+    ///
+    /// 0.4.1 — PublicEntryDispatcher implementors should compose
+    /// `Program.withDispatcherHandle (fun _ -> ())` against their
+    /// minimal program (or accept the React adapter's auto-installed
+    /// dispatch sink that fires on `beforeunload`) so any background
+    /// callback they grow gets the same `IDispatcher.IsActive` /
+    /// `Terminate()` lifecycle guard the full shell enjoys. The
+    /// `IDispatcher` dispatched here is per-dispatcher-program — the
+    /// shell's `shellDispatcher` does not bleed across.
     let tryDispatchPublicEntry (config: ClientConfig) : bool =
         config.PublicEntryDispatchers |> List.exists (fun dispatch -> dispatch config)
 

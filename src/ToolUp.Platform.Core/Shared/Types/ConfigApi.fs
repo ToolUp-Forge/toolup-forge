@@ -54,16 +54,20 @@ type ModuleConfigView = {
 type IConfigApi = {
     /// Enumerate configurable modules for the deployment. Every entry
     /// carries its schema so the UI can render forms inline.
+    [<AllowAnonymous>]
     ListModules: unit -> Async<ModuleConfigEntry list>
     /// Full view of one module — schema + persisted map. Returns
     /// `Error` when the caller has no config scope (Anonymous mode),
     /// or when the key is not registered.
+    [<AllowAnonymous>]
     GetModuleConfig: string -> Async<Result<ModuleConfigView, string>>
     /// Replace the persisted map for one module. Validated against
     /// the schema server-side. Team mode: Owner/Admin only.
+    [<RequiresClaim "scope">]
     SaveModuleConfig: string * Map<string, string> -> Async<Result<unit, string>>
     /// Clear the persisted map for one module (all fields fall back
     /// to schema defaults on next read). Team mode: Owner/Admin only.
+    [<RequiresClaim "scope">]
     ClearModuleConfig: string -> Async<Result<unit, string>>
 }
 

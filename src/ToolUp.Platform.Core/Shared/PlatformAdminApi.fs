@@ -44,12 +44,14 @@ type PlatformAdminApi = {
     /// Resolves the answer from `AccessContext.PlatformRole` — no
     /// `IPlatformAdminStore` call. Visible to every authenticated
     /// caller; anonymous callers always receive `false`.
+    [<AllowAnonymous>]
     IsPlatformAdmin: unit -> Async<bool>
 
     /// List every user holding `PlatformRole.PlatformAdmin`. Visible to
     /// every authenticated caller. Returns an opaque list of userIds —
     /// no other PII attached. Used by `PlatformAdminUI` to render the
     /// current admin set alongside the Assign / Revoke controls.
+    [<AllowAnonymous>]
     ListPlatformAdmins: unit -> Async<string list>
 
     /// Assign `PlatformRole.PlatformAdmin` to `targetUserId`. Gated on
@@ -58,6 +60,7 @@ type PlatformAdminApi = {
     /// to a user who already holds the role returns `Ok` without
     /// re-emitting the audit event. The actor recorded on the audit
     /// event is the calling user's `AccessContext.UserId`.
+    [<RequiresRole "PlatformAdmin">]
     AssignPlatformAdmin: string -> Async<Result<unit, string>>
 
     /// Revoke `PlatformRole.PlatformAdmin` from `targetUserId`. Gated
@@ -66,6 +69,7 @@ type PlatformAdminApi = {
     /// `Error "cannot revoke the last remaining Platform Admin"`).
     /// Idempotent — revoking a non-admin returns `Ok` without an audit
     /// event.
+    [<RequiresRole "PlatformAdmin">]
     RevokePlatformAdmin: string -> Async<Result<unit, string>>
 
     /// Read the current runtime
@@ -75,6 +79,7 @@ type PlatformAdminApi = {
     /// `ListPlatformDocuments` / retrieval gate enforces actual
     /// content access). Used by the Platform Admin module's Settings
     /// tab to render the current state.
+    [<AllowAnonymous>]
     GetPlatformKnowledgeBase: unit -> Async<PlatformKnowledgeBaseMode>
 
     /// Set the runtime
@@ -83,5 +88,6 @@ type PlatformAdminApi = {
     /// next retrieval call sees the new value. Survives restarts.
     /// Returns `Error` on persistence failure (the in-memory cell is
     /// only updated on successful save).
+    [<RequiresRole "PlatformAdmin">]
     SetPlatformKnowledgeBase: PlatformKnowledgeBaseMode -> Async<Result<unit, string>>
 }

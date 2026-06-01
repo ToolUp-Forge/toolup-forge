@@ -308,7 +308,7 @@ Method-call lambdas need parens: `AgGrid.onGridReady (_.AutoSizeAllColumns())`.
 
 - **Fable.Remoting APIs**: handled automatically by the transport.
 - **SSE / non-Remoting JSON**: must use `Fable.Remoting.Json.FableJsonConverter`. Do NOT use `Newtonsoft.Json.Converters.DiscriminatedUnionConverter` — produces a shape `Fable.SimpleJson` cannot parse. Do NOT use `CamelCasePropertyNamesContractResolver` — Fable expects PascalCase.
-- **`unit -> Async<T>` API functions**: work because of `RemotingBodyNormalizationMiddleware` in `SDK.Server.fs`. Do not remove this middleware.
+- **`unit -> Async<T>` API functions**: work because body normalisation is folded into the `ToolUp.Remoting.Giraffe` dispatcher itself (Phase 69b.A, shipped 0.4.0). The standalone `RemotingBodyNormalizationMiddleware` that 0.3.x relied on was retired alongside the Phase 69a SDK adoption sweep — `dotnet build` is the gate, not a middleware presence check.
 - **Consumer dependency contract**: server projects consuming `ToolUp.Platform.Server` MUST include `<PackageReference Include="Fable.Remoting.Json" />` — Newtonsoft arrives transitively.
 
 ### AG Charts axes + animation

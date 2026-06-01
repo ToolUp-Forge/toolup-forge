@@ -3,6 +3,7 @@
 
 module ToolUp.Forms.PublicFormApi
 
+open ToolUp.Platform // 0.4.1 — forge-native auth attributes
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 
@@ -61,6 +62,12 @@ type IPublicFormApi = {
     /// the recipient list. Returns `Error` for malformed / expired /
     /// revoked / use-exhausted tokens, and for tokens that don't
     /// match `forms.publishable` or whose schema isn't `Publishable`.
+    ///
+    /// Token-gated public surface — server enforces the gate
+    /// per-handler via `IShareTokenStore`, not the auth context. The
+    /// dispatcher SHOULD NOT consult an `IAuthContext` resolver for
+    /// these methods.
+    [<PublicEndpoint>]
     GetSchemaByToken: string -> Async<Result<FormSchema, FormError>>
     /// Submit field values against the form referenced by a valid
     /// token. On success the submission is persisted with `Author =
@@ -69,6 +76,7 @@ type IPublicFormApi = {
     /// emitted. Validation rejection (`FormError.ValidationFailed`)
     /// does NOT bump the use count — the respondent can correct
     /// errors and re-submit until the count is exhausted.
+    [<PublicEndpoint>]
     SubmitWithToken: SubmitWithTokenRequest -> Async<Result<Submission, FormError>>
 }
 

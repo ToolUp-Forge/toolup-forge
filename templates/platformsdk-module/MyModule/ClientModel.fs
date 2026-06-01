@@ -20,7 +20,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | SubmitEcho text ->
         let cmd =
-            Cmd.OfAsync.either myModuleApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
+            Cmd.OfRemoting.call myModuleApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
 
         model, cmd
     | EchoSucceeded response ->

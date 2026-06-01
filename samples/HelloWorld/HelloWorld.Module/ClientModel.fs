@@ -47,7 +47,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | SubmitEcho text ->
         let cmd =
-            Cmd.OfAsync.either templateApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
+            Cmd.OfRemoting.call templateApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
 
         { model with Input = text }, cmd
     | EchoSucceeded response ->

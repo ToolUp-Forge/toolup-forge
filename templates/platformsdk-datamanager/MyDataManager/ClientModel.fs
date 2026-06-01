@@ -33,7 +33,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         | None -> model, Cmd.none
         | Some uri ->
             let cmd =
-                Cmd.OfAsync.either api.Ingest { SourceUri = uri; Format = "csv" } IngestSucceeded (fun ex ->
+                Cmd.OfRemoting.call api.Ingest { SourceUri = uri; Format = "csv" } IngestSucceeded (fun ex ->
                     IngestFailed ex.Message)
 
             model, cmd
