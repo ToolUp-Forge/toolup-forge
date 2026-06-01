@@ -425,7 +425,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                             return Error(AIProviderError.toMessage err)
             }
 
-        GetPlatformDescriptor = fun () -> async { return factory.PlatformDescriptor }
+        GetPlatformDescriptors = fun () -> async { return factory.PlatformDescriptors }
 
         SetPlatformModelOverride =
             fun modelOpt ->

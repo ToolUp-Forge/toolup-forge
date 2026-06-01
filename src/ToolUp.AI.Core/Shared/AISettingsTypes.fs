@@ -110,13 +110,16 @@ type AISettingsApi = {
     /// `AIProviderError`. Used by the settings UI before the user
     /// activates the instance.
     TestConnection: string -> Async<Result<unit, string>>
-    /// Descriptor for the deployment's platform-configured provider,
-    /// when one exists. Returns `None` if the factory has no platform
-    /// provider (StrictBYOK, or PlatformOnly misconfigured).
-    /// Used by the settings UI under `PlatformOnly` to surface a
-    /// minimal model-picker from `SupportedModels` while provider
-    /// identity and API-key source stay locked.
-    GetPlatformDescriptor: unit -> Async<AIProviderDescriptor option>
+    /// Descriptors for every platform-configured provider the
+    /// deployment has wired up (Phase 70). Empty list when the factory
+    /// has no platform providers (StrictBYOK, or PlatformOnly
+    /// misconfigured). Used by the settings UI to drive the
+    /// provider+model picker under `PlatformOnly`: a single descriptor
+    /// hides the provider dropdown and renders only the model picker
+    /// (byte-identical to pre-Phase-70 single-provider behaviour);
+    /// two-or-more descriptors render both dropdowns and let the user
+    /// switch between Anthropic / OpenAI / Gemini.
+    GetPlatformDescriptors: unit -> Async<AIProviderDescriptor list>
     /// Set (or clear) the caller's preferred model for the platform
     /// provider. Persisted at the caller's config scope. `None`
     /// clears the override — subsequent resolution uses the platform

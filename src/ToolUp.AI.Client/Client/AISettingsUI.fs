@@ -23,13 +23,15 @@ type Model = {
     /// `AISettingsApi.ListAvailable`. Empty list means the deployment
     /// is `PlatformOnly` (managed-by-deployment mode) — under
     /// PlatformOnly the UI hides the BYOK instance form and instead
-    /// renders a minimal model-picker driven by `PlatformDescriptor`.
+    /// renders a platform provider+model picker driven by
+    /// `PlatformDescriptors`.
     Available: AIProviderDescriptor list
-    /// Descriptor of the deployment's platform-configured provider.
-    /// `Some` under PlatformOnly / PermissiveWithPlatformFallback when
-    /// the factory has a platform provider wired. Drives the
-    /// PlatformOnly model-picker dropdown.
-    PlatformDescriptor: AIProviderDescriptor option
+    /// Phase 70 — descriptors for every platform-configured provider
+    /// the deployment has wired. Empty = no platform provider; a
+    /// single entry hides the provider dropdown and renders only the
+    /// model picker (byte-identical to pre-Phase-70 behaviour); ≥2
+    /// entries surface a provider+model picker.
+    PlatformDescriptors: AIProviderDescriptor list
     /// Current scope's configured providers. Loaded from `GetMyConfig`.
     Config: AIUserConfigView
     /// When Some, the form is in edit mode targeting this instance.
@@ -46,7 +48,7 @@ type Model = {
 
 type Msg =
     | LoadAvailable of ApiCall<unit, AIProviderDescriptor list>
-    | LoadPlatformDescriptor of ApiCall<unit, AIProviderDescriptor option>
+    | LoadPlatformDescriptors of ApiCall<unit, AIProviderDescriptor list>
     | LoadConfig of ApiCall<unit, AIUserConfigView>
     | StartEdit of label: string
     | CancelEdit
@@ -60,6 +62,8 @@ type Msg =
     | TestFinished of label: string * Result<unit, string>
     | SavePlatformModelOverride of string option
     | SavePlatformModelOverrideFinished of Result<unit, string>
+    | SavePlatformProviderOverride of string option
+    | SavePlatformProviderOverrideFinished of Result<unit, string>
     | ApiError of string
     | DismissStatus
 
@@ -71,7 +75,7 @@ let private api =
 let init () : Model * Cmd<Msg> =
     {
         Available = []
-        PlatformDescriptor = None
+        PlatformDescriptors = []
         Config = AIUserConfigView.empty
         Editing = None
         Status = None
@@ -79,7 +83,7 @@ let init () : Model * Cmd<Msg> =
     },
     Cmd.batch [
         Cmd.OfRemoting.call api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
-        Cmd.OfRemoting.call api.GetPlatformDescriptor () (Finished >> LoadPlatformDescriptor) (fun ex ->
+        Cmd.OfRemoting.call api.GetPlatformDescriptors () (Finished >> LoadPlatformDescriptors) (fun ex ->
             ApiError ex.Message)
         Cmd.OfRemoting.call api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
     ]
@@ -107,15 +111,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         },
         Cmd.none
 
-    | LoadPlatformDescriptor(Start()) ->
+    | LoadPlatformDescriptors(Start()) ->
         { model with Loading = true },
-        Cmd.OfRemoting.call api.GetPlatformDescriptor () (Finished >> LoadPlatformDescriptor) (fun ex ->
+        Cmd.OfRemoting.call api.GetPlatformDescriptors () (Finished >> LoadPlatformDescriptors) (fun ex ->
             ApiError ex.Message)
 
-    | LoadPlatformDescriptor(Finished descriptor) ->
+    | LoadPlatformDescriptors(Finished descriptors) ->
         {
             model with
-                PlatformDescriptor = descriptor
+                PlatformDescriptors = descriptors
                 Loading = false
         },
         Cmd.none
@@ -234,6 +238,30 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         refetchConfig ()
 
     | SavePlatformModelOverrideFinished(Error err) ->
+        {
+            model with
+                Status = Some(ErrorMsg err)
+                Loading = false
+        },
+        Cmd.none
+
+    | SavePlatformProviderOverride providerIdOpt ->
+        { model with Loading = true },
+        Cmd.OfRemoting.call
+            api.SetPlatformProviderOverride
+            providerIdOpt
+            SavePlatformProviderOverrideFinished
+            (fun ex -> ApiError ex.Message)
+
+    | SavePlatformProviderOverrideFinished(Ok()) ->
+        {
+            model with
+                Status = Some(SuccessMsg "AI provider preference saved.")
+                Loading = false
+        },
+        refetchConfig ()
+
+    | SavePlatformProviderOverrideFinished(Error err) ->
         {
             model with
                 Status = Some(ErrorMsg err)
@@ -486,75 +514,189 @@ let private ProviderForm
         ]
     ]
 
-// ─── Platform model picker (PlatformOnly branch) ────────────────
+// ─── Platform provider + model picker (PlatformOnly branch) ─────
 //
-// Minimal form: just a model dropdown and a Save button. Provider
-// identity and API-key source stay locked — only the model choice
-// is user-editable.
+// Phase 70 — when the deployment wires ≥2 platform providers
+// (Anthropic + OpenAI + Gemini, etc.), the user picks both provider
+// and model. When exactly 1 is wired, the provider dropdown is
+// hidden and only the model picker renders (byte-identical UX to
+// the pre-Phase-70 single-provider deployment). API key source
+// stays locked end-to-end — that's the Platform Admin keys module's
+// concern, not the user's.
+//
+// Switching provider clears any stored model preference for the
+// previous provider (a model name like "claude-opus-4-1" is not
+// valid for OpenAI). The server validates the stored model against
+// any wired descriptor's models, but the UI applies the local
+// reset for immediate-feedback ergonomics.
+//
 // Text-input pattern follows the CLAUDE.md rule: local React state,
 // dispatch only on explicit Save.
 
 [<ReactComponent>]
-let private PlatformModelPicker
-    (descriptor: AIProviderDescriptor)
-    (currentOverride: string option)
+let private PlatformProviderModelPicker
+    (descriptors: AIProviderDescriptor list)
+    (currentProviderOverride: string option)
+    (currentModelOverride: string option)
     (loading: bool)
-    (onSave: string option -> unit)
+    (onSaveProvider: string option -> unit)
+    (onSaveModel: string option -> unit)
     =
-    // Empty string sentinel = "use default". Stored override maps
-    // to itself; None maps to empty.
-    let initial = currentOverride |> Option.defaultValue ""
+    // Resolve the initial active provider from the stored override
+    // (validated against the wired descriptors); fall back to the
+    // first descriptor when no override is set or the stored value
+    // is no longer wired. Matches the server's `resolvePlatformProvider`
+    // semantics.
+    let firstDescriptor = descriptors |> List.tryHead
 
-    let selected, setSelected = React.useState initial
+    let resolvedProvider =
+        currentProviderOverride
+        |> Option.bind (fun id -> descriptors |> List.tryFind (fun d -> d.Id = id))
+        |> Option.orElse firstDescriptor
 
-    // React.useState initial is captured at mount — if `currentOverride`
-    // changes after a refetch (e.g. a successful save), sync via
-    // useEffect so the dropdown reflects the fresh server state.
-    React.useEffect ((fun () -> setSelected initial), [| box initial |])
+    let initialProviderId =
+        resolvedProvider |> Option.map _.Id |> Option.defaultValue ""
 
-    let effectiveModel = if selected = "" then descriptor.DefaultModel else selected
+    let initialModel = currentModelOverride |> Option.defaultValue ""
 
-    let pending = selected <> initial
+    let selectedProviderId, setSelectedProviderId = React.useState initialProviderId
+    let selectedModel, setSelectedModel = React.useState initialModel
+
+    // Sync local state when the server-side override changes via a
+    // refetch after a successful save. useState's initial only fires
+    // at mount; useEffect re-applies after later prop changes.
+    React.useEffect (
+        (fun () ->
+            setSelectedProviderId initialProviderId
+            setSelectedModel initialModel),
+        [| box initialProviderId; box initialModel |]
+    )
+
+    let selectedDescriptor =
+        descriptors |> List.tryFind (fun d -> d.Id = selectedProviderId)
+
+    let multiProvider = descriptors.Length > 1
+
+    let providerPending =
+        // Stored override matches the resolved selection iff:
+        // - currentOverride = Some id AND id = selectedProviderId, OR
+        // - currentOverride = None AND selectedProviderId = first descriptor's id.
+        match currentProviderOverride with
+        | Some id -> id <> selectedProviderId
+        | None ->
+            firstDescriptor
+            |> Option.map (fun d -> d.Id <> selectedProviderId)
+            |> Option.defaultValue false
+
+    let modelPending =
+        match currentModelOverride with
+        | Some m -> m <> selectedModel
+        | None -> selectedModel <> ""
+
+    let pending = providerPending || modelPending
+
+    let effectiveModel =
+        match selectedDescriptor with
+        | Some d when selectedModel = "" -> d.DefaultModel
+        | Some _ -> selectedModel
+        | None -> "(no provider)"
+
+    let handleProviderChange (newId: string) =
+        setSelectedProviderId newId
+        // Switching provider invalidates the previous model
+        // selection — reset to default. The new selection will be
+        // saved only when the user presses Save.
+        setSelectedModel ""
 
     let handleSave () =
         if not loading && pending then
-            let toSave = if selected = "" then None else Some selected
-            onSave toSave
+            // Provider write first — the server validates the new
+            // model against any wired descriptor's models, so
+            // ordering doesn't strictly matter, but emitting provider
+            // first keeps the audit log readable.
+            if providerPending then
+                let providerToSave =
+                    match firstDescriptor with
+                    | Some first when first.Id = selectedProviderId -> None
+                    | _ -> Some selectedProviderId
+
+                onSaveProvider providerToSave
+
+            if modelPending then
+                let modelToSave = if selectedModel = "" then None else Some selectedModel
+
+                onSaveModel modelToSave
 
     Html.div [
         prop.className "space-y-3"
         prop.children [
             Html.p [
                 prop.className "text-sm text-gray-600"
-                prop.text
-                    $"AI is managed by this deployment using {descriptor.DisplayName}. Provider identity and API key are locked, but you can pick which model to use from the supported list below."
+                prop.text (
+                    if multiProvider then
+                        "AI is managed by this deployment. Pick a provider and model from the options below; the deployment's Platform Admin manages the API keys."
+                    else
+                        match firstDescriptor with
+                        | Some d ->
+                            $"AI is managed by this deployment using {d.DisplayName}. Provider identity and API key are locked, but you can pick which model to use from the supported list below."
+                        | None -> "AI is not configured for this deployment."
+                )
             ]
 
-            Html.div [
-                prop.children [
-                    Html.label [
-                        prop.className "block text-sm font-medium text-gray-700 mb-1"
-                        prop.text "Model"
-                    ]
-                    Html.select [
-                        prop.className
-                            "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
-                        prop.value selected
-                        prop.onChange (fun (v: string) -> setSelected v)
-                        prop.disabled loading
-                        prop.children [
-                            Html.option [ prop.value ""; prop.text $"Default ({descriptor.DefaultModel})" ]
-                            for m in descriptor.SupportedModels do
-                                if m <> descriptor.DefaultModel then
-                                    Html.option [ prop.value m; prop.text m ]
+            // Provider dropdown — only when ≥2 wired
+            if multiProvider then
+                Html.div [
+                    prop.children [
+                        Html.label [
+                            prop.className "block text-sm font-medium text-gray-700 mb-1"
+                            prop.text "Provider"
+                        ]
+                        Html.select [
+                            prop.className
+                                "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            prop.value selectedProviderId
+                            prop.onChange handleProviderChange
+                            prop.disabled loading
+                            prop.children [
+                                for d in descriptors do
+                                    Html.option [ prop.value d.Id; prop.text d.DisplayName ]
+                            ]
                         ]
                     ]
-                    Html.p [
-                        prop.className "mt-1 text-xs text-gray-500"
-                        prop.text $"Effective model: {effectiveModel}"
+                ]
+
+            // Model dropdown — driven by the selected provider's
+            // SupportedModels. Resets to "Default" when the user
+            // switches provider (handleProviderChange clears
+            // selectedModel).
+            match selectedDescriptor with
+            | Some descriptor ->
+                Html.div [
+                    prop.children [
+                        Html.label [
+                            prop.className "block text-sm font-medium text-gray-700 mb-1"
+                            prop.text "Model"
+                        ]
+                        Html.select [
+                            prop.className
+                                "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            prop.value selectedModel
+                            prop.onChange (fun (v: string) -> setSelectedModel v)
+                            prop.disabled loading
+                            prop.children [
+                                Html.option [ prop.value ""; prop.text $"Default ({descriptor.DefaultModel})" ]
+                                for m in descriptor.SupportedModels do
+                                    if m <> descriptor.DefaultModel then
+                                        Html.option [ prop.value m; prop.text m ]
+                            ]
+                        ]
+                        Html.p [
+                            prop.className "mt-1 text-xs text-gray-500"
+                            prop.text $"Effective model: {effectiveModel}"
+                        ]
                     ]
                 ]
-            ]
+            | None -> Html.none
 
             Html.div [
                 prop.className "pt-2 flex items-center gap-3"
@@ -569,7 +711,11 @@ let private PlatformModelPicker
                         ]
                         prop.disabled (loading || not pending)
                         prop.onClick (fun _ -> handleSave ())
-                        prop.text (if loading then "Saving..." else "Save model preference")
+                        prop.text (
+                            if loading then "Saving..."
+                            elif multiProvider then "Save AI preference"
+                            else "Save model preference"
+                        )
                     ]
                 ]
             ]
@@ -756,22 +902,30 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
         | None -> "add"
 
     let outputPanel =
-        match model.Available.IsEmpty, model.PlatformDescriptor with
-        | true, Some descriptor ->
-            Layout.Panel.panel "AI model" [
-                PlatformModelPicker
-                    descriptor
-                    model.Config.PlatformModelOverride
-                    model.Loading
-                    (SavePlatformModelOverride >> dispatch)
-            ]
-        | true, None ->
+        match model.Available.IsEmpty, model.PlatformDescriptors with
+        | true, [] ->
             Layout.Panel.panel "AI settings" [
                 Html.div [
                     prop.className "p-4 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800"
                     prop.text
                         "AI is not configured for this deployment. Contact your administrator to enable an AI provider."
                 ]
+            ]
+        | true, descriptors ->
+            let panelTitle =
+                if descriptors.Length > 1 then
+                    "AI provider + model"
+                else
+                    "AI model"
+
+            Layout.Panel.panel panelTitle [
+                PlatformProviderModelPicker
+                    descriptors
+                    model.Config.PlatformProviderOverride
+                    model.Config.PlatformModelOverride
+                    model.Loading
+                    (SavePlatformProviderOverride >> dispatch)
+                    (SavePlatformModelOverride >> dispatch)
             ]
         | false, _ ->
             Layout.Panel.panel panelTitle [
