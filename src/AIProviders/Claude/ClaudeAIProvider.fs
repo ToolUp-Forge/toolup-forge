@@ -130,7 +130,9 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                     let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
                         // Build a fresh request per attempt — HttpRequestMessage
                         // cannot be reused after being sent.
-                        let body = buildRequestBody model maxTokens messages tools systemPrompt useStreaming
+                        let body =
+                            buildRequestBody model maxTokens messages tools systemPrompt useStreaming None
+
                         let request = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
                         request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
                         request.Headers.Add("x-api-key", key)
@@ -535,22 +537,160 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                     return! retryLoop 0
         }
 
-        // Phase 67b — temporary fallback impl. Replaced with the
-        // native tool-based workaround in the next 67b commit
-        // (synthesise a single tool whose `input_schema` is the
-        // supplied schema; `tool_choice = { type: "tool", name: "..."
-        // }` forces the model to call it; the tool-call `input` is
-        // the structured response). The fallback prepends schema as
-        // a system-prompt instruction and post-validates the
-        // response is JSON.
-        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
-            IAIProviderDefaults.sendStructuredViaFallback
-                (this :> IAIProvider)
-                messages
-                tools
-                systemPrompt
-                schema
-                retryPolicy
+        // Phase 67b — Anthropic has no native structured-output mode.
+        // The documented workaround is to synthesise a tool whose
+        // `input_schema` is the supplied schema, then force
+        // `tool_choice = { type: "tool", name: "structured_response" }`
+        // so the assistant is required to call that tool. The
+        // tool-call's `input` field IS the structured response — this
+        // method extracts it and surfaces it as `AIProviderResponse.
+        // Content` so callers see the same shape as the Gemini /
+        // OpenAI native paths.
+        //
+        // Limitation: with `tool_choice` forcing the schema-tool,
+        // user-supplied tools become unreachable in the same turn.
+        // Callers should run any free-form tool-dispatch loop on
+        // SendMessage first, then a final SendStructuredMessage for
+        // the structured response.
+        //
+        // Non-streaming only — Anthropic does emit `tool_use` blocks
+        // during streaming, but parsing partial `input` JSON
+        // mid-stream is fragile. Streaming structured-output is
+        // deferred to a follow-on phase per the Out-of-scope list.
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let hasImagePart =
+                messages |> List.exists ToolUp.Platform.AI.AIProviderMessage.isMultimodal
+
+            if hasImagePart && not (ClaudeAIProviderWire.isVisionCapable model) then
+                return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
+            else
+                let! apiKey = apiKeyFetcher ()
+
+                match apiKey with
+                | None ->
+                    return
+                        Error(
+                            PermanentClient(
+                                0,
+                                "ANTHROPIC_API_KEY not configured. Set it as an environment variable or in your secret store."
+                            )
+                        )
+                | Some key ->
+                    let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
+                        let body =
+                            buildRequestBody model maxTokens messages tools systemPrompt false (Some schema)
+
+                        let request = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
+                        request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
+                        request.Headers.Add("x-api-key", key)
+                        request.Headers.Add("anthropic-version", "2023-06-01")
+
+                        use cts =
+                            match retryPolicy.Timeout with
+                            | Some t ->
+                                let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
+                                new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
+                            | None -> new CancellationTokenSource()
+
+                        try
+                            let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+
+                            if response.IsSuccessStatusCode then
+                                let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                                try
+                                    let parsed = parseResponse responseBody
+
+                                    // Find the schema-tool call. With
+                                    // tool_choice forcing it +
+                                    // disable_parallel_tool_use, exactly
+                                    // one tool_use block is expected.
+                                    let schemaCall =
+                                        parsed.ToolCalls
+                                        |> List.tryFind (fun tc ->
+                                            tc.Name = ClaudeAIProviderWire.StructuredResponseToolName)
+
+                                    match schemaCall with
+                                    | Some call ->
+                                        // Replace .Content with the
+                                        // tool-call's `input` JSON so
+                                        // the response shape matches
+                                        // Gemini / OpenAI's native
+                                        // paths. Strip the schema-tool
+                                        // from ToolCalls; surface any
+                                        // user-tool calls (should be
+                                        // empty per the forced
+                                        // tool_choice, but defensively
+                                        // preserved).
+                                        let userToolCalls =
+                                            parsed.ToolCalls
+                                            |> List.filter (fun tc ->
+                                                tc.Name <> ClaudeAIProviderWire.StructuredResponseToolName)
+
+                                        return
+                                            Ok {
+                                                parsed with
+                                                    Content = call.Arguments
+                                                    ToolCalls = userToolCalls
+                                                    StopReason = "end_turn"
+                                            }
+                                    | None ->
+                                        // Model declined to call the
+                                        // forced tool — should be
+                                        // impossible per Anthropic's
+                                        // tool_choice contract, but
+                                        // surface honestly rather than
+                                        // silently fabricate.
+                                        return
+                                            Error(
+                                                SchemaUnsupported(
+                                                    "structured-output",
+                                                    "Claude did not return the forced structured_response tool call. This is unexpected — the request was issued with tool_choice forcing the call."
+                                                )
+                                            )
+                                with ex ->
+                                    return Error(MalformedResponse ex.Message)
+                            else
+                                let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                                let code = int response.StatusCode
+
+                                return
+                                    if code = 429 || code >= 500 then
+                                        Error(TransientServer(code, errorBody))
+                                    else
+                                        Error(PermanentClient(code, errorBody))
+                        with
+                        | :? OperationCanceledException when cts.IsCancellationRequested ->
+                            return
+                                Error(
+                                    TransientNetwork
+                                        $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
+                                )
+                        | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
+                        | ex -> return Error(TransientNetwork ex.Message)
+                    }
+
+                    let rec retryLoop attemptsMade = async {
+                        let! result = singleAttempt ()
+                        let attemptsMade = attemptsMade + 1
+
+                        match result with
+                        | Ok r -> return Ok r
+                        | Error err when not (AIProviderError.isRetryable err) -> return Error err
+                        | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
+                            return
+                                if retryPolicy.MaxAttempts = 1 then
+                                    Error err
+                                else
+                                    Error(RetriesExhausted(attemptsMade, err))
+                        | Error _ ->
+                            let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
+                            do! Async.Sleep delay
+                            return! retryLoop attemptsMade
+                    }
+
+                    return! retryLoop 0
+        }
 
 /// Create a Claude AI provider from a secret store. The API key is
 /// read from `ANTHROPIC_API_KEY` in the `_platform` scope on every

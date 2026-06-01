@@ -323,6 +323,17 @@ let private buildTools (tools: AIProviderToolDef list) =
 
         d :> obj)
 
+/// Phase 67b — fixed name for the synthesised schema-tool used in
+/// Claude's tool-based structured-output workaround. Anthropic has no
+/// native equivalent to Gemini's `responseSchema` or OpenAI's
+/// `response_format: json_schema`; the documented workaround is to
+/// define a tool whose `input_schema` is the caller's schema, then
+/// force `tool_choice = { type: "tool", name: ... }` so the model is
+/// forced to call it. The tool-call's `input` field IS the structured
+/// response.
+[<Literal>]
+let StructuredResponseToolName = "structured_response"
+
 let buildRequestBody
     (model: string)
     (maxTokens: int)
@@ -330,6 +341,7 @@ let buildRequestBody
     (tools: AIProviderToolDef list)
     (systemPrompt: string option)
     (stream: bool)
+    (structuredOutputSchema: string option)
     =
     // Build the request as a dictionary to control which fields are included.
     // Claude API rejects null/unknown fields.
@@ -368,10 +380,44 @@ let buildRequestBody
         dict["system"] <- [ block :> obj ]
     | None -> ()
 
-    let toolDefs = buildTools tools
+    // Phase 67b — when a schema is supplied, append the synthesised
+    // schema-tool to user tools. The `tool_choice` directive below
+    // forces the model to call only the schema-tool, so user tools
+    // become unreachable on a structured-output turn (documented
+    // limitation — callers should run free-form tool-dispatch turns
+    // first, then a final SendStructuredMessage for the structured
+    // response).
+    let effectiveTools =
+        match structuredOutputSchema with
+        | Some schema ->
+            let schemaTool: AIProviderToolDef = {
+                Name = StructuredResponseToolName
+                Description =
+                    "Return the structured response. The `input` argument MUST conform to the supplied JSON Schema."
+                InputSchema = schema
+            }
+
+            tools @ [ schemaTool ]
+        | None -> tools
+
+    let toolDefs = buildTools effectiveTools
 
     if not toolDefs.IsEmpty then
         dict["tools"] <- toolDefs
+
+    // Phase 67b — force the schema-tool when structured output is
+    // requested. `disable_parallel_tool_use` keeps the assistant's
+    // turn to exactly one tool call so the response parser picks up
+    // a single structured-response payload (the model otherwise may
+    // emit multiple tool_use blocks in one turn).
+    match structuredOutputSchema with
+    | Some _ ->
+        dict["tool_choice"] <- {|
+            ``type`` = "tool"
+            name = StructuredResponseToolName
+            disable_parallel_tool_use = true
+        |}
+    | None -> ()
 
     if stream then
         dict["stream"] <- true
