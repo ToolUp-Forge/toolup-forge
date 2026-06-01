@@ -279,6 +279,22 @@ type AIProviderError =
     /// shipping the image to the vendor and waiting for HTTP 400;
     /// callers get the same diagnostic at substantially lower cost.
     | UnsupportedCapability of feature: string * detail: string
+    /// Phase 67b — `SendStructuredMessage` was called but the response
+    /// did not conform to the supplied JSON Schema. Distinct from
+    /// `UnsupportedCapability` because the provider attempted the
+    /// request (and may even support structured-output natively) — the
+    /// failure is at the schema-conformance boundary, not at the
+    /// feature-availability boundary.
+    ///
+    /// Sub-causes encoded in `feature`:
+    /// - `"structured-output"` — the default-impl fallback path; the
+    ///   provider lacks native structured-output and the post-hoc
+    ///   JSON-parse check failed.
+    /// - `"oneOf"` / `"anyOf"` / `"$ref"` / ... — the schema uses a
+    ///   feature this provider's native structured-output mode cannot
+    ///   honour. `detail` cites the offending JSON path.
+    /// NOT retryable — the same request would fail identically.
+    | SchemaUnsupported of feature: string * detail: string
 
 module AIProviderError =
     /// Human-readable rendering for logs, UI, SSE error events, and
@@ -292,6 +308,7 @@ module AIProviderError =
         | StreamingAborted(_, d) -> $"Streaming aborted mid-response: {d}"
         | RetriesExhausted(n, inner) -> $"Retries exhausted after {n} attempts. Last error: {toMessage inner}"
         | UnsupportedCapability(feature, detail) -> $"Unsupported capability '{feature}': {detail}"
+        | SchemaUnsupported(feature, detail) -> $"Schema feature '{feature}' not honoured by provider: {detail}"
 
     /// Whether a single attempt's error justifies another retry inside
     /// the provider's loop. Callers (e.g. the agent loop) use different
@@ -304,7 +321,8 @@ module AIProviderError =
         | MalformedResponse _
         | StreamingAborted _
         | RetriesExhausted _
-        | UnsupportedCapability _ -> false
+        | UnsupportedCapability _
+        | SchemaUnsupported _ -> false
 
 // ─── Provider interface ──────────────────────────────────────────
 
@@ -347,3 +365,103 @@ type IAIProvider =
         onStream: (string -> unit) option *
         retryPolicy: RetryPolicy ->
             Async<Result<AIProviderResponse, AIProviderError>>
+
+    /// Phase 67b — schema-respecting structured-output. The provider
+    /// guarantees (best-effort) that `AIProviderResponse.Content` is
+    /// a JSON document conforming to the supplied `schema`. `schema`
+    /// is a JSON Schema as a string (same convention as
+    /// `AIProviderToolDef.InputSchema`); providers parse it internally
+    /// and translate to their native structured-output wire format
+    /// (Gemini `generationConfig.responseSchema`, OpenAI
+    /// `response_format: { type: "json_schema" }`, Claude tool-based
+    /// workaround).
+    ///
+    /// Non-streaming only — streaming structured-output is deferred to
+    /// a follow-on phase. Tool use is permitted; the schema applies to
+    /// the final assistant turn's text content.
+    ///
+    /// Backward-compat contract for implementers: providers without
+    /// native structured-output may delegate to
+    /// `IAIProviderDefaults.sendStructuredViaFallback` — a one-line
+    /// implementation that prepends a schema-as-instruction to the
+    /// system prompt, calls `SendMessage`, and post-validates as
+    /// parseable JSON. The shipped providers (Gemini, OpenAI, Claude)
+    /// override natively; external implementers may opt into the
+    /// fallback. Deployments using only `SendMessage` are unaffected.
+    ///
+    /// Returns `Ok response` with schema-conformant `Content` on
+    /// success. Returns `Error SchemaUnsupported` when the provider
+    /// (or the fallback) cannot honour the schema; returns other
+    /// `AIProviderError` cases for transport / model / retry
+    /// failures, identically to `SendMessage`.
+    abstract SendStructuredMessage:
+        messages: AIProviderMessage list *
+        tools: AIProviderToolDef list *
+        systemPrompt: string option *
+        schema: string *
+        retryPolicy: RetryPolicy ->
+            Async<Result<AIProviderResponse, AIProviderError>>
+
+/// Phase 67b — fallback implementations external `IAIProvider`
+/// implementers may compose into their own `SendStructuredMessage`
+/// methods. The shipped providers (Gemini, OpenAI, Claude) provide
+/// native implementations; this helper is the path for non-native
+/// providers (and the contract test surface for the default fallback).
+module IAIProviderDefaults =
+    /// Default-impl fallback for `IAIProvider.SendStructuredMessage`.
+    /// Prepends the schema as a system-prompt instruction, calls
+    /// `provider.SendMessage`, and post-validates that the response
+    /// is parseable JSON. Returns `Error SchemaUnsupported` when the
+    /// content is empty or non-JSON; transport / model / retry
+    /// errors propagate from `SendMessage` unchanged.
+    ///
+    /// One-line implementer adoption:
+    ///   member this.SendStructuredMessage(m, t, s, sch, r) =
+    ///       IAIProviderDefaults.sendStructuredViaFallback this m t s sch r
+    let sendStructuredViaFallback
+        (provider: IAIProvider)
+        (messages: AIProviderMessage list)
+        (tools: AIProviderToolDef list)
+        (systemPrompt: string option)
+        (schema: string)
+        (retryPolicy: RetryPolicy)
+        : Async<Result<AIProviderResponse, AIProviderError>> =
+        async {
+            let schemaInstruction =
+                sprintf
+                    "You MUST respond with a single JSON document and nothing else (no prose, no Markdown code fences). The JSON document MUST conform to this JSON Schema:\n\n%s"
+                    schema
+
+            let combinedPrompt =
+                match systemPrompt with
+                | Some p -> Some(sprintf "%s\n\n%s" p schemaInstruction)
+                | None -> Some schemaInstruction
+
+            let! result = provider.SendMessage(messages, tools, combinedPrompt, None, retryPolicy)
+
+            return
+                result
+                |> Result.bind (fun r ->
+                    let content = if isNull r.Content then "" else r.Content.Trim()
+
+                    if content = "" then
+                        Error(
+                            SchemaUnsupported(
+                                "structured-output",
+                                "Provider returned empty content; this provider may lack native structured-output support."
+                            )
+                        )
+                    else
+                        try
+                            use _ = System.Text.Json.JsonDocument.Parse(content)
+                            Ok r
+                        with ex ->
+                            Error(
+                                SchemaUnsupported(
+                                    "structured-output",
+                                    sprintf
+                                        "Provider returned non-JSON content (parse error: %s); this provider may lack native structured-output support."
+                                        ex.Message
+                                )
+                            ))
+        }

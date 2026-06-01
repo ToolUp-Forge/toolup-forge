@@ -254,6 +254,121 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                     return! retryLoop 0
         }
 
+        // Phase 67b — schema-respecting structured output. Gemini
+        // supports this natively via `generationConfig.responseSchema` +
+        // `responseMimeType = "application/json"` — the wire-side
+        // `buildRequestBody` already accepts a `JsonElement option` for
+        // exactly this. Non-streaming only (Gemini does support
+        // streaming structured output via :streamGenerateContent, but
+        // that's deferred to a follow-on phase).
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            // Vision pre-check mirrors SendMessage — structured output
+            // and multimodal input are independent capabilities; both
+            // can apply to one request.
+            let hasImagePart =
+                messages |> List.exists ToolUp.Platform.AI.AIProviderMessage.isMultimodal
+
+            if hasImagePart && not (GeminiAIProviderWire.isVisionCapable model) then
+                return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
+            else
+                // Parse the JSON Schema string into a JsonElement. A
+                // malformed schema is a caller defect — surface as
+                // PermanentClient(0) so the agent loop doesn't waste
+                // retry budget. The error class mirrors the
+                // "API_KEY_NOT_CONFIGURED" precedent: synthetic 0-status
+                // for "request never left the process".
+                let parsedSchema =
+                    try
+                        Ok(JsonSerializer.Deserialize<JsonElement>(schema))
+                    with ex ->
+                        Error(PermanentClient(0, sprintf "structuredOutputSchema is not valid JSON: %s" ex.Message))
+
+                match parsedSchema with
+                | Error e -> return Error e
+                | Ok schemaElement ->
+                    let! apiKey = apiKeyFetcher ()
+
+                    match apiKey with
+                    | None ->
+                        return
+                            Error(
+                                PermanentClient(
+                                    0,
+                                    "GEMINI_API_KEY not configured. Set it as an environment variable or in your secret store."
+                                )
+                            )
+                    | Some key ->
+                        let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
+                            let body = buildRequestBody messages tools systemPrompt (Some schemaElement)
+
+                            let endpoint = sprintf "/v1beta/%s:generateContent" (modelPath model)
+
+                            let request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+                            request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
+                            request.Headers.Add("x-goog-api-key", key)
+
+                            use cts =
+                                match retryPolicy.Timeout with
+                                | Some t ->
+                                    let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
+                                    new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
+                                | None -> new CancellationTokenSource()
+
+                            try
+                                let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+
+                                if response.IsSuccessStatusCode then
+                                    let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                                    try
+                                        return Ok(parseResponse responseBody)
+                                    with ex ->
+                                        return Error(MalformedResponse ex.Message)
+                                else
+                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                                    let code = int response.StatusCode
+
+                                    return
+                                        if code = 429 || code >= 500 then
+                                            Error(TransientServer(code, errorBody))
+                                        else
+                                            Error(PermanentClient(code, errorBody))
+                            with
+                            | :? OperationCanceledException when cts.IsCancellationRequested ->
+                                return
+                                    Error(
+                                        TransientNetwork
+                                            $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
+                                    )
+                            | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
+                            | ex -> return Error(TransientNetwork ex.Message)
+                        }
+
+                        // Retry loop mirrors SendMessage's. Same
+                        // semantics: retryable errors honour the policy
+                        // budget; non-retryable propagate.
+                        let rec retryLoop attemptsMade = async {
+                            let! result = singleAttempt ()
+                            let attemptsMade = attemptsMade + 1
+
+                            match result with
+                            | Ok r -> return Ok r
+                            | Error err when not (AIProviderError.isRetryable err) -> return Error err
+                            | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
+                                return
+                                    if retryPolicy.MaxAttempts = 1 then
+                                        Error err
+                                    else
+                                        Error(RetriesExhausted(attemptsMade, err))
+                            | Error _ ->
+                                let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
+                                do! Async.Sleep delay
+                                return! retryLoop attemptsMade
+                        }
+
+                        return! retryLoop 0
+        }
+
 /// Create using a secret-store read of `GEMINI_API_KEY` on every
 /// request. Legacy single-provider deployment helper.
 let create (secretStore: ISecretStore) : IAIProvider =

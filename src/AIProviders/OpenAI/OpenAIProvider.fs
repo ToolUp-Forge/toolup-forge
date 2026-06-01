@@ -43,6 +43,15 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
     new(secretStore: ISecretStore, ?model: string) =
         OpenAIProvider((fun () -> secretStore.GetSecret("_platform", "OPENAI_API_KEY")), defaultArg model DefaultModel)
 
+    // Phase 67b — Native structured-output is deferred to a follow-up
+    // commit in this same phase; the OpenAI native shape maps to
+    // `response_format: { type: "json_schema", json_schema: { name,
+    // schema, strict: true } }`. Until then this provider routes via
+    // the default-impl fallback (prepended schema-as-instruction +
+    // JSON-parse validation) so the interface contract is honoured
+    // and structured-output consumers receive a working — if not
+    // server-side-strict — response. Replaced in the next 67b commit.
+
     interface IAIProvider with
         member _.Capabilities = {
             // Streaming supported on chat/completions with stream=true.
@@ -240,6 +249,19 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
 
                     return! retryLoop 0
         }
+
+        // Phase 67b — temporary fallback impl. Replaced with native
+        // `response_format: { type: "json_schema" }` wiring in the next
+        // 67b commit. The fallback prepends the schema as a system-
+        // prompt instruction and post-validates the response is JSON.
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback
+                (this :> IAIProvider)
+                messages
+                tools
+                systemPrompt
+                schema
+                retryPolicy
 
 /// Create using a secret-store read of `OPENAI_API_KEY` on every
 /// request. Legacy single-provider deployment helper.

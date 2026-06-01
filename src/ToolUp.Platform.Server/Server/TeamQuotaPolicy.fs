@@ -220,6 +220,27 @@ type QuotaGatedAIProvider(inner: IAIProvider, scopeId: string, quotaPolicy: ITea
             | Ok() -> return! inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
         }
 
+        // Phase 67b — structured-output path is quota-gated identically to
+        // SendMessage: pre-call advisory estimate against the same
+        // aiTokensInput budget, then delegate to the inner provider.
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let estimated = estimateInputTokens messages
+            let! gate = quotaPolicy.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, estimated)
+
+            match gate with
+            | Error breach ->
+                let msg =
+                    sprintf
+                        "Token quota exceeded (%s): limit=%M requested=%M scope=%s"
+                        breach.Kind
+                        breach.Limit
+                        breach.Requested
+                        breach.ScopeId
+
+                return Error(AIProviderError.PermanentClient(429, msg))
+            | Ok() -> return! inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+        }
+
 // ─── Decorator: IJobScheduler ────────────────────────────────────
 //
 // `QuotaGatedJobScheduler` wraps `IJobScheduler.TriggerOnce` and

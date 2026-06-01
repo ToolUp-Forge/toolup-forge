@@ -535,6 +535,23 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                     return! retryLoop 0
         }
 
+        // Phase 67b — temporary fallback impl. Replaced with the
+        // native tool-based workaround in the next 67b commit
+        // (synthesise a single tool whose `input_schema` is the
+        // supplied schema; `tool_choice = { type: "tool", name: "..."
+        // }` forces the model to call it; the tool-call `input` is
+        // the structured response). The fallback prepends schema as
+        // a system-prompt instruction and post-validates the
+        // response is JSON.
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback
+                (this :> IAIProvider)
+                messages
+                tools
+                systemPrompt
+                schema
+                retryPolicy
+
 /// Create a Claude AI provider from a secret store. The API key is
 /// read from `ANTHROPIC_API_KEY` in the `_platform` scope on every
 /// request. Legacy single-provider deployment helper.

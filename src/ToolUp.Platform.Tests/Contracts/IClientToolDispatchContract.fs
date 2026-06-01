@@ -145,6 +145,16 @@ type private ScriptedProvider(script: AIProviderResponse list) =
             return Ok response
         }
 
+        // Phase 67b — script-driven; structured-output requests draw
+        // from the same script. The pack's tests don't exercise
+        // schema-conformance directly here; that's the
+        // IAIProviderContract's job in ToolUp.Platform.Tests/Contracts.
+        member _.SendStructuredMessage(_messages, _tools, _systemPrompt, _schema, _retryPolicy) = async {
+            let response = script[callCount]
+            callCount <- callCount + 1
+            return Ok response
+        }
+
 let private mkToolCall (name: string) : AIProviderToolCall = {
     Id = Guid.NewGuid().ToString()
     Name = name

@@ -111,6 +111,26 @@ type private MeteringProvider
             return result
         }
 
+        // Phase 67b — structured-output path is metered identically to
+        // SendMessage: delegate to inner.SendStructuredMessage, record
+        // usage on success. The schema is metered as input tokens at
+        // the provider's report rather than reconstructed here.
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let! result = inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+
+            match result with
+            | Ok response ->
+                match response.Usage with
+                | Some usage ->
+                    let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
+                    do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) cachedExtra
+                    do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) []
+                | None -> ()
+            | Error _ -> ()
+
+            return result
+        }
+
 /// Wraps an `IAIProviderFactory` so resolved providers fire usage
 /// records on every `SendMessage`. `Available`, `PlatformDescriptor`,
 /// and `TryResolveByLabel` (settings-UI catalogue + diagnostic
@@ -166,6 +186,27 @@ type private QuotaEnforcingProvider(inner: IAIProvider, quota: ITeamQuotaPolicy,
                 // won't free up mid-loop). The agent loop surfaces
                 // `AIProviderError.toMessage` as `AITaskFailed`, so the
                 // user sees the quota message instead of a silent stall.
+                return
+                    Error(
+                        PermanentClient(
+                            429,
+                            sprintf
+                                "AI usage quota exceeded for scope '%s': %s budget limit %M reached. Usage resets per the configured per-day / per-month window."
+                                qb.ScopeId
+                                qb.Kind
+                                qb.Limit
+                        )
+                    )
+        }
+
+        // Phase 67b — structured-output path is quota-gated identically
+        // to SendMessage. Same point-in-time gate semantics.
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let! gate = quota.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, 1m)
+
+            match gate with
+            | Ok() -> return! inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            | Error qb ->
                 return
                     Error(
                         PermanentClient(

@@ -91,6 +91,19 @@ type private CannedToolCallProvider(toolNameToCall: string) =
                     }
         }
 
+        // Phase 67b — these tests don't exercise structured-output;
+        // the structured path delegates to the default fallback for
+        // symmetry. Tests that care about structured-output live in
+        // the dedicated 67b contract pack.
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback
+                (this :> IAIProvider)
+                messages
+                tools
+                systemPrompt
+                schema
+                retryPolicy
+
 // ─── Test harness ────────────────────────────────────────────────────
 
 let private buildHttpContext (eventStore: IEventStore) (authorizer: IClientToolAuthorizer) : HttpContext =
