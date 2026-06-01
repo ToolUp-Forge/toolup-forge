@@ -5,12 +5,40 @@ module ToolUp.Platform.Narrative.NarrativeMarkdown
 
 open System.Text
 
-let private severityMarker (s: Severity) =
+/// How `Callout` elements are rendered in markdown.
+///
+/// `Blockquote` is the default and matches the historical output —
+/// portable across every CommonMark reader. `Directive` emits the
+/// `:::severity` admonition shape recognised by docs renderers
+/// (Docusaurus, MkDocs Material, GH-flavoured viewers via plugins)
+/// and preserves the semantic level a Blockquote loses.
+type AdmonitionStyle =
+    | Blockquote
+    | Directive
+
+/// Tunables for `render`. Defaults preserve the historical output
+/// byte-for-byte (GP 11).
+type RenderOptions = {
+    AdmonitionStyle: AdmonitionStyle
+} with
+
+    static member Default = { AdmonitionStyle = Blockquote }
+
+let private severityLabel (s: Severity) =
     match s with
-    | Info -> "> **Info:** "
-    | Notice -> "> **Note:** "
-    | Warning -> "> **Warning:** "
-    | Critical -> "> **Critical:** "
+    | Info -> "Info"
+    | Notice -> "Note"
+    | Warning -> "Warning"
+    | Critical -> "Critical"
+
+let private blockquoteMarker (s: Severity) = sprintf "> **%s:** " (severityLabel s)
+
+let private directiveTag (s: Severity) =
+    match s with
+    | Info -> "info"
+    | Notice -> "note"
+    | Warning -> "warning"
+    | Critical -> "danger"
 
 let private escape (s: string) : string =
     // Minimal markdown escape — enough for narrative prose, not a full sanitiser.
@@ -27,7 +55,7 @@ let private renderSpan (span: InlineSpan) : string =
 let private renderSpans (spans: InlineSpan list) : string =
     spans |> List.map renderSpan |> String.concat ""
 
-let private renderElement (sb: StringBuilder) (el: NarrativeElement) : unit =
+let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: NarrativeElement) : unit =
     match el with
     | Paragraph spans ->
         sb.AppendLine(renderSpans spans) |> ignore
@@ -71,13 +99,20 @@ let private renderElement (sb: StringBuilder) (el: NarrativeElement) : unit =
 
         sb.AppendLine() |> ignore
     | Callout(severity, spans) ->
-        sb.Append(severityMarker severity).AppendLine(renderSpans spans) |> ignore
-        sb.AppendLine() |> ignore
+        match options.AdmonitionStyle with
+        | Blockquote ->
+            sb.Append(blockquoteMarker severity).AppendLine(renderSpans spans) |> ignore
+            sb.AppendLine() |> ignore
+        | Directive ->
+            sb.AppendFormat(":::{0}", directiveTag severity).AppendLine() |> ignore
+            sb.AppendLine(renderSpans spans) |> ignore
+            sb.AppendLine(":::") |> ignore
+            sb.AppendLine() |> ignore
     | Divider ->
         sb.AppendLine("---") |> ignore
         sb.AppendLine() |> ignore
 
-let private renderSection (sb: StringBuilder) (section: NarrativeSection) : unit =
+let private renderSection (options: RenderOptions) (sb: StringBuilder) (section: NarrativeSection) : unit =
     sb.AppendFormat("## {0}", section.Heading).AppendLine() |> ignore
     sb.AppendLine() |> ignore
 
@@ -88,12 +123,14 @@ let private renderSection (sb: StringBuilder) (section: NarrativeSection) : unit
     | None -> ()
 
     for el in section.Elements do
-        renderElement sb el
+        renderElement options sb el
 
-/// Render a `NarrativeDocument` to a markdown string. Title becomes `# `,
-/// sections `## `, `Strong` → `**`, `Emphasis` → `_`, `Metric` → bold label
-/// followed by value, callouts become blockquotes.
-let render (doc: NarrativeDocument) : string =
+/// Render a `NarrativeDocument` to a markdown string with caller-supplied
+/// options. Title becomes `# `, sections `## `, `Strong` → `**`,
+/// `Emphasis` → `_`, `Metric` → bold label followed by value. Callouts
+/// follow `options.AdmonitionStyle` — blockquote (default) or `:::severity`
+/// directive.
+let renderWith (options: RenderOptions) (doc: NarrativeDocument) : string =
     let sb = StringBuilder()
     sb.AppendFormat("# {0}", doc.Title).AppendLine() |> ignore
     sb.AppendLine() |> ignore
@@ -105,6 +142,11 @@ let render (doc: NarrativeDocument) : string =
     | None -> ()
 
     for section in doc.Sections do
-        renderSection sb section
+        renderSection options sb section
 
     sb.ToString().TrimEnd()
+
+/// Render a `NarrativeDocument` to a markdown string with default options
+/// (blockquote callouts). Byte-for-byte identical to the prior render
+/// output (GP 11).
+let render (doc: NarrativeDocument) : string = renderWith RenderOptions.Default doc

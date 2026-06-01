@@ -20,6 +20,12 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\LogLevel.fs" />
+        <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
+             Phase 69d markers in ToolUp.Remoting.Server). Placed early so
+             every later API record file can annotate its fields. The SDK's
+             Api.make consumes them via the AuthAttributeBridge at
+             composition time. -->
+        <Compile Include="Shared\AuthAttributes.fs" />
         <Compile Include="Shared\Interfaces\ILogger.fs" />
         <!-- Phase 57 — static-prerender substrate types lifted out of
              Client/SDK.ClientTypes.fs so ToolUp.Platform.Build can
@@ -86,6 +92,7 @@
         <Compile Include="Shared\NarrativeTypes.fs" />
         <Compile Include="Shared\NarrativePlaintext.fs" />
         <Compile Include="Shared\NarrativeMarkdown.fs" />
+        <Compile Include="Shared\NarrativeBuilder.fs" />
         <!-- Phase 66 Stream C.2 — AuditSubjectKind + AuditSamplingPolicy
              compiled before SDK.Shared.fs so ServerConfig can carry an
              AuditSamplingPolicy field. Depends only on Guid; AuditTypes.fs
