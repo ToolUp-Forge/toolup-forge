@@ -985,13 +985,31 @@ type ClientConfig = {
     /// handshake path). Default `None` — deployments without server-
     /// validated JWTs use the existing X-User-Id / ?userId= flow.
     AuthBridge: IAuthBridge option
-    /// Dev-tooling: when `true`, the SDK applies `Program.withConsoleTrace`
-    /// to the Elmish program, logging every model-update transition to the
-    /// browser console. Default `false` — production deployments leave it
-    /// off; App composition roots flip it on for development. Replaces
-    /// the previous compile-time `#if DEBUG`-only behaviour with explicit
-    /// operator opt-in.
+    /// Dev-tooling: when `true`, the SDK logs every Elmish model-update
+    /// transition to the browser console via `Logger.forCategory
+    /// "client.elmish.trace"`. Default `false` — production deployments
+    /// leave it off; App composition roots flip it on for development.
+    /// Replaces the previous compile-time `#if DEBUG`-only behaviour
+    /// with explicit operator opt-in.
+    ///
+    /// 0.4.1 — implemented via a tiny `update` interceptor + the
+    /// structured `Program.withErrorReporter`, replacing the now-deprecated
+    /// `Program.withConsoleTrace` shim. Trace records carry the same
+    /// `(initial state, msg, updated state, sub-ids)` shape as before.
     EnableElmishConsoleTrace: bool
+    /// 0.4.1 — structured Elmish error reporter. When `Some`, every
+    /// Elmish runtime exception (Init / Update / View / Subscription /
+    /// Termination phases) is delivered as an `ErrorContext` record
+    /// carrying the phase, optional module id, optional correlation id,
+    /// human-readable message, and raw exception. Use to forward to a
+    /// server-side activity sink or a structured-log forwarder.
+    ///
+    /// Default `None` — the SDK falls back to logging via
+    /// `Logger.forCategory "client.elmish"`. Consumers wiring this MUST
+    /// not also subscribe to `withErrorHandler` upstream-shape callbacks
+    /// (the SDK installs `withErrorReporter` as the structured path;
+    /// upstream-shape `onError` still routes through the compat shim).
+    OnElmishError: (ErrorContext -> unit) option
     /// Dev-tooling: when `true`, modules registered with
     /// `ModuleAvailability = DebugOnly` are surfaced in the sidebar.
     /// Default `false` — DebugOnly modules are filtered out (the JS still
@@ -1142,6 +1160,7 @@ module ClientConfig =
         OnError = None
         AuthBridge = None
         EnableElmishConsoleTrace = false
+        OnElmishError = None
         ShowDebugOnlyModules = false
         DevDefaultUserId = None
         PublicEntryDispatchers = []

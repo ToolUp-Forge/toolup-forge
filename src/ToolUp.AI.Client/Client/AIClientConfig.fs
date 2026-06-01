@@ -463,7 +463,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                         WatchdogToken = Some watchdogId
                 },
                 Cmd.batch [
-                    Cmd.OfAsync.either aiApi.SubmitMessage request Submitted ApiError
+                    Cmd.OfRemoting.call aiApi.SubmitMessage request Submitted ApiError
                     scheduleWatchdog watchdogId
                 ]
 
@@ -689,11 +689,27 @@ let withSidePanel
     let allModules = Client.prepareModules config modules
     let queryBus = Client.buildQueryBus allModules
 
-    let sseCmd: Cmd<OuterMsg> =
+    // 0.4.1 — the SSE subscription registers as a lifetime-aware
+    // `EffectHandle` instead of a boot-time `Cmd.ofEffect`. The runtime
+    // disposes it on `IDispatcher.Terminate()` (React's `beforeunload`
+    // hook + HMR's hot-reload terminator), so the EventSource is
+    // explicitly closed across page-navigation and hot-reload rather
+    // than leaking into the next page / next build. The previous
+    // pattern (`Cmd.ofEffect (fun dispatch -> SSEClient.subscribe ... |> ignore)`)
+    // discarded the unsubscribe handle, which is exactly the leak
+    // 0.4.0's README says the fork addresses.
+    let sseEffect: EffectHandle<OuterMsg> option =
         if isAiEnabled mode then
-            Cmd.ofEffect (fun dispatch -> SSEClient.subscribe (SSEEvent >> SidePanelMsg >> dispatch) |> ignore)
+            Some(
+                EffectHandle.programLifetime "ai-sse-events" (fun dispatch ->
+                    let unsubscribe = SSEClient.subscribe (SSEEvent >> SidePanelMsg >> dispatch)
+
+                    { new System.IDisposable with
+                        member _.Dispose() = unsubscribe ()
+                    })
+            )
         else
-            Cmd.none
+            None
 
     let outerInit () : OuterModel * Cmd<OuterMsg> =
         let shellModel, shellCmd = Client.init config queryBus allModules ()
@@ -702,7 +718,7 @@ let withSidePanel
             Shell = shellModel
             SidePanel = sidePanelInit ()
         },
-        Cmd.batch [ Cmd.map ShellMsg shellCmd; sseCmd ]
+        Cmd.map ShellMsg shellCmd
 
     let outerUpdate (msg: OuterMsg) (model: OuterModel) : OuterModel * Cmd<OuterMsg> =
         match msg with
@@ -748,12 +764,41 @@ let withSidePanel
         // visitors and every Remoting call 401'd behind it.
         Client.viewWithSignIn config allModules chrome model.Shell (ShellMsg >> dispatch)
 
-    let prog = Program.mkProgram outerInit outerUpdate outerView
+    // 0.4.1 — structured `withErrorReporter` replaces the obsoleted
+    // `withConsoleTrace` here too. Trace and error routing follow the
+    // shape Client.program already uses (see SDK.Client.fs program/run).
+    let elmishLog = Logger.forCategory "client.elmish"
 
-    if config.EnableElmishConsoleTrace then
-        prog |> Program.withConsoleTrace
-    else
-        prog
+    let elmishReporter (ctx: ErrorContext) =
+        match config.OnElmishError with
+        | Some sink ->
+            try
+                sink ctx
+            with ex ->
+                elmishLog.Error("OnElmishError sink raised", Some ex)
+        | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
+
+    let traceLog = Logger.forCategory "client.elmish.trace"
+
+    let traceUpdate (msg: OuterMsg) (model: OuterModel) =
+        let nextModel, nextCmd = outerUpdate msg model
+        traceLog.Debug(sprintf "outerMsg=%A" msg)
+        nextModel, nextCmd
+
+    let prog =
+        Program.mkProgram
+            outerInit
+            (if config.EnableElmishConsoleTrace then
+                 traceUpdate
+             else
+                 outerUpdate)
+            outerView
+
+    let progWithReporter = prog |> Program.withErrorReporter elmishReporter
+
+    match sseEffect with
+    | Some effect -> progWithReporter |> Program.withEffect effect
+    | None -> progWithReporter
 
 /// Build the Elmish `Program` with the AI assistant module prepended,
 /// the side-panel state machine wrapped around the shell, the SSE

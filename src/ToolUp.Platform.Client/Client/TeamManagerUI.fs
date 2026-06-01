@@ -179,10 +179,10 @@ let init (ctx: ClientModuleContext) =
     }
 
     let loadTeams =
-        Cmd.OfAsync.either teamApi.GetMyTeams () TeamsLoaded (fun e -> ApiError e.Message)
+        Cmd.OfRemoting.call teamApi.GetMyTeams () TeamsLoaded (fun e -> ApiError e.Message)
 
     let loadActive =
-        Cmd.OfAsync.either teamApi.GetActiveTeam () ActiveTeamLoaded (fun e -> ApiError e.Message)
+        Cmd.OfRemoting.call teamApi.GetActiveTeam () ActiveTeamLoaded (fun e -> ApiError e.Message)
 
     // Phase 5f — fetch the deployment policy + the caller's admin
     // status in parallel so the Create form can decide whether to
@@ -191,10 +191,10 @@ let init (ctx: ClientModuleContext) =
     // = None → form hidden — fail-closed UX, matching the server
     // gate's fail-closed posture).
     let loadPolicy =
-        Cmd.OfAsync.either teamApi.GetTeamCreationPolicy () PolicyLoaded (fun e -> ApiError e.Message)
+        Cmd.OfRemoting.call teamApi.GetTeamCreationPolicy () PolicyLoaded (fun e -> ApiError e.Message)
 
     let loadAdminStatus =
-        Cmd.OfAsync.either platformAdminApi.IsPlatformAdmin () IsPlatformAdminLoaded (fun e -> ApiError e.Message)
+        Cmd.OfRemoting.call platformAdminApi.IsPlatformAdmin () IsPlatformAdminLoaded (fun e -> ApiError e.Message)
 
     model, Cmd.batch [ loadTeams; loadActive; loadPolicy; loadAdminStatus ]
 
@@ -211,13 +211,13 @@ let private selfUserId () = UserSession.getUserId ()
 
 let update (msg: Msg) (model: Model) =
     match msg with
-    | LoadTeams -> model, Cmd.OfAsync.either teamApi.GetMyTeams () TeamsLoaded (fun e -> ApiError e.Message)
+    | LoadTeams -> model, Cmd.OfRemoting.call teamApi.GetMyTeams () TeamsLoaded (fun e -> ApiError e.Message)
 
     | TeamsLoaded teams ->
         let cmds =
             teams
             |> List.map (fun t ->
-                Cmd.OfAsync.either
+                Cmd.OfRemoting.call
                     teamApi.GetTeamMembers
                     t.TeamId
                     (fun members -> MembersLoaded(t.TeamId, members))
@@ -226,13 +226,13 @@ let update (msg: Msg) (model: Model) =
         { model with Teams = teams }, Cmd.batch cmds
 
     | LoadActiveTeam ->
-        model, Cmd.OfAsync.either teamApi.GetActiveTeam () ActiveTeamLoaded (fun e -> ApiError e.Message)
+        model, Cmd.OfRemoting.call teamApi.GetActiveTeam () ActiveTeamLoaded (fun e -> ApiError e.Message)
 
     | ActiveTeamLoaded t -> { model with ActiveTeamId = t }, Cmd.none
 
     | LoadMembers teamId ->
         model,
-        Cmd.OfAsync.either teamApi.GetTeamMembers teamId (fun members -> MembersLoaded(teamId, members)) (fun e ->
+        Cmd.OfRemoting.call teamApi.GetTeamMembers teamId (fun members -> MembersLoaded(teamId, members)) (fun e ->
             ApiError e.Message)
 
     | MembersLoaded(teamId, members) ->
@@ -261,7 +261,7 @@ let update (msg: Msg) (model: Model) =
 
     | SwitchActiveTeam teamId ->
         model,
-        Cmd.OfAsync.either teamApi.SetActiveTeam teamId (fun r -> ActiveTeamSwitched(teamId, r)) (fun e ->
+        Cmd.OfRemoting.call teamApi.SetActiveTeam teamId (fun r -> ActiveTeamSwitched(teamId, r)) (fun e ->
             ApiError e.Message)
 
     | ActiveTeamSwitched(teamId, Ok()) ->
@@ -289,7 +289,7 @@ let update (msg: Msg) (model: Model) =
             Cmd.none
         else
             model,
-            Cmd.OfAsync.either teamApi.CreateTeam (model.NewTeamName.Trim()) TeamCreated (fun e -> ApiError e.Message)
+            Cmd.OfRemoting.call teamApi.CreateTeam (model.NewTeamName.Trim()) TeamCreated (fun e -> ApiError e.Message)
 
     | SetNewTeamName name -> { model with NewTeamName = name }, Cmd.none
 
@@ -323,7 +323,7 @@ let update (msg: Msg) (model: Model) =
             Cmd.none
         else
             model,
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 teamApi.AddTeamMember
                 (teamId, model.AddMemberUserId.Trim(), model.AddMemberRole)
                 MemberAdded
@@ -345,7 +345,7 @@ let update (msg: Msg) (model: Model) =
     | MemberAdded(Error e) -> { model with Error = Some e }, Cmd.none
 
     | RemoveMember(teamId, userId) ->
-        model, Cmd.OfAsync.either teamApi.RemoveTeamMember (teamId, userId) MemberRemoved (fun e -> ApiError e.Message)
+        model, Cmd.OfRemoting.call teamApi.RemoveTeamMember (teamId, userId) MemberRemoved (fun e -> ApiError e.Message)
 
     | MemberRemoved(Ok()) ->
         let refresh =
@@ -359,7 +359,7 @@ let update (msg: Msg) (model: Model) =
 
     | ChangeMemberRole(teamId, targetUserId, newRole) ->
         model,
-        Cmd.OfAsync.either teamApi.ChangeMemberRole (teamId, targetUserId, newRole) MemberRoleChanged (fun e ->
+        Cmd.OfRemoting.call teamApi.ChangeMemberRole (teamId, targetUserId, newRole) MemberRoleChanged (fun e ->
             ApiError e.Message)
 
     | MemberRoleChanged(Ok()) ->
@@ -396,7 +396,7 @@ let update (msg: Msg) (model: Model) =
             | Ok entries -> PendingByEmailLoaded(teamId, entries)
             | Error e -> ApiError e
 
-        model, Cmd.OfAsync.either inviteApi.ListPendingInvitesByEmail teamId onLoad (fun e -> ApiError e.Message)
+        model, Cmd.OfRemoting.call inviteApi.ListPendingInvitesByEmail teamId onLoad (fun e -> ApiError e.Message)
 
     | PendingByEmailLoaded(teamId, entries) ->
         {
@@ -477,7 +477,7 @@ let update (msg: Msg) (model: Model) =
                                 SubmitError = None
                         }
             },
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 inviteApi.IssuePendingInviteByEmail
                 request
                 (fun r -> IssueByEmailSubmitted(m.TeamId, r))
@@ -523,7 +523,7 @@ let update (msg: Msg) (model: Model) =
                 model with
                     RevokeByEmailConfirm = None
             },
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 inviteApi.RevokePendingInviteByEmail
                 email
                 (fun r -> RevokeByEmailDone(teamId, email, r))

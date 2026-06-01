@@ -94,32 +94,32 @@ let private platformAdminApi: PlatformAdminApi =
 // ─── Init / commands ─────────────────────────────────────────────────
 
 let private loadAdminsCmd () =
-    Cmd.OfAsync.either platformAdminApi.ListPlatformAdmins () (fun list -> AdminsLoaded(Ok list)) (fun ex ->
+    Cmd.OfRemoting.call platformAdminApi.ListPlatformAdmins () (fun list -> AdminsLoaded(Ok list)) (fun ex ->
         AdminsLoaded(Error ex.Message))
 
 let private assignCmd (targetUserId: string) =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         platformAdminApi.AssignPlatformAdmin
         targetUserId
         (fun result -> AssignResolved(targetUserId, result))
         (fun ex -> AssignResolved(targetUserId, Error ex.Message))
 
 let private revokeCmd (targetUserId: string) =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         platformAdminApi.RevokePlatformAdmin
         targetUserId
         (fun result -> RevokeResolved(targetUserId, result))
         (fun ex -> RevokeResolved(targetUserId, Error ex.Message))
 
 let private loadPlatformKnowledgeBaseCmd () =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         platformAdminApi.GetPlatformKnowledgeBase
         ()
         (fun mode -> PlatformKnowledgeBaseLoaded(Ok mode))
         (fun ex -> PlatformKnowledgeBaseLoaded(Error ex.Message))
 
 let private setPlatformKnowledgeBaseCmd (mode: PlatformKnowledgeBaseMode) =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         platformAdminApi.SetPlatformKnowledgeBase
         mode
         (fun result -> TogglePlatformKnowledgeBaseResolved(mode, result))

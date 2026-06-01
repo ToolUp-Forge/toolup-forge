@@ -57,7 +57,7 @@ let private usageApi: IUsageQueryApi =
 // ─── Init / update ───────────────────────────────────────────────
 
 let private loadAggregateCmd (grouping: UsageGrouping) =
-    Cmd.OfAsync.either usageApi.Aggregate grouping (fun rows -> AggregateLoaded(Ok rows)) (fun e ->
+    Cmd.OfRemoting.call usageApi.Aggregate grouping (fun rows -> AggregateLoaded(Ok rows)) (fun e ->
         AggregateLoaded(Error e.Message))
 
 let init () =
@@ -115,7 +115,7 @@ let update msg model =
         let range = Some { From = model.From; To = model.To }
 
         let cmd =
-            Cmd.OfAsync.either usageApi.ExportCsv range (fun bytes -> ExportComplete(Ok bytes)) (fun e ->
+            Cmd.OfRemoting.call usageApi.ExportCsv range (fun bytes -> ExportComplete(Ok bytes)) (fun e ->
                 ExportComplete(Error e.Message))
 
         { model with Exporting = true }, cmd

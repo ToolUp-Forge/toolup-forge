@@ -77,18 +77,18 @@ let private platformKnowledgeApi =
 // ─── Init / commands ─────────────────────────────────────────────────
 
 let private loadDocsCmd () =
-    Cmd.OfAsync.either platformKnowledgeApi.ListPlatformDocuments () (fun list -> DocsLoaded(Ok list)) (fun ex ->
+    Cmd.OfRemoting.call platformKnowledgeApi.ListPlatformDocuments () (fun list -> DocsLoaded(Ok list)) (fun ex ->
         DocsLoaded(Error ex.Message))
 
 let private uploadCmd (bytes: byte[]) (fileName: string) =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         (fun () -> platformKnowledgeApi.UploadPlatformDocument bytes fileName)
         ()
         UploadResolved
         (fun ex -> UploadResolved(Error ex.Message))
 
 let private deleteCmd (docId: string) =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         platformKnowledgeApi.DeletePlatformDocument
         docId
         (fun result -> DeleteResolved(docId, result))

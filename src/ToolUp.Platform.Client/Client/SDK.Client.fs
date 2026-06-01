@@ -22,18 +22,20 @@ module Client =
 
     let private log = Logger.forCategory "client.bootstrap"
 
-    /// Boot-time prefetches the shell waits on before doing the
-    /// "rendered with full context" re-init of the active module. Init
-    /// runs once with empty seed at shell-`init` (so the user sees
-    /// something immediately); a second time when the last prefetch
-    /// arrives, this time with both `ModuleConfigs` and `ResolvedFlags`
-    /// populated. Without this gate the active module's `Init` would
-    /// run three times on every cold load (seed + ConfigsLoaded reset +
-    /// FlagsLoaded reset), wasting any `Cmd` returned by the
-    /// intermediate inits.
-    type PrefetchKind =
-        | Configs
-        | Flags
+    // 0.4.1 — boot-time prefetch gates use `Prefetch<unit>` from
+    // ToolUp.Elmish (the primitive that codifies the dual-drain
+    // pattern). The actual loaded values still live in `ModuleConfigs`
+    // / `PlatformConfig` / `ResolvedFlags`; `ConfigsPrefetch` /
+    // `FlagsPrefetch` are pure gates flipped from `Pending` to `Loaded
+    // ()` as each source resolves. The "re-init exactly once when the
+    // last source drains" semantic is enforced by `Prefetch.onAllReady`
+    // (consumed in `ConfigsLoaded` / `FlagsLoaded`).
+    //
+    // The previous `PrefetchKind` enum + `PrefetchPending: Set<...>`
+    // bookkeeping is retired — the typed primitive replaces it
+    // verbatim, and a future prefetch source (e.g. boot-time tenant
+    // resolution) gets its own `Prefetch<unit>` rather than another
+    // enum case to add + remove from the set.
 
     // Public so that outer-program composition in companion packages
     // (e.g. ToolUp.AI.Client's AIClientConfig.fs) can wrap the shell MVU
@@ -102,11 +104,16 @@ module Client =
         /// the role is user-bound, not team-bound. Anonymous-mode
         /// deployments leave this `None` (the fetch returns false).
         PlatformRole: PlatformRole option
-        /// Boot-time prefetches that haven't completed yet. Drains as
-        /// `ConfigsLoaded` / `FlagsLoaded` arrive; the active module is
-        /// re-initialised exactly once, when the last entry drains.
-        /// See `PrefetchKind` doc-comment for rationale.
-        PrefetchPending: Set<PrefetchKind>
+        /// Boot-time prefetch gate for the persisted config fetch
+        /// (`/api/_platform/config/all`). Flips `Pending -> Loaded ()`
+        /// inside `ConfigsLoaded`. Combined with `FlagsPrefetch` via
+        /// `Prefetch.onAllReady` to fire the single active-module
+        /// re-init when the last source drains. See the module-level
+        /// comment above for rationale.
+        ConfigsPrefetch: Prefetch<unit>
+        /// Boot-time prefetch gate for the feature-flag resolution.
+        /// Same semantics as `ConfigsPrefetch`.
+        FlagsPrefetch: Prefetch<unit>
         /// Phase 12c — per-module Reload counter. Incremented by
         /// `ResetModule`. Composed into the React `key` of
         /// `Components.ModuleBoundary` so the boundary instance unmounts
@@ -581,7 +588,8 @@ module Client =
             MyTeams = []
             ActiveTeamId = None
             PlatformRole = None
-            PrefetchPending = Set.ofList [ Configs; Flags ]
+            ConfigsPrefetch = Prefetch.none
+            FlagsPrefetch = Prefetch.none
             ResetCounters = Map.empty
         }
 
@@ -616,43 +624,15 @@ module Client =
         // before `init`'s commands fire, so background callbacks reading
         // it from the very first dispatch will see a live handle.
 
-        // Subscribe to the shared per-tab notification stream and route
-        // `ModuleAction` envelopes into the shell as `ModuleActionReceived`
-        // messages. Other kinds (SystemMessage, JobCompleted, …) are
-        // ignored here — they have their own subscribers (ToastCentre,
-        // future job panel, …). One-shot: the subscription lives for the
-        // tab's lifetime and never needs tearing down.
-        // Phase 6g.C: subscribe `NavigationRequest.request` to the
-        // shell's `dispatch (ModuleSelected sidebarId)`. Companion
-        // packages (e.g. a client-resident `navigate_to_page` AI
-        // tool) call `request` to ask the shell to navigate; we
-        // route that through the same `ModuleSelected` path a
-        // sidebar click takes.
-        let subscribeNavigationRequests =
-            Cmd.ofEffect (fun dispatch ->
-                NavigationRequest.subscribe (fun sidebarId -> dispatch (ModuleSelected sidebarId))
-                |> ignore)
-
-        let subscribeNotifications =
-            Cmd.ofEffect (fun dispatch ->
-                NotificationClient.subscribe (fun envelope ->
-                    match envelope.Notification with
-                    | Notification.ModuleAction(moduleId, actionKey, payloadJson) ->
-                        dispatch (ModuleActionReceived(moduleId, actionKey, payloadJson))
-                    | Notification.MembershipChanged payload ->
-                        // Server-side bridge filters by AffectedUserId
-                        // before forwarding to this connection — every
-                        // event delivered here targets this user. We
-                        // route by `ChangeKind` to internal Msgs that
-                        // compare against `model.ActiveTeamId` (this
-                        // closure can't read the model directly).
-                        match payload.ChangeKind with
-                        | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId)
-                        | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId)
-                        | MembershipChangeKind.Added
-                        | MembershipChangeKind.RoleChanged -> ()
-                    | _ -> ())
-                |> ignore)
+        // 0.4.1 — the boot-time background subscriptions (notification
+        // stream + NavigationRequest bus) used to land here as
+        // `Cmd.ofEffect` commands. They now register via
+        // `Program.withEffect (EffectHandle.programLifetime ...)` at the
+        // `program` site below, so the runtime knows their lifetime and
+        // disposes them cleanly on `IDispatcher.Terminate()` — fixing
+        // the SSE / notification leak across HMR hot-reloads and
+        // page-navigation that the 0.4.0 README headlines as resolved.
+        // See `programLifetimeEffects` below.
 
         model,
         Cmd.batch (
@@ -662,8 +642,6 @@ module Client =
                 loadConfigs
                 loadFlags
                 Cmd.OfAsync.perform (fun () -> loadPlatformRole) () PlatformRoleLoaded
-                subscribeNotifications
-                subscribeNavigationRequests
             ]
             @ teamScopedLoaders
         )
@@ -741,13 +719,15 @@ module Client =
                 Cmd.none
 
             | ConfigsLoaded configs ->
-                // Cold-load gate (see `PrefetchKind` doc-comment): record
-                // the loaded configs and drain `Configs` from the pending
-                // set. If `Flags` is still pending we hold off on the
-                // re-init — when both have arrived, the *last* handler
-                // wipes `ModuleStates` and re-runs `Init` against a
-                // context populated with both data sources, instead of
-                // re-running once per arrival.
+                // Cold-load gate via `Prefetch<unit>` + `Prefetch.onAllReady`
+                // (ToolUp.Elmish 0.4.0 primitive). The persisted value is
+                // recorded on `ModuleConfigs` / `PlatformConfig`; the gate is
+                // a `Prefetch<unit>` that flips to `Loaded ()`. When *both*
+                // prefetches are complete the last handler wipes
+                // `ModuleStates` and re-runs `Init` against a context
+                // populated with both data sources — so the active module's
+                // `Init` runs exactly twice on cold load (empty seed +
+                // re-init), never three times.
                 let platformCfg =
                     configs
                     |> Map.tryFind ConfigKeys.PlatformModuleKey
@@ -759,10 +739,10 @@ module Client =
                     model with
                         ModuleConfigs = moduleCfgs
                         PlatformConfig = platformCfg
-                        PrefetchPending = model.PrefetchPending |> Set.remove Configs
+                        ConfigsPrefetch = Prefetch.loaded ()
                 }
 
-                if Set.isEmpty updated.PrefetchPending then
+                if Prefetch.isComplete updated.FlagsPrefetch then
                     reinitActiveAfterPrefetch _config queryBus modules updated
                 else
                     updated, Cmd.none
@@ -772,10 +752,10 @@ module Client =
                 let updated = {
                     model with
                         ResolvedFlags = flags
-                        PrefetchPending = model.PrefetchPending |> Set.remove Flags
+                        FlagsPrefetch = Prefetch.loaded ()
                 }
 
-                if Set.isEmpty updated.PrefetchPending then
+                if Prefetch.isComplete updated.ConfigsPrefetch then
                     reinitActiveAfterPrefetch _config queryBus modules updated
                 else
                     updated, Cmd.none
@@ -1980,16 +1960,91 @@ module Client =
         // same unless the app opts into a sign-in mode. Apps that
         // want the old "no sign-in in DEBUG, sign-in in RELEASE"
         // behaviour set AuthUI conditionally in their own Client.fs.
+        // Structured Elmish error reporter (ToolUp.Elmish 0.4.0 primitive).
+        // Routes runtime exceptions through `ClientConfig.OnElmishError`
+        // when set; otherwise falls back to the categorised default
+        // logger so devtools still surface them. Replaces the previous
+        // unstructured `(string * exn) -> unit` `onError` shape.
+        let elmishLog = Logger.forCategory "client.elmish"
+
+        let elmishReporter (ctx: ErrorContext) =
+            match config.OnElmishError with
+            | Some sink ->
+                try
+                    sink ctx
+                with ex ->
+                    // Defensive: a throwing sink mustn't crash the reporter.
+                    elmishLog.Error("OnElmishError sink raised", Some ex)
+            | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
+
+        // 0.4.1 — `withConsoleTrace` is [<Obsolete>]; replaced by an
+        // update interceptor that logs each transition through the
+        // category logger. Same shape (initial state / message /
+        // updated state) but now grep-able by category.
+        let traceLog = Logger.forCategory "client.elmish.trace"
+
+        let traceUpdate (msg: Msg) (model: Model) =
+            let nextModel, nextCmd = update config queryBus allModules msg model
+            traceLog.Debug(sprintf "msg=%A activeModule=%s" msg nextModel.ActiveModuleId)
+            nextModel, nextCmd
+
         let prog =
             Program.mkProgram
                 (init config queryBus allModules)
-                (update config queryBus allModules)
+                (if config.EnableElmishConsoleTrace then
+                     traceUpdate
+                 else
+                     update config queryBus allModules)
                 (fun model dispatch -> viewWithSignIn config allModules emptyChrome model dispatch)
 
-        if config.EnableElmishConsoleTrace then
-            prog |> Program.withConsoleTrace
-        else
-            prog
+        // 0.4.1 — boot-time NavigationRequest + NotificationClient
+        // subscriptions registered as lifetime-aware `EffectHandle`s.
+        // The runtime disposes them on `IDispatcher.Terminate()` (which
+        // the React adapter fires on `beforeunload` and HMR fires on
+        // hot-reload), so the SSE / notification leak across page
+        // navigation and HMR is gone. Wrapping the upstream
+        // `unit -> unit` unsubscribe into `IDisposable.Dispose` is
+        // mechanical — both `NavigationRequest.subscribe` and
+        // `NotificationClient.subscribe` already return their own
+        // teardown thunk.
+        let navigationEffect =
+            EffectHandle.programLifetime "navigation-request" (fun dispatch ->
+                let unsubscribe =
+                    NavigationRequest.subscribe (fun sidebarId -> dispatch (ModuleSelected sidebarId))
+
+                { new System.IDisposable with
+                    member _.Dispose() = unsubscribe ()
+                })
+
+        let notificationsEffect =
+            EffectHandle.programLifetime "notifications-stream" (fun dispatch ->
+                let unsubscribe =
+                    NotificationClient.subscribe (fun envelope ->
+                        match envelope.Notification with
+                        | Notification.ModuleAction(moduleId, actionKey, payloadJson) ->
+                            dispatch (ModuleActionReceived(moduleId, actionKey, payloadJson))
+                        | Notification.MembershipChanged payload ->
+                            // Server-side bridge filters by AffectedUserId
+                            // before forwarding to this connection — every
+                            // event delivered here targets this user. Route
+                            // by `ChangeKind` to internal Msgs that compare
+                            // against `model.ActiveTeamId` (this closure
+                            // can't read the model directly).
+                            match payload.ChangeKind with
+                            | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId)
+                            | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId)
+                            | MembershipChangeKind.Added
+                            | MembershipChangeKind.RoleChanged -> ()
+                        | _ -> ())
+
+                { new System.IDisposable with
+                    member _.Dispose() = unsubscribe ()
+                })
+
+        prog
+        |> Program.withErrorReporter elmishReporter
+        |> Program.withEffect navigationEffect
+        |> Program.withEffect notificationsEffect
 
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
     /// the full shell bootstrap (the dispatcher has rendered its own program).

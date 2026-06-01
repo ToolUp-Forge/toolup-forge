@@ -88,11 +88,11 @@ let private dataIngestionApi: IDataIngestionApi =
 // ─── Init / update ──────────────────────────────────────────────────
 
 let private loadSourcesCmd () =
-    Cmd.OfAsync.either dataIngestionApi.ListDataSources () (Ok >> SourcesLoaded) (fun e ->
+    Cmd.OfRemoting.call dataIngestionApi.ListDataSources () (Ok >> SourcesLoaded) (fun e ->
         SourcesLoaded(Error e.Message))
 
 let private loadStatusCmd (id: DataSourceId) =
-    Cmd.OfAsync.either dataIngestionApi.GetCredentialStatus id (fun s -> StatusLoaded(id, s)) (fun _ ->
+    Cmd.OfRemoting.call dataIngestionApi.GetCredentialStatus id (fun s -> StatusLoaded(id, s)) (fun _ ->
         // Best-effort — status read failure renders as
         // "checking…" rather than a disruptive error banner.
         StatusLoaded(id, NotConfigured))
@@ -103,7 +103,7 @@ let private loadTokenStatusCmd (id: DataSourceId) =
     // descriptor", which the column renders as "—". Same noise-floor
     // rule as `loadStatusCmd`: failures never push a banner because
     // the column is supplementary, not load-bearing for the page.
-    Cmd.OfAsync.either dataIngestionApi.GetTokenStatus id (fun ts -> TokenStatusLoaded(id, ts)) (fun _ ->
+    Cmd.OfRemoting.call dataIngestionApi.GetTokenStatus id (fun ts -> TokenStatusLoaded(id, ts)) (fun _ ->
         TokenStatusLoaded(id, None))
 
 let init () =
@@ -168,7 +168,7 @@ let update (msg: Msg) (model: Model) =
 
     | ConnectClicked(id, flowName) ->
         let cmd =
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 dataIngestionApi.BeginOAuth
                 (id, flowName)
                 (fun result -> ConnectUrlReady(id, result))
@@ -187,7 +187,7 @@ let update (msg: Msg) (model: Model) =
 
     | DisconnectClicked id ->
         let cmd =
-            Cmd.OfAsync.either dataIngestionApi.Disconnect id (fun result -> DisconnectComplete(id, result)) (fun e ->
+            Cmd.OfRemoting.call dataIngestionApi.Disconnect id (fun result -> DisconnectComplete(id, result)) (fun e ->
                 DisconnectComplete(id, Error e.Message))
 
         {

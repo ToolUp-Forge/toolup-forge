@@ -60,14 +60,14 @@ let private healthMonitorApi: IHealthMonitorApi =
 // ─── Init ────────────────────────────────────────────────────────────
 
 let private loadLiveCmd () =
-    Cmd.OfAsync.either healthMonitorApi.GetCurrentHealth () LiveLoaded (fun e -> LiveLoaded(Error e.Message))
+    Cmd.OfRemoting.call healthMonitorApi.GetCurrentHealth () LiveLoaded (fun e -> LiveLoaded(Error e.Message))
 
 let private loadPreflightCmd () =
-    Cmd.OfAsync.either healthMonitorApi.GetPreflightSnapshot () PreflightLoaded (fun e ->
+    Cmd.OfRemoting.call healthMonitorApi.GetPreflightSnapshot () PreflightLoaded (fun e ->
         PreflightLoaded(Error e.Message))
 
 let private loadSchedulerTelemetryCmd () =
-    Cmd.OfAsync.either healthMonitorApi.GetJobSchedulerTelemetry () SchedulerTelemetryLoaded (fun e ->
+    Cmd.OfRemoting.call healthMonitorApi.GetJobSchedulerTelemetry () SchedulerTelemetryLoaded (fun e ->
         SchedulerTelemetryLoaded(Error e.Message))
 
 let init () =

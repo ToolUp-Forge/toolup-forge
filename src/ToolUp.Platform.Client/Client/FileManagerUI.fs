@@ -102,7 +102,7 @@ let update msg model =
         match action with
         | Start dataFileUpload ->
             model,
-            Cmd.OfAsync.either fileApi.UploadFile { File = dataFileUpload } (Finished >> UploadFile) (fun ex ->
+            Cmd.OfRemoting.call fileApi.UploadFile { File = dataFileUpload } (Finished >> UploadFile) (fun ex ->
                 ApiError ex.Message)
 
         | Finished result ->
@@ -130,7 +130,7 @@ let update msg model =
                 Cmd.none
 
     | LoadFiles(Start()) ->
-        model, Cmd.OfAsync.either fileApi.ListFiles () (Finished >> LoadFiles) (fun ex -> ApiError ex.Message)
+        model, Cmd.OfRemoting.call fileApi.ListFiles () (Finished >> LoadFiles) (fun ex -> ApiError ex.Message)
 
     | LoadFiles(Finished snapshot) ->
         // Server is the source of truth — both the file list and the
@@ -148,7 +148,7 @@ let update msg model =
         Cmd.none
 
     | DeleteFile(Start fileName) ->
-        model, Cmd.OfAsync.either fileApi.DeleteFile fileName (Finished >> DeleteFile) (fun ex -> ApiError ex.Message)
+        model, Cmd.OfRemoting.call fileApi.DeleteFile fileName (Finished >> DeleteFile) (fun ex -> ApiError ex.Message)
 
     | DeleteFile(Finished(Ok())) ->
         // Re-fetch rather than splicing locally — keeps the client view
@@ -166,7 +166,7 @@ let update msg model =
 
     | ReprocessFile(Start fileName) ->
         model,
-        Cmd.OfAsync.either fileApi.ReprocessFile fileName (Finished >> ReprocessFile) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call fileApi.ReprocessFile fileName (Finished >> ReprocessFile) (fun ex -> ApiError ex.Message)
 
     | ReprocessFile(Finished(Ok entry)) ->
         // Replace the existing entry in `ProcessedData` (matched by
@@ -188,7 +188,8 @@ let update msg model =
         Cmd.none
 
     | ResetDataStore(Start()) ->
-        model, Cmd.OfAsync.either fileApi.ResetDataStore () (Finished >> ResetDataStore) (fun ex -> ApiError ex.Message)
+        model,
+        Cmd.OfRemoting.call fileApi.ResetDataStore () (Finished >> ResetDataStore) (fun ex -> ApiError ex.Message)
 
     | ResetDataStore(Finished(Ok _)) ->
         // Re-fetch the file list rather than splicing locally — keeps

@@ -78,10 +78,10 @@ let init () : Model * Cmd<Msg> =
         Loading = true
     },
     Cmd.batch [
-        Cmd.OfAsync.either api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
-        Cmd.OfAsync.either api.GetPlatformDescriptor () (Finished >> LoadPlatformDescriptor) (fun ex ->
+        Cmd.OfRemoting.call api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call api.GetPlatformDescriptor () (Finished >> LoadPlatformDescriptor) (fun ex ->
             ApiError ex.Message)
-        Cmd.OfAsync.either api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
     ]
 
 // ─── Update ───────────────────────────────────────────────────────
@@ -91,13 +91,13 @@ let init () : Model * Cmd<Msg> =
 /// the server makes its own adjustments (e.g. clearing active when
 /// the active instance is deleted).
 let private refetchConfig () =
-    Cmd.OfAsync.either api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
+    Cmd.OfRemoting.call api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | LoadAvailable(Start()) ->
         { model with Loading = true },
-        Cmd.OfAsync.either api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
 
     | LoadAvailable(Finished descriptors) ->
         {
@@ -109,7 +109,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | LoadPlatformDescriptor(Start()) ->
         { model with Loading = true },
-        Cmd.OfAsync.either api.GetPlatformDescriptor () (Finished >> LoadPlatformDescriptor) (fun ex ->
+        Cmd.OfRemoting.call api.GetPlatformDescriptor () (Finished >> LoadPlatformDescriptor) (fun ex ->
             ApiError ex.Message)
 
     | LoadPlatformDescriptor(Finished descriptor) ->
@@ -144,7 +144,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | SaveInstance req ->
         { model with Loading = true },
-        Cmd.OfAsync.either api.SaveInstance req SaveFinished (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call api.SaveInstance req SaveFinished (fun ex -> ApiError ex.Message)
 
     | SaveFinished(Ok()) ->
         // Clear Editing so the form returns to add mode after a
@@ -168,7 +168,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | DeleteInstance label ->
         { model with Loading = true },
-        Cmd.OfAsync.either api.DeleteInstance label DeleteFinished (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call api.DeleteInstance label DeleteFinished (fun ex -> ApiError ex.Message)
 
     | DeleteFinished(Ok()) ->
         {
@@ -188,7 +188,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | SetActive labelOpt ->
         { model with Loading = true },
-        Cmd.OfAsync.either api.SetActive labelOpt SetActiveFinished (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call api.SetActive labelOpt SetActiveFinished (fun ex -> ApiError ex.Message)
 
     | SetActiveFinished(Ok()) -> { model with Loading = false }, refetchConfig ()
 
@@ -202,7 +202,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | TestInstance label ->
         { model with Loading = true },
-        Cmd.OfAsync.either api.TestConnection label (fun r -> TestFinished(label, r)) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call api.TestConnection label (fun r -> TestFinished(label, r)) (fun ex -> ApiError ex.Message)
 
     | TestFinished(label, Ok()) ->
         {
@@ -222,7 +222,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | SavePlatformModelOverride modelOpt ->
         { model with Loading = true },
-        Cmd.OfAsync.either api.SetPlatformModelOverride modelOpt SavePlatformModelOverrideFinished (fun ex ->
+        Cmd.OfRemoting.call api.SetPlatformModelOverride modelOpt SavePlatformModelOverrideFinished (fun ex ->
             ApiError ex.Message)
 
     | SavePlatformModelOverrideFinished(Ok()) ->

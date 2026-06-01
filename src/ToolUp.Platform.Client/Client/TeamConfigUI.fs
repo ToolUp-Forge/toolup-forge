@@ -112,7 +112,7 @@ let private loadFlagsBoot () = async {
 }
 
 let private loadFlagsCmd () =
-    Cmd.OfAsync.either loadFlagsBoot () FlagsBootLoaded (fun e -> FlagsBootLoaded(Error e.Message))
+    Cmd.OfRemoting.call loadFlagsBoot () FlagsBootLoaded (fun e -> FlagsBootLoaded(Error e.Message))
 
 let init () =
     let model = {
@@ -131,7 +131,7 @@ let init () =
     }
 
     let loadModules =
-        Cmd.OfAsync.either configApi.ListModules () ModulesLoaded (fun e -> ListFailed e.Message)
+        Cmd.OfRemoting.call configApi.ListModules () ModulesLoaded (fun e -> ListFailed e.Message)
 
     let loadFlags = loadFlagsCmd ()
 
@@ -143,7 +143,7 @@ let init () =
 /// `ModuleValuesLoaded (Error _)` so the page can render a banner
 /// under the selected form rather than swallowing the failure.
 let private loadValues (moduleKey: string) =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         configApi.GetModuleConfig
         moduleKey
         (fun result ->
@@ -156,7 +156,7 @@ let private loadValues (moduleKey: string) =
 
 let update (msg: Msg) (model: Model) =
     match msg with
-    | LoadModules -> model, Cmd.OfAsync.either configApi.ListModules () ModulesLoaded (fun e -> ListFailed e.Message)
+    | LoadModules -> model, Cmd.OfRemoting.call configApi.ListModules () ModulesLoaded (fun e -> ListFailed e.Message)
 
     | ModulesLoaded modules ->
         // Auto-select the first entry so the admin lands directly on a
@@ -210,7 +210,7 @@ let update (msg: Msg) (model: Model) =
 
     | SubmitSave(key, values) ->
         let cmd =
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 configApi.SaveModuleConfig
                 (key, values)
                 (fun result -> SaveCompleted(key, result))
@@ -238,7 +238,7 @@ let update (msg: Msg) (model: Model) =
 
     | SubmitClear key ->
         let cmd =
-            Cmd.OfAsync.either configApi.ClearModuleConfig key (fun result -> ClearCompleted(key, result)) (fun e ->
+            Cmd.OfRemoting.call configApi.ClearModuleConfig key (fun result -> ClearCompleted(key, result)) (fun e ->
                 ClearCompleted(key, Error e.Message))
 
         {
@@ -292,7 +292,7 @@ let update (msg: Msg) (model: Model) =
 
     | SubmitSetFlag(key, value) ->
         let cmd =
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 featureFlagApi.SetOverride
                 (key, value)
                 (fun result -> SetFlagCompleted(key, result))
@@ -325,7 +325,7 @@ let update (msg: Msg) (model: Model) =
 
     | SubmitClearFlag key ->
         let cmd =
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 featureFlagApi.ClearOverride
                 key
                 (fun result -> ClearFlagCompleted(key, result))

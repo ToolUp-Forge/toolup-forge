@@ -196,14 +196,14 @@ let private loadSnapshotAsync () = async {
 }
 
 let private loadSnapshotCmd () =
-    Cmd.OfAsync.either loadSnapshotAsync () SnapshotLoaded (fun ex -> SnapshotLoaded(Error ex.Message))
+    Cmd.OfRemoting.call loadSnapshotAsync () SnapshotLoaded (fun ex -> SnapshotLoaded(Error ex.Message))
 
 let private saveDefaultsCmd (teamId: string) (defaults: Map<string, ModulePermission list>) =
-    Cmd.OfAsync.either permissionApi.SetTeamDefaults (teamId, defaults) SaveDefaultsResult (fun ex ->
+    Cmd.OfRemoting.call permissionApi.SetTeamDefaults (teamId, defaults) SaveDefaultsResult (fun ex ->
         SaveDefaultsResult(Error ex.Message))
 
 let private saveMemberCmd (teamId: string) (userId: string) (moduleName: string) (perms: ModulePermission list) =
-    Cmd.OfAsync.either
+    Cmd.OfRemoting.call
         permissionApi.SetMemberPermissions
         (teamId, userId, moduleName, perms)
         (fun result -> SaveMemberResult(userId, moduleName, result))

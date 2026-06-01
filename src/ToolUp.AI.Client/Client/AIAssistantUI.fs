@@ -169,9 +169,9 @@ let init () =
         WatchdogToken = None
     },
     Cmd.batch [
-        Cmd.OfAsync.either aiApi.ListConversations () (Finished >> LoadConversations) (fun ex -> ApiError ex.Message)
-        Cmd.OfAsync.either aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
-        Cmd.OfAsync.either aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call aiApi.ListConversations () (Finished >> LoadConversations) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
         // Subscribe to SSE events for streaming AI responses
         Cmd.ofEffect (fun dispatch -> SSEClient.subscribe (SSEEvent >> dispatch) |> ignore)
     ]
@@ -184,21 +184,22 @@ let update msg model =
         match action with
         | Start() ->
             model,
-            Cmd.OfAsync.either aiApi.ListConversations () (Finished >> LoadConversations) (fun ex ->
+            Cmd.OfRemoting.call aiApi.ListConversations () (Finished >> LoadConversations) (fun ex ->
                 ApiError ex.Message)
         | Finished convos -> { model with Conversations = convos }, Cmd.none
 
     | LoadTools action ->
         match action with
         | Start() ->
-            model, Cmd.OfAsync.either aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
+            model,
+            Cmd.OfRemoting.call aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
         | Finished tools -> { model with AvailableTools = tools }, Cmd.none
 
     | LoadProviders action ->
         match action with
         | Start() ->
             model,
-            Cmd.OfAsync.either aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
+            Cmd.OfRemoting.call aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
         | Finished view ->
             {
                 model with
@@ -213,14 +214,14 @@ let update msg model =
                 Messages = []
                 StreamingContent = ""
         },
-        Cmd.OfAsync.either aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
+        Cmd.OfRemoting.call aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
             ApiError ex.Message)
 
     | LoadMessages action ->
         match action with
         | Start conversationId ->
             model,
-            Cmd.OfAsync.either aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
+            Cmd.OfRemoting.call aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
                 ApiError ex.Message)
         | Finished messages -> { model with Messages = messages }, Cmd.none
 
@@ -322,7 +323,7 @@ let update msg model =
                 }
 
                 Cmd.batch [
-                    Cmd.OfAsync.either aiApi.SubmitMessage request (Finished >> MessageSubmitted) (fun ex ->
+                    Cmd.OfRemoting.call aiApi.SubmitMessage request (Finished >> MessageSubmitted) (fun ex ->
                         ApiError ex.Message)
                     scheduleWatchdog watchdogId
                 ]
@@ -346,7 +347,7 @@ let update msg model =
         match action with
         | Start conversationId ->
             model,
-            Cmd.OfAsync.either aiApi.DeleteConversation conversationId (Finished >> DeleteConversation) (fun ex ->
+            Cmd.OfRemoting.call aiApi.DeleteConversation conversationId (Finished >> DeleteConversation) (fun ex ->
                 ApiError ex.Message)
         | Finished(Ok()) ->
             {
@@ -379,7 +380,7 @@ let update msg model =
                 model with
                     Conversations = updatedConversations
             },
-            Cmd.OfAsync.either aiApi.SetConversationOverride (convId, newLabel) ProviderOverrideSet (fun ex ->
+            Cmd.OfRemoting.call aiApi.SetConversationOverride (convId, newLabel) ProviderOverrideSet (fun ex ->
                 ApiError ex.Message)
         | None -> model, Cmd.none
 

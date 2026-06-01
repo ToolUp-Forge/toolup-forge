@@ -52,7 +52,7 @@ let private boardApi: IServiceStatusBoardApi =
     Api.makeProxy<IServiceStatusBoardApi> (customOptions = UserSession.withRequestHeaders)
 
 let private loadSnapshotCmd () =
-    Cmd.OfAsync.either boardApi.GetSnapshot () SnapshotLoaded (fun e -> SnapshotLoaded(Error e.Message))
+    Cmd.OfRemoting.call boardApi.GetSnapshot () SnapshotLoaded (fun e -> SnapshotLoaded(Error e.Message))
 
 let private loadSectionCmd (section: string) =
     let api = boardApi
@@ -67,7 +67,7 @@ let private loadSectionCmd (section: string) =
         | s when s = ServiceStatusSnapshot.SmokeTestSection -> api.RefreshSmokeTest()
         | other -> async { return Error(sprintf "unknown section: %s" other) }
 
-    Cmd.OfAsync.either (fun () -> work) () (fun result -> SectionLoaded(section, result)) (fun e ->
+    Cmd.OfRemoting.call (fun () -> work) () (fun result -> SectionLoaded(section, result)) (fun e ->
         SectionLoaded(section, Error e.Message))
 
 // ─── Init ────────────────────────────────────────────────────────────

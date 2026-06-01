@@ -202,7 +202,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         | Some err -> { model with Banner = ErrorBanner err }, Cmd.none
         | None ->
             let cmd =
-                Cmd.OfAsync.either dsrApi.RequestExport (exportInput model) ExportResolved (fun ex ->
+                Cmd.OfRemoting.call dsrApi.RequestExport (exportInput model) ExportResolved (fun ex ->
                     ExportResolved(Result.Error ex.Message))
 
             {
@@ -235,7 +235,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         | Some err -> { model with Banner = ErrorBanner err }, Cmd.none
         | None ->
             let cmd =
-                Cmd.OfAsync.either dsrApi.PreviewErasure (erasureInput model) PreviewResolved (fun ex ->
+                Cmd.OfRemoting.call dsrApi.PreviewErasure (erasureInput model) PreviewResolved (fun ex ->
                     PreviewResolved(Result.Error ex.Message))
 
             {
@@ -281,7 +281,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             Cmd.none
         | Some preview ->
             let cmd =
-                Cmd.OfAsync.either dsrApi.ConfirmErasure preview.Request.Id ConfirmResolved (fun ex ->
+                Cmd.OfRemoting.call dsrApi.ConfirmErasure preview.Request.Id ConfirmResolved (fun ex ->
                     ConfirmResolved(Result.Error ex.Message))
 
             {

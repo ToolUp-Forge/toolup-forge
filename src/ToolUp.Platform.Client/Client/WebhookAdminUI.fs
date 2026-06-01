@@ -74,7 +74,7 @@ let private webhookApi: IWebhookApi =
 // ─── Init ────────────────────────────────────────────────────────────
 
 let private loadSubscriptionsCmd () =
-    Cmd.OfAsync.either webhookApi.ListSubscriptions () SubscriptionsLoaded (fun e ->
+    Cmd.OfRemoting.call webhookApi.ListSubscriptions () SubscriptionsLoaded (fun e ->
         SubscriptionsLoaded(Error e.Message))
 
 let init () =
@@ -94,7 +94,7 @@ let init () =
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 let private loadDeliveriesCmd (id: Guid) =
-    Cmd.OfAsync.either webhookApi.ListDeliveries id (fun result -> DeliveriesLoaded(id, result)) (fun e ->
+    Cmd.OfRemoting.call webhookApi.ListDeliveries id (fun result -> DeliveriesLoaded(id, result)) (fun e ->
         DeliveriesLoaded(id, Error e.Message))
 
 let private sortByCreatedDesc (subs: WebhookSubscription list) =
@@ -149,7 +149,7 @@ let update (msg: Msg) (model: Model) =
 
     | CreateSubmit req ->
         let cmd =
-            Cmd.OfAsync.either webhookApi.CreateSubscription req CreateCompleted (fun e ->
+            Cmd.OfRemoting.call webhookApi.CreateSubscription req CreateCompleted (fun e ->
                 CreateCompleted(Error e.Message))
 
         model, cmd
@@ -170,7 +170,7 @@ let update (msg: Msg) (model: Model) =
 
     | UpdateStatusSubmit(id, status) ->
         let cmd =
-            Cmd.OfAsync.either
+            Cmd.OfRemoting.call
                 webhookApi.UpdateStatus
                 (id, status)
                 (fun result -> StatusUpdateCompleted(id, result))
@@ -198,7 +198,7 @@ let update (msg: Msg) (model: Model) =
 
     | DeleteSubmit id ->
         let cmd =
-            Cmd.OfAsync.either webhookApi.DeleteSubscription id (fun result -> DeleteCompleted(id, result)) (fun e ->
+            Cmd.OfRemoting.call webhookApi.DeleteSubscription id (fun result -> DeleteCompleted(id, result)) (fun e ->
                 DeleteCompleted(id, Error e.Message))
 
         {
@@ -235,7 +235,7 @@ let update (msg: Msg) (model: Model) =
 
     | TestFireSubmit id ->
         let cmd =
-            Cmd.OfAsync.either webhookApi.TestFire id (fun result -> TestFireCompleted(id, result)) (fun e ->
+            Cmd.OfRemoting.call webhookApi.TestFire id (fun result -> TestFireCompleted(id, result)) (fun e ->
                 TestFireCompleted(id, Error e.Message))
 
         {
