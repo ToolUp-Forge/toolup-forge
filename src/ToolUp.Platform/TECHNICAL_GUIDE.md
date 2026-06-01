@@ -38,10 +38,11 @@ How the platform scopes storage per deployment mode, manages teams, enforces acc
 
 ### [3. Authentication, Secrets & Encryption](technical-guide/03-authentication-secrets-and-encryption.md)
 
-Auth provider contracts, the sign-in UI companion registry, secret storage, and blob encryption at rest.
+Auth provider contracts, the sign-in UI companion registry, build-time constants (Vite-define ↔ `BundleConstants` mapping), secret storage, and blob encryption at rest.
 
 - Authentication Providers
 - Sign-in UI companions
+- Build-time constants (Phase 11.G + Phase 16e — typed-accessor table, fail-loud-on-placeholder behaviour, `vite.config.mts` define wiring)
 - Secret Storage and Encryption
 - Blob storage encryption at rest (Phase 22)
 

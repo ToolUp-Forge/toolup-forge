@@ -121,6 +121,63 @@ let config = {
 
 **Swapping for Clerk.** The companion pattern is symmetric. An app that was using Clerk (`AuthUI = ClerkAuthUI _` + `ClerkUI.Client.props` imported) can switch to OIDC by changing the import and the config; no SDK-level code changes. Both handlers can be registered simultaneously — the active `AuthUIMode` case decides which runs.
 
+## Build-time constants
+
+`ToolUp.Platform.BundleConstants` exposes typed Fable accessors over the consumer's Vite `define` block. Each `define` substitutes a literal into the bundle at build time; the accessor wraps the `typeof X === 'string'` guard so an unwired define doesn't fail with a runtime `ReferenceError`. The convention maps a JS identifier `__NAME__` (double-underscore-bracketed) to an F# value `BundleConstants.name` (lower-camel-case, no underscores).
+
+Two return shapes coexist. The Phase 11.G accessors (Clerk + AG Grid + module filter + platform-surfaces) return a raw `string` that is `""` when unwired; consumers gate on `String.IsNullOrEmpty`. The Phase 16e accessors (Entra + OIDC overrides) return `string option` with `None` when the define is the empty string, the literal JS `'undefined'` string (what Vite emits when a missing `process.env.X` value is `JSON.stringify`'d), or the literal placeholder `__NAME__` (what survives in the bundle when Vite didn't substitute at all). The two-shape split is intentional: Phase 11.G accessors predate the option-typed convention and would be a breaking change to migrate; Phase 16e and onwards adopt `string option` because pattern-matching on `Some` removes the empty-string ambiguity for "set, but to the empty value" callers.
+
+The notifications-disabled accessor (Phase 58) returns `bool` directly — its define is `JSON.stringify`'d as a literal `true` / `false`, not a string, so the wrapping shape differs.
+
+### Typed accessor table
+
+| Phase | Vite define | F# accessor | Type | None / empty when |
+|---|---|---|---|---|
+| 11.G | `__TOOLUP_MODULE__` | `BundleConstants.moduleFilter` | `string` | unwired → `""` (no module filter applied) |
+| 11.G | `__AG_GRID_LICENSE__` | `BundleConstants.agGridLicense` | `string` | unwired → `""` (Community-tier overlays) |
+| 11.G | `__CLERK_PUBLISHABLE_KEY__` | `BundleConstants.clerkPublishableKey` | `string` | unwired → `""` (Release Clerk builds should fail loud) |
+| 11.G | `__TOOLUP_PLATFORM_SURFACES__` | `BundleConstants.platformSurfaces` | `string` | unwired → `""` (falls back to `Surfaces.anonymous`) |
+| 58 | `__TOOLUP_NOTIFICATIONS_DISABLED__` | `BundleConstants.notificationsDisabledExplicitly` | `bool` | unwired → `false` (EventSource opens; the defensive 404-fallback closes for the session) |
+| 16e | `__ENTRA_TENANT_ID__` | `BundleConstants.entraTenantId` | `string option` | `""` / `'undefined'` / `__ENTRA_TENANT_ID__` literal → `None` |
+| 16e | `__ENTRA_CLIENT_ID__` | `BundleConstants.entraClientId` | `string option` | `""` / `'undefined'` / `__ENTRA_CLIENT_ID__` literal → `None` |
+| 16e | `__OIDC_ISSUER_OVERRIDE__` | `BundleConstants.oidcIssuerOverride` | `string option` | `""` / `'undefined'` / `__OIDC_ISSUER_OVERRIDE__` literal → `None` |
+| 16e | `__OIDC_AUDIENCE_OVERRIDE__` | `BundleConstants.oidcAudienceOverride` | `string option` | `""` / `'undefined'` / `__OIDC_AUDIENCE_OVERRIDE__` literal → `None` |
+
+### Wiring the defines in `vite.config.mts`
+
+The `platformsdk-solution` template (emitted by `dotnet new platformsdk-solution`) ships a `define:` block with every accessor's mapping pre-declared. A consumer overrides only the env vars they need:
+
+```ts
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  // ...
+  define: {
+    __TOOLUP_MODULE__: JSON.stringify(process.env.TOOLUP_MODULE ?? ""),
+    __AG_GRID_LICENSE__: JSON.stringify(process.env.AG_GRID_LICENSE ?? ""),
+    __CLERK_PUBLISHABLE_KEY__: JSON.stringify(process.env.CLERK_PUBLISHABLE_KEY ?? ""),
+    __TOOLUP_PLATFORM_SURFACES__: JSON.stringify(process.env.TOOLUP_PLATFORM_SURFACES ?? ""),
+    __TOOLUP_NOTIFICATIONS_DISABLED__: JSON.stringify(process.env.TOOLUP_NOTIFICATIONS_DISABLED === "true"),
+    __ENTRA_TENANT_ID__: JSON.stringify(process.env.ENTRA_TENANT_ID ?? ""),
+    __ENTRA_CLIENT_ID__: JSON.stringify(process.env.ENTRA_CLIENT_ID ?? ""),
+    __OIDC_ISSUER_OVERRIDE__: JSON.stringify(process.env.OIDC_ISSUER_OVERRIDE ?? ""),
+    __OIDC_AUDIENCE_OVERRIDE__: JSON.stringify(process.env.OIDC_AUDIENCE_OVERRIDE ?? "")
+  }
+});
+```
+
+A define omitted from the block produces the unset-shape behaviour described in the table above — there is no requirement to declare every define; a deployment that doesn't use Entra simply leaves the two Entra defines out.
+
+### Fail-loud-on-placeholder behaviour
+
+The three substitution failure modes the `option` accessors collapse to `None` are not theoretical — each has been observed in production:
+
+1. **Empty string.** A consumer wires `JSON.stringify(process.env.ENTRA_TENANT_ID ?? "")` and forgets to set `ENTRA_TENANT_ID` in the deployment's env. The bundle contains `""`. Without the `option` shape, a downstream `OidcUIConfig.defaults issuer ""` call constructs a config that fails opaquely at the IdP. With the `option` shape, the consumer matches `Some` and fails loud at composition time.
+2. **Literal `'undefined'` string.** A consumer wires `JSON.stringify(process.env.ENTRA_TENANT_ID)` (no `??` fallback) and forgets to set the env var. Node returns `undefined`; `JSON.stringify(undefined)` returns... `undefined` (no quotes — JS, not JSON), but if it's later coerced to a string it becomes the literal four-character string `"undefined"`. The bundle ends up with the literal `'undefined'`. The `option` shape catches this even though the value is technically non-empty.
+3. **Literal placeholder.** A consumer's `vite.config.mts` doesn't declare the define at all, but a downstream tool (a CI patch step, a Helm chart, a sed script) attempts to substitute `__ENTRA_TENANT_ID__` in the bundle and fails silently. The bundle ends up with the literal placeholder string still in place. The `option` shape catches this too.
+
+Consumers reading any of the four Phase 16e accessors should `match` on `Some`/`None` rather than testing for empty / placeholder values on a raw string — the SDK has already done that filtering.
+
 ## Secret Storage and Encryption
 
 `ISecretStore` is a scope-aware key-value store for credentials (API keys, connection strings, signing secrets). In-process implementations: `FileSecretStore` (JSON files on disk), `EnvironmentSecretStore` (read-only env-var-backed), `EncryptedSecretStore` (AES-GCM envelope wrapper over any inner store). Cloud-KMS companion implementations: `AzureKeyVaultSecretStore`, `AwsSecretsManagerSecretStore`, `VaultSecretStore` (HashiCorp Vault KV v2) — Phase 2a; `GcpSecretManagerSecretStore` — Phase 2b. Scope discipline mirrors `IBlobStorage` — `_platform` for deployment-level secrets, `user-{userId}` / `team-{teamId}` for per-tenant secrets.
