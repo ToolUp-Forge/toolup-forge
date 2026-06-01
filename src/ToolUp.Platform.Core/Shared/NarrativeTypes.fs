@@ -91,3 +91,35 @@ type NarrativeDocument = {
     Sections: NarrativeSection list
     Provenance: NarrativeProvenance option
 }
+
+/// Per-scope retention policy for `INarrativeStore` implementations.
+/// Carried on `ServerConfig.NarrativeRetention` so deployments can bound
+/// long-running scopes without dropping into store-specific configuration.
+///
+/// `MaxPerScope` caps the entry count per scope; once exceeded, the
+/// oldest entries are evicted first. `None` disables the count cap (the
+/// implementation may still apply a hard ceiling — the in-process stores
+/// historically defaulted to 100).
+///
+/// `MaxAge` evicts entries whose `PublishedAt` is older than `now -
+/// MaxAge`. `None` disables age-based eviction. Stores enforce age
+/// eviction lazily on writes — a quiet scope retains old entries until
+/// the next `Publish` runs the sweep.
+type NarrativeRetentionPolicy = {
+    MaxPerScope: int option
+    MaxAge: TimeSpan option
+}
+
+module NarrativeRetentionPolicy =
+    /// Default policy: cap at 100 entries per scope, no age limit.
+    /// Matches the historical in-process behaviour (GP 11).
+    let defaults: NarrativeRetentionPolicy = {
+        MaxPerScope = Some 100
+        MaxAge = None
+    }
+
+    /// Unbounded policy. Stores never evict on a count or age basis;
+    /// long-running deployments must wipe scopes explicitly via
+    /// `DeleteScope`. Use with caution — the persisted-store layer's
+    /// per-scope blob list grows linearly under this policy.
+    let unbounded: NarrativeRetentionPolicy = { MaxPerScope = None; MaxAge = None }

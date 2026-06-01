@@ -76,14 +76,19 @@ let private throwOnError (op: string) (result: Result<'a, string>) : 'a =
 ///
 /// Writes are O(1) (one blob per `Publish`); `List` and `Get` cost a
 /// `List` round-trip plus a `Download` per entry. For the dev-deployment
-/// volumes this targets (capped at `maxPerScope` per scope), the
+/// volumes this targets (capped at `policy.MaxPerScope` per scope), the
 /// simplicity wins; high-volume deployments should swap in a
 /// secondary-indexed implementation via `ServerApp.withNarrativeStore`.
+///
+/// `policy.MaxAge`, when set, evicts entries whose `PublishedAt` is
+/// older than `now - MaxAge` (lazy sweep on every `Publish`). Eviction
+/// deletes the underlying blob — quiet scopes retain old entries until
+/// the next write triggers the sweep.
 ///
 /// Distribution: persists to whatever `IBlobStorage` is registered, so
 /// a Redis / Postgres / S3-backed deployment gets durable narratives
 /// the moment it switches its storage layer (no further wiring).
-type PersistentNarrativeStore(blobStorage: IBlobStorage, maxPerScope: int) =
+type PersistentNarrativeStore(blobStorage: IBlobStorage, policy: NarrativeRetentionPolicy) =
 
     let toInfo (e: NarrativeEntry) : NarrativeEntryInfo = {
         Id = e.Id
@@ -138,17 +143,35 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, maxPerScope: int) =
         let! uploadResult = blobStorage.Upload(platformContainer, name, bytes)
         uploadResult |> throwOnError "Upload" |> ignore
 
-        // Trim oldest entries past the cap. Best-effort: a failed
-        // delete leaves a stale blob but does not break the publish.
+        // Eviction sweep. Best-effort: a failed delete leaves a stale
+        // blob but does not break the publish.
         let! all = listEntries scopeId
 
-        if all.Length > maxPerScope then
-            let toDelete = all |> List.skip maxPerScope
+        let ageCutoff =
+            match policy.MaxAge with
+            | Some maxAge when maxAge > TimeSpan.Zero -> Some(DateTime.UtcNow - maxAge)
+            | _ -> None
 
-            for old in toDelete do
-                let oldName = blobName scopeId old
-                let! _ = blobStorage.Delete(platformContainer, oldName)
-                ()
+        let agedOut =
+            match ageCutoff with
+            | Some cutoff -> all |> List.filter (fun e -> e.PublishedAt < cutoff)
+            | None -> []
+
+        let survivors =
+            match ageCutoff with
+            | Some cutoff -> all |> List.filter (fun e -> e.PublishedAt >= cutoff)
+            | None -> all
+
+        let countOverflow =
+            match policy.MaxPerScope with
+            | Some maxPerScope when maxPerScope >= 0 && survivors.Length > maxPerScope ->
+                survivors |> List.skip maxPerScope
+            | _ -> []
+
+        for old in agedOut @ countOverflow do
+            let oldName = blobName scopeId old
+            let! _ = blobStorage.Delete(platformContainer, oldName)
+            ()
 
         return id
     }
@@ -173,7 +196,16 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, maxPerScope: int) =
         return! publishInternal (scopeId, moduleId, pageRoute, document, tags)
     }
 
-    new(blobStorage: IBlobStorage) = PersistentNarrativeStore(blobStorage, 100)
+    new(blobStorage: IBlobStorage) = PersistentNarrativeStore(blobStorage, NarrativeRetentionPolicy.defaults)
+
+    new(blobStorage: IBlobStorage, maxPerScope: int) =
+        PersistentNarrativeStore(
+            blobStorage,
+            {
+                NarrativeRetentionPolicy.defaults with
+                    MaxPerScope = Some maxPerScope
+            }
+        )
 
     interface INarrativeStore with
         member _.Publish(scopeId, moduleId, pageRoute, document) =

@@ -4,6 +4,7 @@
 namespace ToolUp.Platform
 
 open System
+open ToolUp.Platform.Narrative
 
 // ─── Inter-module communication ────────────────────────────────────
 
@@ -2175,6 +2176,14 @@ type ServerConfig = {
     /// / Individual) — `CreateTeam` already returns `Error "Team
     /// management not available in this mode"` there.
     TeamCreationPolicy: TeamCreationPolicy
+    /// Per-scope retention policy for the registered `INarrativeStore`.
+    /// Default `NarrativeRetentionPolicy.defaults` keeps the historical
+    /// 100-per-scope cap with no age limit; deployments with long-lived
+    /// scopes that want bounded storage set `MaxAge` to evict stale
+    /// narratives lazily on subsequent writes. The in-process stores
+    /// honour both knobs; external implementations may use the policy as
+    /// guidance or layer their own retention.
+    NarrativeRetention: NarrativeRetentionPolicy
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -2414,6 +2423,7 @@ module ServerConfig =
         ConsentAudit = NoConsentAudit
         AdAnalytics = NoAdAnalytics
         TeamCreationPolicy = PlatformAdminOnly
+        NarrativeRetention = NarrativeRetentionPolicy.defaults
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

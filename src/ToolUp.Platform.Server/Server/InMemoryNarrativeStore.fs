@@ -6,13 +6,16 @@ open ToolUp.Platform.Narrative
 
 /// In-memory `INarrativeStore` — the default for single-process
 /// deployments. Entries are kept per-scope with a hard cap
-/// (`maxPerScope`) so long-running servers do not accumulate
+/// (`policy.MaxPerScope`) so long-running servers do not accumulate
 /// unbounded narrative history; oldest entries are evicted first.
+/// `policy.MaxAge`, when set, additionally evicts entries whose
+/// `PublishedAt` is older than `now - MaxAge` (lazy sweep on every
+/// `Publish`).
 ///
 /// Distributed deployments swap this for a Redis/Postgres/blob
 /// implementation via `ServerApp.withNarrativeStore`; the interface
 /// contract is identical (GP 12).
-type InMemoryNarrativeStore(maxPerScope: int) =
+type InMemoryNarrativeStore(policy: NarrativeRetentionPolicy) =
     // scopeId -> ring-buffer-ish list, newest first. Written through a
     // lock-free dictionary; per-scope list access is serialised via
     // `lock` on the list itself.
@@ -21,9 +24,26 @@ type InMemoryNarrativeStore(maxPerScope: int) =
     let getOrCreate scopeId =
         entriesByScope.GetOrAdd(scopeId, System.Func<string, ResizeArray<NarrativeEntry>>(fun _ -> ResizeArray()))
 
-    let trim (bucket: ResizeArray<NarrativeEntry>) =
-        while bucket.Count > maxPerScope do
-            bucket.RemoveAt(bucket.Count - 1)
+    let evict (bucket: ResizeArray<NarrativeEntry>) =
+        // Age sweep first — drops stale entries regardless of count.
+        match policy.MaxAge with
+        | Some maxAge when maxAge > TimeSpan.Zero ->
+            let cutoff = DateTime.UtcNow - maxAge
+            // bucket is newest-first; walk from the tail and remove
+            // entries older than the cutoff.
+            let mutable i = bucket.Count - 1
+
+            while i >= 0 && bucket.[i].PublishedAt < cutoff do
+                bucket.RemoveAt(i)
+                i <- i - 1
+        | _ -> ()
+
+        // Then count cap.
+        match policy.MaxPerScope with
+        | Some maxPerScope when maxPerScope >= 0 ->
+            while bucket.Count > maxPerScope do
+                bucket.RemoveAt(bucket.Count - 1)
+        | _ -> ()
 
     let toInfo (e: NarrativeEntry) : NarrativeEntryInfo = {
         Id = e.Id
@@ -52,7 +72,7 @@ type InMemoryNarrativeStore(maxPerScope: int) =
 
         lock bucket (fun () ->
             bucket.Insert(0, entry)
-            trim bucket)
+            evict bucket)
 
         return id
     }
@@ -75,7 +95,15 @@ type InMemoryNarrativeStore(maxPerScope: int) =
         return! publishInternal (scopeId, moduleId, pageRoute, document, tags)
     }
 
-    new() = InMemoryNarrativeStore(100)
+    new() = InMemoryNarrativeStore(NarrativeRetentionPolicy.defaults)
+
+    new(maxPerScope: int) =
+        InMemoryNarrativeStore(
+            {
+                NarrativeRetentionPolicy.defaults with
+                    MaxPerScope = Some maxPerScope
+            }
+        )
 
     interface INarrativeStore with
         member _.Publish(scopeId, moduleId, pageRoute, document) =

@@ -208,9 +208,11 @@ let buildNotificationStack
     // narrative-commit also persists into the KnowledgeBase. Persists
     // through the resolved IBlobStorage (LocalFileStorage in dev, cloud
     // storage in production); distributed deployments inherit durability
-    // from whatever storage backend they wire in.
+    // from whatever storage backend they wire in. Retention is governed
+    // by `ServerConfig.NarrativeRetention`; the default policy caps each
+    // scope at 100 entries with no age limit.
     let narrativeStore: INarrativeStore =
-        PersistentNarrativeStore.PersistentNarrativeStore(resolvedBlobStorage) :> _
+        PersistentNarrativeStore.PersistentNarrativeStore(resolvedBlobStorage, config.NarrativeRetention) :> _
 
     {
         SseConnectionManager = sseConnectionManager
