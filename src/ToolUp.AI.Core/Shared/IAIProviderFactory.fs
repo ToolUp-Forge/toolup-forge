@@ -163,3 +163,14 @@ type IAIProviderFactory =
     /// full factory looks the label up in the user/team's config and
     /// builds a provider bound to its stored secret.
     abstract TryResolveByLabel: AccessContext * label: string -> Async<Result<IAIProvider, ProviderResolutionError>>
+
+    /// Phase 70 — build an `IAIProvider` for the named platform
+    /// provider using the supplied API key + model. Returns `None`
+    /// when `providerId` is not one of the wired platform providers.
+    /// Used by the Platform Admin keys handler's `TestPlatformKey` /
+    /// `TestTeamKey` paths: the handler reads the stored key from
+    /// `IPlatformAIKeyStore`, then calls this to construct the
+    /// provider for the ping. Bypasses the resolution chain — no
+    /// fallback, no override, no BYOK consideration — by design;
+    /// the caller is verifying a specific (providerId, apiKey) pair.
+    abstract BuildPlatform: providerId: string * apiKey: string * model: string -> IAIProvider option

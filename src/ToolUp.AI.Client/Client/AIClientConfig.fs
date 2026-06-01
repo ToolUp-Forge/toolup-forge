@@ -655,10 +655,26 @@ let private sidePanelHeaderAction
 /// present in the sidebar means enabling BYOK in the future is a
 /// policy flip, not a module-list change.
 let appendAssistantModule (mode: AIAssistantMode) (modules: ErasedModule list) : ErasedModule list =
+    // Phase 70 — Platform Admin keys module is appended alongside the
+    // assistant + settings modules. Visibility filtering at sidebar-
+    // render time hides it from non-admin callers, so the
+    // unconditional append is safe regardless of deployment shape.
     match mode with
     | NoAIAssistant -> modules
-    | DefaultAIAssistant -> modules @ [ AIAssistantUI.create None; AISettingsUI.create () ]
-    | ConfiguredAIAssistant cfg -> modules @ [ AIAssistantUI.create (Some cfg); AISettingsUI.create () ]
+    | DefaultAIAssistant ->
+        modules
+        @ [
+            AIAssistantUI.create None
+            AISettingsUI.create ()
+            PlatformAIKeysAdminUI.create ()
+        ]
+    | ConfiguredAIAssistant cfg ->
+        modules
+        @ [
+            AIAssistantUI.create (Some cfg)
+            AISettingsUI.create ()
+            PlatformAIKeysAdminUI.create ()
+        ]
 
 // ─── Outer Program construction ──────────────────────────────────
 

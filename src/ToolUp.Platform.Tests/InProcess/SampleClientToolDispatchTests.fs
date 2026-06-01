@@ -52,6 +52,8 @@ type private StubProviderFactory() =
 
         member _.TryResolveByLabel(_, _) = async { return Error(ProviderResolutionError.NoProviderConfigured) }
 
+        member _.BuildPlatform(_providerId, _apiKey, _model) = None
+
 type private StubProviderProfile() =
     interface IProviderProfile with
         member _.Get _ = async { return None }

@@ -157,6 +157,9 @@ type MeteringProviderFactory(inner: IAIProviderFactory, usageLog: IUsageLog, pro
 
         member _.TryResolveByLabel(ctx, label) = inner.TryResolveByLabel(ctx, label)
 
+        member _.BuildPlatform(providerId, apiKey, model) =
+            inner.BuildPlatform(providerId, apiKey, model)
+
 // ─── Phase 9 — compute-quota enforcement decorator ───────────────
 //
 // The `ITeamQuotaPolicy` contract specifies a decorator around
@@ -242,3 +245,6 @@ type QuotaEnforcingProviderFactory(inner: IAIProviderFactory, quota: ITeamQuotaP
         }
 
         member _.TryResolveByLabel(ctx, label) = inner.TryResolveByLabel(ctx, label)
+
+        member _.BuildPlatform(providerId, apiKey, model) =
+            inner.BuildPlatform(providerId, apiKey, model)

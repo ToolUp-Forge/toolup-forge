@@ -204,6 +204,11 @@ let composeAI (app: AIServerApp) : ServerApp =
         [
             makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx)
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
+            // Phase 70 — Platform Admin AI keys API. Every method
+            // is gated server-side on canModifyPlatformConfig; the
+            // client-side module is hidden from non-admin sidebars by
+            // ClientModule.Visibility.platformAdminOnly.
+            makeApi (PlatformAIKeysHandler.platformAIKeysApi aiProviderFactory)
             route "/api/ai/events"
             >=> fun next ctx -> sseHandler (resolveManager ctx) config.SseAuthMode next ctx
             // Phase 6g.A: client-resident tool result POST endpoint.

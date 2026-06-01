@@ -45,6 +45,7 @@ let private fakeFactory
         member _.PlatformDescriptor = platform
         member _.Resolve _ctx = async { return Result.Error NoProviderConfigured }
         member _.TryResolveByLabel(_ctx, _label) = async { return Result.Error NoProviderConfigured }
+        member _.BuildPlatform(_providerId, _apiKey, _model) = None
     }
 
 let private withEnv (name: string) (value: string option) (body: unit -> 'a) : 'a =

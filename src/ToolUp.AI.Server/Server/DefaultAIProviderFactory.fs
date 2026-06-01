@@ -50,6 +50,13 @@ let singleProvider (descriptor: AIProviderDescriptor) (provider: IAIProvider) : 
         member _.Resolve _accessContext = async { return Ok provider }
 
         member _.TryResolveByLabel(_accessContext, _label) = async { return Ok provider }
+
+        member _.BuildPlatform(providerId, _apiKey, _model) =
+            // The single-provider adapter wraps an already-built
+            // IAIProvider; it doesn't carry a key-aware Build closure.
+            // Return the wrapped provider when the id matches, None
+            // otherwise — the (apiKey, model) inputs are ignored.
+            if providerId = descriptor.Id then Some provider else None
     }
 
 /// Factory that always fails with `NoProviderConfigured`. Useful for
@@ -66,6 +73,8 @@ let empty: IAIProviderFactory =
         member _.Resolve _accessContext = async { return Error NoProviderConfigured }
 
         member _.TryResolveByLabel(_accessContext, _label) = async { return Error NoProviderConfigured }
+
+        member _.BuildPlatform(_providerId, _apiKey, _model) = None
     }
 
 // ─── Full factory with provider-profile store + key store ────────
@@ -209,6 +218,9 @@ let create
 
     let platformDescriptors = platformProviders |> List.map _.Descriptor
 
+    let platformBuildById =
+        platformProviders |> List.map (fun b -> b.Descriptor.Id, b.Build) |> Map.ofList
+
     let fallback (ctx: AccessContext) : Async<Result<IAIProvider, ProviderResolutionError>> = async {
         match fallbackPolicy, platformProviders with
         | StrictBYOK, _ -> return Error NoProviderConfigured
@@ -308,4 +320,8 @@ let create
                 | None -> return Error(UnknownProvider label)
                 | Some e -> return! buildFromEntry e scope
         }
+
+        member _.BuildPlatform(providerId, apiKey, model) =
+            platformBuildById.TryFind providerId
+            |> Option.map (fun build -> build apiKey model)
     }

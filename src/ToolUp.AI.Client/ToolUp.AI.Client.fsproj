@@ -29,6 +29,7 @@
         <Compile Include="Client\Icons.fs" />
         <Compile Include="Client\AIAssistantUI.fs" />
         <Compile Include="Client\AISettingsUI.fs" />
+        <Compile Include="Client\PlatformAIKeysAdminUI.fs" />
         <Compile Include="Client\AIClientConfig.fs" />
     </ItemGroup>
     <!-- Fable.Core / ToolUp.Remoting.Client / Fable.SimpleJson /

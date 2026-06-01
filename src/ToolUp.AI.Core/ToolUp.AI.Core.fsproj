@@ -22,6 +22,7 @@
         <Compile Include="Shared\IAIProviderFactory.fs" />
         <Compile Include="Shared\IPlatformAIKeyStore.fs" />
         <Compile Include="Shared\AISettingsTypes.fs" />
+        <Compile Include="Shared\PlatformAIKeysApi.fs" />
         <Compile Include="Shared\AILatencyTypes.fs" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
