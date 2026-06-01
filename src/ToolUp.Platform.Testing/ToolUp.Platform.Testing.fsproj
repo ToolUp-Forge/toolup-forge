@@ -27,6 +27,8 @@
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Expecto" />
-        <PackageReference Include="ToolUp.Elmish" />
+        <!-- 0.4.3 — ToolUp.Elmish was folded into ToolUp.Platform.Client;
+             the runtime arrives transitively through the
+             ToolUp.Platform.Client ProjectReference above. -->
     </ItemGroup>
 </Project>

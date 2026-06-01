@@ -44,17 +44,15 @@
     <PackageVersion Include="Fable.Browser.XMLHttpRequest" Version="1.4" />
     <PackageVersion Include="Fable.Core" Version="5.0" />
     <!--
-      Elmish runtime: forked into ToolUp.Elmish (0.4.0) for the typed
-      out-of-band dispatch (IDispatcher), prefetch-gating primitive
-      (Prefetch), structured ErrorContext, lifetime-aware effects, and
-      Cmd.OfRemoting helpers. Wire / runtime shape preserved unchanged
-      from upstream Fable.Elmish v5.x — existing `open Elmish` call
-      sites compile against ToolUp.Elmish with no source edits.
-      See ../toolup-elmish/MIGRATION.md for the migration story.
+      0.4.3 — The ToolUp.Elmish / ToolUp.Elmish.React / ToolUp.Elmish.HMR
+      packages were folded directly into ToolUp.Platform.Client; the
+      runtime is a forge implementation detail rather than a separately
+      consumable concern. The `namespace Elmish` is preserved, so every
+      `open Elmish` call site continues to compile unchanged — consumers
+      drop the three `PackageReference`s and pick up the runtime via
+      ToolUp.Platform.Client. See docs/migrations/0.4.0-toolup-elmish-adoption.md
+      for the full migration story.
     -->
-    <PackageVersion Include="ToolUp.Elmish" Version="0.4.2" />
-    <PackageVersion Include="ToolUp.Elmish.HMR" Version="0.4.2" />
-    <PackageVersion Include="ToolUp.Elmish.React" Version="0.4.2" />
     <PackageVersion Include="Fable.Parsimmon" Version="4.1" />
     <PackageVersion Include="Fable.React.Types" Version="18.4" />
     <PackageVersion Include="Fable.ReactDom.Types" Version="18.2" />

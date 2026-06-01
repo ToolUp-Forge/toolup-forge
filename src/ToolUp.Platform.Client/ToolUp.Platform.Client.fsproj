@@ -20,6 +20,26 @@
         <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
+        <!-- 0.4.3 — Elmish runtime folded in from the formerly-separate
+             ToolUp.Elmish / ToolUp.Elmish.React / ToolUp.Elmish.HMR
+             packages. The runtime is a forge implementation detail
+             rather than a separately consumable concern; one package
+             instead of three, one version line instead of three. The
+             `namespace Elmish` is preserved so every `open Elmish` site
+             across forge and downstream consumers continues to compile
+             unchanged. Compile order matches the prior cross-package
+             dependency order (core → React → HMR). -->
+        <Compile Include="Client\Elmish\Prelude.fs" />
+        <Compile Include="Client\Elmish\Cmd.fs" />
+        <Compile Include="Client\Elmish\Sub.fs" />
+        <Compile Include="Client\Elmish\Dispatcher.fs" />
+        <Compile Include="Client\Elmish\Prefetch.fs" />
+        <Compile Include="Client\Elmish\ErrorContext.fs" />
+        <Compile Include="Client\Elmish\EffectHandle.fs" />
+        <Compile Include="Client\Elmish\Ring.fs" />
+        <Compile Include="Client\Elmish\Program.fs" />
+        <Compile Include="Client\Elmish\React.fs" />
+        <Compile Include="Client\Elmish\HMR.fs" />
         <Compile Include="Client\Api.fs" />
         <Compile Include="Client\Icon.fs" />
         <!-- Phase 65 — client-tier default ILogger (ConsoleLogger) +
@@ -134,9 +154,12 @@
          declared in Directory.Packages.props. -->
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
-    <PackageReference Include="ToolUp.Elmish" />
-    <PackageReference Include="ToolUp.Elmish.HMR" />
-    <PackageReference Include="ToolUp.Elmish.React" />
+    <!-- 0.4.3 — Fable.React.Types and Fable.Browser.Dom were pulled
+         in transitively via ToolUp.Elmish.React. Declared directly
+         now that the elmish runtime is folded in, so the dep is
+         explicit and survives any future Elmish source restructure. -->
+    <PackageReference Include="Fable.React.Types" />
+    <PackageReference Include="Fable.Browser.Dom" />
     <PackageReference Include="ToolUp.Remoting.Client" />
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Fable.SimpleHttp" />

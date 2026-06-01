@@ -22,9 +22,8 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fable.Core" />
-    <PackageReference Include="ToolUp.Elmish" />
-    <PackageReference Include="ToolUp.Elmish.HMR" />
-    <PackageReference Include="ToolUp.Elmish.React" />
+    <!-- 0.4.3 — ToolUp.Elmish.* were folded into ToolUp.Platform.Client;
+         the runtime arrives transitively through that PackageReference. -->
     <PackageReference Include="ToolUp.Remoting.Client" />
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Feliz" />

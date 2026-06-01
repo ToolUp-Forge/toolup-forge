@@ -41,8 +41,10 @@
     <ProjectReference Include="..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
-    <PackageReference Include="ToolUp.Elmish" />
-    <PackageReference Include="ToolUp.Elmish.React" />
+    <!-- 0.4.3 — ToolUp.Elmish.* folded into ToolUp.Platform.Client; the
+         elmish runtime arrives transitively through the ProjectReference
+         above, so a Fable invocation here still drives the full elmish
+         + Platform.Client + sample source tree. -->
     <PackageReference Include="Feliz" />
   </ItemGroup>
 </Project>
