@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Per-provider integration test pack for the shipped AIProviders
+         companions (Claude / OpenAI / Gemini). Each test file is
+         parameterised on the provider's env-var key
+         (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`);
+         `pendingIf` reports a clean "skipped" on a fresh checkout
+         where no key is set. With keys present the runner drives a
+         live system-prompt + user-message + tool-definition +
+         streaming round-trip plus an `IProviderProfile` factory
+         round-trip per provider via `DefaultAIProviderFactory.Resolve`.
+         Closes the deferred test-shaped tail of Phase 67. -->
+    <ItemGroup>
+        <Compile Include="Support\InMemoryStores.fs" />
+        <Compile Include="Support\ProviderTestPack.fs" />
+        <Compile Include="Tests\ClaudeProviderTests.fs" />
+        <Compile Include="Tests\OpenAIProviderTests.fs" />
+        <Compile Include="Tests\GeminiProviderTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Substrate. `Platform.Server` carries `BlobProviderProfile`
+             (not currently consumed here — the round-trip uses the
+             local InMemoryProviderProfile fake — but kept so future
+             cases that want the blob-backed impl can drop it in
+             without an fsproj edit). -->
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+        <!-- Provider companions under test. -->
+        <ProjectReference Include="..\AIProviders\Claude\ClaudeAIProvider.fsproj" />
+        <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" />
+        <ProjectReference Include="..\AIProviders\Gemini\Gemini.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

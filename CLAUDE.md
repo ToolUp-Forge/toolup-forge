@@ -232,12 +232,20 @@ dotnet build ToolUp.Forge.sln       # full build
 dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
 dotnet run --project src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj
 dotnet run --project src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj
+# Live-API integration pack for the shipped AIProvider companions.
+# Env-gated: each per-provider arm runs when its API-key env var is set
+# (ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY); arms with the
+# env var unset report Pending, not Failed, so a fresh checkout is green
+# without per-provider credentials. Live arms exercise a streaming
+# system + user + tool round-trip plus an IProviderProfile factory
+# round-trip through DefaultAIProviderFactory.Resolve.
+dotnet run --project src/ToolUp.AIProviders.Tests/ToolUp.AIProviders.Tests.fsproj
 dotnet run --project Build.fsproj -- Pack   # produce nupkgs to ../local-nuget-feed
 dotnet run -- Format                # fantomas
 dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 ```
 
-**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus the three `dotnet run --project` suites with 0 failures.
+**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus the four `dotnet run --project` suites with 0 failures (`Platform.Tests` / `Forms.Tests` / `Scheduling.Tests` always-on; `AIProviders.Tests` env-gated — clean on a fresh checkout, asserts live when an API-key env var is set).
 
 `dotnet run --project Build.fsproj -- Pack` walks every public-surface SDK fsproj (filtered against `IsPackable=false`) and packs each individually into a local feed (default `../local-nuget-feed/`). ~9 minutes for a clean cold pack of ~43 packages; subsequent packs are incremental. Point a consumer's `nuget.config` at the same folder to test unreleased changes end-to-end.
 
