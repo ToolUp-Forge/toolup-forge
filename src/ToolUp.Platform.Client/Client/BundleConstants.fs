@@ -66,3 +66,62 @@ let platformSurfaces: string = jsNative
 /// catches the silent-default).
 [<Emit("(typeof __TOOLUP_NOTIFICATIONS_DISABLED__ === 'boolean' ? __TOOLUP_NOTIFICATIONS_DISABLED__ : false)")>]
 let notificationsDisabledExplicitly: bool = jsNative
+
+// Phase 16e — typed accessors for the Docker-era build-time-injected
+// set. As container-mode deploys roll across siblings (Phase 16b's
+// `ToolUp.Hosts.Docker` companion), build-time injection of Entra
+// tenant / client IDs + per-deployment OIDC overrides becomes the
+// universal pattern. The four accessors below replace per-consumer
+// `[<Emit>]` boilerplate and centralise the Vite-define ↔ F#-accessor
+// mapping. Shape divergence from the Phase 11.G set above is
+// intentional: each returns `string option`, with `None` covering
+// three failure modes — the define is the empty string, the literal
+// JS `'undefined'` string (what Vite emits when a `process.env.X`
+// substitution finds nothing), or the literal placeholder
+// `__NAME__` (what survives in the bundle when Vite didn't substitute
+// at all). Consumers gate fail-loud on `None` rather than on
+// `String.IsNullOrEmpty` against a raw `string`.
+
+[<Emit("(typeof __ENTRA_TENANT_ID__ === 'string' && __ENTRA_TENANT_ID__ !== '' && __ENTRA_TENANT_ID__ !== 'undefined' && __ENTRA_TENANT_ID__ !== '__ENTRA_TENANT_ID__' ? __ENTRA_TENANT_ID__ : '')")>]
+let private entraTenantIdRaw: string = jsNative
+
+[<Emit("(typeof __ENTRA_CLIENT_ID__ === 'string' && __ENTRA_CLIENT_ID__ !== '' && __ENTRA_CLIENT_ID__ !== 'undefined' && __ENTRA_CLIENT_ID__ !== '__ENTRA_CLIENT_ID__' ? __ENTRA_CLIENT_ID__ : '')")>]
+let private entraClientIdRaw: string = jsNative
+
+[<Emit("(typeof __OIDC_ISSUER_OVERRIDE__ === 'string' && __OIDC_ISSUER_OVERRIDE__ !== '' && __OIDC_ISSUER_OVERRIDE__ !== 'undefined' && __OIDC_ISSUER_OVERRIDE__ !== '__OIDC_ISSUER_OVERRIDE__' ? __OIDC_ISSUER_OVERRIDE__ : '')")>]
+let private oidcIssuerOverrideRaw: string = jsNative
+
+[<Emit("(typeof __OIDC_AUDIENCE_OVERRIDE__ === 'string' && __OIDC_AUDIENCE_OVERRIDE__ !== '' && __OIDC_AUDIENCE_OVERRIDE__ !== 'undefined' && __OIDC_AUDIENCE_OVERRIDE__ !== '__OIDC_AUDIENCE_OVERRIDE__' ? __OIDC_AUDIENCE_OVERRIDE__ : '')")>]
+let private oidcAudienceOverrideRaw: string = jsNative
+
+let private toOption (raw: string) : string option =
+    if System.String.IsNullOrEmpty raw then None else Some raw
+
+/// Read from the `__ENTRA_TENANT_ID__` Vite define. `None` when the
+/// define is unset, empty, the literal `'undefined'` string, or the
+/// literal placeholder `__ENTRA_TENANT_ID__` (i.e. Vite didn't
+/// substitute). Consumers wire Microsoft Entra Workforce ID via
+/// `OidcAuthUI` and pattern-match `Some tenantId` for fail-loud
+/// behaviour in Release builds.
+let entraTenantId: string option = toOption entraTenantIdRaw
+
+/// Read from the `__ENTRA_CLIENT_ID__` Vite define. Same `None`
+/// semantics as `entraTenantId`. Paired with it in
+/// `OidcUIConfig.defaults` + the `api://{clientId}/access_as_user`
+/// scope.
+let entraClientId: string option = toOption entraClientIdRaw
+
+/// Read from the `__OIDC_ISSUER_OVERRIDE__` Vite define. `None` when
+/// the consumer accepts the SDK / IdP-default issuer URL. Some IdPs
+/// (multi-region Auth0 / Okta, sovereign-cloud Entra) require a
+/// non-default issuer baked at build time; this accessor lets
+/// `OidcUIConfig.defaults` consume it without a consumer-local
+/// `[<Emit>]`.
+let oidcIssuerOverride: string option = toOption oidcIssuerOverrideRaw
+
+/// Read from the `__OIDC_AUDIENCE_OVERRIDE__` Vite define. `None`
+/// when the consumer accepts the default audience derived from
+/// `entraClientId` / `OidcUIConfig.ClientId`. Override when the
+/// access-token audience needs to differ from the OIDC client id
+/// (multi-audience deployments, federated APIs).
+let oidcAudienceOverride: string option = toOption oidcAudienceOverrideRaw
