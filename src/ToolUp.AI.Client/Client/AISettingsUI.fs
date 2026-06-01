@@ -32,6 +32,17 @@ type Model = {
     /// model picker (byte-identical to pre-Phase-70 behaviour); ≥2
     /// entries surface a provider+model picker.
     PlatformDescriptors: AIProviderDescriptor list
+    /// Phase 70 C.5 — per-provider key-presence status reported by
+    /// `PlatformAIKeysApi.ListPlatformKeyStatuses`. Drives the inline
+    /// "Ask a Platform Admin to configure a key for {provider}" notice
+    /// inside the picker when the user-selected provider has no
+    /// platform-scope key configured. Non-admin callers receive `[]`
+    /// from the handler (per D.2's gate); the picker treats a missing
+    /// row for the selected provider as "not configured" — false
+    /// positives only fire when a non-admin's deployment has providers
+    /// wired but no platform-scope keys, which is the exact state the
+    /// notice exists to surface.
+    PlatformKeyStatuses: PlatformAIKeyStatus list
     /// Current scope's configured providers. Loaded from `GetMyConfig`.
     Config: AIUserConfigView
     /// When Some, the form is in edit mode targeting this instance.
@@ -49,6 +60,7 @@ type Model = {
 type Msg =
     | LoadAvailable of ApiCall<unit, AIProviderDescriptor list>
     | LoadPlatformDescriptors of ApiCall<unit, AIProviderDescriptor list>
+    | LoadPlatformKeyStatuses of ApiCall<unit, PlatformAIKeyStatus list>
     | LoadConfig of ApiCall<unit, AIUserConfigView>
     | StartEdit of label: string
     | CancelEdit
@@ -70,12 +82,20 @@ type Msg =
 let private api =
     Api.makeProxy<AISettingsApi> (customOptions = UserSession.withRequestHeaders)
 
+// Phase 70 C.5 — read-only proxy for the platform AI keys API.
+// `ListPlatformKeyStatuses` short-circuits to `[]` for non-admins per
+// Stream D.2's RBAC gate; the picker uses the returned list to
+// surface the "providers wired but no keys configured" inline notice.
+let private platformAIKeysApi =
+    Api.makeProxy<PlatformAIKeysApi> (customOptions = UserSession.withRequestHeaders)
+
 // ─── Init ─────────────────────────────────────────────────────────
 
 let init () : Model * Cmd<Msg> =
     {
         Available = []
         PlatformDescriptors = []
+        PlatformKeyStatuses = []
         Config = AIUserConfigView.empty
         Editing = None
         Status = None
@@ -85,6 +105,11 @@ let init () : Model * Cmd<Msg> =
         Cmd.OfRemoting.call api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
         Cmd.OfRemoting.call api.GetPlatformDescriptors () (Finished >> LoadPlatformDescriptors) (fun ex ->
             ApiError ex.Message)
+        Cmd.OfRemoting.call
+            platformAIKeysApi.ListPlatformKeyStatuses
+            ()
+            (Finished >> LoadPlatformKeyStatuses)
+            (fun ex -> ApiError ex.Message)
         Cmd.OfRemoting.call api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
     ]
 
@@ -120,6 +145,22 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 PlatformDescriptors = descriptors
+                Loading = false
+        },
+        Cmd.none
+
+    | LoadPlatformKeyStatuses(Start()) ->
+        { model with Loading = true },
+        Cmd.OfRemoting.call
+            platformAIKeysApi.ListPlatformKeyStatuses
+            ()
+            (Finished >> LoadPlatformKeyStatuses)
+            (fun ex -> ApiError ex.Message)
+
+    | LoadPlatformKeyStatuses(Finished statuses) ->
+        {
+            model with
+                PlatformKeyStatuses = statuses
                 Loading = false
         },
         Cmd.none
@@ -538,6 +579,7 @@ let private PlatformProviderModelPicker
     (descriptors: AIProviderDescriptor list)
     (currentProviderOverride: string option)
     (currentModelOverride: string option)
+    (platformKeyStatuses: PlatformAIKeyStatus list)
     (loading: bool)
     (onSaveProvider: string option -> unit)
     (onSaveModel: string option -> unit)
@@ -601,6 +643,29 @@ let private PlatformProviderModelPicker
         | Some _ -> selectedModel
         | None -> "(no provider)"
 
+    // Phase 70 C.5 — inline "no platform key configured" notice. The
+    // picker renders even when no platform-scope key has been set for
+    // the selected provider (the substrate can still resolve via team-
+    // scope or BootstrapKeyFromEnv); but if `ListPlatformKeyStatuses`
+    // reports `HasKey = false` (or omits the row entirely — same
+    // signal because the handler short-circuits non-admins to `[]`),
+    // surface a friendly hint pointing at the Platform Admin path.
+    // Suppress the hint when no provider is selected (empty deployment).
+    let selectedProviderHasKey =
+        match selectedDescriptor with
+        | None -> true
+        | Some d ->
+            platformKeyStatuses
+            |> List.tryFind (fun s -> s.ProviderId = d.Id)
+            |> Option.map _.HasKey
+            |> Option.defaultValue false
+
+    let missingKeyNoticeText =
+        match selectedDescriptor with
+        | Some d ->
+            $"No platform-scope key is configured for {d.DisplayName}. Ask a Platform Admin to add one via Platform Admin > AI Keys, or set the deployment's BootstrapKeyFromEnv at composition time."
+        | None -> ""
+
     let handleProviderChange (newId: string) =
         setSelectedProviderId newId
         // Switching provider invalidates the previous model
@@ -642,6 +707,20 @@ let private PlatformProviderModelPicker
                         | None -> "AI is not configured for this deployment."
                 )
             ]
+
+            // Phase 70 C.5 — inline "providers wired but no keys"
+            // notice for the user's currently-selected provider. Renders
+            // above the provider dropdown so the operator-facing
+            // remediation path is the first thing the user reads.
+            if not selectedProviderHasKey && selectedDescriptor.IsSome then
+                Html.div [
+                    prop.className
+                        "p-3 border border-amber-200 bg-amber-50 rounded text-sm text-amber-800 flex items-start gap-2"
+                    prop.children [
+                        Html.span [ prop.className "font-medium"; prop.text "Key required:" ]
+                        Html.span [ prop.text missingKeyNoticeText ]
+                    ]
+                ]
 
             // Provider dropdown — only when ≥2 wired
             if multiProvider then
@@ -923,6 +1002,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
                     descriptors
                     model.Config.PlatformProviderOverride
                     model.Config.PlatformModelOverride
+                    model.PlatformKeyStatuses
                     model.Loading
                     (SavePlatformProviderOverride >> dispatch)
                     (SavePlatformModelOverride >> dispatch)

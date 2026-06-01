@@ -83,6 +83,23 @@ type AIServerApp = {
     /// `DefaultAIProviderFactory.create` call, and the Platform Admin
     /// keys handler (Phase 70 Stream D) resolves it from DI.
     PlatformKeyStore: IPlatformAIKeyStore option
+    /// Phase 70 A.5 — declarative accumulator for the platform providers
+    /// wired into `AIProviderFactory`. Populated additively via
+    /// `withPlatformProvider`. Today the consumer still constructs the
+    /// factory directly (passing the same list to
+    /// `DefaultAIProviderFactory.create`); `composeAI` validates that
+    /// the accumulator and `factory.PlatformDescriptors` agree, failing
+    /// loudly when they diverge (catches the "wired the builder but
+    /// forgot to pass them to the factory" footgun). An empty list
+    /// disables the validator — the factory is the source of truth.
+    ///
+    /// The field shape is also the seat for a future `composeAI`-
+    /// internal factory construction (deferred — no consumer migration
+    /// target has surfaced; F.3 cookbook recipes use the existing
+    /// pattern unchanged). When that refactor lands, this field becomes
+    /// the input to `DefaultAIProviderFactory.create` rather than the
+    /// validator's reference set.
+    PlatformProviders: DefaultAIProviderFactory.AIPlatformProvider list
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
 }
@@ -150,6 +167,25 @@ let composeAI (app: AIServerApp) : ServerApp =
         failwithf
             "AI tool name collision across modules: %s. Each tool must have a unique Name across the deployment."
             (System.String.Join(", ", duplicateNames))
+
+    // Phase 70 A.5 — when the consumer declared platform providers via
+    // `AIServerApp.withPlatformProvider`, verify the accumulated list
+    // matches what `factory.PlatformDescriptors` reports. A divergence
+    // means the consumer wired providers via the builder but passed a
+    // different list (or none) to `DefaultAIProviderFactory.create` —
+    // a class of bug that otherwise surfaces only at first request as
+    // a mysterious `NoProviderConfigured`. Empty `app.PlatformProviders`
+    // disables the check (back-compat with consumers that haven't
+    // adopted the builder).
+    if not app.PlatformProviders.IsEmpty then
+        let declaredIds = app.PlatformProviders |> List.map (fun p -> p.Descriptor.Id)
+        let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map (fun d -> d.Id)
+
+        if declaredIds <> factoryIds then
+            failwithf
+                "AI platform-provider declaration mismatch. AIServerApp.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same list to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
+                (System.String.Join(", ", declaredIds))
+                (System.String.Join(", ", factoryIds))
 
     // Convert per-module `(definition, executor)` tuples into the
     // companion's `RegisteredTool` shape and prepend the SDK's built-in
@@ -358,6 +394,7 @@ module AIServerApp =
         AIProviderFactory = factory
         ProviderProfile = providerProfile
         PlatformKeyStore = None
+        PlatformProviders = []
         AIConfig = None
         ModuleAIContexts = []
     }
@@ -384,6 +421,7 @@ module AIServerApp =
             AIProviderFactory = factory
             ProviderProfile = providerProfile
             PlatformKeyStore = None
+            PlatformProviders = []
             AIConfig = None
             ModuleAIContexts = []
         }
@@ -554,6 +592,30 @@ module AIServerApp =
     let withPlatformAIKeyStore (store: IPlatformAIKeyStore) (app: AIServerApp) : AIServerApp = {
         app with
             PlatformKeyStore = Some store
+    }
+
+    /// Phase 70 A.5 — additively declare a platform provider on the
+    /// `AIServerApp` pipeline. Each call appends to
+    /// `app.PlatformProviders`; `composeAI` cross-checks the
+    /// accumulated list against `factory.PlatformDescriptors` at
+    /// compose time and fails with a clear diagnostic when they
+    /// diverge (the consumer wired a provider via the builder but
+    /// passed a different list to `DefaultAIProviderFactory.create`).
+    ///
+    /// **Today.** The consumer still constructs the factory directly
+    /// — this builder is a *declaration* helper, not a *construction*
+    /// helper. The validator catches the common drift between the
+    /// declared shape and the factory's actual shape.
+    ///
+    /// **Future.** When `composeAI` takes over factory construction
+    /// (deferred per Phase 70 A.5 — no consumer migration target has
+    /// surfaced), this list becomes the direct input to
+    /// `DefaultAIProviderFactory.create`. The builder's call shape and
+    /// semantics stay byte-identical across that transition; consumers
+    /// adopting the builder today are forward-compatible.
+    let withPlatformProvider (provider: DefaultAIProviderFactory.AIPlatformProvider) (app: AIServerApp) : AIServerApp = {
+        app with
+            PlatformProviders = app.PlatformProviders @ [ provider ]
     }
 
     /// Drive the final composition. Returns the process exit code.
