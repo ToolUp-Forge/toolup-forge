@@ -13,6 +13,7 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.BlobEncryption
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Secrets
 open ToolUp.Platform.RemotingHelpers
 open ToolUp.Platform.Server
 open ToolUp.AI
@@ -72,6 +73,16 @@ type AIServerApp = {
     /// by `create` / `createFrom` so a non-AI handler in the same app
     /// can resolve it from DI too.
     ProviderProfile: IProviderProfile
+    /// Phase 70 — Platform-Admin-managed AI key store. `None` lets the
+    /// composer auto-promote `BlobPlatformAIKeyStore.create secretStore`
+    /// at compose time when `ISecretStore` is registered in DI. Setting
+    /// `Some store` overrides with a custom backing implementation
+    /// (in-memory test double, future custom companion). The store is
+    /// registered as `IPlatformAIKeyStore` in DI; the factory's
+    /// resolution chain consumes it via the consumer's
+    /// `DefaultAIProviderFactory.create` call, and the Platform Admin
+    /// keys handler (Phase 70 Stream D) resolves it from DI.
+    PlatformKeyStore: IPlatformAIKeyStore option
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
 }
@@ -258,6 +269,22 @@ let composeAI (app: AIServerApp) : ServerApp =
                         | _ -> baseFactory)
                 )
                 .AddSingleton<IProviderProfile>(providerProfile)
+                // Phase 70 — register the Platform-Admin-managed AI key
+                // store. When the consumer passed `withPlatformAIKeyStore`
+                // explicitly, register that instance directly. When
+                // omitted, register a Func-resolver that lazily builds
+                // `BlobPlatformAIKeyStore.create secretStore` from
+                // whichever `ISecretStore` is in DI at request time.
+                // Platform-side handlers (Phase 70 Stream D's
+                // `PlatformAIKeysHandler`) resolve via DI.
+                .AddSingleton<IPlatformAIKeyStore>(
+                    System.Func<IServiceProvider, IPlatformAIKeyStore>(fun sp ->
+                        match app.PlatformKeyStore with
+                        | Some store -> store
+                        | None ->
+                            let secretStore = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
+                            BlobPlatformAIKeyStore.create secretStore)
+                )
                 .AddSingleton<AIToolRegistry>(registry)
                 .AddSingleton<ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
@@ -325,6 +352,7 @@ module AIServerApp =
             |> ServerApp.withMetricRegistrations AILatencyMetrics.registrations
         AIProviderFactory = factory
         ProviderProfile = providerProfile
+        PlatformKeyStore = None
         AIConfig = None
         ModuleAIContexts = []
     }
@@ -350,6 +378,7 @@ module AIServerApp =
                 |> ServerApp.withMetricRegistrations AILatencyMetrics.registrations
             AIProviderFactory = factory
             ProviderProfile = providerProfile
+            PlatformKeyStore = None
             AIConfig = None
             ModuleAIContexts = []
         }
@@ -506,6 +535,20 @@ module AIServerApp =
         app with
             ProviderProfile = store
             Base = ServerApp.withProviderProfile store app.Base
+    }
+
+    /// Phase 70 — supply a Platform-Admin-managed AI key store. When
+    /// omitted, `composeAI` auto-promotes `BlobPlatformAIKeyStore.create`
+    /// over the registered `ISecretStore` so the Platform Admin keys
+    /// module works out of the box. Override when you want a custom
+    /// backing store (in-memory test double, Azure Key Vault wrapper,
+    /// AWS Secrets Manager wrapper, etc.) — the store is registered as
+    /// `IPlatformAIKeyStore` in DI and surfaces to the factory's
+    /// resolution chain via the consumer's `DefaultAIProviderFactory.create`
+    /// call.
+    let withPlatformAIKeyStore (store: IPlatformAIKeyStore) (app: AIServerApp) : AIServerApp = {
+        app with
+            PlatformKeyStore = Some store
     }
 
     /// Drive the final composition. Returns the process exit code.

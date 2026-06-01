@@ -202,6 +202,8 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                         ActiveProviderLabel = activeLabel p
                         PlatformModelOverride =
                             ProviderProfile.surfaceModelOverride AIProviderSurface.platformModelKey p
+                        PlatformProviderOverride =
+                            ProviderProfile.surfaceProviderOverride AIProviderSurface.platformProviderKey p
                     }
             }
 
@@ -434,19 +436,26 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                 // choice, not a team-configuration change. Only the model
                 // choice is user-editable.
                 withScope (fun scope -> async {
-                    // Reject models that aren't declared by the platform
-                    // descriptor. Keeps the stored preference aligned
-                    // with what the factory can actually rebuild with.
-                    // `None` is always allowed (clears the override).
+                    // Phase 70: validate the model against ANY wired
+                    // platform descriptor's models (not just the singular
+                    // one). The UI's provider+model picker pairs
+                    // `SetPlatformProviderOverride` with this call when
+                    // the user switches provider, so the model belongs
+                    // to whichever provider the user just chose. `None`
+                    // is always allowed (clears the override).
                     let validates =
-                        match modelOpt, factory.PlatformDescriptor with
+                        match modelOpt, factory.PlatformDescriptors with
                         | None, _ -> Ok()
-                        | Some _, None -> Error "This deployment has no platform-configured AI provider."
-                        | Some m, Some desc ->
-                            if desc.SupportedModels |> List.contains m || m = desc.DefaultModel then
+                        | Some _, [] -> Error "This deployment has no platform-configured AI provider."
+                        | Some m, descriptors ->
+                            let isKnown =
+                                descriptors
+                                |> List.exists (fun d -> d.SupportedModels |> List.contains m || m = d.DefaultModel)
+
+                            if isKnown then
                                 Ok()
                             else
-                                Error $"Model '{m}' is not supported by the platform provider."
+                                Error $"Model '{m}' is not supported by any configured platform provider."
 
                     match validates with
                     | Error e -> return Error e
@@ -473,6 +482,55 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                         | Error e ->
                             logger.Warn
                                 $"AI settings: platform model override save failed scope={scope.Container}: {e}"
+
+                            return Error e
+                })
+
+        SetPlatformProviderOverride =
+            fun providerIdOpt ->
+                // Phase 70 — same user-rendering scope semantics as
+                // `SetPlatformModelOverride`. Validates the supplied id
+                // against the deployment's wired `PlatformDescriptors`;
+                // `None` clears the override (resolution falls back to
+                // the first descriptor).
+                withScope (fun scope -> async {
+                    let validates =
+                        match providerIdOpt, factory.PlatformDescriptors with
+                        | None, _ -> Ok()
+                        | Some _, [] -> Error "This deployment has no platform-configured AI provider."
+                        | Some id, descriptors ->
+                            if descriptors |> List.exists (fun d -> d.Id = id) then
+                                Ok()
+                            else
+                                Error $"Provider '{id}' is not configured for this deployment."
+
+                    match validates with
+                    | Error e -> return Error e
+                    | Ok() ->
+                        let! existing = providerProfile.Get scope
+                        let current = existing |> Option.defaultValue (ProviderProfile.empty ())
+
+                        let updated = {
+                            (current
+                             |> ProviderProfile.withSurfaceProviderOverride
+                                 AIProviderSurface.platformProviderKey
+                                 providerIdOpt) with
+                                UpdatedAt = DateTime.UtcNow
+                        }
+
+                        let! result = providerProfile.Set(scope, updated)
+
+                        match result with
+                        | Ok() ->
+                            let rendered = providerIdOpt |> Option.defaultValue "<cleared>"
+
+                            logger.Info
+                                $"AI settings: platform provider override set to '{rendered}' scope={scope.Container}"
+
+                            return Ok()
+                        | Error e ->
+                            logger.Warn
+                                $"AI settings: platform provider override save failed scope={scope.Container}: {e}"
 
                             return Error e
                 })

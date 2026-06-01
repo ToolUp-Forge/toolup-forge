@@ -32,6 +32,13 @@ type AIUserConfigView = {
     /// single `GetMyConfig` round-trip covers both BYOK instances and
     /// the platform-model preference.
     PlatformModelOverride: string option
+    /// Phase 70 — user's preferred provider id when the deployment
+    /// wires ≥2 platform providers (Anthropic + OpenAI + Gemini etc.).
+    /// `None` → use the first descriptor on `PlatformDescriptors` as
+    /// the default. A stored value pointing at a no-longer-wired
+    /// provider resolves silently to the same default (matches the
+    /// `PlatformModelOverride` stale-value precedent in Phase 43.A).
+    PlatformProviderOverride: string option
 }
 
 module AIUserConfigView =
@@ -39,6 +46,7 @@ module AIUserConfigView =
         ConfiguredProviders = []
         ActiveProviderLabel = None
         PlatformModelOverride = None
+        PlatformProviderOverride = None
     }
 
 // ─── Save request ────────────────────────────────────────────────
@@ -115,4 +123,14 @@ type AISettingsApi = {
     /// descriptor's `DefaultModel`. In `Anonymous` mode the request
     /// is rejected (no persistent config scope).
     SetPlatformModelOverride: string option -> Async<Result<unit, string>>
+    /// Phase 70 — Set (or clear) the caller's preferred provider id
+    /// when the deployment wires ≥2 platform providers. Persisted at
+    /// the caller's config scope. `None` clears the override —
+    /// resolution falls back to the first descriptor on
+    /// `PlatformDescriptors`. Validation: when `Some id` is supplied,
+    /// `id` must match one of the wired descriptors (queried via
+    /// `factory.PlatformDescriptors`); unknown values reject. Same
+    /// scope semantics as `SetPlatformModelOverride` — user-rendering
+    /// choice, not team-config.
+    SetPlatformProviderOverride: string option -> Async<Result<unit, string>>
 }
