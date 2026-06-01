@@ -56,11 +56,18 @@
     <PackageVersion Include="Fable.Parsimmon" Version="4.1" />
     <PackageVersion Include="Fable.React.Types" Version="18.4" />
     <PackageVersion Include="Fable.ReactDom.Types" Version="18.2" />
-    <PackageVersion Include="ToolUp.Remoting.AspNetCore" Version="0.1.15" />
-    <PackageVersion Include="ToolUp.Remoting.Client" Version="0.1.15" />
-    <PackageVersion Include="ToolUp.Remoting.Giraffe" Version="0.1.15" />
-    <PackageVersion Include="ToolUp.Remoting.Json" Version="0.1.15" />
-    <PackageVersion Include="ToolUp.Remoting.Server" Version="0.1.15" />
+    <!--
+      0.4.4 — The ToolUp.Remoting.{Client,Server,Json,Giraffe,AspNetCore,
+      MsgPack} packages were folded directly into ToolUp.Platform.Core
+      (MsgPack), ToolUp.Platform.Client (Client) and ToolUp.Platform.Server
+      (Server / Json / Giraffe / AspNetCore). The transport is a forge
+      implementation detail rather than a separately consumable concern.
+      The `namespace ToolUp.Remoting.*` is preserved across every moved
+      file, so every `open ToolUp.Remoting.Server` / `.Client` /
+      `.Giraffe` / `.AspNetCore` call site continues to compile unchanged
+      — consumers drop the PackageReferences and pick up the runtime via
+      Platform.Core / .Client / .Server.
+    -->
     <PackageVersion Include="Fable.SimpleHttp" Version="3.6" />
     <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
     <PackageVersion Include="Fake.Core.CommandLineParsing" Version="6.1.4" />
@@ -180,7 +187,7 @@
     The PackageVersion entries here are unchanged at split time.
   -->
   <PropertyGroup>
-    <ToolUpSdkVersion>0.4.3</ToolUpSdkVersion>
+    <ToolUpSdkVersion>0.4.4</ToolUpSdkVersion>
   </PropertyGroup>
   <ItemGroup>
     <!-- ToolUp.Platform — the SDK floor -->

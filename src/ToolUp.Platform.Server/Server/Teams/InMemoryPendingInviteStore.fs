@@ -83,9 +83,12 @@ module PendingInviteStore =
             let json = Encoding.UTF8.GetString bytes
 
             try
-                JsonConvert.DeserializeObject<Map<string, PendingInviteByEmail>>(json)
-                |> Option.ofObj
-                |> Option.defaultValue Map.empty
+                // 0.4.4 — `Option.ofObj` requires `'T : null`, which F# Map
+                // doesn't satisfy. Box then null-check; defensive against
+                // a deserialiser that hands back null on malformed input.
+                match JsonConvert.DeserializeObject<Map<string, PendingInviteByEmail>>(json) |> box with
+                | null -> Map.empty
+                | _ as o -> o :?> Map<string, PendingInviteByEmail>
             with _ ->
                 Map.empty
 

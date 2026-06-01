@@ -33,6 +33,45 @@
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
     </ItemGroup>
     <ItemGroup>
+        <!-- 0.4.4 — ToolUp.Remoting.{Json,Server,Giraffe,AspNetCore}
+             folded in from the formerly-separate sibling repo. The
+             transport is a forge implementation detail; one package
+             instead of four. Namespace `ToolUp.Remoting.*` is preserved
+             across every moved file so every existing
+             `open ToolUp.Remoting.Server` / `.Giraffe` / `.AspNetCore`
+             site keeps compiling unchanged.
+
+             Compile order matches the original cross-package dependency
+             order: Json (server-side JSON converters) -> Server core
+             dispatcher + auth + rate-limit + audit + etc. -> Giraffe
+             adapter -> AspNetCore middleware. MsgPack types (used by
+             Server/Proxy.fs) come in via ProjectReference to
+             ToolUp.Platform.Core which carries the folded MsgPack
+             source. -->
+        <Compile Include="Server\Remoting\Json\NewtonsoftConverter.fs" />
+        <Compile Include="Server\Remoting\Json\SystemTextJsonConverter.fs" />
+        <Compile Include="Server\Remoting\Types.fs" />
+        <Compile Include="Server\Remoting\CallContext.fs" />
+        <Compile Include="Server\Remoting\Auth.fs" />
+        <Compile Include="Server\Remoting\RateLimit.fs" />
+        <Compile Include="Server\Remoting\Audit.fs" />
+        <Compile Include="Server\Remoting\Idempotency.fs" />
+        <Compile Include="Server\Remoting\Validation.fs" />
+        <Compile Include="Server\Remoting\Jobs.fs" />
+        <Compile Include="Server\Remoting\Streaming.fs" />
+        <Compile Include="Server\Remoting\SourceGenDispatch.fs" />
+        <Compile Include="Server\Remoting\Errors.fs" />
+        <Compile Include="Server\Remoting\Diagnostics.fs" />
+        <Compile Include="Server\Remoting\Patterns.fs" />
+        <Compile Include="Server\Remoting\Documentation.fs" />
+        <Compile Include="Server\Remoting\Proxy.fs" />
+        <Compile Include="Server\Remoting\DocsApp.fs" />
+        <Compile Include="Server\Remoting\Remoting.fs" />
+        <Compile Include="Server\Remoting\Reader.fs" />
+        <Compile Include="Server\Remoting\ThreadSafeCell.fs" />
+        <Compile Include="Server\Remoting\Giraffe\SharedReader.fs" />
+        <Compile Include="Server\Remoting\Giraffe\GiraffeAdapter.fs" />
+        <Compile Include="Server\Remoting\AspNetCore\Middleware.fs" />
         <Compile Include="Server\Rag\IEmbeddingProvider.fs" />
         <Compile Include="Server\IEmbeddingCache.fs" />
         <Compile Include="Server\Rag\IVectorStore.fs" />
@@ -355,9 +394,20 @@
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />
-    <PackageReference Include="ToolUp.Remoting.Giraffe" />
-    <PackageReference Include="ToolUp.Remoting.Json" />
+    <!-- 0.4.4 — ToolUp.Remoting.{Json,Server,Giraffe,AspNetCore}
+         PackageReferences dropped; source folded under Server/Remoting/
+         per the Compile block above. Microsoft.IO.RecyclableMemoryStream
+         was a transitive dep of ToolUp.Remoting.Server / Giraffe /
+         AspNetCore — now declared explicitly. -->
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
     <PackageReference Include="Newtonsoft.Json" />
-    <!-- FSharp.Core is implicit via the .NET SDK. -->
+    <!-- 0.4.4 — explicit FSharp.Core PackageReference. Pre-fold, the
+         transitively-resolved FSharp.Core was 10.1.300 (Directory.Packages.props
+         pins). Post-fold, one of the dropped ToolUp.Remoting.* packages
+         no longer floors FSharp.Core, and NuGet picks 6.0.0 from a
+         lower dep — which lacks the `objnull` type the F# 10 compiler
+         emits. Explicit reference forces the centrally-pinned version
+         back into scope. -->
+    <PackageReference Include="FSharp.Core" />
   </ItemGroup>
 </Project>

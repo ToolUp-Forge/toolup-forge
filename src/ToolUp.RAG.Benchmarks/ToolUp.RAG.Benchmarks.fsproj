@@ -48,8 +48,8 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
+    <!-- 0.4.4 — ToolUp.Remoting.{Giraffe,Json} flow transitively from
+         ToolUp.Platform.Server after the fold. -->
     <PackageReference Include="Giraffe" />
-    <PackageReference Include="ToolUp.Remoting.Giraffe" />
-    <PackageReference Include="ToolUp.Remoting.Json" />
   </ItemGroup>
 </Project>

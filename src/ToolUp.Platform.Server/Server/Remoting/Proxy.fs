@@ -1,0 +1,483 @@
+module ToolUp.Remoting.Server.Proxy
+
+// This module is the INTERNAL implementation of both serializer paths. It
+// uses `ToolUp.Remoting.Json.FableJsonConverter` (deprecated) for the
+// Newtonsoft branch the consumer opted into via `Remoting.withNewtonsoftJson`.
+// External consumers see the deprecation warning if they touch the type
+// directly; the internal Newtonsoft branch is a supported legacy path until
+// the next major version, so suppress here.
+#nowarn "44"
+
+open ToolUp.Remoting.Json
+open Newtonsoft.Json
+open TypeShape
+open ToolUp.Remoting
+open System
+open System.Buffers
+open Newtonsoft.Json.Linq
+open System.IO
+open System.Text
+open System.Threading.Tasks
+open Microsoft.Net.Http.Headers
+open Microsoft.AspNetCore.WebUtilities
+
+let private settings =
+    JsonSerializerSettings(DateParseHandling = DateParseHandling.None)
+
+let private fableSerializer =
+    let serializer = JsonSerializer()
+    serializer.Converters.Add(FableJsonConverter())
+    serializer
+
+let private jsonEncoding = UTF8Encoding false
+
+let jsonSerialize (o: 'a) (stream: Stream) =
+    use sw = new StreamWriter(stream, jsonEncoding, 1024, true)
+    use writer = new JsonTextWriter(sw, CloseOutput = false)
+    fableSerializer.Serialize(writer, o)
+
+/// Serialise the value to the output stream using the configured backend.
+/// `NewtonsoftJson` → existing FableJsonConverter path; `SystemTextJson opts`
+/// → System.Text.Json.JsonSerializer.Serialize with the provided options.
+///
+/// Public so sibling adapters (Suave, Falco, AspNetCore, AwsLambda,
+/// AzureFunctions.Worker, Giraffe) can route their response-path serialisation
+/// (docs schema, error bodies, etc.) through the same backend-aware path the
+/// main proxy uses. Without this, those adapters' helper functions would
+/// silently fall back to Newtonsoft for docs / error responses even when
+/// the consumer opted in to STJ.
+let jsonSerializeWithBackend (backend: JsonSerializerBackend) (o: 'a) (stream: Stream) =
+    match backend with
+    | NewtonsoftJson -> jsonSerialize o stream
+    | SystemTextJson stjOptions -> System.Text.Json.JsonSerializer.Serialize<'a>(stream, o, stjOptions)
+
+/// Parse the outer arguments-array JSON text into a list of raw per-argument
+/// JSON strings, branching on backend. The result is backend-agnostic — any
+/// parser the per-argument deserialise path picks can re-parse each element's
+/// text. STJ consumers therefore exercise no Newtonsoft code path at runtime.
+let private parseArgumentArray
+    (backend: JsonSerializerBackend)
+    (functionName: string)
+    (expectedArgCount: int)
+    (text: string)
+    : string list =
+    match backend with
+    | NewtonsoftJson ->
+        let token = JsonConvert.DeserializeObject<JToken>(text, settings)
+
+        if token.Type <> JTokenType.Array then
+            failwithf
+                "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
+                functionName
+                expectedArgCount
+
+        token :?> JArray
+        |> Seq.map (fun el -> el.ToString(Formatting.None))
+        |> Seq.toList
+    | SystemTextJson _ ->
+        use doc = System.Text.Json.JsonDocument.Parse(text)
+
+        if doc.RootElement.ValueKind <> System.Text.Json.JsonValueKind.Array then
+            failwithf
+                "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
+                functionName
+                expectedArgCount
+
+        doc.RootElement.EnumerateArray()
+        |> Seq.map (fun el -> el.GetRawText())
+        |> Seq.toList
+
+// A dedicated JsonSerializer instance for per-argument Newtonsoft
+// deserialise. Has DateParseHandling.None applied directly — required to
+// preserve DateTimeOffset offsets through the nested JTokenReader inside
+// the FableJsonConverter's Kind.Union case branch. Without this, a Just
+// (DTO +5:00) round-trip on the Newtonsoft path silently rewrites the
+// offset to the server's local timezone (surfaced by the Maybe<DateTimeOffset>
+// canary test in LegacyNewtonsoftIntegrationTests.fs).
+let private fableArgSerializer =
+    let serializer = JsonSerializer()
+    serializer.DateParseHandling <- DateParseHandling.None
+    serializer.DateTimeZoneHandling <- DateTimeZoneHandling.RoundtripKind
+    serializer.DateFormatHandling <- DateFormatHandling.IsoDateFormat
+    serializer.Converters.Add(FableJsonConverter())
+    serializer
+
+/// Parse one already-extracted argument's raw JSON text into 'inp using the
+/// configured backend.
+///
+/// Newtonsoft path: re-parses argText into a JToken with DateParseHandling.None
+/// (keeps date strings as String JValues, no auto-conversion to DateTime),
+/// then uses `JToken.ToObject<'inp>(fableArgSerializer)` for the typed
+/// conversion. The fableArgSerializer ALSO has DateParseHandling.None — this
+/// is load-bearing for DateTimeOffset preservation: the typed conversion
+/// goes through a nested JTokenReader inside FableJsonConverter's Kind.Union
+/// branch, and that reader inherits DateParseHandling from the serializer.
+/// With DateParseHandling.DateTime (the default), DateTimeOffset round-trips
+/// silently lose their original offset.
+///
+/// STJ path: direct deserialise via STJ — no Newtonsoft API touched.
+let private deserialiseArgWithBackend<'inp> (backend: JsonSerializerBackend) (argText: string) : 'inp =
+    match backend with
+    | NewtonsoftJson ->
+        let token = JsonConvert.DeserializeObject<JToken>(argText, settings)
+        token.ToObject<'inp>(fableArgSerializer)
+    | SystemTextJson stjOptions -> System.Text.Json.JsonSerializer.Deserialize<'inp>(argText, stjOptions)
+
+type private MsgPackSerializer<'a> =
+    static let serializer = MsgPack.Write.makeSerializer<'a> ()
+    static member Serialize(o, stream) = serializer.Invoke(o, stream)
+
+let private recyclableMemoryStreamManager =
+    Lazy<Microsoft.IO.RecyclableMemoryStreamManager>()
+
+let getRecyclableMemoryStreamManager options =
+    options.RmsManager
+    |> Option.defaultWith (fun _ -> recyclableMemoryStreamManager.Value)
+
+let private typeNames inputTypes =
+    inputTypes
+    |> Array.map Diagnostics.typePrinter
+    |> String.concat ", "
+    |> sprintf "[%s]"
+
+let private (|FSharpAsync|_|) (s: TypeShape) =
+    match s.ShapeInfo with
+    | Generic(td, ta) when td = typedefof<Async<_>> ->
+        Activator.CreateInstanceGeneric<ShapeFSharpAsyncOrTask<_>>(ta) :?> IShapeFSharpAsyncOrTask
+        |> Some
+    | _ -> None
+
+let private (|Task|_|) (s: TypeShape) =
+    match s.ShapeInfo with
+    | Generic(td, ta) when td = typedefof<Task<_>> ->
+        Activator.CreateInstanceGeneric<ShapeFSharpAsyncOrTask<_>>(ta) :?> IShapeFSharpAsyncOrTask
+        |> Some
+    | _ -> None
+
+/// 0.1.15 — copy a multipart section's body into the supplied stream
+/// with a hard byte cap. Raises a clear error if the cap is exceeded
+/// before materialising the entire section's bytes (would otherwise
+/// OOM the host on a hostile request).
+let private copyWithCap (source: Stream) (target: Stream) (cap: int64) (sectionIdx: int) : System.Threading.Tasks.Task =
+    task {
+        let buffer = ArrayPool<byte>.Shared.Rent(64 * 1024)
+
+        try
+            let mutable copied = 0L
+            let mutable keepReading = true
+
+            while keepReading do
+                let! n = source.ReadAsync(buffer, 0, buffer.Length)
+
+                if n <= 0 then
+                    keepReading <- false
+                else
+                    copied <- copied + int64 n
+
+                    if copied > cap then
+                        // 0.1.16 — typed exception so the adapter can map
+                        // to `ErrorCategory.User` + 413 Payload Too Large
+                        // rather than the generic `System` category any
+                        // plain failwithf would land in.
+                        raise (
+                            MultipartCapExceededException(
+                                sprintf
+                                    "Multipart section %d exceeds the configured byte cap (%d bytes). Adjust via Remoting.withMaxMultipartSectionBytes if your application requires larger uploads."
+                                    sectionIdx
+                                    cap
+                            )
+                        )
+
+                    do! target.WriteAsync(buffer, 0, n)
+        finally
+            ArrayPool<byte>.Shared.Return buffer
+    }
+    :> System.Threading.Tasks.Task
+
+let private readMultipartArgs props (options: RemotingOptions<_, _>) =
+    task {
+        let mediaType = MediaTypeHeaderValue.Parse props.InputContentType
+        let boundary = HeaderUtilities.RemoveQuotes mediaType.Boundary
+
+        if
+            Microsoft.Extensions.Primitives.StringSegment.IsNullOrEmpty boundary
+            || boundary.Length > 70
+        then
+            failwith "Multipart boundary missing or too long"
+
+        let reader = MultipartReader(boundary.ToString(), props.Input)
+        let parts = ResizeArray()
+        let mutable go = true
+        let mutable sectionIdx = 0
+        let sectionCap = options.MaxMultipartSectionBytes
+        let sectionCountCap = options.MaxMultipartSections
+
+        while go do
+            let! section = reader.ReadNextSectionAsync()
+
+            if isNull section then
+                go <- false
+            else
+                if sectionIdx >= sectionCountCap then
+                    // 0.1.16 — typed exception (see copyWithCap above).
+                    raise (
+                        MultipartCapExceededException(
+                            sprintf
+                                "Multipart request exceeds the configured section count cap (%d). Adjust via Remoting.withMaxMultipartSections if your application requires more sections."
+                                sectionCountCap
+                        )
+                    )
+
+                if section.ContentType.Equals("application/octet-stream", StringComparison.Ordinal) then
+                    use buffer =
+                        (getRecyclableMemoryStreamManager options).GetStream "remoting-input-multipart"
+
+                    do! copyWithCap section.Body buffer sectionCap sectionIdx
+                    parts.Add(buffer.GetReadOnlySequence().ToArray() |> Choice1Of2)
+                else
+                    // Text sections also need to be bounded — drain into a
+                    // capped MemoryStream then decode as UTF-8.
+                    use buffer =
+                        (getRecyclableMemoryStreamManager options).GetStream "remoting-input-multipart-text"
+
+                    do! copyWithCap section.Body buffer sectionCap sectionIdx
+
+                    let text =
+                        System.Text.Encoding.UTF8.GetString(buffer.GetReadOnlySequence().ToArray())
+                    // Multipart JSON sections are single values (one argument per
+                    // multipart part), so the section's text IS the raw JSON text
+                    // for that argument — no outer array unwrap required.
+                    parts.Add(Choice2Of2 text)
+
+                sectionIdx <- sectionIdx + 1
+
+        return Seq.toList parts
+    }
+
+let rec private makeEndpointProxy<'fieldPart>
+    (makeProps: MakeEndpointProps)
+    : 'fieldPart -> InvocationPropsInt -> Task<InvocationResult> =
+    let wrap (p: 'a -> InvocationPropsInt -> Task<InvocationResult>) =
+        unbox<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> p
+
+    // Check that no arguments are left
+    let validateArgumentCount props makeProps =
+        match props.Arguments with
+        | _ :: _ ->
+            let typeInfo =
+                typeNames makeProps.FlattenedTypes.[0 .. makeProps.FlattenedTypes.Length - 2]
+
+            failwithf
+                "The record function '%s' expected %d argument(s) of the types %s but got %d argument(s) in the input JSON array"
+                makeProps.FieldName
+                (makeProps.FlattenedTypes.Length - 1)
+                typeInfo
+                props.Arguments.Length
+        | _ -> ()
+
+    let writeToOutputMemoryStream isBinaryOutput (props: InvocationPropsInt) result =
+        if
+            isBinaryOutput
+            && props.IsProxyHeaderPresent
+            && makeProps.ResponseSerialization.IsJson
+        then
+            let data = box result :?> byte[]
+            props.Output.Write(data, 0, data.Length)
+        elif makeProps.ResponseSerialization.IsJson then
+            jsonSerializeWithBackend makeProps.JsonSerializer result props.Output
+        else
+            MsgPackSerializer.Serialize(result, props.Output)
+
+        props.Output.Position <- 0L
+
+    match shapeof<'fieldPart> with
+    | FSharpAsync a ->
+        a.Element.Accept
+            { new ITypeVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
+                member _.Visit<'result>() =
+                    let isBinaryOutput = typeof<'result> = typeof<byte[]>
+
+                    wrap (fun (s: Async<'result>) props ->
+                        task {
+                            validateArgumentCount props makeProps
+                            let! result = s
+                            writeToOutputMemoryStream isBinaryOutput props result
+                            return Success isBinaryOutput
+                        }) }
+    | Task t ->
+        t.Element.Accept
+            { new ITypeVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
+                member _.Visit<'result>() =
+                    let isBinaryOutput = typeof<'result> = typeof<byte[]>
+
+                    wrap (fun (s: Task<'result>) props ->
+                        task {
+                            validateArgumentCount props makeProps
+                            let! result = s
+                            writeToOutputMemoryStream isBinaryOutput props result
+                            return Success isBinaryOutput
+                        }) }
+    | Shape.FSharpFunc func ->
+        func.Accept
+            { new IFSharpFuncVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
+                member _.Visit<'inp, 'out>() =
+                    let outp = makeEndpointProxy<'out> makeProps
+
+                    wrap (fun (f: 'inp -> 'out) props ->
+                        match props.Arguments with
+                        | Choice1Of2 bytes :: t ->
+                            if typeof<'inp> <> typeof<byte[]> then
+                                failwithf
+                                    "The record function '%s' expected an argument of type %s, but got binary input"
+                                    makeProps.FieldName
+                                    typeof<'inp>.Name
+
+                            let inp = box bytes :?> 'inp
+                            outp (f inp) { props with Arguments = t }
+                        | Choice2Of2 argText :: t ->
+                            // Per-Phase 4f: argText is the raw JSON text for
+                            // this single argument. The outer array was
+                            // already parsed (in the request body parser or
+                            // multipart reader, branched on backend), so the
+                            // per-arg path is also fully backend-agnostic —
+                            // STJ consumers exercise no Newtonsoft code path.
+                            let inp = deserialiseArgWithBackend<'inp> makeProps.JsonSerializer argText
+                            outp (f inp) { props with Arguments = t }
+                        | [] when typeof<'inp> = typeof<unit> ->
+                            let inp = box () :?> _
+                            outp (f inp) { props with Arguments = [] }
+                        | [] ->
+                            let typeInfo =
+                                typeNames makeProps.FlattenedTypes.[0 .. makeProps.FlattenedTypes.Length - 2]
+
+                            failwithf
+                                "The record function '%s' expected %d argument(s) of the types %s but got %d argument(s) in the input"
+                                makeProps.FieldName
+                                (makeProps.FlattenedTypes.Length - 1)
+                                typeInfo
+                                props.Arguments.Length) }
+    | _ ->
+        // Phase 69c — streaming methods returning IAsyncEnumerable<'T>
+        // are handled by the adapter's SSE short-circuit BEFORE the proxy
+        // dispatches. Emit a no-op endpoint here so startup classification
+        // doesn't reject the record; the adapter never invokes this stub
+        // for streaming methods at request time.
+        let returnT = typeof<'fieldPart>
+
+        let isStreamingReturn =
+            returnT.IsGenericType
+            && returnT.GetGenericTypeDefinition() = typedefof<System.Collections.Generic.IAsyncEnumerable<_>>
+
+        let isStreamingFuncReturn =
+            FSharp.Reflection.FSharpType.IsFunction returnT
+            && (let _, ret = FSharp.Reflection.FSharpType.GetFunctionElements returnT
+
+                ret.IsGenericType
+                && ret.GetGenericTypeDefinition() = typedefof<System.Collections.Generic.IAsyncEnumerable<_>>)
+
+        if isStreamingReturn || isStreamingFuncReturn then
+            fun (_: 'fieldPart) (_: InvocationPropsInt) ->
+                Task.FromResult(
+                    InvocationResult.Exception(
+                        exn
+                            "Phase 69c streaming method invoked through proxy fallback — adapter SSE short-circuit was skipped",
+                        makeProps.FieldName,
+                        None
+                    )
+                )
+        else
+            failwithf
+                "The type '%s' of the record field '%s' for record type '%s' is not valid. It must either be Async<'t>, Task<'t> or a function that returns either (i.e. 'u -> Async<'t>)"
+                typeof<'fieldPart>.Name
+                makeProps.FieldName
+                makeProps.RecordName
+
+let makeApiProxy<'impl, 'ctx>
+    (options: RemotingOptions<'ctx, 'impl>)
+    : InvocationProps<'impl> -> Task<InvocationResult> =
+    let wrap (p: InvocationProps<'a> -> Task<InvocationResult>) =
+        unbox<InvocationProps<'impl> -> Task<InvocationResult>> p
+
+    let memberVisitor (shape: IShapeMember<'impl>, flattenedTypes: Type[]) =
+        shape.Accept
+            { new IReadOnlyMemberVisitor<'impl, InvocationProps<'impl> -> Task<InvocationResult>> with
+                member _.Visit(shape: ReadOnlyMember<'impl, 'field>) =
+                    let fieldProxy =
+                        makeEndpointProxy<'field>
+                            { FieldName = shape.MemberInfo.Name
+                              RecordName = typeof<'impl>.Name
+                              ResponseSerialization = options.ResponseSerialization
+                              JsonSerializer = options.JsonSerializer
+                              FlattenedTypes = flattenedTypes }
+
+                    let isNoArg =
+                        flattenedTypes.Length = 1
+                        || (flattenedTypes.Length = 2 && flattenedTypes.[0] = typeof<unit>)
+
+                    wrap (fun (props: InvocationProps<'impl>) ->
+                        task {
+                            let mutable requestBodyText = None
+
+                            try
+                                if
+                                    not (props.HttpVerb.Equals("POST", StringComparison.OrdinalIgnoreCase))
+                                    && not (
+                                        isNoArg && props.HttpVerb.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                                    )
+                                then
+                                    return InvalidHttpVerb
+                                elif
+                                    props.InputContentType.StartsWith("multipart/form-data", StringComparison.Ordinal)
+                                then
+                                    let! args = readMultipartArgs props options
+
+                                    let props' =
+                                        { Arguments = args
+                                          IsProxyHeaderPresent = props.IsProxyHeaderPresent
+                                          Output = props.Output }
+
+                                    return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
+                                else
+                                    use sr = new StreamReader(props.Input)
+                                    let! text = sr.ReadToEndAsync()
+
+                                    let args =
+                                        if String.IsNullOrEmpty text then
+                                            []
+                                        else
+                                            requestBodyText <- Some text
+
+                                            parseArgumentArray
+                                                options.JsonSerializer
+                                                shape.MemberInfo.Name
+                                                (flattenedTypes.Length - 1)
+                                                text
+                                            |> List.map Choice2Of2
+
+                                    let props' =
+                                        { Arguments = args
+                                          IsProxyHeaderPresent = props.IsProxyHeaderPresent
+                                          Output = props.Output }
+
+                                    return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
+                            with e ->
+                                return InvocationResult.Exception(e, shape.MemberInfo.Name, requestBodyText)
+                        }) }
+
+    match shapeof<'impl> with
+    | Shape.FSharpRecord(:? ShapeFSharpRecord<'impl> as shape) ->
+        let endpoints =
+            shape.Fields
+            |> Array.map (fun f ->
+                options.RouteBuilder typeof<'impl>.Name f.MemberInfo.Name,
+                memberVisitor (f, TypeInfo.flattenFuncTypes f.Member.Type))
+            |> Map.ofArray
+
+        wrap (fun (props: InvocationProps<'impl>) ->
+            match Map.tryFind props.EndpointName endpoints with
+            | Some endpoint -> endpoint props
+            | _ -> Task.FromResult EndpointNotFound)
+    | _ ->
+        failwithf
+            "Protocol definition must be encoded as a record type. The input type '%s' was not a record."
+            typeof<'impl>.Name

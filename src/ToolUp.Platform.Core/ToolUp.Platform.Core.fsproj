@@ -18,6 +18,19 @@
     <ItemGroup>
         <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
+    <!-- 0.4.4 — MsgPack's TypeShape module is `module internal TypeShape`
+         (deliberately hidden from Platform.Core's public API to avoid
+         leaking the TypeShape namespace to downstream consumers). The
+         folded ToolUp.Remoting.Server source (in Platform.Server) opens
+         TypeShape directly — `open TypeShape`, `shapeof<_>`, `Shape.X`
+         patterns — and needs visibility into Core's internals. Mirrors
+         the original ToolUp.Remoting.MsgPack -> ToolUp.Remoting.Server
+         InternalsVisibleTo from the pre-fold layout. -->
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>ToolUp.Platform.Server</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\LogLevel.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
@@ -133,6 +146,18 @@
         <Compile Include="Shared\I18nDefaults.fs" />
         <Compile Include="Shared\Interfaces\ILocaleResolver.fs" />
         <Compile Include="Shared\Api.fs" />
+        <!-- 0.4.4 — MsgPack binary format folded in from
+             ToolUp.Remoting.MsgPack. Used by Platform.Server's remoting
+             dispatcher (Server/Remoting/Proxy.fs) and Platform.Client's
+             remoting client (Client/Remoting/Remoting.fs); lives in Core
+             so both tiers compile against the same source rather than
+             duplicating the converters. Compile order matches the
+             original ToolUp.Remoting.MsgPack package order. -->
+        <Compile Include="Shared\Remoting\MsgPack\TypeShape.fs" />
+        <Compile Include="Shared\Remoting\MsgPack\TypeShapeUtils.fs" />
+        <Compile Include="Shared\Remoting\MsgPack\Format.fs" />
+        <Compile Include="Shared\Remoting\MsgPack\Write.fs" />
+        <Compile Include="Shared\Remoting\MsgPack\Read.fs" />
     </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

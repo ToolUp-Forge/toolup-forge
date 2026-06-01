@@ -23,8 +23,9 @@
              SkiaSharp.NativeAssets.Linux (not declared here — kept
              host-specific so Windows / macOS dev doesn't drag in
              native Linux assets). -->
+        <!-- 0.4.4 — ToolUp.Remoting.Giraffe flows transitively from
+             ToolUp.Platform.Server after the fold. -->
         <PackageReference Include="SkiaSharp" />
-        <PackageReference Include="ToolUp.Remoting.Giraffe" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\AssetTypes.fs" />

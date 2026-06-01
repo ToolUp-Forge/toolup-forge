@@ -45,9 +45,10 @@
     <PackageVersion Include="Fable.Remoting.Json" Version="3.0" />
     <!-- Client stack -->
     <PackageVersion Include="Fable.Core" Version="5.0" />
-    <PackageVersion Include="ToolUp.Elmish" Version="0.4.0" />
-    <PackageVersion Include="ToolUp.Elmish.HMR" Version="0.4.0" />
-    <PackageVersion Include="ToolUp.Elmish.React" Version="0.4.0" />
+    <!-- 0.4.4 — ToolUp.Elmish.* (folded into ToolUp.Platform.Client in
+         0.4.3) and ToolUp.Remoting.Client (folded in 0.4.4) PackageVersion
+         entries dropped from the template. Both runtimes arrive
+         transitively through ToolUp.Platform.Client. -->
     <PackageVersion Include="Fable.Remoting.Client" Version="8.0" />
     <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
     <PackageVersion Include="Feliz" Version="3.3.3" />

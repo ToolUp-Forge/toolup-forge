@@ -29,6 +29,15 @@
              across forge and downstream consumers continues to compile
              unchanged. Compile order matches the prior cross-package
              dependency order (core → React → HMR). -->
+        <!-- 0.4.4 — ToolUp.Remoting.Client folded in. The Fable-side
+             RPC proxy + transport. Compiled BEFORE Elmish so
+             Cmd.OfRemoting in the folded Elmish source can reference
+             the Remoting types. -->
+        <Compile Include="Client\Remoting\Types.fs" />
+        <Compile Include="Client\Remoting\Extensions.fs" />
+        <Compile Include="Client\Remoting\Http.fs" />
+        <Compile Include="Client\Remoting\Proxy.fs" />
+        <Compile Include="Client\Remoting\Remoting.fs" />
         <Compile Include="Client\Elmish\Prelude.fs" />
         <Compile Include="Client\Elmish\Cmd.fs" />
         <Compile Include="Client\Elmish\Sub.fs" />
@@ -160,7 +169,10 @@
          explicit and survives any future Elmish source restructure. -->
     <PackageReference Include="Fable.React.Types" />
     <PackageReference Include="Fable.Browser.Dom" />
-    <PackageReference Include="ToolUp.Remoting.Client" />
+    <!-- 0.4.4 — ToolUp.Remoting.Client folded in; PackageReference dropped.
+         The Fable client transport (Browser.XMLHttpRequest, Fable.SimpleJson
+         deserialisation) is now compiled directly under Client/Remoting/. -->
+    <PackageReference Include="Fable.Browser.XMLHttpRequest" />
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Fable.SimpleHttp" />
     <PackageReference Include="Feliz" />

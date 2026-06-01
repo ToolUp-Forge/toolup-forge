@@ -392,7 +392,8 @@
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Expecto" />
-        <PackageReference Include="ToolUp.Remoting.Json" />
+        <!-- 0.4.4 — ToolUp.Remoting.Json folded into ToolUp.Platform.Server;
+             arrives transitively through the ProjectReference above. -->
         <PackageReference Include="StackExchange.Redis" />
         <PackageReference Include="MailKit" />
         <PackageReference Include="WebPush" />

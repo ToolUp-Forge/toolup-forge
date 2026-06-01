@@ -101,9 +101,13 @@ let private fromJson (bytes: byte[]) : UsageRecord list =
         let json = Encoding.UTF8.GetString bytes
 
         try
-            JsonConvert.DeserializeObject<UsageRecord list>(json, jsonSettings)
-            |> Option.ofObj
-            |> Option.defaultValue []
+            // 0.4.4 — `Option.ofObj` requires `'T : null`, which F# lists
+            // don't satisfy. Box then null-check, which keeps the
+            // "deserialiser returned null -> []" defensive shape without
+            // tripping the type-constraint check.
+            match JsonConvert.DeserializeObject<UsageRecord list>(json, jsonSettings) |> box with
+            | null -> []
+            | _ as o -> o :?> UsageRecord list
         with _ ->
             // Defensive: a single corrupt rollup must not break the
             // whole query. Return empty for this bucket and let the
