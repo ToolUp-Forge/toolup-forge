@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Net.Http
 open System.Text
+open System.Text.Json
 open System.Threading
 open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
 open ToolUp.Platform.AI
@@ -42,15 +43,6 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
     /// request. Reads `OPENAI_API_KEY` from the `_platform` scope.
     new(secretStore: ISecretStore, ?model: string) =
         OpenAIProvider((fun () -> secretStore.GetSecret("_platform", "OPENAI_API_KEY")), defaultArg model DefaultModel)
-
-    // Phase 67b — Native structured-output is deferred to a follow-up
-    // commit in this same phase; the OpenAI native shape maps to
-    // `response_format: { type: "json_schema", json_schema: { name,
-    // schema, strict: true } }`. Until then this provider routes via
-    // the default-impl fallback (prepended schema-as-instruction +
-    // JSON-parse validation) so the interface contract is honoured
-    // and structured-output consumers receive a working — if not
-    // server-side-strict — response. Replaced in the next 67b commit.
 
     interface IAIProvider with
         member _.Capabilities = {
@@ -99,7 +91,7 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                     let useStreaming = onStream.IsSome
 
                     let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
-                        let body = buildRequestBody model messages tools systemPrompt useStreaming
+                        let body = buildRequestBody model messages tools systemPrompt useStreaming None
                         let request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
                         request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
                         request.Headers.Add("Authorization", $"Bearer {key}")
@@ -250,18 +242,113 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                     return! retryLoop 0
         }
 
-        // Phase 67b — temporary fallback impl. Replaced with native
-        // `response_format: { type: "json_schema" }` wiring in the next
-        // 67b commit. The fallback prepends the schema as a system-
-        // prompt instruction and post-validates the response is JSON.
-        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
-            IAIProviderDefaults.sendStructuredViaFallback
-                (this :> IAIProvider)
-                messages
-                tools
-                systemPrompt
-                schema
-                retryPolicy
+        // Phase 67b — native structured output via OpenAI's
+        // `response_format: { type: "json_schema", json_schema: { name,
+        // schema, strict: true } }`. Requires gpt-4o-2024-08-06+ or
+        // gpt-4o-mini; older models reject with HTTP 400 (surfaced as
+        // PermanentClient — see retry classification).
+        //
+        // Non-streaming only (streaming structured-output is supported
+        // by OpenAI but deferred to a follow-on phase per the
+        // Out-of-scope list). Vision pre-check mirrors SendMessage.
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let hasImagePart =
+                messages |> List.exists ToolUp.Platform.AI.AIProviderMessage.isMultimodal
+
+            if hasImagePart && not (OpenAIProviderWire.isVisionCapable model) then
+                return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
+            else
+                // Parse the JSON Schema string into a JsonElement. A
+                // malformed schema is a caller defect — surface as
+                // PermanentClient(0). Same precedent as the Gemini
+                // structured path.
+                let parsedSchema =
+                    try
+                        Ok(JsonSerializer.Deserialize<JsonElement>(schema))
+                    with ex ->
+                        Error(PermanentClient(0, sprintf "structuredOutputSchema is not valid JSON: %s" ex.Message))
+
+                match parsedSchema with
+                | Error e -> return Error e
+                | Ok schemaElement ->
+                    let! apiKey = apiKeyFetcher ()
+
+                    match apiKey with
+                    | None ->
+                        return
+                            Error(
+                                PermanentClient(
+                                    0,
+                                    "OPENAI_API_KEY not configured. Set it as an environment variable or in your secret store."
+                                )
+                            )
+                    | Some key ->
+                        let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
+                            let body =
+                                buildRequestBody model messages tools systemPrompt false (Some schemaElement)
+
+                            let request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
+                            request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
+                            request.Headers.Add("Authorization", $"Bearer {key}")
+
+                            use cts =
+                                match retryPolicy.Timeout with
+                                | Some t ->
+                                    let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
+                                    new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
+                                | None -> new CancellationTokenSource()
+
+                            try
+                                let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+
+                                if response.IsSuccessStatusCode then
+                                    let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                                    try
+                                        return Ok(parseResponse responseBody)
+                                    with ex ->
+                                        return Error(MalformedResponse ex.Message)
+                                else
+                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                                    let code = int response.StatusCode
+
+                                    return
+                                        if code = 429 || code >= 500 then
+                                            Error(TransientServer(code, errorBody))
+                                        else
+                                            Error(PermanentClient(code, errorBody))
+                            with
+                            | :? OperationCanceledException when cts.IsCancellationRequested ->
+                                return
+                                    Error(
+                                        TransientNetwork
+                                            $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
+                                    )
+                            | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
+                            | ex -> return Error(TransientNetwork ex.Message)
+                        }
+
+                        let rec retryLoop attemptsMade = async {
+                            let! result = singleAttempt ()
+                            let attemptsMade = attemptsMade + 1
+
+                            match result with
+                            | Ok r -> return Ok r
+                            | Error err when not (AIProviderError.isRetryable err) -> return Error err
+                            | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
+                                return
+                                    if retryPolicy.MaxAttempts = 1 then
+                                        Error err
+                                    else
+                                        Error(RetriesExhausted(attemptsMade, err))
+                            | Error _ ->
+                                let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
+                                do! Async.Sleep delay
+                                return! retryLoop attemptsMade
+                        }
+
+                        return! retryLoop 0
+        }
 
 /// Create using a secret-store read of `OPENAI_API_KEY` on every
 /// request. Legacy single-provider deployment helper.

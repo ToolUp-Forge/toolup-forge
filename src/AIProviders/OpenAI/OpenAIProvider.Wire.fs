@@ -234,12 +234,18 @@ let private buildTools (tools: AIProviderToolDef list) =
         |}
     |})
 
+/// Build the chat-completions request body. `structuredOutputSchema`
+/// (Phase 67b) flips on `response_format: { type: "json_schema",
+/// strict: true }` when supplied; `None` runs the request in normal
+/// free-text / tool-use mode. Mirrors Gemini's wire-layer
+/// `structuredOutputSchema` parameter.
 let buildRequestBody
     (model: string)
     (messages: AIProviderMessage list)
     (tools: AIProviderToolDef list)
     (systemPrompt: string option)
     (stream: bool)
+    (structuredOutputSchema: JsonElement option)
     =
     let msgs = toOpenAIMessages messages
 
@@ -265,6 +271,25 @@ let buildRequestBody
         dict["stream"] <- true
         // Request usage stats in the final stream chunk for future token accounting.
         dict["stream_options"] <- {| include_usage = true |}
+
+    // Phase 67b — structured output. `strict: true` activates OpenAI's
+    // constrained-decoding mode (gpt-4o-2024-08-06+ and gpt-4o-mini);
+    // older models reject the request rather than silently degrading.
+    // `name` is required by the wire format; "structured_response" is a
+    // recipe-neutral identifier (callers cannot supply a name without
+    // expanding the IAIProvider signature, and the provider-side name
+    // has no semantic effect on the response).
+    match structuredOutputSchema with
+    | Some schema ->
+        dict["response_format"] <- {|
+            ``type`` = "json_schema"
+            json_schema = {|
+                name = "structured_response"
+                schema = schema
+                strict = true
+            |}
+        |}
+    | None -> ()
 
     JsonSerializer.Serialize(dict, jsonOptions)
 
