@@ -57,6 +57,18 @@ let configurePipeline
         opts.KnownProxies.Clear()
         app.UseForwardedHeaders(opts) |> ignore
 
+        // Phase 16d follow-up — surface the "trust any peer" posture
+        // explicitly. `KnownIPNetworks` / `KnownProxies` are cleared
+        // above by design, so an attacker sending `X-Forwarded-Proto`
+        // or `X-Forwarded-For` from any peer is honoured. Behind a
+        // single TLS-terminating ingress that's the right shape; in
+        // any other topology operators should pin the proxy CIDR via
+        // a post-`compose` `ForwardedHeadersOptions` registration.
+        // Logged at startup (not per request) so the noise budget is
+        // bounded.
+        resolvedLogger.Warn
+            "ServerConfig.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured from any peer (KnownIPNetworks + KnownProxies cleared by design). Behind a single TLS-terminating ingress this is correct. To pin a known proxy CIDR range, register a custom `ForwardedHeadersOptions` post-`compose`. To opt out entirely, set `TOOLUP_TRUST_FORWARDED_HEADERS=0`."
+
     // Exception-handler middleware. Without this, ASP.NET Core's
     // behaviour depends on the host's `EnvironmentName`: in
     // `Production` an unhandled exception returns an empty 500 (safe);
