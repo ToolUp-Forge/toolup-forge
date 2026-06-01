@@ -99,14 +99,22 @@ let ingestNarrative
                         }
                 }
 
-                // Note: on overwrite with fewer sections than the previous
-                // ingestion, trailing chunks (indices chunks.Length..oldN-1)
-                // orphan in the vector store. The re-ingested chunks 0..N-1
-                // replace the old ones via `IVectorStore.Upsert` idempotency
-                // on (scope, chunkId), so stale *content* never leaks — only
-                // excess count. Matches the existing `DeleteDocument` path
-                // which also leaves orphan chunks. A future vector-chunk
-                // cleanup pass will address both.
+                // Vector-chunk cleanup on overwrite. When the regenerated
+                // narrative has fewer sections than the prior version,
+                // trailing chunks (indices chunks.Length..oldN-1) would
+                // orphan in the vector store — the re-ingestion's
+                // Upsert paths cover 0..N-1 but leave the tail untouched,
+                // so RAG retrieval keeps surfacing stale section content
+                // under the live document id. Delete the tail now while
+                // we still know the old chunk count from the prior
+                // KnowledgeDocument; falls through silently when no
+                // vector store is wired (test harnesses) or when the
+                // new section count meets or exceeds the old.
+                match duplicate, deps.VectorStore with
+                | Some existingDoc, Some vs when chunks.Length < existingDoc.ChunkCount ->
+                    for i in chunks.Length .. existingDoc.ChunkCount - 1 do
+                        do! vs.DeleteChunk deps.VectorScope (sprintf "%s:chunk:%d" docId i)
+                | _ -> ()
 
                 // Persist rendered markdown so the document can be re-read
                 // even if the embedding/store is rebuilt.
@@ -189,11 +197,11 @@ let resetIndex (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
     // Vector chunks are also dropped so RAG stops surfacing the
     // wiped documents. Chunks for each doc are deleted by id
     // (`{docId}:chunk:{i}`) up to its `ChunkCount` — same pattern
-    // `deleteDocument` uses. Note the narrative-overwrite path in
-    // `submitNarrative` still leaves trailing-chunk orphans on a
-    // shrink (its existing comment); that one's a separate fix
-    // because we don't have the prior chunk count there without
-    // re-reading the index inside the lock.
+    // `deleteDocument` uses. The narrative-overwrite path in
+    // `ingestNarrative` does its own per-write trailing-chunk
+    // cleanup (using the prior KnowledgeDocument's ChunkCount
+    // captured before re-ingestion), so by the time we reach this
+    // sweep there are no orphan tails left to chase.
     //
     // No server-side role gate — `ITeamStore` is in the SDK's
     // server-only compile context and isn't visible to module
