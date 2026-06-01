@@ -31,7 +31,7 @@ let mySalesModule =
     |> ServerModule.withConfig salesConfigSchema
 
 ServerApp.empty
-|> ServerApp.withConfig { ServerConfig.defaults with Port = 5000; Mode = Individual }
+|> ServerApp.withConfig { ServerConfig.defaults with Port = 5000; Surfaces = Surfaces.individual }
 |> ServerApp.withAuth authProvider
 |> ServerApp.withStorage blobStorage
 |> ServerApp.addModules [ mySalesModule; (* … *) ]
@@ -71,7 +71,7 @@ let modules : ErasedModule list = [
 ]
 
 Client.run
-    { ClientConfig.defaults with AppName = "MyApp"; Mode = Individual }
+    { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual }
     modules
 ```
 
@@ -79,18 +79,19 @@ For AI, wrap the shell with `AIClientConfig.withAIAssistant`:
 
 ```fsharp
 let aiMode = ConfiguredAIAssistant { Name = "Aria"; Icon = "/svg/spark.svg"; ShowSidePanel = true }
-AIClientConfig.run aiMode { ClientConfig.defaults with AppName = "MyApp"; Mode = Individual } modules
+AIClientConfig.run aiMode { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual } modules
 ```
 
-The Elmish shell handles sidebar navigation, module state management, file management UI (when modules declare data types), team management UI (in `Team` / `MultiTeam` modes), and config admin UI.
+The Elmish shell handles sidebar navigation, module state management, file management UI (when modules declare data types), team management UI (when `Surfaces` includes a `Team` profile), and config admin UI.
 
 ## What the SDK auto-injects
 
 `ServerApp.run` automatically adds:
 
-- **Auth provider** — `HeaderAuthProvider` by default (trusts `X-User-Id`, dev-only) or whatever you `withAuth`ed.
-- **Storage scope resolver** — picks one of four implementations based on `ServerConfig.Mode`.
-- **Team store** (in `Team` / `MultiTeam` mode) — default blob-backed `TeamStore` unless you `withTeamStore`ed.
+- **Auth provider** — `HeaderAuthProvider` by default (trusts `X-User-Id`, dev-only) or whatever you `withAuth`ed. `withAuth` is only required when `ServerConfig.Surfaces` includes a non-Anonymous profile; pure-Anonymous deployments make `withAuth` optional.
+- **Subject resolver** — single `ISubjectResolver` (default `DefaultSubjectResolver`) resolves a `Subject` per request from the validated share-token claim, auth-provider user, active team, or anonymous session id. See [`surfaces.md`](surfaces.md#request-resolution-flow) for the resolution order.
+- **Team store** — auto-wired when `ServerConfig.Surfaces` contains any `Team _` profile. Default blob-backed `BlobTeamStore` unless you `withTeamStore`ed.
+- **Share-token store** — auto-promotes to `BlobShareTokenStore` when `ServerConfig.Surfaces` contains a `ClaimBearer _` profile and `ShareTokenStore` is unset.
 - **File management API** — when any registered module has data types.
 - **Config admin API** — when any registered module declares a `ModuleConfigSchema`.
 - **Audit log** — `AuditLog` backed by `IEventStore`, sourcing events under `_platform.audit`.
@@ -103,10 +104,10 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 `Client.run` adds:
 - The Elmish shell with sidebar navigation
 - Built-in `Data Manager` module (file upload + per-data-type management) — auto-injected when modules declare data types
-- Built-in `Team Manager` module — auto-injected in `Team` / `MultiTeam` modes
+- Built-in `Team Manager` module — auto-injected when `ClientConfig.Surfaces` includes a `Team` profile
 - Built-in `Platform Admin` sidebar group with role-management, health monitoring, and Platform KB administration modules (gated by `PlatformRole`)
 - Built-in `ToastCentre` — fixed-position toast renderer subscribing to `NotificationClient`
-- Built-in `AI Settings` module (in non-Anonymous modes)
+- Built-in `AI Settings` module — auto-injected when `ClientConfig.Surfaces` includes any non-Anonymous profile
 - Notification client over SSE
 - Processed-data context (modules consume processed data via `React.useContext`)
 
@@ -124,16 +125,20 @@ Modules declare:
 
 The shell wires everything else — file uploads, persistence, scope resolution, AI tool registration, config storage, notification routing.
 
-## Scope resolution
+## Subject and scope resolution
 
-Every request resolves a `StorageScope` (`{ ScopeId; Container; Persist }`) via the registered `IStorageScopeResolver`. The four shipped implementations:
+Every request resolves a `Subject` (the four-case DU of `AnonymousSession` / `AuthenticatedUser` / `TeamMember` / `ClaimBearer`) via the registered `ISubjectResolver`. The default `DefaultSubjectResolver` runs a single four-step algorithm: a validated `ShareTokenClaim` stashed by `ShareTokenAuthMiddleware` → `ClaimBearer`; an authenticated user with active team scope → `TeamMember`; an authenticated user without team scope → `AuthenticatedUser`; otherwise → `AnonymousSession`. Team-scope probes cache for 5 minutes (sliding) with `MembershipChanged` invalidation.
 
-- `AnonymousScopeResolver` — scope per session (per-tab); not persisted; evicted after N minutes.
-- `AuthenticatedEphemeralScopeResolver` — scope per authenticated user; not persisted.
-- `AuthenticatedScopeResolver` (`Individual` mode) — scope per user, persisted.
-- `TeamScopeResolver` (`Team` / `MultiTeam` mode) — scope per active team, persisted. Caches active team lookups with 5-minute sliding expiration.
+`StorageScope` (`{ ScopeId; Container; Persist }`) falls out of the resolved `Subject` and the matching `SurfaceProfile`:
 
-`SessionFileStore` uses `scope.Persist` to decide whether to write through to `IBlobStorage`. Per-scope blob containers (`team-{teamId}`, `user-{userId}`, `session-{guid}`) keep data isolated.
+| Subject | `ScopeId` | `Container` | `Persist` |
+|---|---|---|---|
+| `AnonymousSession sid` | `sid` | `session-{sid}` | from `AnonymousConfig.Persistence` (default `Ephemeral`) |
+| `AuthenticatedUser uid` | `uid` | `user-{uid}` | from `AuthenticatedUserConfig.Persistence` (`Persistent` for individual; `Ephemeral` for trial) |
+| `TeamMember (_, tid)` | `tid` | `team-{tid}` | from `TeamConfig.Persistence` (almost always `Persistent`) |
+| `ClaimBearer claim` | `claim.ScopeId` | `claim.ScopeId` | always `true` |
+
+`SessionFileStore` uses `scope.Persist` to decide whether to write through to `IBlobStorage`. Per-scope blob containers keep data isolated. See [`surfaces.md`](surfaces.md#persistence-routing) for the full per-subject persistence routing.
 
 ## Access control
 
@@ -143,11 +148,13 @@ Every request resolves an `AccessContext`:
 type AccessContext = {
     UserId: string
     TeamId: string option
-    Mode: PlatformMode
-    ModulePermissions: Map<string, PermissionLevel>
-    PlatformRole: PlatformRole
+    Subject: Subject
+    ModulePermissions: Map<string, ModulePermission list>
+    PlatformRole: PlatformRole option
 }
 ```
+
+`AccessContext.UserId` carries the session id for `AnonymousSession`, the user id for `AuthenticatedUser` / `TeamMember`, and the claim's `AttributedHandle` (or a synthetic `claim:{tokenId}` when unset) for `ClaimBearer`. Handlers that need team scope match on `match ctx.Subject with TeamMember (uid, tid) -> …` — the compiler refuses the three other cases, so team-scoped code structurally cannot forget to check for membership.
 
 Currently the SDK does not enforce per-module permissions beyond the user's choice via `IPermissionStore`. Module APIs are wrapped in `makePermissionGuardedApi` which checks `ModulePermissions` before each call. Empty map = unrestricted. `PlatformRole.PlatformAdmin` is the deployment-wide admin role.
 

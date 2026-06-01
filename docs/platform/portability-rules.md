@@ -1,6 +1,6 @@
 # Portability rules for distributed implementations
 
-Many SDK interfaces (`IJobScheduler`, `IJobStore`, `IModuleQueryBus`, `INotificationChannel`, `IShareTokenStore`, etc.) could plausibly be implemented by a distributed task framework — Akka.NET, Orleans, Hangfire, Redis-backed, etc. Doing so without breaking consumers requires that the **shape of the contract itself** stays portable.
+Many SDK interfaces (`IJobScheduler`, `IJobStore`, `IModuleQueryBus`, `INotificationChannel`, `IShareTokenStore`, `ISubjectResolver`, `IAnonymousSessionMigrator`, etc.) could plausibly be implemented by a distributed task framework — Akka.NET, Orleans, Hangfire, Redis-backed, etc. Doing so without breaking consumers requires that the **shape of the contract itself** stays portable.
 
 The six rules below define that portability discipline. Any interface that *might* be implemented distributed-side **must** satisfy all six. The conformance test packs (`IJobSchedulerContract`, `IModuleQueryBusContract`, `IShareTokenStoreContract`, `IDataSourceContract`, `IEntityStoreContract`, etc.) are the executable enforcement bar — every implementation passes the same tests.
 
@@ -17,6 +17,8 @@ abstract GetJob: jobId: string -> Async<IActorRef>
 ```
 
 **Why**: identity by value means the same caller can look up the same handle from any node in a cluster. Live handles bind to a process; if that process is gone, so is the handle.
+
+`ISubjectResolver` honours rule 1 by returning a `Subject` record (the four-case DU) rather than a live identity handle — every node resolves the same `Subject` from the same `HttpContext` + claim stash. `IShareTokenStore.ListByIssuer` returns `ShareTokenClaim` records keyed by issuer userId, never an in-memory iterator that would bind to one process.
 
 ## Rule 2 — Async at every boundary
 
@@ -58,6 +60,8 @@ abstract RegisterJob: jobId: string -> handler: ... -> supervisor: SupervisorStr
 
 **Why**: data-shaped retry/supervision serialises across the wire, persists across restarts, and translates cleanly between frameworks. Callback supervision is framework-bound and untransportable.
 
+`RateLimitConfig` follows the same data-not-callback shape — the per-`SubjectKind` policy map (`{ Default; PerShape: Map<SubjectKind, RateLimitPolicy> }`) is a serialisable record, not a function callback resolving a policy per request. A future distributed limiter (Redis-backed token bucket, etc.) consumes the same record and runs the same partitioning algorithm against the resolved `Subject`'s kind. See [`security.md`](security.md#per-shape-rate-limiting-guidance) for the per-shape partition-key contract.
+
 ## Rule 4 — Stateless handlers between invocations
 
 Handler interfaces (`IJobHandler.Execute`, `IQueryHandler.Handle`, notification subscribers) receive all state via parameters (`JobContext`, payload, `AccessContext`). Implementations must NOT assume in-memory state between calls.
@@ -69,6 +73,8 @@ type IJobHandler =
 ```
 
 **Why**: Orleans can deactivate grains between calls; Akka.Persistence can restart actors after a crash. Anything cached in handler instance fields evaporates. Inputs flow on the parameter list; if a handler needs durable state, it persists through `IBlobStorage` / `IEntityStore` / etc.
+
+`IAnonymousSessionMigrator.Migrate` honours this — the per-`userId` `SemaphoreSlim` lock that prevents the double-migration race lives in the SDK middleware, not in migrator instance state. Migrators receive the `AnonymousSessionId` + the resolved `AuthenticatedUser`'s userId per call and must be idempotent: re-running the same migration on already-migrated state returns success without side effects.
 
 ## Rule 5 — No cross-shard ordering promises
 

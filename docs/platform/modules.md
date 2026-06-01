@@ -117,9 +117,47 @@ let helloModule =
     |> ServerModule.withNeedsData [ "SalesData" ]        // declares dependency
     |> ServerModule.withProvides [ "HelloProcessed" ]    // declares output
     |> ServerModule.withAITools [ helloTool ]            // AI-callable tools
+    |> ServerModule.withDefaultSurfaceRequirement
+           SurfaceRequirement.userOrTeam                 // default per-route requirement
+    |> ServerModule.withRoutePrefix "/api/hello/"        // optional — required only when
+                                                         // other modules in the deployment
+                                                         // share a path prefix
+    |> ServerModule.withRouteSurfaceRequirement
+           ("POST", "/api/hello/public/submit")
+           SurfaceRequirement.claimBearerOnly            // per-route override
 ```
 
 Only `create` is mandatory. Each `with*` helper adds a facet; the order doesn't matter. The composition root assembles every module's `ServerModule` record into the running `ServerApp`.
+
+## Surface requirements per route
+
+Every server route declares which subject kinds may reach it via `SurfaceRequirement`. The module-level `DefaultSurfaceRequirement` covers the common case; `withRouteSurfaceRequirement` overrides per route when one endpoint diverges from the module default. The six named helpers cover the common shapes — `SurfaceRequirement.public_`, `.authenticated`, `.userOrTeam`, `.teamScoped`, `.anonymousOnly`, `.claimBearerOnly` — see [`surfaces.md`](surfaces.md#per-route-surfacerequirements) for the helper table and the request-resolution flow.
+
+The strict global default (when no module or route declaration applies) is `userOrTeam`. Fail-closed is the rule — a forgotten declaration produces a 403 the operator notices, not a silent public exposure. The compose-time `SurfaceCoherenceValidator` raises an error when a module's declared default or a per-route override is unreachable under the deployment's `Surfaces` list, so misconfiguration surfaces at startup rather than at first traffic.
+
+## Client-side `Visibility`
+
+The client module registration carries a `Visibility: SubjectKind -> bool` predicate. The shell's sidebar filter hides modules whose predicate returns `false` for the current `Subject`. Four smart constructors cover the common shapes:
+
+```fsharp
+let registerSalesAnalysis () : ErasedModule =
+    ClientModule.create {
+        Init = init
+        Update = update
+        Name = "Sales Analysis"
+        Icon = "/svg/sales.svg"
+    }
+    |> ClientModule.withView view
+    |> ClientModule.withVisibility Visibility.visibleToAuthenticated
+    |> ClientModule.register
+```
+
+- `Visibility.visibleToAll` — every subject kind (default; matches pre-66 behaviour).
+- `Visibility.visibleToAuthenticated` — `UserKind` + `TeamMemberKind` + `ClaimBearerKind`. The right shape for any admin-shaped module in a mixed-mode deployment.
+- `Visibility.visibleToAnonymous` — `AnonymousKind` only. Use for sign-up flows that should disappear once the visitor has signed in.
+- `Visibility.visibleTo [kinds]` — explicit list of admitted kinds. The escape hatch when the three named helpers don't fit.
+
+`Visibility` controls **discovery** — what appears in the sidebar — not authorisation. The server-side `SurfaceRequirement` is the gate; the client predicate removes the surface from the menu for subjects that wouldn't be allowed to reach it anyway. The two declarations move together: a module whose server declares `DefaultSurfaceRequirement = SurfaceRequirement.userOrTeam` carries `Visibility = visibleToAuthenticated` client-side, and so on.
 
 ## Modules vs pages
 

@@ -12,7 +12,7 @@ type IAuthProvider =
     abstract ValidateRequest: HttpContext -> Async<Result<unit, AuthError>>
 ```
 
-`GetUser` returns the resolved identity (or `None` for anonymous requests in `Anonymous` mode). `ValidateRequest` runs cheap pre-checks (token signature, expiry, issuer / audience) and returns `Error` to short-circuit the pipeline.
+`GetUser` returns the resolved identity (or `None` for anonymous requests reaching a deployment whose `Surfaces` includes an `Anonymous` profile). `ValidateRequest` runs cheap pre-checks (token signature, expiry, issuer / audience) and returns `Error` to short-circuit the pipeline. `IAuthProvider` resolves authenticated identity only — the per-request `Subject` (`AnonymousSession` / `AuthenticatedUser` / `TeamMember` / `ClaimBearer`) is the SDK's job and falls out of `ISubjectResolver` against the auth provider's result. See [`surfaces.md`](surfaces.md#the-subject-model) for the subject model and the request-resolution flow.
 
 `AuthenticatedUser` carries:
 - `UserId: string` — stable identity (typically the OIDC `sub` claim or equivalent)
@@ -83,7 +83,7 @@ OidcRegister.register
       Scope = "openid profile email" }
 
 Client.run
-    { ClientConfig.defaults with AppName = "MyApp"; Mode = Individual; AuthUI = ConfiguredAuthUI OidcClient.uiProvider }
+    { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual; AuthUI = ConfiguredAuthUI OidcClient.uiProvider }
     modules
 ```
 
@@ -107,13 +107,13 @@ Clerk is a commercial product with its own licence and pricing — this companio
 
 ```fsharp
 ServerApp.empty
-|> ServerApp.withConfig { ServerConfig.defaults with Mode = Individual }
+|> ServerApp.withConfig { ServerConfig.defaults with Surfaces = Surfaces.individual }
 |> ServerApp.withAuth oidcAuthProvider
 |> ServerApp.addModules modules
 |> ServerApp.run
 ```
 
-Omit the `withAuth` call entirely for `HeaderAuthProvider` (the default). Authenticated modes (`AuthenticatedEphemeral` / `Individual` / `Team` / `MultiTeam`) without `withAuth` will run on the header provider in production — usually a misconfiguration. `HeaderAuthProviderModeValidator` (an `IConfigValidator`) emits a `Warning` if the combination is detected; set `ServerConfig.SkipPreflight = true` to bypass.
+Omit the `withAuth` call entirely for `HeaderAuthProvider` (the default). A deployment whose `Surfaces` includes any non-Anonymous profile without `withAuth` will run on the header provider in production — usually a misconfiguration. `HeaderAuthProviderModeValidator` (an `IConfigValidator`, keyed off `DeploymentConfig.requiresAnyAuth`) emits a `Warning` if the combination is detected; set `ServerConfig.SkipPreflight = true` to bypass. The compose-time `SurfaceCoherenceValidator` raises Rule 8 (Error) when a non-Anonymous `Surfaces` is declared and `ServerApp.withAuth` is never called — see [`security.md`](security.md#validator-coverage-as-a-hardening-lever) for the full validator rule list.
 
 ## Writing a new auth provider
 
@@ -162,7 +162,7 @@ Server-Sent Events open a long-lived connection to `/api/notifications`. The bro
 2. **Cookie** — server sets a session cookie on sign-in; SSE reads it automatically. Risk: CSRF surface. Mitigation: `SameSite=Strict` + CSRF token on state-changing requests.
 3. **Pre-handshake** — a brief `/api/auth/sse-handshake` POST exchanges the bearer token for a short-lived SSE-scoped opaque session ID; `EventSource` connects with that. Most secure; most plumbing.
 
-`SseAuthModeValidator` (an `IConfigValidator`) emits a `Warning` when authenticated modes are configured without a documented SSE auth strategy. Deployments set `ServerConfig.SseAuthMode` explicitly to acknowledge the choice.
+`SseAuthModeValidator` (an `IConfigValidator`) emits a `Warning` when a deployment whose `Surfaces` requires authentication is configured without a documented SSE auth strategy. Deployments set `ServerConfig.SseAuthMode` explicitly to acknowledge the choice.
 
 ## Permissions + roles
 

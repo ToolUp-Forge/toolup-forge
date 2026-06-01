@@ -80,7 +80,7 @@ let config =
     ClientConfigDefaults.fromBundleConstants {
         ClientConfigOverrides.referenceApp with
             AppName = Some "MyApp"
-            Mode = Some Individual
+            Surfaces = Some Surfaces.individual
             GridModules = Some gridModules
             AuthUI = Some authUI
             Handlers = Some Wiring.handlers

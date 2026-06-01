@@ -13,7 +13,7 @@ type IBlobStorage =
     abstract Exists: container: string -> objectId: string -> Async<bool>
 ```
 
-Containers are tenant-scoped (`team-{teamId}`, `user-{userId}`, `session-{guid}`, `_platform`). Object IDs are arbitrary strings — usually structured paths like `objects/{objectId}/v{N}.json`.
+Containers are tenant-scoped (`team-{teamId}`, `user-{userId}`, `session-{guid}`, `claim-{scopeId}` for share-token-bound resources, `_platform`). The container + `Persist` flag for each request fall out of the resolved `Subject` and the matching `SurfaceProfile`'s `Persistence` knob — see [`surfaces.md`](surfaces.md#persistence-routing) for the full per-subject routing table. Object IDs are arbitrary strings — usually structured paths like `objects/{objectId}/v{N}.json`.
 
 The `_platform` container is reserved for SDK-owned state (team memberships, role assignments, encryption keys, audit-sink cursors, config blobs, etc.). Module code never writes there directly.
 
@@ -164,7 +164,7 @@ Storage-related `ServerConfig` fields:
 - `Storage` — `IBlobStorage` instance. Default `LocalFileStorage("./data")`.
 - `EncryptionKeyResolver` — optional `IBlobEncryptionKeyResolver`. When set, `ServerApp.run` wires `EncryptedBlobStorage` around the configured storage.
 - `MaxRequestBodyBytes` — caps single-request uploads. Defaults to generous; tighten for production.
-- `DefaultTeamStorageQuotaBytes` — optional per-team quota (in `Team` / `MultiTeam` mode). Enforced via `ITeamQuotaPolicy` + `IUsageLog`.
+- `DefaultTeamStorageQuotaBytes` — optional per-team quota (applied to `TeamMember` subjects when `Surfaces` includes a `Team` profile). Enforced via `ITeamQuotaPolicy` + `IUsageLog`.
 
 Environment variables (read by the reference deployment, not by the SDK directly):
 - `TOOLUP_STORAGE_PROVIDER=local|aws-s3|azure|gcs` — selects the storage companion.
