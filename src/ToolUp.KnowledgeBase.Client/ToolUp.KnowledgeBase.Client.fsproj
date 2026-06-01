@@ -22,6 +22,7 @@
     <ItemGroup>
         <Compile Include="Client\ClientModel.fs" />
         <Compile Include="Client\Icons.fs" />
+        <Compile Include="Client\KnowledgeListView.fs" />
         <Compile Include="Client\ClientView.fs" />
         <Compile Include="Client\PlatformKnowledgeAdminUI.fs" />
     </ItemGroup>

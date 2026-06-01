@@ -133,6 +133,32 @@ let private recordAudit (auditLog: IAuditLog option) (event: AuditEvent) =
     | Some a -> a.Record(platformContainer, event) |> Async.Start
     | None -> ()
 
+/// Fan a `DataRefreshed("PlatformKnowledgeBase", "_platform")` event out
+/// to every connected SSE client so the team-side "Platform Library" page
+/// and any other Platform Admin tab refreshes without manual reload.
+///
+/// Published on `NotificationKind.PlatformReservedScope` — the magic
+/// scopeId every SSE connection subscribes to on top of its own per-user
+/// scope (see `NotificationHandler.writePlatformEnvelope`). The handler
+/// filters that subscription so only platform-broadcast envelopes the
+/// client should see fan out to the wire; `DataRefreshed` carrying the
+/// `"PlatformKnowledgeBase"` data-type id is the allow-listed shape.
+///
+/// Failure-tolerant — a missing channel or a transport error is logged
+/// and swallowed so a write that succeeded primarily never reports
+/// failure on a best-effort downstream notification.
+let private publishPlatformKbRefresh (deps: KnowledgeApiDeps) = async {
+    if not (isNull (box deps.Notifications)) then
+        try
+            do!
+                deps.Notifications.Publish(
+                    NotificationKind.PlatformReservedScope,
+                    DataRefreshed("PlatformKnowledgeBase", platformContainer)
+                )
+        with ex ->
+            deps.Logger.Error("[PlatformKB] Failed to publish DataRefreshed notification", Some ex)
+}
+
 /// Construct the Fable.Remoting `IPlatformKnowledgeApi` for the current
 /// request. Mirrors `KnowledgeBase.Server.knowledgeApi`'s shape exactly
 /// (build deps once, bind methods to handlers) so the wire-level
@@ -164,6 +190,8 @@ let platformKnowledgeApi (ctx: HttpContext) : PlatformKnowledgeApi.IPlatformKnow
                             SizeBytes = int64 bytes.Length
                         })
 
+                    do! publishPlatformKbRefresh pdeps
+
                     return Ok doc
             }
 
@@ -193,6 +221,10 @@ let platformKnowledgeApi (ctx: HttpContext) : PlatformKnowledgeApi.IPlatformKnow
                                 FileName = doc.FileName
                             })
                     | _ -> ()
+
+                    match result with
+                    | Ok() -> do! publishPlatformKbRefresh pdeps
+                    | Error _ -> ()
 
                     return result
             }
@@ -243,6 +275,8 @@ let platformKnowledgeApi (ctx: HttpContext) : PlatformKnowledgeApi.IPlatformKnow
                                     FileName = doc.FileName
                                     SizeBytes = int64 bytes.Length
                                 })
+
+                            do! publishPlatformKbRefresh pdeps
 
                             return Ok newDoc
             }

@@ -6,6 +6,7 @@ module ClientModel
 open ToolUp.Platform
 open Elmish
 open SharedTypes
+open PlatformKnowledgeApi
 open ToolUp.Remoting.Client
 
 /// Which note the editor panel is currently authoring. `CreateNew`
@@ -46,6 +47,19 @@ type Model = {
     AIContextEditorOpen: bool
     SavingAIContext: bool
     AIContextSaveError: string option
+
+    // ── Platform Library (read-only view of the Platform Knowledge Base) ──
+    /// Cross-team documents the Platform Admin has curated. Loaded on
+    /// first visit to the Platform Library page; refreshed on subsequent
+    /// visits + on `DataRefreshed("PlatformKnowledgeBase", _)` notifications.
+    /// Writes happen exclusively through the separate `_sdk.PlatformKnowledgeAdmin`
+    /// module (gated on `canModifyPlatformConfig`) — this list is read-only
+    /// here so non-admin users get transparent visibility into the shared
+    /// reference content the AI assistant will draw from.
+    PlatformDocuments: KnowledgeDocument list
+    PlatformDocsLoaded: bool
+    PlatformDocsLoading: bool
+    PlatformDocsLoadError: string option
 }
 
 type Msg =
@@ -77,6 +91,10 @@ type Msg =
     | SaveAIContext of body: string
     | AIContextSaved of Result<AIContextEntry, string>
 
+    // ── Platform Library ──
+    | LoadPlatformDocuments of ApiCall<unit, KnowledgeDocument list>
+    | PlatformDocumentsLoadFailed of string
+
 // `withMultipartOptimization` is required for the `byte[]` argument on
 // `UploadDocument`: Fable.Remoting's default JSON transport encodes byte
 // arrays as a JSON array of ints, which Newtonsoft cannot deserialise
@@ -84,6 +102,14 @@ type Msg =
 // arg as `application/octet-stream` and the rest as JSON parts.
 let private knowledgeApi =
     Api.makeProxy<KnowledgeApi> (customOptions = (UserSession.withRequestHeaders >> Remoting.withMultipartOptimization))
+
+/// Read-only proxy used by the team-side "Platform Library" page. Writes
+/// to the Platform Knowledge Base flow through the separate
+/// `_sdk.PlatformKnowledgeAdmin` module's proxy, which is identical at
+/// the wire level but kept distinct so an audit by call-site distinguishes
+/// the two surfaces.
+let private platformKnowledgeApi =
+    Api.makeProxy<IPlatformKnowledgeApi> (customOptions = UserSession.withRequestHeaders)
 
 let init () =
     {
@@ -103,6 +129,11 @@ let init () =
         AIContextEditorOpen = false
         SavingAIContext = false
         AIContextSaveError = None
+
+        PlatformDocuments = []
+        PlatformDocsLoaded = false
+        PlatformDocsLoading = false
+        PlatformDocsLoadError = None
     },
     Cmd.batch [ Cmd.ofMsg (LoadDocuments(Start())); Cmd.ofMsg (LoadAIContext(Start())) ]
 
@@ -364,6 +395,39 @@ let update (msg: Msg) (model: Model) =
             model with
                 SavingAIContext = false
                 AIContextSaveError = Some reason
+        },
+        Cmd.none
+
+    // ── Platform Library ──
+
+    | LoadPlatformDocuments(Start()) ->
+        {
+            model with
+                PlatformDocsLoading = true
+                PlatformDocsLoadError = None
+        },
+        Cmd.OfAsync.either
+            (fun () -> platformKnowledgeApi.ListPlatformDocuments())
+            ()
+            (fun docs -> LoadPlatformDocuments(Finished docs))
+            (fun ex -> PlatformDocumentsLoadFailed ex.Message)
+
+    | LoadPlatformDocuments(Finished docs) ->
+        {
+            model with
+                PlatformDocuments = docs |> List.sortByDescending _.UploadedAt
+                PlatformDocsLoaded = true
+                PlatformDocsLoading = false
+                PlatformDocsLoadError = None
+        },
+        Cmd.none
+
+    | PlatformDocumentsLoadFailed reason ->
+        {
+            model with
+                PlatformDocsLoaded = true
+                PlatformDocsLoading = false
+                PlatformDocsLoadError = Some reason
         },
         Cmd.none
 

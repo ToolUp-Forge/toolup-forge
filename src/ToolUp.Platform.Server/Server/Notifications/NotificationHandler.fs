@@ -132,9 +132,20 @@ let notificationHandler (channel: INotificationChannel) (manager: SSEConnectionM
             // is published cross-scope (one publication per write, every
             // subscriber sees it) so the wire delivers only those that
             // target `scopeId`. Client filters again by `MembershipChangeKind`.
+            //
+            // Platform Knowledge Base writes (`DataRefreshed(
+            // "PlatformKnowledgeBase", _)`) are intentionally fan-out to
+            // every connected client — the Platform Library page is
+            // readable by every authenticated user, so a Platform Admin
+            // upload / delete / promote must refresh everyone's view.
+            // Filtering is by data-type id (`"PlatformKnowledgeBase"`),
+            // not by the affected user, so the same envelope reaches every
+            // subscriber. Future cross-scope DataRefreshed kinds add
+            // additional `DataRefreshed(<kind>, _)` clauses here.
             let writePlatformEnvelope (env: NotificationEnvelope) =
                 match env.Notification with
                 | MembershipChanged payload when payload.AffectedUserId = scopeId -> writeEnvelope env
+                | DataRefreshed("PlatformKnowledgeBase", _) -> writeEnvelope env
                 | _ -> ()
 
             let! platformSubscriptionId =

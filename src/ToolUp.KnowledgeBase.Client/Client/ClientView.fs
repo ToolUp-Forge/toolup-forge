@@ -9,94 +9,10 @@ open ToolUp.Platform
 open ClientModel
 open SharedTypes
 
-// ─── Status badge ─────────────────────────────────────────────────
-
-let private statusBadge (status: IngestionStatus) =
-    match status with
-    | Queued ->
-        Html.span [
-            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600"
-            prop.text "Queued"
-        ]
-    | ExtractingText ->
-        Html.span [
-            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
-            prop.text "Extracting…"
-        ]
-    | Embedding(processed, total) ->
-        Html.span [
-            prop.className
-                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700"
-            prop.text (sprintf "Embedding %d/%d" processed total)
-        ]
-    | Complete count ->
-        Html.span [
-            prop.className
-                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
-            prop.text (sprintf "Indexed (%d chunks)" count)
-        ]
-    | Failed reason ->
-        Html.span [
-            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
-            prop.title reason
-            prop.text "Failed"
-        ]
-
-// ─── Source badge ─────────────────────────────────────────────────
-
-let private sourceBadge (source: KnowledgeSource) =
-    match source with
-    | UploadedFile ->
-        Html.span [
-            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700"
-            prop.text "Upload"
-        ]
-    | FromNarrative src ->
-        let tooltip =
-            src.SettingsDisplay
-            |> List.map (fun (k, v) -> sprintf "%s: %s" k v)
-            |> String.concat "\n"
-
-        Html.span [
-            prop.className
-                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700"
-            prop.title (
-                if tooltip = "" then
-                    src.ModuleId
-                else
-                    sprintf "%s\n%s" src.ModuleId tooltip
-            )
-            prop.text (sprintf "Narrative · %s" src.ModuleId)
-        ]
-    | Note src ->
-        let edited =
-            match src.LastEditedAt with
-            | Some t -> sprintf " · edited %s" (t.ToString("yyyy-MM-dd HH:mm"))
-            | None -> ""
-
-        Html.span [
-            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700"
-            prop.title (sprintf "Authored by %s on %s%s" src.Author (src.CreatedAt.ToString("yyyy-MM-dd HH:mm")) edited)
-            prop.text "Note"
-        ]
-
-// ─── File type badge ──────────────────────────────────────────────
-
-let private fileTypeBadge (fileType: string) =
-    let color =
-        match fileType with
-        | "pdf" -> "bg-red-50 text-red-600"
-        | "pptx" -> "bg-orange-50 text-orange-600"
-        | "docx" -> "bg-blue-50 text-blue-600"
-        | "xlsx" -> "bg-green-50 text-green-600"
-        | "csv" -> "bg-purple-50 text-purple-600"
-        | "note" -> "bg-amber-50 text-amber-600"
-        | _ -> "bg-gray-50 text-gray-600"
-
-    Html.span [
-        prop.className (sprintf "inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium %s" color)
-        prop.text (fileType.ToUpperInvariant())
-    ]
+// Status / source / file-type badges live in `KnowledgeListView.Badges`
+// — referenced here as `KnowledgeListView.Badges.statusBadge` etc. so the
+// Documents page, Notes page, Platform Library page, and the
+// Platform Admin module all render identically.
 
 // ─── Upload zone ──────────────────────────────────────────────────
 
@@ -202,84 +118,35 @@ let private errorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
             ]
         ]
 
-// ─── Document list ────────────────────────────────────────────────
+// ─── Team Documents list ──────────────────────────────────────────
+//
+// Uses the shared `KnowledgeListView` component for filtering / grouping
+// and uniform badge rendering. Notes are filtered out at the source
+// because they have their own dedicated page (the Documents list shows
+// uploads + narratives only).
 
-let private documentRow (doc: KnowledgeDocument) (dispatch: Msg -> unit) : ReactElement =
-    Html.tr [
-        prop.key doc.Id
-        prop.className "hover:bg-gray-50"
-        prop.children [
-            Html.td [
-                prop.className "px-4 py-3 text-sm font-medium text-gray-900"
-                prop.text doc.FileName
-            ]
-            Html.td [ prop.className "px-4 py-3"; prop.children [ fileTypeBadge doc.FileType ] ]
-            Html.td [ prop.className "px-4 py-3"; prop.children [ sourceBadge doc.Source ] ]
-            Html.td [
-                prop.className "px-4 py-3 text-xs text-gray-500"
-                prop.text (doc.UploadedAt.ToString("yyyy-MM-dd HH:mm"))
-            ]
-            Html.td [ prop.className "px-4 py-3"; prop.children [ statusBadge doc.Status ] ]
-            Html.td [
-                prop.className "px-4 py-3 text-right"
-                prop.children [
-                    Html.button [
-                        prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
-                        prop.text "Delete"
-                        prop.onClick (fun _ -> dispatch (DeleteRequested doc.Id))
-                    ]
-                ]
-            ]
-        ]
+let private deleteRowAction (dispatch: Msg -> unit) (doc: KnowledgeDocument) : ReactElement =
+    Html.button [
+        prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
+        prop.text "Delete"
+        prop.onClick (fun _ -> dispatch (DeleteRequested doc.Id))
     ]
 
 let private documentList (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    if model.Documents.IsEmpty then
-        Html.none
-    else
-        Html.div [
-            prop.className "bg-white border border-gray-200 rounded-lg overflow-hidden"
-            prop.children [
-                Html.table [
-                    prop.className "w-full text-sm"
-                    prop.children [
-                        Html.thead [
-                            prop.className "bg-gray-50 border-b border-gray-200"
-                            prop.children [
-                                Html.tr [
-                                    prop.children [
-                                        Html.th [
-                                            prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                            prop.text "File"
-                                        ]
-                                        Html.th [
-                                            prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                            prop.text "Type"
-                                        ]
-                                        Html.th [
-                                            prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                            prop.text "Source"
-                                        ]
-                                        Html.th [
-                                            prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                            prop.text "Added"
-                                        ]
-                                        Html.th [
-                                            prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                            prop.text "Status"
-                                        ]
-                                        Html.th [ prop.className "px-4 py-2" ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                        Html.tbody [
-                            prop.children (model.Documents |> List.map (fun doc -> documentRow doc dispatch))
-                        ]
-                    ]
-                ]
-            ]
-        ]
+    let nonNote =
+        model.Documents
+        |> List.filter (fun d ->
+            match d.Source with
+            | Note _ -> false
+            | _ -> true)
+
+    let config: KnowledgeListView.KnowledgeListConfig = {
+        EmptyStateText = "No documents uploaded yet. Drop files into the upload zone above to get started."
+        RowAction = Some(deleteRowAction dispatch)
+        InstanceKey = "team-documents"
+    }
+
+    KnowledgeListView.KnowledgeListView config nonNote
 
 // ─── Main view ────────────────────────────────────────────────────
 
@@ -380,6 +247,92 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
             errorBanner model dispatch
             UploadZone model dispatch
             documentList model dispatch
+        ]
+    ]
+
+// ─── Platform Library page (read-only view of Platform KB) ────────
+//
+// Every authenticated user can see the cross-team Platform Knowledge
+// Base content from this page — transparency over what reference
+// material the AI assistant draws from. Writes (upload / delete /
+// promote) live exclusively in the separate Platform Admin module,
+// gated server-side on `canModifyPlatformConfig`. Mount-time refresh
+// keeps the list current; there is no server-side live-refresh
+// notification today (admin uploads are infrequent — a manual Reload
+// button covers the gap).
+
+let private platformLibraryErrorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    match model.PlatformDocsLoadError with
+    | None -> Html.none
+    | Some err ->
+        Html.div [
+            prop.className "bg-red-50 border border-red-200 rounded-md px-4 py-3 flex items-start gap-3"
+            prop.children [
+                Html.p [ prop.className "text-sm text-red-700 flex-1"; prop.text err ]
+                Html.button [
+                    prop.className "text-red-400 hover:text-red-600 text-lg"
+                    prop.text "×"
+                    prop.onClick (fun _ -> dispatch DismissError)
+                ]
+            ]
+        ]
+
+[<ReactComponent>]
+let private PlatformLibraryPanel (model: Model) (dispatch: Msg -> unit) =
+    React.useEffectOnce (fun () ->
+        dispatch (LoadPlatformDocuments(Start()))
+
+        // Subscribe to platform-wide refresh fan-out so any Platform Admin
+        // upload / delete / promote in another session refreshes this view
+        // without requiring a manual Reload. Server publishes
+        // `DataRefreshed("PlatformKnowledgeBase", _)` on the reserved
+        // `_platform` scope and `NotificationHandler.writePlatformEnvelope`
+        // forwards the envelope to every connected SSE client.
+        let dispose =
+            NotificationClient.subscribe (fun envelope ->
+                match envelope.Notification with
+                | Notification.DataRefreshed("PlatformKnowledgeBase", _) -> dispatch (LoadPlatformDocuments(Start()))
+                | _ -> ())
+
+        FsReact.createDisposable (fun () -> dispose ()))
+
+    let config: KnowledgeListView.KnowledgeListConfig = {
+        EmptyStateText =
+            "No Platform Knowledge Base content yet. Platform Admins can add cross-team reference material from the Platform Admin section."
+        RowAction = None
+        InstanceKey = "platform-library"
+    }
+
+    Html.div [
+        prop.className "p-6 space-y-6"
+        prop.children [
+            Html.div [
+                prop.className "flex items-center justify-between"
+                prop.children [
+                    Html.div [
+                        prop.children [
+                            Html.h1 [
+                                prop.className "text-xl font-semibold text-gray-900"
+                                prop.text "Platform Library"
+                            ]
+                            Html.p [
+                                prop.className "text-sm text-gray-500 mt-1"
+                                prop.text
+                                    "Cross-team reference material the AI assistant draws from. Read-only — managed by Platform Admins."
+                            ]
+                        ]
+                    ]
+                    Html.button [
+                        prop.className "text-sm text-gray-500 hover:text-gray-700"
+                        prop.disabled model.PlatformDocsLoading
+                        prop.text (if model.PlatformDocsLoading then "Loading…" else "Reload")
+                        prop.title "Re-fetch the Platform KB content from the server."
+                        prop.onClick (fun _ -> dispatch (LoadPlatformDocuments(Start())))
+                    ]
+                ]
+            ]
+            platformLibraryErrorBanner model dispatch
+            KnowledgeListView.KnowledgeListView config model.PlatformDocuments
         ]
     ]
 
@@ -519,7 +472,7 @@ let private noteRow (doc: KnowledgeDocument) (dispatch: Msg -> unit) : ReactElem
                                         prop.className "text-sm font-semibold text-gray-900 truncate"
                                         prop.text title
                                     ]
-                                    statusBadge doc.Status
+                                    KnowledgeListView.Badges.statusBadge doc.Status
                                 ]
                             ]
                             Html.p [
@@ -821,6 +774,9 @@ let private notesView (model: Model) (dispatch: Msg -> unit) : PageContent =
 let private aiContextView (model: Model) (dispatch: Msg -> unit) : PageContent =
     PageContent.FullWidth(AIContextPanel model dispatch)
 
+let private platformLibraryView (model: Model) (dispatch: Msg -> unit) : PageContent =
+    PageContent.FullWidth(PlatformLibraryPanel model dispatch)
+
 // ─── Module registration ──────────────────────────────────────────
 
 /// Companion-exported NarrativeCommit handler. Add to
@@ -853,6 +809,12 @@ let private aiContextPage: PageConfig = {
     Icon = ToolUp.KnowledgeBase.Icons.aiContext
 }
 
+let private platformLibraryPage: PageConfig = {
+    Route = "/platform-library"
+    Title = "Platform Library"
+    Icon = ToolUp.KnowledgeBase.Icons.knowledge
+}
+
 let register () : ToolUp.Platform.ErasedModule =
     ToolUp.Platform.ClientModule.create {
         Init = ClientModel.init
@@ -863,6 +825,7 @@ let register () : ToolUp.Platform.ErasedModule =
     |> ToolUp.Platform.ClientModule.withPages [
         documentsPage, documentsView
         notesPage, notesView
+        platformLibraryPage, platformLibraryView
         aiContextPage, aiContextView
     ]
     |> ToolUp.Platform.ClientModule.withGroup "Knowledge"

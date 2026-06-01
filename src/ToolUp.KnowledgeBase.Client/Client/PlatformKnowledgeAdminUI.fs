@@ -168,46 +168,25 @@ let private errorBanner (message: string) =
         prop.text message
     ]
 
-let private statusLabel (status: IngestionStatus) =
-    match status with
-    | Queued -> "Queued"
-    | ExtractingText -> "Extracting"
-    | Embedding(processed, total) -> sprintf "Embedding %d / %d" processed total
-    | Complete n -> sprintf "Complete (%d chunks)" n
-    | Failed reason -> sprintf "Failed: %s" reason
-
-let private documentRow (model: Model) (dispatch: Msg -> unit) (doc: KnowledgeDocument) =
+/// Per-row action for the shared KnowledgeListView: Delete button + any
+/// inline error from the most-recent delete attempt against this row.
+let private deleteRowAction (model: Model) (dispatch: Msg -> unit) (doc: KnowledgeDocument) =
     let deleteError = model.DeleteError |> Map.tryFind doc.Id
 
     Html.div [
-        prop.className "py-2 px-3 border-b border-border last:border-0"
+        prop.className "flex flex-col items-end gap-1"
         prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between gap-3"
-                prop.children [
-                    Html.div [
-                        prop.className "flex flex-col gap-0.5"
-                        prop.children [
-                            Html.span [
-                                prop.className "text-sm font-medium text-text-primary"
-                                prop.text doc.FileName
-                            ]
-                            Html.span [
-                                prop.className "text-xs text-text-secondary"
-                                prop.text (statusLabel doc.Status)
-                            ]
-                        ]
-                    ]
-                    Html.button [
-                        prop.className
-                            "px-3 py-1 text-xs font-medium rounded border border-red-300 text-red-700 hover:bg-red-50"
-                        prop.text "Delete"
-                        prop.onClick (fun _ -> dispatch (RequestDelete doc.Id))
-                    ]
-                ]
+            Html.button [
+                prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
+                prop.text "Delete"
+                prop.onClick (fun _ -> dispatch (RequestDelete doc.Id))
             ]
             match deleteError with
-            | Some msg -> errorBanner msg
+            | Some msg ->
+                Html.span [
+                    prop.className "text-xs text-red-600 max-w-[14rem] text-right"
+                    prop.text msg
+                ]
             | None -> Html.none
         ]
     ]
@@ -259,48 +238,63 @@ let private uploadPanel (model: Model) (dispatch: Msg -> unit) =
     ]
 
 let private documentsPanel (model: Model) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className "rounded border border-border bg-white"
-        prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between px-3 py-2 border-b border-border"
-                prop.children [
-                    Html.h3 [
-                        prop.className "text-sm font-medium text-text-primary"
-                        prop.text "Platform Knowledge Base documents"
-                    ]
-                    Html.button [
-                        prop.className "text-xs text-brand hover:underline"
-                        prop.text "Refresh"
-                        prop.onClick (fun _ -> dispatch RefreshDocs)
-                    ]
+    let headerRow =
+        Html.div [
+            prop.className "flex items-center justify-between"
+            prop.children [
+                Html.h3 [
+                    prop.className "text-sm font-medium text-text-primary"
+                    prop.text "Platform Knowledge Base documents"
+                ]
+                Html.button [
+                    prop.className "text-xs text-brand hover:underline"
+                    prop.text "Refresh"
+                    prop.onClick (fun _ -> dispatch RefreshDocs)
                 ]
             ]
-            match model.Documents with
-            | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "Loading…" ]
-            | LoadError msg -> errorBanner msg
-            | Loaded [] ->
-                Html.p [
-                    prop.className "text-sm text-text-secondary p-3"
-                    prop.text "No documents in the Platform Knowledge Base yet."
-                ]
-            | Loaded docs ->
-                Html.div [
-                    prop.className "divide-y divide-border"
-                    prop.children (docs |> List.map (documentRow model dispatch))
-                ]
         ]
+
+    let listBody =
+        match model.Documents with
+        | NotLoaded
+        | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "Loading…" ]
+        | LoadError msg -> errorBanner msg
+        | Loaded docs ->
+            let config: KnowledgeListView.KnowledgeListConfig = {
+                EmptyStateText = "No documents in the Platform Knowledge Base yet."
+                RowAction = Some(deleteRowAction model dispatch)
+                InstanceKey = "platform-admin"
+            }
+
+            KnowledgeListView.KnowledgeListView config docs
+
+    Html.div [ prop.className "flex flex-col gap-3"; prop.children [ headerRow; listBody ] ]
+
+/// Hosts the admin body inside a React component so the panel can
+/// subscribe to the platform-wide `DataRefreshed("PlatformKnowledgeBase",
+/// _)` fan-out. Without this, an admin watching the list in one tab
+/// wouldn't see another admin's upload / delete / promote until they
+/// clicked Refresh. The publisher (the admin doing the action) reloads
+/// the list locally via `loadDocsCmd ()` in `update`; this subscription
+/// covers the cross-session case.
+[<ReactComponent>]
+let private AdminPanel (model: Model) (dispatch: Msg -> unit) =
+    React.useEffectOnce (fun () ->
+        let dispose =
+            NotificationClient.subscribe (fun envelope ->
+                match envelope.Notification with
+                | Notification.DataRefreshed("PlatformKnowledgeBase", _) -> dispatch RefreshDocs
+                | _ -> ())
+
+        FsReact.createDisposable (fun () -> dispose ()))
+
+    Html.div [
+        prop.className "p-4 flex flex-col gap-4 h-full overflow-y-auto"
+        prop.children [ uploadPanel model dispatch; documentsPanel model dispatch ]
     ]
 
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
-    let body =
-        Html.div [
-            prop.className "p-4 flex flex-col gap-4 h-full overflow-y-auto"
-            prop.children [ uploadPanel model dispatch; documentsPanel model dispatch ]
-        ]
-
-    body, Html.none
+    AdminPanel model dispatch, Html.none
 
 // ─── Module registration ─────────────────────────────────────────────
 
