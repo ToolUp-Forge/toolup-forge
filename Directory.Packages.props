@@ -102,6 +102,11 @@
          compatibility for net10.0. -->
     <PackageVersion Include="Google.Cloud.Functions.Framework" Version="3.0.1" />
     <PackageVersion Include="Google.Cloud.Functions.Hosting" Version="3.0.1" />
+    <!-- Phase 2b — GCP Secret Manager ISecretStore companion
+         (src/Secrets/GcpSecretManager). Companion-only dep (GP 1): the
+         SDK core never references the GCP Secret Manager SDK; only the
+         opt-in companion package pulls it in. -->
+    <PackageVersion Include="Google.Cloud.SecretManager.V1" Version="2.7.0" />
     <PackageVersion Include="Google.Cloud.Storage.V1" Version="4.14" />
     <PackageVersion Include="HNSW" Version="26.4.177" />
     <PackageVersion Include="MailKit" Version="4.16" />
@@ -231,6 +236,8 @@
     <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Storage.GoogleCloud" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Secrets.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
+    <!-- Phase 2b — GCP Secret Manager ISecretStore companion. -->
+    <PackageVersion Include="ToolUp.Secrets.GcpSecretManager" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpSdkVersion)" />
 
     <!-- Audit sinks (Phase 11.C.5 — Platform prefix dropped 2026-05-27) -->

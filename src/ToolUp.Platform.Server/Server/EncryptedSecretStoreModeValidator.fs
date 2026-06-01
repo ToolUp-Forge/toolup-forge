@@ -30,16 +30,17 @@ open ToolUp.Platform.ConfigValidation
 //
 // Phase 2a interaction. When `TOOLUP_SECRET_STORE` resolves to a
 // managed cloud KMS (`azure-key-vault` / `aws-secrets-manager` /
-// `vault`), the active `ISecretStore` is a cloud companion that
-// provides its own at-rest encryption (HSM-backed in Azure Key Vault,
-// AWS-managed KMS keys for Secrets Manager, Vault transit engine).
-// Wrapping such companions in `EncryptedSecretStore` is intentionally
-// skipped in the composition root, so the `TOOLUP_SECRETS_MASTER_KEY`
-// requirement does not apply. The validator reads `TOOLUP_SECRET_STORE`
-// directly here rather than type-checking the registered store —
-// matches the existing env-var-inspection style and avoids coupling
-// the SDK validator to companion types that live outside
-// `ToolUp.Platform`.
+// `vault` / `gcp-secret-manager`), the active `ISecretStore` is a
+// cloud companion that provides its own at-rest encryption (HSM-
+// backed in Azure Key Vault, AWS-managed KMS keys for Secrets
+// Manager, Vault transit engine, Google-managed AES-256 for GCP
+// Secret Manager). Wrapping such companions in `EncryptedSecretStore`
+// is intentionally skipped in the composition root, so the
+// `TOOLUP_SECRETS_MASTER_KEY` requirement does not apply. The
+// validator reads `TOOLUP_SECRET_STORE` directly here rather than
+// type-checking the registered store — matches the existing env-var-
+// inspection style and avoids coupling the SDK validator to
+// companion types that live outside `ToolUp.Platform`.
 
 /// Phase 6l.E — config validator that refuses an authenticated mode
 /// running `EncryptedSecretStore` with `masterKey = None`. The
@@ -60,7 +61,8 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
             match s.ToLowerInvariant() with
             | "azure-key-vault"
             | "aws-secrets-manager"
-            | "vault" -> true
+            | "vault"
+            | "gcp-secret-manager" -> true
             | _ -> false
 
     interface IConfigValidator with
@@ -105,7 +107,7 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
                 return
                     Error(
                         sprintf
-                            "ServerConfig.Surfaces = %s but %s. EncryptedSecretStore falls back to plaintext writes — every API key, OAuth token, and per-tenant credential will sit unencrypted in blob storage. Resolutions: (1) set TOOLUP_SECRETS_MASTER_KEY to a base64-encoded 32-byte key (call EncryptedSecretStore.generateMasterKey () once during deployment setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault) — Phase 2a companions provide their own at-rest encryption; (3) set ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            "ServerConfig.Surfaces = %s but %s. EncryptedSecretStore falls back to plaintext writes — every API key, OAuth token, and per-tenant credential will sit unencrypted in blob storage. Resolutions: (1) set TOOLUP_SECRETS_MASTER_KEY to a base64-encoded 32-byte key (call EncryptedSecretStore.generateMasterKey () once during deployment setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager) — Phase 2a/2b companions provide their own at-rest encryption; (3) set ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
                             stateDescription
                     )

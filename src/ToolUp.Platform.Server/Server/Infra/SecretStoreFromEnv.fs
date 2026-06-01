@@ -16,7 +16,8 @@ open ToolUp.Platform.Secrets
 /// exist only at the SDK boundary, per `CLAUDE.md`).
 type CloudSecretStoreResolver = {
     /// Matched against `TOOLUP_SECRET_STORE` (case-insensitive). Common
-    /// values: `"azure-key-vault"`, `"aws-secrets-manager"`, `"vault"`.
+    /// values: `"azure-key-vault"`, `"aws-secrets-manager"`, `"vault"`,
+    /// `"gcp-secret-manager"`.
     Name: string
     /// The companion's existing `fromEnv : unit -> ISecretStore option`.
     /// Returns `None` when the companion's required env vars aren't set

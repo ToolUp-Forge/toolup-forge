@@ -116,6 +116,7 @@
         <Compile Include="InProcess\AzureKeyVaultSecretStoreTests.fs" />
         <Compile Include="InProcess\AwsSecretsManagerSecretStoreTests.fs" />
         <Compile Include="InProcess\HashiCorpVaultSecretStoreTests.fs" />
+        <Compile Include="InProcess\GcpSecretManagerSecretStoreTests.fs" />
         <Compile Include="InProcess\MarkdownRendererTests.fs" />
         <Compile Include="InProcess\HtmlRendererTests.fs" />
         <Compile Include="InProcess\DataSubjectRequestTests.fs" />
@@ -337,6 +338,10 @@
         <ProjectReference Include="..\Secrets\AzureKeyVault\AzureKeyVault.fsproj" />
         <ProjectReference Include="..\Secrets\AwsSecretsManager\AwsSecretsManager.fsproj" />
         <ProjectReference Include="..\Secrets\HashiCorpVault\HashiCorpVault.fsproj" />
+        <!-- Phase 2b — GCP Secret Manager companion. Contract bindings
+             are env-gated on TOOLUP_GCP_PROJECT_ID; without the
+             activating env var the pack skips cleanly. -->
+        <ProjectReference Include="..\Secrets\GcpSecretManager\ToolUp.Secrets.GcpSecretManager.fsproj" />
         <!-- Phase 3a follow-up — OidcAuthProvider contract tests via mock
              HttpMessageHandler (no env-gate; the handler removes the
              need for a real OIDC issuer). -->

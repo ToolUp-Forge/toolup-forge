@@ -123,17 +123,18 @@ let config = {
 
 ## Secret Storage and Encryption
 
-`ISecretStore` is a scope-aware key-value store for credentials (API keys, connection strings, signing secrets). In-process implementations: `FileSecretStore` (JSON files on disk), `EnvironmentSecretStore` (read-only env-var-backed), `EncryptedSecretStore` (AES-GCM envelope wrapper over any inner store). Cloud-KMS companion implementations (Phase 2a): `AzureKeyVaultSecretStore`, `AwsSecretsManagerSecretStore`, `VaultSecretStore` (HashiCorp Vault KV v2). Scope discipline mirrors `IBlobStorage` — `_platform` for deployment-level secrets, `user-{userId}` / `team-{teamId}` for per-tenant secrets.
+`ISecretStore` is a scope-aware key-value store for credentials (API keys, connection strings, signing secrets). In-process implementations: `FileSecretStore` (JSON files on disk), `EnvironmentSecretStore` (read-only env-var-backed), `EncryptedSecretStore` (AES-GCM envelope wrapper over any inner store). Cloud-KMS companion implementations: `AzureKeyVaultSecretStore`, `AwsSecretsManagerSecretStore`, `VaultSecretStore` (HashiCorp Vault KV v2) — Phase 2a; `GcpSecretManagerSecretStore` — Phase 2b. Scope discipline mirrors `IBlobStorage` — `_platform` for deployment-level secrets, `user-{userId}` / `team-{teamId}` for per-tenant secrets.
 
-### Cloud secret-manager companions (Phase 2a)
+### Cloud secret-manager companions (Phase 2a + 2b)
 
-The three Phase 2a companions implement `ISecretStore` against managed cloud secret services. All three are independent NuGet packages; a deployment imports exactly one. Activation is via env-driven switch in the composition root, mirroring the `TOOLUP_BLOB_STORAGE` pattern from Phase 2.
+The four cloud-secret-manager companions implement `ISecretStore` against managed cloud secret services. All four are independent NuGet packages; a deployment imports exactly one. Activation is via env-driven switch in the composition root, mirroring the `TOOLUP_BLOB_STORAGE` pattern from Phase 2.
 
 | Companion | Package | Activation env vars | Backing API |
 |---|---|---|---|
 | Azure Key Vault | `ToolUp.Secrets.AzureKeyVault` | `TOOLUP_SECRET_STORE=azure-key-vault` + `TOOLUP_AZURE_KEY_VAULT_URL` | `Azure.Security.KeyVault.Secrets` + `DefaultAzureCredential` |
 | AWS Secrets Manager | `ToolUp.Secrets.AwsSecretsManager` | `TOOLUP_SECRET_STORE=aws-secrets-manager` + `TOOLUP_AWS_SECRETS_REGION` | `AWSSDK.SecretsManager` + AWS SDK credential chain |
 | HashiCorp Vault | `ToolUp.Secrets.HashiCorpVault` | `TOOLUP_SECRET_STORE=vault` + `VAULT_ADDR` + `VAULT_TOKEN` + optional `VAULT_NAMESPACE` | BCL `HttpClient` against KV v2 HTTP API; no vendor SDK |
+| GCP Secret Manager | `ToolUp.Secrets.GcpSecretManager` | `TOOLUP_SECRET_STORE=gcp-secret-manager` + `TOOLUP_GCP_PROJECT_ID` | `Google.Cloud.SecretManager.V1` + Application Default Credentials |
 
 Each companion sanitises scope IDs and keys into its vendor's allowed-character set, then stores secrets under a `toolup/{scopeId}/{key}` (or vendor-equivalent) prefix. The prefix carries the scope explicitly, so the vendor's audit log (Azure Key Vault diagnostic logs, AWS CloudTrail, Vault audit log) records which ToolUp scope each request touched — cross-scope reads are visible at the audit layer.
 
