@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1.7
+# Generated from ToolUp.Hosts.Docker / dotnet new platformsdk-docker.
+# Multi-stage F# build for a compose-built ToolUp deployment. See
+# README in the ToolUp.Hosts.Docker package for the full contract.
+
+# ─── Stage 1: build ───────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY *.sln ./
+COPY Directory.Packages.props Directory.Build.props global.json nuget.config ./
+COPY src/ ./src/
+RUN dotnet restore
+
+ARG SERVER_PROJECT=src/{{server-project}}/{{server-project}}.fsproj
+RUN dotnet publish "${SERVER_PROJECT}" \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    /p:UseAppHost=false
+
+# ─── Stage 2: runtime ─────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini curl \
+    && rm -rf /var/lib/apt/lists/*
+ENV TINI_SUBREAPER=1
+
+RUN groupadd --system --gid 10001 app \
+    && useradd  --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+
+WORKDIR /app
+COPY --from=build --chown=app:app /app/publish .
+COPY --chown=app:app healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod 0755 /usr/local/bin/healthcheck.sh
+
+USER app
+
+ENV ASPNETCORE_URLS=http://+:5000
+EXPOSE 5000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["/usr/local/bin/healthcheck.sh"]
+
+ARG SERVER_DLL={{server-dll}}.dll
+ENV TOOLUP_SERVER_DLL=${SERVER_DLL}
+ENTRYPOINT ["/usr/bin/tini", "--", "/bin/sh", "-c", "exec dotnet \"${TOOLUP_SERVER_DLL}\""]

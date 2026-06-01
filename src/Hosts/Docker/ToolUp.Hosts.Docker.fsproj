@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Hosts.Docker</PackageId>
+    <AssemblyName>ToolUp.Hosts.Docker</AssemblyName>
+    <Description>Container host companion for ToolUp.Platform. Ships a maintained Dockerfile + .dockerignore + healthcheck script + sample compose.yml. The same OCI image runs every ServerConfig.ProcessProfile (Phase 16a) — pick the role at boot via TOOLUP_PROCESS_PROFILE. Forwarded-headers trust is on by default (Phase 16d).</Description>
+    <PackageTags>fsharp;sdk;container;docker;oci;host-adapter</PackageTags>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+  </PropertyGroup>
+
+  <!-- This is a template-asset host. No production .fs code today; the
+       package payload is the Dockerfile / .dockerignore / healthcheck
+       script / compose.yml templates packed under contentFiles/ so a
+       consumer's NuGet restore drops them into the consumer project's
+       working tree alongside its build infrastructure. -->
+
+  <ItemGroup>
+    <None Include="Dockerfile.template" Pack="true" PackagePath="contentFiles/any/any/Dockerfile.template" />
+    <None Include=".dockerignore.template" Pack="true" PackagePath="contentFiles/any/any/.dockerignore.template" />
+    <None Include="healthcheck.sh" Pack="true" PackagePath="contentFiles/any/any/healthcheck.sh" />
+    <None Include="compose.yml.template" Pack="true" PackagePath="contentFiles/any/any/compose.yml.template" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

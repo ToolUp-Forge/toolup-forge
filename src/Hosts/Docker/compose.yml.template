@@ -1,0 +1,69 @@
+# ─── ToolUp.Platform — compose.yml template (Phase 16b) ───────────────
+#
+# Local development orchestration. Brings up the ToolUp deployment as
+# a single service alongside whatever companion infrastructure the
+# deployment is configured for. Replace `{{...}}` tokens with your
+# deployment's values (or let `dotnet new platformsdk-docker` fill
+# them in for you).
+#
+# `compose.yml` is for local-dev convenience; production deployments
+# target one of the cloud orchestrators that consume the Dockerfile
+# directly — Azure App Service Linux container mode / GCP Cloud Run /
+# AWS ECS / Kubernetes. The chapter-14 Docker hosting guide covers
+# the per-cloud entry points; this file does not.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: {{image-name}}:dev
+    container_name: {{image-name}}-app
+    restart: unless-stopped
+    ports:
+      - "{{host-port}}:5000"
+    environment:
+      # ServerConfig knobs read by ServerConfigOverrides.fromEnv.
+      # `AllInOne` matches the `AllInOne` default; flip to `WebOnly` /
+      # `WorkerOnly` / `DispatcherOnly` to validate the Phase 16a
+      # process-model split locally.
+      TOOLUP_PROCESS_PROFILE: AllInOne
+      # `TOOLUP_TRUST_FORWARDED_HEADERS` is not set — Phase 16d made
+      # the trust the SDK default. Set it explicitly only if you are
+      # overriding the default for a reverse-proxy-less deployment.
+      ASPNETCORE_ENVIRONMENT: Development
+    depends_on:
+      # Uncomment companion dependencies the deployment composes in.
+      # The `dotnet new platformsdk-docker` template fills these
+      # automatically based on the symbols you supply at emit time.
+      # redis:
+      #   condition: service_healthy
+      []
+    healthcheck:
+      test:
+        - CMD
+        - /usr/local/bin/healthcheck.sh
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  # ── Redis — INotificationChannel companion (commented by default) ──
+  # Uncomment when ServerConfig.NotificationChannel is `RedisChannel`
+  # (TOOLUP_NOTIFICATION_CHANNEL=redis), to share scope-isolated
+  # pub/sub state across multi-silo deployments.
+  #
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   command: ["redis-server", "--appendonly", "yes"]
+  #   volumes:
+  #     - redis-data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
+# volumes:
+#   redis-data:

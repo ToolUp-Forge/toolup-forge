@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Web", "F#", "Docker", "Container", "ToolUp" ],
+  "identity": "ToolUp.Templates.Docker",
+  "groupIdentity": "ToolUp.Templates.Docker",
+  "name": "ToolUp Platform SDK Docker host (Dockerfile + .dockerignore + healthcheck + compose)",
+  "shortName": "platformsdk-docker",
+  "description": "Emits a maintained Dockerfile + .dockerignore + healthcheck.sh + compose.yml at the solution root. Multi-stage F# build, non-root user, HEALTHCHECK against /health, signal forwarding via tini. One image runs every ServerConfig.ProcessProfile (Phase 16a) — pick the role at boot via TOOLUP_PROCESS_PROFILE.",
+  "tags": {
+    "language": "F#",
+    "type": "item"
+  },
+  "preferNameDirectory": false,
+  "sourceName": "MyApp",
+  "symbols": {
+    "server-project": {
+      "type": "parameter",
+      "datatype": "string",
+      "isRequired": true,
+      "description": "Server project directory name under src/, e.g. 'MyApp-Server'. The Dockerfile invokes 'dotnet publish src/<server-project>/<server-project>.fsproj' in the build stage.",
+      "replaces": "{{server-project}}"
+    },
+    "server-dll": {
+      "type": "parameter",
+      "datatype": "string",
+      "isRequired": true,
+      "description": "Server assembly name (without the .dll extension), e.g. 'MyApp-Server'. The runtime stage's ENTRYPOINT execs 'dotnet <server-dll>.dll'.",
+      "replaces": "{{server-dll}}"
+    },
+    "image-name": {
+      "type": "parameter",
+      "datatype": "string",
+      "isRequired": true,
+      "description": "Container image name (lowercase, no namespace prefix), e.g. 'myapp'. Used as the compose service image tag and container name.",
+      "replaces": "{{image-name}}"
+    },
+    "host-port": {
+      "type": "parameter",
+      "datatype": "integer",
+      "isRequired": false,
+      "defaultValue": "8080",
+      "description": "Host-side port the compose service publishes (container-side is always 5000, matching ServerConfig.Port default).",
+      "replaces": "{{host-port}}"
+    },
+    "notification-channel": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "none",
+      "description": "INotificationChannel substrate. 'redis' uncomments the Redis service in compose.yml and adds the depends_on entry on the app service. 'none' (default) leaves Redis commented out.",
+      "choices": [
+        { "choice": "none",  "description": "InMemoryNotificationChannel (default; single-process only)." },
+        { "choice": "redis", "description": "Redis-backed channel (multi-silo deployments)." }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**",
+        "**/.template.config/**"
+      ],
+      "rename": {
+        "Dockerfile.template": "Dockerfile",
+        "dockerignore.template": ".dockerignore",
+        "compose.yml.template": "compose.yml"
+      }
+    }
+  ],
+  "primaryOutputs": [
+    { "path": "Dockerfile" },
+    { "path": ".dockerignore" },
+    { "path": "healthcheck.sh" },
+    { "path": "compose.yml" }
+  ],
+  "postActions": [
+    {
+      "description": "Container build + run commands.",
+      "manualInstructions": [
+        { "text": "Build:   docker build -t <image-name>:dev ." },
+        { "text": "Run:     docker run --rm -p <host-port>:5000 -e TOOLUP_PROCESS_PROFILE=AllInOne <image-name>:dev" },
+        { "text": "Compose: docker compose up --build" },
+        { "text": "When deploying behind a reverse proxy, do NOT set TOOLUP_TRUST_FORWARDED_HEADERS — Phase 16d made trust the SDK default. Set =0 only to opt out." },
+        { "text": "WorkerOnly / DispatcherOnly: pin ReplicaCount = 1 until Phase 9i (IDistributedLock) ships, otherwise scheduler ticks duplicate-fire across replicas." }
+      ],
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "continueOnError": true
+    }
+  ]
+}

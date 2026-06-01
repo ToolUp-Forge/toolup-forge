@@ -1,0 +1,11 @@
+# Default: let git autodetect line endings on text files.
+* text=auto
+
+# Files consumed inside Linux containers MUST keep LF endings even when
+# checked out on Windows. CRLF in a shell script breaks the interpreter
+# (`/bin/sh^M: no such file or directory`); CRLF in a Dockerfile is
+# tolerated by current Docker builders but invites future surprises.
+*.sh         text eol=lf
+Dockerfile   text eol=lf
+Dockerfile.* text eol=lf
+*.Dockerfile text eol=lf

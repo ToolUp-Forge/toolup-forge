@@ -1,0 +1,44 @@
+# Generated from ToolUp.Hosts.Docker / dotnet new platformsdk-docker.
+# Local development orchestration. Production deployments target one of
+# the cloud container platforms (App Service Linux / Cloud Run / ECS /
+# Kubernetes) and consume the Dockerfile directly — this file is for
+# the local-dev loop only.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: {{image-name}}:dev
+    container_name: {{image-name}}-app
+    restart: unless-stopped
+    ports:
+      - "{{host-port}}:5000"
+    environment:
+      TOOLUP_PROCESS_PROFILE: AllInOne
+      ASPNETCORE_ENVIRONMENT: Development
+    depends_on: []
+    healthcheck:
+      test:
+        - CMD
+        - /usr/local/bin/healthcheck.sh
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  # ── Redis — uncomment when TOOLUP_NOTIFICATION_CHANNEL=redis ────────
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   command: ["redis-server", "--appendonly", "yes"]
+  #   volumes:
+  #     - redis-data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
+# volumes:
+#   redis-data:

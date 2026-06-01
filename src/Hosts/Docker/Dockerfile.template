@@ -1,0 +1,96 @@
+# syntax=docker/dockerfile:1.7
+# ─── ToolUp.Platform — Dockerfile template (Phase 16b) ────────────────
+#
+# Multi-stage F# build for a compose-built ToolUp deployment. One image
+# runs every `ServerConfig.ProcessProfile` (`AllInOne` / `WebOnly` /
+# `WorkerOnly` / `DispatcherOnly`) — pick the role at boot via the
+# `TOOLUP_PROCESS_PROFILE` environment variable (see Phase 16a).
+#
+# Replace the `TOOLUPAPP_*` tokens marked `{{...}}` with your project /
+# server-entrypoint names when emitting from `dotnet new platformsdk-
+# docker` or copying by hand. The defaults below match the SDK's stock
+# `MyApp` naming.
+#
+# Image contract:
+#   * non-root user `app` (uid/gid 10001) — `USER app` for the runtime
+#   * working dir `/app` — server dll + content files live here
+#   * EXPOSE 5000 — match `ServerConfig.Port` default
+#   * HEALTHCHECK against `/health` (Phase 9k Liveness probe)
+#   * SIGTERM-respecting ENTRYPOINT — `dotnet` forwards POSIX signals
+#     so `docker stop` produces a clean shutdown
+#
+# Forwarded-headers trust: this Dockerfile does NOT set
+# `TOOLUP_TRUST_FORWARDED_HEADERS`. Phase 16d (forwarded-headers
+# default-on) made the trust the SDK default; setting the env var here
+# would be redundant. Reverse-proxy deployments behind nginx / Traefik
+# / an Azure App Service ingress / a Cloud Run front door work without
+# additional Dockerfile knobs.
+
+# ─── Stage 1: build ───────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Cache the restore graph as its own layer. Copy only the files that
+# affect the NuGet graph first, restore, then copy the rest. A source
+# edit that does not touch a .fsproj / .props / .config file re-uses
+# the cached restore layer.
+COPY *.sln ./
+COPY Directory.Packages.props Directory.Build.props global.json nuget.config ./
+COPY src/ ./src/
+RUN dotnet restore
+
+# Publish the server tier. `--no-restore` re-uses the cached restore;
+# `-c Release` produces an optimised build with PDBs trimmed.
+ARG SERVER_PROJECT=src/{{server-project}}/{{server-project}}.fsproj
+RUN dotnet publish "${SERVER_PROJECT}" \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    /p:UseAppHost=false
+
+# ─── Stage 2: runtime ─────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+
+# tini handles PID-1 responsibilities — reaping orphaned children and
+# forwarding SIGTERM to the dotnet process. Required when the image
+# spawns subprocesses (Phase 9b background workers may grow this) so
+# zombies don't accumulate. `TINI_SUBREAPER=1` makes tini the
+# subreaper, picking up children re-parented to PID 1.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini curl \
+    && rm -rf /var/lib/apt/lists/*
+ENV TINI_SUBREAPER=1
+
+# Non-root user — uid/gid 10001, no login shell, no home dir baggage.
+# Cloud platforms (Cloud Run / ECS Fargate / App Service Linux) all
+# accept non-root images; running as root is a defensive failure mode
+# we choose not to ship as the default.
+RUN groupadd --system --gid 10001 app \
+    && useradd  --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+
+WORKDIR /app
+COPY --from=build --chown=app:app /app/publish .
+COPY --chown=app:app healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod 0755 /usr/local/bin/healthcheck.sh
+
+USER app
+
+# `ASPNETCORE_URLS` binds Kestrel to all interfaces on the documented
+# port. Pair with `EXPOSE` so `docker run -P` and orchestrator port
+# discovery both work.
+ENV ASPNETCORE_URLS=http://+:5000
+EXPOSE 5000
+
+# HEALTHCHECK consumes Phase 9k's `/health` Liveness probe. The
+# wrapper script `healthcheck.sh` adds curl timeout + retry tolerance
+# so transient network hiccups don't oscillate the container's
+# reported health state.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["/usr/local/bin/healthcheck.sh"]
+
+# Set the entrypoint via tini so signal forwarding works correctly.
+# Override the dll name at build time with `--build-arg SERVER_DLL=...`
+# if your server entrypoint dll is named differently.
+ARG SERVER_DLL={{server-dll}}.dll
+ENV TOOLUP_SERVER_DLL=${SERVER_DLL}
+ENTRYPOINT ["/usr/bin/tini", "--", "/bin/sh", "-c", "exec dotnet \"${TOOLUP_SERVER_DLL}\""]

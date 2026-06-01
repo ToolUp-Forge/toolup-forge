@@ -1,0 +1,36 @@
+# Generated from ToolUp.Hosts.Docker / dotnet new platformsdk-docker.
+# Excludes paths that should never reach the Docker build context.
+
+**/bin/
+**/obj/
+
+**/node_modules/
+
+**/output/
+**/*.fs.js
+
+.git/
+.gitignore
+.gitattributes
+
+data/
+**/data/
+
+.vs/
+.vscode/
+.idea/
+**/*.user
+
+compose.override.yml
+compose.override.yaml
+docker-compose.override.yml
+docker-compose.override.yaml
+
+**/.DS_Store
+**/Thumbs.db
+
+**/TestResults/
+**/coverage/
+
+*.env
+!*.env.example

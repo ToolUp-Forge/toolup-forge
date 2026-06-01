@@ -137,3 +137,17 @@ How a pure-Kestrel deployment partitions across silos via `ServerConfig.ProcessP
 - Cross-silo coordination contract (single-leader subsystems, `IDistributedLock` Phase 9i deferral, `ReplicaCount` pinning)
 - Operator visibility — `/dev/inspect`'s `ProcessProfile` panel
 - Follow-ups (deferred)
+
+### [14. Docker Hosting](technical-guide/14-docker-hosting.md)
+
+Packaging a Kestrel deployment as a container — the OCI image layout, `tini` signal forwarding, non-root convention, healthcheck wrapper, per-platform deployment entry points (App Service Linux / Cloud Run / ECS / Kubernetes), and how the same image runs every `ProcessProfile` via env var. Companion: [`ToolUp.Hosts.Docker`](../Hosts/Docker/README.md).
+
+- Image layout (multi-stage F# build, restore vs publish layer caching)
+- Why `tini` (signal forwarding, zombie reaping, the `SIGKILL`-after-grace-period failure mode)
+- Non-root by convention (uid/gid 10001, per-platform support matrix)
+- Healthcheck wrapper (`/health` Liveness, `TOOLUP_HEALTHCHECK_URL` / `TOOLUP_HEALTHCHECK_TIMEOUT` overrides)
+- `ProcessProfile` interaction — one image, env-var-driven role (`WorkerOnly` + multi-replica caveat)
+- Forwarded-headers trust (Phase 16d default-on; opt-out only)
+- Per-platform deployment (Azure App Service Linux, GCP Cloud Run, AWS ECS Fargate, Kubernetes)
+- Build-context hygiene — `.dockerignore`
+- Limitations (no streaming caveat — pass-through, no multi-replica `WorkerOnly`, no signing pipeline / SBOM)
