@@ -1893,7 +1893,12 @@ module Client =
         // interceptor chain (categorised-error bridge + telemetry).
         // Idempotent: re-registering the same interceptor instance
         // no-ops via the underlying registry's reference check.
-        RemotingInterceptors.install ()
+        //
+        // 0.4.3 — pass the same correlationGetter so the telemetry
+        // interceptor stamps the wire id rather than minting its
+        // own; client log id == outbound wire header == server-
+        // stamped response header (modulo proxy mangling).
+        RemotingInterceptors.install correlationGetter
 
         // Phase 9j — pre-fetch the per-session CSRF token so the
         // request-guard can attach it to the first mutating call.

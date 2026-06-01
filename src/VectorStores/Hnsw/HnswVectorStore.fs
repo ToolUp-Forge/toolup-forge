@@ -218,6 +218,37 @@ module HnswParameters =
         KeepPrunedConnections = true
     }
 
+    /// 0.4.3 — bounds-check tunable parameters before the graph is
+    /// asked to build. Pathological values (`EfSearch = 0`, `M = -1`,
+    /// `LevelLambda <= 0.0`) used to flow straight through to the
+    /// HNSW.Net library, where they produce either a cryptic
+    /// `ArgumentOutOfRangeException` deep in the build pipeline or
+    /// (worse) a degenerate graph that returns zero candidates with
+    /// no error. The store now refuses to start in those cases.
+    ///
+    /// Bounds chosen against the HNSW reference paper (Malkov et al.
+    /// 2018) and the eval-harness sweeps that justified the defaults:
+    /// * `M in [2, 64]`     — `M = 1` cannot form a navigable
+    ///                        small-world graph; `M > 64` blows up
+    ///                        graph memory without recall gains the
+    ///                        eval harness has observed.
+    /// * `LevelLambda > 0`  — `<= 0.0` collapses the multi-level
+    ///                        structure to a single layer; ANN
+    ///                        degenerates to brute scan with overhead.
+    /// * `EfSearch in [1, 2000]` — `0` yields zero candidates;
+    ///                             `> 2000` is well past the recall
+    ///                             ceiling on every fixture and just
+    ///                             burns query latency.
+    let validate (p: HnswParameters) : Result<unit, string> =
+        if p.M < 2 || p.M > 64 then
+            Error(sprintf "HnswParameters.M must be in [2, 64]; got %d." p.M)
+        elif p.LevelLambda <= 0.0 then
+            Error(sprintf "HnswParameters.LevelLambda must be > 0.0; got %f." p.LevelLambda)
+        elif p.EfSearch < 1 || p.EfSearch > 2000 then
+            Error(sprintf "HnswParameters.EfSearch must be in [1, 2000]; got %d." p.EfSearch)
+        else
+            Ok()
+
 // ─── Cosine distance ──────────────────────────────────────────────
 //
 // Stored vectors are pre-normalised at upsert time, so cosine distance
@@ -270,6 +301,13 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
     let flushMs = defaultArg flushIntervalMs 2000
     let hnswParams = defaultArg parameters HnswParameters.defaults
+
+    // 0.4.3 — fail fast on pathological tunings rather than letting
+    // them flow into the HNSW.Net build pipeline.
+    do
+        match HnswParameters.validate hnswParams with
+        | Ok() -> ()
+        | Error msg -> invalidArg "parameters" (sprintf "HnswVectorStore: invalid HnswParameters — %s" msg)
 
     let scopes = Dictionary<string, ScopeState>()
     let scopesLock = obj ()

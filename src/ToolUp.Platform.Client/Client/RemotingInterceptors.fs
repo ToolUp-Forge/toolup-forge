@@ -148,16 +148,39 @@ module RemotingInterceptors =
     /// stamps `x-correlation-id` back per Phase 69b.D — but the request
     /// guard generates it client-side first, so a successful call
     /// records the id without needing to read the response header.
+    ///
+    /// 0.4.3 — the interceptor now reads the **same**
+    /// `correlationGetter` thunk that `CsrfClient.installRequestGuard`
+    /// uses, rather than minting its own GUID. Before 0.4.3 the
+    /// interceptor logged one GUID and the wire carried a different
+    /// one (the CsrfClient JS guard's call to `getCorrId()`), so
+    /// client logs and server-stamped response logs never stitched on
+    /// the same id. Unifying through the configured provider guarantees
+    /// client log id == outbound wire id == server-stamped response id
+    /// for the common "no proxy mangling" case.
     let private telemetryLog = Logger.forCategory "client.remoting.telemetry"
+
+    let private fallbackCorrelationGetter: unit -> string =
+        fun () -> System.Guid.NewGuid().ToString("N")
+
+    let private correlationGetterRef: (unit -> string) ref =
+        ref fallbackCorrelationGetter
 
     let private telemetry: Cmd.OfRemoting.IRemotingInterceptor =
         { new Cmd.OfRemoting.IRemotingInterceptor with
             member _.OnCalling info =
-                // Stash the current correlation id at call-start. The
-                // CsrfClient JS guard re-reads the provider per request,
-                // so this `info` reflects the value attached to the
-                // outbound headers when `proxyCall arg` actually fires.
-                let corrId = System.Guid.NewGuid().ToString("N")
+                // Stash the current correlation id at call-start using
+                // the same provider the CsrfClient JS guard reads —
+                // ensures the logged id equals the wire id. If the
+                // provider throws, fall back to a fresh GUID so a
+                // misbehaving provider can't blind observability.
+                let corrId =
+                    try
+                        correlationGetterRef.Value()
+                    with ex ->
+                        telemetryLog.Warn $"correlationGetter raised: {ex.Message}; falling back to fresh GUID"
+                        fallbackCorrelationGetter ()
+
                 info.Bag.["x-correlation-id"] <- corrId
                 telemetryLog.Debug $"start {info.MethodName} corr={corrId}"
 
@@ -183,8 +206,17 @@ module RemotingInterceptors =
     /// `SDK.Client.installRequestSeam` so every `Cmd.OfRemoting.call`
     /// site benefits without per-call wiring.
     ///
+    /// `correlationGetter` is the same thunk passed to
+    /// `CsrfClient.installRequestGuard`; the telemetry interceptor
+    /// reads from it so the client log id, the outbound wire header,
+    /// and the server-stamped response header all carry the same
+    /// value (modulo proxy mangling — see SECURITY note in
+    /// `docs/migrations/0.4.3-correlation-id-stitch.md` when added).
+    ///
     /// Idempotent — `Interceptors.register` no-ops on a re-registration
-    /// of the same instance reference.
-    let install () : unit =
+    /// of the same instance reference. Re-calling `install` updates the
+    /// stored correlationGetter without re-registering the interceptors.
+    let install (correlationGetter: unit -> string) : unit =
+        correlationGetterRef.Value <- correlationGetter
         Cmd.OfRemoting.Interceptors.register telemetry
         Cmd.OfRemoting.Interceptors.register categorisedErrorBridge

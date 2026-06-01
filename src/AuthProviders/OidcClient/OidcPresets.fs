@@ -77,6 +77,14 @@ let private auth0DefaultScopes = [ "openid"; "profile"; "email"; "offline_access
 /// for (Okta, Keycloak, custom OIDC providers, etc.). Scope set is
 /// the OIDC-spec minimum (`openid profile email`); consumers
 /// requiring `offline_access` for refresh tokens add it explicitly.
+///
+/// 0.4.3 — `ValidateIdToken` defaults to `Some true`. Without first-
+/// class provider knowledge the SDK has no way to know whether the
+/// chosen IdP is internal or customer-facing, so defence-in-depth
+/// signature/iss/aud/exp validation is the safer default. Consumers
+/// who explicitly trust the post-callback channel can set it back to
+/// `None`; the coherence validator emits a warning in that case so
+/// the opt-out is visible at startup.
 let generic (issuer: string) (clientId: string) (redirectUri: string) : OidcAppConfig = {
     Issuer = issuer
     Audience = clientId
@@ -84,7 +92,7 @@ let generic (issuer: string) (clientId: string) (redirectUri: string) : OidcAppC
     Scopes = genericDefaultScopes
     RedirectUri = redirectUri
     PostLogoutRedirectUri = None
-    ValidateIdToken = None
+    ValidateIdToken = Some true
     Preset = Some Generic
 }
 

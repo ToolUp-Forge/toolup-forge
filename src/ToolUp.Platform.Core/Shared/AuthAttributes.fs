@@ -43,8 +43,7 @@ type RequiresClaimAttribute(claim: string) =
     member val Value: string = null with get, set
 
 /// Method requires an authenticated tenant-bound subject — used to gate
-/// per-tenant endpoints (Concord-shaped APIs) against anonymous and
-/// platform-scoped callers.
+/// per-tenant endpoints against anonymous and platform-scoped callers.
 [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
 type TenantScopedAttribute() =
     inherit Attribute()

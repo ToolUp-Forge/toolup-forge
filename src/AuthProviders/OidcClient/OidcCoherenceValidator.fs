@@ -22,7 +22,7 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 // relied on `PresetMetadata.AutoAddedScopes` / `.Notes` now derive
 // the same data from `PresetKind` via the helpers in `OidcAppConfig`.
 //
-// Rules (11):
+// Rules (12):
 //
 //   1. ERROR    Issuer empty.
 //   2. ERROR    ClientId empty.
@@ -42,16 +42,30 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 //               a custom-domain v2.0 path that isn't workforce).
 //   9. WARN     Preset `auth0` declared but Issuer contains
 //               `microsoftonline.com`.
-//  10. WARN     Preset's `autoAddedScopes` not all present in
-//               `Scopes`. Catches the common "consumer override
+//  10. WARN/    Preset's `autoAddedScopes` not all present in
+//      ERROR    `Scopes`. Catches the common "consumer override
 //               of Scopes dropped a load-bearing preset scope"
-//               regression — for `EntraWorkforce` losing
-//               `api://{clientId}/access_as_user` breaks every
-//               authenticated request after sign-in.
+//               regression. **For `EntraWorkforce` losing
+//               `api://{clientId}/access_as_user` this is an
+//               ERROR** — Entra mints an opaque Microsoft Graph
+//               token without it and every authenticated request
+//               401s post-auth, and the app appears to boot
+//               successfully which makes the failure invisible
+//               until first API call. For other presets where
+//               scope omission is sometimes intentional (e.g.
+//               Auth0 dropping `offline_access` when the app
+//               doesn't need refresh-token rotation), the
+//               outcome stays a WARNING.
 //  11. Ok-info  When a preset is declared on the config, a single
 //               Ok-class outcome records the preset name + applied
 //               quirks for the boot log / `/dev/inspect`
 //               validators panel.
+//  12. WARN     0.4.3 — `Generic` preset with
+//               `ValidateIdToken = None`. The 0.4.3 default
+//               flipped to `Some true`; landing on `None` now
+//               means an explicit opt-out. Surfaces so the
+//               decision is visible at startup rather than
+//               assumed-safe by silence.
 
 /// Per-rule outcome.  Aggregator collapses these into a single
 /// `ValidationResult`; `evaluate` exposes the raw list for tests +
@@ -186,18 +200,27 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
                 )
 
         // Rule 10 — preset auto-added scopes dropped by override.
+        // Severity is preset-aware: EntraWorkforce dropping its
+        // load-bearing access_as_user scope is non-recoverable at
+        // runtime (every authenticated request 401s post-auth with
+        // no operator signal), so it's an Error. For other presets
+        // where scope omission is sometimes intentional, a Warning
+        // surfaces the choice without aborting startup.
         let added = PresetKind.autoAddedScopes kind cfg.ClientId
 
         let missing = added |> List.filter (fun s -> not (List.contains s cfg.Scopes))
 
         if not (List.isEmpty missing) then
-            yield
-                RuleWarning(
-                    sprintf
-                        "Preset `%s` auto-adds scope(s) [%s] but OidcAppConfig.Scopes does not include them. A consumer override likely dropped the preset's contribution — for `entra-workforce` the `api://{clientId}/access_as_user` scope is load-bearing (Entra issues an opaque Microsoft Graph token without it and server-side audience validation rejects every authenticated request after sign-in)."
-                        label
-                        (String.concat "; " missing)
-                )
+            let message =
+                sprintf
+                    "Preset `%s` auto-adds scope(s) [%s] but OidcAppConfig.Scopes does not include them. A consumer override likely dropped the preset's contribution — for `entra-workforce` the `api://{clientId}/access_as_user` scope is load-bearing (Entra issues an opaque Microsoft Graph token without it and server-side audience validation rejects every authenticated request after sign-in)."
+                    label
+                    (String.concat "; " missing)
+
+            if label = "entra-workforce" then
+                yield RuleError message
+            else
+                yield RuleWarning message
 
         // Rule 11 — informational provenance.
         yield
@@ -209,6 +232,12 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
                     (String.concat "; " added)
                     (PresetKind.expectsDecodableAccessToken kind)
             )
+
+        // Rule 12 — Generic + ValidateIdToken = None explicit opt-out.
+        if label = "generic" && cfg.ValidateIdToken = None then
+            yield
+                RuleWarning
+                    "Preset `generic` was used with `ValidateIdToken = None` (explicit opt-out). The 0.4.3 default flipped to `Some true` because the `generic` preset has no per-IdP knowledge to judge whether the channel is internal or customer-facing. Confirm the post-callback channel is trusted; otherwise set `ValidateIdToken = Some true` so id_token signature / iss / aud / exp are re-checked on every callback."
 ]
 
 let private joinMessages (msgs: string list) =

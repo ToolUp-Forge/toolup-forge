@@ -18,6 +18,16 @@ namespace ToolUp.Platform
 // bridge is opt-in: passing `?authContext` enables the per-method
 // classifier (and the startup-time refusal for unannotated methods);
 // omitting it preserves the pre-0.4.1 zero-cost behaviour.
+//
+// 0.4.3 — closes the silent-no-op trap. If the API record `'T`
+// carries any of the forge auth attributes (`RequiresRole`,
+// `RequiresClaim`, `TenantScoped`, `AllowAnonymous`,
+// `PublicEndpoint`) but no `authContext` resolver is supplied, the
+// dispatcher would previously ship those methods with attributes
+// declared but enforcement skipped — a silent insecure default.
+// `Api.make` now refuses to start in that case, naming the
+// attributed members so the wiring defect surfaces at composition
+// time rather than at runtime.
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
@@ -58,8 +68,12 @@ type Api =
     ///   per-method telemetry emission. Composed at this layer so
     ///   handlers don't have to wire `MetricsMiddleware` per route.
     ///
-    /// All optional composers default to "not composed", which keeps
-    /// the pre-0.4.1 behaviour byte-for-byte.
+    /// 0.4.3 — gates the silent-no-op trap. Omitting `authContext`
+    /// while `'T` carries any forge auth attribute now fails at
+    /// composition with the offending member list; the dispatcher
+    /// no longer silently ships unenforced attributes. A record with
+    /// no forge auth attributes is still free to omit `authContext`
+    /// and keeps the pre-0.4.1 zero-cost behaviour.
     static member make<'T>
         (
             api: HttpContext -> 'T,
@@ -71,6 +85,47 @@ type Api =
         ) : HttpHandler =
         let routeBuilder = defaultArg routeBuilder (sprintf "/api/%s/%s")
         let customOptions = defaultArg customOptions id
+
+        // 0.4.3 — silent-no-op guard. If `'T` declares any forge auth
+        // attribute and no resolver is supplied, refuse at composition.
+        // Without this, the dispatcher would happily route requests
+        // ignoring the declared attributes — a class of insecure
+        // default an OSS adopter following the samples would land on.
+        if authContext.IsNone then
+            let forgeAuthAttrFullNames =
+                Set.ofList [
+                    typeof<RequiresRoleAttribute>.FullName
+                    typeof<RequiresClaimAttribute>.FullName
+                    typeof<TenantScopedAttribute>.FullName
+                    typeof<AllowAnonymousAttribute>.FullName
+                    typeof<PublicEndpointAttribute>.FullName
+                ]
+
+            let t = typeof<'T>
+
+            let attributed = [
+                for p in t.GetProperties() do
+                    for a in p.GetCustomAttributes(false) do
+                        if forgeAuthAttrFullNames.Contains(a.GetType().FullName) then
+                            yield p.Name, a.GetType().Name
+                for f in t.GetFields() do
+                    for a in f.GetCustomAttributes(false) do
+                        if forgeAuthAttrFullNames.Contains(a.GetType().FullName) then
+                            yield f.Name, a.GetType().Name
+            ]
+
+            if not (List.isEmpty attributed) then
+                let lines =
+                    attributed
+                    |> List.map (fun (m, a) -> sprintf "    %s : [<%s>]" m a)
+                    |> String.concat System.Environment.NewLine
+
+                failwithf
+                    "Api.make: API record '%s' carries forge auth attributes:%s%s%sbut no `authContext` resolver was supplied. The dispatcher would silently skip enforcement. Pass `?authContext = Some (fun ctx -> async { ... })` to enable Phase 69d auth-attribute evaluation, or remove the attributes if enforcement is intentionally handled elsewhere."
+                    t.Name
+                    System.Environment.NewLine
+                    lines
+                    System.Environment.NewLine
 
         // Bridge: ForgeAuthContext (declared on Platform.Core) →
         // IAuthContext (declared on ToolUp.Remoting.Server). Trivial

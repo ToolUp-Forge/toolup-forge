@@ -110,10 +110,42 @@ let ingestNarrative
                 // KnowledgeDocument; falls through silently when no
                 // vector store is wired (test harnesses) or when the
                 // new section count meets or exceeds the old.
+                //
+                // 0.4.3 — per-chunk DeleteChunk failures are caught,
+                // counted, and surfaced as a single summary log line.
+                // Previously they were swallowed silently; a partial
+                // failure left orphans in the store and RAG kept
+                // surfacing them under the live document id with no
+                // operator signal.
                 match duplicate, deps.VectorStore with
                 | Some existingDoc, Some vs when chunks.Length < existingDoc.ChunkCount ->
+                    let mutable orphanIds: string list = []
+
                     for i in chunks.Length .. existingDoc.ChunkCount - 1 do
-                        do! vs.DeleteChunk deps.VectorScope (sprintf "%s:chunk:%d" docId i)
+                        let chunkId = sprintf "%s:chunk:%d" docId i
+
+                        try
+                            do! vs.DeleteChunk deps.VectorScope chunkId
+                        with ex ->
+                            orphanIds <- chunkId :: orphanIds
+
+                            deps.Logger.Warn(
+                                sprintf
+                                    "[KnowledgeBase] Orphan-chunk delete failed for %s (docId=%s scope=%s): %s"
+                                    chunkId
+                                    docId
+                                    deps.Scope.ScopeId
+                                    ex.Message
+                            )
+
+                    if not (List.isEmpty orphanIds) then
+                        deps.Logger.Warn(
+                            sprintf
+                                "[KnowledgeBase] %d orphan chunk(s) remain in vector store for docId=%s after narrative overwrite; RAG may surface stale section content. Surviving chunk ids: %s"
+                                orphanIds.Length
+                                docId
+                                (orphanIds |> List.rev |> String.concat "; ")
+                        )
                 | _ -> ()
 
                 // Persist rendered markdown so the document can be re-read
@@ -242,11 +274,40 @@ let resetIndex (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
         // Drop each prior doc's vector chunks so RAG retrieval
         // doesn't keep surfacing them. Falls through if no vector
         // store is wired (tests).
+        //
+        // 0.4.3 — per-chunk failures caught, counted, and surfaced
+        // as a single summary log line per ResetIndex call. Without
+        // this, a partial-failure reset left RAG quoting wiped docs
+        // with no operator signal.
         match deps.VectorStore with
         | Some vs ->
+            let mutable orphanIds: string list = []
+
             for doc in priorDocs do
                 for i in 0 .. doc.ChunkCount - 1 do
-                    do! vs.DeleteChunk deps.VectorScope (sprintf "%s:chunk:%d" doc.Id i)
+                    let chunkId = sprintf "%s:chunk:%d" doc.Id i
+
+                    try
+                        do! vs.DeleteChunk deps.VectorScope chunkId
+                    with ex ->
+                        orphanIds <- chunkId :: orphanIds
+
+                        deps.Logger.Warn(
+                            sprintf
+                                "[KnowledgeBase] ResetIndex chunk delete failed for %s (scope=%s): %s"
+                                chunkId
+                                deps.Scope.ScopeId
+                                ex.Message
+                        )
+
+            if not (List.isEmpty orphanIds) then
+                deps.Logger.Warn(
+                    sprintf
+                        "[KnowledgeBase] ResetIndex left %d orphan vector chunk(s) in scope %s; RAG may continue surfacing wiped documents. Surviving chunk ids: %s"
+                        orphanIds.Length
+                        deps.Scope.ScopeId
+                        (orphanIds |> List.rev |> String.concat "; ")
+                )
         | None -> ()
 
         for doc in priorDocs do

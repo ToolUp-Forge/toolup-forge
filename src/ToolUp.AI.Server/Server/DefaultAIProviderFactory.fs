@@ -225,7 +225,20 @@ let create
                 let! apiKeyOpt = resolvePlatformApiKey active platformKeyStore ctx
 
                 match apiKeyOpt with
-                | None -> return Error(MissingApiKey(active.Descriptor.Id, ""))
+                | None ->
+                    // 0.4.3 — second field now carries an actionable
+                    // hint rather than empty string. Operators upgrading
+                    // from the 0.3.x env-var-only shape see where to
+                    // remediate (Platform Admin AI Keys, or the
+                    // composition-time BootstrapKeyFromEnv shim) rather
+                    // than `MissingApiKey(anthropic, "")` with no signal.
+                    let hint =
+                        match active.BootstrapKeyFromEnv with
+                        | Some _ ->
+                            "Platform Admin > AI Keys (the wired BootstrapKeyFromEnv was non-empty at startup but is currently unset for this scope)"
+                        | None -> "Platform Admin > AI Keys, or wire BootstrapKeyFromEnv at composition time"
+
+                    return Error(MissingApiKey(active.Descriptor.Id, hint))
                 | Some apiKey ->
                     let! model = resolvePlatformModel active providerProfile ctx
                     return Ok(active.Build apiKey model)
