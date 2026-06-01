@@ -182,6 +182,7 @@ For providers with automatic caching (OpenAI), no markers are needed — set `Ca
 ### Provider authoring checklist
 
 - [ ] `IAIProvider` impl with translation layer.
+- [ ] `SendStructuredMessage` — either a native implementation against the vendor's JSON-Schema mode, or a one-line delegation to `IAIProviderDefaults.sendStructuredViaFallback` (see [Structured-output support](#structured-output-support) below).
 - [ ] `AIProviderDescriptor` with unique `Id` matching the package vendor name.
 - [ ] `AIProviderBuilder` pairing descriptor + Build function.
 - [ ] Streaming support (if vendor supports it) — emits `StreamDelta` / `ToolCallBegin` / `Done` callbacks.
@@ -194,6 +195,80 @@ For providers with automatic caching (OpenAI), no markers are needed — set `Ca
 - [ ] At least one integration test (against a mock endpoint or the real API with a test key).
 
 For a complete reference, see [`ToolUp.AIProviders.Claude`](https://github.com/ToolUp-Forge/toolup-forge/tree/main/src/AIProviders/Claude) (~300 lines of code, handles the full Anthropic API surface).
+
+### Structured-output support
+
+`IAIProvider` carries a sibling `SendStructuredMessage` method for JSON-Schema-respecting structured output (Phase 67b). The schema rides as a string (same convention as `AIProviderToolDef.InputSchema`); providers parse internally and translate to their native wire format.
+
+#### Provider-side: choose native or fallback
+
+If the vendor supports server-side structured-output natively, implement against it:
+
+| Vendor    | Native shape                                                                                                      |
+|-----------|-------------------------------------------------------------------------------------------------------------------|
+| Gemini    | `generationConfig.responseSchema` + `responseMimeType: "application/json"`.                                       |
+| OpenAI    | `response_format: { type: "json_schema", json_schema: { name, schema, strict: true } }` (gpt-4o-2024-08-06+).      |
+| Anthropic | No native mode. Tool-based workaround: synthesise a tool whose `input_schema` is the schema; force `tool_choice`. |
+
+For vendors without a native mode (or for an MVP provider you'll harden later), delegate one line to the helper:
+
+```fsharp
+interface IAIProvider with
+    member _.Capabilities = ...
+    member _.SendMessage(...) = ...
+    member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+        IAIProviderDefaults.sendStructuredViaFallback
+            (this :> IAIProvider)
+            messages tools systemPrompt schema retryPolicy
+```
+
+The fallback prepends the schema as a system-prompt instruction, calls `SendMessage`, and post-validates the response is parseable JSON. Non-JSON responses surface as `AIProviderError.SchemaUnsupported`.
+
+#### Consumer-side: dispatch a structured request
+
+Once an `IAIProvider` is resolved (via `DefaultAIProviderFactory.Resolve` or any factory path), call `SendStructuredMessage` directly:
+
+```fsharp
+let schema = """{
+    "type": "object",
+    "properties": {
+        "verdict": { "type": "string", "enum": ["yes", "no", "uncertain"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reasoning": { "type": "string" }
+    },
+    "required": ["verdict", "confidence"]
+}"""
+
+let messages = [
+    AIProviderMessage.text "user" "Is this image a cat? Respond per the schema."
+]
+
+let! result =
+    provider.SendStructuredMessage(
+        messages,
+        [],                          // tools — see limitation below
+        Some "You are a strict classifier.",
+        schema,
+        RetryPolicy.defaults
+    )
+
+match result with
+| Ok response ->
+    // response.Content is JSON conforming to the schema.
+    let parsed = JsonDocument.Parse(response.Content)
+    ...
+| Error (SchemaUnsupported(feature, detail)) ->
+    // Provider could not honour the schema (or the fallback couldn't
+    // extract JSON from the response).
+    ...
+| Error err -> ...
+```
+
+#### Limitations (v1)
+
+- **Non-streaming only.** Streaming structured-output is deferred to a follow-on phase.
+- **Tool use is provider-dependent.** Gemini and OpenAI honour `tools` alongside the schema; Claude's workaround forces `tool_choice` on the synthesised schema-tool, so user-supplied tools become unreachable in the same turn. The canonical pattern: run any free-form tool-dispatch turns with `SendMessage` first, then a final `SendStructuredMessage` for the structured response.
+- **Advanced schema features** (`oneOf`, `anyOf`, `$ref`, …) that one provider can't honour return `AIProviderError.SchemaUnsupported(feature, detail)` rather than degrading silently. Stick to the lowest common denominator for portability.
 
 ## Registering custom tools
 

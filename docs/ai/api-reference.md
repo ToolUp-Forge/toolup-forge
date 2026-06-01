@@ -160,6 +160,18 @@ and AITaskStatus =
 type IAIProvider =
     abstract Capabilities: AIProviderCapabilities
     abstract SendMessage: AIProviderRequest -> Async<AIProviderResponse>
+    // Phase 67b — schema-respecting structured output. `schema` is a
+    // JSON Schema as a string; providers translate to their native
+    // wire format (Gemini `responseSchema`, OpenAI `response_format`,
+    // Claude tool-based workaround). Non-streaming only. Non-native
+    // providers compose `IAIProviderDefaults.sendStructuredViaFallback`.
+    abstract SendStructuredMessage:
+        messages: AIProviderMessage list *
+        tools: AIProviderToolDef list *
+        systemPrompt: string option *
+        schema: string *
+        retryPolicy: RetryPolicy ->
+            Async<Result<AIProviderResponse, AIProviderError>>
 
 and AIProviderCapabilities = {
     ProviderName: string
