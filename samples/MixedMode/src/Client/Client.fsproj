@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 66 Stream F.5 — MixedMode worked example, client side.
+    Demonstrates per-module `Visibility: SubjectKind -> bool`
+    predicates against the mixed-mode `[anonymous; team;
+    claimBearer]` deployment.
+
+    Fable verification gate (from samples/MixedMode/src/Client):
+        dotnet tool restore
+        dotnet fable -o output (with the no-cache switch)
+
+    The ProjectReference to ToolUp.Platform.Client drives the full
+    Client-tier source tree through the Fable compiler; this
+    sample's three module registrations + Visibility predicates ride
+    on top.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+        <!-- Per CLAUDE.md: nullable reference types stay disabled on
+             Fable-touching projects until Feliz / Fable.Remoting /
+             Fable.SimpleJson / Fable.Elmish.HMR ship nullness
+             annotations. -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Client.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Fable.Core" />
+        <PackageReference Include="Feliz" />
+    </ItemGroup>
+</Project>

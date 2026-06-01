@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 66 Stream F.5 — HelloWorld composition root demonstrating
+    Surfaces.individual end-to-end. Compare with
+    samples/MinimalApp/src/MinimalApp.Server/Server.fs — same fromEnv
+    shape, but referenceApp's `Some Surfaces.individual` default
+    pins this app to the canonical Individual deployment.
+
+    Module wiring (registering HelloWorld.Module/Template.fsproj into
+    the ServerApp's module list) remains the README's outstanding
+    follow-up — the rename Template→HelloWorld + the four-file module
+    being registered as a typed Fable.Remoting API surface is broader
+    than this composition-root demo.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Server.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

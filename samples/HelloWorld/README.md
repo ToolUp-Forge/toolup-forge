@@ -6,14 +6,16 @@ End-to-end runnable demonstration of a ToolUp Platform deployment with one minim
 
 **Module shape: complete.** `HelloWorld.Module/` is the canonical 4-file module — `SharedTypes.fs`, `Server.fs`, `ClientModel.fs`, `ClientView.fs` + `Template.fsproj` + `Template.Client.props`. Renaming `Template` to `HelloWorld` throughout is a follow-up edit.
 
-**Server + Client composition roots: not yet authored.** Per the docs in [`../../docs/platform/architecture.md`](../../docs/platform/architecture.md), the minimum composition roots are ~30 lines each. Authoring them + verifying `dotnet run --project HelloWorld.Server` starts cleanly + Vite builds the client + the module loads end-to-end is the work to finish this sample.
+**Server composition root: stub shipped (Phase 66 Stream F.5).** `HelloWorld.Server/Server.fs` demonstrates the canonical `Surfaces.individual` shape via `ServerConfigOverrides.referenceApp` — the `fromEnv` helper pins this app to the Individual deployment unless the operator overrides via `TOOLUP_PLATFORM_SURFACES`. The Module is not yet registered into the `ServerApp.ModuleNames` list — wiring the four-file module through `ServerModule.create + withGuardedApi` is the next follow-up, paired with the Template→HelloWorld rename.
+
+**Client composition root: not yet authored.** Per the docs in [`../../docs/platform/architecture.md`](../../docs/platform/architecture.md), the minimum client composition root pairs with a Vite config + `package.json` + `index.html` — see `samples/MinimalClient/` for the in-tree Fable smoke-test shape and `samples/MixedMode/src/Client/` for the multi-module + `Visibility`-predicate shape this sample's Client will eventually adopt.
 
 When complete, the structure will be:
 
 ```
 samples/HelloWorld/
 ├── HelloWorld.Module/      # 4-file module + Module fsproj + .Client.props
-├── HelloWorld.Server/      # minimal Giraffe composition root
+├── HelloWorld.Server/      # Surfaces.individual composition root (shipped)
 ├── HelloWorld.Client/      # minimal Elmish + Feliz composition root + package.json + vite.config.mts
 └── HelloWorld.sln          # wires Module + Server + Client
 ```
