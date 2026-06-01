@@ -1887,7 +1887,14 @@ module Client =
             | Some provider -> provider
             | None -> fun () -> System.Guid.NewGuid().ToString("N")
 
-        CsrfClient.installRequestGuard identityGetter apiOriginGetter correlationGetter
+        // `csrfEnabled` short-circuits the guard's state-changing CSRF
+        // branch in anonymous-only deployments — same gate used to skip
+        // the prefetch below. Without this the `notoken` console warn
+        // fires on every state-changing /api call in anonymous mode
+        // (server-side CsrfMiddleware exempts anonymous-admitting routes,
+        // so the warn is signal-free noise).
+        let csrfEnabled = ClientConfig.requiresAnyAuth config
+        CsrfClient.installRequestGuard identityGetter apiOriginGetter correlationGetter csrfEnabled
 
         // 0.4.1 — install the SDK's standard `Cmd.OfRemoting`
         // interceptor chain (categorised-error bridge + telemetry).

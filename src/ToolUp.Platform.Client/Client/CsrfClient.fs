@@ -34,7 +34,14 @@ open ToolUp.Platform
 //
 //  * Identity (`Authorization` / `X-User-Id`) is attached on every
 //    eligible request, GET included (reads are authenticated too).
-//  * `X-CSRF-Token` is attached only on state-changing methods.
+//  * `X-CSRF-Token` is attached only on state-changing methods, and
+//    only when the deployment declares an authenticated surface
+//    (`csrfEnabled` — passed in from `ClientConfig.requiresAnyAuth`).
+//    Anonymous-only deployments skip the entire CSRF branch: the
+//    server doesn't mount `/api/csrf-token`, anonymous-admitting
+//    routes are exempt from `CsrfMiddleware` validation, and the
+//    `notoken` console warn that would otherwise fire on every
+//    state-changing call is suppressed.
 //  * Eligibility: path starts with `/api/` AND origin is same-origin
 //    OR the explicitly-configured API origin. A `/api/`-looking
 //    request to an excluded origin emits a one-time `console.warn`
@@ -135,11 +142,13 @@ let mutable private guardInstalled = false
 // $3 = per-request correlation-id getter (returns fresh string per call),
 // $4 = warnOnce sink callback (called as `sink(kind, message)` on the
 // first occurrence of each kind — A6 routes these through F#-side
-// AuthDiagnostics + Logger).
+// AuthDiagnostics + Logger), $5 = csrfEnabled boolean (false in
+// anonymous-only deployments — short-circuits the state-changing
+// branch so no token attempt is made and no `notoken` warn fires).
 // Reads the getters at send time, so it is correct regardless of when
 // the calling proxy/closure was built. Never throws; the original
 // transport is always invoked; idempotent via sentinels.
-[<Emit("""(function(getTok, getIdent, getApiOrigin, getCorrId, warnOnceSink){
+[<Emit("""(function(getTok, getIdent, getApiOrigin, getCorrId, warnOnceSink, csrfEnabled){
   var WARNED = {};
   function warnOnce(k, msg){
     if (!WARNED[k]) {
@@ -179,6 +188,11 @@ let mutable private guardInstalled = false
       if (corrId) { try { setHeader('x-correlation-id', corrId); } catch(e){} }
     }
     if (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'PATCH' || ctx.method === 'DELETE') {
+      // csrfEnabled === false in anonymous-only deployments: no
+      // /api/csrf-token route, anonymous-admitting routes are
+      // server-side CSRF-exempt, and the `notoken` warn would
+      // otherwise fire on every state-changing call. Skip both.
+      if (!csrfEnabled) { return; }
       var tok = '';
       try { tok = getTok() || ''; } catch(e){}
       if (tok) { if (!hasHeader('X-CSRF-Token')) { try { setHeader('X-CSRF-Token', tok); } catch(e){} } }
@@ -226,13 +240,14 @@ let mutable private guardInstalled = false
     wrapped.__toolupReqGuard = true;
     window.fetch = wrapped;
   }
-})($0, $1, $2, $3, $4)""")>]
+})($0, $1, $2, $3, $4, $5)""")>]
 let private installGuardJs
     (tokenGetter: unit -> string)
     (identityGetter: unit -> (string * string)[])
     (apiOriginGetter: unit -> string)
     (correlationGetter: unit -> string)
     (warnOnceSink: string -> string -> unit)
+    (csrfEnabled: bool)
     : unit =
     jsNative
 
@@ -249,6 +264,14 @@ let private installGuardJs
 ///     each provider in config.RequestSeam.HeaderProviders`
 ///   * `apiOriginGetter` = `config.RequestSeam.ApiOrigin >> Option.defaultValue ""`
 ///
+/// `csrfEnabled` short-circuits the state-changing CSRF branch in
+/// anonymous-only deployments (`ClientConfig.requiresAnyAuth = false`).
+/// In that shape the server doesn't mount `/api/csrf-token`,
+/// anonymous-admitting routes are exempt from `CsrfMiddleware`, and
+/// the boot prefetch is already skipped — so the `notoken` console
+/// warn would fire on every state-changing call with no actionable
+/// signal. Identity + correlation headers still attach as normal.
+///
 /// SECURITY: this wrapper IS the CSRF synchroniser-token (and
 /// identity) delivery path; see SECURITY.md.
 ///
@@ -258,6 +281,7 @@ let installRequestGuard
     (identityGetter: unit -> (string * string)[])
     (apiOriginGetter: unit -> string)
     (correlationGetter: unit -> string)
+    (csrfEnabled: bool)
     : unit =
     if not guardInstalled then
         guardInstalled <- true
@@ -279,7 +303,7 @@ let installRequestGuard
                 ()
 
         try
-            installGuardJs tokenOrEmpty identityGetter apiOriginGetter correlationGetter warnSink
+            installGuardJs tokenOrEmpty identityGetter apiOriginGetter correlationGetter warnSink csrfEnabled
         with _ ->
             ()
 
