@@ -160,6 +160,11 @@
              Schedule(Manual) + TriggerOnce; per-AppSlug SemaphoreSlim
              enforces no-cross-shard ordering at single-node scale. -->
         <Compile Include="Server\JobSchedulerBuildOrchestrator.fs" />
+        <!-- Phase 26 — single-node default IDeployPipeline. Composes
+             IBuildOrchestrator + IContainerScheduler + IEventStore.
+             State persisted as DeployStateChanged events under the
+             _platform scope; reconstruction is scan + take latest. -->
+        <Compile Include="Server\DefaultDeployPipeline.fs" />
         <Compile Include="Server\IDataSource.fs" />
         <Compile Include="Server\IOAuthCredentialFlow.fs" />
         <!-- Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate. -->
