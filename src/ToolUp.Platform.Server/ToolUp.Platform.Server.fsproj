@@ -122,6 +122,11 @@
         <Compile Include="Server\IEntityStore.fs" />
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
+        <!-- Phase 26 — Tenant entity registration. Sits behind IEntityStore;
+             consumed by EntityStoreTenantFleet (the ITenantFleet single-node
+             default) and by the Compose pipeline (registers via
+             ServerApp.withEntity<Tenant>). -->
+        <Compile Include="Server\TenantEntity.fs" />
         <Compile Include="Server\IDataCatalog.fs" />
         <Compile Include="Server\DataCatalog.fs" />
         <Compile Include="Server\IResultStore.fs" />
