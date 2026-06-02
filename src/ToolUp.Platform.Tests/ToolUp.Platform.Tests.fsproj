@@ -261,6 +261,13 @@
              DomAttrCustomAuditTests.fs whitelists these modules). -->
         <Compile Include="InProcess\DataPropTests.fs" />
         <Compile Include="InProcess\AriaPropTests.fs" />
+        <!-- v0.5.0 — DOM attr-custom audit ratchet. Walks the forge
+             client tree and flags any raw `prop.custom ("data-*",
+             _)` / `prop.custom ("aria-*", _)` / `prop.custom ("role",
+             _)` call outside the DataProp / AriaProp / SvgProp helper
+             modules. Mirrors the Support/SubjectWildcardAnalyzer.fs
+             text-scanner pattern. -->
+        <Compile Include="InProcess\DomAttrCustomAuditTests.fs" />
         <Compile Include="InProcess\ConsentProviderTests.fs" />
         <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->

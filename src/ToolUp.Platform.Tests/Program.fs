@@ -172,6 +172,24 @@ let allTests =
         DeployPlaneTests.deployPipelineTests
         DeployPlaneTests.containerSchedulerInMemoryTests
         DeployPlaneTests.containerSchedulerDockerLocalTests
+        // v0.5.0 — DOM-attr helper module sanity packs + audit ratchet.
+        // The DataProp / AriaProp helper modules (sub-task A) ship
+        // sanity tests that mirror SvgPropTests' shape; the audit
+        // ratchet (this commit) walks the forge client tree and flags
+        // any raw `prop.custom ("data-*"|"aria-*"|"role", _)` call
+        // outside the helper modules. All three packs are wired in
+        // here together because they share the same v0.5.0 motivation
+        // and the audit only earns its keep when the helpers it
+        // anchors are themselves under test. SvgPropTests is also
+        // wired in for the first time — the pre-existing pack carried
+        // an `[<Tests>]` attribute (assuming auto-discovery) but
+        // `runTestsWithCLIArgs` only runs the supplied `allTests`
+        // list, leaving the pack silently dormant. Discovered when
+        // wiring up the new packs.
+        SvgPropTests.tests
+        DataPropTests.tests
+        AriaPropTests.tests
+        DomAttrCustomAuditTests.tests
     ]
 
 [<EntryPoint>]
