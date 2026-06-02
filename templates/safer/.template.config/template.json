@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Web", "F#", "Giraffe", "Fable", "Elmish", "Feliz", "ToolUp", "SAFE" ],
+  "identity": "ToolUp.SAFER.Minimal",
+  "groupIdentity": "ToolUp.Templates.SAFER",
+  "name": "ToolUp.SAFER — minimal F# full-stack starter (Tiny Chat demo)",
+  "shortName": "toolup-safer",
+  "description": "Minimal F# full-stack starter for the ToolUp Platform SDK. Mirrors the SAFE Stack get-started experience and demonstrates the in-tree Elmish + ToolUp.Remoting fork primitives via a Tiny Chat demo. Anonymous mode, in-memory only, no auth, no persistence. For production multi-tenant + auth + persistence, use platformsdk-solution.",
+  "tags": {
+    "language": "F#",
+    "type": "solution"
+  },
+  "sourceName": "MyApp",
+  "preferNameDirectory": true,
+  "symbols": {
+    "port-server": {
+      "type": "parameter",
+      "datatype": "integer",
+      "defaultValue": "5000",
+      "description": "Server port.",
+      "replaces": "5000"
+    },
+    "port-client-vite": {
+      "type": "parameter",
+      "datatype": "integer",
+      "defaultValue": "8080",
+      "description": "Vite dev-server port.",
+      "replaces": "8080"
+    },
+    "toolUpSdkVersion": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "0.2.3",
+      "description": "ToolUp.Sdk meta-manifest version (drives every transitive ToolUp.* package version).",
+      "replaces": "TOOLUP_SDK_VERSION"
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "If true, skip dotnet restore after scaffolding."
+    }
+  },
+  "primaryOutputs": [
+    { "path": "MyApp.sln" },
+    { "path": "src/MyApp-Server/MyApp-Server.fsproj" },
+    { "path": "src/MyApp-Client/MyApp-Client.fsproj" },
+    { "path": "src/Modules/Chat/Chat.fsproj" }
+  ],
+  "postActions": [
+    {
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages",
+      "manualInstructions": [ { "text": "Run 'dotnet restore'." } ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
+}

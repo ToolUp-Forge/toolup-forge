@@ -1,0 +1,7 @@
+bin/
+obj/
+.vs/
+output/
+*.user
+node_modules/
+*.log
