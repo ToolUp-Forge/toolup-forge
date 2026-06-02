@@ -155,6 +155,11 @@
         <Compile Include="Server\JobScheduler.fs" />
         <Compile Include="Server\JobSchedulerDiagnosticsContributor.fs" />
         <Compile Include="Server\JobNotifyEventStore.fs" />
+        <!-- Phase 26 — single-node default IBuildOrchestrator over IJobScheduler.
+             Registers handler "_platform.build" + dispatches builds via
+             Schedule(Manual) + TriggerOnce; per-AppSlug SemaphoreSlim
+             enforces no-cross-shard ordering at single-node scale. -->
+        <Compile Include="Server\JobSchedulerBuildOrchestrator.fs" />
         <Compile Include="Server\IDataSource.fs" />
         <Compile Include="Server\IOAuthCredentialFlow.fs" />
         <!-- Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate. -->
