@@ -309,4 +309,84 @@ let tests =
             Expect.equal captured.Length 2 "both outcomes captured"
             let names = captured |> List.map _.Name |> List.sort
             Expect.equal names [ "v_a"; "v_b" ] "all validator names present"
+
+        // ─── Name-collision detector ──────────────────────────────
+        //
+        // Validator names are dictionary-keyed in aggregation; two
+        // registrations sharing the same `Name` silently overwrite the
+        // prior entry. `assertUniqueValidatorNames` runs before
+        // `Validate` so the diagnostic fires at compose time with a
+        // cryptic-startup-friendly message naming both registration
+        // sites.
+
+        testCase "assertUniqueValidatorNames — three distinct names pass through unit"
+        <| fun _ ->
+            let validators = [
+                mkValidator "v1" (TimeSpan.FromSeconds 1.0) (fun () -> async { return Ok })
+                mkValidator "v2" (TimeSpan.FromSeconds 1.0) (fun () -> async { return Ok })
+                mkValidator "v3" (TimeSpan.FromSeconds 1.0) (fun () -> async { return Ok })
+            ]
+
+            assertUniqueValidatorNames validators
+
+        testCase "assertUniqueValidatorNames — duplicate name throws with the collision diagnostic message"
+        <| fun _ ->
+            let validators = [
+                mkValidator "auth-bound" (TimeSpan.FromSeconds 1.0) (fun () -> async { return Ok })
+                mkValidator "auth-bound" (TimeSpan.FromSeconds 1.0) (fun () -> async { return Ok })
+            ]
+
+            try
+                assertUniqueValidatorNames validators
+                Expect.isTrue false "expected exception on duplicate Name, got none"
+            with ex ->
+                Expect.stringContains ex.Message "auth-bound" "collision message names the colliding validator's Name"
+
+                Expect.stringContains
+                    ex.Message
+                    "Compose-time defect"
+                    "collision message uses the cryptic-startup-friendly prefix"
+
+                Expect.stringContains
+                    ex.Message
+                    "dictionary-keyed"
+                    "collision message explains why the overwrite is silent"
+
+                Expect.stringContains ex.Message "Rename one" "collision message suggests a fix"
+
+        testCase "validate — collision fires before Validate (no validator body invoked)"
+        <| fun _ ->
+            // Body throws on invocation. Aggregator must fail with the
+            // collision message, NOT the "validator threw" message —
+            // proving the gate fires before any Validate call.
+            let bodyInvoked = ref false
+
+            let services = ServiceCollection()
+
+            services.AddSingleton<IConfigValidator>(
+                mkValidator "dup" (TimeSpan.FromSeconds 1.0) (fun () -> async {
+                    bodyInvoked.Value <- true
+                    failwith "should not reach"
+                    return Ok
+                })
+            )
+            |> ignore
+
+            services.AddSingleton<IConfigValidator>(
+                mkValidator "dup" (TimeSpan.FromSeconds 1.0) (fun () -> async {
+                    bodyInvoked.Value <- true
+                    failwith "should not reach"
+                    return Ok
+                })
+            )
+            |> ignore
+
+            try
+                validate services None false |> ignore
+                Expect.isTrue false "expected collision exception, got none"
+            with ex ->
+                Expect.stringContains ex.Message "name collision" "collision detector ran"
+                Expect.stringContains ex.Message "dup" "colliding name surfaced"
+
+            Expect.isFalse bodyInvoked.Value "Validate was not invoked — gate fired first"
     ]

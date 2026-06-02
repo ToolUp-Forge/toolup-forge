@@ -72,6 +72,44 @@ let private truncate (max: int) (s: string) =
     elif s.Length <= max then s
     else s.Substring(0, max)
 
+/// Throw with a cryptic-startup-friendly message when two or more
+/// validators share the same `Name`. Names are the dictionary key for
+/// outcome aggregation and the lookup key for `securityClassValidatorNames`
+/// + the `/dev/inspect` validators panel — a collision silently
+/// overwrites whichever entry was registered last and the operator sees
+/// only one of the two probes running, with no diagnostic surface.
+/// Called from `validate` immediately after `collectValidators` so the
+/// failure fires BEFORE the first `Validate` invocation.
+///
+/// Surfaces the colliding validators' .NET type names so the operator
+/// can grep `src/` for the registration sites. The interface itself
+/// doesn't carry registration-site info, so the type name (or
+/// `<unknown>` if the impl is anonymous, e.g. an object expression in a
+/// test) is the closest stand-in available.
+let assertUniqueValidatorNames (validators: IConfigValidator list) : unit =
+    let collisions =
+        validators
+        |> List.groupBy _.Name
+        |> List.filter (fun (_, vs) -> List.length vs > 1)
+
+    if not collisions.IsEmpty then
+        let renderOne (name, vs) =
+            let typeNames =
+                vs
+                |> List.map (fun v ->
+                    let t = v.GetType()
+
+                    if isNull t.FullName then "<unknown>" else t.FullName)
+                |> String.concat " + "
+
+            sprintf
+                "Compose-time defect: IConfigValidator name collision on \"%s\". Found in: %s. Validator names are dictionary-keyed in aggregation; a duplicate silently overwrites the prior entry. Rename one (and update the consumer-side `[<HostedConfigKey>]` if any depends on the name) or merge the two validators into one."
+                name
+                typeNames
+
+        let summary = collisions |> List.map renderOne |> String.concat "\n"
+        failwith summary
+
 let private collectValidators (services: IServiceCollection) : IConfigValidator list =
     services
     |> Seq.filter (fun d -> d.ServiceType = typeof<IConfigValidator>)
@@ -224,6 +262,12 @@ let private runSet (logger: ILogger option) (validators: IConfigValidator list) 
 /// populate the snapshot service.
 let validate (services: IServiceCollection) (logger: ILogger option) (skipPreflight: bool) : ValidatorOutcome list =
     let validators = collectValidators services
+
+    // Fire BEFORE any Validate call — a name collision otherwise
+    // silently drops one probe's outcome in the dictionary-keyed
+    // aggregation paths (e.g. /dev/inspect, securityClassValidatorNames
+    // lookup). Diagnostic surface > silent overwrite.
+    assertUniqueValidatorNames validators
 
     if skipPreflight then
         let securityClass, skipped = validators |> List.partition isSecurityClass
