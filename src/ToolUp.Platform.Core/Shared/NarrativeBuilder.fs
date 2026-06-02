@@ -35,9 +35,40 @@ let strong (s: string) : InlineSpan = Strong s
 let metric (label: string) (value: string) : InlineSpan = Metric(label, value)
 let code (s: string) : InlineSpan = Code s
 
+/// Inline link. `spans` are the visible content of the link (so a link
+/// can wrap emphasised / coded runs); `href` is the URL the link points
+/// to. `Narrative.link "https://..." [ Narrative.text "see docs" ]`.
+let link (href: string) (spans: InlineSpan list) : InlineSpan = Link(href, spans)
+
+/// Convenience: a link whose visible content is a single text span.
+/// `Narrative.linkText "see docs" "https://..."`.
+let linkText (label: string) (href: string) : InlineSpan = Link(href, [ Text label ])
+
+/// Inline image. `alt` is mandatory — fallback for plaintext / RSS /
+/// screen-reader contexts; renderers that cannot show images emit the
+/// alt text in brackets. `title` is an optional hover hint surfaced in
+/// HTML's `title=` attribute and markdown's `![alt](src "title")` form.
+let image (src: string) (alt: string) : InlineSpan = Image(src, alt, None)
+
+/// Image with an optional `title` hint.
+let imageWith (src: string) (alt: string) (title: string) : InlineSpan = Image(src, alt, Some title)
+
 // ─── Element constructors ───────────────────────────────────────
 
 let paragraph (spans: InlineSpan list) : NarrativeElement = Paragraph spans
+
+/// Sub-section heading inside the current section. `level` is the HTML
+/// heading level — pass 3 or 4 for the common case (sections are H2; the
+/// document title is H1). Out-of-range levels are clamped to 3..6 by
+/// every renderer so a misplaced value can't produce illegal HTML.
+let heading (level: int) (spans: InlineSpan list) : NarrativeElement = Heading(level, spans)
+
+/// Convenience: H3 heading with a single text span. The most common
+/// long-form-page shape.
+let h3 (label: string) : NarrativeElement = Heading(3, [ Text label ])
+
+/// Convenience: H4 heading with a single text span.
+let h4 (label: string) : NarrativeElement = Heading(4, [ Text label ])
 
 let bullets (items: InlineSpan list list) : NarrativeElement = BulletList items
 
@@ -49,6 +80,21 @@ let table (columns: (string * TableAlignment) list) (rows: InlineSpan list list 
     Table(columns, rows)
 
 let callout (severity: Severity) (spans: InlineSpan list) : NarrativeElement = Callout(severity, spans)
+
+/// Hard line break inside a paragraph or bullet.
+let br: InlineSpan = Br
+
+/// Fenced code block with an optional language hint.
+/// `Narrative.codeBlock (Some "fsharp") "let x = 1"`.
+let codeBlock (language: string option) (content: string) : NarrativeElement = CodeBlock(language, content)
+
+/// Untagged fenced code block. Equivalent to `codeBlock None`.
+let codeBlockOf (content: string) : NarrativeElement = CodeBlock(None, content)
+
+/// Block quotation with an optional citation. The citation renders as
+/// `<cite>...</cite>` in HTML and as a `— citation` attribution line
+/// in markdown / plaintext.
+let blockquote (citation: string option) (spans: InlineSpan list) : NarrativeElement = Blockquote(citation, spans)
 
 let divider: NarrativeElement = Divider
 
@@ -62,10 +108,20 @@ let create (title: string) : NarrativeDocument = {
     Subtitle = None
     Sections = []
     Provenance = None
+    Lang = None
+    CanonicalUrl = None
 }
 
 /// Set the document's subtitle.
 let subtitle (s: string) (doc: NarrativeDocument) : NarrativeDocument = { doc with Subtitle = Some s }
+
+/// Set the document's BCP-47 language tag (`"en-GB"`, `"fr"`, etc.).
+/// Drives `<html lang="...">` and `og:locale` on SSR-rendered pages.
+let withLang (tag: string) (doc: NarrativeDocument) : NarrativeDocument = { doc with Lang = Some tag }
+
+/// Set the document's canonical absolute URL. Renders as
+/// `<link rel="canonical" href="...">` and `og:url`.
+let withCanonicalUrl (url: string) (doc: NarrativeDocument) : NarrativeDocument = { doc with CanonicalUrl = Some url }
 
 /// Append a section to the document. `id` is the stable anchor used by
 /// renderers that support deep-linking; `heading` is the human-visible

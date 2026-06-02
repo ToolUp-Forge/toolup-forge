@@ -253,6 +253,8 @@ let private executeGetSection (ctx: HttpContext) (argsJson: string) : Async<stri
                         Subtitle = e.Document.Subtitle
                         Sections = [ section ]
                         Provenance = e.Document.Provenance
+                        Lang = e.Document.Lang
+                        CanonicalUrl = e.Document.CanonicalUrl
                     }
 
                     let markdown = NarrativeMarkdown.render sectionDoc

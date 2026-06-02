@@ -1,6 +1,7 @@
 namespace ToolUp.PublicRendering
 
 open System
+open ToolUp.Platform.Narrative
 
 // `ContentRoot` and `PublicRenderingMode` live in
 // `ToolUp.Platform.Core.Shared.SDK.Shared.fs` so `ServerConfig` can
@@ -27,13 +28,29 @@ type LayoutName = LayoutName of string
 module LayoutName =
     let value (LayoutName n) = n
 
-/// Rendered body of a page. v1 carries the parsed markdown source and
-/// the pre-rendered HTML fragment side-by-side; layouts choose which
-/// to surface. (A typed-component case can be added non-breakingly
-/// when a layout actually wants it.)
+/// Rendered body of a page. The three variants cover the three main
+/// authoring paths a publishable site uses:
+///
+/// - `Markdown` — file-backed `.md` content loaded by
+///   `MarkdownContentLoader`. The canonical baseline.
+/// - `Html` — pre-rendered HTML fragment. Layouts surface the string
+///   verbatim; used for content that arrived as HTML already (legacy
+///   imports, hand-authored marketing pages).
+/// - `Narrative` — typed `NarrativeDocument`. Programmatic pages
+///   (status dashboards, pricing tables that mirror runtime config),
+///   AI-emitted pages (the LLM populates a typed structure rather
+///   than round-tripping through markdown), and analytical posts
+///   whose bodies use the Narrative element set natively (Paragraph
+///   + Table + KeyValueGrid + Callout + Metric) all live here.
+///
+/// Layouts inspect `Body` and dispatch — see `NarrativeLayout` for the
+/// shipped helper that renders the `Narrative` branch into a
+/// Giraffe.ViewEngine fragment with optional schema.org JSON-LD
+/// derived from the document's `Provenance`.
 type ContentBody =
     | Markdown of source: string
     | Html of fragment: string
+    | Narrative of document: NarrativeDocument
 
 /// Static page / news article / event / etc. Frontmatter is open by
 /// design: well-known keys (`og:image`, `author`, `date`, `sitemap`,

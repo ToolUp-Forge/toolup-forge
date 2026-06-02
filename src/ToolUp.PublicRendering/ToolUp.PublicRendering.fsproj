@@ -29,6 +29,8 @@
         <Compile Include="Server\PublicContentApiImpl.fs" />
         <Compile Include="Server\RedirectMap.fs" />
         <Compile Include="Server\StructuredDataHelpers.fs" />
+        <Compile Include="Server\NarrativePrerender.fs" />
+        <Compile Include="Server\NarrativeLayout.fs" />
         <Compile Include="Server\Attribution.fs" />
         <Compile Include="Server\SitemapGenerator.fs" />
         <Compile Include="Server\PublicPageHandler.fs" />

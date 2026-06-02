@@ -12,7 +12,7 @@ open Toolup.UIToolkit
 
 module NarrativeCommit = Toolup.NarrativeCommit
 
-let private renderSpan (span: InlineSpan) : ReactElement =
+let rec private renderSpan (span: InlineSpan) : ReactElement =
     match span with
     | Text s -> Html.span [ prop.text s ]
     | Emphasis s -> Html.em [ prop.className "italic text-gray-700"; prop.text s ]
@@ -31,8 +31,29 @@ let private renderSpan (span: InlineSpan) : ReactElement =
                 Html.span [ prop.className "font-semibold text-gray-900"; prop.text value ]
             ]
         ]
+    | Link(href, spans) ->
+        Html.a [
+            prop.href href
+            prop.className "text-brand underline underline-offset-2 hover:text-brand/80"
+            prop.children (renderSpans spans)
+        ]
+    | Image(src, alt, title) ->
+        Html.img [
+            prop.src src
+            prop.alt alt
+            prop.className "max-w-full h-auto rounded"
+            match title with
+            | Some t -> prop.title t
+            | None -> ()
+        ]
+    | Br -> Html.br []
 
-let private renderSpans (spans: InlineSpan list) : ReactElement list = spans |> List.map renderSpan
+and private renderSpans (spans: InlineSpan list) : ReactElement list = spans |> List.map renderSpan
+
+let private clampHeadingLevel (level: int) : int =
+    if level < 3 then 3
+    elif level > 6 then 6
+    else level
 
 let private calloutClasses (severity: Severity) : string =
     match severity with
@@ -48,6 +69,30 @@ let private renderElement (el: NarrativeElement) : ReactElement =
             prop.className "text-base text-gray-800 leading-relaxed"
             prop.children (renderSpans spans)
         ]
+    | Heading(level, spans) ->
+        // Tailwind sizes mirror the standard heading-cascade ratios; the
+        // section heading uses `Typography.subSubheading` above (~H2
+        // shape), so H3 stays one notch below that. Each branch
+        // constructs the element inline because Feliz's `Html.hN` static
+        // members are overload-resolved per call site — pulling the
+        // member reference into a `let`-bound value makes overload
+        // resolution ambiguous (FS0041).
+        let props: IReactProperty list = [
+            prop.className (
+                match clampHeadingLevel level with
+                | 3 -> "text-lg font-semibold text-gray-900"
+                | 4 -> "text-base font-semibold text-gray-900"
+                | 5 -> "text-sm font-semibold text-gray-800"
+                | _ -> "text-sm font-semibold text-gray-700"
+            )
+            prop.children (renderSpans spans)
+        ]
+
+        match clampHeadingLevel level with
+        | 3 -> Html.h3 props
+        | 4 -> Html.h4 props
+        | 5 -> Html.h5 props
+        | _ -> Html.h6 props
     | BulletList items ->
         Html.ul [
             prop.className "list-disc list-outside pl-5 space-y-1 text-base text-gray-800"
@@ -133,6 +178,26 @@ let private renderElement (el: NarrativeElement) : ReactElement =
                 + calloutClasses severity
             )
             prop.children (renderSpans spans)
+        ]
+    | CodeBlock(language, content) ->
+        let codeClass =
+            match language with
+            | Some lang -> "font-mono text-[0.85em] language-" + lang
+            | None -> "font-mono text-[0.85em]"
+
+        Html.pre [
+            prop.className "bg-gray-50 border border-gray-200 rounded p-3 overflow-x-auto"
+            prop.children [ Html.code [ prop.className codeClass; prop.text content ] ]
+        ]
+    | Blockquote(citation, spans) ->
+        Html.blockquote [
+            prop.className "border-l-4 border-gray-300 pl-4 italic text-gray-700"
+            prop.children [
+                Html.p [ prop.children (renderSpans spans) ]
+                match citation with
+                | Some c -> Html.cite [ prop.className "block text-sm text-gray-500 not-italic mt-1"; prop.text c ]
+                | None -> ()
+            ]
         ]
     | Divider -> Misc.divider
 

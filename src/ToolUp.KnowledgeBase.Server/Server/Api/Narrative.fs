@@ -62,6 +62,8 @@ let ingestNarrative
                             Subtitle = request.Document.Subtitle
                             Sections = [ section ]
                             Provenance = request.Document.Provenance
+                            Lang = request.Document.Lang
+                            CanonicalUrl = request.Document.CanonicalUrl
                         }
 
                         let body = NarrativeMarkdown.render sectionDoc

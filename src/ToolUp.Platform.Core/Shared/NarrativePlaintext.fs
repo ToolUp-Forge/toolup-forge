@@ -13,20 +13,57 @@ let private severityPrefix (s: Severity) =
     | Warning -> "[WARNING] "
     | Critical -> "[CRITICAL] "
 
-let private renderSpan (span: InlineSpan) : string =
+let rec private renderSpan (span: InlineSpan) : string =
     match span with
     | Text t -> t
     | Emphasis t -> t
     | Strong t -> t
     | Metric(label, value) -> sprintf "%s = %s" label value
     | Code t -> t
+    | Link(href, spans) ->
+        // Plaintext readers can't follow href on their own; surface the
+        // URL after the visible label so RSS / email / terminal readers
+        // can still copy-paste it.
+        sprintf "%s (%s)" (renderSpans spans) href
+    | Image(_, alt, _) ->
+        // Image renders as bracketed alt text — the universally-portable
+        // accessibility fallback. Title is dropped (no readable place
+        // for it in plaintext).
+        sprintf "[%s]" alt
+    // Br collapses to a single newline. Within a Paragraph (which
+    // appends its own terminator), this produces the visual break the
+    // author intended; consecutive `Br`s degrade gracefully to blank
+    // lines.
+    | Br -> "\n"
 
-let private renderSpans (spans: InlineSpan list) : string =
+and private renderSpans (spans: InlineSpan list) : string =
     spans |> List.map renderSpan |> String.concat ""
+
+let private clampHeadingLevel (level: int) : int =
+    if level < 3 then 3
+    elif level > 6 then 6
+    else level
 
 let private renderElement (sb: StringBuilder) (el: NarrativeElement) : unit =
     match el with
     | Paragraph spans -> sb.AppendLine(renderSpans spans) |> ignore
+    | Heading(level, spans) ->
+        let rendered = renderSpans spans
+        let _ = clampHeadingLevel level
+        // Plaintext expresses heading hierarchy through indentation +
+        // underline weight. H3 uses a `-` underline; H4 uses a `.` underline.
+        // Deeper levels collapse to indented bold text without an underline.
+        let underline =
+            match clampHeadingLevel level with
+            | 3 -> Some "-"
+            | 4 -> Some "."
+            | _ -> None
+
+        sb.AppendLine(rendered) |> ignore
+
+        match underline with
+        | Some marker -> sb.AppendLine(String.replicate rendered.Length marker) |> ignore
+        | None -> ()
     | BulletList items ->
         for spans in items do
             sb.Append("  - ").AppendLine(renderSpans spans) |> ignore
@@ -76,6 +113,17 @@ let private renderElement (sb: StringBuilder) (el: NarrativeElement) : unit =
         for row in renderedRows do
             sb.AppendLine(line row) |> ignore
     | Callout(severity, spans) -> sb.Append(severityPrefix severity).AppendLine(renderSpans spans) |> ignore
+    | CodeBlock(_, content) ->
+        // Plaintext can't express syntax; indent every line by four
+        // spaces — the universally-portable preformatted convention.
+        for line in content.Replace("\r\n", "\n").Split('\n') do
+            sb.AppendFormat("    {0}", line).AppendLine() |> ignore
+    | Blockquote(citation, spans) ->
+        sb.Append("    ").AppendLine(renderSpans spans) |> ignore
+
+        match citation with
+        | Some c -> sb.AppendFormat("      — {0}", c).AppendLine() |> ignore
+        | None -> ()
     | Divider -> sb.AppendLine("---") |> ignore
 
 let private renderSection (sb: StringBuilder) (section: NarrativeSection) : unit =

@@ -18,12 +18,28 @@ type Severity =
 /// of spans, not a tree. `Metric` is the single concession to structure —
 /// both consumers format labelled numeric values (`r = 0.42`, `γ = 1.04`)
 /// frequently enough that renderers benefit from styling them distinctly.
+///
+/// `Link` and `Image` extend the original analytics-shaped set with the
+/// two inline primitives marketing-shape pages need (Phase 80). `Link`
+/// carries its visible spans separately from its `href` so a link can
+/// contain emphasised / coded / metric runs. `Image` carries mandatory
+/// `alt` (accessibility + plaintext / RSS fallback) and an optional
+/// `title` (the `title=` attribute on HTML output; the `"title"` field in
+/// markdown `![alt](src "title")` form).
 type InlineSpan =
     | Text of string
     | Emphasis of string
     | Strong of string
     | Metric of label: string * value: string
     | Code of string
+    | Link of href: string * spans: InlineSpan list
+    | Image of src: string * alt: string * title: string option
+    /// Hard line break inside a paragraph. Renders as `<br />` (HTML),
+    /// trailing-two-spaces + newline (markdown), or newline (plaintext).
+    /// Useful for addresses, multi-line callouts, and marketing copy
+    /// where the visual break matters but a new paragraph would over-
+    /// stress the prose hierarchy.
+    | Br
 
 /// Per-column horizontal alignment for `Table` cells. Renderers that can't
 /// express alignment (e.g. Feliz text tables on narrow viewports) may ignore
@@ -40,13 +56,35 @@ type TableAlignment =
 /// definition list. `Table` is a first-class tabular element: each column
 /// has a header and alignment; each row is a list of cells; each cell is
 /// a list of inline spans.
+///
+/// `Heading` carries a level (3 or 4 — the document's own title is the
+/// implicit H1 and the section's `Heading` field is H2, so sub-section
+/// headings inside a section start at H3) and inline spans. Added in
+/// Phase 80 to give Narrative a path to long-form / marketing-shape
+/// pages whose bodies want nested headings without breaking out of the
+/// section model. Renderers clamp out-of-range levels to 3..6 so an
+/// author who passes 5/6 keeps semantic HTML and an author who passes
+/// 1/2 doesn't collide with the document or section heading.
 type NarrativeElement =
     | Paragraph of InlineSpan list
+    | Heading of level: int * spans: InlineSpan list
     | BulletList of InlineSpan list list
     | OrderedList of InlineSpan list list
     | KeyValueGrid of (string * InlineSpan list) list
     | Table of columns: (string * TableAlignment) list * rows: InlineSpan list list list
     | Callout of Severity * InlineSpan list
+    /// Fenced code block. `language` is an optional syntax-highlighter
+    /// hint surfaced as `class="language-fsharp"` in HTML and a
+    /// ```` ```fsharp ```` fence in markdown. Distinct from `InlineSpan.Code`
+    /// (which is a single-token inline run); use a `CodeBlock` whenever
+    /// the content includes newlines or wants a fixed-width frame.
+    | CodeBlock of language: string option * content: string
+    /// Block quotation — testimonials, pull quotes, cited prose.
+    /// Semantically distinct from `Callout` (severity-keyed advisories);
+    /// `Blockquote` carries an optional `citation` (renders as `<cite>`
+    /// in HTML, attribution prefix in markdown). Inline spans inside the
+    /// quote can themselves use `Link` / `Emphasis` / `Metric` etc.
+    | Blockquote of citation: string option * spans: InlineSpan list
     | Divider
 
 /// A document section with a stable Id (used as an anchor by renderers
@@ -90,6 +128,19 @@ type NarrativeDocument = {
     Subtitle: string option
     Sections: NarrativeSection list
     Provenance: NarrativeProvenance option
+    /// BCP-47 language tag the document is authored in (e.g. `"en-GB"`,
+    /// `"fr"`). Feeds `<html lang="...">` in SSR renders and Open Graph
+    /// `og:locale`. `None` defers to the surrounding page's locale
+    /// (analytical narratives within a single-locale deployment leave
+    /// this unset).
+    Lang: string option
+    /// Canonical absolute URL the document should be indexed under.
+    /// Drives `<link rel="canonical" href="...">` emitted by SSR
+    /// layouts and the `og:url` Open Graph tag. Critical for any
+    /// deployment that cross-publishes (the same document surfaced
+    /// at multiple paths, syndicated to a partner site, or rendered
+    /// both as HTML and as an Atom feed entry).
+    CanonicalUrl: string option
 }
 
 /// Per-scope retention policy for `INarrativeStore` implementations.

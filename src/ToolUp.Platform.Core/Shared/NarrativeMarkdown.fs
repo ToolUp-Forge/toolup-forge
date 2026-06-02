@@ -44,21 +44,47 @@ let private escape (s: string) : string =
     // Minimal markdown escape — enough for narrative prose, not a full sanitiser.
     s.Replace("\\", "\\\\").Replace("*", "\\*").Replace("_", "\\_")
 
-let private renderSpan (span: InlineSpan) : string =
+let private escapeUrl (s: string) : string =
+    // CommonMark allows raw URLs inside `()` but `)` would close the
+    // link target prematurely. Backslash-escape the two characters that
+    // matter; everything else (spaces in URLs notwithstanding) is the
+    // caller's problem to percent-encode before passing in.
+    s.Replace("\\", "\\\\").Replace(")", "\\)")
+
+let rec private renderSpan (span: InlineSpan) : string =
     match span with
     | Text t -> escape t
     | Emphasis t -> sprintf "_%s_" (escape t)
     | Strong t -> sprintf "**%s**" (escape t)
     | Metric(label, value) -> sprintf "**%s** %s" (escape label) (escape value)
     | Code t -> sprintf "`%s`" t
+    | Link(href, spans) -> sprintf "[%s](%s)" (renderSpans spans) (escapeUrl href)
+    | Image(src, alt, title) ->
+        match title with
+        | Some t -> sprintf "![%s](%s \"%s\")" (escape alt) (escapeUrl src) (escape t)
+        | None -> sprintf "![%s](%s)" (escape alt) (escapeUrl src)
+    // CommonMark hard line break: two trailing spaces followed by a
+    // newline. Renderers that strip trailing whitespace will break
+    // this; the alternative `\` form is supported by GFM but not all
+    // readers.
+    | Br -> "  \n"
 
-let private renderSpans (spans: InlineSpan list) : string =
+and private renderSpans (spans: InlineSpan list) : string =
     spans |> List.map renderSpan |> String.concat ""
+
+let private clampHeadingLevel (level: int) : int =
+    if level < 3 then 3
+    elif level > 6 then 6
+    else level
 
 let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: NarrativeElement) : unit =
     match el with
     | Paragraph spans ->
         sb.AppendLine(renderSpans spans) |> ignore
+        sb.AppendLine() |> ignore
+    | Heading(level, spans) ->
+        let prefix = String.replicate (clampHeadingLevel level) "#"
+        sb.AppendFormat("{0} {1}", prefix, renderSpans spans).AppendLine() |> ignore
         sb.AppendLine() |> ignore
     | BulletList items ->
         for spans in items do
@@ -100,7 +126,7 @@ let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: Narr
         sb.AppendLine() |> ignore
     | Callout(severity, spans) ->
         match options.AdmonitionStyle with
-        | Blockquote ->
+        | AdmonitionStyle.Blockquote ->
             sb.Append(blockquoteMarker severity).AppendLine(renderSpans spans) |> ignore
             sb.AppendLine() |> ignore
         | Directive ->
@@ -108,6 +134,21 @@ let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: Narr
             sb.AppendLine(renderSpans spans) |> ignore
             sb.AppendLine(":::") |> ignore
             sb.AppendLine() |> ignore
+    | CodeBlock(language, content) ->
+        let fence = "```"
+        let langTag = language |> Option.defaultValue ""
+        sb.AppendFormat("{0}{1}", fence, langTag).AppendLine() |> ignore
+        sb.AppendLine(content) |> ignore
+        sb.AppendLine(fence) |> ignore
+        sb.AppendLine() |> ignore
+    | NarrativeElement.Blockquote(citation, spans) ->
+        sb.Append("> ").AppendLine(renderSpans spans) |> ignore
+
+        match citation with
+        | Some c -> sb.AppendFormat("> — {0}", escape c).AppendLine() |> ignore
+        | None -> ()
+
+        sb.AppendLine() |> ignore
     | Divider ->
         sb.AppendLine("---") |> ignore
         sb.AppendLine() |> ignore

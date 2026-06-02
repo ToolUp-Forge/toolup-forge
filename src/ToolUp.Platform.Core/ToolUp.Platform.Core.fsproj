@@ -106,6 +106,7 @@
         <Compile Include="Shared\NarrativePlaintext.fs" />
         <Compile Include="Shared\NarrativeMarkdown.fs" />
         <Compile Include="Shared\NarrativeHtml.fs" />
+        <Compile Include="Shared\NarrativeAtom.fs" />
         <Compile Include="Shared\NarrativeBuilder.fs" />
         <Compile Include="Shared\INarrativeRenderer.fs" />
         <Compile Include="Shared\NarrativeRenderers.fs" />

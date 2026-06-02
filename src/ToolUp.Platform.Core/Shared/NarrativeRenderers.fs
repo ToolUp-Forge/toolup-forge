@@ -30,6 +30,13 @@ let private htmlRenderer =
         member _.Render(doc) = NarrativeHtml.render doc
     }
 
+let private atomRenderer =
+    { new INarrativeRenderer with
+        member _.ContentType = "application/atom+xml"
+        member _.Name = "Atom"
+        member _.Render(doc) = NarrativeAtom.render doc
+    }
+
 /// Markdown renderer — wraps `NarrativeMarkdown.render`.
 let markdown: INarrativeRenderer = markdownRenderer
 
@@ -40,8 +47,13 @@ let plaintext: INarrativeRenderer = plaintextRenderer
 /// fragment; not wrapped in `<html>` / `<body>`.
 let html: INarrativeRenderer = htmlRenderer
 
-/// The full default set, ordered markdown → plaintext → html.
-let defaults: INarrativeRenderer list = [ markdownRenderer; plaintextRenderer; htmlRenderer ]
+/// Atom renderer — wraps `NarrativeAtom.render`. Emits a single
+/// `<entry>` Atom 1.0 element. Use `NarrativeAtom.renderFeed` directly
+/// to wrap multiple entries in a complete `<feed>` document.
+let atom: INarrativeRenderer = atomRenderer
+
+/// The full default set, ordered markdown → plaintext → html → atom.
+let defaults: INarrativeRenderer list = [ markdownRenderer; plaintextRenderer; htmlRenderer; atomRenderer ]
 
 /// Look up a renderer by content type within the supplied registry.
 /// Match is case-insensitive on the MIME type — `text/HTML` resolves
