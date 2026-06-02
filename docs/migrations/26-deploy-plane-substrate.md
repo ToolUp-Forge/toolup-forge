@@ -1,10 +1,10 @@
-# Phase 26 — Deploy Plane substrate (partial — substrate surface only)
+# Phase 26 — Deploy Plane substrate (substrate + single-node defaults + ServerConfig opt-in)
 
 ## What changes
 
-A new substrate ships at the SDK boundary giving the typed contract any deploy backend composes against: four interfaces (`IBuildOrchestrator`, `ITenantFleet`, `IDeployPipeline`, `IContainerScheduler`) plus their supporting types and a `Tenant` entity registration on `IEntityStore`. The substrate is **interface-first**: this migration covers the contract surface and one of the three single-node default implementations (`EntityStoreTenantFleet`). The remaining defaults (`JobSchedulerBuildOrchestrator`, `DefaultDeployPipeline`), the reference `IContainerScheduler` companion (`DockerLocalContainerScheduler`), the four contract test packs, and the `ServerConfig.DeployPlane` wiring all ship in follow-up work — they are not blocking the substrate's contract surface for downstream consumers that wire their own implementations.
+A new substrate ships at the SDK boundary giving the typed contract any deploy backend composes against: four interfaces (`IBuildOrchestrator`, `ITenantFleet`, `IDeployPipeline`, `IContainerScheduler`) plus their supporting types, a `Tenant` entity registration on `IEntityStore`, three single-node F# default implementations, and a `ServerConfig.DeployPlane` opt-in switch wiring them into DI. The substrate remains **interface-first**: every default is replaceable by a distributed-companion DI registration, and `IContainerScheduler` is consumer-supplied (the SDK ships no default — operators wire `DockerLocalContainerScheduler` or a cloud-specific impl).
 
-**No consumer-side behaviour changes by default.** The substrate is fully opt-in. Consumers that do not register any of the four interfaces in DI continue to load no deploy-plane code — byte-for-byte identical to today.
+**No consumer-side behaviour changes by default.** `ServerConfig.DeployPlane = NoDeployPlane` is the SDK-wide default — every existing deployment loads no deploy-plane code, byte-for-byte identical to pre-Phase-26 behaviour (GP 11 / GP 13). Consumers that opt in via `ServerConfig.DeployPlane = SingleNodeDeployPlane` pick up `IBuildOrchestrator` + `IDeployPipeline` + `ITenantFleet` automatically, plus a Tenant entity registration prepended to the entity store.
 
 ## What ships in this migration
 
@@ -18,11 +18,11 @@ A new substrate ships at the SDK boundary giving the typed contract any deploy b
 | `IDeployPipeline` | `Server/Server/IDeployPipeline.fs` | Server | ✅ |
 | `IContainerScheduler` | `Server/Server/IContainerScheduler.fs` | Server | ✅ |
 | `EntityStoreTenantFleet` single-node default | `Server/Server/EntityStoreTenantFleet.fs` | Server | ✅ |
-| `JobSchedulerBuildOrchestrator` single-node default | `Server/Server/JobSchedulerBuildOrchestrator.fs` | Server | ⏸ deferred |
-| `DefaultDeployPipeline` single-node default | `Server/Server/DefaultDeployPipeline.fs` | Server | ⏸ deferred |
-| `DockerLocalContainerScheduler` reference companion | `src/ContainerSchedulers/DockerLocal/` | companion package | ⏸ deferred |
-| `Tests/Contracts/I*Contract.fs` (×4) | `Tests/Contracts/` | tests | ⏸ deferred |
-| `ServerConfig.DeployPlaneMode` DU + DI wiring | `Core/Shared/SDK.Shared.fs` + `Server/Compose/BuildRouteHandlers.fs` | Core + Server compose | ⏸ deferred |
+| `JobSchedulerBuildOrchestrator` single-node default | `Server/Server/JobSchedulerBuildOrchestrator.fs` | Server | ✅ `a631c4a` |
+| `DefaultDeployPipeline` single-node default | `Server/Server/DefaultDeployPipeline.fs` | Server | ✅ `cbfd1d4` |
+| `ServerConfig.DeployPlaneMode` DU + DI wiring | `Core/Shared/SDK.Shared.fs` + `Server/Compose/ComposeStores.fs` + `Server/SDK.Server.fs` | Core + Server compose | ✅ `4bf6466` |
+| `DockerLocalContainerScheduler` reference companion | `src/ContainerSchedulers/DockerLocal/` | companion package | ⏸ Track A lane 2 (in flight) |
+| `Tests/Contracts/I*Contract.fs` (×4) | `Tests/Contracts/` | tests | ⏸ Track A lane 2 (in flight) |
 
 The deferred items don't block consumers that implement the substrate against their own backend (Diametrical's [Phase 26.C](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/diametrical-roadmap/phases/26-C-toolup-cloud-operation.md) ToolUp Cloud composition; a self-hosted operator on Docker Swarm; a Kubernetes-based shop). The substrate's contract is stable; downstream composes against the interfaces today and the SDK's single-node defaults / reference companion / contract packs land in a follow-up phase commit set.
 
@@ -32,9 +32,29 @@ The phase file prescribed `Shared/Types/I*.fs` for the four substrate interfaces
 
 This deviation is documented inline in the phase file and is the correct call for the substrate's split; no downstream consumer is affected (the interfaces are server-only by definition).
 
-## Diff to apply (downstream consumers — none required today)
+## Diff to apply (downstream consumers — none required by default)
 
-Consumers do not need to apply any change yet. The substrate is opt-in via `ServerConfig.DeployPlane` (deferred), and no existing consumer composes against the four interfaces. When the deferred items land, this migration doc will be amended with the consumer-side wiring (DI registration, env vars, `ServerConfig` field).
+`NoDeployPlane` is the SDK-wide default, so existing consumers need no change. Consumers wanting to opt in to the substrate's single-node defaults set four `ServerConfig` fields and register one consumer-supplied DI binding:
+
+```fsharp
+let serverConfig = {
+    ServerConfig.defaults with
+        JobScheduler = InProcessJobScheduler        // required dep
+        EntityStore = EnabledEntityStore            // required dep (Tenant catalog)
+        DeployPlane = SingleNodeDeployPlane         // opt-in switch
+        // ... rest of consumer's config
+}
+
+// Register a consumer-supplied IContainerScheduler. The SDK ships no
+// default — operators wire the dev-grade reference companion or a
+// cloud-specific impl:
+services.AddSingleton<IContainerScheduler>(
+    // DockerLocalContainerScheduler when Track A lane 2 ships, or:
+    YourCustomContainerScheduler()
+)
+```
+
+The SDK's `registerDeployPlane` factory will resolve dependencies at first-use and raise a clear remediation error if any are missing (e.g. `IContainerScheduler` not registered, `JobScheduler = NoJobScheduler`, `EntityStore = NoEntityStore`).
 
 ## Verification steps
 
@@ -42,12 +62,14 @@ The following all pass today against the shipped substrate surface:
 
 - `dotnet build src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj` — clean.
 - `dotnet build src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj` — clean.
-- `DeployManifest.validate` returns the expected `MissingRequiredField` / `InvalidSlug` / `DuplicateDomain` / `ConflictingModuleVersions` errors for malformed inputs (covered by the manifest's own internal logic — formal contract pack lands with the deferred work).
-- The six-rule portability audit comment block appears at the top of each of the four interface files (`IBuildOrchestrator.fs`, `ITenantFleet.fs`, `IDeployPipeline.fs`, `IContainerScheduler.fs`) and traces each rule to a specific signature decision. This is the **prose** half of the audit; the **executable** half (contract-pack assertions) is part of the deferred work.
+- `DeployManifest.validate` returns the expected `MissingRequiredField` / `InvalidSlug` / `DuplicateDomain` / `ConflictingModuleVersions` errors for malformed inputs (covered by the manifest's own internal logic — formal contract pack lands with Track A lane 2).
+- The six-rule portability audit comment block appears at the top of each of the four interface files (`IBuildOrchestrator.fs`, `ITenantFleet.fs`, `IDeployPipeline.fs`, `IContainerScheduler.fs`) and traces each rule to a specific signature decision. This is the **prose** half of the audit; the **executable** half (contract-pack assertions) ships with Track A lane 2.
+- `NoDeployPlane` (default) registers nothing — no `IBuildOrchestrator` / `IDeployPipeline` / `ITenantFleet` in DI, no Tenant entity registration, no `_platform.build` / `_platform.deploy` event emission. Existing consumers see byte-for-byte unchanged behaviour.
+- `SingleNodeDeployPlane` with all four prerequisites satisfied (JobScheduler / EntityStore / IContainerScheduler / EventStore) registers the three defaults end-to-end; a build → deploy → launch round-trip persists events under `_platform.build` and `_platform.deploy` SourceModules.
 
 ## Rollback
 
-The substrate is purely additive. To revert: delete the eight new `.fs` files, the one modified record (`TenantEntity.fs`'s removal of the inline `TenantId = string`), and unwind the two `.fsproj` `<Compile>` additions. No consumer behaviour reverts; no data-layout migration to reverse.
+The substrate is purely additive. Consumers that have not flipped `ServerConfig.DeployPlane = SingleNodeDeployPlane` need no rollback action — `NoDeployPlane` is the default and registers nothing. To revert at the SDK level: drop `ServerConfig.DeployPlane` and the `DeployPlaneMode` DU from `SDK.Shared.fs`, drop the `registerDeployPlane` call from `SDK.Server.fs`, drop the deploy-plane prepend in `registerEntityStore`. No data-layout migration to reverse.
 
 ## See also
 
