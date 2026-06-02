@@ -71,7 +71,17 @@ The full docs site lives in [`docs/`](docs/):
 
 ## In-tree client + transport forks
 
-The two load-bearing client libraries — **Elmish** (MVU runtime) and **ToolUp.Remoting** (type-safe RPC transport, forked from [Fable.Remoting](https://github.com/Zaid-Ajaj/Fable.Remoting) under MIT, see [`NOTICE.md`](NOTICE.md)) — are vendored in-tree under `ToolUp.Platform.{Core,Client,Server}` rather than pulled as third-party packages. The `namespace Elmish` and `namespace Fable.Remoting.*` are preserved verbatim, so consumer `open Elmish` / `open Fable.Remoting.Client` / `open Fable.Remoting.Server` call sites compile unchanged — no source migration is required to adopt these forks.
+The two load-bearing client libraries — **ToolUp.Elmish** (MVU runtime, forked from [Fable.Elmish](https://github.com/elmish/elmish) under Apache 2.0) and **ToolUp.Remoting** (type-safe RPC transport, forked from [Fable.Remoting](https://github.com/Zaid-Ajaj/Fable.Remoting) under MIT) — are vendored in-tree under `ToolUp.Platform.{Core,Client,Server}` rather than pulled as third-party packages. Consumer code uses `open ToolUp.Elmish` / `open ToolUp.Remoting.Server` etc.; no separate `PackageReference` is required for either.
+
+### Standing on shoulders — upstream credit
+
+The full appreciative attribution lives in [`NOTICE.md`](NOTICE.md). Short form:
+
+**ToolUp.Remoting — built on Fable.Remoting (Zaid Ajaj, MIT).** ToolUp.Remoting began as a fork of [Fable.Remoting](https://github.com/Zaid-Ajaj/Fable.Remoting) by Zaid Ajaj. Years of careful work on type-safe RPC over HTTP for F# — wire-shape conventions, route-info encoding, JSON-converter behaviour, the ergonomics of binding API records on both client and server — are the substrate ToolUp's transport rests on. The Phase 69b–69k seam family added substantial new surface for the ToolUp use case (per-request `CallContext`, structured error envelopes, `RateLimit`, `Idempotency`, `Audit`, typed `Validation`, `JobHandle`, source-generator dispatch, schema-versioned wire envelopes), but the core wire model and converter heritage stay Zaid's. **If your use case fits upstream Fable.Remoting unmodified, use it directly** — it's well-maintained, broadly adopted, and excellent. ToolUp forked because we needed seams that didn't exist upstream, not because anything was wrong with what's there.
+
+**ToolUp.Elmish — built on Fable.Elmish (Eugene Tolmachev + the Elmish community, Apache 2.0).** ToolUp.Elmish began as a fork of [Fable.Elmish](https://github.com/elmish/elmish) by Eugene Tolmachev with contributions from a community of F# developers over 8+ years. The Elm Architecture core (`Program<>`, `Cmd<'msg>`, `Sub<'msg>`, `Dispatch<'msg>`, `init`/`update`/`view`) is bit-for-bit Eugene's design and code; ToolUp's variant is an opinionated trim of that surface (dropping `Cmd.OfFunc` / `OfPromise` / `OfTask` / `OfValueTask` / `OfAsyncWith` / `OfAsyncImmediate` / WebSharper paths / `cmd.obsolete.fs` v3.x shims that ToolUp consumers never used) plus ToolUp-specific additions (`IDispatcher`, `Prefetch`, lifetime-aware `EffectHandle`, structured `ErrorContext`, `Cmd.OfRemoting`). The trim is opinionated, not adversarial. **If your code base uses any of the dropped surface or you simply want canonical Elmish, use upstream directly** — it remains the F# MVU standard and the right choice for the broad community it serves. ToolUp forked to fit a specific consumer base, not to replace what's there.
+
+Both upstream projects remain under their original licences (MIT for Fable.Remoting, Apache 2.0 for Fable.Elmish); the relevant attributions are reproduced in [NOTICE.md](NOTICE.md).
 
 **What the Elmish fork adds over upstream Fable.Elmish v5.x:**
 
