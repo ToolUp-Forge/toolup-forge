@@ -7,8 +7,8 @@ Phase 39 `IAssetStore` companion. Image-first asset substrate for ToolUp.Platfor
 - `IAssetStore` (5-method surface: `Upload` / `Get` / `GetDerivative` / `Delete` / `List`).
 - `DefaultAssetStore` — wraps `IBlobStorage` for originals + derivative cache. SHA-256 content-hash as dedup key; per-asset record at `assets/records/{assetId}.json`; alt-text + MIME-accept-list validation in `Upload`.
 - `IDerivativeRenderer` — pluggable image renderer. Default `SkiaSharpDerivativeRenderer` handles JPEG / PNG / WebP natively; AVIF returns `UnsupportedFormat` (needs a SkiaSharp AVIF plug-in not bundled).
-- `AssetUploadHandler` — Fable.Remoting handler + multipart endpoint at `/api/assets/upload`. Mandatory alt-text validation.
-- `AssetApi` — Fable.Remoting `IAssetApi` contract; mounted at `/api/assets/` when `ServerConfig.AssetStore = EnabledAssetStore`.
+- `AssetUploadHandler` — ToolUp.Remoting handler + multipart endpoint at `/api/assets/upload`. Mandatory alt-text validation.
+- `AssetApi` — ToolUp.Remoting `IAssetApi` contract; mounted at `/api/assets/` when `ServerConfig.AssetStore = EnabledAssetStore`.
 - `AssetCompose` — `AssetStoreServerApp` shape; `withAssetStore` registration; `withDerivativeRenderer` / `withDerivativeProfile` / `withAcceptedMimeTypes` / `withMaxUploadBytes` / `withAssetStoreOverride` builders. Strip-imports byte-for-byte equivalent to `ServerApp` when `AssetStore = NoAssetStore`.
 - `DerivativeProfiles` — compose-time registry seeded with `web-default` (thumbnail / medium / OG / webp-medium). Deployments add profiles via `withDerivativeProfile`.
 

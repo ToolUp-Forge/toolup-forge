@@ -24,13 +24,13 @@ Shipped surface (commit-stable across Phase 21):
 | Schema types | [`Shared/FormSchema.fs`](Shared/FormSchema.fs) | `FormSchemaId`, `FieldKind`, `ValidationRule`, `FieldSchema`, `FormSchema` |
 | Submission types | [`Shared/FormSubmission.fs`](Shared/FormSubmission.fs) | `SubmissionId`, `FieldValue`, `SubmissionState`, `Submission`, `FieldError`, `FormError` |
 | Workflow types | [`Shared/Workflow.fs`](Shared/Workflow.fs) | `WorkflowState`, `WorkflowId`, `Transition`, `WorkflowDefinition` |
-| Wire contract | [`Shared/FormApi.fs`](Shared/FormApi.fs) | `IFormApi` (Fable.Remoting) |
+| Wire contract | [`Shared/FormApi.fs`](Shared/FormApi.fs) | `IFormApi` (ToolUp.Remoting) |
 | Server interface | [`Server/IFormStore.fs`](Server/IFormStore.fs) | `IFormStore` — six-rule portable |
 | Server interface | [`Server/IWorkflowEngine.fs`](Server/IWorkflowEngine.fs) | `IWorkflowEngine`, `WorkflowGuard`, `WorkflowAction` — six-rule portable |
 | Entity registrations | [`Server/EntityRegistrations.fs`](Server/EntityRegistrations.fs) | `formSchemaRegistration`, `submissionRegistration` |
 | Default impls | [`Server/FormStore.fs`](Server/FormStore.fs), [`Server/WorkflowEngine.fs`](Server/WorkflowEngine.fs) | over `IEntityStore` (Phase 19) + `IAuditLog` (Phase 9) |
 | Validation | [`Server/FormValidator.fs`](Server/FormValidator.fs) | `validate`, `CustomValidator`, `CustomValidatorRegistry` |
-| API handler | [`Server/FormApiHandler.fs`](Server/FormApiHandler.fs) | `formApi` Fable.Remoting handler with Owner/Admin gating |
+| API handler | [`Server/FormApiHandler.fs`](Server/FormApiHandler.fs) | `formApi` ToolUp.Remoting handler with Owner/Admin gating |
 | Compose pipeline | [`Server/FormsCompose.fs`](Server/FormsCompose.fs) | `FormsServerApp` record + `run`, `DefaultedFormStore` decorator |
 | Client renderer | [`Client/FormRenderer.fs`](Client/FormRenderer.fs) | `FormRenderer` Feliz component |
 | Client list | [`Client/FormSubmissionsList.fs`](Client/FormSubmissionsList.fs) | `FormSubmissionsList` table |

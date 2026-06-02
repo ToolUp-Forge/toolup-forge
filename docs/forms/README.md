@@ -24,9 +24,9 @@ Three packages:
 
 | Package | What it is |
 |---|---|
-| `ToolUp.Forms.Core` | Shared types: `FormSchema` / `FieldKind` / `ValidationRule` / `Submission` / `FieldValue` / `FormError` / `WorkflowDefinition` / `IFormApi` Fable.Remoting contract + `IPublicFormApi` for publishable surveys + `IActionLedger` (Phase 21d). |
+| `ToolUp.Forms.Core` | Shared types: `FormSchema` / `FieldKind` / `ValidationRule` / `Submission` / `FieldValue` / `FormError` / `WorkflowDefinition` / `IFormApi` ToolUp.Remoting contract + `IPublicFormApi` for publishable surveys + `IActionLedger` (Phase 21d). |
 | `ToolUp.Forms.Server` | `IFormStore` + default `FormStore` (over `IEntityStore`), `IWorkflowEngine` + `WorkflowEngine`, `FormValidator`, `formApi` handler, `publicFormApi` handler (Phase 21b), `PublishableFormConfigValidator`, `InMemoryActionLedger` default + `IActionLedger` substrate (Phase 21d), `FormsCompose`. |
-| `ToolUp.Forms.Client` | `FormRenderer` (Feliz schema-driven inputs), `WorkflowBadge` (state pill), `FormSubmissionsList` (table), `PublicEmbed` (`/r/{token}` standalone respondent UI), `SurveyDashboardView` + `SurveyListView` (admin), `FormsClient.proxy` (Fable.Remoting proxy). |
+| `ToolUp.Forms.Client` | `FormRenderer` (Feliz schema-driven inputs), `WorkflowBadge` (state pill), `FormSubmissionsList` (table), `PublicEmbed` (`/r/{token}` standalone respondent UI), `SurveyDashboardView` + `SurveyListView` (admin), `FormsClient.proxy` (ToolUp.Remoting proxy). |
 
 ## Required substrate
 

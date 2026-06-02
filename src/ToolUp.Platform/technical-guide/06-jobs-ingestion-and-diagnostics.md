@@ -25,7 +25,7 @@ Five files form the SDK layer:
 
 Plus the integration:
 - `Server/JobNotifyEventStore.fs` — `IEventStore` decorator that fires `IJobScheduler.NotifyEventWritten` after every `Write`. Stacks above `HookedEventStore` (webhooks). Without this wrapper, `OnEvent`-triggered jobs never auto-fire.
-- `Shared/JobApi.fs` + `Server/JobApiHandler.fs` — Fable.Remoting surface (auto-injected when scheduler is enabled). Read paths ungated within the caller's scope; write paths require Owner / Admin in `Team` / `MultiTeam` mode (mirrors `ConfigHandler.ensureWriteAllowed`). The handler overwrites caller-supplied `ScopeId` and `CreatedBy` with the resolved `AccessContext` values — wire-side impersonation is impossible.
+- `Shared/JobApi.fs` + `Server/JobApiHandler.fs` — ToolUp.Remoting surface (auto-injected when scheduler is enabled). Read paths ungated within the caller's scope; write paths require Owner / Admin in `Team` / `MultiTeam` mode (mirrors `ConfigHandler.ensureWriteAllowed`). The handler overwrites caller-supplied `ScopeId` and `CreatedBy` with the resolved `AccessContext` values — wire-side impersonation is impossible.
 
 ### Dispatch lifecycle
 
@@ -216,7 +216,7 @@ The threshold is exactly `60_000ms` (one full minute) — the loop's own tick in
 
 - **Comprehensive `IJobScheduler` contract pack.** Phase 9b ships `IJobStore` contract coverage (10 tests) + `CronExpression` unit tests (13 tests). A scheduler-level contract pack covering Schedule validation cases, idempotency end-to-end, and dispatch-loop behaviour against a manually-driven tick is a follow-up.
 - **Schedule-validation telemetry.** `ScheduleError` is returned to callers but not emitted as an audit event today. A future entry would record validation rejections separately from `JobScheduled` so admins can spot configuration drift.
-- **Admin UI module.** The `JobApi` Fable.Remoting surface is shipped; a built-in `JobAdminUI` module mirroring `WebhookAdminUI` is a follow-up — list / create / cancel / disable / enable / re-fire from the SDK shell.
+- **Admin UI module.** The `JobApi` ToolUp.Remoting surface is shipped; a built-in `JobAdminUI` module mirroring `WebhookAdminUI` is a follow-up — list / create / cancel / disable / enable / re-fire from the SDK shell.
 - **Distributed companion.** Phase 9c — Akka.NET reference companion + portability validation. Whatever shape that audit produces feeds back into the interfaces above.
 
 ## Data ingestion (Phase 10 — interface-first; connectors deferred)
@@ -232,7 +232,7 @@ The SDK ships the substrate for pulling data from external sources (BigQuery, Re
 Five files form the SDK layer:
 
 - `Shared/DataIngestionTypes.fs` — `DataSourceId` (= `string`), `DataSourceConfig`, `IngestionStatus`, `IngestionError` DU, `IngestionRun`, `ColumnInfo`, `TableSchema`. All Fable-compatible so the admin UI deserialises through `Fable.SimpleJson`.
-- `Shared/DataIngestionApi.fs` — `IDataIngestionApi` Fable.Remoting record (List / Get / Save / Delete / TriggerRefresh / ListRecentRuns).
+- `Shared/DataIngestionApi.fs` — `IDataIngestionApi` ToolUp.Remoting record (List / Get / Save / Delete / TriggerRefresh / ListRecentRuns).
 - `Server/IDataSource.fs` — connector contract + `DataSourceCallContext` (carries `ScopeId` + `Config` + optional pre-resolved `Credential`).
 - `Server/IDataIngestor.fs` — orchestrator contract.
 - `Server/IDataSourceConfigStore.fs` — config persistence contract.
@@ -243,7 +243,7 @@ Plus the implementations + integration:
 - `Server/DataSourceConfigStore.fs` — blob-backed default at `_platform/data-sources/{scopeId}/configs/{sourceId}.json`.
 - `Server/DataIngestor.fs` — default orchestrator. Resolves config → connector by `Kind` → credential via `ISecretStore.GetSecret(scopeId, config.CredentialKey)` → `Connect` → `Query` → `IDataObjectStore.Save(..., Versioned)` → `IngestionRun` blob + lifecycle event.
 - `Server/DataIngestionJobHandler.fs` — `IJobHandler` registered under `"_platform.dataingestion.run"` so scheduled and triggered ingestion both flow through the Phase 9b scheduler.
-- `Server/DataIngestionApiHandler.fs` — Fable.Remoting handler with Owner/Admin write gate.
+- `Server/DataIngestionApiHandler.fs` — ToolUp.Remoting handler with Owner/Admin write gate.
 
 ### Credential-thunk pattern
 
@@ -299,7 +299,7 @@ Every method on `IDataSourceConfigStore`, `IDataIngestor`, and `IDataIngestionAp
 |---|---|
 | Interface design (`IDataSource`, `IDataIngestor`, `IDataSourceConfigStore`) | Shipped |
 | `DataSourceConfig` + `IngestionRun` types | Shipped |
-| `IDataIngestionApi` Fable.Remoting surface | Shipped |
+| `IDataIngestionApi` ToolUp.Remoting surface | Shipped |
 | Default orchestrator (`DataIngestor`) | Shipped |
 | Default config store (blob-backed) | Shipped |
 | In-memory connector (`InMemoryDataSource`) | Shipped (Kind = `"InMemory"`) |

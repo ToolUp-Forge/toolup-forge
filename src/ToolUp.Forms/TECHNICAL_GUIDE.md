@@ -159,7 +159,7 @@ For the public-survey surface, `FormsCompose.run` performs three
 additional setup steps beyond the baseline schema-storage wiring:
 
 1. Registers `/api/public/forms/` as an anonymous route via `ServerApp.withAnonymousRoute` so `AuthEnforcementMiddleware` lets unauthenticated submissions through
-2. Mounts `PublicFormApiHandler` as a Fable.Remoting handler with the `PublicFormApi.routeBuilder` (separate from the authenticated handler's default routing)
+2. Mounts `PublicFormApiHandler` as a ToolUp.Remoting handler with the `PublicFormApi.routeBuilder` (separate from the authenticated handler's default routing)
 3. Auto-registers `PublishableFormConfigValidator` so deployments hear about misconfigured visibility / `PublicBaseUrl` at startup, not at first respondent click
 
 The handler factory resolves `IShareTokenStore`, `INotificationChannel`, and `IBlobStorage` per-request (all option-typed — `None` causes the relevant API methods to return clear errors rather than null-ref). `ServerConfig.PublicBaseUrl` is captured outside the per-request lambda so URL composition doesn't pay a config-lookup per call.

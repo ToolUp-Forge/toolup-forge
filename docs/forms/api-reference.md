@@ -257,7 +257,7 @@ module ActionLedger =
 
 ### `IFormApi` (`module ToolUp.Forms.FormApi`)
 
-The authenticated Fable.Remoting wire contract. Mounted by `FormsServerApp.run` at `/api/IFormApi/<MethodName>`.
+The authenticated ToolUp.Remoting wire contract. Mounted by `FormsServerApp.run` at `/api/IFormApi/<MethodName>`.
 
 ```fsharp
 open System
@@ -732,7 +732,7 @@ SurveyListView.render
 
 Apps wire these into their own admin module.
 
-### Fable.Remoting proxies
+### ToolUp.Remoting proxies
 
 ```fsharp
 val FormsClient.proxy : IFormApi

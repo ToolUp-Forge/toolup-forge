@@ -111,7 +111,7 @@ The full server-side registration:
 ```fsharp
 let helloModule =
     ServerModule.create "HelloWorld"
-    |> ServerModule.withGuardedApi helloApiFactory       // Fable.Remoting API
+    |> ServerModule.withGuardedApi helloApiFactory       // ToolUp.Remoting API
     |> ServerModule.withDataTypes [ helloDataType ]      // data type detection + processing
     |> ServerModule.withConfig helloConfigSchema         // per-module config
     |> ServerModule.withNeedsData [ "SalesData" ]        // declares dependency

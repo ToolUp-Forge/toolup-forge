@@ -2,7 +2,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-A modular F# full-stack SDK for building production multi-tenant analytical applications. Giraffe over ASP.NET Core (server); Fable + Elmish + Feliz (client); Fable.Remoting (type-safe wire).
+A modular F# full-stack SDK for building production multi-tenant analytical applications. Giraffe over ASP.NET Core (server); Fable + Feliz with an in-tree Elmish runtime (client); in-tree ToolUp.Remoting transport (type-safe wire).
 
 > **Status: pre-release (`0.x.y`).** SemVer-on-`0.x` policy — minor bumps may include breaking changes; `1.0.0` is declared once the surface is stable.
 
@@ -11,7 +11,7 @@ A modular F# full-stack SDK for building production multi-tenant analytical appl
 - **Multi-tenant by construction.** Scope isolation, RBAC, audit trail, per-tenant data scoping are first-class — not retrofitted.
 - **AI-augmented as a peer.** Agent loop, SSE streaming, tool calling, prompt caching, conversation persistence — drop in a provider companion and the LLM is wired.
 - **Schema-driven modules.** `FormSchema` + `WorkflowDefinition` + module convention collapses CRUD-heavy intake / approval flows.
-- **F# end to end.** Shared types cross the wire via Fable.Remoting without DTO duplication.
+- **F# end to end.** Shared types cross the wire via ToolUp.Remoting without DTO duplication.
 - **Sector-agnostic.** The SDK ships infrastructure; you bring domain.
 
 ## Quick start
@@ -61,6 +61,27 @@ The full docs site lives in [`docs/`](docs/):
 - [`docs/forms/`](docs/forms/) — `ToolUp.Forms`: schema-driven forms, workflows, publishable surveys.
 - [`docs/scheduling/`](docs/scheduling/) — `ToolUp.Scheduling`: booking with concurrency lock, recurrence, iCalendar.
 - [`docs/companions/`](docs/companions/) — provider-companion overviews (auth, storage, AI, embedding, notifications).
+
+## In-tree client + transport forks
+
+The two load-bearing client libraries — **Elmish** (MVU runtime) and **ToolUp.Remoting** (type-safe RPC transport, forked from [Fable.Remoting](https://github.com/Zaid-Ajaj/Fable.Remoting) under MIT, see [`NOTICE.md`](NOTICE.md)) — are vendored in-tree under `ToolUp.Platform.{Core,Client,Server}` rather than pulled as third-party packages. The `namespace Elmish` and `namespace Fable.Remoting.*` are preserved verbatim, so consumer `open Elmish` / `open Fable.Remoting.Client` / `open Fable.Remoting.Server` call sites compile unchanged — no source migration is required to adopt these forks.
+
+**What the Elmish fork adds over upstream Fable.Elmish v5.x:**
+
+- **`IDispatcher<'msg>`** — typed out-of-band dispatch handle, replacing the `let mutable shellDispatch : (Msg -> unit) option = None` pattern every non-trivial Elmish app reinvents. Carries an `IsActive` flag so background callbacks (SSE reconnect timers, notification listeners) no-op cleanly after `Program.withTermination` fires rather than dispatching against a torn-down loop.
+- **`Prefetch<'a>` + `Prefetch.onAllReady`** — codifies boot-time multi-source data loading (load Configs in parallel with Flags, fire `ReinitActiveModule` when the last one resolves) without ad-hoc `IsConfigsPending` / `IsFlagsPending` bookkeeping fields.
+- **Structured `ErrorContext` + `Program.withErrorReporter`** — the upstream `(string * exn) -> unit` shape loses module id, phase, correlation id; the structured reporter carries all of them.
+- **`EffectHandle<'msg>` with explicit `Lifetime`** (`Program` / `Module of moduleId` / `Manual`) — subscription cleanup that doesn't leak across hot reloads. The runtime + HMR dispose lifetime-scoped effects automatically; the old `Cmd.ofEffect (fun d -> SomeClient.subscribe (M >> d) |> ignore)` pattern that never tears down is the leak this primitive replaces.
+- **`Cmd.OfRemoting.{call, callWithRetry}`** — typed Cmd helpers for the dominant RPC-call pattern (`Cmd.OfAsync.either api.Method arg OkMsg ErrMsg`). Same shape with intent-naming, plus a `RetryPolicy` knob for transient transport failures and integration with the transport's correlation-id propagation.
+- **Trimmed unused surface** — `Cmd.OfFunc`, `Cmd.OfPromise`, `Cmd.OfTask`, `Cmd.OfValueTask`, `Cmd.OfAsyncWith`, `Cmd.OfAsyncImmediate`, the WebSharper paths and v3.x shims are dropped (zero observed call sites across the consumer base). Migration cost: none.
+
+**What the ToolUp.Remoting fork adds over upstream Fable.Remoting:**
+
+- **Body normalisation folded into the dispatcher.** `unit -> Async<T>` API methods, empty / `"null"` / `""` request bodies, and `DateTimeOffset` round-tripping all work out of the box — the standalone `RemotingBodyNormalizationMiddleware` consumers used to wire into the pipeline is no longer required.
+- **Bundled `FableJsonConverter`** — F# discriminated unions land as `{ "Case": "X", "Fields": [...] }` on SSE / non-Remoting JSON surfaces too, matching the shape `Fable.SimpleJson` parses on the client. No second JSON-converter pick-list to maintain.
+- **Foundation for categorised error envelopes, typed validation, idempotency-key memoisation, AsyncSeq streaming, and JobHandle long-running operations** as those land in subsequent point releases. The single-source-of-truth dispatcher means each addition arrives without consumer-side middleware changes.
+
+The Elmish runtime's classical Elm Architecture (Init / Update / View / Cmd / Sub) is fully preserved — the additions above are refinements *inside* that pattern, not departures from it. `Program<'arg, 'model, 'msg, 'view>`, `mkProgram`, `mkSimple`, `withSubscription`, `withReactSynchronous`, `Cmd.batch` / `Cmd.ofMsg` / `Cmd.OfAsync.{either, perform, attempt}` all match upstream bit-for-bit.
 
 ## Package families
 

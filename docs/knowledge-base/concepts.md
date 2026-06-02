@@ -131,7 +131,7 @@ Html.button [
 `Toolup.NarrativeCommit.submit` is a global function with no compile-time dependency on KB. The handler is installed by `KnowledgeBaseView.installNarrativeCommit ()` at app boot.
 
 The handler:
-1. Sends the narrative + title via `KnowledgeApi.IngestNarrative` (Fable.Remoting).
+1. Sends the narrative + title via `KnowledgeApi.IngestNarrative` (ToolUp.Remoting).
 2. Server-side: persists a document blob with `Source = FromNarrative { SourceModule; Title }`.
 3. Runs through the same vectorisation handler + ingestion pipeline as a file upload.
 

@@ -69,9 +69,9 @@ All methods are `Async<_>` (GP 12 rule 2); identity is carried by value (GP 12 r
 
 Removing a member also clears their active team if it was the removed team.
 
-### Platform-level Fable.Remoting APIs
+### Platform-level ToolUp.Remoting APIs
 
-The platform exposes five sibling Fable.Remoting APIs auto-injected by `ServerApp.run` — originally a single `PlatformApi` umbrella, split for per-concern route prefixes and per-concern test surfaces:
+The platform exposes five sibling ToolUp.Remoting APIs auto-injected by `ServerApp.run` — originally a single `PlatformApi` umbrella, split for per-concern route prefixes and per-concern test surfaces:
 
 - **`PlatformInfoApi`** — `GetPlatformInfo` returns the current mode and whether auth is required. Always-on; no auth gating because the client shell needs this before deciding whether to render a login affordance.
 - **`TeamApi`** — wraps `TeamStore` with role-based access control: `CreateTeam` (caller becomes Owner + active team), `GetMyTeams`, `GetActiveTeam`, `GetTeamMembers` (read-only, all members), `AddTeamMember` / `RemoveTeamMember` / `ChangeMemberRole` (Owner/Admin gated), `SetActiveTeam` (membership-validated; invalidates the `IMemoryCache` entry so `TeamScopeResolver` picks up the change immediately).
@@ -142,7 +142,7 @@ Helpers:
 - `hasPermission moduleName required ctx` — honours the hierarchy: `Admin` satisfies anything, `Write` satisfies `Read` or `Write`, `Read` satisfies only `Read`.
 
 **Enforcement (Phase 4):**
-- `makePermissionGuardedApi moduleName api` wraps a module's Fable.Remoting handler with a `canAccessModule` check. Denials raise `UnauthorizedAccessException`, translated to HTTP 403 by the error handler.
+- `makePermissionGuardedApi moduleName api` wraps a module's ToolUp.Remoting handler with a `canAccessModule` check. Denials raise `UnauthorizedAccessException`, translated to HTTP 403 by the error handler.
 - `ScopeResolutionMiddleware` loads the user's effective permissions from `IPermissionStore` on every team-scoped request and stashes them in `HttpContext.Items["ToolUp.ModulePermissions"]`. The `AccessContext` DI factory reads from Items synchronously — the async resolution has already run.
 
 #### Async ↔ Task adaptation
@@ -168,7 +168,7 @@ The interfaces themselves stay on `Async<_>` (GP 12 rule 2 — async at every bo
 
 ## Per-Team Configuration
 
-Configuration is the companion to access control: RBAC decides *who* can see a module, config decides *how* it behaves once visible. Both live under `_platform` blob storage, both are scoped via `AccessContext`, and both are gated through the same Fable.Remoting surface with identical role checks.
+Configuration is the companion to access control: RBAC decides *who* can see a module, config decides *how* it behaves once visible. Both live under `_platform` blob storage, both are scoped via `AccessContext`, and both are gated through the same ToolUp.Remoting surface with identical role checks.
 
 ### Storage layout
 
@@ -208,7 +208,7 @@ Values persist as JSON-encoded strings (`"true"`, `42`, `"hello"`). That choice 
 ### Server flow
 
 1. `ServerConfig.ModuleConfigs: ModuleConfigSchema list` lists app-level schemas; each `ServerModule.withConfig` adds a module-scoped schema. `ServerApp.run` concatenates both into the handler's registry. An empty list is legal; the reserved `_platform` entry is always surfaced by `ListModules` regardless.
-2. `ServerApp.run` (and its `AIServerApp` / `RAGServerApp` wrappers) wires `configApiHandler` into the Fable.Remoting surface alongside the five platform APIs (`PlatformInfoApi`, `TeamApi`, `PermissionApi`, `AccessibilityApi`, `DataCatalogApi`), `fileManagementApi`, and any AI/RAG companions.
+2. `ServerApp.run` (and its `AIServerApp` / `RAGServerApp` wrappers) wires `configApiHandler` into the ToolUp.Remoting surface alongside the five platform APIs (`PlatformInfoApi`, `TeamApi`, `PermissionApi`, `AccessibilityApi`, `DataCatalogApi`), `fileManagementApi`, and any AI/RAG companions.
 3. Each request reaches the handler with a resolved `AccessContext`. `AccessContext.configScope` returns `Some scopeId` for every non-Anonymous mode; Anonymous requests get `None` and every handler method short-circuits to `Error "Not available in Anonymous mode"`.
 4. `SaveModuleConfig` runs the payload through per-field validation (numeric range, string length, choice membership) before calling `IConfigStore.SetValues`. Invalid payloads return `Error` without touching storage.
 5. Writes are gated by `TeamRoles.canWriteTeamConfig` — the same predicate that guards `SetMemberPermissions`. Read is available to anyone in the scope.

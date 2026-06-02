@@ -1,6 +1,6 @@
 # ToolUp.Platform
 
-A modular application framework for building analytical platforms in F# on ASP.NET Core + Giraffe (server), Fable + Elmish + Feliz (client), Fable.Remoting (type-safe wire), and any-cloud blob / event storage.
+A modular application framework for building analytical platforms in F# on ASP.NET Core + Giraffe (server), Fable + Feliz with an in-tree Elmish runtime (client), in-tree ToolUp.Remoting (type-safe wire — Fable.Remoting fork; `namespace Fable.Remoting.*` preserved), and any-cloud blob / event storage.
 
 Originally bootstrapped from the [SAFE Stack](https://safe-stack.github.io/) template; the Saturn DSL and SAFE.Client/Server metapackages were retired in favour of direct Giraffe + Fable + Elmish + Feliz references, with the SAFE `Api.makeProxy<T>` / `Api.make` / `ApiCall<_,_>` / `RemoteData<_>` surface re-homed inside `ToolUp.Platform` itself.
 
@@ -287,7 +287,7 @@ Team CRUD, membership, and active-team tracking are entirely SDK-owned (not part
 - `memberships/{userId}.json` — user's team memberships
 - `active-team/{userId}.txt` — user's currently selected team
 
-Five Fable.Remoting APIs (auto-injected by `ServerApp.run`) cover the platform surface:
+Five ToolUp.Remoting APIs (auto-injected by `ServerApp.run`) cover the platform surface:
 - **`TeamApi`** — team CRUD / membership: `CreateTeam`, `GetMyTeams`, `AddTeamMember`, `RemoveTeamMember`, `ChangeMemberRole`, `GetTeamMembers`, `SetActiveTeam`, `GetActiveTeam`.
 - **`PermissionApi`** — Owner/Admin RBAC: `GetTeamPermissions`, `SetMemberPermissions`, `SetTeamDefaults`.
 - **`AccessibilityApi`** — `GetAccessibleModules` returns `{ Managed; Accessible }` (module Ids the server RBAC-tracks, and the subset the caller can access). The client shell filters server-managed modules by `Accessible`; SDK-built-ins outside `Managed` stay visible unconditionally.
@@ -310,7 +310,7 @@ Core types live in `Shared/ConfigTypes.fs`:
 Server surface:
 - `IConfigStore` (`IConfigStore.fs`) — `GetValues / GetValue / SetValues / ClearModule`. Values are raw JSON strings; strongly-typed helpers (`GetEffective<'T>`) can layer on top.
 - `ConfigStore.fs` — blob-backed default. Persists under `_platform/config/{scopeId}/{moduleKey}.json`.
-- `ConfigHandler.fs` — Fable.Remoting `IConfigApi` implementation. `ListModules` returns every registered schema (plus the reserved `_platform` entry). `GetModuleConfig` / `SaveModuleConfig` / `ClearModuleConfig` resolve the current scope from `AccessContext` and validate payloads against the schema before writing. Writes are gated by the same Owner/Admin check as team management (`TeamRoles.canWriteTeamConfig`).
+- `ConfigHandler.fs` — ToolUp.Remoting `IConfigApi` implementation. `ListModules` returns every registered schema (plus the reserved `_platform` entry). `GetModuleConfig` / `SaveModuleConfig` / `ClearModuleConfig` resolve the current scope from `AccessContext` and validate payloads against the schema before writing. Writes are gated by the same Owner/Admin check as team management (`TeamRoles.canWriteTeamConfig`).
 - `ServerApp.run` auto-injects the config handler and picks up both `ServerConfig.ModuleConfigs` and every registered `ServerModule.ConfigSchema` — an empty module list still yields a live surface because `_platform` is always present.
 
 Client surface:
@@ -328,7 +328,7 @@ The `_platform` key carries deployment-wide display defaults (currency, date for
 **Permissive default:** `ModulePermissions = Map.empty` means unrestricted — every module accessible. RBAC is opt-in per team; teams that haven't configured permissions preserve pre-Phase-4 "everyone can use everything" behaviour.
 
 **Enforcement (shipped):**
-- `makePermissionGuardedApi moduleName api` wraps a module's Fable.Remoting routes with a `canAccessModule moduleName` check before dispatch. Denials raise `UnauthorizedAccessException` which a custom error handler translates to HTTP 403.
+- `makePermissionGuardedApi moduleName api` wraps a module's ToolUp.Remoting routes with a `canAccessModule moduleName` check before dispatch. Denials raise `UnauthorizedAccessException` which a custom error handler translates to HTTP 403.
 - `ScopeResolutionMiddleware` loads the user's effective permissions from `IPermissionStore` on every team-scoped request and stashes them in `HttpContext.Items` for the `AccessContext` DI factory to pick up.
 - Client shell calls `AccessibilityApi.GetAccessibleModules` on startup to filter the sidebar to modules the user can actually use. Not a security boundary — the per-route guard is the actual enforcement.
 
@@ -440,7 +440,7 @@ All Enterprise imports and module registration calls are at module top level in 
 | `TeamRoles.fs` | Role predicates (`canManageMembers`, `canWriteTeamConfig`, `isOwner`, `displayName`) |
 | `ModuleAITypes.fs` | `AIToolDefinition`, `ToolParameterSchema` (module-facing AI tool surface) |
 | `ConfigTypes.fs` | `ModuleConfigSchema`, `ConfigFieldSchema`, `ConfigFieldKind` DU |
-| `ConfigApi.fs` | `IConfigApi` Fable.Remoting contract, `ModuleConfigEntry`, `ModuleConfigView` |
+| `ConfigApi.fs` | `IConfigApi` ToolUp.Remoting contract, `ModuleConfigEntry`, `ModuleConfigView` |
 | `NotificationTypes.fs` | `Notification` DU (5 kinds), `NotificationKind`, `NotificationEnvelope` record + companion module (`NotificationEnvelope.create`), `SystemMessageLevel`, subscription-handle Guid alias |
 | `INotificationChannel.fs` | `INotificationChannel` interface — `Publish` / `Subscribe` / `Unsubscribe`, `Guid` handles. Lives in Shared so module projects can consume it from `ToolUp.Platform.dll` (e.g. `KnowledgeBase` publishes `DataRefreshed` after narrative ingestion) |
 | `SDK.Shared.fs` | `ModuleEvent`, `IEventStore`, `EventRetentionPolicy`, `EventStoreMode`, `EventReplay`, `PageConfig`, `ModuleDefinition`, `StaticPathBehaviour`, `RateLimitConfig`, `ServerConfig` (incl. `ModuleConfigs`, `RequireHttps`, `TrustForwardedHeaders`, `StaticPathBehaviour`, `SlowRequestThreshold`, `DefaultTeamStorageQuotaBytes`, `RateLimit`) |
@@ -473,8 +473,8 @@ All Enterprise imports and module registration calls are at module top level in 
 | `ConfigStore.fs` | Blob-backed default — persists JSON under `_platform/config/{scopeId}/{moduleKey}.json` |
 | `ConfigHandler.fs` | `IConfigApi` handler — validates writes against registered schemas, gates via `TeamRoles.canWriteTeamConfig` |
 | `Shared/Api.fs` | `ApiCall<'S,'F>` DU (`Start` / `Finished`) and `RemoteData<'T>` DU + companion module — Elmish message/state helpers re-homed from SAFE.Client.Utils (MIT) |
-| `Server/Api.fs` | `type Api` with `static member make (builder, ?routeBuilder, ?errorHandler, ?customOptions)` — thin wrapper over `Fable.Remoting.Giraffe` preserving the SAFE call-site syntax (injected via `.Server.props`) |
-| `Client/Api.fs` | `type Api` with `static member inline makeProxy<'T> (?routeBuilder, ?customOptions)` — thin wrapper over `Fable.Remoting.Client` preserving the SAFE call-site syntax (injected via `.Client.props`) |
+| `Server/Api.fs` | `type Api` with `static member make (builder, ?routeBuilder, ?errorHandler, ?customOptions)` — thin wrapper over the in-tree `Fable.Remoting.Giraffe` adapter (namespace preserved; ships inside `ToolUp.Platform.Server`), keeping the SAFE call-site syntax (injected via `.Server.props`) |
+| `Client/Api.fs` | `type Api` with `static member inline makeProxy<'T> (?routeBuilder, ?customOptions)` — thin wrapper over the in-tree `Fable.Remoting.Client` proxy builder (namespace preserved; ships inside `ToolUp.Platform.Client`), keeping the SAFE call-site syntax (injected via `.Client.props`) |
 | `SDK.Server.fs` | `WebApplication.CreateBuilder` composition, middleware (`ScopeResolutionMiddleware`, `AuthEnforcementMiddleware`, `RequestTimingMiddleware`, `RemotingBodyNormalizationMiddleware`), `makeApi`, `makePermissionGuardedApi`, the five `platform*ApiHandler` builders (info / team / permission / accessibility / data-catalog), `configApiHandler`, `ServerModule` / `ServerApp` record-based composition API, audit / health / quota / rate-limit DI wiring |
 | `AuditLog.fs` | `IAuditLog` interface + `EventStoreAuditLog` default — wraps `IEventStore` under reserved `SourceModule = "_platform.audit"`; fire-and-forget `Record`, scope-filtered `GetAuditTrail` |
 | `Shared/IHealthCheck.fs` | Phase 9k portable interface (`Name`, `Kind`, `Timeout`, `Check : unit -> Async<HealthResult>`) for companion-contributed readiness probes. Lives in Shared so `ProjectReference`-style companions (storage backends) see it without `.Server.props` injection |

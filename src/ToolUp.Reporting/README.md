@@ -1,6 +1,6 @@
 # ToolUp.Reporting
 
-Companion package providing typed-template document generation for applications built on [`ToolUp.Platform`](../ToolUp.Platform/). Ships the `IReportRenderer` interface, default `MarkdownRenderer` + `HtmlRenderer` (zero-deps), `IReportTemplateStore` over `IEntityStore`, the `ReportApi` Fable.Remoting endpoint, and `ReportingCompose` (registers the renderer registry + API handler against a `ServerApp`).
+Companion package providing typed-template document generation for applications built on [`ToolUp.Platform`](../ToolUp.Platform/). Ships the `IReportRenderer` interface, default `MarkdownRenderer` + `HtmlRenderer` (zero-deps), `IReportTemplateStore` over `IEntityStore`, the `ReportApi` ToolUp.Remoting endpoint, and `ReportingCompose` (registers the renderer registry + API handler against a `ServerApp`).
 
 Each output format that needs a real renderer (PDF / DOCX / XLSX / PPTX) lives in its own sub-companion under [`src/Reporting/`](../Reporting/) so a deployment that only needs PDF doesn't pay for the OpenXml dep, and vice versa.
 

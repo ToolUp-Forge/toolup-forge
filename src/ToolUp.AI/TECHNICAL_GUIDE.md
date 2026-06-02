@@ -9,7 +9,7 @@ Browser                            Server
 ──────                             ──────
 AIAssistantUI / SidePanel          composeWithAI (ToolUp.AI)
    │                                     │
-   │ Fable.Remoting                      │ wraps
+   │ ToolUp.Remoting                     │ wraps
    │ (SubmitMessage, etc.)               ▼
    ▼                               Server.compose (ToolUp.Platform)
 AIAssistantApi proxy               │     │
@@ -45,7 +45,7 @@ EventSource ←──────── /api/ai/events
 
 **Why authenticated modes are the design target.**
 
-- `AccessContext.UserId` flows through `ScopeResolutionMiddleware` (in [`../ToolUp.Platform.Server/Server/Middleware.fs`](../ToolUp.Platform.Server/Server/Middleware.fs)) into every Fable.Remoting handler, every SSE connection, and every tool execution. In authenticated modes this identity is verified by `IAuthProvider.ValidateRequest`. In Anonymous mode it's a per-tab GUID generated client-side and trusted server-side via the `X-User-Id` header.
+- `AccessContext.UserId` flows through `ScopeResolutionMiddleware` (in [`../ToolUp.Platform.Server/Server/Middleware.fs`](../ToolUp.Platform.Server/Server/Middleware.fs)) into every ToolUp.Remoting handler, every SSE connection, and every tool execution. In authenticated modes this identity is verified by `IAuthProvider.ValidateRequest`. In Anonymous mode it's a per-tab GUID generated client-side and trusted server-side via the `X-User-Id` header.
 - Per-user cost attribution, per-user rate limits (`ServerConfig.RateLimit` partitioning), audit log entries, and conversation persistence all key off `UserId`. In authenticated modes those are real users; in Anonymous mode they're per-tab GUIDs that can be regenerated freely.
 - BYOK (`AllowUserProviders`) requires the user to configure their provider in `IUserAIConfigStore`, which keys off `UserId`. In Anonymous mode this still works mechanically, but the configuration is per-tab and lost when the tab closes.
 
@@ -667,9 +667,9 @@ do ToolUp.AI.Client.SidePanelExtensions.registerStreamingAction (fun () -> MyBut
 
 Sanctioned mutable global, same precedent as `ClientToolRuntime.registry`. No deployment-side wiring — the registration runs at JS module load when whatever file holds the `do` block is imported (companions typically piggyback on a file that's already pulled by `ClientConfig.GlobalOverlays`).
 
-## Fable.Remoting unit-body normalisation
+## ToolUp.Remoting unit-body normalisation
 
-Unrelated to AI but load-bearing: `ToolUp.Platform`'s `RemotingBodyNormalizationMiddleware` intercepts requests with the `x-remoting-proxy` header and normalises empty bodies (`""`, `null`, GET with no body) to `[]`. Without it, `unit -> Async<T>` API members fail — `ListConversations`, `GetAvailableTools`, and the Platform equivalents break silently.
+Unrelated to AI but load-bearing: the in-tree ToolUp.Remoting dispatcher (shipped inside `ToolUp.Platform.Server`) folds body normalisation into its own request pipeline — it recognises requests with the `x-remoting-proxy` header and normalises empty bodies (`""`, `null`, GET with no body) to `[]` before invoking the handler. Without that, `unit -> Async<T>` API members would fail (`ListConversations`, `GetAvailableTools`, and the Platform equivalents would all break silently). Consumers no longer wire a separate `RemotingBodyNormalizationMiddleware` — `dotnet build` is the gate, not a middleware presence check.
 
 ## Latency telemetry — Phase 6i.A
 
@@ -772,7 +772,7 @@ and RAG / KnowledgeBase chunks that may include **PII**. Two safeguards:
 - **Elmish.HMR loses SSE subscriptions on hot-reload.** The `EventSource` created in `init` is not re-run after a Fable-only recompile; `Cmd.none` is returned instead of the original commands. Full browser refresh (F5) re-initialises. Not a bug — a documented Elmish.HMR quirk.
 - **Vite proxy SSE buffering (historical).** http-proxy (Vite's underlying proxy) buffers responses by default. SSE endpoints need `x-accel-buffering: no` injected on the proxied response. `vite.config.mts` has a dedicated rule for each SSE endpoint (`/api/notifications` and `/api/ai/events`) — they MUST NOT be merged into the generic `/api/` catch-all, because applying `cache-control: no-cache` to every API response would defeat browser caching of `GET` API calls.
 - **Streaming retries are intentionally impossible** once any content has been delivered. `ClaudeAIProvider` reports mid-stream failures as `StreamingAborted(partialText, …)`; the agent loop propagates these as `AITaskFailed`. Partial text is preserved for diagnostics only — the UI does not attempt to "complete" a partially-streamed response. Non-streaming retries with exponential backoff are live (see [Provider error classification](#provider-error-classification)).
-- **`AccessContext` tool scoping.** Tools currently receive `HttpContext` directly and can read any DI service, including the resolved `AccessContext` via `ctx.GetService<AccessContext>()`. Platform-level RBAC now enforces per-module permissions at the Fable.Remoting boundary (`makePermissionGuardedApi`), so module APIs the agent invokes are already gated. Tool authors should still read the resolved `AccessContext` for any additional per-tool checks rather than assuming the agent loop has authorised the action — tools can be called across module boundaries.
+- **`AccessContext` tool scoping.** Tools currently receive `HttpContext` directly and can read any DI service, including the resolved `AccessContext` via `ctx.GetService<AccessContext>()`. Platform-level RBAC now enforces per-module permissions at the ToolUp.Remoting boundary (`makePermissionGuardedApi`), so module APIs the agent invokes are already gated. Tool authors should still read the resolved `AccessContext` for any additional per-tool checks rather than assuming the agent loop has authorised the action — tools can be called across module boundaries.
 
 ## Where files go
 

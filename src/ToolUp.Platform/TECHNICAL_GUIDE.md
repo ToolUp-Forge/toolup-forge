@@ -1,8 +1,8 @@
 # ToolUp.Platform Technical Guide
 
-This document explains how ToolUp.Platform extends the standard F# full-stack architecture (Shared / Server / Client on Giraffe + Fable + Elmish + Feliz + Fable.Remoting) to support a modular, multi-module platform. It assumes familiarity with Giraffe, ASP.NET Core, Fable, Elmish, and Fable.Remoting.
+This document explains how ToolUp.Platform extends the standard F# full-stack architecture (Shared / Server / Client on Giraffe + Fable + Feliz with an in-tree Elmish runtime + in-tree ToolUp.Remoting transport) to support a modular, multi-module platform. It assumes familiarity with Giraffe, ASP.NET Core, Fable, the Elmish MVU pattern, and the Fable.Remoting wire shape (the in-tree fork keeps the upstream namespace and API surface; see the [forge README](../../README.md#in-tree-client--transport-forks) for what the forks add).
 
-> **Origins.** ToolUp.Platform was bootstrapped from the [SAFE Stack](https://safe-stack.github.io/) template. The Saturn DSL (a thin wrapper over Giraffe) and the SAFE.Client / SAFE.Server metapackages (which bundled Fable + Elmish + Feliz + Fable.Remoting at pinned minor versions) were retired in favour of direct library references. The SAFE `Api.make` / `Api.makeProxy<T>` / `ApiCall<_,_>` / `RemoteData<_>` call-site surface is preserved inside `ToolUp.Platform` itself (`Shared/Api.fs` + `Server/Api.fs` + `Client/Api.fs`), so the experience for a developer familiar with SAFE is unchanged.
+> **Origins.** ToolUp.Platform was bootstrapped from the [SAFE Stack](https://safe-stack.github.io/) template. The Saturn DSL (a thin wrapper over Giraffe) and the SAFE.Client / SAFE.Server metapackages (which bundled Fable + Elmish + Feliz + Fable.Remoting at pinned minor versions) were retired in favour of direct library references — and as the platform matured, the Elmish runtime and the Fable.Remoting transport were themselves vendored in-tree under `ToolUp.Platform.{Core,Client,Server}`, with their `namespace Elmish` and `namespace Fable.Remoting.*` preserved verbatim so consumer `open` statements compile unchanged. The SAFE `Api.make` / `Api.makeProxy<T>` / `ApiCall<_,_>` / `RemoteData<_>` call-site surface is preserved inside `ToolUp.Platform` itself (`Shared/Api.fs` + `Server/Api.fs` + `Client/Api.fs`), so the experience for a developer familiar with SAFE is unchanged.
 >
 > **Post-SAFE composition pipeline.** With Saturn gone, `compose` builds the server directly via `WebApplication.CreateBuilder` and adds middleware / services with the raw ASP.NET Core APIs. The fluent record-based surface (`ServerApp` → `AIServerApp` → `RAGServerApp`) is unchanged — apps still write the same pipeline — but several extension points Saturn used to provide implicitly are now explicit `ServerConfig` fields: `RequireHttps`, `TrustForwardedHeaders`, `StaticPathBehaviour`. See [Post-SAFE composition pipeline](technical-guide/01-architecture-and-composition.md#post-safe-composition-pipeline).
 
@@ -28,10 +28,10 @@ The foundational model: why the standard three-project layout doesn't scale, pro
 
 ### [2. Multi-Tenancy, Teams & Access Control](technical-guide/02-multi-tenancy-and-access.md)
 
-How the platform scopes storage per deployment mode, manages teams, enforces access control, resolves per-team configuration, and surfaces five concern-scoped platform Fable.Remoting APIs (`PlatformInfoApi` / `TeamApi` / `PermissionApi` / `AccessibilityApi` / `DataCatalogApi`).
+How the platform scopes storage per deployment mode, manages teams, enforces access control, resolves per-team configuration, and surfaces five concern-scoped platform ToolUp.Remoting APIs (`PlatformInfoApi` / `TeamApi` / `PermissionApi` / `AccessibilityApi` / `DataCatalogApi`).
 
 - Platform Modes and Storage Scoping
-- Team Management (incl. the five platform-level Fable.Remoting APIs and the team-switching reset flow)
+- Team Management (incl. the five platform-level ToolUp.Remoting APIs and the team-switching reset flow)
 - Access Control
 - Per-Team Configuration
 - PlatformAdmin profiles (Phase 61 — Standard vs PublicUtility composition)

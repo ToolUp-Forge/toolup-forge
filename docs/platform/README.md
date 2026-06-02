@@ -2,7 +2,9 @@
 
 A modular F# full-stack SDK for building production multi-tenant analytical applications.
 
-ToolUp Platform ships as a set of independently-versioned NuGet packages — pick the ones you need, compose them with your own domain modules, and deploy. Built on Giraffe + ASP.NET Core (server), Fable + Elmish + Feliz (client), Fable.Remoting (type-safe wire).
+ToolUp Platform ships as a set of independently-versioned NuGet packages — pick the ones you need, compose them with your own domain modules, and deploy. Built on Giraffe + ASP.NET Core (server), Fable + Feliz with an in-tree Elmish runtime (client), in-tree ToolUp.Remoting transport (type-safe wire).
+
+> The Elmish runtime (forked from Fable.Elmish v5.x) and the ToolUp.Remoting transport (forked from Fable.Remoting) ship in-tree under `ToolUp.Platform.{Core,Client,Server}`. The `namespace Elmish` and `namespace Fable.Remoting.*` are preserved verbatim, so consumer `open Elmish` / `open Fable.Remoting.*` call sites compile unchanged. See the [forge README](../../README.md#in-tree-client--transport-forks) for the full list of fork additions (typed dispatch handle, lifetime-aware effects, structured error context, prefetch gating, integrated body normalisation, bundled JSON converter).
 
 ## What's in the box
 
@@ -47,7 +49,7 @@ For a runnable end-to-end sample (server + client + a "Hello World" module), see
 
 ## When this SDK is a good fit
 
-- **F# full-stack** apps where the server (Giraffe) and the client (Fable + Elmish) share types directly via Fable.Remoting.
+- **F# full-stack** apps where the server (Giraffe) and the client (Fable + Elmish) share types directly via ToolUp.Remoting.
 - **Multi-tenant production** deployments needing built-in scope isolation, audit trails, RBAC, and per-tenant data scoping out of the box.
 - **AI-augmented apps** where the LLM is a peer of the UI — agent loop, tool calling, SSE streaming, prompt caching, and conversation persistence work without writing the plumbing.
 - **Schema-driven internal tools** where form definitions + workflow state machines beat hand-rolled CRUD.

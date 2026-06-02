@@ -23,7 +23,7 @@ and AIAssistantBranding = {
 
 Branding only. System-prompt content stays server-side.
 
-### `AIAssistantApi` (Fable.Remoting contract)
+### `AIAssistantApi` (ToolUp.Remoting contract)
 
 ```fsharp
 type IAIAssistantApi = {
@@ -36,7 +36,7 @@ type IAIAssistantApi = {
 }
 ```
 
-Auto-injected via Fable.Remoting when AI is enabled. Caller binds the `IAIAssistantApi` proxy on the client; per-method auth gating handled by `makePermissionGuardedApi`.
+Auto-injected via ToolUp.Remoting when AI is enabled. Caller binds the `IAIAssistantApi` proxy on the client; per-method auth gating handled by `makePermissionGuardedApi`.
 
 ### `AIMessageRequest`
 
@@ -504,7 +504,7 @@ Under `SourceModule = "_platform.ai.fastpath"`:
 
 Auto-injected by `AIServerApp.run`:
 
-- `POST /api/IAIAssistantApi/SubmitMessage` — Fable.Remoting
+- `POST /api/IAIAssistantApi/SubmitMessage` — ToolUp.Remoting
 - `POST /api/IAIAssistantApi/GetConversation`
 - `POST /api/IAIAssistantApi/ListConversations`
 - `POST /api/IAIAssistantApi/GetAvailableTools`

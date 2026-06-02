@@ -57,11 +57,11 @@ Before this directory can contain working code, the implementation session must 
 | `IDataSourceContract` test pack | `src/ToolUp.Platform.Tests/Contracts/IDataSourceContract.fs` | Shipped (7 tests) |
 | In-process orchestrator | `src/ToolUp.Platform/Server/DataIngestor.fs` | Shipped (binds connectors by `Kind`, resolves credentials, writes through `IDataObjectStore` with `Versioned`) |
 | Scheduled-ingestion job handler | `src/ToolUp.Platform/Server/DataIngestionJobHandler.fs` | Shipped (registered against `IJobScheduler` at compose time) |
-| Fable.Remoting admin API | `src/ToolUp.Platform/Server/DataIngestionApiHandler.fs` | Shipped (Owner/Admin write gate, Manual-trigger schedule) |
+| ToolUp.Remoting admin API | `src/ToolUp.Platform/Server/DataIngestionApiHandler.fs` | Shipped (Owner/Admin write gate, Manual-trigger schedule) |
 | In-memory test connector | `src/ToolUp.Platform/Server/InMemoryDataSource.fs` | Shipped (Kind = "InMemory"; serves the test pack + dev harness) |
 | BigQuery connector | This directory | **Deferred** — needs GCP credentials |
 | Redshift / Athena / Synapse connectors | Reserved at `src/DataSources/<Name>/` (not yet created) | **Deferred** — same dependency on real cloud accounts |
-| Admin UI module | A future `src/ToolUp.Platform/Client/DataIngestionUI.fs` | **Deferred** — pairs with the shipped `IDataIngestionApi` Fable.Remoting surface |
+| Admin UI module | A future `src/ToolUp.Platform/Client/DataIngestionUI.fs` | **Deferred** — pairs with the shipped `IDataIngestionApi` ToolUp.Remoting surface |
 
 ## Don't ship working BigQuery code without testing it
 

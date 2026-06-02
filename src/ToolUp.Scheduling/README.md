@@ -12,13 +12,13 @@ Shipped surface (commit-stable across Phase 20):
 |---|---|---|
 | Domain types | [`Shared/SchedulingTypes.fs`](Shared/SchedulingTypes.fs) | `BookableResource`, `Booking`, `AvailabilityException`, `RecurrenceRule`, `BookingConflict`, `BookingError` |
 | Recurrence expansion | [`Shared/RecurrenceExpander.fs`](Shared/RecurrenceExpander.fs) | `expand`, `occurrenceStarts` — pure, Fable-safe |
-| Wire contract | [`Shared/SchedulingApi.fs`](Shared/SchedulingApi.fs) | `ISchedulingApi` (Fable.Remoting) |
+| Wire contract | [`Shared/SchedulingApi.fs`](Shared/SchedulingApi.fs) | `ISchedulingApi` (ToolUp.Remoting) |
 | iCalendar I/O | [`Shared/iCalendar.fs`](Shared/iCalendar.fs) | `parse`, `emit`, `VCalendar`, `VEvent` |
 | Audit payloads | [`Shared/SchedulingEvents.fs`](Shared/SchedulingEvents.fs) | `BookingCreatedPayload` etc., `SourceModule = "_scheduling"` |
 | Server interface | [`Server/IBookingScheduler.fs`](Server/IBookingScheduler.fs) | `IBookingScheduler` — six-rule portable |
 | Pure conflict detection | [`Server/BookingConflictDetector.fs`](Server/BookingConflictDetector.fs) | `detect`, `DetectorInputs` |
 | Default impl | [`Server/BookingScheduler.fs`](Server/BookingScheduler.fs) | `BookingScheduler` over `IEntityStore` + `IEventStore` |
-| API handler | [`Server/SchedulingApiHandler.fs`](Server/SchedulingApiHandler.fs) | `schedulingApi` Fable.Remoting handler |
+| API handler | [`Server/SchedulingApiHandler.fs`](Server/SchedulingApiHandler.fs) | `schedulingApi` ToolUp.Remoting handler |
 | Compose pipeline | [`Server/SchedulingCompose.fs`](Server/SchedulingCompose.fs) | `SchedulingServerApp` record + `run` |
 
 ## Why a companion, not core SDK
@@ -69,7 +69,7 @@ let main _ =
    - `Booking` (indexes on `ResourceId`, `Status`, compound `(ResourceId, StartUtc)`)
    - `AvailabilityException` (index on `ResourceId`)
 2. Registers `IBookingScheduler` in DI as a singleton (default impl: `BookingScheduler`).
-3. Mounts the `ISchedulingApi` Fable.Remoting handler.
+3. Mounts the `ISchedulingApi` ToolUp.Remoting handler.
 4. Delegates the rest to `ServerApp.run`.
 
 Apps without `ServerConfig.EntityStore = EnabledEntityStore` get a runtime null reference at first dispatch — explicit enforcement is a follow-up.

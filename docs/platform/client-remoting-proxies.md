@@ -1,6 +1,6 @@
 # Client Remoting proxy convention
 
-Every `*.Client` companion in this SDK constructs its Fable.Remoting proxy as a **module-level value**, not as a per-call function. Header freshness — identity, CSRF token, anything else the deployment attaches to outgoing requests — is owned by the **send-time request-guard** the SDK installs at the XHR + fetch seam, not by the proxy's construction-time customiser.
+Every `*.Client` companion in this SDK constructs its ToolUp.Remoting proxy (built via `Remoting.buildProxy` under the preserved `Fable.Remoting.Client` namespace — the in-tree transport keeps the upstream API shape) as a **module-level value**, not as a per-call function. Header freshness — identity, CSRF token, anything else the deployment attaches to outgoing requests — is owned by the **send-time request-guard** the SDK installs at the XHR + fetch seam, not by the proxy's construction-time customiser.
 
 This convention is load-bearing for codebase consistency and contributor onboarding. Read this page before adding a new `*.Client` companion or refactoring an existing one.
 

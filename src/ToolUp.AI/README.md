@@ -50,7 +50,7 @@ Compiled into `ToolUp.AI.dll`. Referenced by both server and client.
 | `AIAssistantMode` | `NoAIAssistant \| DefaultAIAssistant \| ConfiguredAIAssistant of Branding` |
 | `AIMessageRequest` | Record on the `SubmitMessage` API — carries `ConversationId`, `Content`, and the user's `ActiveModule` |
 | `ModuleAIContext` | `{ ModuleName; SystemPrompt }` — a module's private domain-expert prompt, registered at compose time |
-| `AIAssistantApi` | Fable.Remoting API: `SubmitMessage`, `GetConversation`, `ListConversations`, `GetAvailableTools`, `GetTaskStatus`, `DeleteConversation` |
+| `AIAssistantApi` | ToolUp.Remoting API: `SubmitMessage`, `GetConversation`, `ListConversations`, `GetAvailableTools`, `GetTaskStatus`, `DeleteConversation` |
 | `AIStreamEvent` | SSE payloads: `MessageDelta`, `ToolCallStarted`, `ToolCallCompleted`, `TaskStatusChanged`, `MessageComplete`, `StreamError` |
 | `AIProviderMessage`, `AIProviderToolCall`, `AIProviderToolResult`, `AIProviderToolDef`, `AIProviderResponse` | Provider-level protocol types — used by `IAIProvider` implementations |
 | `Conversation`, `ConversationMessage`, `Participant`, `AITask`, `AITaskStatus` | Persistence and task-tracking types |

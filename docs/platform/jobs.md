@@ -146,7 +146,7 @@ Five events emit to `IEventStore` under `SourceModule = "_platform.jobs"`:
 
 These events feed the audit log. Operators query the audit trail for per-job history.
 
-## `JobApi` Fable.Remoting surface
+## `JobApi` ToolUp.Remoting surface
 
 When the scheduler is enabled, the SDK auto-injects `JobApi`:
 

@@ -4,7 +4,7 @@ Public surface of `ToolUp.KnowledgeBase`.
 
 ## `ToolUp.KnowledgeBase.Core`
 
-### `KnowledgeApi` (Fable.Remoting contract)
+### `KnowledgeApi` (ToolUp.Remoting contract)
 
 ```fsharp
 type IKnowledgeApi = {
@@ -121,7 +121,7 @@ type KnowledgeError =
 
 ### `KnowledgeBase.Server.knowledgeApi`
 
-The Fable.Remoting handler. Pass directly to `ServerModule.withGuardedApi`:
+The ToolUp.Remoting handler. Pass directly to `ServerModule.withGuardedApi`:
 
 ```fsharp
 let kbModule =

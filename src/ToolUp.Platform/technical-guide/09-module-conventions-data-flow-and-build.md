@@ -11,9 +11,9 @@ Every module follows the same structure:
 
 | File | F# Declaration | Compiled By | Purpose |
 |------|---------------|-------------|---------|
-| `SharedTypes.fs` | `namespace Toolup` | Both dotnet and Fable | API request/response records, Fable.Remoting API record type |
+| `SharedTypes.fs` | `namespace Toolup` | Both dotnet and Fable | API request/response records, ToolUp.Remoting API record type |
 | `Server.fs` | `module ModuleName.Server` | Server only (via `.fsproj` `<Compile>`) | Route handler implementation, data processing, `DataType` registration |
-| `ClientModel.fs` | `module ModuleNameModel` | Fable only (via `.Client.props`) | Elmish Model, Msg, init, update, Fable.Remoting proxy |
+| `ClientModel.fs` | `module ModuleNameModel` | Fable only (via `.Client.props`) | Elmish Model, Msg, init, update, ToolUp.Remoting proxy |
 | `ClientView.fs` | `module ModuleNameView` | Fable only (via `.Client.props`) | Feliz view function, `register()` returning `ErasedModule` |
 
 `SharedTypes.fs` uses `namespace Toolup` so its types are accessible via `open Toolup` in both server and client code. This is consistent across all modules and avoids the need for module-specific `open` statements in consuming code.
@@ -25,14 +25,14 @@ The module `.fsproj` compiles `SharedTypes.fs` and `Server.fs` with `<Compile>`,
 The standard data flow through the platform:
 
 1. **Upload:** User selects a file in the DataManager module's client view.
-2. **Transfer:** `DataManagerModel` sends the file contents to `FileManagementApi.UploadFile` via Fable.Remoting.
+2. **Transfer:** `DataManagerModel` sends the file contents to `FileManagementApi.UploadFile` via ToolUp.Remoting.
 3. **Detection:** `FileManagement.detectFileType` iterates registered `DataType` records in priority order. First match wins; returns `"UnrecognisedData"` if none match.
 4. **Processing:** `FileManagement.processFile` finds the matching `DataType` and calls its `Process` function, which returns a type-erased result (`obj`) plus a `ProcessedFileEntry` summary.
 5. **Scope resolution:** `FileManagement.fileManagementApi` resolves the `IStorageScopeResolver` from DI, calls `resolver.Resolve(ctx)` to get the `StorageScope` for this request, then gets or creates the `SessionFileStore` for that scope.
 6. **Persistence:** `SessionFileStore` saves the file contents in-memory. If `scope.Persist` is true, it also writes to `IBlobStorage` (default: local filesystem at `data/{container}/`).
 7. **Client update:** The upload response includes the `ProcessedFileEntry`. The DataManager module's state picks it up via its own `update`, and the shell's next `computeProcessedData` pass aggregates it into `Model.ProcessedData`. The view re-renders with the updated `ProcessedDataContext` Provider value, so any module view `[<ReactComponent>]` calling `ProcessedData.forType` sees the new entry on the next render.
 8. **Module activation:** Each module's `NeedsData` predicate is re-evaluated. Modules whose data requirements are met become active in the sidebar.
-9. **Analysis:** When a user opens an analytical module and triggers an analysis, the module's client sends a request via its Fable.Remoting API. The server handler retrieves the file contents from `SessionFileStore` and passes them to the module's analysis function. The result is returned to the client.
+9. **Analysis:** When a user opens an analytical module and triggers an analysis, the module's client sends a request via its ToolUp.Remoting API. The server handler retrieves the file contents from `SessionFileStore` and passes them to the module's analysis function. The result is returned to the client.
 
 At no point does any analytical module reference the DataManager or any other module. The only shared surface is the `DataTypeId` string convention — modules agree on string identifiers for data types, but this agreement is by convention, not by import.
 

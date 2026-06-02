@@ -5,9 +5,11 @@
 ToolUp Platform is a modular F# full-stack SDK for building production multi-tenant analytical applications. It ships as a set of independently-versioned NuGet packages under the `ToolUp.*` namespace; consumers compose them with their own domain modules.
 
 Core foundations:
-- **Server**: Giraffe over ASP.NET Core, Fable.Remoting.Giraffe for type-safe APIs.
-- **Client**: Fable + Elmish + Feliz (React bindings).
+- **Server**: Giraffe over ASP.NET Core; in-tree ToolUp.Remoting transport (Fable.Remoting fork, distributed inside `ToolUp.Platform.Server`) for type-safe APIs. `namespace Fable.Remoting.*` is preserved, so `open Fable.Remoting.Server` / `open Fable.Remoting.Giraffe` continue to compile unchanged.
+- **Client**: Fable + Feliz (React bindings) with an in-tree Elmish runtime (Fable.Elmish v5.x fork, distributed inside `ToolUp.Platform.Client`). `namespace Elmish` is preserved; consumers see classical Elm Architecture plus ToolUp additions (`IDispatcher<'msg>`, `Prefetch<'a>`, structured `ErrorContext`, `EffectHandle` lifetimes, `Cmd.OfRemoting`).
 - **Build**: FAKE targets in a Pack-able `ToolUp.Platform.Build` package.
+
+See [`README.md`](README.md#in-tree-client--transport-forks) for the full list of fork additions and the source-compat guarantee.
 
 ## Versioning
 
@@ -58,7 +60,7 @@ Pure infrastructure with zero domain knowledge. Per-tier packages:
 
 - **`Core`** — shared types + interfaces (`ILogger`, `IBlobStorage`, `IAuthProvider`, `IAIProvider`, `INotificationChannel`, `IHealthCheck`, `IConfigValidator`, `IEventStore`, `ISecretStore`, etc.). No server or client deps; the "minimum viable consumer" floor. Source ships in the nupkg under `fable/` for Fable consumers.
 - **`Server`** — Giraffe-over-ASP.NET Core implementation: `ServerApp` composition root, `StorageScope` / scope resolvers, `ITeamStore`, `IConfigStore`, `IPermissionStore`, `IEntityStore`, `IDataObjectStore`, `IShareTokenStore`, `IJobScheduler`, `IDataIngestor`, `IAuditLog`, transactional dispatch, rate limiting, security headers middleware, `MetricsMiddleware`, `RequestTimingMiddleware`, OAuth flow handler, encryption-at-rest decorator, default in-process implementations of every interface, etc.
-- **`Client`** — Fable + Elmish + Feliz shell: MVU, sidebar navigation, `UIToolkit`, `AgChart`/`AgGrid` Fable bindings, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`.
+- **`Client`** — Fable + Feliz shell with the in-tree Elmish runtime (under `Client/Elmish/`): MVU, sidebar navigation, `UIToolkit`, `AgChart`/`AgGrid` Fable bindings, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`.
 - **`Build`** — FAKE pipeline targets (`Run` / `Bundle` / `Format` / `Pack` / `ThirdPartyNotices`).
 
 ### `ToolUp.AI` — AI assistant companion
@@ -93,7 +95,7 @@ Public-form surface adds `IPublicFormApi` (token-gated submit at `/api/public/fo
 
 ### `ToolUp.Scheduling` — booking + recurrence
 
-`IBookingScheduler` interface (per-resource concurrency lock, conflict detector), `RecurrenceExpander`, `iCalendar` types, `SchedulingApi` Fable.Remoting contract, `SchedulingCompose`. Consumers wire it into modules that surface booking-grid UIs.
+`IBookingScheduler` interface (per-resource concurrency lock, conflict detector), `RecurrenceExpander`, `iCalendar` types, `SchedulingApi` ToolUp.Remoting contract, `SchedulingCompose`. Consumers wire it into modules that surface booking-grid UIs.
 
 ## Guiding Principles
 
@@ -104,7 +106,7 @@ A numbered design canon the SDK is built against. Source comments and docs cite 
 - **GP 4 — Tenant / team isolation is non-negotiable and enforced structurally.** Scope isolation is carried by the type system and the storage-scope resolver, not by a runtime "remember to filter" convention. A handler cannot accidentally read across tenants.
 - **GP 5 — Immutable by default.** Domain and config types are immutable records; state transitions produce new values. Mutability is a documented, justified exception (e.g. hot-path metrics), never the default.
 - **GP 7 — Correlation / context rides the async chain.** Request-scoped context (correlation id, scope, principal) flows via `AsyncLocal`-backed ambient context, not threaded by hand through every signature. Handlers read it where needed without it polluting every parameter list.
-- **GP 10 — Shared request/response types live in a shared-types project or are primitives.** Types crossing the client/server boundary (Fable.Remoting contracts, DTOs) sit in a Core/shared `<Compile>` file or are primitives — never defined server-side only and leaked, which would break the Fable client compile.
+- **GP 10 — Shared request/response types live in a shared-types project or are primitives.** Types crossing the client/server boundary (ToolUp.Remoting contracts, DTOs) sit in a Core/shared `<Compile>` file or are primitives — never defined server-side only and leaked, which would break the Fable client compile.
 - **GP 11 — Backward-compatible defaults.** A new SDK feature defaults to off / to its prior behaviour, so an existing deployment that upgrades stays byte-for-byte identical until it opts in. `fromEnv` helpers and config records preserve prior dispatch behaviour exactly.
 - **GP 12 — The six portability rules for distributed implementations** (see [Six portability rules](#six-portability-rules-for-distributed-implementations) below).
 - **GP 13 — Advanced behaviour is opt-in; deployments that don't use it pay nothing.** Optional subsystems (RAG, AI, scheduling, transactional sinks) cost zero — no hosted service, no middleware, no allocation — when a deployment doesn't compose them in.
@@ -210,9 +212,9 @@ Client-tier SDK packages ship their `.fs` files under `fable/` in the nupkg; a F
 
 F# 9+ supports nullable reference types via `<Nullable>enable</Nullable>` in a `.fsproj`. The Fable compiler itself supports nullness (Fable 5.0.0+). However, enabling nullness in a Fable consumer causes the compiler to re-compile every transitive Fable dependency in null-aware mode, and any dependency that hasn't been nullness-annotated produces a cascade of warnings (or errors, depending on configuration).
 
-As of 2026-05, the major Fable ecosystem packages this SDK depends on (Feliz, Fable.Remoting, Fable.SimpleJson, Fable.Elmish.HMR) have not been nullness-annotated, and there's no published timeline for that to land.
+As of 2026-05, the major Fable-ecosystem libraries this SDK consumes or embeds (Feliz, Fable.SimpleJson, the in-tree Elmish runtime, the in-tree ToolUp.Remoting transport) have not been nullness-annotated, and there's no published timeline for that to land.
 
-**Rule:** do not set `<Nullable>enable</Nullable>` on any project that compiles via Fable or whose Fable-compiled output consumes Feliz / Fable.Remoting / Fable.SimpleJson / Fable.Elmish.HMR. Leave the property unset (which inherits F#'s default of `disable`), or explicitly set `<Nullable>disable</Nullable>` for projects sitting in a solution whose `Directory.Build.props` enables nullness by default. Server-only projects with no Fable involvement may enable nullness per the standard F# 10 default.
+**Rule:** do not set `<Nullable>enable</Nullable>` on any project that compiles via Fable or whose Fable-compiled output consumes Feliz / Fable.SimpleJson / the in-tree Elmish / ToolUp.Remoting runtimes. Leave the property unset (which inherits F#'s default of `disable`), or explicitly set `<Nullable>disable</Nullable>` for projects sitting in a solution whose `Directory.Build.props` enables nullness by default. Server-only projects with no Fable involvement may enable nullness per the standard F# 10 default.
 
 This rule retires when the upstream packages ship nullness annotations.
 
@@ -314,10 +316,10 @@ Method-call lambdas need parens: `AgGrid.onGridReady (_.AutoSizeAllColumns())`.
 
 ### Serialisation
 
-- **Fable.Remoting APIs**: handled automatically by the transport.
-- **SSE / non-Remoting JSON**: must use `Fable.Remoting.Json.FableJsonConverter`. Do NOT use `Newtonsoft.Json.Converters.DiscriminatedUnionConverter` — produces a shape `Fable.SimpleJson` cannot parse. Do NOT use `CamelCasePropertyNamesContractResolver` — Fable expects PascalCase.
-- **`unit -> Async<T>` API functions**: work because body normalisation is folded into the `ToolUp.Remoting.Giraffe` dispatcher itself (Phase 69b.A, shipped 0.4.0). The standalone `RemotingBodyNormalizationMiddleware` that 0.3.x relied on was retired alongside the Phase 69a SDK adoption sweep — `dotnet build` is the gate, not a middleware presence check.
-- **Consumer dependency contract**: server projects consuming `ToolUp.Platform.Server` MUST include `<PackageReference Include="Fable.Remoting.Json" />` — Newtonsoft arrives transitively.
+- **ToolUp.Remoting APIs**: handled automatically by the transport (the in-tree Fable.Remoting fork bundled inside `ToolUp.Platform.{Core,Client,Server}`).
+- **SSE / non-Remoting JSON**: must use `Fable.Remoting.Json.FableJsonConverter` (preserved namespace; ships inside `ToolUp.Platform.Server`). Do NOT use `Newtonsoft.Json.Converters.DiscriminatedUnionConverter` — produces a shape `Fable.SimpleJson` cannot parse. Do NOT use `CamelCasePropertyNamesContractResolver` — Fable expects PascalCase.
+- **`unit -> Async<T>` API functions**: work because body normalisation is folded into the dispatcher itself (shipped 0.4.0). The standalone `RemotingBodyNormalizationMiddleware` that 0.3.x relied on was retired — `dotnet build` is the gate, not a middleware presence check.
+- **Consumer dependency contract**: server projects consuming `ToolUp.Platform.Server` need no extra `Fable.Remoting.*` PackageReferences — the transport, the JSON converter, and the Giraffe / ASP.NET Core adapters all arrive transitively via `ToolUp.Platform.Server`. Newtonsoft arrives transitively too.
 
 ### AG Charts axes + animation
 

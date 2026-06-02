@@ -33,7 +33,7 @@ No cycles. RAG knows nothing about KB; KB depends on RAG (today). KB's server re
 ## Public surface
 
 **Server** (`module KnowledgeBase.Server`):
-- `knowledgeApi` — Fable.Remoting `KnowledgeApi` implementation (upload, list, delete, reset, ingest narrative, **add/update note**, **get/set AI context**).
+- `knowledgeApi` — ToolUp.Remoting `KnowledgeApi` implementation (upload, list, delete, reset, ingest narrative, **add/update note**, **get/set AI context**).
 - `makeIngestionStatusObserver` — factory for the `IIngestionStatusObserver` registered with `composeWithRAG`.
 - `standingContextBuilder : IBlobStorage -> ILogger option -> SystemPromptBuilder` — opt-in AI prompt builder that reads the team's standing context per outer turn. Composed by the deployment in `composeWithAI`'s prompt list — KB never auto-injects it (AI doesn't depend on KB; the deployment's composition root is the only place that sees both).
 
@@ -42,7 +42,7 @@ No cycles. RAG knows nothing about KB; KB depends on RAG (today). KB's server re
 - `KnowledgeBaseView.register ()` — returns the `ErasedModule` for SDK registration. Multi-page module with `/documents`, `/notes`, `/ai-context` pages.
 
 **Shared** (`module SharedTypes`):
-- `KnowledgeApi` record (Fable.Remoting contract) — adds `AddNote`, `UpdateNote`, `GetAIContext`, `SetAIContext`.
+- `KnowledgeApi` record (ToolUp.Remoting contract) — adds `AddNote`, `UpdateNote`, `GetAIContext`, `SetAIContext`.
 - `KnowledgeDocument`, `IngestionStatus`, `KnowledgeSource` (now `UploadedFile | FromNarrative _ | Note _`), `NoteSource`, `AddNoteRequest`, `UpdateNoteRequest`, `AIContextEntry`, `IngestionStatusUpdate`.
 - `[<Literal>] IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"` — published wire-format key. The AI-assistant side panel subscribes to this string literal directly so it does not need to depend on KB; the contract is published, not imported.
 

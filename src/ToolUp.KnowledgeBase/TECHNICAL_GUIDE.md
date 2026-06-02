@@ -17,7 +17,7 @@ src/
 ├── ToolUp.KnowledgeBase.Core/                  shared types — packaged as a normal .dll
 │   └── Shared/
 │       ├── SharedTypes.fs                      IngestionStatus, KnowledgeDocument, IngestionStatusNotificationKey
-│       └── PlatformKnowledgeApi.fs             Fable.Remoting API contract
+│       └── PlatformKnowledgeApi.fs             ToolUp.Remoting API contract
 ├── ToolUp.KnowledgeBase.Server/                server-side surface
 │   └── Server/
 │       ├── Server.fs                           knowledgeApi, makeIngestionStatusObserver

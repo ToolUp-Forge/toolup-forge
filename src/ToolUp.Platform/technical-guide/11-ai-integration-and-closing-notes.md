@@ -15,31 +15,17 @@ The AI assistant runtime (agent loop, SSE streaming, conversation persistence, t
 
 Provider-reported token usage rides on `AIProviderResponse.Usage: TokenUsage option` (`PromptTokens`, `CachedPromptTokens`, `OutputTokens`, plus optional Anthropic-specific `CacheCreationTokens`). Vocabulary is normalised across providers — Anthropic's `cache_read_input_tokens` and OpenAI's `prompt_tokens_details.cached_tokens` both populate `CachedPromptTokens`. Providers without a usage block (or without a prompt cache) declare `Capabilities.SupportsPromptCaching = false` and consumer-side rollups (e.g. `/dev/ai-latency`) hide the cache-hit-rate column for those buckets. See `ToolUp.AI/TECHNICAL_GUIDE.md` "Cache hit rate (Phase 6i.B)" for the full surface.
 
-For full AI architecture — SSE lifecycle, Fable.Remoting vs SSE serialisation rules, agent loop internals, `SystemPromptBuilder` composition, team- and module-aware prompts, tool error classification, client-side local-state pattern, Elmish.HMR limitations, Vite proxy configuration — see [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Deployment overview and extension points are in [`src/ToolUp.AI/README.md`](../../ToolUp.AI/README.md).
+For full AI architecture — SSE lifecycle, ToolUp.Remoting vs SSE serialisation rules, agent loop internals, `SystemPromptBuilder` composition, team- and module-aware prompts, tool error classification, client-side local-state pattern, Elmish.HMR limitations, Vite proxy configuration — see [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Deployment overview and extension points are in [`src/ToolUp.AI/README.md`](../../ToolUp.AI/README.md).
 
-The rest of this section covers the one AI-adjacent mechanism that stays in core: the Fable.Remoting body-normalisation middleware.
+The rest of this section covers the one AI-adjacent mechanism that stays in core: the ToolUp.Remoting body-normalisation behaviour.
 
-### Fable.Remoting: unit function body normalization
+### ToolUp.Remoting: unit function body normalisation
 
-Fable.Remoting has a client/server serialization mismatch for `unit -> Async<T>` API functions. The client may send GET requests with no body or POST requests with invalid body content (`""`, `null`) for functions like `ListConversations: unit -> Async<Conversation list>`. The server expects a JSON array body `[]`.
+Browsers send `unit -> Async<T>` API calls in inconsistent shapes: GET with no body, POST with `""`, POST with `null`, POST with a missing body altogether. A naive dispatcher expecting a JSON array (`[]`) breaks on every one of them — methods like `ListConversations`, `GetAvailableTools`, `GetPlatformInfo`, `GetMyTeams`, `GetActiveTeam`, `ListFiles` would all fail.
 
-This is handled by `RemotingBodyNormalizationMiddleware` in `SDK.Server.fs`, which intercepts all Fable.Remoting requests (identified by the `x-remoting-proxy` header) and normalizes empty/invalid bodies to `[]`:
+The in-tree ToolUp.Remoting fork (over upstream Fable.Remoting) folds body normalisation **into the dispatcher itself**, inside `ToolUp.Platform.Server`. Requests carrying the `x-remoting-proxy` header have empty / `""` / `null` bodies promoted to `[]` before the dispatcher reads them; the unit-arg path then proceeds normally. There is no separate `RemotingBodyNormalizationMiddleware` to wire into `compose`, and no `app.UseMiddleware<…>` registration to remember — `dotnet build` is the gate, not a middleware presence check.
 
-```fsharp
-type RemotingBodyNormalizationMiddleware(next: RequestDelegate) =
-    member _.InvokeAsync(ctx: HttpContext) =
-        task {
-            let isRemotingRequest =
-                ctx.Request.Headers.ContainsKey("x-remoting-proxy")
-            if isRemotingRequest then
-                // Read body, check for empty/""/null, replace with []
-                ...
-        }
-```
-
-This middleware must remain registered in `compose` via `app.UseMiddleware<RemotingBodyNormalizationMiddleware>()`. Without it, all `unit -> Async<T>` API functions fail — including `ListFiles`, `ListConversations`, `GetAvailableTools`, `GetPlatformInfo`, `GetMyTeams`, and `GetActiveTeam`.
-
-The `[]` UTF-8 byte array is allocated once at module load (`emptyArrayJsonBytes`) and shared across requests — `MemoryStream` does not write to its backing array on read paths, so a shared buffer is safe under concurrency.
+The change is invisible to consumer code: `unit -> Async<T>` API methods just work. If a consumer is migrating from a pre-fork SDK version that did rely on `RemotingBodyNormalizationMiddleware`, the registration can be deleted; the dispatcher already handles it.
 
 <!-- AI-specific concerns moved to src/ToolUp.AI/TECHNICAL_GUIDE.md:
      SSE JSON serialisation (FableJsonConverter), SSE userId matching,
@@ -54,11 +40,11 @@ AI-specific concerns (SSE JSON serialisation via `FableJsonConverter`, SSE userI
 
 **Fable compiles one project.** All client-side F# must be in a single Fable compilation unit. This is why modules inject source files via props rather than being separate projects — separate Fable-compiled projects would create cross-assembly issues with anonymous records and type identity.
 
-**The SDK `.fsproj` compiles only shared types.** Files like `UIToolkit.fs`, `SDK.Client.fs`, and `SDK.Server.fs` are marked `<None>` in the SDK project. They are compiled by the consuming Client or Server project via props injection. This is because they depend on packages (Feliz, Giraffe, Fable.Remoting.Giraffe, Fable.Remoting.Client) that the SDK project does not reference — the consuming project provides those dependencies.
+**The SDK `.fsproj` compiles only shared types.** Files like `UIToolkit.fs`, `SDK.Client.fs`, and `SDK.Server.fs` are marked `<None>` in the SDK project. They are compiled by the consuming Client or Server project via props injection. This is because they depend on packages (Feliz, Giraffe, the in-tree `Fable.Remoting.Giraffe` and `Fable.Remoting.Client` adapters under `ToolUp.Platform.{Server,Client}`) that the SDK project does not reference — the consuming project provides those dependencies.
 
 **Do not add server packages to ToolUp.Platform's `paket.references`.** These would flow transitively to the client project, and Fable cannot handle ASP.NET Core assemblies. Server files must compile in the consuming server project's context via `.Server.props`.
 
-**Consuming server projects must list `Fable.Remoting.Json` in `paket.references`.** Twelve SDK server files (`Server/ConfigStore.fs`, `Server/DataObjectStore.fs`, `Server/ResultStore.fs`, `Server/LineageStore.fs`, `Server/AuditLog.fs`, `Server/FeatureFlagStore.fs`, `Server/FeatureFlagHandler.fs`, `Server/ModuleQueryBus.fs`, `Server/NotificationHandler.fs`, `Server/WebhookApiHandler.fs`, `Server/WebhookDispatcher.fs`, `Server/WebhookRegistry.fs`) `open Newtonsoft.Json` and `open Fable.Remoting.Json` to use `FableJsonConverter` for lossless F# DU persistence (`VersioningPolicy`, `LinkType`, and similar payload-carrying DUs). Newtonsoft arrives transitively through `Fable.Remoting.Json` — the SDK's own `paket.references` lists only `FSharp.Core`, by the rule above. Without the consumer-side reference, every store file errors with unresolved `Newtonsoft.Json`, surfacing the symptom rather than the cause. The canonical helper shape lives in `Server/ConfigStore.fs:16-26`; new SDK files persisting F# data should copy it. Symmetric on the client: Fable client projects parsing JSON from these stores or from SSE frames need `Fable.SimpleJson` — it reads the same `FableJsonConverter` wire format losslessly without an additional converter, and `Fable.Remoting` RPC is automatic via `Fable.Remoting.Client` and unaffected by this contract. See [README.md → Consumer dependency contract](../README.md#consumer-dependency-contract) for the canonical write-up.
+**Consuming server projects no longer need a separate `Fable.Remoting.Json` reference.** The in-tree fork ships `FableJsonConverter` inside `ToolUp.Platform.Server`; a server consumer's `PackageReference Include="ToolUp.Platform.Server"` is sufficient. The historic guidance (kept here for context on older deployments still on a pre-fork SDK) was: Twelve SDK server files (`Server/ConfigStore.fs`, `Server/DataObjectStore.fs`, `Server/ResultStore.fs`, `Server/LineageStore.fs`, `Server/AuditLog.fs`, `Server/FeatureFlagStore.fs`, `Server/FeatureFlagHandler.fs`, `Server/ModuleQueryBus.fs`, `Server/NotificationHandler.fs`, `Server/WebhookApiHandler.fs`, `Server/WebhookDispatcher.fs`, `Server/WebhookRegistry.fs`) `open Newtonsoft.Json` and `open Fable.Remoting.Json` to use `FableJsonConverter` for lossless F# DU persistence (`VersioningPolicy`, `LinkType`, and similar payload-carrying DUs). Newtonsoft arrives transitively through `Fable.Remoting.Json` — the SDK's own `paket.references` lists only `FSharp.Core`, by the rule above. Without the consumer-side reference, every store file errors with unresolved `Newtonsoft.Json`, surfacing the symptom rather than the cause. The canonical helper shape lives in `Server/ConfigStore.fs:16-26`; new SDK files persisting F# data should copy it. Symmetric on the client: Fable client projects parsing JSON from these stores or from SSE frames need `Fable.SimpleJson` — it reads the same `FableJsonConverter` wire format losslessly without an additional converter, and `Fable.Remoting` RPC is automatic via `Fable.Remoting.Client` and unaffected by this contract. See [README.md → Consumer dependency contract](../README.md#consumer-dependency-contract) for the canonical write-up.
 
 **`importSideEffects` resolves relative to the source file.** When `SDK.Client.fs` was in the ToolUp.Platform directory, `importSideEffects "./index.css"` resolved to `ToolUp.Platform/index.css` — which doesn't exist. The CSS import must be in `Client.fs` (the app's entry point) where the relative path resolves to `src/ToolUpApp-Client/index.css`. This is a Fable-specific constraint that affects where certain JS interop calls can live.
 

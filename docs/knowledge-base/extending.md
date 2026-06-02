@@ -7,7 +7,7 @@ How to replace the built-in KB module with a custom one, add new extractors, cus
 `ToolUp.KnowledgeBase` is one consumer of `ToolUp.RAG`. Apps with different requirements (custom upload UI, different file kinds, integrated workflow management, etc.) can replace it entirely.
 
 The minimum contract for a KB replacement:
-1. Implements a Fable.Remoting API for document upload + list.
+1. Implements a ToolUp.Remoting API for document upload + list.
 2. Wires an `IIngestionStatusObserver` into `composeWithRAG`.
 3. Either matches the `"KnowledgeBase.IngestionStatus"` notification key (so the AI side panel surfaces ingestion progress) or accepts the AI panel won't show progress for its uploads.
 4. Optionally installs the `Toolup.NarrativeCommit` handler (so other modules' "Save to Knowledge Base" buttons resolve).

@@ -9,7 +9,7 @@ Browser                             Server
 ──────                              ──────
 File upload                         composeWithRAG (ToolUp.RAG)
    │                                       │ wraps
-   │ Fable.Remoting                        ▼
+   │ ToolUp.Remoting                       ▼
    ▼                                composeWithAI (ToolUp.AI)
 SessionFileStore.AddFile            │     │ wraps
    │                                │     ▼

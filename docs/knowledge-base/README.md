@@ -36,7 +36,7 @@ Three packages:
 
 | Package | What it is |
 |---|---|
-| `ToolUp.KnowledgeBase.Core` | Shared types: `KnowledgeApi` Fable.Remoting contract, `KnowledgeDocument`, `IngestionStatus`, `KnowledgeSource` (`UploadedFile \| FromNarrative \| Note`), `NoteSource`, `AddNoteRequest`, `UpdateNoteRequest`, `AIContextEntry`, `IngestionStatusUpdate`. Plus the wire-format literal `IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"`. |
+| `ToolUp.KnowledgeBase.Core` | Shared types: `KnowledgeApi` ToolUp.Remoting contract, `KnowledgeDocument`, `IngestionStatus`, `KnowledgeSource` (`UploadedFile \| FromNarrative \| Note`), `NoteSource`, `AddNoteRequest`, `UpdateNoteRequest`, `AIContextEntry`, `IngestionStatusUpdate`. Plus the wire-format literal `IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"`. |
 | `ToolUp.KnowledgeBase.Server` | Document upload + multi-format extraction (PDF / PPTX / DOCX / XLSX / CSV), ingestion observer, narrative-commit, notes / AI-context API, `KnowledgeBase.Server.knowledgeApi`. Depends on `ToolUp.AI.Server` + `ToolUp.RAG.Server`. Heavy NuGet deps (`PdfPig`, `DocumentFormat.OpenXml`) stay scoped here. |
 | `ToolUp.KnowledgeBase.Client` | Multi-page Feliz module: `/documents`, `/notes`, `/ai-context`. Narrative-commit installer (`KnowledgeBaseView.installNarrativeCommit`). KB icons. |
 
@@ -96,7 +96,7 @@ External KB replacements (apps that want to provide their own KB module instead 
 2. **`IIngestionStatusObserver`** — wired explicitly into `composeWithRAG`; not auto-injected. The observer surfaces per-document status (Pending / Extracting / Chunking / Embedding / Indexed / Failed) to the UI.
 3. **Notification-key contract** — the literal `"KnowledgeBase.IngestionStatus"` is the wire format the AI side panel subscribes to. An external KB either matches it or accepts that the AI panel won't surface its progress.
 
-These are the only contracts. Internally, `KnowledgeBase.Server` is just an `IFormApi`-like Fable.Remoting handler that the SDK shell injects.
+These are the only contracts. Internally, `KnowledgeBase.Server` is just an `IFormApi`-like ToolUp.Remoting handler that the SDK shell injects.
 
 ## Multi-format extraction
 
@@ -120,7 +120,7 @@ See [concepts.md](concepts.md) for the upload → extract → chunk → ingest p
 
 ## API reference
 
-See [api-reference.md](api-reference.md) for the full `KnowledgeApi` Fable.Remoting contract, server-side handler shape, client view types.
+See [api-reference.md](api-reference.md) for the full `KnowledgeApi` ToolUp.Remoting contract, server-side handler shape, client view types.
 
 ## Extending
 

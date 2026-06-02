@@ -21,7 +21,7 @@ Two packages:
 
 | Package | What it is |
 |---|---|
-| `ToolUp.Scheduling.Core` | Shared types: `Slot`, `Booking`, `Resource`, `RecurrenceRule`, `iCalendar` export, `ISchedulingApi` Fable.Remoting contract. |
+| `ToolUp.Scheduling.Core` | Shared types: `Slot`, `Booking`, `Resource`, `RecurrenceRule`, `iCalendar` export, `ISchedulingApi` ToolUp.Remoting contract. |
 | `ToolUp.Scheduling.Server` | `IBookingScheduler` interface with per-resource concurrency lock, conflict detector, scheduling API handler, `SchedulingCompose`. |
 
 ## Quick start

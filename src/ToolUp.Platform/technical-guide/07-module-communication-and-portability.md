@@ -59,11 +59,11 @@ match result with
 | Some (Error (HandlerFailed msg))  -> // handler threw; message already logged server-side
 ```
 
-The raw `IModuleQueryBus.Ask` stays string-based (`Payload: string`) so the wire format is identical across in-process, Fable.Remoting, and any future distributed bus — callers opt into the typed projection at the call site, not at the interface.
+The raw `IModuleQueryBus.Ask` stays string-based (`Payload: string`) so the wire format is identical across in-process, ToolUp.Remoting, and any future distributed bus — callers opt into the typed projection at the call site, not at the interface.
 
 ### Serialisation rule (server + client)
 
-Request and response payloads cross the manual JSON boundary — they are not Fable.Remoting for the in-process and HTTP paths. The server serialises with `Fable.Remoting.Json.FableJsonConverter` on Newtonsoft; the client serialises with `Fable.SimpleJson`. Both converters agree on the wire shape for records, unions, and `option` types, so the same `'TRequest` / `'TResponse` round-trips losslessly regardless of which side emitted the JSON. Do **not** swap in `DiscriminatedUnionConverter` or `CamelCasePropertyNamesContractResolver` — same rule as SSE (see `AI integration` → `ToolUp.AI/TECHNICAL_GUIDE.md`).
+Request and response payloads cross the manual JSON boundary — they are not ToolUp.Remoting for the in-process and HTTP paths. The server serialises with `Fable.Remoting.Json.FableJsonConverter` on Newtonsoft; the client serialises with `Fable.SimpleJson`. Both converters agree on the wire shape for records, unions, and `option` types, so the same `'TRequest` / `'TResponse` round-trips losslessly regardless of which side emitted the JSON. Do **not** swap in `DiscriminatedUnionConverter` or `CamelCasePropertyNamesContractResolver` — same rule as SSE (see `AI integration` → `ToolUp.AI/TECHNICAL_GUIDE.md`).
 
 Typed request / response records must live in `ToolUp-SharedTypes` or be primitives (GP 10). Declaring them inside the answering module's project would force the caller to import that project, defeating the bus's whole purpose.
 
@@ -71,7 +71,7 @@ Typed request / response records must live in `ToolUp-SharedTypes` or be primiti
 
 The client-side `ClientModuleQueryBus` prefers local dispatch and falls back to the server for anything it can't answer:
 
-1. **Module not locally registered** → HTTP call to `/api/IModuleQueryBusApi/Ask` (Fable.Remoting). The server's `None` (module not deployed) flows through unchanged.
+1. **Module not locally registered** → HTTP call to `/api/IModuleQueryBusApi/Ask` (ToolUp.Remoting). The server's `None` (module not deployed) flows through unchanged.
 2. **Module locally registered but no handler for the key** → fall through to HTTP. Server-only keys still work — a module can answer some keys in-browser (cached data, client-derived projections) and leave server-only keys (large joins, auth-sensitive queries) to the HTTP path.
 3. **Local handler matched** → invoke in-process; permission checks are **not** performed client-side (the browser cannot enforce RBAC — any cross-module call that matters for security falls through to the server where the real check lives). Exceptions are caught, logged to `console.error`, and returned as `Some (Error (HandlerFailed _))` — the raw exception does not re-throw (portability Rule 3).
 
@@ -81,11 +81,11 @@ The `AccessContext` used for the in-browser path is best-effort — `UserId` fro
 
 ### Permission check (server-side only)
 
-`InMemoryModuleQueryBus` calls `AccessContext.hasPermission targetModule ModulePermission.Read ctx` before dispatching to the handler. Empty permission map = unrestricted (opt-in RBAC, same convention as `makePermissionGuardedApi`). A denied call returns `Some (Error (PermissionDenied moduleName))` as a typed result — it is **not** a 403 HTTP response. Clients branch on the typed error rather than parsing status codes, and the wire behaviour is identical whether the caller is in-process, another server module, or an HTTP Fable.Remoting client.
+`InMemoryModuleQueryBus` calls `AccessContext.hasPermission targetModule ModulePermission.Read ctx` before dispatching to the handler. Empty permission map = unrestricted (opt-in RBAC, same convention as `makePermissionGuardedApi`). A denied call returns `Some (Error (PermissionDenied moduleName))` as a typed result — it is **not** a 403 HTTP response. Clients branch on the typed error rather than parsing status codes, and the wire behaviour is identical whether the caller is in-process, another server module, or an HTTP ToolUp.Remoting client.
 
 ### Auto-injected HTTP endpoint
 
-`ServerApp.run` registers `IModuleQueryBusApi` as a Fable.Remoting endpoint at `/api/IModuleQueryBusApi/Ask`. The server-side wrapper resolves `IModuleQueryBus` and `AccessContext` from DI per request and forwards the call — the typed `AccessContext` stays server-side, never crossing the wire, because clients cannot fabricate it. This matches the pattern used by `IConfigApi`, the five sibling platform APIs (`PlatformInfoApi` / `TeamApi` / `PermissionApi` / `AccessibilityApi` / `DataCatalogApi`), and the feature-flag API.
+`ServerApp.run` registers `IModuleQueryBusApi` as a ToolUp.Remoting endpoint at `/api/IModuleQueryBusApi/Ask`. The server-side wrapper resolves `IModuleQueryBus` and `AccessContext` from DI per request and forwards the call — the typed `AccessContext` stays server-side, never crossing the wire, because clients cannot fabricate it. This matches the pattern used by `IConfigApi`, the five sibling platform APIs (`PlatformInfoApi` / `TeamApi` / `PermissionApi` / `AccessibilityApi` / `DataCatalogApi`), and the feature-flag API.
 
 ### Portability rule audit (GP 12 / Phase 9c)
 

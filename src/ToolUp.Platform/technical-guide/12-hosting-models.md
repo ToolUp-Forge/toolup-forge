@@ -504,7 +504,7 @@ The phase-16 acceptance target is "< 2s cold start" for a minimal `Anonymous` SD
 
 **1. Framework-dependent publish.** Default (`<SelfContained>false</SelfContained>`) cuts publish-output size by 70–80 MB versus self-contained and lowers cold-start I/O cost accordingly. Self-contained is required only if your target runtime doesn't ship the .NET 10 framework yet — confirm runtime availability for each provider's region (see the per-cloud notes at the end of each worked example) before publishing self-contained.
 
-**2. `ReadyToRun` over `PublishTrimmed`.** Trimming is unsafe for F# applications: Fable.Remoting's transport layer uses reflection to materialise the API record on the server, and any trim pass removes handlers it can't statically prove are reachable. `<PublishReadyToRun>true</PublishReadyToRun>` is safe — it precompiles IL to native ahead of time, eliminating the JIT pass on the cold-start hot path without removing any code. Expect a 30–50% cold-start reduction on the SDK's stateless composition without breaking reflection.
+**2. `ReadyToRun` over `PublishTrimmed`.** Trimming is unsafe for F# applications: ToolUp.Remoting's transport layer (the in-tree Fable.Remoting fork) uses reflection to materialise the API record on the server, and any trim pass removes handlers it can't statically prove are reachable. `<PublishReadyToRun>true</PublishReadyToRun>` is safe — it precompiles IL to native ahead of time, eliminating the JIT pass on the cold-start hot path without removing any code. Expect a 30–50% cold-start reduction on the SDK's stateless composition without breaking reflection.
 
 ```xml
 <!-- In the consumer's Server fsproj -->
@@ -514,7 +514,7 @@ The phase-16 acceptance target is "< 2s cold start" for a minimal `Anonymous` SD
 </PropertyGroup>
 ```
 
-A pure-Anonymous-mode deployment that doesn't use Fable.Remoting on its API surface (Giraffe-shape HTTP handlers only) can opt into `<PublishTrimmed>true</PublishTrimmed>` at the consumer fsproj level. Document the choice explicitly so a future contributor doesn't add Remoting and discover the runtime breakage in production.
+A pure-Anonymous-mode deployment that doesn't use ToolUp.Remoting on its API surface (Giraffe-shape HTTP handlers only) can opt into `<PublishTrimmed>true</PublishTrimmed>` at the consumer fsproj level. Document the choice explicitly so a future contributor doesn't add ToolUp.Remoting and discover the runtime breakage in production.
 
 **3. Pre-resolve hot-path singletons.** ASP.NET Core's DI container resolves lazily; the first call to any service pays the resolution cost on the request-handling thread. The host adapters all call `IServerHost.Host.StartAsync` at cold start, which pre-resolves every `IHostedService` registration (gated off under `ServerlessHost = ServerlessHost`, so this is effectively a no-op for background subsystems) and every `Server`-tier substrate the composition root touched (`IBlobStorage`, `IConfigStore`, `IAuthProvider`, `IAIProvider`, …). The substrate companions you registered are warm by the time the first request lands.
 

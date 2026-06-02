@@ -25,7 +25,7 @@ The synchronous `Broadcast` method is a shim over an internal `task { ... }` —
 
 ### Serialization rule (non-negotiable)
 
-Notifications cross the manual server→Fable boundary — they are not Fable.Remoting. `NotificationHandler` serialises every envelope with `Fable.Remoting.Json.FableJsonConverter`. Do **not** replace this with `Newtonsoft.Json.Converters.DiscriminatedUnionConverter` — the output shape `{"Case":"X","Fields":[...]}` is not parseable by `Fable.SimpleJson` on the client. Do **not** add a `CamelCasePropertyNamesContractResolver`. This matches the existing SSE rule documented in `ToolUp.AI/TECHNICAL_GUIDE.md`; AI inherited the rule, notifications reaffirm it.
+Notifications cross the manual server→Fable boundary — they are not ToolUp.Remoting. `NotificationHandler` serialises every envelope with `FableJsonConverter` (under the preserved `Fable.Remoting.Json` namespace; ships inside `ToolUp.Platform.Server`). Do **not** replace this with `Newtonsoft.Json.Converters.DiscriminatedUnionConverter` — the output shape `{"Case":"X","Fields":[...]}` is not parseable by `Fable.SimpleJson` on the client. Do **not** add a `CamelCasePropertyNamesContractResolver`. This matches the existing SSE rule documented in `ToolUp.AI/TECHNICAL_GUIDE.md`; AI inherited the rule, notifications reaffirm it.
 
 ### Named events, not generic `data:`
 

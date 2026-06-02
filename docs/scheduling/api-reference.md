@@ -247,7 +247,7 @@ The client surface is small — no built-in calendar UI. The shipped pieces:
 val proxy: ISchedulingApi
 ```
 
-Fable.Remoting proxy. Use in Elmish commands:
+ToolUp.Remoting proxy. Use in Elmish commands:
 
 ```fsharp
 Cmd.OfAsync.either (fun () -> SchedulingClient.proxy.Book request) () onSuccess onFailure
