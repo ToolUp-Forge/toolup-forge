@@ -106,6 +106,59 @@ module BlobIndex =
     let private trimTrailingSlash (s: string) =
         if s.EndsWith "/" then s.Substring(0, s.Length - 1) else s
 
+    /// Path-safe encoder for a key or value segment. Any character
+    /// outside the safe set `[A-Za-z0-9_-]` is percent-encoded as its
+    /// UTF-8 bytes (`|` → `%7C`, `:` → `%3A`, space → `%20`, etc.).
+    /// Callers handing user-controlled or compound-key strings to
+    /// `BlobIndex.create` should compose this with their own segment
+    /// extractor so the resulting path segment is portable across
+    /// every backend — most notably Windows NTFS, which rejects
+    /// `< > : " | ? *` in path components.
+    ///
+    /// Round-trip safe: the same input always produces the same
+    /// output, so `Add(key)` and `Lookup(key)` agree on the path.
+    /// Single-character ASCII inputs in the safe set are emitted
+    /// verbatim, so callers whose keys are already alphanumeric pay
+    /// no overhead.
+    let pathSafeSegment (s: string) : string =
+        let isSafe (c: char) =
+            (c >= 'A' && c <= 'Z')
+            || (c >= 'a' && c <= 'z')
+            || (c >= '0' && c <= '9')
+            || c = '_'
+            || c = '-'
+
+        let buffer = System.Text.StringBuilder(s.Length)
+        let mutable i = 0
+
+        while i < s.Length do
+            let c = s[i]
+
+            if isSafe c then
+                buffer.Append c |> ignore
+                i <- i + 1
+            else
+                // Encode this code point as its UTF-8 bytes.
+                // Handle surrogate pairs together so multi-byte
+                // code points round-trip cleanly.
+                let span =
+                    if
+                        System.Char.IsHighSurrogate c
+                        && i + 1 < s.Length
+                        && System.Char.IsLowSurrogate s[i + 1]
+                    then
+                        let pair = s.Substring(i, 2)
+                        i <- i + 2
+                        pair
+                    else
+                        i <- i + 1
+                        string c
+
+                for b in System.Text.Encoding.UTF8.GetBytes span do
+                    buffer.Append(sprintf "%%%02X" b) |> ignore
+
+        buffer.ToString()
+
     /// Compose the leaf blob name for a `(key, value)` pair.
     let private leafName indexPrefix keyToSegment valueToSegment key value =
         let prefix = trimTrailingSlash indexPrefix

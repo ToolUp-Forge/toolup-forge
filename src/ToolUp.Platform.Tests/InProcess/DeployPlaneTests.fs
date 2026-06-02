@@ -277,17 +277,18 @@ type InMemoryDeployPipeline() =
 
 let tenantFleetTests =
     let factory () : ITenantFleet =
-        // In-memory blob storage rather than LocalFileStorage. The Tenant
-        // entity declares a (Region, Slug) compound index whose key
-        // segments are pipe-delimited via `EntityRegistration.withCompoundIndex`'s
-        // documented join character; on Windows NTFS rejects `|` in path
-        // segments, so LocalFileStorage would fail on every test that
-        // touches the compound-index materialisation path. The
-        // dictionary-backed `InMemoryBlobStorage` sidesteps the path
-        // validation entirely and exercises the substrate's documented
-        // contract end-to-end on every OS. See TIDY-UP entry "Compound
-        // index pipe-encoding on Windows" for the substrate fix.
-        let blob = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+        // LocalFileStorage exercises the cross-platform substrate
+        // path on disk — the Tenant entity declares a (Region, Slug)
+        // compound index whose joined key (`"region|slug"`) flows
+        // through `BlobIndex.pathSafeSegment` so the `|` is
+        // percent-encoded before it reaches the filesystem,
+        // surviving Windows NTFS path validation. Mirrors the
+        // BlobEntityStoreTests binding shape.
+        let tempDir =
+            Path.Combine(Path.GetTempPath(), "toolup-fleet-test-" + Guid.NewGuid().ToString("N"))
+
+        Directory.CreateDirectory tempDir |> ignore
+        let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
         registry.Register<Tenant>(Tenant.registration)

@@ -153,8 +153,22 @@ type BlobEntityStore
                     blobStorage
                     scopeId
                     (indexPrefixFor entityType indexName)
-                    id // keyToSegment: the key IS the segment
-                    id // valueToSegment: EntityId IS the segment
+                    // Entity index keys flow from user-supplied
+                    // extractors via `EntityRegistration.withIndex` /
+                    // `withCompoundIndex` and may carry any character —
+                    // including `|` (the compound-index join), `:`
+                    // (Author-tag prefixes), spaces, etc. Percent-encode
+                    // any char outside [A-Za-z0-9_-] so the path
+                    // segment survives Windows NTFS path validation as
+                    // well as every cloud blob store. Alphanumeric
+                    // keys pay no overhead.
+                    BlobIndex.pathSafeSegment
+                    // EntityIds are operator-controlled; convention is
+                    // GUIDs ("N" format) or DNS-safe slugs — both
+                    // path-safe by construction. Pass through verbatim
+                    // so `valueParser` round-trips to the canonical id
+                    // without a paired decoder.
+                    id
                     Some
         )
 
