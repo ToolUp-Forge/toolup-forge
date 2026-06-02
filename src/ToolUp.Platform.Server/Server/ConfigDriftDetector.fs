@@ -62,15 +62,18 @@ let private redactedString (length: int) = sprintf "<redacted:length=%d>" length
 // redaction marker, sized to the original value's length. Non-string
 // secrets (an unlikely shape, but covered) are stringified first so
 // the marker sizes still convey "there was something here, this big".
-//
-// Snapshots property names before mutating — mutating a JsonObject
-// during enumeration would raise InvalidOperationException.
 let rec private redact (node: JsonNode) : unit =
     if isNull node then
         ()
     else
         match node with
         | :? JsonObject as obj ->
+            // IMPORTANT: System.Text.Json.Nodes.JsonObject throws
+            // InvalidOperationException if mutated during enumeration.
+            // Snapshot the keys first (the `names` line below), then
+            // iterate the snapshot — never `for kvp in obj do … obj.[k] <- …`.
+            // See docs/migrations/fablejsonconverter-to-stj.md
+            // "JsonNode equivalents" for the canonical pattern.
             let names = obj |> Seq.map (fun kvp -> kvp.Key) |> Seq.toArray
 
             for name in names do

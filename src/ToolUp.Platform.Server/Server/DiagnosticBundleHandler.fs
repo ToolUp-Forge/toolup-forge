@@ -93,8 +93,12 @@ let rec private redact (node: JsonNode) : unit =
     else
         match node with
         | :? JsonObject as obj ->
-            // Snapshot keys before mutating — JsonObject raises
+            // IMPORTANT: System.Text.Json.Nodes.JsonObject throws
             // InvalidOperationException if mutated during enumeration.
+            // Snapshot the keys first (the `names` line below), then
+            // iterate the snapshot — never `for kvp in obj do … obj.[k] <- …`.
+            // See docs/migrations/fablejsonconverter-to-stj.md
+            // "JsonNode equivalents" for the canonical pattern.
             let names = obj |> Seq.map (fun kvp -> kvp.Key) |> Seq.toArray
 
             for name in names do
