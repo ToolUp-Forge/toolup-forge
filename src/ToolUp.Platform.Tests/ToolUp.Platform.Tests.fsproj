@@ -275,6 +275,12 @@
              modules. Mirrors the Support/SubjectWildcardAnalyzer.fs
              text-scanner pattern. -->
         <Compile Include="InProcess\DomAttrCustomAuditTests.fs" />
+        <!-- v0.5.0 — STJ backward-compat backstop. Pins the wire
+             shape of representative persistence DUs + records against
+             `FableConverters.shared` at v0.5.0 ship time. Catches
+             post-migration wire-format drift before a production
+             deployment reads a pre-v0.5.0 blob and crashes silently. -->
+        <Compile Include="InProcess\StjBackwardCompatTests.fs" />
         <Compile Include="InProcess\ConsentProviderTests.fs" />
         <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->

@@ -191,6 +191,12 @@ let allTests =
         DataPropTests.tests
         AriaPropTests.tests
         DomAttrCustomAuditTests.tests
+        // v0.5.0 — STJ backward-compat backstop. Frozen-snapshot wire
+        // shape + roundtrip-equality for representative persistence
+        // DUs + records. First production deployment after v0.5.0 that
+        // reads a pre-migration blob fails loudly here rather than
+        // silently in production if the wire shape drifts.
+        StjBackwardCompatTests.tests
     ]
 
 [<EntryPoint>]
