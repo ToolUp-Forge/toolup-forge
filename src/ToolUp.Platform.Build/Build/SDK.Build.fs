@@ -100,6 +100,13 @@ type BuildConfig = {
     ClientProject: string
     Output: BuildOutput
     Port: int
+    /// Expecto test packs run sequentially by the `VerifyAll` target.
+    /// Default is empty — `VerifyAll` becomes a no-op for consumers
+    /// that haven't opted in, preserving zero behaviour change for
+    /// downstream `Build.fs` files that construct `BuildConfig` via
+    /// `{ BuildConfig.defaults with … }`. Forge's own root `Build.fs`
+    /// populates this list with the 4 in-tree Expecto runners.
+    TestPacks: TestPack list
 }
 
 module BuildConfig =
@@ -108,6 +115,7 @@ module BuildConfig =
         ClientProject = "src/ToolUpApp-Client/ToolupApp-Client.fsproj"
         Output = BuildOutput.defaults
         Port = 5000
+        TestPacks = []
     }
 
 // ─── FAKE pipeline ─────────────────────────────────────────────────
@@ -199,6 +207,64 @@ let registerTargets (config: BuildConfig) =
     Target.create "Docker" (fun _ -> run docker [ "compose"; "up"; "-d" ] ".")
 
     Target.create "Format" (fun _ -> run dotnet [ "fantomas"; "." ] ".")
+
+    Target.create "VerifyAll" (fun _ ->
+        // Canonical "run every Expecto test pack" aggregator. Each pack
+        // is a console runner (`<OutputType>Exe</OutputType>` per the
+        // forge convention) invoked via `dotnet run --project <path>`;
+        // `dotnet test` silently no-ops against them, hence this
+        // target exists to give operators + CI a single call shape.
+        //
+        // Packs run sequentially so the per-pack output isn't
+        // interleaved (the parallel-pretty-printer is reserved for
+        // long-lived watch shapes). Each pack's stdout/stderr stream
+        // straight through; the cumulative summary lands at the end.
+        //
+        // Failure semantics: each pack uses `CreateProcess.ensureExitCode`
+        // (via the file-top `dotnet` shim), so the first non-zero exit
+        // throws and aborts the loop. The summary still prints for
+        // every pack that ran to completion before the failure.
+        match config.TestPacks with
+        | [] ->
+            Trace.tracefn
+                "VerifyAll: BuildConfig.TestPacks is empty — nothing to run. Populate `TestPacks` in your `BuildConfig` to opt in."
+        | packs ->
+            let results = ResizeArray<string * int>()
+
+            // Per-pack process WITHOUT the file-top `dotnet` shim's
+            // `ensureExitCode` decorator — we want to capture every
+            // pack's exit code so the summary lists each one, then
+            // throw at the end if any failed.
+            let runPack (pack: TestPack) =
+                CreateProcess.fromRawCommand "dotnet" [ "run"; "--project"; pack.Project ]
+                |> CreateProcess.withWorkingDirectory "."
+                |> Proc.run
+
+            try
+                for pack in packs do
+                    Trace.tracefn "▶ VerifyAll: %s (%s)" pack.Name pack.Project
+                    let result = runPack pack
+                    results.Add(pack.Name, result.ExitCode)
+            finally
+                Trace.tracefn ""
+                Trace.tracefn "VerifyAll summary:"
+
+                for name, exitCode in results do
+                    let status =
+                        if exitCode = 0 then
+                            "PASS"
+                        else
+                            sprintf "FAIL (exit %d)" exitCode
+
+                    Trace.tracefn "  %s — %s" status name
+
+            let failed = results |> Seq.filter (fun (_, c) -> c <> 0) |> Seq.toList
+
+            if not failed.IsEmpty then
+                failed
+                |> List.map (fun (n, c) -> sprintf "%s (exit %d)" n c)
+                |> String.concat "; "
+                |> failwithf "VerifyAll: %d pack(s) failed — %s" failed.Length)
 
     Target.create "Pack" (fun _ ->
         // Pack each public-surface SDK fsproj into the local NuGet feed

@@ -230,7 +230,11 @@ Module code outside these boundaries never sees type erasure.
 
 ```bash
 dotnet build ToolUp.Forge.sln       # full build
-# Tests are Expecto console runners — run EACH via `dotnet run`, not `dotnet test`:
+# Canonical "run every Expecto test pack" aggregator — sequential,
+# fails the target on any pack's non-zero exit, prints a one-line
+# per-pack summary at the end:
+dotnet run --project Build.fsproj -- VerifyAll
+# Individual packs (useful during iteration on one pack):
 dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
 dotnet run --project src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj
 dotnet run --project src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj
@@ -257,6 +261,8 @@ dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 ```
 
 **Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus the four `dotnet run --project` Expecto suites with 0 failures (`Platform.Tests` / `Forms.Tests` / `Scheduling.Tests` always-on; `AIProviders.Tests` env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above).
+
+**Shortcut for the 4 Expecto packs**: `dotnet run --project Build.fsproj -- VerifyAll` runs all 4 sequentially with a per-pack summary at the end — the canonical "run everything" invocation. Each per-pack `dotnet run --project` shown above is still the right shape for iteration on one pack.
 
 `dotnet run --project Build.fsproj -- Pack` walks every public-surface SDK fsproj (filtered against `IsPackable=false`) and packs each individually into a local feed (default `../local-nuget-feed/`). ~9 minutes for a clean cold pack of ~43 packages; subsequent packs are incremental. Point a consumer's `nuget.config` at the same folder to test unreleased changes end-to-end.
 

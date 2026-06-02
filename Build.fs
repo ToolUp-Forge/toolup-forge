@@ -4,11 +4,22 @@ open System.IO
 open Fake.Core
 open Fake.IO
 open Fake.IO.Globbing.Operators
+open ToolUp.Platform
 open ToolUp.Platform.Build
 
 let config = {
     BuildConfig.defaults with
         Port = 5000
+        // The 4 in-tree Expecto runners — `dotnet run -- VerifyAll`
+        // iterates these sequentially. AIProviders.Tests is env-gated;
+        // arms with no API-key env var report Pending (not Failed), so
+        // a fresh checkout is green without per-provider credentials.
+        TestPacks = [
+            TestPack.create "Platform" "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
+            TestPack.create "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj"
+            TestPack.create "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj"
+            TestPack.create "AIProviders" "src/ToolUp.AIProviders.Tests/ToolUp.AIProviders.Tests.fsproj"
+        ]
 }
 
 [<EntryPoint>]
