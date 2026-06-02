@@ -1,4 +1,4 @@
-# Phase 26 — Deploy Plane substrate (substrate + single-node defaults + ServerConfig opt-in)
+# Phase 26 — Deploy Plane substrate
 
 ## What changes
 
@@ -21,10 +21,10 @@ A new substrate ships at the SDK boundary giving the typed contract any deploy b
 | `JobSchedulerBuildOrchestrator` single-node default | `Server/Server/JobSchedulerBuildOrchestrator.fs` | Server | ✅ `a631c4a` |
 | `DefaultDeployPipeline` single-node default | `Server/Server/DefaultDeployPipeline.fs` | Server | ✅ `cbfd1d4` |
 | `ServerConfig.DeployPlaneMode` DU + DI wiring | `Core/Shared/SDK.Shared.fs` + `Server/Compose/ComposeStores.fs` + `Server/SDK.Server.fs` | Core + Server compose | ✅ `4bf6466` |
-| `DockerLocalContainerScheduler` reference companion | `src/ContainerSchedulers/DockerLocal/` | companion package | ⏸ Track A lane 2 (in flight) |
-| `Tests/Contracts/I*Contract.fs` (×4) | `Tests/Contracts/` | tests | ⏸ Track A lane 2 (in flight) |
+| `DockerLocalContainerScheduler` reference companion | `src/ContainerSchedulers/DockerLocal/` | companion package | ✅ `1a1bf22` |
+| `Tests/Contracts/I*Contract.fs` (×4) + in-process bindings | `Tests/Contracts/` + `Tests/InProcess/DeployPlaneTests.fs` | tests | ✅ `1a1bf22` |
 
-The deferred items don't block consumers that implement the substrate against their own backend (Diametrical's [Phase 26.C](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/diametrical-roadmap/phases/26-C-toolup-cloud-operation.md) ToolUp Cloud composition; a self-hosted operator on Docker Swarm; a Kubernetes-based shop). The substrate's contract is stable; downstream composes against the interfaces today and the SDK's single-node defaults / reference companion / contract packs land in a follow-up phase commit set.
+Every substrate surface, single-node default, the reference `DockerLocalContainerScheduler` companion, and the four contract packs now ship together. Operator-side `ServerConfig.DeployPlane = SingleNodeDeployPlane` lights up `IBuildOrchestrator` + `IDeployPipeline` + `ITenantFleet` automatically; `IContainerScheduler` remains consumer-supplied (the reference companion is one valid choice; cloud-specific implementations ship downstream — Diametrical's [Phase 26.C](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/diametrical-roadmap/phases/26-C-toolup-cloud-operation.md) ToolUp Cloud composition; a self-hosted operator on Docker Swarm; a Kubernetes-based shop).
 
 ## Placement deviation from the phase spec
 
@@ -62,8 +62,12 @@ The following all pass today against the shipped substrate surface:
 
 - `dotnet build src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj` — clean.
 - `dotnet build src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj` — clean.
-- `DeployManifest.validate` returns the expected `MissingRequiredField` / `InvalidSlug` / `DuplicateDomain` / `ConflictingModuleVersions` errors for malformed inputs (covered by the manifest's own internal logic — formal contract pack lands with Track A lane 2).
-- The six-rule portability audit comment block appears at the top of each of the four interface files (`IBuildOrchestrator.fs`, `ITenantFleet.fs`, `IDeployPipeline.fs`, `IContainerScheduler.fs`) and traces each rule to a specific signature decision. This is the **prose** half of the audit; the **executable** half (contract-pack assertions) ships with Track A lane 2.
+- `dotnet build src/ContainerSchedulers/DockerLocal/ToolUp.ContainerSchedulers.DockerLocal.fsproj` — clean.
+- `dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj -- --filter-test-list "IBuildOrchestrator contract"` — 18/18 pass against `InMemoryBuildOrchestrator`.
+- `dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj -- --filter-test-list "ITenantFleet contract"` — 26/26 pass against `EntityStoreTenantFleet` (binding uses `InMemoryBlobStorage` so the compound-index path materialisation does not touch NTFS — see TIDY-UP entry "Compound-index pipe encoding on Windows" for the substrate-side filesystem-safety fix).
+- `dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj -- --filter-test-list "IDeployPipeline contract"` — 10/10 pass against `InMemoryDeployPipeline`.
+- `dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj -- --filter-test-list "IContainerScheduler contract"` — 24/24 pass (11 against `InMemoryContainerScheduler`, 13 against `DockerLocalContainerScheduler` when a local Docker socket / Windows named pipe is reachable; otherwise the Docker-backed binding self-skips).
+- The six-rule portability audit comment block appears at the top of each of the four interface files (`IBuildOrchestrator.fs`, `ITenantFleet.fs`, `IDeployPipeline.fs`, `IContainerScheduler.fs`); the executable counterpart now lands in the contract packs as `Rule 1 — identity-by-value` / `Rule 2 — async at every boundary` / `Rule 3 — failure flows as data` test cases.
 - `NoDeployPlane` (default) registers nothing — no `IBuildOrchestrator` / `IDeployPipeline` / `ITenantFleet` in DI, no Tenant entity registration, no `_platform.build` / `_platform.deploy` event emission. Existing consumers see byte-for-byte unchanged behaviour.
 - `SingleNodeDeployPlane` with all four prerequisites satisfied (JobScheduler / EntityStore / IContainerScheduler / EventStore) registers the three defaults end-to-end; a build → deploy → launch round-trip persists events under `_platform.build` and `_platform.deploy` SourceModules.
 
