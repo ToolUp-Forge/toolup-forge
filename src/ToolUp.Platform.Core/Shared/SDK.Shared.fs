@@ -989,6 +989,43 @@ type AssetStoreMode =
     | NoAssetStore
     | EnabledAssetStore
 
+/// Phase 26 — deploy-plane substrate opt-in. Default `NoDeployPlane`
+/// (GP 13) registers nothing: no `IBuildOrchestrator`, no
+/// `IDeployPipeline`, no `ITenantFleet`, no `Tenant` entity
+/// registration, no `_platform.build` / `_platform.deploy` event
+/// emission. Byte-for-byte identical to pre-Phase-26 behaviour for any
+/// deployment that does not opt in.
+///
+/// `SingleNodeDeployPlane` registers the three SDK-shipped defaults
+/// (`JobSchedulerBuildOrchestrator` over `IJobScheduler`,
+/// `DefaultDeployPipeline`, `EntityStoreTenantFleet`) plus the
+/// `Tenant` entity. `IContainerScheduler` is **consumer-supplied** —
+/// the SDK does not register a default. Operators wire a backend
+/// (`DockerLocalContainerScheduler` is the dev-grade reference
+/// companion; Fly Machines / K8s / CloudRun ship as third-party or
+/// Diametrical-side companions). When `SingleNodeDeployPlane` is set
+/// without an `IContainerScheduler` in DI, an `IConfigValidator` emits
+/// a startup error.
+///
+/// **Dependencies.** `SingleNodeDeployPlane` requires
+/// `JobScheduler = InProcessJobScheduler` (for the build orchestrator's
+/// dispatch substrate) and `EntityStore = EnabledEntityStore` (for the
+/// tenant catalog). A future config validator may enforce; for now the
+/// composition root raises at construction time if either is missing.
+///
+/// Distributed companions (Akka-cluster-sharded build orchestrator per
+/// `diametrical#26.A`) replace the singletons via DI and add new cases
+/// here without changing existing consumers.
+type DeployPlaneMode =
+    /// No deploy-plane infrastructure registered. Default — keeps the
+    /// SDK lean for deployments not running the Layer 3 deploy plane.
+    | NoDeployPlane
+    /// Single-node defaults registered:
+    /// `JobSchedulerBuildOrchestrator` + `DefaultDeployPipeline` +
+    /// `EntityStoreTenantFleet` + `Tenant` entity. Consumer supplies
+    /// `IContainerScheduler` separately via DI.
+    | SingleNodeDeployPlane
+
 // ─── Wave 10 — Phase 56 inbound rate-limit substrate types ────────
 
 /// Identity key used by the inbound `IRateLimitStore` substrate.
@@ -2115,6 +2152,16 @@ type ServerConfig = {
     /// `AssetStoreMode` for the strip-imports contract.
     AssetStore: AssetStoreMode
 
+    /// Phase 26 — Layer 3 deploy-plane substrate opt-in. Default
+    /// `NoDeployPlane` (GP 13) registers nothing. `SingleNodeDeployPlane`
+    /// brings up `IBuildOrchestrator` / `IDeployPipeline` /
+    /// `ITenantFleet` over the SDK-shipped single-node defaults plus
+    /// the `Tenant` entity registration. `IContainerScheduler` is
+    /// consumer-supplied — register a companion separately via DI
+    /// (`DockerLocalContainerScheduler` is the dev-grade reference
+    /// impl). See `DeployPlaneMode` for the contract.
+    DeployPlane: DeployPlaneMode
+
     /// Phase 16 — host-model selection. `KestrelHost` (default)
     /// runs every registered `BackgroundService`. `ServerlessHost`
     /// gates compose to skip `BackgroundService` registrations so
@@ -2419,6 +2466,7 @@ module ServerConfig =
         ConversationStore = NoConversationStore
         PublicRendering = NoPublicRendering
         AssetStore = NoAssetStore
+        DeployPlane = NoDeployPlane
         ServerlessHost = KestrelHost
         ProcessProfile = AllInOne
         RateLimitStore = NoRateLimitStore

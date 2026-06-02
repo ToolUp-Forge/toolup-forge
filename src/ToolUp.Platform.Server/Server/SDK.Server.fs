@@ -477,8 +477,20 @@ let compose
     wirePerScopeResolverToNotificationChannel encryptionKeyResolver resolvedNotificationChannel
 
     // Phase 19 — entity-store registration (extracted to
-    // `ComposeStores.registerEntityStore`).
+    // `ComposeStores.registerEntityStore`). Phase 26 — when
+    // `DeployPlane = SingleNodeDeployPlane`, the Tenant entity
+    // registration is prepended automatically.
     registerEntityStore services config entityRegistrations
+
+    // Phase 26 — Layer 3 deploy-plane substrate. Conditional on
+    // `ServerConfig.DeployPlane`; `NoDeployPlane` (default) skips
+    // registration entirely. `SingleNodeDeployPlane` wires
+    // `IBuildOrchestrator` + `IDeployPipeline` + `ITenantFleet`
+    // (extracted to `ComposeStores.registerDeployPlane`).
+    // `IContainerScheduler` is consumer-supplied — the factories
+    // raise at first-resolve when missing with a clear remediation
+    // message.
+    registerDeployPlane services config eventStore resolvedLogger
 
     // Phase 9d — usage metering substrate (extracted to
     // `ComposeRuntimeServices.registerUsageMetering`). Returns the

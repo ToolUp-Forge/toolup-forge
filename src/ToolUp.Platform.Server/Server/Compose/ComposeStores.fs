@@ -99,7 +99,23 @@ let registerEntityStore
     | EnabledEntityStore ->
         let entityRegistry = EntityStore.EntityRegistry()
 
-        for registerFn in entityRegistrations do
+        // Phase 26 — when SingleNodeDeployPlane is set, prepend the
+        // Tenant entity registration to the iteration list. Saves
+        // consumers from having to call ServerApp.withEntity<Tenant>
+        // manually when they opt in to the substrate's defaults. The
+        // closure runs against the same registry as user-declared
+        // registrations; the resulting registry binds all of them
+        // into BlobEntityStore below.
+        let effectiveRegistrations =
+            match config.DeployPlane with
+            | SingleNodeDeployPlane ->
+                let tenantRegister (registry: EntityStore.EntityRegistry) =
+                    registry.Register TenantEntity.Tenant.registration
+
+                tenantRegister :: entityRegistrations
+            | NoDeployPlane -> entityRegistrations
+
+        for registerFn in effectiveRegistrations do
             registerFn entityRegistry
 
         services.AddSingleton<EntityStore.EntityRegistry>(entityRegistry) |> ignore
@@ -220,3 +236,76 @@ let registerConfigQueryAndFlagStores
 
     services.AddSingleton<IFeatureFlagStore>(featureFlagStore).AddSingleton<FlagEvaluator.FlagEvaluator>(flagEvaluator)
     |> ignore
+
+/// Phase 26 — register the Layer 3 deploy-plane substrate when
+/// `ServerConfig.DeployPlane = SingleNodeDeployPlane`. Wires three
+/// singletons (`IBuildOrchestrator` → `JobSchedulerBuildOrchestrator`,
+/// `IDeployPipeline` → `DefaultDeployPipeline`, `ITenantFleet` →
+/// `EntityStoreTenantFleet`). `IContainerScheduler` is
+/// **consumer-supplied** — operators register a backend (the dev-grade
+/// `DockerLocalContainerScheduler` reference companion, or a
+/// cloud-specific impl) before composing. `NoDeployPlane` (default)
+/// skips every registration — the deploy plane costs zero runtime when
+/// unused (GP 13).
+///
+/// **Resolution-time validation.** The factories check for the required
+/// dependencies (`IJobScheduler` for the orchestrator;
+/// `IContainerScheduler` for the pipeline and fleet) and raise at
+/// first-resolve with a clear remediation message rather than letting
+/// DI return `null`. Composition-time gating would require either
+/// re-ordering the compose pipeline or adding a Phase 9m
+/// `IConfigValidator`; the first-resolve check is the lighter lift and
+/// the failure mode is just as loud.
+let registerDeployPlane
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (eventStore: IEventStore)
+    (resolvedLogger: ILogger)
+    : unit =
+    match config.DeployPlane with
+    | NoDeployPlane -> ()
+    | SingleNodeDeployPlane ->
+        services.AddSingleton<IBuildOrchestrator>(fun (sp: System.IServiceProvider) ->
+            let scheduler = sp.GetService(typeof<IJobScheduler>) :?> IJobScheduler
+
+            if isNull (box scheduler) then
+                failwith
+                    "SingleNodeDeployPlane requires JobScheduler = InProcessJobScheduler (or a distributed scheduler companion) — register an IJobScheduler before consuming IBuildOrchestrator."
+
+            JobSchedulerBuildOrchestrator.JobSchedulerBuildOrchestrator(scheduler, eventStore, resolvedLogger)
+            :> IBuildOrchestrator)
+        |> ignore
+
+        services.AddSingleton<IDeployPipeline>(fun (sp: System.IServiceProvider) ->
+            let buildOrch = sp.GetService(typeof<IBuildOrchestrator>) :?> IBuildOrchestrator
+
+            let containerSched =
+                sp.GetService(typeof<IContainerScheduler>) :?> IContainerScheduler
+
+            if isNull (box containerSched) then
+                failwith
+                    "SingleNodeDeployPlane requires IContainerScheduler to be registered by a consumer companion (e.g. DockerLocalContainerScheduler from src/ContainerSchedulers/DockerLocal/, or a cloud-specific impl). The SDK does not ship a default — operators wire a backend separately via services.AddSingleton<IContainerScheduler>(...)."
+
+            DefaultDeployPipeline.DefaultDeployPipeline(buildOrch, containerSched, eventStore, resolvedLogger)
+            :> IDeployPipeline)
+        |> ignore
+
+        services.AddSingleton<ITenantFleet>(fun (sp: System.IServiceProvider) ->
+            let entityStore =
+                sp.GetService(typeof<IEntityStore.IEntityStore>) :?> IEntityStore.IEntityStore
+
+            if isNull (box entityStore) then
+                failwith
+                    "SingleNodeDeployPlane requires EntityStore = EnabledEntityStore — the Tenant catalog lives behind IEntityStore. Set ServerConfig.EntityStore = EnabledEntityStore."
+
+            let containerSched =
+                sp.GetService(typeof<IContainerScheduler>) :?> IContainerScheduler
+
+            if isNull (box containerSched) then
+                failwith
+                    "SingleNodeDeployPlane requires IContainerScheduler to be registered by a consumer companion before consuming ITenantFleet."
+
+            let pipeline = sp.GetService(typeof<IDeployPipeline>) :?> IDeployPipeline
+
+            EntityStoreTenantFleet(entityStore, containerSched, pipeline, resolvedLogger) :> ITenantFleet)
+        |> ignore
