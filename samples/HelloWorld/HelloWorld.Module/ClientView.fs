@@ -3,6 +3,7 @@ module Template.ClientView
 open Feliz
 open ToolUp.Platform
 open ToolUp.Platform.SvgProp
+open ToolUp.Platform.DataProp
 open Template.ClientModel
 
 // ─── View ────────────────────────────────────────────────────────
@@ -26,9 +27,15 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
 
     let left =
         Html.div [
+            // Inline `dataProp.testid` anchors the `dataProp.*` helper
+            // convention (see docs/platform/dom-props.md). React preserves
+            // `data-*` verbatim today via a hardcoded exception; using
+            // the helper insulates against a future React tightening and
+            // documents the intent at the call site.
+            dataProp.testid "hello-world-module"
             prop.children [
                 // Inline divider SVG anchoring the `svgProp.*` helper convention
-                // (see docs/platform/svg-helpers.md). `strokeWidth` and
+                // (see docs/platform/dom-props.md). `strokeWidth` and
                 // `strokeLinecap` are kebab-case in the SVG spec; React
                 // requires their camelCase forms — the helpers wrap the
                 // correct names so consumers can't trip the silent-drop

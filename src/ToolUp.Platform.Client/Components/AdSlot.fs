@@ -9,6 +9,7 @@ open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
 open ToolUp.Platform.AdPanel
+open ToolUp.Platform.DataProp
 
 // ─── Phase 60 — Feliz `AdSlot` component ──────────────────────────
 //
@@ -92,10 +93,9 @@ let AdSlot (config: ClientConfig) (slot: AdSlotConfig) : ReactElement =
             (Html.ins [
                 prop.className "adsbygoogle"
                 prop.ref insRef
-                prop.custom ("data-ad-client", slot.AdClientId)
-                prop.custom ("data-ad-slot", slot.SlotId)
-                prop.custom (
-                    "data-ad-format",
+                dataProp.adClient slot.AdClientId
+                dataProp.adSlot slot.SlotId
+                dataProp.adFormat (
                     match slot.Format with
                     | AdAuto -> "auto"
                     | AdRectangle -> "rectangle"
@@ -104,7 +104,7 @@ let AdSlot (config: ClientConfig) (slot: AdSlotConfig) : ReactElement =
                     | AdFluid _ -> "fluid"
                 )
                 match slot.Format with
-                | AdFluid layoutKey -> prop.custom ("data-ad-layout-key", layoutKey)
+                | AdFluid layoutKey -> dataProp.adLayoutKey layoutKey
                 | _ -> ()
                 match slot.Style with
                 | Some s -> prop.style [ style.custom ("display", "block"); style.custom ("cssText", s.CssStyle) ]

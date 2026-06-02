@@ -8,6 +8,7 @@ open Feliz
 open Fable.Core.JsInterop
 open Browser
 open ToolUp.Platform
+open ToolUp.Platform.DataProp
 open ProcessedDataTypes
 
 module Forms =
@@ -27,7 +28,7 @@ module Forms =
     /// natural width via Tailwind `w-full inline-block`).
     let aiNamed (name: string) (child: ReactElement) : ReactElement =
         Html.div [
-            prop.custom ("data-ai-name", name)
+            dataProp.aiName name
             prop.className "inline-block w-full"
             prop.children [ child ]
         ]

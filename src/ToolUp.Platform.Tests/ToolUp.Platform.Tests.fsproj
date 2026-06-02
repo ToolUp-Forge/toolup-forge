@@ -253,6 +253,14 @@
         <Compile Include="InProcess\WithRequestHeadersPassthroughTests.fs" />
         <Compile Include="InProcess\CsrfPrefetchAnonymousGateTests.fs" />
         <Compile Include="InProcess\SvgPropTests.fs" />
+        <!-- v0.5.0 — DataProp + AriaProp helper-module sanity packs.
+             Same shape as SvgPropTests.fs: textual checks pin the
+             per-helper attribute names + an internal "no foreign
+             attribute" sweep so the modules' own bodies stay
+             single-purpose (the audit ratchet in
+             DomAttrCustomAuditTests.fs whitelists these modules). -->
+        <Compile Include="InProcess\DataPropTests.fs" />
+        <Compile Include="InProcess\AriaPropTests.fs" />
         <Compile Include="InProcess\ConsentProviderTests.fs" />
         <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->

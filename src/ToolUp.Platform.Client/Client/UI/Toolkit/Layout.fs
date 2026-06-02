@@ -8,6 +8,7 @@ open Feliz
 open Fable.Core.JsInterop
 open Browser
 open ToolUp.Platform
+open ToolUp.Platform.DataProp
 
 module Layout =
     //open Fable.Core.JsInterop
@@ -103,7 +104,7 @@ module Layout =
                     style.custom ("gridAutoRows", "min-content")
                 ]
                 prop.children [
-                    for (name, el) in areas -> Html.div [ prop.custom ("data-area", name); prop.children [ el ] ]
+                    for (name, el) in areas -> Html.div [ dataProp.area name; prop.children [ el ] ]
                 ]
             ]
         | Custom el -> el

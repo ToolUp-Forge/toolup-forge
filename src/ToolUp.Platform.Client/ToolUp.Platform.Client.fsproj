@@ -62,6 +62,17 @@
         <Compile Include="Client\SidebarPreferences.fs" />
         <Compile Include="Client\UI\Sidebar.fs" />
         <Compile Include="Client\UI\SvgProp.fs" />
+        <!-- v0.5.0 — DataProp + AriaProp typed helpers. Same shape /
+             rationale as SvgProp.fs: wrap `prop.custom` with a typed
+             entry per attribute so the call-site advertises intent
+             and a future audit can ratchet against raw
+             `prop.custom ("data-*"|"aria-*"|"role", _)` shapes
+             (see `DomAttrCustomAuditTests.fs`). React preserves
+             `data-*` / `aria-*` / `role` verbatim today via a
+             hardcoded exception; these helpers insulate against any
+             future React tightening + give a single seam to audit. -->
+        <Compile Include="Client\UI\DataProp.fs" />
+        <Compile Include="Client\UI\AriaProp.fs" />
         <Compile Include="Client\IAuthBridge.fs" />
         <Compile Include="Client\SDK.ClientTypes.fs" />
         <!-- Phase 55 — `withGroup` requirement preflight. Pure decision +

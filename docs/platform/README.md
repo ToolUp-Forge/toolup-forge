@@ -99,7 +99,7 @@ See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRe
 - [`jobs.md`](jobs.md) — cron + event-triggered + manual background jobs.
 - [`data-subject-requests.md`](data-subject-requests.md) — GDPR Article 15/17 export + erasure, the erasure-policy choice tree, per-store behaviour.
 - [`client-remoting-proxies.md`](client-remoting-proxies.md) — module-level proxy convention + send-time request-guard contract for `*.Client` companions.
-- [`svg-helpers.md`](svg-helpers.md) — typed `svgProp.*` helpers for hand-rolled SVG; React requires camelCase attribute names and silently drops kebab-case forms.
+- [`dom-props.md`](dom-props.md) — typed `svgProp.*` / `dataProp.*` / `ariaProp.*` helpers for hand-rolled DOM attributes; React requires camelCase for SVG and silently drops kebab-case forms, and the `data-*` / `aria-*` / `role` families share the same `prop.custom` code path with a hardcoded exception today.
 - [`ads.md`](ads.md) — AdSense embedding substrate (`<AdSlot>` Feliz component, `AdScriptLoader`, `IAdAnalyticsSink`) + consent-gate composition.
 - [`premium.md`](premium.md) — operator-granted premium-tier substrate (`IUserClaims`, `PremiumGate`, `usePremium`, `PremiumOnly` flag-source composition).
 - [`adsense-approval.md`](adsense-approval.md) — operator-facing AdSense site-approval gotchas (HTTPS, content / policy requirements, test-mode parameter, review delay).

@@ -9,6 +9,7 @@ open Fable.Core.JsInterop
 open Fable.SimpleJson
 open Feliz
 open ToolUp.Platform
+open ToolUp.Platform.DataProp
 open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
@@ -622,7 +623,7 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                                 let wasCited = List.contains i cited
 
                                 Html.div [
-                                    prop.custom ("data-cite-idx", string i)
+                                    dataProp.citeIdx i
                                     prop.className [
                                         "rounded-md border p-2 transition-colors"
                                         if highlightIdx = Some i then
