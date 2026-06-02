@@ -34,6 +34,7 @@
         <Compile Include="Server\Attribution.fs" />
         <Compile Include="Server\SitemapGenerator.fs" />
         <Compile Include="Server\PublicPageHandler.fs" />
+        <Compile Include="Server\StaticExport.fs" />
         <Compile Include="Server\PublicRenderingCompose.fs" />
     </ItemGroup>
 </Project>

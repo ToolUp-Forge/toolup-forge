@@ -337,3 +337,14 @@ module PublicRenderingServerApp =
             }
 
             ServerApp.run final
+
+    /// Build-time terminus. Mirrors `run` but writes the rendered
+    /// site to disk under `outputDir` instead of starting Kestrel,
+    /// producing a static HTML tree hostable on Azure Static Web Apps,
+    /// Netlify, GitHub Pages, S3 + CloudFront, etc. See
+    /// `StaticExport.run` for the output layout and behaviour.
+    ///
+    /// Requires `ServerConfig.PublicRendering = EnabledPublicRendering`
+    /// and at least one registered layout — same invariants as `run`.
+    let exportStatic (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
+        StaticExport.run app.Base.Config app.Layouts app.ContentApiOverride app.Base.Logger outputDir
