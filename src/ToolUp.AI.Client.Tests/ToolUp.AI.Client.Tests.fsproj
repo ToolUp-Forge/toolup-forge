@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.AI.Client.Tests — Fable-tier test harness for the AI.Client
+    surface (Phase 70 E.4 follow-up).
+
+    The .NET Expecto runners in `ToolUp.Platform.Tests` cannot reach
+    AI.Client's MVU code at runtime: module-level Remoting proxy
+    constructors (e.g. `let private api = Api.makeProxy<…>` in
+    `PlatformAIKeysAdminUI.fs:67`) are reflection-shaped for Fable
+    and fail under .NET reflection (`buildProxy` cannot reconstruct
+    the record of FSharpFunc values). The static constructor fires
+    the first time any member of the module is touched, so even a
+    "pure update-function" test cannot execute on .NET.
+
+    Tests here transpile via Fable + run under Node's built-in test
+    runner (`node:test`, stable in Node 20+). The `NodeTest.fs` shim
+    provides an Expecto-style facade so test bodies look like
+    Platform.Tests; zero npm test-runner dependencies (the SDK-bundle
+    deps in `package.json` are present only to satisfy ESM resolution
+    of `react` / `ag-grid` / `@clerk/react` imports the Fable-emitted
+    JS carries from the Platform.Client tier). See the "Testing
+    client-tier MVU update functions" section in
+    `docs/platform/testing-conventions.md` for the run procedure.
+
+    Future view-level tests (Feliz components, useState interaction)
+    compose on top of this harness; adding JSDOM as a devDep when
+    such a test concretely needs it.
+
+    `IsPackable=false`; the project ships nothing.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+        <!-- Fable ecosystem (Feliz, Fable.Mocha, Fable.Elmish, ToolUp.Remoting)
+             pre-dates F# 10's nullable reference types; enabling nullness
+             here would cascade "null / not null inconsistent" errors
+             through transitive references. Per forge `CLAUDE.md` guidance:
+             nullness stays disabled on Fable-touching projects. -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="NodeTest.fs" />
+        <Compile Include="PlatformAIKeysAdminUITests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- ProjectReference to ToolUp.AI.Client transitively drives
+             Platform.Client + Platform.Core + AI.Core through the Fable
+             compiler — so AI.Client modules under test compile against
+             the same source the SDK ships. -->
+        <ProjectReference Include="..\ToolUp.AI.Client\ToolUp.AI.Client.fsproj" />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Fable.Core" />
+    </ItemGroup>
+</Project>

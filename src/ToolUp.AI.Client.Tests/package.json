@@ -1,0 +1,24 @@
+{
+    "private": true,
+    "engines": {
+        "node": ">=20 || >=22 || >=24 || >=25"
+    },
+    "scripts": {
+        "test": "node --import ./register-loader.mjs --test output/Program.js"
+    },
+    "//1": "SDK-bundle deps mirror `samples/MinimalClient/package.json` — the Platform.Client tier's transpiled JS imports `react`, `@clerk/react`, `@dnd-kit/*`, `ag-*` from every consumer. Node ESM resolution at module-load needs these installed even though the test code only calls pure `init` / `update` functions (the view-side code never executes).",
+    "//2": "Test runner is Node's built-in `node:test` (stable in Node 20+) — zero transitive npm deps for the runner itself. The Fable-side facade lives in `NodeTest.fs`. See `docs/platform/testing-conventions.md` for rationale (vs Fable.Mocha + npm mocha)."
+    ,
+    "devDependencies": {
+        "@clerk/react": "^6.6.4",
+        "@dnd-kit/core": "^6.3.1",
+        "@dnd-kit/sortable": "^10.0.0",
+        "@dnd-kit/utilities": "^3.2.2",
+        "ag-charts-community": "13.3.0",
+        "ag-charts-react": "13.3.0",
+        "ag-grid-community": "35.3.0",
+        "ag-grid-react": "35.3.0",
+        "react": "~19.2.6",
+        "react-dom": "~19.2.6"
+    }
+}

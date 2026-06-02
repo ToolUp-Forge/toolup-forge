@@ -242,12 +242,21 @@ dotnet run --project src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj
 # system + user + tool round-trip plus an IProviderProfile factory
 # round-trip through DefaultAIProviderFactory.Resolve.
 dotnet run --project src/ToolUp.AIProviders.Tests/ToolUp.AIProviders.Tests.fsproj
+# Client-tier Fable test harness for AI.Client MVU surfaces (Phase 70
+# E.4 follow-on). Different shape: transpiles via Fable + runs under
+# Node's built-in test runner (`node:test`, zero npm test-runner
+# deps); see docs/platform/testing-conventions.md for rationale and
+# the full procedure. Run from the project directory:
+#   cd src/ToolUp.AI.Client.Tests
+#   dotnet tool restore && npm install --no-fund --no-audit
+#   dotnet fable -o output --noCache
+#   node --import ./register-loader.mjs --test output/Program.js
 dotnet run --project Build.fsproj -- Pack   # produce nupkgs to ../local-nuget-feed
 dotnet run -- Format                # fantomas
 dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 ```
 
-**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus the four `dotnet run --project` suites with 0 failures (`Platform.Tests` / `Forms.Tests` / `Scheduling.Tests` always-on; `AIProviders.Tests` env-gated — clean on a fresh checkout, asserts live when an API-key env var is set).
+**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus the four `dotnet run --project` Expecto suites with 0 failures (`Platform.Tests` / `Forms.Tests` / `Scheduling.Tests` always-on; `AIProviders.Tests` env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above).
 
 `dotnet run --project Build.fsproj -- Pack` walks every public-surface SDK fsproj (filtered against `IsPackable=false`) and packs each individually into a local feed (default `../local-nuget-feed/`). ~9 minutes for a clean cold pack of ~43 packages; subsequent packs are incremental. Point a consumer's `nuget.config` at the same folder to test unreleased changes end-to-end.
 

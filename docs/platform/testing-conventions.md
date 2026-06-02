@@ -100,6 +100,75 @@ Set-Location C:\repos\ToolUp\toolup-forge
 
 Filter to server-tier paths under `src/ToolUp.Platform.Server/`, `src/AuthProviders/Oidc/`, `src/AuthProviders/EntraExternalId/` — client-tier paths fall under the Fable-tier (a)-class by construction.
 
+## Testing client-tier MVU update functions
+
+Client-tier modules (`ToolUp.Platform.Client`, `ToolUp.AI.Client`, etc.) cannot be exercised by the `.NET` Expecto runners. The blocker is module-level construction of ToolUp.Remoting proxies:
+
+```fsharp
+// PlatformAIKeysAdminUI.fs — typical AI.Client module shape
+let private api =
+    Api.makeProxy<PlatformAIKeysApi> (customOptions = UserSession.withRequestHeaders)
+```
+
+F# initialises module-level `let` bindings eagerly through the static constructor on first member access. ToolUp.Remoting's reflection-based proxy builder is shaped for Fable's runtime: `buildProxy` walks the API record and constructs a record of `FSharpFunc<_,Async<_>>` values via a closure (`normalize@…-1`) that the .NET reflection layer cannot bind back to the record's field types. The first call to `init ()` or `update msg model` triggers the static constructor, which throws `System.ArgumentException` before any test assertion runs.
+
+The fix is to test through the same runtime the code actually deploys to: Fable transpile → Node test runner. The reference harness lives at [`src/ToolUp.AI.Client.Tests/`](../../src/ToolUp.AI.Client.Tests/).
+
+### Runner choice: `node:test`, not Fable.Mocha
+
+The harness uses Node's built-in test runner (`node:test`, stable in Node 20+) plus `node:assert/strict`, not `Fable.Mocha` + npm `mocha`. Both reach Fable-compiled F#; the differentiator is the supply-chain story.
+
+`mocha` 11.7.x's transitive dep tree carries unaddressed audit findings on `serialize-javascript` (RCE via crafted `RegExp.flags` / `Date.toISOString`, CVSS 8.1) and `diff` (DoS in `parsePatch` / `applyPatch`). The [Mocha team's official position (#5690)](https://github.com/mochajs/mocha/issues/5690) is that neither is reachable through Mocha's actual surface — the test runner only processes developer-written test code, not untrusted input — but `npm audit` does not make that distinction. Every contributor running `npm audit` in the test project would see "3 vulnerabilities, 1 high," and no current `mocha` version clears them.
+
+`node:test` sidesteps the noise entirely: it ships with Node itself, no transitive npm deps to audit. The thin `NodeTest.fs` shim ([source](../../src/ToolUp.AI.Client.Tests/NodeTest.fs)) gives the same Expecto-style API the rest of forge uses (`testCase` / `testList` / `Expect.equal` / `Expect.isTrue` / …) on top of `node:test` + `node:assert/strict`.
+
+### How to add a new client-tier test pack
+
+1. **Add a `.fs` file under [`src/ToolUp.AI.Client.Tests/`](../../src/ToolUp.AI.Client.Tests/)** alongside `PlatformAIKeysAdminUITests.fs`. The pack's top shape:
+
+   ```fsharp
+   module ToolUp.AI.Client.Tests.MyNewTests
+
+   open ToolUp.AI.Client.Tests.NodeTest
+   // open the modules under test
+
+   let tests =
+       testList "MyNewSuite" [
+           testCase "describes what this verifies" <| fun _ ->
+               let actual = subjectUnderTest input
+               Expect.equal actual expected "what the assertion proves"
+       ]
+   ```
+
+2. **Register the new file** in `ToolUp.AI.Client.Tests.fsproj` `<Compile>` list (after `NodeTest.fs`, before `Program.fs`).
+3. **Register the suite** in `Program.fs`'s top-level `allTests` — append it to the `testList` argument list.
+4. **Run the gate** from `src/ToolUp.AI.Client.Tests/`:
+
+   ```powershell
+   dotnet tool restore
+   npm install --no-fund --no-audit
+   dotnet fable -o output --noCache
+   node --import ./register-loader.mjs --test output/Program.js
+   ```
+
+   The `--import ./register-loader.mjs` flag activates the asset-import loader hook (no-ops `.svg` / `.css` / `.png` etc. imports the Fable-emitted JS carries from Feliz components — see [`test-loader.mjs`](../../src/ToolUp.AI.Client.Tests/test-loader.mjs)). The `--test` flag puts Node into test-runner mode; exit code reflects pass/fail.
+
+### What this harness does and does not exercise
+
+- **Does exercise**: pure `update` functions, model transitions, Msg → Cmd plumbing, `Cmd.batch` / `Cmd.none` composition, any pure F# code reachable from the Fable-transpiled output.
+- **Does not exercise**: Feliz `view` rendering (no DOM), React `useState` interaction, browser-only APIs (SSE event sources, IndexedDB, `window.*`), `Cmd` execution (Cmds are constructed but not run).
+
+Adding view-level tests is a follow-on once a concrete view-level case lands. That work would add JSDOM as a devDependency, plus a small `Feliz` mount helper, and would compose on top of the same `NodeTest.fs` facade.
+
+### When to use this harness vs `Platform.Tests`
+
+| If you want to test… | Use |
+|---|---|
+| Server-tier infrastructure (storage, queue, validators, dispatch) | `ToolUp.Platform.Tests` (`.NET` Expecto) |
+| Client-tier source via textual analysis (analyser, presence check, anti-pattern audit) | `ToolUp.Platform.Tests` — see `SvgPropTests` / `SubjectWildcardAnalyzerTests` |
+| Client-tier MVU `update` runtime behaviour | `ToolUp.AI.Client.Tests` (this harness) |
+| Live AI provider response shape | `ToolUp.AIProviders.Tests` (env-gated `.NET` Expecto) |
+
 ## What this convention does NOT do
 
 - It does not force `testSequenced` everywhere. Expecto's parallel-within-testList execution is a real productivity feature.
