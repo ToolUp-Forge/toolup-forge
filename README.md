@@ -50,6 +50,13 @@ let main _ =
 
 For a runnable end-to-end sample — module + server + client — see [`samples/HelloWorld/`](samples/HelloWorld/).
 
+### Starter templates
+
+Two `dotnet new` paths sit alongside the bare-`PackageReference` shape above; pick whichever matches the deployment shape you're aiming at:
+
+- **`platformsdk-solution`** — full F# full-stack scaffold with `{AppName}-Server` + `{AppName}-Client`, one starter module, `Build.fs`, `compose.yml`, and CI workflow. Production-multi-tenant shape; the right starter for the typical commercial deployment. See [`templates/platformsdk-solution/`](templates/platformsdk-solution/) (and `platformsdk-application` / `platformsdk-module` / `platformsdk-datamanager` / `platformsdk-docker` for adding to an existing solution).
+- **`toolup-safer`** — minimal SAFE-Stack-shaped starter; one chat module, anonymous mode, no auth, no persistence, in-memory only. Useful for SAFE-Stack-familiar developers who want to learn the in-tree Elmish + ToolUp.Remoting primitives via a Tiny Chat demo. **An option**, not the recommended path — for production multi-tenant + auth + persistence, use `platformsdk-solution`. See [`docs/getting-started/safer.md`](docs/getting-started/safer.md).
+
 ## Documentation
 
 The full docs site lives in [`docs/`](docs/):

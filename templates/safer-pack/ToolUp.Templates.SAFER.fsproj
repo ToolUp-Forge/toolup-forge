@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ToolUp.Templates.SAFER — NuGet template-pack for the toolup-safer dotnet-new template.
+
+    Lives in a sibling directory (templates/safer-pack/) rather than inside
+    templates/safer/ so it does NOT inherit the SAFER template's
+    Directory.Packages.props (which uses the literal `TOOLUP_SDK_VERSION`
+    placeholder) or nuget.config (which references a relative
+    `../local-nuget-feed` path that doesn't resolve from inside the
+    template-source tree).
+
+    Pack: invoked from forge root Build.fs `PackTemplates` target.
+    Install: `dotnet new install ToolUp.Templates.SAFER`.
+    Use:     `dotnet new toolup-safer -o MyApp`.
+
+    `<PackageType>Template</PackageType>` switches `dotnet pack` from
+    assembly packaging to content packaging — every file under
+    `../safer/**` (except the obvious build outputs) ships under
+    content/ in the resulting nupkg.
+
+    Why .fsproj and not .csproj for a content-only pack: forge is an
+    F# repo and every fsproj in the tree (including content-only
+    template-packs) is .fsproj for convention consistency. The F# SDK
+    is happy to pack content-only with `<EnableDefaultItems>false</EnableDefaultItems>`
+    + `<Compile Remove="**\*" />` (no source files compiled).
+  -->
+
+  <PropertyGroup>
+    <PackageType>Template</PackageType>
+    <PackageId>ToolUp.Templates.SAFER</PackageId>
+    <PackageVersion>0.4.4</PackageVersion>
+    <Title>ToolUp.SAFER — minimal F# full-stack starter (Tiny Chat demo)</Title>
+    <Authors>ToolUp Analytics Ltd (UK)</Authors>
+    <Description>Minimal F# full-stack starter for the ToolUp Platform SDK. Mirrors the SAFE Stack get-started experience and demonstrates the in-tree Elmish + ToolUp.Remoting fork primitives via a Tiny Chat demo. Anonymous mode, in-memory only, no auth, no persistence. For production multi-tenant + auth + persistence, use platformsdk-solution.</Description>
+    <PackageTags>dotnet-new;templates;F#;ToolUp;SAFE;Fable;Elmish;Feliz;Giraffe</PackageTags>
+    <PackageProjectUrl>https://github.com/ToolUp-Forge/toolup-forge</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      Override the forge-root Directory.Build.props defaults that don't
+      apply to a content-only template-pack:
+      - PackageReadmeFile: the forge-root default expects a sibling
+        README.md; this fsproj has none (template README ships as
+        content). Empty string opts out.
+      - IncludeSymbols: forge-root sets true to produce .snupkg files
+        for every assembly. Template-packs have no compiled assembly,
+        so the symbols pack errors with NU5017 ("no dependencies nor
+        content"). Disable for this fsproj.
+    -->
+    <PackageReadmeFile></PackageReadmeFile>
+    <IncludeSymbols>false</IncludeSymbols>
+
+    <!-- CPM is irrelevant for a content-only pack with no PackageReferences. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+
+    <!-- Templates ship no assembly — suppress NuGet's "no lib/" warning. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+
+    <!-- Preserve dotfiles (.gitignore / .editorconfig / .template.config). -->
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Walk the sibling SAFER template tree, packaging each file at
+      `content/<rel-path>` in the resulting nupkg. Explicit `PackagePath`
+      avoids the `ContentTargetFolders` + Link interaction that collapsed
+      directory structure (files all landed at `content/<filename>`).
+    -->
+    <Content Include="..\safer\**\*"
+             Exclude="..\safer\**\bin\**;..\safer\**\obj\**"
+             PackagePath="content\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Remove="**\*" />
+  </ItemGroup>
+
+</Project>

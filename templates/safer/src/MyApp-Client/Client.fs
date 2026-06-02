@@ -23,6 +23,6 @@ let private modules: ErasedModule list = [ Chat.ClientView.register () ]
 // the chat module and the SDK shell's navigation / module sidebar.
 
 let private config =
-    ClientConfigDefaults.fromBundleConstants ClientConfigOverrides.empty
+    ClientConfigDefaults.fromBundleConstants ClientConfigDefaults.ClientConfigOverrides.empty
 
 Client.run config modules

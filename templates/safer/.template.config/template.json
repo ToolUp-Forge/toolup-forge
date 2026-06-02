@@ -13,6 +13,15 @@
   },
   "sourceName": "MyApp",
   "preferNameDirectory": true,
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "exclude": [ "**/bin/**", "**/obj/**" ]
+        }
+      ]
+    }
+  ],
   "symbols": {
     "port-server": {
       "type": "parameter",

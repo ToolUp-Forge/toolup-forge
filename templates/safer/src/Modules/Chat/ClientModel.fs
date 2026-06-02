@@ -60,17 +60,19 @@ let private chatApi: ChatApi =
 
 // ─── Retry policy for Cmd.OfRemoting.callWithRetry ──────────────────────
 //
-// 3 attempts, 250 ms initial delay, exponential backoff capped at 2 s.
-// On retry exhaustion the failure flows through `SendFailed` with the
-// structured `ChatError` (when the server returned `Result.Error`) or
-// a plain `exn` message (when the transport itself failed). The view
-// renders a red banner with the classified reason + correlation id.
+// 3 attempts, 250 ms initial delay, exponential backoff (×2). On retry
+// exhaustion the failure flows through `SendFailed` with the structured
+// `ChatError` (when the server returned `Result.Error`) or a plain `exn`
+// message (when the transport itself failed). The view renders a red
+// banner with the classified reason + correlation id. `ShouldRetry`
+// returns `true` for every exception — chat sends are short and idempotent
+// from the user's perspective (an optimistic row is already on screen).
 
 let private sendRetryPolicy: Cmd.RetryPolicy = {
     MaxAttempts = 3
     InitialDelayMs = 250
     BackoffMultiplier = 2.0
-    MaxDelayMs = 2_000
+    ShouldRetry = fun _ -> true
 }
 
 let init () : Model * Cmd<Msg> =
