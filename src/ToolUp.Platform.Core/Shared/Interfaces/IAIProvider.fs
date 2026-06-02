@@ -402,11 +402,16 @@ type IAIProvider =
         retryPolicy: RetryPolicy ->
             Async<Result<AIProviderResponse, AIProviderError>>
 
+#if !FABLE_COMPILER
 /// Phase 67b — fallback implementations external `IAIProvider`
 /// implementers may compose into their own `SendStructuredMessage`
 /// methods. The shipped providers (Gemini, OpenAI, Claude) provide
 /// native implementations; this helper is the path for non-native
 /// providers (and the contract test surface for the default fallback).
+///
+/// Server-only: the JSON post-validation uses `System.Text.Json`,
+/// which Fable does not transpile. `IAIProvider` implementers all
+/// live server-side, so the helper has no Fable consumer.
 module IAIProviderDefaults =
     /// Default-impl fallback for `IAIProvider.SendStructuredMessage`.
     /// Prepends the schema as a system-prompt instruction, calls
@@ -465,3 +470,4 @@ module IAIProviderDefaults =
                                 )
                             ))
         }
+#endif
