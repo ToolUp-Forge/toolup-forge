@@ -127,6 +127,15 @@
              default) and by the Compose pipeline (registers via
              ServerApp.withEntity<Tenant>). -->
         <Compile Include="Server\TenantEntity.fs" />
+        <!-- Phase 26 — four deploy-plane substrate interfaces. Server-only
+             (IContainerScheduler.StreamLogs returns IAsyncEnumerable which
+             Fable cannot transpile). Supporting types are in Core's
+             Shared/Types/DeployPlaneTypes.fs so a Fable admin UI can
+             render tenant/deploy state without a DTO round-trip. -->
+        <Compile Include="Server\IBuildOrchestrator.fs" />
+        <Compile Include="Server\ITenantFleet.fs" />
+        <Compile Include="Server\IDeployPipeline.fs" />
+        <Compile Include="Server\IContainerScheduler.fs" />
         <Compile Include="Server\IDataCatalog.fs" />
         <Compile Include="Server\DataCatalog.fs" />
         <Compile Include="Server\IResultStore.fs" />

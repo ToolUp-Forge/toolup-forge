@@ -139,6 +139,13 @@
              async surface; six-rule audit applies to the four substrate
              interfaces (Server-tier), not this file. -->
         <Compile Include="Shared\Types\DeployManifestTypes.fs" />
+        <!-- Phase 26 — supporting types for the four deploy-plane substrate
+             interfaces (BuildRequest/BuildSummary, ProvisioningRequest,
+             DeployState, ContainerSpec, LogEntry, etc.). Fable-compatible
+             (Async-free, no streams); the interfaces themselves are
+             server-only because IContainerScheduler.StreamLogs returns
+             IAsyncEnumerable. -->
+        <Compile Include="Shared\Types\DeployPlaneTypes.fs" />
         <Compile Include="Shared\DataIngestionTypes.fs" />
         <Compile Include="Shared\DataIngestionApi.fs" />
         <Compile Include="Shared\MaintenanceApi.fs" />
