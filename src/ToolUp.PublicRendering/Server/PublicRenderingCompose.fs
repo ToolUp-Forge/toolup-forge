@@ -268,6 +268,8 @@ module PublicRenderingServerApp =
                 |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
 
             // ─── DI registrations ────────────────────────────────
+            let registeredLayoutNames = layouts |> Map.toList |> List.map fst
+
             let publicRenderingServiceConfig (services: IServiceCollection) =
                 services
                     .AddSingleton<MarkdownContentLoader>(
@@ -288,13 +290,23 @@ module PublicRenderingServerApp =
 
                                 PublicContentApiImpl.create loader entityStore)
                     )
+                    .AddSingleton<INarrativePagePublisher>(
+                        System.Func<System.IServiceProvider, INarrativePagePublisher>(fun sp ->
+                            // Resolve the entity store at request time
+                            // rather than at registration so any decorator
+                            // wired by the consumer (encrypted store,
+                            // audit-logged store, etc.) participates.
+                            let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
+
+                            PublicRenderingNarrativePagePublisher.create entityStore registeredLayoutNames)
+                    )
 
             // ─── Handler chain ───────────────────────────────────
             // Order: sitemap (specific route) → redirect (path-match
-            // short-circuit) → page (catch-all by slug). All three
-            // resolve `IPublicContentApi` + `MarkdownContentLoader`
-            // per-request from `ctx.RequestServices` so the DI
-            // singleton is shared.
+            // short-circuit) → export (?format= short-circuit) →
+            // page (catch-all by slug, default HTML). All resolve
+            // `IPublicContentApi` + `MarkdownContentLoader` per-request
+            // from `ctx.RequestServices` so the DI singleton is shared.
             let sitemapHandler: HttpHandler =
                 route "/sitemap.xml"
                 >=> fun next ctx ->
@@ -311,6 +323,13 @@ module PublicRenderingServerApp =
                     let allRedirects = loader.Redirects @ composeRedirects
                     RedirectMap.handler allRedirects next ctx
 
+            let exportHandler: HttpHandler =
+                fun next ctx ->
+                    let api =
+                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                    NarrativeExportHandler.handler api next ctx
+
             let pageHandler: HttpHandler =
                 fun next ctx ->
                     let api =
@@ -318,7 +337,7 @@ module PublicRenderingServerApp =
 
                     PublicPageHandler.handler api layouts next ctx
 
-            let publicRenderingHandlers = [ sitemapHandler; redirectHandler; pageHandler ]
+            let publicRenderingHandlers = [ sitemapHandler; redirectHandler; exportHandler; pageHandler ]
 
             let baseExt = appWithEntity.Extensions
 

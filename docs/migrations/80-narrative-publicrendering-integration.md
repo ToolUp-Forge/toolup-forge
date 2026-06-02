@@ -190,3 +190,91 @@ Revert the commit. The schema additions are all backwards-incompatible — there
 The five schema additions (Link / Image / Heading / CodeBlock / Blockquote / Br on InlineSpan-and-Element + Lang / CanonicalUrl on Document) all require the same migration shape — every external `INarrativeRenderer` impl recompiles, every record-literal constructor recompiles. Bundling them as one phase costs one migration doc + one adoption-matrix row + one consumer-side audit. Splitting them into N phases pays N×each.
 
 The PublicRendering integration (ContentBody.Narrative variant + layout helpers + Atom renderer + RenderOptions + ToC + OG/Twitter helpers + prerender bridge) is the user-facing capability that motivates the schema changes — together they make `NarrativeDocument` a credible marketing-page primitive, programmatic page source, and AI-emitted-page target, not just an analytics output shape.
+
+---
+
+# Phase 80a — `publish_narrative` AI tool + content-negotiated export
+
+**Status:** Shipped.
+**Scope:** Wires the two highest-leverage substrate pieces called out in Phase 80's "honest gap" so the AI authoring loop and multi-channel distribution are end-to-end.
+
+## What changes (additive — no consumer migration required)
+
+### 1. `INarrativePagePublisher` substrate seam (Platform.Server)
+
+New interface in [`INarrativeStore.fs`](../../src/ToolUp.Platform.Server/Server/INarrativeStore.fs):
+
+```fsharp
+type NarrativePublishOutcome =
+    | PublishSucceeded of slug: string
+    | PublishFailed of reason: string
+
+type INarrativePagePublisher =
+    abstract member PublishAsync:
+        slug: string *
+        titleOverride: string option *
+        descriptionOverride: string option *
+        layoutHint: string option *
+        document: NarrativeDocument ->
+            Async<NarrativePublishOutcome>
+```
+
+Lives in Platform.Server so both `ToolUp.AI.Server` (which calls it from the new AI tool) and `ToolUp.PublicRendering` (which provides the implementation) can reference it without depending on each other.
+
+### 2. `publish_narrative` AI tool (AI.Server)
+
+New built-in tool in [`NarrativeTools.fs`](../../src/ToolUp.AI.Server/Server/NarrativeTools.fs), auto-registered by `composeWithAI`:
+
+- **Parameters**: `id` (NarrativeId GUID), `slug`, optional `title` / `description` / `layout` / `canonicalUrl` / `lang` overrides.
+- **Behaviour**: fetches the narrative from `INarrativeStore` (user's scope), applies overrides onto the document, resolves `INarrativePagePublisher` from DI, calls `PublishAsync`. Returns the canonical slug on success, error JSON on failure.
+- **Graceful degradation**: when no `INarrativePagePublisher` is registered (deployment without PublicRendering, or with PublicRendering disabled), returns `{"error":"No INarrativePagePublisher is registered..."}` — the tool stays callable but no-ops.
+
+### 3. `PublicRenderingNarrativePagePublisher` default impl (PublicRendering)
+
+New file [`NarrativePagePublisher.fs`](../../src/ToolUp.PublicRendering/Server/NarrativePagePublisher.fs). Constructs a `PublicPage` envelope with `Body = Narrative document`, sets the layout from the caller's hint (falling back to the first-registered layout), writes through `IEntityStore<PublicPageEntity>.Save` to the `_public` scope. Registered as a DI singleton by `PublicRenderingCompose.run` when public rendering is enabled.
+
+### 4. Content-negotiated export handler (PublicRendering)
+
+New file [`NarrativeExportHandler.fs`](../../src/ToolUp.PublicRendering/Server/NarrativeExportHandler.fs). Mounted before the default page handler in the compose chain. Triggered by `?format=` query parameter; falls through to the standard HTML page handler when the parameter is absent.
+
+Supported combinations:
+
+| Body | Supported `?format=` | Content-Type |
+|---|---|---|
+| `Narrative` | `html`, `md` / `markdown`, `txt` / `plain`, `atom` | matches the format |
+| `Markdown` | `md` / `markdown` | `text/markdown; charset=utf-8` |
+| `Html` | `html` | `text/html; charset=utf-8` |
+
+Unsupported body/format pairs return 415 with a small JSON body listing the formats available for that body kind.
+
+## Compose-time wiring (zero consumer change)
+
+`PublicRenderingCompose.run` now:
+1. Registers `INarrativePagePublisher` as a DI singleton (resolves `IEntityStore` from DI per-request so any decorator the consumer wires participates).
+2. Mounts `NarrativeExportHandler` between the redirect handler and the page handler.
+
+A deployment that already composed `withPublicRendering` and now also composes `withAI` gets `publish_narrative` and `?format=` wiring automatically. No call-site changes.
+
+## Diff to apply (consumer side)
+
+**None.** The Phase 80a surface is purely additive. Consumers that don't want the AI tool can leave their `composeWithAI` unwired; consumers that don't want the export query can leave `?format=` unused. Existing routes continue to serve HTML by default.
+
+## Verification
+
+1. **`dotnet build ToolUp.Forge.sln`** — clean. Phase 80a touches three sibling packages (Platform.Server, AI.Server, PublicRendering) plus the workspace adoption matrix.
+2. **AI tool registration** — `composeWithAI` registers the new `publish_narrative` tool. Verify by inspecting `AIToolRegistry.GetAll()` at startup; it should include the four narrative tools (`list_narratives`, `get_narrative`, `get_narrative_section`, `publish_narrative`).
+3. **End-to-end publish** — in a deployment with both AI and PublicRendering composed: ask the assistant to "publish the last narrative I generated at /blog/test". The assistant calls `list_narratives` → `publish_narrative(id, "blog/test")`. Subsequent `GET /blog/test` returns the page.
+4. **`?format=` export** — `curl http://your-deploy/blog/test?format=atom` returns the page as an Atom entry; `?format=md` returns markdown; `?format=html` returns the HTML article fragment (not the layout shell).
+5. **415 path** — `curl http://your-deploy/marketing-page?format=atom` (where `/marketing-page` is a Markdown-bodied page) returns 415 with `{"error":"unsupported format...","supported":["md"]}`.
+6. **Strip-imports** — a deployment with PublicRendering disabled (`ServerConfig.PublicRendering = NoPublicRendering`) gets no `INarrativePagePublisher` registration. The AI tool's `publish_narrative` returns the "no publisher registered" error. No runtime cost when unused.
+
+## Rollback
+
+Phase 80a is additive — revert the commit. Deployments that already started using `publish_narrative` would lose the tool but the published pages remain in `IEntityStore` (unaffected by reverting the publisher).
+
+## What this leaves open (productisation, not substrate)
+
+- **Authorisation gating.** `publish_narrative` writes to `_public` scope unconditionally. Production needs an RBAC / permission gate before exposing this tool to untrusted users.
+- **Collision policy.** `IEntityStore.Save` overwrites by slug — repeat publishes silently replace the prior version. Real editorial flows want explicit `fail` / `overwrite` / `auto-rename` semantics.
+- **Layout discovery.** The AI doesn't know which layouts are registered. A `list_layouts` tool closes this loop.
+- **Feed aggregation.** Per-page Atom via `?format=atom` is shipped; a site-wide `/feed.atom` aggregator that pulls recent published pages from `IEntityStore` is a small follow-on — `NarrativeAtom.renderFeed` already exists.

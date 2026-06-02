@@ -274,6 +274,174 @@ let private executeGetSection (ctx: HttpContext) (argsJson: string) : Async<stri
                     return fableSerialize payload
 }
 
+// ─── publish_narrative ───────────────────────────────────────────
+
+let private publishDefinition: AIToolDefinition = {
+    Name = "publish_narrative"
+    Description =
+        "Publish a stored narrative (one the user has generated and saved) as a public-facing page at the given slug. Looks up the narrative by id within the current scope, wraps it in a `PublicPage` envelope (Body = Narrative), and writes it through the registered `INarrativePagePublisher`. Returns the canonical slug the page lives at. Use this after `get_narrative` confirms the source content; layouts + canonical-URL + lang flow through the document's existing fields, with optional overrides for title / description / layout. Returns an error if no publisher is registered (deployment without PublicRendering) or if the narrative id is unknown to this scope."
+    Parameters = [
+        {
+            Name = "id"
+            Type = "string"
+            Description = "NarrativeId (GUID string) returned by `list_narratives`."
+            Required = true
+            Default = None
+        }
+        {
+            Name = "slug"
+            Type = "string"
+            Description =
+                "URL slug for the published page (no leading slash; nested slugs like `blog/q3-release` encode a directory shape)."
+            Required = true
+            Default = None
+        }
+        {
+            Name = "title"
+            Type = "string"
+            Description =
+                "Optional override for the published page's Title (used in `<title>` and crawler results). Defaults to the document's own Title."
+            Required = false
+            Default = None
+        }
+        {
+            Name = "description"
+            Type = "string"
+            Description =
+                "Optional override for the published page's Description (used in `<meta name=description>` and Open Graph). Defaults to the document's Subtitle when set, empty string otherwise."
+            Required = false
+            Default = None
+        }
+        {
+            Name = "layout"
+            Type = "string"
+            Description =
+                "Optional layout name to render under. Must match a layout registered via `PublicRenderingServerApp.withLayout`. Unknown / omitted layouts fall back to the first-registered layout."
+            Required = false
+            Default = None
+        }
+        {
+            Name = "canonicalUrl"
+            Type = "string"
+            Description =
+                "Optional canonical absolute URL the page should be indexed under. Overrides the document's own `CanonicalUrl` field. Recommended whenever the same content is published at multiple paths or syndicated externally."
+            Required = false
+            Default = None
+        }
+        {
+            Name = "lang"
+            Type = "string"
+            Description =
+                "Optional BCP-47 language tag (e.g. `en-GB`, `fr`). Overrides the document's own `Lang` field. Drives `<html lang>` and Open Graph `og:locale`."
+            Required = false
+            Default = None
+        }
+    ]
+    SourceModule = "ToolUp.Platform"
+    EmitsActions = None
+    Location = ServerResident
+    Surface = Both
+}
+
+let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string> = async {
+    let parsed =
+        try
+            let doc = JsonDocument.Parse(argsJson)
+
+            let getStr (name: string) =
+                match doc.RootElement.TryGetProperty(name) with
+                | true, v when v.ValueKind = JsonValueKind.String ->
+                    let s = v.GetString()
+
+                    if System.String.IsNullOrWhiteSpace s then None else Some s
+                | _ -> None
+
+            Some(
+                getStr "id",
+                getStr "slug",
+                getStr "title",
+                getStr "description",
+                getStr "layout",
+                getStr "canonicalUrl",
+                getStr "lang"
+            )
+        with _ ->
+            None
+
+    match parsed with
+    | None
+    | Some(None, _, _, _, _, _, _) ->
+        return
+            fableSerialize {|
+                error = "Required argument 'id' is missing. Call list_narratives first to get valid ids."
+            |}
+    | Some(_, None, _, _, _, _, _) ->
+        return
+            fableSerialize {|
+                error =
+                    "Required argument 'slug' is missing. Pass a URL slug like 'blog/q3-release' (no leading slash)."
+            |}
+    | Some(Some idText, Some slug, titleOpt, descOpt, layoutOpt, canonicalOpt, langOpt) ->
+        match Guid.TryParse idText with
+        | false, _ ->
+            return
+                fableSerialize {|
+                    error = "Argument 'id' is not a valid GUID."
+                    id = idText
+                |}
+        | true, id ->
+            let! entry = NarrativePublisher.get ctx id
+
+            match entry with
+            | None ->
+                return
+                    fableSerialize {|
+                        error =
+                            "No narrative with that id is visible to this scope. It may belong to a different user or team, or have been evicted."
+                        id = idText
+                    |}
+            | Some entry ->
+                // Apply caller-supplied overrides onto the document
+                // before handing to the publisher. Overrides win over
+                // document fields when present.
+                let docWithOverrides = {
+                    entry.Document with
+                        Lang = langOpt |> Option.orElse entry.Document.Lang
+                        CanonicalUrl = canonicalOpt |> Option.orElse entry.Document.CanonicalUrl
+                }
+
+                let publisher =
+                    match ctx.RequestServices.GetService(typeof<INarrativePagePublisher>) with
+                    | :? INarrativePagePublisher as p -> Some p
+                    | _ -> None
+
+                match publisher with
+                | None ->
+                    return
+                        fableSerialize {|
+                            error =
+                                "No INarrativePagePublisher is registered. This deployment does not have PublicRendering wired in — publish_narrative is unavailable."
+                        |}
+                | Some publisher ->
+                    let! outcome = publisher.PublishAsync(slug, titleOpt, descOpt, layoutOpt, docWithOverrides)
+
+                    match outcome with
+                    | PublishSucceeded canonicalSlug ->
+                        return
+                            fableSerialize {|
+                                id = idText
+                                slug = canonicalSlug
+                                published = true
+                            |}
+                    | PublishFailed reason ->
+                        return
+                            fableSerialize {|
+                                error = reason
+                                id = idText
+                                slug = slug
+                            |}
+}
+
 // ─── Registration ────────────────────────────────────────────────
 
 /// Built-in narrative tools — auto-registered by `composeWithAI`.
@@ -281,4 +449,5 @@ let builtInTools: RegisteredTool list = [
     createTool listDefinition executeList
     createTool getDefinition executeGet
     createTool getSectionDefinition executeGetSection
+    createTool publishDefinition executePublish
 ]

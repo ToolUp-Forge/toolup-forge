@@ -169,6 +169,55 @@ type INarrativeStore =
     /// any other team's narratives).
     abstract member DeleteScope: scopeId: string -> Async<int>
 
+/// Outcome of a publish attempt — the payload-shaped facts a caller
+/// needs to react to the result without parsing strings.
+///
+/// `PublishSucceeded` carries the canonical slug the publisher used
+/// (may differ from the requested slug if the implementation
+/// sanitises). `PublishFailed` carries a short human-readable reason.
+///
+/// Cases are prefixed `Publish*` rather than the bare `Published` /
+/// `Failed` because both names collide with cases on unrelated
+/// workspace DUs (`JobRunStatus.Failed`, etc.), forcing every call
+/// site to qualify. The prefix is the cheap way to keep the
+/// usage-site call shape readable.
+type NarrativePublishOutcome =
+    | PublishSucceeded of slug: string
+    | PublishFailed of reason: string
+
+/// Substrate seam that lets an AI tool (or any compose-time-wired
+/// handler) publish a `NarrativeDocument` as an externally-addressable
+/// page without depending on the implementation. The default
+/// implementation lives in `ToolUp.PublicRendering` and writes a
+/// `PublicPageEntity` envelope; deployments without PublicRendering
+/// leave the DI slot unfilled and the `publish_narrative` AI tool
+/// gracefully degrades to "no publisher registered".
+///
+/// GP 12 audit:
+///   1. Identity by value — slug / title / description / doc are values
+///   2. Async at every boundary — returns Async
+///   3. Retry as data — single-shot publish; callers retry by re-call
+///   4. Stateless between invocations — implementations must not hold
+///      state between PublishAsync calls (the entity store does)
+///   5. No cross-shard ordering — pages within a `slug` are version-
+///      monotonic; cross-slug ordering is not promised
+///   6. Precision at lower bound — n/a (no time semantics)
+type INarrativePagePublisher =
+    /// Publish the document at the given slug. `titleOverride` and
+    /// `descriptionOverride` let the caller surface a page Title /
+    /// Description distinct from the document's own (most relevant for
+    /// AI-emitted narratives where the document's analytics-shape title
+    /// differs from the desired marketing title). `layoutHint` selects
+    /// a registered layout name; implementations fall back to the
+    /// first-registered layout when `None` or unknown.
+    abstract member PublishAsync:
+        slug: string *
+        titleOverride: string option *
+        descriptionOverride: string option *
+        layoutHint: string option *
+        document: NarrativeDocument ->
+            Async<NarrativePublishOutcome>
+
 /// Composition-root helpers for writing narratives from request-scoped
 /// Fable.Remoting handlers. Handlers resolve `INarrativeStore` and the
 /// current `StorageScope` from DI / `HttpContext.Items`; the helper

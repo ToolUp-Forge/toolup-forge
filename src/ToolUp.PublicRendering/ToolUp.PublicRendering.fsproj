@@ -33,6 +33,8 @@
         <Compile Include="Server\NarrativeLayout.fs" />
         <Compile Include="Server\Attribution.fs" />
         <Compile Include="Server\SitemapGenerator.fs" />
+        <Compile Include="Server\NarrativePagePublisher.fs" />
+        <Compile Include="Server\NarrativeExportHandler.fs" />
         <Compile Include="Server\PublicPageHandler.fs" />
         <Compile Include="Server\StaticExport.fs" />
         <Compile Include="Server\PublicRenderingCompose.fs" />
