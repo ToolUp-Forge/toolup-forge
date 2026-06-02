@@ -1,31 +1,18 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <!-- Coordinated SDK version — bump in one place and every transitive
-         ToolUp.* package moves in lockstep via the ToolUp.Sdk meta-manifest. -->
     <ToolUpSdkVersion>TOOLUP_SDK_VERSION</ToolUpSdkVersion>
   </PropertyGroup>
-  <!--
-    First-restore fallback entries (see platformsdk-solution's template
-    for the rationale). ToolUp.Sdk is the bootstrap; once it's restored,
-    its build/ToolUp.Sdk.props brings in the rest of the meta-manifest.
-  -->
   <ItemGroup>
-    <PackageVersion Include="ToolUp.Sdk" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
   </ItemGroup>
-  <Import Project="$(NuGetPackageRoot)toolup.sdk\$(ToolUpSdkVersion)\build\ToolUp.Sdk.props"
-          Condition="Exists('$(NuGetPackageRoot)toolup.sdk\$(ToolUpSdkVersion)\build\ToolUp.Sdk.props')" />
   <ItemGroup>
-    <!-- Server stack -->
     <PackageVersion Include="Giraffe" Version="8.2" />
-    <!-- Client stack -->
     <PackageVersion Include="Fable.Core" Version="5.0" />
     <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
     <PackageVersion Include="Feliz" Version="3.3.3" />
-    <!-- Core -->
     <PackageVersion Include="FSharp.Core" Version="10.1.300" />
   </ItemGroup>
 </Project>

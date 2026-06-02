@@ -10,11 +10,6 @@
     <Compile Include="Server.fs" />
   </ItemGroup>
   <ItemGroup>
-    <!-- ToolUp.Sdk meta-manifest reference triggers NuGet restore of the
-         meta package; its build/ToolUp.Sdk.props is then auto-imported by
-         Directory.Packages.props so every ToolUp.* PackageVersion item
-         becomes available across the solution. -->
-    <PackageReference Include="ToolUp.Sdk" PrivateAssets="all" />
     <PackageReference Include="ToolUp.Platform.Core" />
     <PackageReference Include="ToolUp.Platform.Server" />
     <ProjectReference Include="..\Modules\Chat\Chat.fsproj" />

@@ -6,7 +6,7 @@
   "groupIdentity": "ToolUp.Templates.SAFER",
   "name": "ToolUp.SAFER — minimal F# full-stack starter (Tiny Chat demo)",
   "shortName": "toolup-safer",
-  "description": "Minimal F# full-stack starter for the ToolUp Platform SDK. Mirrors the SAFE Stack get-started experience and demonstrates the in-tree Elmish + ToolUp.Remoting fork primitives via a Tiny Chat demo. Anonymous mode, in-memory only, no auth, no persistence. For production multi-tenant + auth + persistence, use platformsdk-solution.",
+  "description": "Minimal F# full-stack starter for the ToolUp Platform SDK. Mirrors the SAFE Stack get-started experience and demonstrates the in-tree Elmish + ToolUp.Remoting fork primitives via a Tiny Chat demo. Anonymous mode, in-memory only, no auth, no persistence. For production multi-tenant + auth + persistence, use platformsdk-solution. Note: pass `-o <Name>` with a CamelCase or alphanumeric name; hyphenated names diverge between filenames (raw) and .sln project refs (id-safe form).",
   "tags": {
     "language": "F#",
     "type": "solution"
@@ -31,8 +31,8 @@
     "toolUpSdkVersion": {
       "type": "parameter",
       "datatype": "text",
-      "defaultValue": "0.2.3",
-      "description": "ToolUp.Sdk meta-manifest version (drives every transitive ToolUp.* package version).",
+      "defaultValue": "0.4.4",
+      "description": "ToolUp.* SDK version (drives every transitive ToolUp.* package version via $(ToolUpSdkVersion) in Directory.Packages.props).",
       "replaces": "TOOLUP_SDK_VERSION"
     },
     "skipRestore": {
