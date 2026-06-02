@@ -326,20 +326,28 @@ let registerTargets (config: BuildConfig) =
         // for each package's licence metadata, and emits THIRD_PARTY_NOTICES.md
         // at repo root. Phase 11.C.1 rewrite — replaces the Phase 11.A
         // paket.lock walker now that CPM owns dependency resolution.
-        Trace.tracefn "Running `dotnet list package --include-transitive --format json`..."
+        // Auto-discover the solution file at repo root. The Phase 11.A
+        // shape hardcoded "ToolUpApplication.sln" which only worked for
+        // the original consumer app — every other consumer (forge itself,
+        // Concord, Xcelsys, every cookbook-app) names its sln differently
+        // and the target failed. One `.sln` at the working directory is
+        // the contract; multiple is ambiguous, none is a usage error.
+        let slnFile =
+            match !!"*.sln" |> List.ofSeq with
+            | [ single ] -> System.IO.Path.GetFileName single
+            | [] -> failwithf "ThirdPartyNotices: no .sln found in %s" (System.IO.Directory.GetCurrentDirectory())
+            | many ->
+                failwithf
+                    "ThirdPartyNotices: multiple .sln files found in %s (%s) — single-sln assumption violated"
+                    (System.IO.Directory.GetCurrentDirectory())
+                    (many |> List.map System.IO.Path.GetFileName |> String.concat ", ")
+
+        Trace.tracefn "Running `dotnet list %s package --include-transitive --format json`..." slnFile
 
         let psi = System.Diagnostics.ProcessStartInfo()
         psi.FileName <- "dotnet"
 
-        for arg in
-            [
-                "list"
-                "ToolUpApplication.sln"
-                "package"
-                "--include-transitive"
-                "--format"
-                "json"
-            ] do
+        for arg in [ "list"; slnFile; "package"; "--include-transitive"; "--format"; "json" ] do
             psi.ArgumentList.Add(arg)
 
         psi.RedirectStandardOutput <- true
