@@ -53,6 +53,9 @@
         <Compile Include="Contracts\IMetricsSinkContract.fs" />
         <Compile Include="Contracts\IActivitySinkContract.fs" />
         <Compile Include="Contracts\IAuditSinkContract.fs" />
+        <!-- Phase 30a — signed module artefact contract packs. -->
+        <Compile Include="Contracts\IArtifactSignerContract.fs" />
+        <Compile Include="Contracts\IArtifactVerifierContract.fs" />
         <Compile Include="Contracts\IShareTokenStoreContract.fs" />
         <Compile Include="Contracts\IPendingInviteStoreContract.fs" />
         <!-- Phase 70 — IPlatformAIKeyStore contract pack. Six portability
@@ -176,6 +179,10 @@
         <Compile Include="InProcess\ServerModuleMetricsTests.fs" />
         <Compile Include="InProcess\JsonConsoleLoggerTests.fs" />
         <Compile Include="InProcess\InMemoryAuditSinkTests.fs" />
+        <!-- Phase 30a — Ed25519 artefact substrate in-process binding
+             (signer + verifier contract packs + substrate-specific
+             tests for the blob-backed key store + audit emission). -->
+        <Compile Include="InProcess\Ed25519ArtifactSubstrateTests.fs" />
         <Compile Include="InProcess\S3ArchiveAuditSinkTests.fs" />
         <Compile Include="InProcess\SplunkHecAuditSinkTests.fs" />
         <Compile Include="InProcess\DatadogLogsAuditSinkTests.fs" />

@@ -118,6 +118,12 @@
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
         <Compile Include="Shared\RateLimitDescriptor.fs" />
+        <!-- Phase 30a — signed module artefact format (ArtifactManifest,
+             SignedArtifact, ArtifactValidation, PublisherKeyId). Compiled
+             before AuditTypes.fs so audit payload types can reference the
+             publisher-key-id shape via string projections without circular
+             dependencies. -->
+        <Compile Include="Shared\Types\ArtifactTypes.fs" />
         <Compile Include="Shared\AuditTypes.fs" />
         <Compile Include="Shared\Interfaces\ISubjectResolver.fs" />
         <Compile Include="Shared\Interfaces\IAnonymousSessionMigrator.fs" />

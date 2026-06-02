@@ -164,6 +164,9 @@ let private decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
             Some(AdSlotConfigDeleted(p.SlotId, p.Actor, p.OccurredAt))
         | "AnonymousSessionMigrated" ->
             Some(AnonymousSessionMigrated(fromAuditJson<AnonymousSessionMigratedPayload> evt.Payload))
+        | "ArtifactSigned" -> Some(ArtifactSigned(fromAuditJson<ArtifactSignedPayload> evt.Payload))
+        | "ArtifactVerified" -> Some(ArtifactVerified(fromAuditJson<ArtifactVerifiedPayload> evt.Payload))
+        | "ArtifactRejected" -> Some(ArtifactRejected(fromAuditJson<ArtifactRejectedPayload> evt.Payload))
         | _ -> None
     with _ ->
         None
@@ -275,6 +278,9 @@ type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger) =
                 OccurredAt = occurredAt
             }
         | AnonymousSessionMigrated p -> toAuditJson p
+        | ArtifactSigned p -> toAuditJson p
+        | ArtifactVerified p -> toAuditJson p
+        | ArtifactRejected p -> toAuditJson p
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {

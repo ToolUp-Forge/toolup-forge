@@ -191,6 +191,18 @@
         <Compile Include="Server\EncryptedBlobStorage.fs" />
         <Compile Include="Server\SingleKeyResolver.fs" />
         <Compile Include="Server\AuditLog.fs" />
+        <!-- Phase 30a — signed module artefact substrate (canonical-bytes
+             encoder, signer/verifier interfaces + Ed25519 defaults,
+             blob-backed trusted-publisher key store). Crypto via
+             BouncyCastle.Cryptography (MIT) — .NET 10 BCL surfaces only
+             post-quantum primitives, not Ed25519. -->
+        <Compile Include="Server\ArtifactCanonical.fs" />
+        <Compile Include="Server\IArtifactSigner.fs" />
+        <Compile Include="Server\IArtifactVerifier.fs" />
+        <Compile Include="Server\IPublisherKeyStore.fs" />
+        <Compile Include="Server\Ed25519ArtifactSigner.fs" />
+        <Compile Include="Server\Ed25519ArtifactVerifier.fs" />
+        <Compile Include="Server\BlobBackedPublisherKeyStore.fs" />
         <Compile Include="Server\NoOpRateLimiter.fs" />
         <Compile Include="Server\InProcessRateLimiter.fs" />
         <Compile Include="Server\IDataExporter.fs" />
@@ -428,6 +440,11 @@
          was a transitive dep of ToolUp.Remoting.Server / Giraffe /
          AspNetCore — now declared explicitly. -->
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+    <!-- Phase 30a — Ed25519 signing / verification for
+         IArtifactSigner / IArtifactVerifier defaults. MIT-licensed
+         (GP 2 — no paid deps). Version pinned centrally in
+         Directory.Packages.props. -->
+    <PackageReference Include="BouncyCastle.Cryptography" />
     <!-- 0.4.4 — explicit FSharp.Core PackageReference. Pre-fold, the
          transitively-resolved FSharp.Core was 10.1.300 (Directory.Packages.props
          pins). Post-fold, one of the dropped ToolUp.Remoting.* packages

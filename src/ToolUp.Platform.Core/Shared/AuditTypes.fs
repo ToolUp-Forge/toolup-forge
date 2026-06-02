@@ -1445,6 +1445,68 @@ type SurfaceDeniedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+// ─── Phase 30a — signed module artefact audit payloads ───────────────
+//
+// Emitted by `IArtifactSigner.Sign` (hub-side) and
+// `IArtifactVerifier.Verify` (edge-side). Reserved `SourceModule =
+// "_platform.artefacts"` (see `ArtifactsSourceModule.value` in
+// `Shared/Types/ArtifactTypes.fs`). PII-free — payloads carry the
+// publisher key id (NEVER the private key bytes), the module id +
+// artefact version (manifest-supplied), and a reason on `Rejected`.
+
+/// `IArtifactSigner.Sign` succeeded. Records who signed (the actor that
+/// invoked the signer), which publisher key was used (id only — never
+/// the private key), and the manifest's module / version identity.
+type ArtifactSignedPayload = {
+    /// Actor who invoked the signer (typically `"_hub"` for an
+    /// automated publish pipeline; the authenticated user's id for
+    /// operator-initiated signs).
+    Actor: string
+    /// `PublisherKeyId.value` of the key used to sign. The signer NEVER
+    /// records the private key bytes in the audit trail.
+    PublisherKeyId: string
+    /// `ArtifactManifest.ModuleId` — the module identity the signed
+    /// artefact installs as.
+    ModuleId: string
+    /// `ArtifactManifest.Version` — SemVer string.
+    ArtifactVersion: string
+}
+
+/// `IArtifactVerifier.Verify` returned `ArtifactValidation.Ok` (signature
+/// valid + publisher key trusted at the edge).
+type ArtifactVerifiedPayload = {
+    /// `PublisherKeyId.value` of the publisher whose signature was
+    /// validated.
+    PublisherKeyId: string
+    /// `ArtifactManifest.ModuleId`.
+    ModuleId: string
+    /// `ArtifactManifest.Version`.
+    ArtifactVersion: string
+}
+
+/// `IArtifactVerifier.Verify` returned `ArtifactValidation.Error reason`.
+/// Recorded as a separate case from `ArtifactVerified` so operator
+/// dashboards can target refusal rates without scanning every verify
+/// row.
+type ArtifactRejectedPayload = {
+    /// `PublisherKeyId.value` from the manifest. `None` when the
+    /// rejection happened before the key id could be parsed (corrupt
+    /// manifest, decode failure).
+    PublisherKeyId: string option
+    /// `ArtifactManifest.ModuleId` when the manifest decoded; empty
+    /// string when the rejection happened before the manifest could be
+    /// read.
+    ModuleId: string
+    /// `ArtifactManifest.Version` when the manifest decoded; empty
+    /// string otherwise.
+    ArtifactVersion: string
+    /// Operator-readable refusal reason. Mirrors the
+    /// `ArtifactValidation.Error reason` string verbatim:
+    /// `"untrusted publisher"`, `"signature mismatch"`,
+    /// `"manifest hash mismatch"`, or a sink-specific message.
+    Reason: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -1754,6 +1816,20 @@ type AuditEvent =
     /// flipped legit calls to denied. Reserved
     /// `SourceModule = "_platform.auth"`.
     | SurfaceDenied of SurfaceDeniedPayload
+    /// Phase 30a — `IArtifactSigner.Sign` succeeded. Reserved
+    /// `SourceModule = "_platform.artefacts"`. Payload carries the
+    /// publisher key id (never the private key bytes).
+    | ArtifactSigned of ArtifactSignedPayload
+    /// Phase 30a — `IArtifactVerifier.Verify` returned
+    /// `ArtifactValidation.Ok` (signature valid + publisher key trusted
+    /// at the edge). Reserved `SourceModule = "_platform.artefacts"`.
+    | ArtifactVerified of ArtifactVerifiedPayload
+    /// Phase 30a — `IArtifactVerifier.Verify` returned
+    /// `ArtifactValidation.Error reason`. Reserved
+    /// `SourceModule = "_platform.artefacts"`. Operator dashboards
+    /// query on this case to surface refusal rates without scanning
+    /// every verify row.
+    | ArtifactRejected of ArtifactRejectedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1837,6 +1913,9 @@ module AuditEvent =
         | AnonymousSessionMigrated _ -> "AnonymousSessionMigrated"
         | AuthScopeResolutionFailed _ -> "AuthScopeResolutionFailed"
         | SurfaceDenied _ -> "SurfaceDenied"
+        | ArtifactSigned _ -> "ArtifactSigned"
+        | ArtifactVerified _ -> "ArtifactVerified"
+        | ArtifactRejected _ -> "ArtifactRejected"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
