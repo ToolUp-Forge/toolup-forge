@@ -248,3 +248,42 @@ type QuotaEnforcingProviderFactory(inner: IAIProviderFactory, quota: ITeamQuotaP
 
         member _.BuildPlatform(providerId, apiKey, model) =
             inner.BuildPlatform(providerId, apiKey, model)
+
+// ─── DI composition helper ───────────────────────────────────────
+//
+// Both `AICompose.composeAI` and `RAGCompose.composeWithRAG` need the
+// same Metering+Quota wrap on their `IAIProviderFactory` registration.
+// Previously AICompose wrapped inline while RAGCompose registered the
+// raw factory — RAG-using deployments silently bypassed both
+// subsystems even when `ServerConfig.UsageMetering =
+// EnabledUsageMetering` and an `ITeamQuotaPolicy` was wired. The
+// keep-in-sync comment block in RAGCompose flagged this drift; the
+// helper here removes the surface.
+
+/// Build a DI factory delegate that resolves `IAIProviderFactory` with
+/// the standard Metering + Quota wrap applied over `rawFactory`:
+///   * `MeteringProviderFactory` is stacked when
+///     `config.UsageMetering = EnabledUsageMetering` (Phase 9d).
+///   * `QuotaEnforcingProviderFactory` is stacked OUTERMOST whenever an
+///     `ITeamQuotaPolicy` resolves from DI (Phase 9 compute-quota).
+///
+/// Both composers register their factory via this helper so a
+/// deployment composing RAG retains metering + quota enforcement on
+/// AI calls.
+let wrapFactoryForDI
+    (config: ServerConfig)
+    (rawFactory: IAIProviderFactory)
+    (providerProfile: IProviderProfile)
+    : System.Func<System.IServiceProvider, IAIProviderFactory> =
+    System.Func<System.IServiceProvider, IAIProviderFactory>(fun sp ->
+        let baseFactory =
+            match config.UsageMetering with
+            | NoUsageMetering -> rawFactory
+            | EnabledUsageMetering ->
+                let usageLog = sp.GetService(typeof<IUsageLog>) :?> IUsageLog
+
+                MeteringProviderFactory(rawFactory, usageLog, providerProfile) :> IAIProviderFactory
+
+        match sp.GetService(typeof<ITeamQuotaPolicy>) with
+        | :? ITeamQuotaPolicy as quota -> QuotaEnforcingProviderFactory(baseFactory, quota) :> IAIProviderFactory
+        | _ -> baseFactory)

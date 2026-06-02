@@ -154,19 +154,29 @@ let composeAI (app: AIServerApp) : ServerApp =
     let aiConfig = app.AIConfig
     let moduleAIContexts = app.ModuleAIContexts
 
-    // Validate tool name uniqueness across modules. Duplicates fail
-    // loudly at compose time with a clear message, before any agent
-    // turn runs.
+    // Validate tool name uniqueness across modules AND against the
+    // platform-reserved `NarrativeTools.builtInTools` names. Duplicates
+    // fail loudly at compose time with a clear message, before any
+    // agent turn runs. Before this check included built-ins, a module
+    // tool named e.g. `list_narratives` passed compose validation and
+    // silently lost lookup to the prepended built-in at
+    // `registry.RegisterAll` (the agent then saw two tools with the
+    // same name and hit a provider-side 400 at runtime).
+    let builtInToolNames =
+        NarrativeTools.builtInTools |> List.map (fun t -> t.Definition.Name)
+
+    let moduleToolNames = moduleTools |> List.map (fun (def, _) -> def.Name)
+
     let duplicateNames =
-        moduleTools
-        |> List.map (fun (def, _) -> def.Name)
+        (builtInToolNames @ moduleToolNames)
         |> List.groupBy id
         |> List.choose (fun (n, occurrences) -> if occurrences.Length > 1 then Some n else None)
 
     if not duplicateNames.IsEmpty then
         failwithf
-            "AI tool name collision across modules: %s. Each tool must have a unique Name across the deployment."
+            "AI tool name collision: %s. Each tool must have a unique Name across the deployment. The SDK reserves the built-in NarrativeTools names [%s] — rename any module-declared tools that collide."
             (System.String.Join(", ", duplicateNames))
+            (System.String.Join(", ", builtInToolNames))
 
     // Phase 70 A.5 — when the consumer declared platform providers via
     // `AIServerApp.withPlatformProvider`, verify the accumulated list
@@ -181,9 +191,17 @@ let composeAI (app: AIServerApp) : ServerApp =
         let declaredIds = app.PlatformProviders |> List.map (fun p -> p.Descriptor.Id)
         let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map (fun d -> d.Id)
 
-        if declaredIds <> factoryIds then
+        // Compare as sets — the validator's purpose is to catch
+        // "declared providers do not match factory-wired providers", a
+        // set membership question; the declaration *order* the consumer
+        // used (calls to `withPlatformProvider`) doesn't have to match
+        // the order `DefaultAIProviderFactory.create` exposes via
+        // `PlatformDescriptors`. Two valid orderings of the same set
+        // previously tripped this failure with a misleading "wired the
+        // builder but forgot" message.
+        if Set.ofList declaredIds <> Set.ofList factoryIds then
             failwithf
-                "AI platform-provider declaration mismatch. AIServerApp.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same list to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
+                "AI platform-provider declaration mismatch. AIServerApp.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
                 (System.String.Join(", ", declaredIds))
                 (System.String.Join(", ", factoryIds))
 
@@ -274,40 +292,17 @@ let composeAI (app: AIServerApp) : ServerApp =
         @ fastPathDevHandlers
 
     let aiServiceConfig (s: IServiceCollection) =
-        // Phase 9d — when usage metering is enabled, wrap the
-        // configured `IAIProviderFactory` with `MeteringProviderFactory`
-        // so every `Resolve`-d provider's `SendMessage` emits
-        // `ai.tokens.input` / `ai.tokens.output` `UsageRecord`s.
-        // `TryResolveByLabel` (settings-UI test-connection flow) is
-        // forwarded but NOT metered — those calls are diagnostic, not
-        // user-attributable. Registered as a factory so the lazy
-        // resolver can read `IUsageLog` from DI (registered by core
-        // `compose` before this point).
+        // Phase 9d (usage metering) + Phase 9 compute-quota. The
+        // delegate factory resolves `IUsageLog` and `ITeamQuotaPolicy`
+        // from DI per request and stacks the wrappers over the
+        // composition-supplied raw factory. Same shape as RAGCompose
+        // via the shared `AIProviderUsageMiddleware.wrapFactoryForDI`
+        // helper — keeps RAG-using deployments from silently bypassing
+        // both subsystems on AI calls.
         let s =
             s
                 .AddSingleton<IAIProviderFactory>(
-                    System.Func<IServiceProvider, IAIProviderFactory>(fun sp ->
-                        let baseFactory =
-                            match config.UsageMetering with
-                            | NoUsageMetering -> aiProviderFactory
-                            | EnabledUsageMetering ->
-                                let usageLog = sp.GetService(typeof<IUsageLog>) :?> IUsageLog
-
-                                AIProviderUsageMiddleware.MeteringProviderFactory(
-                                    aiProviderFactory,
-                                    usageLog,
-                                    providerProfile
-                                )
-                                :> IAIProviderFactory
-
-                        // Phase 9 compute-quota — gate `SendMessage` BEFORE
-                        // the call. Composed OUTERMOST so a denied call is
-                        // neither sent nor metered.
-                        match sp.GetService(typeof<ITeamQuotaPolicy>) with
-                        | :? ITeamQuotaPolicy as quota ->
-                            AIProviderUsageMiddleware.QuotaEnforcingProviderFactory(baseFactory, quota)
-                            :> IAIProviderFactory
-                        | _ -> baseFactory)
+                    AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
                 )
                 .AddSingleton<IProviderProfile>(providerProfile)
                 // Phase 70 — register the Platform-Admin-managed AI key

@@ -48,12 +48,22 @@ let private modelPath (model: string) =
     else
         "models/" + model
 
-type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
-    let client = new HttpClient()
+// Shared per-process HttpClient — see the matching note in
+// `ClaudeAIProvider`. Phase 70's factory builds a fresh `GeminiAIProvider`
+// per `Resolve` call; without sharing, the prior shape opened a new
+// connection pool per request and exhausted ephemeral ports under
+// sustained load. `BaseAddress` and `Timeout` are stable; Gemini's
+// per-request `?key=` query-string auth rides on the request URI,
+// never on the client.
+let private sharedClient =
+    lazy
+        (let c = new HttpClient()
+         c.BaseAddress <- Uri("https://generativelanguage.googleapis.com")
+         c.Timeout <- TimeSpan.FromMinutes(5.0)
+         c)
 
-    do
-        client.BaseAddress <- Uri("https://generativelanguage.googleapis.com")
-        client.Timeout <- TimeSpan.FromMinutes(5.0)
+type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
+    let client = sharedClient.Value
 
     /// Construct with an API key provided directly (factory path —
     /// user-supplied or deployment-resolved key).

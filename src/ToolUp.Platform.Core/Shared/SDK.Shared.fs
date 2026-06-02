@@ -2648,56 +2648,74 @@ module ServerConfig =
     /// the Phase 66 Stream A.8 cutover from `TOOLUP_PLATFORM_MODE` to
     /// `TOOLUP_PLATFORM_SURFACES` (clean cutover; no aliasing).
     ///
-    /// Surface-resolution: `overrides.Surfaces` wins when `Some`;
-    /// else `TOOLUP_PLATFORM_SURFACES` (comma- / semicolon- /
-    /// space-separated token list); else `defaults.Surfaces`.
-    /// An unrecognised token in the env-var value falls the whole
-    /// value back to `defaults.Surfaces` and surfaces the bad
-    /// tokens via the supplied logger.
+    /// Surface-resolution (Phase 71.A — env-var beats library-default
+    /// override-record value):
+    ///   1. `TOOLUP_PLATFORM_SURFACES` (comma- / semicolon- /
+    ///      space-separated token list) when set and at least one
+    ///      token parses cleanly.
+    ///   2. `overrides.Surfaces` when `Some` and non-empty (the
+    ///      library-default fallback — `ServerConfigOverrides.referenceApp`
+    ///      pins `Some Surfaces.individual`).
+    ///   3. `defaults.Surfaces` as a final fallback.
+    ///
+    /// Consumer-authored literals (`{ ServerConfig.defaults with
+    /// Surfaces = ... }`) never traverse this helper, so they still win
+    /// at the highest altitude. The flip moves operator-deployer intent
+    /// (env var) ahead of library-author defaults — fixes the
+    /// silent-precedence trap documented in
+    /// [`docs/migrations/71-runtime-config-audit.md`](../../docs/migrations/71-runtime-config-audit.md)
+    /// §3.
+    ///
+    /// An unrecognised token (or an empty-after-parse result) falls
+    /// back to the override-record value when present, else
+    /// `defaults.Surfaces`, and surfaces the bad tokens via the
+    /// supplied logger.
     let fromEnv (logger: ILogger) (overrides: ServerConfigOverrides) : ServerConfig =
-        let surfaces =
+        let overridesFallback =
             match overrides.Surfaces with
             | Some s when not (List.isEmpty s) -> s
-            | _ ->
-                match envVar "TOOLUP_PLATFORM_SURFACES" with
-                | None -> defaults.Surfaces
-                | Some raw ->
-                    let tokens =
-                        raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
-                        |> Array.map (fun s -> s.Trim().ToLowerInvariant())
-                        |> Array.filter (fun s -> s <> "")
-                        |> Array.toList
+            | _ -> defaults.Surfaces
 
-                    let parsed = tokens |> List.map parseSurfaceProfile
+        let surfaces =
+            match envVar "TOOLUP_PLATFORM_SURFACES" with
+            | None -> overridesFallback
+            | Some raw ->
+                let tokens =
+                    raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
+                    |> Array.map (fun s -> s.Trim().ToLowerInvariant())
+                    |> Array.filter (fun s -> s <> "")
+                    |> Array.toList
 
-                    let errors =
+                let parsed = tokens |> List.map parseSurfaceProfile
+
+                let errors =
+                    parsed
+                    |> List.choose (function
+                        | Error e -> Some e
+                        | _ -> None)
+
+                match errors with
+                | [] ->
+                    let resolved =
                         parsed
                         |> List.choose (function
-                            | Error e -> Some e
+                            | Ok s -> Some s
                             | _ -> None)
 
-                    match errors with
-                    | [] ->
-                        let resolved =
-                            parsed
-                            |> List.choose (function
-                                | Ok s -> Some s
-                                | _ -> None)
-
-                        if List.isEmpty resolved then
-                            logger.Warn
-                                $"TOOLUP_PLATFORM_SURFACES={raw} resolved to an empty surface list. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to anonymous."
-
-                            defaults.Surfaces
-                        else
-                            resolved
-                    | bad ->
-                        let badList = String.concat ", " bad
-
+                    if List.isEmpty resolved then
                         logger.Warn
-                            $"TOOLUP_PLATFORM_SURFACES={raw} contains unrecognised token(s): {badList}. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to anonymous."
+                            $"TOOLUP_PLATFORM_SURFACES={raw} resolved to an empty surface list. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to the library-default override value (or defaults)."
 
-                        defaults.Surfaces
+                        overridesFallback
+                    else
+                        resolved
+                | bad ->
+                    let badList = String.concat ", " bad
+
+                    logger.Warn
+                        $"TOOLUP_PLATFORM_SURFACES={raw} contains unrecognised token(s): {badList}. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to the library-default override value (or defaults)."
+
+                    overridesFallback
 
         let logLevel, traceCategories = parseLogLevel ()
 

@@ -540,18 +540,24 @@ let composeWithRAG
     let resolveManager (ctx: HttpContext) =
         ctx.RequestServices.GetService(typeof<SSEConnectionManager>) :?> SSEConnectionManager
 
-    // Validate tool name uniqueness across modules. Same shape as
-    // `composeWithAI` — duplicates fail loudly here at compose time.
+    // Validate tool name uniqueness across modules AND against the
+    // platform-reserved `NarrativeTools.builtInTools` names. Same shape
+    // as `composeWithAI` — duplicates fail loudly here at compose time.
+    let builtInToolNames =
+        NarrativeTools.builtInTools |> List.map (fun t -> t.Definition.Name)
+
+    let moduleToolNames = moduleTools |> List.map (fun (def, _) -> def.Name)
+
     let duplicateNames =
-        moduleTools
-        |> List.map (fun (def, _) -> def.Name)
+        (builtInToolNames @ moduleToolNames)
         |> List.groupBy id
         |> List.choose (fun (n, occurrences) -> if occurrences.Length > 1 then Some n else None)
 
     if not duplicateNames.IsEmpty then
         failwithf
-            "AI tool name collision across modules: %s. Each tool must have a unique Name across the deployment."
+            "AI tool name collision: %s. Each tool must have a unique Name across the deployment. The SDK reserves the built-in NarrativeTools names [%s] — rename any module-declared tools that collide."
             (System.String.Join(", ", duplicateNames))
+            (System.String.Join(", ", builtInToolNames))
 
     let registeredModuleTools =
         moduleTools
@@ -631,10 +637,17 @@ let composeWithRAG
             Some(ToolUp.RAG.CitationNormaliserImpl.create citationPolicy citationCounters)
 
     let serviceConfig (s: IServiceCollection) =
-        // AI services
+        // AI services. The `IAIProviderFactory` registration flows
+        // through the shared Metering+Quota wrap helper so RAG-using
+        // deployments retain Phase 9d usage metering and Phase 9
+        // compute-quota enforcement on AI calls. Earlier this branch
+        // registered the raw factory and silently bypassed both
+        // subsystems even when the deployment opted into metering.
         let s =
             s
-                .AddSingleton<IAIProviderFactory>(aiProviderFactory)
+                .AddSingleton<IAIProviderFactory>(
+                    ToolUp.AI.AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
+                )
                 .AddSingleton<IProviderProfile>(providerProfile)
                 .AddSingleton<AIToolRegistry>(registry)
                 .AddSingleton<ToolUp.AI.ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)

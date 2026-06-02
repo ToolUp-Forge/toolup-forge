@@ -27,12 +27,21 @@ let KnownModels = [ "gpt-4o"; "gpt-4o-mini"; "gpt-4-turbo"; "o1"; "o1-mini" ]
 [<Literal>]
 let ProviderId = "openai-gpt"
 
-type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
-    let client = new HttpClient()
+// Shared per-process HttpClient — see the matching note in
+// `ClaudeAIProvider`. Phase 70's factory builds a fresh `OpenAIProvider`
+// per `Resolve` call; without sharing, the prior shape opened a new
+// connection pool per request and exhausted ephemeral ports under
+// sustained load. `BaseAddress` and `Timeout` are stable; per-request
+// `Authorization` rides on `HttpRequestMessage`, never on the client.
+let private sharedClient =
+    lazy
+        (let c = new HttpClient()
+         c.BaseAddress <- Uri("https://api.openai.com")
+         c.Timeout <- TimeSpan.FromMinutes(5.0)
+         c)
 
-    do
-        client.BaseAddress <- Uri("https://api.openai.com")
-        client.Timeout <- TimeSpan.FromMinutes(5.0)
+type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
+    let client = sharedClient.Value
 
     /// Construct with an API key provided directly (Phase A+ factory
     /// path — user-supplied or deployment-resolved key).

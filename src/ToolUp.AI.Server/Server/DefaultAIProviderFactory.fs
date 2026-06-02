@@ -238,17 +238,25 @@ let create
 
                 match apiKeyOpt with
                 | None ->
-                    // 0.4.3 — second field now carries an actionable
-                    // hint rather than empty string. Operators upgrading
+                    // 0.4.3 — second field carries an actionable hint
+                    // rather than empty string. Operators upgrading
                     // from the 0.3.x env-var-only shape see where to
                     // remediate (Platform Admin AI Keys, or the
                     // composition-time BootstrapKeyFromEnv shim) rather
                     // than `MissingApiKey(anthropic, "")` with no signal.
+                    //
+                    // BootstrapKeyFromEnv is snapshotted at process start
+                    // — the SDK does not re-read the env var per request,
+                    // so an env-var unset post-start does not propagate
+                    // and an env-var set post-start requires a restart.
+                    // Surfaces both states accurately so the operator
+                    // does not chase the wrong remediation.
                     let hint =
                         match active.BootstrapKeyFromEnv with
                         | Some _ ->
-                            "Platform Admin > AI Keys (the wired BootstrapKeyFromEnv was non-empty at startup but is currently unset for this scope)"
-                        | None -> "Platform Admin > AI Keys, or wire BootstrapKeyFromEnv at composition time"
+                            "No key is recorded in IPlatformAIKeyStore for this scope (team or platform). The composition-time BootstrapKeyFromEnv shim was populated at process start but the factory does not re-read env vars per request — set a key via Platform Admin > AI Keys (preferred), or restart the process with the env var populated."
+                        | None ->
+                            "No key is recorded in IPlatformAIKeyStore for this scope (team or platform), and no BootstrapKeyFromEnv was wired at composition time. Set a key via Platform Admin > AI Keys, or wire BootstrapKeyFromEnv in the composition root (re-reading env vars at runtime is not supported)."
 
                     return Error(MissingApiKey(active.Descriptor.Id, hint))
                 | Some apiKey ->

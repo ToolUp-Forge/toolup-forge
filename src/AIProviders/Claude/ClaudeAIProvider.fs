@@ -41,6 +41,26 @@ let KnownModels = [
     "claude-haiku-3-5-20241022"
 ]
 
+// Shared per-process HttpClient. Phase 70's factory builds a fresh
+// `ClaudeAIProvider` per `Resolve` call (the curried `Build` closure
+// is invoked at request time, not at composition time). Constructing
+// a new HttpClient per provider per request — the prior shape — is
+// the classic .NET socket-exhaustion antipattern: each HttpClient owns
+// its own connection pool, and connections linger in TIME_WAIT for
+// 60–120 seconds after disposal, so under sustained chat volume the
+// process eventually runs out of ephemeral ports.
+//
+// The provider snapshots no per-request state on the HttpClient
+// itself — `BaseAddress` and `Timeout` are stable across every
+// instance, and the per-request `x-api-key` header lives on the
+// `HttpRequestMessage`, not on the client. Sharing is therefore safe.
+let private sharedClient =
+    lazy
+        (let c = new HttpClient()
+         c.BaseAddress <- Uri("https://api.anthropic.com")
+         c.Timeout <- TimeSpan.FromMinutes(5.0)
+         c)
+
 // API-key fetching is abstracted to a thunk so the same core
 // implementation serves both the legacy secret-store path (fetch on
 // every request — supports rotation) and the Phase-A factory path
@@ -48,16 +68,12 @@ let KnownModels = [
 // SendMessage re-executes the thunk; the thunk decides whether to hit
 // a store or return a captured value.
 type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string, maxTokens: int) =
-    let client = new HttpClient()
+    let client = sharedClient.Value
 
     // Guard a misconfigured cap. <= 0 would make the Anthropic API
     // reject every request; fall back to the safe default rather than
     // hard-fail every call.
     let maxTokens = if maxTokens > 0 then maxTokens else DefaultMaxTokens
-
-    do
-        client.BaseAddress <- Uri("https://api.anthropic.com")
-        client.Timeout <- TimeSpan.FromMinutes(5.0)
 
     /// Construct with an API key provided directly. Phase A+ factory
     /// path used by BYOK deployments — the factory resolves the user's

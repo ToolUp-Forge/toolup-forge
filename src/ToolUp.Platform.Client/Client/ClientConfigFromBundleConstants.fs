@@ -105,13 +105,19 @@ let private parseSurfaceProfile (raw: string) : Result<SurfaceProfile, string> =
 /// Phase 66 Stream A.8 client-side counterpart — parse the
 /// `__TOOLUP_PLATFORM_SURFACES__` raw string into a `SurfaceProfile
 /// list`. Empty / whitespace input or any unrecognised token falls
-/// back to `[ SurfaceProfile.anonymous ]` (the SDK default) and
-/// surfaces a `console.warn`. Mirrors the server-side `fromEnv`
-/// resolution semantics.
-let private parseSurfacesString (raw: string) : SurfaceProfile list =
+/// back to `fallback` and surfaces a `console.warn`. Mirrors the
+/// server-side `fromEnv` resolution semantics.
+///
+/// Phase 71.A — caller passes the override-record fallback so the
+/// env-var-set-but-invalid path lands consistently with the
+/// env-var-unset path. Without this parameter, a typo'd
+/// `__TOOLUP_PLATFORM_SURFACES__` value would land on the SDK default
+/// regardless of override-record posture, contradicting the
+/// "consumer overrides beat the bare default" expectation.
+let private parseSurfacesString (raw: string) (fallback: SurfaceProfile list) : SurfaceProfile list =
     match raw with
     | null
-    | "" -> [ SurfaceProfile.anonymous ]
+    | "" -> fallback
     | s ->
         let tokens =
             s.Split([| ','; ';'; ' ' |])
@@ -137,18 +143,18 @@ let private parseSurfacesString (raw: string) : SurfaceProfile list =
 
             if List.isEmpty resolved then
                 JS.console.warn
-                    $"__TOOLUP_PLATFORM_SURFACES__={raw} resolved to an empty surface list. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to anonymous."
+                    $"__TOOLUP_PLATFORM_SURFACES__={raw} resolved to an empty surface list. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to the library-default override value (or defaults)."
 
-                [ SurfaceProfile.anonymous ]
+                fallback
             else
                 resolved
         | bad ->
             let badList = String.concat ", " bad
 
             JS.console.warn
-                $"__TOOLUP_PLATFORM_SURFACES__={raw} contains unrecognised token(s): {badList}. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to anonymous."
+                $"__TOOLUP_PLATFORM_SURFACES__={raw} contains unrecognised token(s): {badList}. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to the library-default override value (or defaults)."
 
-            [ SurfaceProfile.anonymous ]
+            fallback
 
 /// Build a `ClientConfig` from the Vite-injected bundle constants
 /// (passed as explicit string values) + the overrides record. Use
@@ -185,10 +191,20 @@ let fromBundleConstantValues
         | "" -> None
         | s -> Some s
 
-    let resolvedSurfaces =
+    // Phase 71.A — env-var (Vite define) wins over library-default
+    // override-record value. Consumer-authored literals via
+    // `{ ClientConfig.defaults with Surfaces = ... }` bypass this
+    // helper and still take precedence over both. Mirrors the server
+    // side semantics in `ServerConfigOverrides.fromEnv` so a deployment
+    // with `TOOLUP_PLATFORM_SURFACES=team` plus
+    // `__TOOLUP_PLATFORM_SURFACES__=team` lands consistently on both
+    // sides regardless of override-record posture.
+    let overridesFallback =
         match overrides.Surfaces with
         | Some s when not (List.isEmpty s) -> s
-        | _ -> parseSurfacesString platformSurfaces
+        | _ -> [ SurfaceProfile.anonymous ]
+
+    let resolvedSurfaces = parseSurfacesString platformSurfaces overridesFallback
 
     {
         ClientConfig.defaults with
