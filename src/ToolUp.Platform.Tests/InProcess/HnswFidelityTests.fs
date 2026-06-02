@@ -102,6 +102,11 @@ let private exactTopK (corpus: (string * float32[])[]) (query: float32[]) (k: in
 //
 // In-isolation runs of either list pass cleanly 4/4 every time, which
 // is why this is a sequencing decision, not a "skip the test" decision.
+//
+// The per-store RNG in `HnswVectorStore.fs` is also now seeded
+// (`graphBuildSeed`), so the recall-fidelity assertions below see a
+// byte-identical graph on every run — the recall numbers in the
+// budget checks are reproducible, not stochastic.
 
 let tests =
     testSequenced

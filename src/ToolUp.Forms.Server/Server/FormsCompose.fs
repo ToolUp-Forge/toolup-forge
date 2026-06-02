@@ -472,6 +472,15 @@ module FormsServerApp =
     /// IntelliSense via `[<EditorBrowsable>]`.
     [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
     let composeForms (app: FormsServerApp) : ServerApp =
+        // Phase 1h conflict validator — fail fast if Forms has already
+        // been composed onto this pipeline (e.g. `withForms ... |>
+        // withForms ...`). Pre-empts the cascading
+        // duplicate-entity-registration / duplicate-metric-name /
+        // double-mounted-route failures that the second composition
+        // would otherwise surface deep inside `compose` or at first
+        // request.
+        ServerApp.ensureCompanionNotAlreadyComposed "ToolUp.Forms" app.Base
+
         // 1. Register the two entity types via the base's
         //    `withEntity` pipeline. Also register the Phase 21b
         //    Publishable-form preflight validator — it's free at
@@ -776,10 +785,13 @@ module FormsServerApp =
                     | Some baseFn -> Some(fun s -> formsServiceConfig (baseFn s))
         }
 
+        // Phase 1h — append the Forms marker so a second `withForms` on
+        // the same pipeline trips the entry-guard above.
         {
             withEntities with
                 Extensions = mergedExt
         }
+        |> ServerApp.withCompanionMarker "ToolUp.Forms"
 
     /// Drive the final composition. Registers the two form entity
     /// types, wires `IFormStore` (overlaid with registered defaults)

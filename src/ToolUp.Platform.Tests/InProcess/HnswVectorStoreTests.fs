@@ -54,8 +54,12 @@ let private newStore () =
 // `testSequenced` paired with `HnswFidelityTests` — HNSW.Net carries
 // shared static state beyond the per-store RNG fix in HnswVectorStore.fs;
 // concurrent HNSW testList execution surfaces intermittent
-// `Graph.Core..ctor` failures inside `Graph.AddItems`. See the
-// matching comment block in HnswFidelityTests.fs for details.
+// `Graph.Core..ctor` failures inside `Graph.AddItems`. The per-store
+// RNG is now seeded (see HnswVectorStore.fs `graphBuildSeed`), which
+// makes the recall-fidelity test deterministic, but the cross-list
+// concurrency hazard is a separate static-state issue and still
+// requires sequencing. See the matching comment block in
+// HnswFidelityTests.fs for details.
 let tests =
     testSequenced
     <| testList "HnswVectorStore" [

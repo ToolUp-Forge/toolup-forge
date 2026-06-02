@@ -1,0 +1,8 @@
+# Runtime artefacts. `Server.fs` writes blob storage to ./.local-blobs/
+# when actually launched; regenerated on every boot.
+.local-blobs/
+data/
+
+# .NET build output.
+bin/
+obj/

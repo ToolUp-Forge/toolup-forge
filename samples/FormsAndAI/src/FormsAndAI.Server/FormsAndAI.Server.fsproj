@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 1h reference. Anonymous-mode composition root stacking Forms
+    AND AI side-by-side on a single ServerApp pipeline via the
+    `withForms` / `withAI` additive extensions. Demonstrates:
+
+      * One `ServerApp.empty |> ... |> ServerApp.run` pipeline shared
+        between the two companions (instead of choosing one terminal
+        `FormsServerApp.run` / `AIServerApp.run` and dropping the
+        other).
+      * A workflow `Action` resolving `IEntityStore` from
+        `ctx.Services` (the Phase 1h guard/action DI change) — proving
+        the action reaches the same provider every other handler in
+        the app sees, including the AI agent loop.
+      * The Phase 1h conflict validator: calling `withForms` twice
+        fails fast with a clear diagnostic at compose time (commented-
+        out demo in Server.fs).
+
+    Server-only by design — same posture as `samples/MinimalApp`. The
+    sample's job is to verify the composition shape compiles and is
+    self-consistent; running it requires `TOOLUP_ENTITY_STORE` (Forms
+    needs an `IEntityStore`) and a real `IAIProvider` companion (AI
+    will boot but every Resolve returns `NoProviderConfigured` against
+    the `DefaultAIProviderFactory.empty` stub used here).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Server.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Forms.Core\ToolUp.Forms.Core.fsproj" />
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Forms.Server\ToolUp.Forms.Server.fsproj" />
+        <ProjectReference Include="..\..\..\..\src\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+        <ProjectReference Include="..\..\..\..\src\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

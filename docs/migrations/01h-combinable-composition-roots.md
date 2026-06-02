@@ -32,6 +32,41 @@ duplicating AI's DI registrations inline (see the existing comment in
 before that refactor would force the duplication into the additive
 surface.
 
+**Update — conflict validator + sample landed.** Two of the three
+follow-up items now ship alongside this doc:
+
+- **Conflict validator.** `ServerApp` gains a `ComposedCompanions:
+  string list` field tracking the dotted-name of every companion
+  that opted into the duplicate-guard. `ServerApp.ensureCompanionNotAlreadyComposed
+  companionName` raises a clear single-line diagnostic when the
+  marker is already present; `ServerApp.withCompanionMarker
+  companionName` appends it after a successful emit. Today
+  `FormsCompose.composeForms` opts in — calling `withForms ... |>
+  withForms ...` on the same pipeline fails fast at the second call
+  with `ToolUp.Forms: companion already composed on this ServerApp
+  pipeline. ...` instead of cascading into the duplicate-entity-
+  registration / double-mounted-route failures the pre-Phase-1h
+  shape would surface at first request. AI / RAG and the other
+  companions still rely on existing duplicate-detection paths
+  (metric-sink construction / DI-singleton replace / route-double-
+  mount); they may opt in to the same marker convention in a
+  follow-up.
+- **Combined-companion sample.** `samples/FormsAndAI/` is a
+  compile-verified reference composition root stacking Forms + AI
+  via the `withForms` / `withAI` additive extensions on a single
+  `ServerApp` pipeline. It registers a minimal `FormSchema` +
+  `WorkflowDefinition` + `WorkflowAction` that resolves `IEntityStore`
+  from `ctx.Services` (the Phase 1h DI access shape), and ships a
+  commented-out demo of the conflict validator firing.
+  `docs/platform/composition-roots.md` carries a matching
+  "Combining companions on one pipeline (Phase 1h)" section.
+
+The remaining `withRAG` work is still gated on the `composeWithRAG`
+→ `composeAI` lift described above; the cookbook recipe refresh for
+`client-job-tracker` / `lead-capture-pipeline` /
+`expense-receipt-tracker` is deferred to a dedicated `Update
+Cookbook` pass.
+
 ---
 
 ## What changes

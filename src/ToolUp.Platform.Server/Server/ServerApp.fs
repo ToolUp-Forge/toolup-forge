@@ -577,6 +577,22 @@ type ServerApp = {
     /// pre-9b.B behaviour, where modules wanting a cron resolved
     /// `IJobScheduler` from the built `IServiceProvider` themselves.
     ScheduledJobs: ScheduledJobDeclaration list
+    /// Phase 1h — dotted-name of every companion-set composition that
+    /// opts into the duplicate-guard. Currently only
+    /// `"ToolUp.Forms"` (see `FormsCompose.composeForms`). A second
+    /// `withForms` on the same pipeline sees its own marker already
+    /// present and fails fast via
+    /// `ServerApp.ensureCompanionNotAlreadyComposed` instead of
+    /// cascading into the duplicate-entity-registration /
+    /// double-mounted-route failures the pre-Phase-1h shape would have
+    /// produced at first request. Other companions (AI / RAG /
+    /// Scheduling / Asset / PublicRendering) still rely on their
+    /// existing duplicate-detection paths (metric-sink construction /
+    /// DI-singleton replace / route-double-mount); they may opt in to
+    /// the same marker convention in a follow-up by calling
+    /// `ensureCompanionNotAlreadyComposed` at entry and
+    /// `withCompanionMarker` before returning.
+    ComposedCompanions: string list
 }
 
 module ServerApp =
@@ -617,6 +633,38 @@ module ServerApp =
         ModuleSurfaceDefaults = []
         RouteSurfaceOverrides = []
         ScheduledJobs = []
+        ComposedCompanions = []
+    }
+
+    /// Phase 1h companion-conflict validator. Companion compose seams
+    /// that opt into the marker convention call this at entry to refuse
+    /// re-emitting onto a `ServerApp` that already carries the same
+    /// companion's marker. `companionName` is the dotted package name
+    /// (e.g. `"ToolUp.Forms"`); the marker also appears on
+    /// `ComposedCompanions` after a successful emit so the validator
+    /// catches the second call.
+    ///
+    /// On conflict, raises a clear single-line diagnostic naming the
+    /// companion and the canonical resolution paths. Today only
+    /// `FormsCompose.composeForms` calls this; the existing cascading
+    /// failures (duplicate-metric-name at sink construction,
+    /// duplicate-entity-registration at compose, double-mounted route
+    /// at first request) remain the backstop for any companion that
+    /// hasn't opted in.
+    let ensureCompanionNotAlreadyComposed (companionName: string) (app: ServerApp) : unit =
+        if List.contains companionName app.ComposedCompanions then
+            failwithf
+                "%s: companion already composed on this ServerApp pipeline. The same companion cannot be stacked twice (each call re-registers its DI services, re-appends its metric declarations, and re-mounts its routes — the cascading failures land at sink construction or first request). Combine all your %s configuration in a single call (e.g. one withForms invocation that builds up every schema/workflow/action), or rebuild the pipeline from ServerApp.empty. (Phase 1h)"
+                companionName
+                companionName
+
+    /// Phase 1h — append a companion marker to `ComposedCompanions`
+    /// after a successful compose emit. Paired with
+    /// `ensureCompanionNotAlreadyComposed` at the top of the same
+    /// compose seam.
+    let withCompanionMarker (companionName: string) (app: ServerApp) : ServerApp = {
+        app with
+            ComposedCompanions = app.ComposedCompanions @ [ companionName ]
     }
 
     let withConfig (c: ServerConfig) (app: ServerApp) : ServerApp = { app with Config = c }
