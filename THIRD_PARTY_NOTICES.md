@@ -5,7 +5,7 @@ NuGet dependency the ToolUp SDK consumes (direct and transitive) along with
 its declared licence as published on nuget.org. The curated headline list
 of major direct dependencies lives in [`NOTICE.md`](NOTICE.md).
 
-Last regenerated: 2026-06-02 19:56:58 UTC.
+Last regenerated: 2026-06-02 20:57:00 UTC.
 
 Entries showing `(licence not declared)` are upstream packages whose NuGet
 metadata omits a licence — check the package's repository or README directly.
@@ -66,29 +66,19 @@ metadata omits a licence — check the package's repository or README directly.
 | `FSharp.SystemTextJson` | `1.3.13` | `MIT` | [link](https://github.com/tarmil/FSharp.SystemTextJson) |
 | `Giraffe` | `8.2.0` | Embedded file: `LICENSE` | [link](https://github.com/giraffe-fsharp/giraffe) |
 | `Giraffe.ViewEngine` | `1.4.0` | `Apache-2.0` | [link](https://github.com/giraffe-fsharp/Giraffe.ViewEngine) |
-| `Google.Api.CommonProtos` | `2.17.0` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
 | `Google.Api.Gax` | `4.12.1` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
-| `Google.Api.Gax.Grpc` | `4.12.1` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
 | `Google.Api.Gax.Rest` | `4.12.1` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
 | `Google.Apis` | `1.72.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | `Google.Apis.Auth` | `1.72.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | `Google.Apis.Core` | `1.72.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | `Google.Apis.Storage.v1` | `1.71.0.3920` | `Apache-2.0` | [link](https://github.com/google/google-api-dotnet-client) |
 | `Google.Cloud.Functions.Framework` | `3.0.1` | `Apache-2.0` | [link](https://github.com/GoogleCloudPlatform/functions-framework-dotnet) |
-| `Google.Cloud.Iam.V1` | `3.5.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
-| `Google.Cloud.Location` | `2.4.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
-| `Google.Cloud.SecretManager.V1` | `2.7.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
 | `Google.Cloud.Storage.V1` | `4.14.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
-| `Google.Protobuf` | `3.31.1` | `BSD-3-Clause` | [link](https://github.com/protocolbuffers/protobuf) |
 | `Google.Protobuf` | `3.30.2` | `BSD-3-Clause` | [link](https://github.com/protocolbuffers/protobuf) |
 | `Google.Protobuf` | `3.28.0` | `BSD-3-Clause` | [link](https://github.com/protocolbuffers/protobuf) |
-| `Grpc.Auth` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
-| `Grpc.Core.Api` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Core.Api` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
-| `Grpc.Net.Client` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Net.Client` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Net.ClientFactory` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
-| `Grpc.Net.Common` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Net.Common` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `HNSW` | `26.4.177` | `MIT` | [link](https://github.com/curiosity-ai/hnsw.net) |
 | `MailKit` | `4.16.0` | `MIT` | [link](http://www.mimekit.net/) |
@@ -145,7 +135,6 @@ metadata omits a licence — check the package's repository or README directly.
 | `Microsoft.Extensions.Logging.Abstractions` | `10.0.2` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `10.0.3` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `8.0.0` | `MIT` | [link](https://dot.net/) |
-| `Microsoft.Extensions.Logging.Abstractions` | `6.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `10.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Configuration` | `9.0.0` | `MIT` | [link](https://dot.net/) |
@@ -209,4 +198,4 @@ metadata omits a licence — check the package's repository or README directly.
 | `System.Security.Cryptography.ProtectedData` | `4.5.0` | [link](https://github.com/dotnet/corefx/blob/master/LICENSE.TXT) | [link](https://dot.net/) |
 | `WebPush` | `1.0.13` | [link](https://github.com/web-push-libs/web-push-csharp/blob/master/LICENSE) | [link](https://github.com/web-push-libs/web-push-csharp/) |
 
-Total: 194 packages.
+Total: 183 packages.

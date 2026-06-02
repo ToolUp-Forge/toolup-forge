@@ -1,17 +1,34 @@
 module ToolUp.Secrets.GcpSecretManager
 
 open System
-open Google.Cloud.SecretManager.V1
-open Grpc.Core
+open System.Collections.Generic
+open System.IO
+open System.Net.Http
+open System.Net.Http.Headers
+open System.Security.Cryptography
+open System.Text
+open System.Text.Json
+open System.Threading
 open ToolUp.Platform.Secrets
 
 // ─── Configuration ───────────────────────────────────────────────────
 //
-// Phase 2b — GCP Secret Manager implementation of `ISecretStore`.
-// Mirrors the `src/Secrets/AwsSecretsManager` companion shape: one
-// record-typed config, a `create` helper, and a `fromEnv` resolver.
-// Activated via `TOOLUP_SECRET_STORE=gcp-secret-manager` +
-// `TOOLUP_GCP_PROJECT_ID` in the consumer composition root.
+// GCP Secret Manager implementation of `ISecretStore`. Mirrors the
+// `src/Secrets/AwsSecretsManager` companion shape: one record-typed
+// config, a `create` helper, and a `fromEnv` resolver. Activated via
+// `TOOLUP_SECRET_STORE=gcp-secret-manager` + `TOOLUP_GCP_PROJECT_ID`
+// in the consumer composition root.
+//
+// Transport. Pure BCL `HttpClient` against the Secret Manager REST API
+// at `secretmanager.googleapis.com/v1`. Matches the
+// "Companion-authoring guide" steer for HTTP-shaped companions
+// ("use BCL `HttpClient` rather than a vendor SDK where the API is
+// permissive") — the older revision of this companion went through
+// `Google.Cloud.SecretManager.V1` and dragged ~20 transitive packages
+// (`Google.Api.Gax`, `Grpc.*`, `Google.Protobuf`, `Newtonsoft.Json`)
+// into every consumer; the REST shape is permissive and the auth
+// implementation small enough that the SDK dep stopped being worth
+// the supply-chain surface.
 //
 // IAM. The caller's service account must hold the five Secret
 // operations on the configured project (or on resources matching the
@@ -28,43 +45,54 @@ open ToolUp.Platform.Secrets
 //   - `roles/secretmanager.admin` — full access (covers delete + list)
 // A minimum-privilege policy spec ships in the companion README.
 //
-// Credential resolution. Application Default Credentials (ADC) — the
-// Google SDK default chain. On GCP compute (Cloud Run / GKE / GCE /
-// App Engine) ADC auto-resolves to the workload-identity-bound
-// service account attached to the resource — no env vars, no JSON
-// key on disk. Off-GCP (dev shells, cross-cloud deploys) ADC falls
-// back to the path in `GOOGLE_APPLICATION_CREDENTIALS` pointing at a
-// service-account JSON key file. ToolUp code never touches
-// credentials directly; the companion takes only the project ID in
-// config and lets `SecretManagerServiceClient.Create()` walk the ADC
-// chain.
+// Credential resolution. Two-mode chain — equivalent to the
+// previously-used SDK's Application Default Credentials chain
+// narrowed to the modes that matter for the deployment shapes
+// ToolUp supports:
+//
+//   1. `GOOGLE_APPLICATION_CREDENTIALS` set → load the service-account
+//      JSON key file at that path; exchange a signed JWT for an OAuth
+//      access token at `token_uri` (default
+//      `https://oauth2.googleapis.com/token`). This is the off-GCP
+//      path — dev shells, cross-cloud deploys, CI.
+//   2. Env var unset → fall back to the GCE / Cloud Run metadata
+//      server at
+//      `http://metadata.google.internal/computeMetadata/v1/instance/`
+//      `service-accounts/default/token`. On Cloud Run / GKE / GCE /
+//      App Engine this returns a workload-identity-bound token with
+//      no on-disk key.
+//
+// Both paths return `{access_token, expires_in}`; the companion
+// caches the token in-process behind a `SemaphoreSlim` and refreshes
+// 30s before expiry, so steady-state cost is one in-memory read for
+// ~55 minutes per process.
 //
 // Cross-tenant isolation (GP 4). Single GCP project holds every
-// ToolUp scope as an underscore-prefixed secret ID: `toolup_{scopeId}_{key}`.
-// GCP secret IDs allow `[A-Za-z0-9_-]` only — no slashes, no dots —
-// so underscore is the separator. The prefix encodes the scope; a
-// Cloud Audit Log entry shows exactly which scope each request
-// touched. Per-scope project isolation is possible (one project per
-// tenant) but operationally heavy and outside Phase 2b's scope.
+// ToolUp scope as an underscore-prefixed secret ID:
+// `toolup_{scopeId}_{key}`. GCP secret IDs allow `[A-Za-z0-9_-]` only
+// — no slashes, no dots — so underscore is the separator. The prefix
+// encodes the scope; a Cloud Audit Log entry shows exactly which
+// scope each request touched. Per-scope project isolation is possible
+// (one project per tenant) but operationally heavy and outside this
+// companion's scope.
 //
 // Cloud-KMS-native at-rest encryption. Secret Manager encrypts every
 // secret at rest with Google-managed AES-256 keys by default;
 // customer-managed encryption keys (CMEK) are configurable at the
-// secret-creation level via the `Replication.Automatic.CustomerManagedEncryption`
-// field (not exercised by this companion's default `SetSecret`).
-// Wrapping this companion in `EncryptedSecretStore` would add a
-// redundant envelope — the composition root deliberately does NOT
-// wrap cloud-KMS companions, and the Phase 6l.E plaintext-secrets
-// validator recognises `TOOLUP_SECRET_STORE=gcp-secret-manager` as
-// equivalent to `EncryptedSecretStore` for the master-key gate.
+// secret-creation level via the
+// `replication.automatic.customerManagedEncryption` field (not
+// exercised by this companion's default `SetSecret`). Wrapping this
+// companion in `EncryptedSecretStore` would add a redundant envelope
+// — the composition root deliberately does NOT wrap cloud-KMS
+// companions, and the `EncryptedSecretStoreModeValidator`
+// recognises `TOOLUP_SECRET_STORE=gcp-secret-manager` as equivalent
+// to `EncryptedSecretStore` for the master-key gate.
 //
 // Versioning. Secret Manager treats each `SetSecret` as a new
 // immutable version of the secret. `GetSecret name` resolves the
 // `latest` version (the canonical alias for the highest-numbered
 // enabled version). Callers that need a pinned version pass
 // `name@versionId` (e.g. `"db-password@3"` or `"db-password@latest"`).
-// The convention is documented in the TECHNICAL_GUIDE.md companion
-// summary.
 //
 // Deletion. `DeleteSecret` removes the secret resource AND every
 // version irreversibly. Unlike Azure Key Vault (soft-delete + purge)
@@ -74,8 +102,9 @@ open ToolUp.Platform.Secrets
 // hygiene.
 
 /// Configuration for `GcpSecretManagerSecretStore`. Takes the GCP
-/// project ID; credentials flow through Application Default
-/// Credentials.
+/// project ID; credentials flow through either a service-account JSON
+/// file at `GOOGLE_APPLICATION_CREDENTIALS` or the GCE metadata
+/// server.
 type GcpSecretManagerConfig = {
     /// GCP project ID — the slug from the GCP Console URL, e.g.
     /// `"my-project-12345"`. Read from `TOOLUP_GCP_PROJECT_ID`.
@@ -84,6 +113,182 @@ type GcpSecretManagerConfig = {
 
 module GcpSecretManagerConfig =
     let defaults = { ProjectId = "" }
+
+// ─── Auth ────────────────────────────────────────────────────────────
+
+module private Auth =
+    let cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
+
+    let defaultTokenUri = "https://oauth2.googleapis.com/token"
+
+    let metadataTokenUrl =
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+
+    [<CLIMutable>]
+    type ServiceAccountKey = {
+        ``type``: string
+        client_email: string
+        private_key: string
+        token_uri: string
+    }
+
+    [<CLIMutable>]
+    type private TokenResponse = {
+        access_token: string
+        expires_in: int
+    }
+
+    type AccessToken = {
+        Token: string
+        ExpiresAtUtc: DateTime
+    }
+
+    let private jsonOptions = JsonSerializerOptions(PropertyNameCaseInsensitive = true)
+
+    let private base64UrlEncode (bytes: byte[]) =
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+    let private base64UrlEncodeString (s: string) =
+        base64UrlEncode (Encoding.UTF8.GetBytes s)
+
+    let private readServiceAccount (path: string) =
+        let json = File.ReadAllText path
+        let key = JsonSerializer.Deserialize<ServiceAccountKey>(json, jsonOptions)
+
+        if isNull (box key) then
+            invalidArg
+                "GOOGLE_APPLICATION_CREDENTIALS"
+                (sprintf "Service-account JSON at '%s' could not be parsed." path)
+
+        if String.IsNullOrWhiteSpace key.client_email then
+            invalidArg
+                "GOOGLE_APPLICATION_CREDENTIALS"
+                (sprintf "Service-account JSON at '%s' is missing 'client_email'." path)
+
+        if String.IsNullOrWhiteSpace key.private_key then
+            invalidArg
+                "GOOGLE_APPLICATION_CREDENTIALS"
+                (sprintf "Service-account JSON at '%s' is missing 'private_key'." path)
+
+        let tokenUri =
+            if String.IsNullOrWhiteSpace key.token_uri then
+                defaultTokenUri
+            else
+                key.token_uri
+
+        { key with token_uri = tokenUri }
+
+    let private buildJwt (key: ServiceAccountKey) =
+        let now = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+
+        let headerJson = JsonSerializer.Serialize {| alg = "RS256"; typ = "JWT" |}
+
+        let claimsJson =
+            JsonSerializer.Serialize {|
+                iss = key.client_email
+                scope = cloudPlatformScope
+                aud = key.token_uri
+                iat = now
+                exp = now + 3600L
+            |}
+
+        let unsigned =
+            base64UrlEncodeString headerJson + "." + base64UrlEncodeString claimsJson
+
+        use rsa = RSA.Create()
+        rsa.ImportFromPem(key.private_key.AsSpan())
+
+        let signature =
+            rsa.SignData(Encoding.UTF8.GetBytes unsigned, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+
+        unsigned + "." + base64UrlEncode signature
+
+    let private parseToken (body: string) =
+        let parsed = JsonSerializer.Deserialize<TokenResponse>(body, jsonOptions)
+
+        if isNull (box parsed) || String.IsNullOrWhiteSpace parsed.access_token then
+            failwithf "GCP token endpoint returned an unparseable body: %s" body
+
+        {
+            Token = parsed.access_token
+            ExpiresAtUtc = DateTime.UtcNow.AddSeconds(float parsed.expires_in)
+        }
+
+    let private fetchServiceAccountToken (http: HttpClient) (key: ServiceAccountKey) = async {
+        let jwt = buildJwt key
+
+        let form =
+            new FormUrlEncodedContent(
+                [
+                    KeyValuePair("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
+                    KeyValuePair("assertion", jwt)
+                ]
+            )
+
+        let! response = http.PostAsync(key.token_uri, form) |> Async.AwaitTask
+        let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+        if not response.IsSuccessStatusCode then
+            failwithf "GCP token exchange failed (%d): %s" (int response.StatusCode) body
+
+        return parseToken body
+    }
+
+    let private fetchMetadataToken (http: HttpClient) = async {
+        use request = new HttpRequestMessage(HttpMethod.Get, metadataTokenUrl)
+        request.Headers.Add("Metadata-Flavor", "Google")
+        let! response = http.SendAsync request |> Async.AwaitTask
+        let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+        if not response.IsSuccessStatusCode then
+            failwithf
+                "GCE metadata-server token fetch failed (%d): %s. Set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON key file when running off-GCP."
+                (int response.StatusCode)
+                body
+
+        return parseToken body
+    }
+
+    /// Per-store token cache. Resolves the credential source once at
+    /// construction (service-account JSON file vs metadata server),
+    /// then fetches + caches the access token. Thread-safe; refreshes
+    /// 30s before expiry so concurrent requests don't all race the
+    /// renewal.
+    type TokenProvider(http: HttpClient) =
+        let serviceAccountKey =
+            match Environment.GetEnvironmentVariable "GOOGLE_APPLICATION_CREDENTIALS" with
+            | null
+            | "" -> None
+            | path -> Some(readServiceAccount path)
+
+        let semaphore = new SemaphoreSlim(1, 1)
+        let mutable cached: AccessToken option = None
+        let refreshSafetyWindow = TimeSpan.FromSeconds 30.0
+
+        let fetch () =
+            match serviceAccountKey with
+            | Some key -> fetchServiceAccountToken http key
+            | None -> fetchMetadataToken http
+
+        let isFresh (token: AccessToken) =
+            token.ExpiresAtUtc - DateTime.UtcNow > refreshSafetyWindow
+
+        member _.GetAsync() = async {
+            match cached with
+            | Some t when isFresh t -> return t.Token
+            | _ ->
+                do! semaphore.WaitAsync() |> Async.AwaitTask
+
+                try
+                    match cached with
+                    | Some t when isFresh t -> return t.Token
+                    | _ ->
+                        let! fresh = fetch ()
+                        cached <- Some fresh
+                        return fresh.Token
+                finally
+                    semaphore.Release() |> ignore
+        }
 
 // ─── Naming ──────────────────────────────────────────────────────────
 
@@ -124,14 +329,6 @@ module private Naming =
         | -1 -> key, "latest"
         | i -> key.Substring(0, i), key.Substring(i + 1)
 
-    let projectResource (projectId: string) = $"projects/{projectId}"
-
-    let secretResource (projectId: string) (secretId: string) =
-        $"projects/{projectId}/secrets/{secretId}"
-
-    let secretVersionResource (projectId: string) (secretId: string) (version: string) =
-        $"projects/{projectId}/secrets/{secretId}/versions/{version}"
-
     /// Extract the trailing `{secretId}` from a resource name of the
     /// form `projects/{p}/secrets/{secretId}`. Defensive against
     /// future resource-name shape changes.
@@ -143,36 +340,161 @@ module private Naming =
         else
             None
 
+// ─── REST plumbing ───────────────────────────────────────────────────
+
+module private Rest =
+    let baseUrl = "https://secretmanager.googleapis.com/v1"
+
+    let projectResource (projectId: string) = $"projects/{projectId}"
+
+    let secretsCollection (projectId: string) =
+        $"{baseUrl}/{projectResource projectId}/secrets"
+
+    let secretResource (projectId: string) (secretId: string) =
+        $"{baseUrl}/{projectResource projectId}/secrets/{secretId}"
+
+    let accessUrl (projectId: string) (secretId: string) (version: string) =
+        $"{baseUrl}/{projectResource projectId}/secrets/{secretId}/versions/{version}:access"
+
+    let addVersionUrl (projectId: string) (secretId: string) =
+        $"{secretResource projectId secretId}:addVersion"
+
+    let private jsonOptions = JsonSerializerOptions(PropertyNameCaseInsensitive = true)
+
+    /// GCP error responses have shape `{"error":{"code":..,"message":..,"status":".."}}`.
+    /// Extract the `status` field; returns `None` when the body is
+    /// missing or not in the expected shape (treat as a non-canonical
+    /// error and surface the raw body).
+    let tryGetErrorStatus (body: string) =
+        try
+            use doc = JsonDocument.Parse body
+            let mutable error = Unchecked.defaultof<JsonElement>
+            let mutable status = Unchecked.defaultof<JsonElement>
+
+            if
+                doc.RootElement.TryGetProperty("error", &error)
+                && error.TryGetProperty("status", &status)
+                && status.ValueKind = JsonValueKind.String
+            then
+                Some(status.GetString())
+            else
+                None
+        with _ ->
+            None
+
+    let send (http: HttpClient) (token: string) (request: HttpRequestMessage) = async {
+        request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+        return! http.SendAsync request |> Async.AwaitTask
+    }
+
+    let private jsonContent (payload: obj) =
+        let body = JsonSerializer.Serialize payload
+        new StringContent(body, Encoding.UTF8, "application/json")
+
+    let buildGet (url: string) =
+        new HttpRequestMessage(HttpMethod.Get, url)
+
+    let buildDelete (url: string) =
+        new HttpRequestMessage(HttpMethod.Delete, url)
+
+    let buildPost (url: string) (payload: obj) =
+        let req = new HttpRequestMessage(HttpMethod.Post, url)
+        req.Content <- jsonContent payload
+        req
+
+    /// AccessSecretVersion response: `{"name":"...","payload":{"data":"<base64>"}}`.
+    /// Returns the decoded UTF-8 secret string, or None when the
+    /// shape is missing.
+    let tryReadSecretPayload (body: string) =
+        use doc = JsonDocument.Parse body
+        let mutable payload = Unchecked.defaultof<JsonElement>
+        let mutable data = Unchecked.defaultof<JsonElement>
+
+        if
+            doc.RootElement.TryGetProperty("payload", &payload)
+            && payload.TryGetProperty("data", &data)
+            && data.ValueKind = JsonValueKind.String
+        then
+            let bytes = Convert.FromBase64String(data.GetString())
+            Some(Encoding.UTF8.GetString bytes)
+        else
+            None
+
+    /// ListSecrets response: `{"secrets":[{"name":"projects/.../secrets/.."}], "nextPageToken":".."}`.
+    let readSecretListPage (body: string) =
+        use doc = JsonDocument.Parse body
+        let mutable secretsArray = Unchecked.defaultof<JsonElement>
+
+        let names =
+            if
+                doc.RootElement.TryGetProperty("secrets", &secretsArray)
+                && secretsArray.ValueKind = JsonValueKind.Array
+            then
+                [
+                    for el in secretsArray.EnumerateArray() do
+                        let mutable nameProp = Unchecked.defaultof<JsonElement>
+
+                        if
+                            el.TryGetProperty("name", &nameProp)
+                            && nameProp.ValueKind = JsonValueKind.String
+                        then
+                            yield nameProp.GetString()
+                ]
+            else
+                []
+
+        let mutable nextTokenProp = Unchecked.defaultof<JsonElement>
+
+        let nextToken =
+            if
+                doc.RootElement.TryGetProperty("nextPageToken", &nextTokenProp)
+                && nextTokenProp.ValueKind = JsonValueKind.String
+            then
+                let t = nextTokenProp.GetString()
+
+                if String.IsNullOrEmpty t then None else Some t
+            else
+                None
+
+        names, nextToken
+
 // ─── ISecretStore implementation ─────────────────────────────────────
 
 /// GCP Secret Manager implementation of `ISecretStore`. One
-/// `SecretManagerServiceClient` per instance; the underlying gRPC
-/// channel is thread-safe and designed for reuse.
+/// `HttpClient` per instance; reused across the process lifetime per
+/// Microsoft's guidance for `HttpClient`. The token provider caches
+/// an in-process OAuth access token so steady-state per-call cost is
+/// one cached read plus one REST round-trip.
 type GcpSecretManagerSecretStore(config: GcpSecretManagerConfig) =
     do
         if String.IsNullOrWhiteSpace config.ProjectId then
             invalidArg "ProjectId" "GcpSecretManagerConfig.ProjectId is required (read from TOOLUP_GCP_PROJECT_ID)."
 
-    let client = SecretManagerServiceClient.Create()
-    let parent = Naming.projectResource config.ProjectId
+    let http = new HttpClient()
+    let tokenProvider = Auth.TokenProvider http
+
+    let withToken (build: unit -> HttpRequestMessage) = async {
+        let! token = tokenProvider.GetAsync()
+        use request = build ()
+        return! Rest.send http token request
+    }
 
     interface ISecretStore with
         member _.GetSecret(scopeId, key) = async {
             let keyName, version = Naming.parseVersion key
             let secretId = Naming.secretId scopeId keyName
-            let name = Naming.secretVersionResource config.ProjectId secretId version
+            let url = Rest.accessUrl config.ProjectId secretId version
+            use! response = withToken (fun () -> Rest.buildGet url)
+            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
-            try
-                let! response = client.AccessSecretVersionAsync name |> Async.AwaitTask
-                // Payload.Data is a ByteString; secrets stored by
-                // SetSecret are UTF-8 strings.
-                return Some(response.Payload.Data.ToStringUtf8())
-            with
-            | :? RpcException as ex when ex.StatusCode = StatusCode.NotFound -> return None
-            | :? RpcException as ex when ex.StatusCode = StatusCode.FailedPrecondition ->
+            match int response.StatusCode with
+            | 200 -> return Rest.tryReadSecretPayload body
+            | 404 -> return None
+            | 400 when Rest.tryGetErrorStatus body = Some "FAILED_PRECONDITION" ->
                 // Version is disabled or destroyed; surface as
                 // "not found" per the ISecretStore contract.
                 return None
+            | code -> return failwithf "GCP AccessSecretVersion failed (%d): %s" code body
         }
 
         member _.SetSecret(scopeId, key, value) = async {
@@ -180,80 +502,111 @@ type GcpSecretManagerSecretStore(config: GcpSecretManagerConfig) =
             // assigned by Secret Manager, not the caller.
             let keyName, _ = Naming.parseVersion key
             let secretId = Naming.secretId scopeId keyName
-            let secretName = Naming.secretResource config.ProjectId secretId
+            let projectId = config.ProjectId
+            let payloadBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes value)
 
-            let payload = SecretPayload()
-            payload.Data <- Google.Protobuf.ByteString.CopyFromUtf8 value
+            let addVersion () =
+                Rest.buildPost (Rest.addVersionUrl projectId secretId) {|
+                    payload = {| data = payloadBase64 |}
+                |}
 
             // AddSecretVersion is the hot path (the secret container
-            // already exists from a prior write). On NotFound, fall
-            // back to CreateSecret + AddSecretVersion. Cheaper than
-            // a probe + branch for the common idempotent-write case.
-            try
-                let! _ = client.AddSecretVersionAsync(secretName, payload) |> Async.AwaitTask
-                return Ok()
-            with :? RpcException as ex when ex.StatusCode = StatusCode.NotFound ->
-                try
-                    let secret = Secret()
-                    secret.Replication <- Replication()
-                    secret.Replication.Automatic <- Replication.Types.Automatic()
-                    let! _ = client.CreateSecretAsync(parent, secretId, secret) |> Async.AwaitTask
-                    let! _ = client.AddSecretVersionAsync(secretName, payload) |> Async.AwaitTask
-                    return Ok()
-                with ex ->
-                    return Error ex.Message
+            // already exists from a prior write). On 404, fall back
+            // to CreateSecret + AddSecretVersion. Cheaper than a
+            // probe + branch for the common idempotent-write case.
+            use! firstAttempt = withToken addVersion
+            let! firstBody = firstAttempt.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+            match int firstAttempt.StatusCode with
+            | code when code >= 200 && code < 300 -> return Ok()
+            | 404 ->
+                let createUrl =
+                    Rest.secretsCollection projectId + "?secretId=" + Uri.EscapeDataString secretId
+
+                use! createResponse =
+                    withToken (fun () ->
+                        Rest.buildPost createUrl {|
+                            replication = {| automatic = obj () |}
+                        |})
+
+                let! createBody = createResponse.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                if not createResponse.IsSuccessStatusCode then
+                    return Error(sprintf "GCP CreateSecret failed (%d): %s" (int createResponse.StatusCode) createBody)
+                else
+                    use! secondAttempt = withToken addVersion
+                    let! secondBody = secondAttempt.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                    if secondAttempt.IsSuccessStatusCode then
+                        return Ok()
+                    else
+                        return
+                            Error(
+                                sprintf
+                                    "GCP AddSecretVersion after CreateSecret failed (%d): %s"
+                                    (int secondAttempt.StatusCode)
+                                    secondBody
+                            )
+            | code -> return Error(sprintf "GCP AddSecretVersion failed (%d): %s" code firstBody)
         }
 
         member _.DeleteSecret(scopeId, key) = async {
             let keyName, _ = Naming.parseVersion key
             let secretId = Naming.secretId scopeId keyName
-            let name = Naming.secretResource config.ProjectId secretId
+            let url = Rest.secretResource config.ProjectId secretId
+            use! response = withToken (fun () -> Rest.buildDelete url)
+            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
-            try
-                do! client.DeleteSecretAsync name |> Async.AwaitTask
-                return Ok()
-            with
-            | :? RpcException as ex when ex.StatusCode = StatusCode.NotFound -> return Ok()
-            | ex -> return Error ex.Message
+            match int response.StatusCode with
+            | code when code >= 200 && code < 300 -> return Ok()
+            | 404 -> return Ok()
+            | code -> return Error(sprintf "GCP DeleteSecret failed (%d): %s" code body)
         }
 
         member _.ListKeys(scopeId) = async {
             let prefix = Naming.scopePrefix scopeId
+            let projectId = config.ProjectId
             let results = System.Collections.Generic.List<string>()
-            // Filter syntax — Secret Manager supports prefix filters
-            // on the `name` field (`name:toolup_{scopeId}_*`). The
-            // wildcard semantics aren't fully spec'd across SDK
-            // versions, so we defensively prefix-strip below.
-            let request = ListSecretsRequest()
-            request.Parent <- parent
-            request.Filter <- $"name:{prefix}"
+            let mutable pageToken: string option = None
+            let mutable keepGoing = true
 
-            let pageable = client.ListSecretsAsync request
-            let enumerator = pageable.GetAsyncEnumerator()
+            while keepGoing do
+                let queryParts = [
+                    // Server-side filter on the `name` field —
+                    // Secret Manager accepts the prefix-as-substring
+                    // form `name:toolup_{scopeId}_`. The Uri.Escape
+                    // keeps the colon legible on the wire.
+                    "filter=" + Uri.EscapeDataString(sprintf "name:%s" prefix)
+                    match pageToken with
+                    | Some t -> "pageToken=" + Uri.EscapeDataString t
+                    | None -> ()
+                ]
 
-            try
-                let mutable keepGoing = true
+                let url = Rest.secretsCollection projectId + "?" + String.concat "&" queryParts
 
-                while keepGoing do
-                    let! hasNext = enumerator.MoveNextAsync().AsTask() |> Async.AwaitTask
+                use! response = withToken (fun () -> Rest.buildGet url)
+                let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
-                    if hasNext then
-                        // Secret.Name is the full resource name
-                        // `projects/{p}/secrets/{secretId}`; recover
-                        // the secretId, then strip the scope prefix
-                        // to get the original key.
-                        let secret = enumerator.Current
+                if not response.IsSuccessStatusCode then
+                    return! async.Return(failwithf "GCP ListSecrets failed (%d): %s" (int response.StatusCode) body)
 
-                        match Naming.extractSecretId secret.Name with
-                        | Some sid ->
-                            match Naming.stripPrefix prefix sid with
-                            | Some k -> results.Add k
-                            | None -> ()
+                let names, nextToken = Rest.readSecretListPage body
+
+                for fullName in names do
+                    // `name` is the full resource name
+                    // `projects/{p}/secrets/{secretId}`; recover the
+                    // secretId, then strip the scope prefix to get
+                    // the original key.
+                    match Naming.extractSecretId fullName with
+                    | Some sid ->
+                        match Naming.stripPrefix prefix sid with
+                        | Some k -> results.Add k
                         | None -> ()
-                    else
-                        keepGoing <- false
-            finally
-                enumerator.DisposeAsync().AsTask().Wait()
+                    | None -> ()
+
+                match nextToken with
+                | Some t -> pageToken <- Some t
+                | None -> keepGoing <- false
 
             return results |> List.ofSeq
         }
@@ -261,10 +614,10 @@ type GcpSecretManagerSecretStore(config: GcpSecretManagerConfig) =
 // ─── Public entry points ─────────────────────────────────────────────
 
 /// Construct an `ISecretStore` from a `GcpSecretManagerConfig`. The
-/// `SecretManagerServiceClient` is initialised eagerly here; the
-/// underlying gRPC channel connects lazily on first call. Bad
-/// project ID / missing ADC credentials surface on first request as
-/// an `RpcException`, not at composition.
+/// `HttpClient` + token cache are initialised eagerly here; the first
+/// secret operation triggers the lazy token fetch. Bad project ID,
+/// missing credentials, or an unreachable metadata server surface on
+/// first request, not at composition.
 let create (config: GcpSecretManagerConfig) : ISecretStore =
     new GcpSecretManagerSecretStore(config) :> ISecretStore
 
@@ -282,22 +635,20 @@ let fromEnv () : ISecretStore option =
 // ─── Phase 9c portability audit (six rules) ──────────────────────────
 //
 // 1. Identity by value — `ISecretStore` returns `string option` and
-//    `Result<unit, string>`; never a GCP SDK live handle or a gRPC
-//    channel.
+//    `Result<unit, string>`; never an HttpClient handle or a cached
+//    bearer token.
 // 2. Async at every boundary — every interface method returns
-//    `Async<_>`; SDK Tasks bridged via `Async.AwaitTask`.
-// 3. Retry as data — none expressed by this companion. The Google
-//    Cloud client libraries carry their own gRPC-level retry policy
-//    (idempotent reads retry on `Unavailable` etc.); the companion
-//    stays pure pass-through and the deployment can override via
-//    `SecretManagerServiceClientBuilder` if needed.
-// 4. Stateless between calls — the cached `SecretManagerServiceClient`
-//    is per-project not per-secret; no in-memory state survives
-//    across method calls. Distributed-safe: any node with the same
-//    ADC identity produces identical results.
+//    `Async<_>`; HttpClient Tasks bridged via `Async.AwaitTask`.
+// 3. Retry as data — none expressed by this companion. HttpClient's
+//    `SocketsHttpHandler` can be configured for retry / timeout if
+//    the deployment needs it; the companion stays pure pass-through.
+// 4. Stateless between calls — the cached OAuth access token is
+//    process-local, derived from the same on-disk / metadata-server
+//    credential each node observes. Distributed-safe: any node with
+//    the same ADC identity produces identical results.
 // 5. No cross-shard ordering — Secret Manager makes no global
 //    ordering promises across secrets, and this companion makes
-//    none either. `ListKeys` order is whatever `ListSecretsAsync`
-//    returns (page-by-page, no guaranteed sort).
+//    none either. `ListKeys` order is whatever the REST `ListSecrets`
+//    endpoint returns (page-by-page, no guaranteed sort).
 // 6. Precision at the lower bound — N/A; `ISecretStore` has no
 //    timing semantics.
