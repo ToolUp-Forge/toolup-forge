@@ -134,6 +134,11 @@
         <Compile Include="Shared\JobApi.fs" />
         <!-- Phase 10h — OAuth token refresh substrate types (descriptor + result DU). -->
         <Compile Include="Shared\Types\OAuthRefreshTypes.fs" />
+        <!-- Phase 26 — typed deploy-manifest schema (format-neutral; the
+             operator's CLI serialises to TOML/YAML/JSON). Pure data; no
+             async surface; six-rule audit applies to the four substrate
+             interfaces (Server-tier), not this file. -->
+        <Compile Include="Shared\Types\DeployManifestTypes.fs" />
         <Compile Include="Shared\DataIngestionTypes.fs" />
         <Compile Include="Shared\DataIngestionApi.fs" />
         <Compile Include="Shared\MaintenanceApi.fs" />
