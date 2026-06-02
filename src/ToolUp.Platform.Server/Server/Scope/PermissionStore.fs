@@ -67,12 +67,14 @@ module private Json =
         | ModulePermission.Read -> "Read"
         | ModulePermission.Write -> "Write"
         | ModulePermission.Admin -> "Admin"
+        | ModulePermission.SchemaOnly -> "SchemaOnly"
 
     let private stringToPermission =
         function
         | "Read" -> Some ModulePermission.Read
         | "Write" -> Some ModulePermission.Write
         | "Admin" -> Some ModulePermission.Admin
+        | "SchemaOnly" -> Some ModulePermission.SchemaOnly
         | _ -> None
 
     let private permsToStrings (perms: ModulePermission list) =

@@ -8,6 +8,15 @@ namespace ToolUp.Platform
 /// implies `Read`; `Read` stands alone. Users may be granted any
 /// combination; the helpers normalise the hierarchy when checking.
 ///
+/// `SchemaOnly` is the Phase 30d substrate role: the holder may call
+/// `IDataCatalog.GetSchema` / `GetSyntheticSample` to see what data
+/// exists and iterate against synthetic samples, but every real-row
+/// read path is structurally refused. Outside the read-side hierarchy
+/// (`SchemaOnly` does NOT imply `Read`, and `Read` does NOT imply
+/// `SchemaOnly`) — the two grants describe different access intents
+/// and a partner who is given `SchemaOnly` must not silently inherit
+/// real-data access by being later granted `Read`.
+///
 /// `RequireQualifiedAccess` is mandatory because `Admin` collides with
 /// `TeamRole.Admin` (different concept: module-level perm vs team
 /// membership role). Forcing `ModulePermission.Admin` at call sites
@@ -23,16 +32,35 @@ type ModulePermission =
     /// module defaults, manage per-module resources). Does not imply
     /// team-scope admin — that's `TeamRole.Admin`.
     | Admin
+    /// Phase 30d — partner-sandbox grant. The holder can call
+    /// `IDataCatalog.GetSchema` + `GetSyntheticSample` to discover data
+    /// shapes and iterate against deterministically-generated synthetic
+    /// rows, but every path that would return a real-row blob is
+    /// refused with a `SchemaOnlyAccessAttempted` audit event. Does
+    /// NOT imply `Read` — a partner who acquires real-data access must
+    /// be granted `Read` explicitly. Intended for federated cross-
+    /// instance partner tenants and any deployment that wants to expose
+    /// "what data exists" without exposing "what's in it".
+    | SchemaOnly
 
 module ModulePermission =
     /// Does holding `granted` satisfy a requirement of `required`?
-    /// Encodes the Read / Write / Admin hierarchy.
+    /// Encodes the Read / Write / Admin hierarchy plus the
+    /// Phase 30d `SchemaOnly` carve-out. `Admin` / `Write` / `Read` all
+    /// satisfy a `SchemaOnly` requirement (more authority covers less —
+    /// any real-data reader can trivially see schemas + synthetic
+    /// samples). The reverse is structurally blocked: `SchemaOnly` does
+    /// NOT satisfy `Read` / `Write` / `Admin`, so a partner whose only
+    /// grant is `SchemaOnly` cannot inherit real-data access.
     let implies (granted: ModulePermission) (required: ModulePermission) =
         match granted, required with
         | ModulePermission.Admin, _ -> true
         | ModulePermission.Write, ModulePermission.Write
-        | ModulePermission.Write, ModulePermission.Read -> true
-        | ModulePermission.Read, ModulePermission.Read -> true
+        | ModulePermission.Write, ModulePermission.Read
+        | ModulePermission.Write, ModulePermission.SchemaOnly -> true
+        | ModulePermission.Read, ModulePermission.Read
+        | ModulePermission.Read, ModulePermission.SchemaOnly -> true
+        | ModulePermission.SchemaOnly, ModulePermission.SchemaOnly -> true
         | _ -> false
 
 /// Persisted per-team permission document. One per team, stored under

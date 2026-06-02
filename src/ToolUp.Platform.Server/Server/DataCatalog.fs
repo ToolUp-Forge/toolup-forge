@@ -71,3 +71,22 @@ type DataCatalog(registrations: DataTypeRegistration list, objectStore: IDataObj
             let! all = objectStore.ListObjects scopeId
             return all |> List.filter (fun obj -> obj.DataType = typeId)
         }
+
+        member _.GetSyntheticSample(typeId, count, seed) = async {
+            // Schema lookup mirrors GetSchema's path — picks the first
+            // registered schema for `typeId` across producers (catalog
+            // contract is "first declaration wins" for cross-module
+            // shared shapes).
+            let schema =
+                byId
+                |> Map.tryFind typeId
+                |> Option.bind (fun rs -> rs |> List.tryPick (fun r -> r.DataType.Info.Schema))
+
+            // In-process cap is the generator's `Int32.MaxValue` ceiling;
+            // the per-scope partner-sandbox cap is enforced by the gate
+            // that fronts this method (the Phase 30d shielding layer),
+            // not by the substrate generator. Keeps SyntheticSampleGenerator
+            // testable in isolation and respects the SDK's "substrate
+            // doesn't read config" rule.
+            return SyntheticSampleGenerator.generate typeId schema count seed System.Int32.MaxValue
+        }

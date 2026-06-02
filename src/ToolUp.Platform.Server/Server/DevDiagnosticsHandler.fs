@@ -309,6 +309,7 @@ let private permissionName (perm: ModulePermission) =
     | ModulePermission.Read -> "Read"
     | ModulePermission.Write -> "Write"
     | ModulePermission.Admin -> "Admin"
+    | ModulePermission.SchemaOnly -> "SchemaOnly"
 
 /// Runtime detection of whether the entry assembly was compiled with
 /// JIT optimisations disabled (the `Debug` configuration). Replaces the

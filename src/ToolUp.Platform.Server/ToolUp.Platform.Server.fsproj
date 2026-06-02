@@ -141,6 +141,10 @@
              (Region, Slug) compound index for O(1) slug uniqueness. -->
         <Compile Include="Server\EntityStoreTenantFleet.fs" />
         <Compile Include="Server\IDataCatalog.fs" />
+        <!-- Phase 30d — deterministic seeded generator for synthetic
+             samples; powers IDataCatalog.GetSyntheticSample under the
+             ModulePermission.SchemaOnly partner-sandbox role. -->
+        <Compile Include="Server\SyntheticSampleGenerator.fs" />
         <Compile Include="Server\DataCatalog.fs" />
         <Compile Include="Server\IResultStore.fs" />
         <Compile Include="Server\ILineageStore.fs" />

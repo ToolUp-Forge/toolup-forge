@@ -35,6 +35,7 @@ let private permissionToString =
     | ModulePermission.Read -> "Read"
     | ModulePermission.Write -> "Write"
     | ModulePermission.Admin -> "Admin"
+    | ModulePermission.SchemaOnly -> "SchemaOnly"
 
 let private permissionsToCsv (perms: ModulePermission list) =
     perms |> List.map permissionToString |> String.concat ","

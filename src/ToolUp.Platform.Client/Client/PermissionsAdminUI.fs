@@ -134,6 +134,7 @@ let private allPermLevels: ModulePermission list = [
     ModulePermission.Read
     ModulePermission.Write
     ModulePermission.Admin
+    ModulePermission.SchemaOnly
 ]
 
 let private permLabel (p: ModulePermission) =
@@ -141,6 +142,7 @@ let private permLabel (p: ModulePermission) =
     | ModulePermission.Read -> "Read"
     | ModulePermission.Write -> "Write"
     | ModulePermission.Admin -> "Admin"
+    | ModulePermission.SchemaOnly -> "Schema-only"
 
 let private toggleInList (p: ModulePermission) (current: ModulePermission list) =
     if List.contains p current then

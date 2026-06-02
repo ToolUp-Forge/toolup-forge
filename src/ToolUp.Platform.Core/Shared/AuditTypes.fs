@@ -1507,6 +1507,68 @@ type ArtifactRejectedPayload = {
     Reason: string
 }
 
+/// Phase 30d — a `ModulePermission.SchemaOnly` partner-sandbox caller
+/// invoked `IDataCatalog.GetSyntheticSample` successfully. Recorded
+/// under `_platform.audit` with `SourceModule` derived per call site.
+/// Volume note: high-cardinality for chatty partner integrations
+/// (each iteration loop call emits a row), so the payload is
+/// metadata-only — no synthetic bytes travel through the trail. The
+/// `Seed` field IS recorded so a deployment can prove an
+/// exfiltration-style "partner generated thousands of differing
+/// seeds" pattern after the fact.
+type SyntheticSampleGeneratedPayload = {
+    /// Acting `AccessContext.UserId` at the moment of the call. Pinned
+    /// to a real principal — anonymous callers should never reach this
+    /// path (the gating layer refuses them earlier).
+    UserId: string
+    /// `DataTypeId` the sample was generated for.
+    TypeId: string
+    /// Number of rows requested. May exceed the configured per-partner
+    /// cap; in that case the actual emitted row count is
+    /// `min(requested, cap)` (see `EmittedCount`).
+    RequestedCount: int
+    /// Actual rows emitted after the per-partner cap clamped the
+    /// request. Always `<= RequestedCount`.
+    EmittedCount: int
+    /// Seed passed by the caller. Recorded verbatim so forensic
+    /// review can detect "thousands of differing seeds in one
+    /// session" exfiltration patterns.
+    Seed: int
+    /// Per-partner cap that was applied (from
+    /// `_platform.notification_prefs.schemaOnly.maxSampleRows` or the
+    /// SDK default when unset).
+    AppliedMaxRows: int
+}
+
+/// Phase 30d — a `ModulePermission.SchemaOnly` caller attempted to
+/// access a real-row API path; the substrate refused before any real
+/// data was read. Emitted by every shield site so a deployment can
+/// dashboard "refusal rate by partner" as a leading-indicator metric
+/// for credential leak / misconfiguration / hostile activity. Distinct
+/// from `SurfaceDenied` (Phase 66 `SurfaceEnforcementMiddleware` —
+/// surface-level deny) because the SchemaOnly refusal happens at the
+/// substrate / handler layer, not at the route surface.
+type SchemaOnlyAccessAttemptedPayload = {
+    /// Acting `AccessContext.UserId`. Required for forensics —
+    /// anonymous callers do not reach this path (the surface refuses
+    /// them earlier).
+    UserId: string
+    /// Module name the caller was attempting to read. Mirrors the
+    /// `IPermissionStore` key shape so admin queries can correlate
+    /// refusals with team-permission grants.
+    ModuleName: string
+    /// Short stable label for the substrate path that fired the
+    /// refusal — `"IDataObjectStore.Get"`, `"IDataObjectStore.ListObjects"`,
+    /// `"IDataCatalog.ListObjects"`, `"IFileManagementApi.GetFileContent"`,
+    /// etc. Operator dashboards group refusals by call site so a
+    /// regressed shield is visible immediately.
+    AttemptedPath: string
+    /// Best-effort identifier for the requested resource (object id,
+    /// file name, scope id, etc.). Empty string when the refusal
+    /// happened before any identifier could be resolved.
+    AttemptedResource: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -1830,6 +1892,16 @@ type AuditEvent =
     /// query on this case to surface refusal rates without scanning
     /// every verify row.
     | ArtifactRejected of ArtifactRejectedPayload
+    /// Phase 30d — `IDataCatalog.GetSyntheticSample` returned
+    /// synthetic rows for a `ModulePermission.SchemaOnly` partner-
+    /// sandbox caller. Payload is metadata-only (count + seed) — no
+    /// synthetic bytes travel.
+    | SyntheticSampleGenerated of SyntheticSampleGeneratedPayload
+    /// Phase 30d — a `ModulePermission.SchemaOnly` caller attempted
+    /// to access a real-row API path and was refused before any real
+    /// data was read. Distinct from `SurfaceDenied` — fires at the
+    /// substrate / handler layer, not at the route surface.
+    | SchemaOnlyAccessAttempted of SchemaOnlyAccessAttemptedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1916,6 +1988,8 @@ module AuditEvent =
         | ArtifactSigned _ -> "ArtifactSigned"
         | ArtifactVerified _ -> "ArtifactVerified"
         | ArtifactRejected _ -> "ArtifactRejected"
+        | SyntheticSampleGenerated _ -> "SyntheticSampleGenerated"
+        | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

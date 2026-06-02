@@ -167,6 +167,10 @@ let private decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
         | "ArtifactSigned" -> Some(ArtifactSigned(fromAuditJson<ArtifactSignedPayload> evt.Payload))
         | "ArtifactVerified" -> Some(ArtifactVerified(fromAuditJson<ArtifactVerifiedPayload> evt.Payload))
         | "ArtifactRejected" -> Some(ArtifactRejected(fromAuditJson<ArtifactRejectedPayload> evt.Payload))
+        | "SyntheticSampleGenerated" ->
+            Some(SyntheticSampleGenerated(fromAuditJson<SyntheticSampleGeneratedPayload> evt.Payload))
+        | "SchemaOnlyAccessAttempted" ->
+            Some(SchemaOnlyAccessAttempted(fromAuditJson<SchemaOnlyAccessAttemptedPayload> evt.Payload))
         | _ -> None
     with _ ->
         None
@@ -281,6 +285,8 @@ type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger) =
         | ArtifactSigned p -> toAuditJson p
         | ArtifactVerified p -> toAuditJson p
         | ArtifactRejected p -> toAuditJson p
+        | SyntheticSampleGenerated p -> toAuditJson p
+        | SchemaOnlyAccessAttempted p -> toAuditJson p
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {
