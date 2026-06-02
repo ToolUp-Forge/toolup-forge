@@ -336,12 +336,31 @@ let private publishDefinition: AIToolDefinition = {
             Required = false
             Default = None
         }
+        {
+            Name = "collisionPolicy"
+            Type = "string"
+            Description =
+                "What to do when the slug already has a published page. `overwrite` (default) writes regardless — previous version stays in the entity store's version history. `reject` returns an error and refuses to publish. `suffix` finds the next free slug (`slug-2`, `slug-3`, …) and publishes there; the returned `slug` reflects the actual slug used."
+            Required = false
+            Default = Some "overwrite"
+        }
     ]
     SourceModule = "ToolUp.Platform"
     EmitsActions = None
     Location = ServerResident
     Surface = Both
 }
+
+let private parseCollisionPolicy (raw: string option) : SlugCollisionPolicy =
+    match raw with
+    | Some s ->
+        match s.ToLowerInvariant() with
+        | "reject"
+        | "rejectifexists" -> RejectIfExists
+        | "suffix"
+        | "autosuffix" -> AutoSuffix
+        | _ -> OverwriteExisting
+    | None -> OverwriteExisting
 
 let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string> = async {
     let parsed =
@@ -363,25 +382,26 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
                 getStr "description",
                 getStr "layout",
                 getStr "canonicalUrl",
-                getStr "lang"
+                getStr "lang",
+                getStr "collisionPolicy"
             )
         with _ ->
             None
 
     match parsed with
     | None
-    | Some(None, _, _, _, _, _, _) ->
+    | Some(None, _, _, _, _, _, _, _) ->
         return
             fableSerialize {|
                 error = "Required argument 'id' is missing. Call list_narratives first to get valid ids."
             |}
-    | Some(_, None, _, _, _, _, _) ->
+    | Some(_, None, _, _, _, _, _, _) ->
         return
             fableSerialize {|
                 error =
                     "Required argument 'slug' is missing. Pass a URL slug like 'blog/q3-release' (no leading slash)."
             |}
-    | Some(Some idText, Some slug, titleOpt, descOpt, layoutOpt, canonicalOpt, langOpt) ->
+    | Some(Some idText, Some slug, titleOpt, descOpt, layoutOpt, canonicalOpt, langOpt, collisionOpt) ->
         match Guid.TryParse idText with
         | false, _ ->
             return
@@ -390,56 +410,115 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
                     id = idText
                 |}
         | true, id ->
-            let! entry = NarrativePublisher.get ctx id
+            // Phase 80b — per-request authoriser gate. If an
+            // AIPublishAuthoriser is registered, call it before
+            // doing any further work; a `false` return short-
+            // circuits to an unauthorised error response.
+            let! authorised =
+                match ctx.RequestServices.GetService(typeof<AIPublishAuthoriser>) with
+                | :? AIPublishAuthoriser as (AIPublishAuthoriser f) -> f ctx
+                | _ -> async { return true }
 
-            match entry with
-            | None ->
+            if not authorised then
                 return
                     fableSerialize {|
                         error =
-                            "No narrative with that id is visible to this scope. It may belong to a different user or team, or have been evicted."
+                            "This session is not authorised to publish. The deployment's AIPublishAuthoriser refused the request."
                         id = idText
+                        slug = slug
                     |}
-            | Some entry ->
-                // Apply caller-supplied overrides onto the document
-                // before handing to the publisher. Overrides win over
-                // document fields when present.
-                let docWithOverrides = {
-                    entry.Document with
-                        Lang = langOpt |> Option.orElse entry.Document.Lang
-                        CanonicalUrl = canonicalOpt |> Option.orElse entry.Document.CanonicalUrl
-                }
+            else
+                let! entry = NarrativePublisher.get ctx id
 
-                let publisher =
-                    match ctx.RequestServices.GetService(typeof<INarrativePagePublisher>) with
-                    | :? INarrativePagePublisher as p -> Some p
-                    | _ -> None
-
-                match publisher with
+                match entry with
                 | None ->
                     return
                         fableSerialize {|
                             error =
-                                "No INarrativePagePublisher is registered. This deployment does not have PublicRendering wired in — publish_narrative is unavailable."
+                                "No narrative with that id is visible to this scope. It may belong to a different user or team, or have been evicted."
+                            id = idText
                         |}
-                | Some publisher ->
-                    let! outcome = publisher.PublishAsync(slug, titleOpt, descOpt, layoutOpt, docWithOverrides)
+                | Some entry ->
+                    // Apply caller-supplied overrides onto the document
+                    // before handing to the publisher. Overrides win over
+                    // document fields when present.
+                    let docWithOverrides = {
+                        entry.Document with
+                            Lang = langOpt |> Option.orElse entry.Document.Lang
+                            CanonicalUrl = canonicalOpt |> Option.orElse entry.Document.CanonicalUrl
+                    }
 
-                    match outcome with
-                    | PublishSucceeded canonicalSlug ->
+                    let collisionPolicy = parseCollisionPolicy collisionOpt
+
+                    let publisher =
+                        match ctx.RequestServices.GetService(typeof<INarrativePagePublisher>) with
+                        | :? INarrativePagePublisher as p -> Some p
+                        | _ -> None
+
+                    match publisher with
+                    | None ->
                         return
                             fableSerialize {|
-                                id = idText
-                                slug = canonicalSlug
-                                published = true
+                                error =
+                                    "No INarrativePagePublisher is registered. This deployment does not have PublicRendering wired in, or has not enabled AI publishing via withAIPublishEnabled true."
                             |}
-                    | PublishFailed reason ->
-                        return
-                            fableSerialize {|
-                                error = reason
-                                id = idText
-                                slug = slug
-                            |}
+                    | Some publisher ->
+                        let! outcome =
+                            publisher.PublishAsync(
+                                slug,
+                                titleOpt,
+                                descOpt,
+                                layoutOpt,
+                                collisionPolicy,
+                                docWithOverrides
+                            )
+
+                        match outcome with
+                        | PublishSucceeded canonicalSlug ->
+                            return
+                                fableSerialize {|
+                                    id = idText
+                                    slug = canonicalSlug
+                                    published = true
+                                |}
+                        | PublishFailed reason ->
+                            return
+                                fableSerialize {|
+                                    error = reason
+                                    id = idText
+                                    slug = slug
+                                |}
+}
+
+// ─── list_layouts ────────────────────────────────────────────────
+
+let private listLayoutsDefinition: AIToolDefinition = {
+    Name = "list_layouts"
+    Description =
+        "List the public-rendering layout names registered for this deployment. Use this before `publish_narrative` to pick an appropriate `layout` argument (otherwise the publisher silently falls back to the first-registered layout). Returns an empty array when no `ILayoutCatalog` is registered (PublicRendering not wired in)."
+    Parameters = []
+    SourceModule = "ToolUp.Platform"
+    EmitsActions = None
+    Location = ServerResident
+    Surface = Both
+}
+
+let private executeListLayouts (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
+    let catalog =
+        match ctx.RequestServices.GetService(typeof<ILayoutCatalog>) with
+        | :? ILayoutCatalog as c -> Some c
+        | _ -> None
+
+    match catalog with
+    | None ->
+        return
+            fableSerialize {|
+                layouts = ([]: string list)
+                note = "no layout catalog registered"
+            |}
+    | Some c ->
+        let names = c.ListLayoutNames()
+        return fableSerialize {| layouts = names |}
 }
 
 // ─── Registration ────────────────────────────────────────────────
@@ -450,4 +529,5 @@ let builtInTools: RegisteredTool list = [
     createTool getDefinition executeGet
     createTool getSectionDefinition executeGetSection
     createTool publishDefinition executePublish
+    createTool listLayoutsDefinition executeListLayouts
 ]

@@ -274,7 +274,175 @@ Phase 80a is additive — revert the commit. Deployments that already started us
 
 ## What this leaves open (productisation, not substrate)
 
-- **Authorisation gating.** `publish_narrative` writes to `_public` scope unconditionally. Production needs an RBAC / permission gate before exposing this tool to untrusted users.
-- **Collision policy.** `IEntityStore.Save` overwrites by slug — repeat publishes silently replace the prior version. Real editorial flows want explicit `fail` / `overwrite` / `auto-rename` semantics.
-- **Layout discovery.** The AI doesn't know which layouts are registered. A `list_layouts` tool closes this loop.
-- **Feed aggregation.** Per-page Atom via `?format=atom` is shipped; a site-wide `/feed.atom` aggregator that pulls recent published pages from `IEntityStore` is a small follow-on — `NarrativeAtom.renderFeed` already exists.
+→ All four items below closed in **Phase 80b** (below). Substrate-side gap section retained for historical reference.
+
+- ~~**Authorisation gating.**~~ Closed by `withAIPublishEnabled` toggle + `withAIPublishAuthoriser` per-request gate (Phase 80b).
+- ~~**Collision policy.**~~ Closed by `SlugCollisionPolicy` parameter on `INarrativePagePublisher.PublishAsync` + `collisionPolicy` AI tool parameter (Phase 80b).
+- ~~**Layout discovery.**~~ Closed by `ILayoutCatalog` + `list_layouts` AI tool (Phase 80b).
+- ~~**Feed aggregation.**~~ Closed by `NarrativeFeedHandler` + `withFeed` compose helper (Phase 80b).
+
+---
+
+# Phase 80b — Gating + collision policy + layout discovery + feed aggregation
+
+**Status:** Shipped.
+**Scope:** Closes the four productisation gaps Phase 80a left open. All additive on the substrate side; one behavioural change to the Phase 80a auto-registration noted below.
+
+## What changes
+
+### 1. Compose-time gating for `publish_narrative` (BEHAVIOURAL — supersedes Phase 80a default)
+
+Phase 80a unconditionally registered `INarrativePagePublisher` in DI when public rendering was enabled. Phase 80b makes that registration **conditional on a compose-time toggle**:
+
+```fsharp
+let app =
+    PublicRenderingServerApp.create ()
+    |> PublicRenderingServerApp.withConfig serverConfig
+    |> PublicRenderingServerApp.withLayout (LayoutName "default") defaultLayout
+    |> PublicRenderingServerApp.withAIPublishEnabled true           // NEW — required to expose publish_narrative
+    |> PublicRenderingServerApp.withAIPublishAuthoriser authoriser  // NEW — optional per-request gate
+```
+
+- **`withAIPublishEnabled false`** (the new default) — `INarrativePagePublisher` is not registered; `publish_narrative` returns "no publisher registered, or not enabled via withAIPublishEnabled true".
+- **`withAIPublishEnabled true`** — publisher is registered; if no authoriser is wired, every AI request that resolves the tool can publish.
+- **`withAIPublishAuthoriser (fun ctx -> async { return ... })`** — per-request gate. `false` returns cause `publish_narrative` to refuse with an unauthorised error before the publisher is invoked.
+
+The authoriser signature is `HttpContext -> Async<bool>`, so deployments can plumb in RBAC role checks, per-team permissions, claim inspection, or any other gating policy without the substrate taking a hard dep on `IPermissionStore`.
+
+**Migration note for Phase 80a adopters:** if you started using `publish_narrative` between Phase 80a and 80b (unlikely — both shipped same session), add `withAIPublishEnabled true` to your compose root.
+
+### 2. `SlugCollisionPolicy` on `PublishAsync` (BREAKING signature change)
+
+`INarrativePagePublisher.PublishAsync` gains a `collisionPolicy: SlugCollisionPolicy` parameter (in fifth position, before `document`):
+
+```fsharp
+type SlugCollisionPolicy =
+    | OverwriteExisting     // Phase 80a behaviour
+    | RejectIfExists
+    | AutoSuffix
+```
+
+- `OverwriteExisting` — write regardless; previous version remains in `IDataObjectStore` history (recoverable via `IEntityStore.ListVersions` / `GetVersion`).
+- `RejectIfExists` — check first; return `PublishFailed` if any page already lives at the slug.
+- `AutoSuffix` — try `slug`, `slug-2`, `slug-3`, … up to 100 attempts; `PublishSucceeded` carries the slug actually used.
+
+The AI tool gains an optional `collisionPolicy` parameter (`"overwrite"` / `"reject"` / `"suffix"` — default `"overwrite"` for back-compat).
+
+External `INarrativePagePublisher` implementations recompile with a missing-parameter error and must update their `PublishAsync` signatures.
+
+### 3. `ILayoutCatalog` + `list_layouts` AI tool
+
+```fsharp
+type ILayoutCatalog =
+    abstract member ListLayoutNames: unit -> string list
+```
+
+Lives in Platform.Server alongside `INarrativePagePublisher`. Default implementation in PublicRendering (`PublicRenderingLayoutCatalog`) is backed by the layouts registered via `PublicRenderingServerApp.withLayout`. Registered as a DI singleton by `PublicRenderingCompose.run` whenever public rendering is enabled (no gating — read-only).
+
+New AI tool `list_layouts` resolves the catalog and returns the registered names. Empty result + `"note":"no layout catalog registered"` when called against a deployment without PublicRendering.
+
+Use case: assistant calls `list_layouts` → picks a sensible `layout` argument for `publish_narrative` instead of falling back silently to the first-registered one.
+
+### 4. `NarrativeFeedHandler` + `withFeed` compose helper
+
+```fsharp
+let app =
+    PublicRenderingServerApp.create ()
+    // ...
+    |> PublicRenderingServerApp.withFeed {
+        NarrativeFeedConfig.defaults with
+            Title = "ACME Blog"
+            SelfUrl = "/blog.atom"
+            AlternateUrl = "https://acme.example/blog"
+            Collection = Some "blog"
+            MaxEntries = 20
+       }
+```
+
+Each registered feed mounts a `route` handler at its `SelfUrl`. The handler:
+1. Walks `IPublicContentApi.ListPages("")` for file-loaded pages.
+2. Walks `IEntityStore.ListAll<PublicPageEntity>` for entity-store-overlay pages (where `publish_narrative` writes).
+3. Filters to Narrative-bodied pages matching the optional `Collection` filter.
+4. Sorts by `PublishedAt` descending (None last); caps at `MaxEntries`.
+5. Renders via `NarrativeAtom.renderFeed`.
+
+Non-Narrative bodies are skipped. For v1 this is acceptable — feed consumers usually want Narrative-shaped structured content. A future Markdown-body-to-feed-entry adapter is non-breaking when added.
+
+Caller can register multiple feeds (one whole-site + one per collection, typically).
+
+## Diff to apply (consumer side)
+
+### A. External `INarrativePagePublisher` implementations
+
+Add the `collisionPolicy` parameter:
+
+```fsharp
+// Before (Phase 80a)
+member _.PublishAsync(slug, titleOverride, descOverride, layoutHint, doc) = async { ... }
+
+// After (Phase 80b)
+member _.PublishAsync(slug, titleOverride, descOverride, layoutHint, collisionPolicy, doc) = async {
+    // Honour collisionPolicy:
+    //   - OverwriteExisting → write regardless (Phase 80a behaviour)
+    //   - RejectIfExists → check existing first, return PublishFailed if occupied
+    //   - AutoSuffix → walk slug, slug-2, slug-3, … until free
+}
+```
+
+### B. Direct `INarrativePagePublisher.PublishAsync` callers (rare — usually only the AI tool)
+
+Add `collisionPolicy` to the call site. For back-compat with Phase 80a behaviour pass `OverwriteExisting`.
+
+### C. Compose roots that want to use `publish_narrative` from AI
+
+Add `withAIPublishEnabled true` (and optionally `withAIPublishAuthoriser`):
+
+```fsharp
+let app =
+    PublicRenderingServerApp.create ()
+    |> PublicRenderingServerApp.withConfig serverConfig
+    |> PublicRenderingServerApp.withLayout (LayoutName "default") defaultLayout
+    |> PublicRenderingServerApp.withAIPublishEnabled true
+    // optionally:
+    |> PublicRenderingServerApp.withAIPublishAuthoriser (fun ctx -> async {
+        // Inspect ctx.User claims, ctx.Items["ToolUp.StorageScope"], etc.
+        // Return true for permitted subjects, false otherwise.
+        return true
+    })
+```
+
+### D. Compose roots that want Atom feeds
+
+Add one or more `withFeed` calls:
+
+```fsharp
+let app =
+    PublicRenderingServerApp.create ()
+    // ...
+    |> PublicRenderingServerApp.withFeed { NarrativeFeedConfig.defaults with Title = "..."; SelfUrl = "/feed.atom"; AlternateUrl = "..." }
+```
+
+## Verification
+
+1. **`dotnet build ToolUp.Forge.sln`** — clean. Phase 80b touches the same three sibling packages as 80a (Platform.Server, AI.Server, PublicRendering).
+2. **Gating off (default)** — deployment without `withAIPublishEnabled true` exposes `publish_narrative` to AI but every call returns the "not registered" error.
+3. **Gating on, no authoriser** — every AI user can publish.
+4. **Gating on with authoriser refusing** — `publish_narrative` returns the "unauthorised" error before invoking the publisher.
+5. **Collision policy reject** — publish to occupied slug returns the `RejectIfExists` error.
+6. **Collision policy suffix** — publish to occupied slug returns success with a `-2` (or higher) suffix in the response.
+7. **`list_layouts`** — returns the registered layout names; returns `{"layouts":[],"note":"no layout catalog registered"}` when PublicRendering isn't wired in.
+8. **Feed handler** — `GET /feed.atom` returns Atom XML with entries for every Narrative-bodied page published via `publish_narrative` (or registered via file-loaded markdown that uses ContentBody.Narrative). Sorted newest first.
+
+## Rollback
+
+Phase 80b changes are mostly additive; the breaking item is the `PublishAsync` signature. Rolling back means:
+- Drop the `collisionPolicy` parameter from external implementations.
+- Drop the new `with*` compose helpers from compose roots that adopted them.
+- Phase 80a's unconditional `INarrativePagePublisher` registration returns (the `withAIPublishEnabled` gate goes away).
+
+## What this leaves truly open
+
+All substrate gaps are now closed. Remaining items are productisation polish:
+- **AI authoring UX.** The AI assistant emits `NarrativeDocument`s as opaque records; richer streaming construction (per-section emit, per-element validation) would tighten the author loop.
+- **Feed sources beyond Narrative bodies.** Markdown/Html bodies are skipped from feeds; a per-body summarisation pass would surface them too.
+- **Collection-aware indexing.** `ListAll<PublicPageEntity>` doesn't currently index by Collection; for high-volume sites a denormalised collection index would beat the per-request filter scan.

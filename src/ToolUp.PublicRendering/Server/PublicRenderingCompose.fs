@@ -62,6 +62,27 @@ type PublicRenderingServerApp = {
     /// Deployments wanting the runtime-edited overlay
     /// (`IEntityStore<PublicPage>`) supply their own impl here.
     ContentApiOverride: IPublicContentApi option
+    /// Phase 80b — gate exposing the `publish_narrative` AI tool.
+    /// When `false` (default), `INarrativePagePublisher` is not
+    /// registered in DI and the AI tool returns its graceful-
+    /// degradation error ("no publisher registered"). Set to `true`
+    /// only when the deployment has decided who can publish (either
+    /// via `AIPublishAuthoriser` below, or by accepting that all AI
+    /// users in the deployment can publish freely).
+    AIPublishEnabled: bool
+    /// Phase 80b — optional per-request authoriser for AI publishing.
+    /// When `Some f`, the AI tool calls `f ctx` before invoking
+    /// `INarrativePagePublisher.PublishAsync`; a `false` return causes
+    /// the tool to refuse with an "unauthorised" error. `None`
+    /// (default) means "allow whenever AIPublishEnabled = true" —
+    /// fine for trusted single-user deployments, dangerous in
+    /// multi-tenant ones.
+    AIPublishAuthoriser: AIPublishAuthoriser option
+    /// Phase 80b — optional Atom feed registrations. Each entry is
+    /// mounted as a route handler at its `SelfUrl`. Empty (default)
+    /// → no feeds emitted; the renderer registry's per-page
+    /// `?format=atom` still works.
+    Feeds: NarrativeFeedConfig list
 }
 
 module PublicRenderingServerApp =
@@ -73,6 +94,9 @@ module PublicRenderingServerApp =
         StructuredDataBuilders = Map.empty
         HotReload = true
         ContentApiOverride = None
+        AIPublishEnabled = false
+        AIPublishAuthoriser = None
+        Feeds = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -216,6 +240,44 @@ module PublicRenderingServerApp =
             ContentApiOverride = Some api
     }
 
+    /// Phase 80b — expose `publish_narrative` to AI tool callers.
+    /// Default `false` (the publisher isn't registered, the AI tool
+    /// gracefully degrades). Set to `true` ONLY after deciding who
+    /// can publish — either by composing `withAIPublishAuthoriser`
+    /// alongside this toggle, or by accepting that every AI user in
+    /// the deployment can write to the public-page surface.
+    let withAIPublishEnabled (enabled: bool) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            AIPublishEnabled = enabled
+    }
+
+    /// Phase 80b — register a per-request authoriser the AI tool
+    /// consults before calling `INarrativePagePublisher.PublishAsync`.
+    /// `authoriser ctx` returning `false` causes the tool to refuse
+    /// with an unauthorised error. Typical implementations check the
+    /// resolved `Subject` against an RBAC role or a per-team
+    /// permission. Composes with `withAIPublishEnabled true` — both
+    /// must be set for gated publish to work.
+    let withAIPublishAuthoriser
+        (authoriser: Microsoft.AspNetCore.Http.HttpContext -> Async<bool>)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        {
+            app with
+                AIPublishAuthoriser = Some(AIPublishAuthoriser authoriser)
+        }
+
+    /// Phase 80b — register an Atom feed at the supplied
+    /// `NarrativeFeedConfig.SelfUrl`. Mount one per collection
+    /// (or one whole-site feed with `Collection = None`). Feeds
+    /// surface every Narrative-bodied page matching the
+    /// `Collection` filter, sorted by `PublishedAt` descending,
+    /// capped at `MaxEntries`.
+    let withFeed (config: NarrativeFeedConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            Feeds = app.Feeds @ [ config ]
+    }
+
     /// Toggle the dev-mode hot-reload watcher. Defaults to `true`.
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
@@ -245,6 +307,9 @@ module PublicRenderingServerApp =
             let composeRedirects = app.Redirects
             let hotReload = app.HotReload
             let explicitApi = app.ContentApiOverride
+            let aiPublishEnabled = app.AIPublishEnabled
+            let aiPublishAuthoriser = app.AIPublishAuthoriser
+            let feeds = app.Feeds
 
             // Auto-register `PublicPageEntity` against the base
             // `ServerApp` so the default impl's entity-store fallthrough
@@ -290,16 +355,41 @@ module PublicRenderingServerApp =
 
                                 PublicContentApiImpl.create loader entityStore)
                     )
-                    .AddSingleton<INarrativePagePublisher>(
-                        System.Func<System.IServiceProvider, INarrativePagePublisher>(fun sp ->
-                            // Resolve the entity store at request time
-                            // rather than at registration so any decorator
-                            // wired by the consumer (encrypted store,
-                            // audit-logged store, etc.) participates.
-                            let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
-
-                            PublicRenderingNarrativePagePublisher.create entityStore registeredLayoutNames)
+                    .AddSingleton<ILayoutCatalog>(
+                        // Phase 80b — always exposed when public
+                        // rendering is enabled. Read-only view; no
+                        // authorisation concern.
+                        System.Func<System.IServiceProvider, ILayoutCatalog>(fun _sp ->
+                            PublicRenderingLayoutCatalog.create registeredLayoutNames)
                     )
+                |> fun s ->
+                    // Phase 80b — INarrativePagePublisher registration
+                    // is conditional on AIPublishEnabled. When off,
+                    // the slot stays empty and the AI tool's DI
+                    // resolution returns null → tool gracefully
+                    // degrades with the "no publisher registered"
+                    // error.
+                    if aiPublishEnabled then
+                        s.AddSingleton<INarrativePagePublisher>(
+                            System.Func<System.IServiceProvider, INarrativePagePublisher>(fun sp ->
+                                // Resolve the entity store at request time
+                                // rather than at registration so any decorator
+                                // wired by the consumer (encrypted store,
+                                // audit-logged store, etc.) participates.
+                                let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
+
+                                PublicRenderingNarrativePagePublisher.create entityStore registeredLayoutNames)
+                        )
+                    else
+                        s
+                |> fun s ->
+                    // Phase 80b — AIPublishAuthoriser registration.
+                    // When unset, the AI tool's DI resolution returns
+                    // null and the tool treats every request as
+                    // authorised (subject to AIPublishEnabled gating).
+                    match aiPublishAuthoriser with
+                    | Some a -> s.AddSingleton<AIPublishAuthoriser>(a)
+                    | None -> s
 
             // ─── Handler chain ───────────────────────────────────
             // Order: sitemap (specific route) → redirect (path-match
@@ -337,7 +427,24 @@ module PublicRenderingServerApp =
 
                     PublicPageHandler.handler api layouts next ctx
 
-            let publicRenderingHandlers = [ sitemapHandler; redirectHandler; exportHandler; pageHandler ]
+            // Phase 80b — one handler per registered feed, each
+            // mounted at its configured SelfUrl. The route check uses
+            // the standard Giraffe `route` combinator so feed URLs
+            // short-circuit before the catch-all page handler.
+            let feedHandlers: HttpHandler list =
+                feeds
+                |> List.map (fun feedConfig ->
+                    route feedConfig.SelfUrl
+                    >=> fun next ctx ->
+                        let api =
+                            ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                        NarrativeFeedHandler.handler feedConfig api next ctx)
+
+            let publicRenderingHandlers =
+                [ sitemapHandler; redirectHandler; exportHandler ]
+                @ feedHandlers
+                @ [ pageHandler ]
 
             let baseExt = appWithEntity.Extensions
 

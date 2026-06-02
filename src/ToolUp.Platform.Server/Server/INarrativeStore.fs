@@ -185,6 +185,40 @@ type NarrativePublishOutcome =
     | PublishSucceeded of slug: string
     | PublishFailed of reason: string
 
+/// Policy controlling what `INarrativePagePublisher.PublishAsync` does
+/// when the target slug already has a page.
+///
+/// - `OverwriteExisting` — write regardless. Latest publish wins.
+///   The previous version remains in `IDataObjectStore` history under
+///   the same `(entityType, entityId)` tuple (Phase 19 version chain),
+///   so the revision is recoverable via `IEntityStore.ListVersions` /
+///   `GetVersion` even when the head pointer has moved on. Phase 80a
+///   default.
+/// - `RejectIfExists` — check first; return `PublishFailed` if any
+///   page already lives at the slug. Use for editorial workflows that
+///   want explicit consent before overwriting.
+/// - `AutoSuffix` — if the slug is free, write it; if occupied, try
+///   `slug-2`, `slug-3`, … until a free slug is found. Returns the
+///   actual slug used via `PublishSucceeded`. Use for content-
+///   generating workflows that want collision-tolerance without
+///   author intervention.
+type SlugCollisionPolicy =
+    | OverwriteExisting
+    | RejectIfExists
+    | AutoSuffix
+
+/// Wrapper carrying an optional per-request gate on AI-driven publish
+/// operations. Deployments compose-time-register this when they want
+/// to restrict `publish_narrative` to specific subjects (admins,
+/// users with a `Publisher` role, etc.) without dragging
+/// `IPermissionStore` into the substrate.
+///
+/// The `Func` is called once per `publish_narrative` invocation with
+/// the request's `HttpContext`; returning `false` causes the AI tool
+/// to refuse with an "unauthorised" error. Absent registration, the
+/// tool publishes freely whenever the publisher is wired.
+type AIPublishAuthoriser = AIPublishAuthoriser of (Microsoft.AspNetCore.Http.HttpContext -> Async<bool>)
+
 /// Substrate seam that lets an AI tool (or any compose-time-wired
 /// handler) publish a `NarrativeDocument` as an externally-addressable
 /// page without depending on the implementation. The default
@@ -209,14 +243,31 @@ type INarrativePagePublisher =
     /// AI-emitted narratives where the document's analytics-shape title
     /// differs from the desired marketing title). `layoutHint` selects
     /// a registered layout name; implementations fall back to the
-    /// first-registered layout when `None` or unknown.
+    /// first-registered layout when `None` or unknown. `collisionPolicy`
+    /// controls behaviour when the slug already has a page — see
+    /// `SlugCollisionPolicy` for the semantics; pass `OverwriteExisting`
+    /// to preserve the Phase 80a default.
     abstract member PublishAsync:
         slug: string *
         titleOverride: string option *
         descriptionOverride: string option *
         layoutHint: string option *
+        collisionPolicy: SlugCollisionPolicy *
         document: NarrativeDocument ->
             Async<NarrativePublishOutcome>
+
+/// Compose-time catalog of registered layout names. Lets read-only
+/// consumers (the `list_layouts` AI tool, future admin UIs) discover
+/// which layouts a deployment has wired without coupling to the
+/// `PublicRenderingServerApp` record shape.
+///
+/// Implementations are pure read views over the registered map; calls
+/// are cheap and stateless.
+type ILayoutCatalog =
+    /// Names of every registered layout in insertion order. Empty list
+    /// when no layouts have been registered (an unusual but valid
+    /// compose-time state).
+    abstract member ListLayoutNames: unit -> string list
 
 /// Composition-root helpers for writing narratives from request-scoped
 /// Fable.Remoting handlers. Handlers resolve `INarrativeStore` and the

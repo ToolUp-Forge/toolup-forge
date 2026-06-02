@@ -52,43 +52,104 @@ type PublicRenderingNarrativePagePublisher(entityStore: IEntityStore, registered
         // their canonical form.
         raw.TrimStart('/').Trim()
 
-    interface INarrativePagePublisher with
-        member _.PublishAsync(slug, titleOverride, descriptionOverride, layoutHint, document) = async {
-            let canonicalSlug = sanitiseSlug slug
+    let slugExists (slug: string) : Async<bool> = async {
+        let! result =
+            entityStore.Get<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, slug)
 
-            if System.String.IsNullOrWhiteSpace canonicalSlug then
+        match result with
+        | Ok _ -> return true
+        | Error _ -> return false
+    }
+
+    /// Walk `slug`, `slug-2`, `slug-3`, … until a free slug is found.
+    /// Caps at 100 attempts to avoid a runaway when a misconfigured
+    /// IEntityStore reports every slug as occupied.
+    let rec findFreeSlug (baseSlug: string) (attempt: int) : Async<string option> = async {
+        if attempt > 100 then
+            return None
+        else
+            let candidate =
+                if attempt = 1 then
+                    baseSlug
+                else
+                    sprintf "%s-%d" baseSlug attempt
+
+            let! exists = slugExists candidate
+
+            if exists then
+                return! findFreeSlug baseSlug (attempt + 1)
+            else
+                return Some candidate
+    }
+
+    interface INarrativePagePublisher with
+        member _.PublishAsync(slug, titleOverride, descriptionOverride, layoutHint, collisionPolicy, document) = async {
+            let requestedSlug = sanitiseSlug slug
+
+            if System.String.IsNullOrWhiteSpace requestedSlug then
                 return PublishFailed "slug is required (received an empty / whitespace-only value)"
             else
-                let title =
-                    titleOverride
-                    |> Option.defaultValue (
-                        if System.String.IsNullOrWhiteSpace document.Title then
-                            "(untitled)"
-                        else
-                            document.Title
-                    )
-
-                let description =
-                    descriptionOverride |> Option.orElse document.Subtitle |> Option.defaultValue ""
-
-                let page: PublicPage = {
-                    Slug = Slug canonicalSlug
-                    Title = title
-                    Description = description
-                    Body = Narrative document
-                    Layout = resolveLayout layoutHint
-                    Frontmatter = Map.empty
-                    PublishedAt = Some DateTimeOffset.UtcNow
-                    Collection = None
+                // Resolve the target slug per collision policy. Reject
+                // and AutoSuffix both consult the entity store first;
+                // OverwriteExisting skips the check (the existing Save
+                // semantics already handle the overwrite).
+                let! resolvedSlug = async {
+                    match collisionPolicy with
+                    | OverwriteExisting -> return Some requestedSlug
+                    | RejectIfExists ->
+                        let! exists = slugExists requestedSlug
+                        if exists then return None else return Some requestedSlug
+                    | AutoSuffix -> return! findFreeSlug requestedSlug 1
                 }
 
-                let envelope = PublicPageEntity.fromPage page
+                match resolvedSlug with
+                | None ->
+                    match collisionPolicy with
+                    | RejectIfExists ->
+                        return
+                            PublishFailed(
+                                sprintf
+                                    "slug '%s' is already occupied (RejectIfExists policy); pass a different slug or use OverwriteExisting / AutoSuffix to proceed"
+                                    requestedSlug
+                            )
+                    | _ ->
+                        return
+                            PublishFailed(
+                                sprintf
+                                    "could not find a free slug starting from '%s' within 100 attempts"
+                                    requestedSlug
+                            )
+                | Some canonicalSlug ->
+                    let title =
+                        titleOverride
+                        |> Option.defaultValue (
+                            if System.String.IsNullOrWhiteSpace document.Title then
+                                "(untitled)"
+                            else
+                                document.Title
+                        )
 
-                let! result = entityStore.Save<PublicPageEntity>(PublicPageEntity.PublicScope, envelope)
+                    let description =
+                        descriptionOverride |> Option.orElse document.Subtitle |> Option.defaultValue ""
 
-                match result with
-                | Ok _ -> return PublishSucceeded canonicalSlug
-                | Error err -> return PublishFailed(sprintf "entity store rejected the save: %A" err)
+                    let page: PublicPage = {
+                        Slug = Slug canonicalSlug
+                        Title = title
+                        Description = description
+                        Body = Narrative document
+                        Layout = resolveLayout layoutHint
+                        Frontmatter = Map.empty
+                        PublishedAt = Some DateTimeOffset.UtcNow
+                        Collection = None
+                    }
+
+                    let envelope = PublicPageEntity.fromPage page
+
+                    let! result = entityStore.Save<PublicPageEntity>(PublicPageEntity.PublicScope, envelope)
+
+                    match result with
+                    | Ok _ -> return PublishSucceeded canonicalSlug
+                    | Error err -> return PublishFailed(sprintf "entity store rejected the save: %A" err)
         }
 
 module PublicRenderingNarrativePagePublisher =
@@ -97,3 +158,19 @@ module PublicRenderingNarrativePagePublisher =
     /// value so the DI registration carries the abstraction.
     let create (entityStore: IEntityStore) (layoutNames: LayoutName list) : INarrativePagePublisher =
         PublicRenderingNarrativePagePublisher(entityStore, layoutNames) :> INarrativePagePublisher
+
+// ─── Phase 80b — Layout catalog ────────────────────────────────
+
+/// `ILayoutCatalog` impl backed by the layouts registered on
+/// `PublicRenderingServerApp` at compose time. Read-only; the
+/// catalog snapshot is captured at construction and doesn't track
+/// later additions (compose-time registration is final after
+/// `PublicRenderingCompose.run` runs).
+type PublicRenderingLayoutCatalog(layoutNames: string list) =
+    interface ILayoutCatalog with
+        member _.ListLayoutNames() = layoutNames
+
+module PublicRenderingLayoutCatalog =
+    let create (layoutNames: LayoutName list) : ILayoutCatalog =
+        let strings = layoutNames |> List.map LayoutName.value
+        PublicRenderingLayoutCatalog(strings) :> ILayoutCatalog
