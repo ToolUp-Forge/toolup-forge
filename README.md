@@ -160,6 +160,19 @@ Contract test packs in `ToolUp.Platform.Tests` / `ToolUp.Forms.Tests` / `ToolUp.
 
 Each companion versions independently — `ToolUp.Platform.Core 0.3.0` can pair with `ToolUp.AI 0.5.0`. Compatibility documented per release.
 
+## Compatibility & migrations
+
+Every refactor that requires consumer-side changes ships a per-entry migration doc under [`./docs/migrations/`](./docs/migrations/). Each entry is a short, focused page covering:
+
+- **What changes** — narrative summary of the shape shift.
+- **Diff to apply** — copy-pasteable before/after blocks for each touched file.
+- **Verification steps** — concrete checks (`dotnet build`, startup-log diffs, etc.).
+- **Rollback** — how to revert if needed.
+
+**Adopting a new SDK release.** Bump `<ToolUpSdkVersion>` (or the relevant per-package `<PackageVersion>`) in your `Directory.Packages.props`, walk [`docs/migrations/`](./docs/migrations/) for any entries added since your previous version, and follow each entry's diff + verification steps in turn. Entries are scoped to one consumer-visible change apiece, so a multi-version jump is a sequence of small, independently-verifiable adoptions rather than a single cliff.
+
+If a release lands no consumer-visible changes, no migration entry is added — silence on a version bump means the upgrade is a pure `<PackageVersion>` edit.
+
 ## License
 
 [Apache License 2.0](LICENSE). Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK).
