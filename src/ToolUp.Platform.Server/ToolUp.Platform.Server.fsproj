@@ -136,6 +136,11 @@
         <Compile Include="Server\ITenantFleet.fs" />
         <Compile Include="Server\IDeployPipeline.fs" />
         <Compile Include="Server\IContainerScheduler.fs" />
+        <!-- Phase 26 — single-node default impl of ITenantFleet over
+             IEntityStore + IContainerScheduler + IDeployPipeline.
+             Per-tenant SemaphoreSlim for serialised state mutations;
+             (Region, Slug) compound index for O(1) slug uniqueness. -->
+        <Compile Include="Server\EntityStoreTenantFleet.fs" />
         <Compile Include="Server\IDataCatalog.fs" />
         <Compile Include="Server\DataCatalog.fs" />
         <Compile Include="Server\IResultStore.fs" />
