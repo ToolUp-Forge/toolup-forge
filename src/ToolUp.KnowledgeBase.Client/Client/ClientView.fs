@@ -4,7 +4,7 @@
 module KnowledgeBaseView
 
 open Feliz
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 open ClientModel
 open SharedTypes

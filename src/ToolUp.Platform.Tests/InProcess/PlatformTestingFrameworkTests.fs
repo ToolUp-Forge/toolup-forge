@@ -1,7 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.PlatformTestingFrameworkTests
 
 open System.Text
-open Elmish
+open ToolUp.Elmish
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage

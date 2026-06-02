@@ -1,4 +1,4 @@
-namespace Elmish
+namespace ToolUp.Elmish
 
 /// Which phase of the Elmish loop raised the exception. Populated by the
 /// runtime so the reporter doesn't have to infer from the error message

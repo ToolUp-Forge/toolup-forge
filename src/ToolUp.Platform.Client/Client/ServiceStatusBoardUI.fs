@@ -3,7 +3,7 @@
 
 module ServiceStatusBoardUI
 
-open Elmish
+open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform

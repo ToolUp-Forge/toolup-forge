@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-open Elmish
+open ToolUp.Elmish
 open Feliz
 
 // ─── Phase 57 — static-prerender substrate types ─────────────────

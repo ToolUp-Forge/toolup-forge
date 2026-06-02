@@ -3,7 +3,7 @@
 
 module ToolUp.Platform.Testing.ModuleHarness
 
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 
 // ─── Elmish module harness ────────────────────────────────────────────

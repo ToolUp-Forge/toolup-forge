@@ -3,7 +3,7 @@
 
 module MixedMode.Client
 
-open Elmish
+open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 

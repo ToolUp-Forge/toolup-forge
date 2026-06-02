@@ -1,8 +1,8 @@
-namespace Elmish.HMR
+namespace ToolUp.Elmish.HMR
 
 open Fable.Core
 open Fable.Core.JsInterop
-open Elmish
+open ToolUp.Elmish
 
 /// Vite / webpack HMR detection + state hand-off across module replaces.
 ///
@@ -109,28 +109,28 @@ module Program =
             stashTerminate terminate
             registerDisposeCallback terminate)
 
-    /// HMR-aware wrapper around `Elmish.Program.run`. In a Vite / webpack
+    /// HMR-aware wrapper around `ToolUp.Elmish.Program.run`. In a Vite / webpack
     /// dev build, tears the previous program down (disposing every
     /// `EffectHandle` and stopping every active subscription) before
     /// starting the new one — so background SSE / notification listeners
     /// don't leak across hot reloads.
     ///
     /// In production builds (no `import.meta.hot` / `module.hot`), this
-    /// is identical to `Elmish.Program.run`.
+    /// is identical to `ToolUp.Elmish.Program.run`.
     let run (program: Program<unit, 'model, 'msg, 'view>) =
         if hmrAvailable () then
             callPreviousTerminate ()
-            program |> withHmrDispatcherCapture |> Elmish.Program.run
+            program |> withHmrDispatcherCapture |> ToolUp.Elmish.Program.run
         else
-            Elmish.Program.run program
+            ToolUp.Elmish.Program.run program
 
     /// HMR-aware `runWith`.
     let runWith (arg: 'arg) (program: Program<'arg, 'model, 'msg, 'view>) =
         if hmrAvailable () then
             callPreviousTerminate ()
-            program |> withHmrDispatcherCapture |> Elmish.Program.runWith arg
+            program |> withHmrDispatcherCapture |> ToolUp.Elmish.Program.runWith arg
         else
-            Elmish.Program.runWith arg program
+            ToolUp.Elmish.Program.runWith arg program
 
     /// HMR-aware `withReactSynchronous` — passes through to the React
     /// renderer; the HMR teardown is wired separately at `Program.run`.
@@ -138,18 +138,18 @@ module Program =
         (placeholderId: string)
         (program: Program<'arg, 'model, 'msg, Fable.React.ReactElement>)
         =
-        Elmish.React.Program.withReactSynchronous placeholderId program
+        ToolUp.Elmish.React.Program.withReactSynchronous placeholderId program
 
     /// HMR-aware `withReactBatched`.
     let inline withReactBatched
         (placeholderId: string)
         (program: Program<'arg, 'model, 'msg, Fable.React.ReactElement>)
         =
-        Elmish.React.Program.withReactBatched placeholderId program
+        ToolUp.Elmish.React.Program.withReactBatched placeholderId program
 
     /// HMR-aware `withReactHydrate`.
     let inline withReactHydrate
         (placeholderId: string)
         (program: Program<'arg, 'model, 'msg, Fable.React.ReactElement>)
         =
-        Elmish.React.Program.withReactHydrate placeholderId program
+        ToolUp.Elmish.React.Program.withReactHydrate placeholderId program

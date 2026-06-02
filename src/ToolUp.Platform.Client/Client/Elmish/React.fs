@@ -1,10 +1,10 @@
-namespace Elmish.React
+namespace ToolUp.Elmish.React
 
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.React
 open Browser.Dom
-open Elmish
+open ToolUp.Elmish
 
 /// Render mode for the React renderer.
 [<RequireQualifiedAccess>]

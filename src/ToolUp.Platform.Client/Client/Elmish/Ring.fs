@@ -1,4 +1,4 @@
-namespace Elmish
+namespace ToolUp.Elmish
 
 [<Struct>]
 type internal RingState<'item> =

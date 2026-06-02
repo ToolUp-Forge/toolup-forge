@@ -1,4 +1,4 @@
-namespace Elmish
+namespace ToolUp.Elmish
 
 open System
 open System.Collections.Generic

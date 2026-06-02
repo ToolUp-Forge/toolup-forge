@@ -1,4 +1,4 @@
-namespace Elmish
+namespace ToolUp.Elmish
 
 /// Status of a single prefetch — three terminal states: still loading,
 /// successfully loaded, or failed with an exception.

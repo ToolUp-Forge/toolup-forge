@@ -3,7 +3,7 @@
 
 module ToolUp.AI.Client.PlatformAIKeysAdminUI
 
-open Elmish
+open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform

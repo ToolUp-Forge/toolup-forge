@@ -1,8 +1,8 @@
 module MinimalClient.Client
 
 open Fable.Core.JsInterop
-open Elmish
-open Elmish.React
+open ToolUp.Elmish
+open ToolUp.Elmish.React
 open Feliz
 
 importSideEffects "./index.css"

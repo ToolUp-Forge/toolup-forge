@@ -4,7 +4,7 @@
 module WebhookAdminUI
 
 open System
-open Elmish
+open ToolUp.Elmish
 open Feliz
 open Fable.Core
 open Fable.Core.JsInterop

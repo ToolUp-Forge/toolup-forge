@@ -4,7 +4,7 @@
 module ClientModel
 
 open ToolUp.Platform
-open Elmish
+open ToolUp.Elmish
 open SharedTypes
 open PlatformKnowledgeApi
 open ToolUp.Remoting.Client

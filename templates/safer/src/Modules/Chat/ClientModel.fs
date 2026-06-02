@@ -1,7 +1,7 @@
 module Chat.ClientModel
 
 open System
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 open Chat.SharedTypes
 

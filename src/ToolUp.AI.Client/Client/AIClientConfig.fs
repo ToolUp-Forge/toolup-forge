@@ -28,19 +28,19 @@ module ToolUp.AI.Client.AIClientConfig
 // Client.run directly.
 
 open System
-open Elmish
-open Elmish.React
+open ToolUp.Elmish
+open ToolUp.Elmish.React
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
 open ToolUp.AI
 
-// HMR is always open; the Elmish.HMR overrides detect the absence of
+// HMR is always open; the ToolUp.Elmish.HMR overrides detect the absence of
 // Vite's `import.meta.hot` at runtime and become identity functions in
 // production builds. Mirrors the SDK.Client.fs change made when
 // ToolUp.AI stopped carrying compile-time `#if DEBUG` gates.
-open Elmish.HMR
+open ToolUp.Elmish.HMR
 
 // ─── Side-panel MVU ───────────────────────────────────────────────
 // (Previously lived in Client.Model / Client.Msg in the shell.)

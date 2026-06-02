@@ -1,6 +1,6 @@
 module MyModule.ClientModel
 
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 open MyModule.SharedTypes
 

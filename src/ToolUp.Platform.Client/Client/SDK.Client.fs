@@ -3,20 +3,20 @@
 
 namespace ToolUp.Platform
 
-open Elmish
-open Elmish.React
+open ToolUp.Elmish
+open ToolUp.Elmish.React
 open Feliz
 open ProcessedDataTypes
 
 // ─── Shell MVU ────────────────────────────────────────────────────
 
-// HMR is always open; the Elmish.HMR overrides of `Program.run` /
+// HMR is always open; the ToolUp.Elmish.HMR overrides of `Program.run` /
 // `Program.withReactSynchronous` etc. detect the absence of Vite's
 // `import.meta.hot` at runtime and become identity functions in
 // production builds. The previous `#if DEBUG`-gated open was removed
 // when ToolUp.Platform stopped carrying compile-time gates (App-side
 // `#if DEBUG` is unaffected).
-open Elmish.HMR
+open ToolUp.Elmish.HMR
 
 module Client =
 

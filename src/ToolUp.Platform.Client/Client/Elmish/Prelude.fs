@@ -1,4 +1,4 @@
-namespace Elmish
+namespace ToolUp.Elmish
 
 /// Cross-platform logging shim. Used internally by the runtime; not part of
 /// the consumer-facing surface. `Log.onError` is the default seed for

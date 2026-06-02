@@ -1,6 +1,6 @@
 module Template.ClientModel
 
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 open Template.SharedTypes
 

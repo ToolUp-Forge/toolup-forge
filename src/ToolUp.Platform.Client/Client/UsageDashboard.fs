@@ -4,7 +4,7 @@
 module UsageDashboard
 
 open System
-open Elmish
+open ToolUp.Elmish
 open Feliz
 open Browser
 open Browser.Types

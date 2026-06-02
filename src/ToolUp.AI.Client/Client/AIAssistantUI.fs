@@ -4,7 +4,7 @@
 module ToolUp.AI.Client.AIAssistantUI
 
 open System
-open Elmish
+open ToolUp.Elmish
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.SimpleJson

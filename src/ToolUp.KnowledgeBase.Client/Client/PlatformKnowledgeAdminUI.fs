@@ -3,7 +3,7 @@
 
 module PlatformKnowledgeAdminUI
 
-open Elmish
+open ToolUp.Elmish
 open Feliz
 open Fable.Core.JsInterop
 open Toolup.UIToolkit

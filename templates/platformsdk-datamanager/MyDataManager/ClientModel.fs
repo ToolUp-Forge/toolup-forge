@@ -1,6 +1,6 @@
 module MyDataManager.ClientModel
 
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 open MyDataManager.SharedTypes
 
