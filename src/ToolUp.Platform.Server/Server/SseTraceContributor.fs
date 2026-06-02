@@ -28,7 +28,7 @@ type SseTraceContributor(manager: SSEConnectionManager) =
 
             // Render an anonymous record so the JSON shape is
             // self-describing (field names appear in the wire
-            // payload). FableJsonConverter handles anonymous
+            // payload). FableConverters handles anonymous
             // records, lists, Maps, and DateTime cleanly.
             let payload: obj =
                 box {|

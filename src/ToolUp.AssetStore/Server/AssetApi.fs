@@ -9,7 +9,7 @@ namespace ToolUp.AssetStore
 /// `AssetUploadHandler.uploadEndpoint` — because raw
 /// `byte[]`-in-Remoting is awkward for the React/Feliz side
 /// (one chunked-encoded request beats serialising the payload
-/// twice through Newtonsoft). The Remoting API below covers
+/// twice through the converter set). The Remoting API below covers
 /// the metadata + derivative-read paths.
 ///
 /// Mount at `/api/assets/`. Authentication is the SDK's

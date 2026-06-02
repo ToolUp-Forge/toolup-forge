@@ -38,7 +38,7 @@ open ToolUp.Platform.ConfigValidatorAggregator
 // **Wire format.** Hand-shaped DTO of primitives, strings, and lists —
 // no F# DUs round-trip through. Every DU on the report path is mapped
 // to its case name as a string so `System.Text.Json` produces a clean,
-// human-readable shape for `curl` / browser. No `FableJsonConverter`
+// human-readable shape for `curl` / browser. No `FableConverters`
 // dependency: this endpoint is for humans, not Fable.
 
 // ─── Report DTO ──────────────────────────────────────────────────────
@@ -672,7 +672,7 @@ let buildReport
 
 // ─── Renderers ───────────────────────────────────────────────────────
 
-// Canonical SDK JSON helper — `FableJsonConverter` round-trips F#
+// Canonical SDK JSON helper — `FableConverters` round-trips F#
 // records, `option`, and `Map<string,_>` losslessly. The dev endpoint
 // has no DUs on the wire (every DU on the report path is pre-mapped
 // to a case-name string), so the output stays human-friendly.

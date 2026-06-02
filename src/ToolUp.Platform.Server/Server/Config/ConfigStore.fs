@@ -9,7 +9,7 @@ open ToolUp.Platform.BlobStorage
 
 // ─── JSON helpers ────────────────────────────────────────────────
 
-/// Shared `FableJsonConverter` setup — same pattern as
+/// Shared `FableConverters` setup — same pattern as
 /// `BlobProviderProfile`. The converter handles F# records,
 /// DUs, and `option` types losslessly so modules can hand the store
 /// their domain records without hand-rolling a DTO layer.

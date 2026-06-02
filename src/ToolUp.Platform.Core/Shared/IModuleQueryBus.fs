@@ -4,7 +4,7 @@
 namespace ToolUp.Platform
 
 /// Caller → target-module request envelope. Payload is JSON (produced by
-/// a `FableJsonConverter`-compatible serialiser) so the wire format stays
+/// a `FableConverters`-compatible serialiser) so the wire format stays
 /// portable across in-process, Fable.Remoting, and future distributed
 /// (Akka cluster, Orleans) implementations. Typed request / response
 /// records live in `ToolUp-SharedTypes` — shared types never live in

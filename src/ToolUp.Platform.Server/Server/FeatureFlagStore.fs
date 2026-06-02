@@ -8,7 +8,7 @@ open ToolUp.Platform.BlobStorage
 
 // ─── JSON helpers ────────────────────────────────────────────────
 
-/// Shared `FableJsonConverter` setup — same pattern as `ConfigStore`
+/// Shared `FableConverters` setup — same pattern as `ConfigStore`
 /// and `BlobProviderProfile`. The converter handles F# records,
 /// DUs, and `option` types losslessly, which matters here because
 /// `FlagValue` is a DU that must round-trip through `Fable.SimpleJson`

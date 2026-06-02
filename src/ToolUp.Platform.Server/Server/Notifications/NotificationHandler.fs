@@ -9,9 +9,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── JSON serialization ──────────────────────────────────────────
-// `FableJsonConverter` so `Notification` DU cases round-trip through
-// `Fable.SimpleJson` on the client as `{"CaseName": [fields]}`. Using
-// Newtonsoft's `DiscriminatedUnionConverter` would emit
+// `FableConverters` so `Notification` DU cases round-trip through
+// `Fable.SimpleJson` on the client as `{"CaseName": [fields]}`. The
+// bare-STJ default contract would emit
 // `{"Case":"X","Fields":[...]}` which the client cannot parse. Same
 // rule as `ToolUp.AI.SSEHandler` — any server-authored JSON that the
 // Fable client will read manually (SSE, persisted DU data) must go

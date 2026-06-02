@@ -129,7 +129,7 @@ module private Diff =
 // ─── Event emission ──────────────────────────────────────────────
 
 module private Events =
-    /// Newtonsoft + FableJsonConverter — same pattern as
+    /// STJ + FableConverters — same pattern as
     /// `ConfigStore` / `DataObjectStore`. `LineageLink` payloads
     /// round-trip the `LinkType` DU losslessly, which
     /// `System.Text.Json` does not.

@@ -149,8 +149,8 @@ type WebhookDelivery = {
 /// receiving service unwraps `event` to get the underlying
 /// `ModuleEvent` payload. Serialised as plain camelCase JSON via
 /// `System.Text.Json` — third-party endpoints aren't Fable clients,
-/// so the DU-aware `FableJsonConverter` shape is not appropriate
-/// here. The persisted log uses `FableJsonConverter` separately so
+/// so the DU-aware `FableConverters` shape is not appropriate
+/// here. The persisted log uses `FableConverters` separately so
 /// the admin UI sees the round-tripped DU.
 type WebhookDeliveryPayload = {
     DeliveryId: Guid

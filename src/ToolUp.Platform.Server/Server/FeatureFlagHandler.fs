@@ -6,9 +6,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.TeamManagement
 
-/// `FableJsonConverter` is required on `FlagChangedPayload` because it
+/// `FableConverters` is required on `FlagChangedPayload` because it
 /// carries a `FlagScope` / `FlagChangeAction` / `FlagValue` DU — the
-/// default Newtonsoft contract emits a shape Fable cannot parse.
+/// bare-STJ default contract emits a shape Fable cannot parse.
 /// Same pattern as `ConfigStore`, `FeatureFlagStore`, and
 /// `NotificationHandler`. Event payloads are server-only (`IEventStore`
 /// is never surfaced to the client), but keeping the converter keeps

@@ -12,8 +12,8 @@ open ToolUp.Platform.BlobStorage
 
 /// Wire shape persisted under `assets/records/{assetId}.json`.
 /// `AssetRecord` itself uses an `AssetId` (single-case DU) and
-/// `DerivativeProfileId` (single-case DU). FableJsonConverter
-/// serialises those cleanly already; this alias exists so future
+/// `DerivativeProfileId` (single-case DU). The FableConverters
+/// set serialises those cleanly already; this alias exists so future
 /// schema changes can ship a `_schemaVersion` field without
 /// renaming the on-disk shape.
 type private AssetRecordWire = AssetRecord

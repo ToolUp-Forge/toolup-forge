@@ -408,7 +408,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// scope. Callers pre-format with the SSE `data:`/`event:`
     /// framing and a trailing `\n\n` — this method does no
     /// formatting, which lets different callers use different
-    /// serialisation (AI companion uses `FableJsonConverter` on
+    /// serialisation (AI companion uses `FableConverters` on
     /// `AIStreamEvent`; notification channel uses the same converter
     /// on `NotificationEnvelope`).
     ///

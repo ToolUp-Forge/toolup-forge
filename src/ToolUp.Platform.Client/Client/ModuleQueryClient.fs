@@ -11,7 +11,7 @@ let private log = Logger.forCategory "client.module-query"
 // ─── JSON helpers ─────────────────────────────────────────────────
 
 /// Client-side (de)serialisation uses `Fable.SimpleJson`, which
-/// round-trips the same shape the server's `FableJsonConverter`
+/// round-trips the same shape the server's `FableConverters`
 /// produces — unions, options, records all survive the boundary
 /// without additional configuration.
 module private Json =

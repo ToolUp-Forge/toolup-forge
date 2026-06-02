@@ -1447,7 +1447,7 @@ type SurfaceDeniedPayload = {
 
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
-/// into `ModuleEvent.Payload` via `FableJsonConverter` (matches the
+/// into `ModuleEvent.Payload` via `FableConverters` (matches the
 /// existing `WebhookApiHandler` / `KnowledgeBase` audit emission idiom).
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload

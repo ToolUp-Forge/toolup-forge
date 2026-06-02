@@ -9,10 +9,11 @@ open ToolUp.Platform.StorageScopeResolver
 open ToolUp.AI
 
 // ─── JSON serialization ──────────────────────────────────────────
-// Uses FableJsonConverter (from ToolUp.Remoting.Json) so that F# DUs are
-// serialized in the format Fable.SimpleJson expects on the client:
+// Uses FableConverters (from ToolUp.Remoting.Json.SystemTextJson) so
+// that F# DUs are serialized in the format Fable.SimpleJson expects on
+// the client:
 //   {"CaseName": [field1, field2]}
-// NOT Newtonsoft's DiscriminatedUnionConverter format:
+// NOT the bare-STJ default contract format:
 //   {"Case":"CaseName","Fields":[field1, field2]}
 
 open System.Text.Json
@@ -27,7 +28,7 @@ let private serializeEvent (event: AIStreamEvent) =
 
 /// Writes an `AIStreamEvent` to every SSE connection registered for a
 /// scope. Thin wrapper over the shared `SSEConnectionManager` —
-/// serialises with `FableJsonConverter`, frames as a default SSE
+/// serialises with `FableConverters`, frames as a default SSE
 /// `message` event, and calls `Broadcast`. The connection-tracking,
 /// zombie cleanup, and scope-gating all live in the core manager.
 ///

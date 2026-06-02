@@ -90,7 +90,7 @@ module AuditReplicatorOptions =
     }
 
 /// Phase 9g — per-`(sinkName, scopeId)` cursor. Persisted as JSON via
-/// `FableJsonConverter` at
+/// `FableConverters` at
 /// `_platform/audit-replicator/{sinkName}/{scopeId}.cursor`. Advances
 /// only after `IAuditSink.Deliver` returns `Result.Ok`. The pair
 /// `(LastDeliveredAt, LastDeliveredEventId)` is a deterministic

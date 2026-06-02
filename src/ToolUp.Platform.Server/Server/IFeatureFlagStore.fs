@@ -9,8 +9,8 @@ namespace ToolUp.Platform
 /// config carries over with minimal surface difference.
 ///
 /// Lives in the server layer because implementations depend on
-/// server-only infrastructure (`IBlobStorage`, Newtonsoft + the shared
-/// `FableJsonConverter`). A Fable.Remoting admin API exposed to the
+/// server-only infrastructure (`IBlobStorage`, STJ + the shared
+/// `FableConverters`). A Fable.Remoting admin API exposed to the
 /// client never holds this interface — handlers resolve the caller's
 /// `AccessContext`, translate to `FlagScope`, and call through.
 ///

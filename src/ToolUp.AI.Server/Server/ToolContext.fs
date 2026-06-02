@@ -40,9 +40,9 @@ open ToolUp.Platform
 ///                  `"apply-optimised-budget"`). Declared on
 ///                  `AIToolDefinition.EmitsActions` for discoverability.
 ///   payloadJson  — already-serialised JSON string the decoder parses.
-///                  Using a string (not `obj`) avoids the
-///                  System.Text.Json-vs-Newtonsoft DU pitfall — tool
-///                  authors pick their own serialiser per payload.
+///                  Using a string (not `obj`) avoids the bare-STJ-vs-
+///                  `FableConverters` DU pitfall — tool authors pick
+///                  their own serialiser per payload.
 ///
 /// Silently no-ops when the notification channel isn't registered in DI
 /// (unit tests, pared-down test harnesses) or the user id is absent.

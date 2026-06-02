@@ -25,11 +25,11 @@ open ToolUp.Platform.Narrative
 // impossible (GP 4 / GP 12 rule 5).
 //
 // Each blob is a `NarrativeEntry` JSON-serialised via
-// `ToolUp.Remoting.Json.FableJsonConverter`. `NarrativeDocument`
-// carries DUs whose round-trip identity matters; the FableJsonConverter
-// is the canonical SDK choice for DU-bearing persisted blobs and
-// matches what other stores in `_platform` use (see CLAUDE.md
-// "Consumer dependency contract").
+// `ToolUp.Remoting.Json.SystemTextJson.FableConverters`.
+// `NarrativeDocument` carries DUs whose round-trip identity matters;
+// FableConverters is the canonical SDK choice for DU-bearing persisted
+// blobs and matches what other stores in `_platform` use (see
+// CLAUDE.md "Consumer dependency contract").
 
 [<Literal>]
 let private platformContainer = "_platform"

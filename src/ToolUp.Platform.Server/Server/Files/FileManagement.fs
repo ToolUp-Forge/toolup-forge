@@ -131,7 +131,7 @@ let processFile (dataTypes: DataType list) (fileName: string) (dataTypeId: DataT
 //
 // Layout: `{container}/objects/_processed_entry__{fileName}/v1.json`
 //
-// `Info: obj option` round-trips via `FableJsonConverter` — the same
+// `Info: obj option` round-trips via `FableConverters` — the same
 // converter every existing `ProcessedFileEntry` traversal of an SDK
 // boundary uses today.
 module ProcessedEntryStore =

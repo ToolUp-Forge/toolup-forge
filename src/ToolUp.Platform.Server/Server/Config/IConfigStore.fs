@@ -6,7 +6,7 @@ namespace ToolUp.Platform
 /// shape is `Map<string, string>` where values are serialised JSON —
 /// this keeps the blob layout admin-UI friendly (the form edits a
 /// flat string/string map) and lets typed `Get<'T>` / `Set<'T>`
-/// round-trip F# records and DUs through `FableJsonConverter`.
+/// round-trip F# records and DUs through `FableConverters`.
 ///
 /// Lives in the server layer (not shared) because implementations
 /// depend on server-only infrastructure (`IBlobStorage`, serialisation).

@@ -26,7 +26,7 @@ let private configsPrefix (scopeId: string) = $"data-sources/{scopeId}/configs/"
 // ─── JSON ────────────────────────────────────────────────────────
 //
 // `DataSourceConfig` round-trips to the Fable admin UI, so use
-// `FableJsonConverter` (DU-aware shape compatible with `Fable.SimpleJson`
+// `FableConverters` (DU-aware shape compatible with `Fable.SimpleJson`
 // on the client). Same pattern as `WebhookRegistry`, `ConfigStore`,
 // `BlobJobStore`.
 

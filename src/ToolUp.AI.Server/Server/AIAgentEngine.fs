@@ -219,7 +219,7 @@ let private ProviderSendTimeoutMs = 50_000
 // by `AIServerApp.create`.
 
 /// Latency-record JSON serialiser. Mirrors `FastPathBeaconHandler` —
-/// `FableJsonConverter` round-trips F# DUs / `option` / records
+/// `FableConverters` round-trips F# DUs / `option` / records
 /// losslessly so `/dev/ai-latency` reads back the same shape that
 /// `IEventStore.Write` persisted.
 let private latencyJsonOptions = FableConverters.create ()

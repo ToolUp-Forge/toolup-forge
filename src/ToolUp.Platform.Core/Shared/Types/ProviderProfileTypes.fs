@@ -133,14 +133,14 @@ type ProviderProfile = {
     Fallback: FallbackChain
     /// Per-surface model override for a surface's *platform-configured*
     /// provider (distinct from a per-entry Model). Assoc list rather
-    /// than Map for FableJsonConverter round-trip safety + codebase
+    /// than Map for FableConverters round-trip safety + codebase
     /// consistency. The AI shim stores AIUserConfig.PlatformModelOverride
     /// under key "ai.platform".
     SurfaceModelOverrides: (string * string) list
     /// Phase 70: per-surface provider-id override carrying the user's
     /// preferred provider among a deployment's wired multi-platform-
     /// provider list. Sibling of SurfaceModelOverrides; same assoc-
-    /// list shape for the same FableJsonConverter round-trip reason.
+    /// list shape for the same FableConverters round-trip reason.
     /// The AI surface stores the user's PlatformProviderOverride under
     /// key "ai.platform.provider"; the factory consults this when
     /// PlatformOnly mode wires multiple platform providers.

@@ -46,7 +46,7 @@ type NoOpRetrievalTracer() =
 
 /// `KnowledgeRetrieved` payload as serialised by `EventStoreRetrievalTracer`.
 /// Distinct from `RetrievalTrace` because it must round-trip through JSON
-/// — `VectorScope` is a DU (`FableJsonConverter`-compatible) but we flatten
+/// — `VectorScope` is a DU (`FableConverters`-compatible) but we flatten
 /// it here to a stable string form (`"platform"`, `"deployment"`, `"team:<id>"`)
 /// so consumers don't need the SDK to read traces.
 type KnowledgeRetrievedPayload = {

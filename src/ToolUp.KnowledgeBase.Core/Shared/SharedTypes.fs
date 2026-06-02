@@ -123,7 +123,7 @@ type IngestNarrativeError =
 let IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"
 
 /// Payload of `CustomNotification(IngestionStatusNotificationKey, _)`.
-/// Serialised on the server with `FableJsonConverter`; parsed on the
+/// Serialised on the server with `FableConverters`; parsed on the
 /// client with `Fable.SimpleJson`. v1 fires only on terminal
 /// transitions (`Complete` / `Failed`) — incremental progress is
 /// noise in chat.
@@ -161,7 +161,7 @@ type IngestionStatusUpdate = {
 let InventoryUpdatedNotificationKey = "KnowledgeBase.InventoryUpdated"
 
 /// Payload of `CustomNotification(InventoryUpdatedNotificationKey, _)`.
-/// Serialised on the server with `FableJsonConverter`; parsed on the
+/// Serialised on the server with `FableConverters`; parsed on the
 /// client with `Fable.SimpleJson`. Fired on every additive or destructive
 /// inventory change — fine-grained enough for badges, coarse enough that
 /// downstream consumers don't have to reason about per-document state.

@@ -8,11 +8,11 @@ open ToolUp.Platform.Tracing
 // The `ModuleQueryHandler` record itself now lives in
 // `Shared/IModuleQueryBus.fs` so server and client share a single
 // shape; what follows is the server-specific serialisation layer
-// (Newtonsoft + FableJsonConverter) and the in-process bus impl.
+// (STJ + FableConverters) and the in-process bus impl.
 
 // ─── JSON helpers ─────────────────────────────────────────────────
 
-/// Shared `FableJsonConverter` setup. Handlers serialise typed
+/// Shared `FableConverters` setup. Handlers serialise typed
 /// requests / responses through the same converter the Fable client
 /// uses for SSE / non-Remoting JSON, so payloads round-trip losslessly
 /// through DUs, options, and records (the platform's SSE serialisation

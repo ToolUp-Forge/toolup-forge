@@ -154,8 +154,8 @@ let private errorTests =
 // ─── Phase 6o follow-up B — ConversationMessage persistence round-trip ──
 //
 // `ConversationMessage.Parts: AIContentPart list` widens the persisted
-// shape so a multipart turn survives save → load via the same Newtonsoft
-// + FableJsonConverter pipeline `AIAssistantHandler` uses for the
+// shape so a multipart turn survives save → load via the same STJ +
+// FableConverters pipeline `AIAssistantHandler` uses for the
 // `ai-conversations/{id}.json` blob. Plain-text turns continue to
 // round-trip with `Parts = []` byte-for-byte.
 

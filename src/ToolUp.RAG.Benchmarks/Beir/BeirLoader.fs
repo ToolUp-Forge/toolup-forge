@@ -69,7 +69,7 @@ let download (name: string) : Async<string> = async {
 /// Stringify a JsonNode property, returning "" when absent or null. The
 /// JsonValue.GetValue<string>() form is the canonical STJ path; .ToString()
 /// on a JsonValue holding a string returns the string unquoted, matching
-/// the prior Newtonsoft behaviour.
+/// the prior converter behaviour.
 let private stringFrom (o: JsonObject) (key: string) : string =
     match o.[key] with
     | null -> ""

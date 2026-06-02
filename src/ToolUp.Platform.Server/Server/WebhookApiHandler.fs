@@ -10,7 +10,7 @@ open ToolUp.Platform.WebhookDispatcher
 
 // ─── Audit-event payloads ────────────────────────────────────────
 //
-// Persisted audit-event payloads use `FableJsonConverter` because
+// Persisted audit-event payloads use `FableConverters` because
 // the admin UI deserialises them via Fable.Remoting/SimpleJson.
 // Same converter the dispatcher uses for its own audit writes —
 // keep both sides consistent so admin tooling can render any

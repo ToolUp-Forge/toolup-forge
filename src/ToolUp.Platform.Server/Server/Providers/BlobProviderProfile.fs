@@ -17,10 +17,10 @@ open ToolUp.Platform.Providers
 // the shim, making this the sole canonical BYOK store (the AI
 // assistant's legacy "ai-config.json" one-time migration now lives in
 // ToolUp.AI's LegacyAIConfigProviderProfile decorator, not here —
-// this store stays AI-free). FableJsonConverter is required because
+// this store stays AI-free). FableConverters is required because
 // the profile shape contains F# DUs (ProviderEntry.Model: string
-// option, CredentialOrigin, ProviderHealthStatus) that
-// System.Text.Json cannot round-trip without hand-rolling the shape.
+// option, CredentialOrigin, ProviderHealthStatus) that bare-STJ
+// defaults cannot round-trip without hand-rolling the shape.
 
 module private Json =
     let private options = FableConverters.create ()

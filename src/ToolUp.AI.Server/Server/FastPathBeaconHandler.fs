@@ -160,9 +160,10 @@ type FastPathBeacon = {
 // rolling-window rollup can compute `meanClausesPerSequence` from
 // `TotalClauses` and per-clause hit counts.
 //
-// Newtonsoft.Json deserialisation is case-insensitive by default, so
-// PascalCase F# field names round-trip cleanly against the camelCase
-// JSON the resolver emits (`clauseIndex` / `clauseText` / etc.).
+// `FableConverters.create ()` sets `PropertyNameCaseInsensitive = true`,
+// so camelCase inputs from the browser deserialise into PascalCase F#
+// records without ceremony (`clauseIndex` → `ClauseIndex` / `clauseText`
+// → `ClauseText` / etc.).
 
 type SequencedClauseBeacon = {
     ClauseIndex: int

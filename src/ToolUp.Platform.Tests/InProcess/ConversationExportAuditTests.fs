@@ -11,9 +11,9 @@ open ToolUp.Platform
 //
 // Covers the .NET-verifiable half of 6h.A: the `ConversationExported`
 // AuditEvent serialises + decodes losslessly through the production
-// `EventStoreAuditLog` path (FableJsonConverter), and the event-type
-// filter on `GetAuditTrail` targets it. The client-side export
-// sanitisation (stripping `ToolCalls`) lives in Fable code in
+// `EventStoreAuditLog` path (STJ + `FableConverters`), and the
+// event-type filter on `GetAuditTrail` targets it. The client-side
+// export sanitisation (stripping `ToolCalls`) lives in Fable code in
 // `ConversationPanel.fs` and is verified separately at the Fable layer.
 
 let private silentLogger =

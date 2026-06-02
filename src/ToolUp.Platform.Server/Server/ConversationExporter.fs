@@ -48,11 +48,11 @@ let private HandlerName = "conversations"
 
 /// Sanitised projection of `Conversation` — strips operator / SDK
 /// metadata that doesn't name the data subject. Distinct type so
-/// `JsonConvert.SerializeObject` writes exactly these fields without
+/// `JsonSerializer.Serialize` writes exactly these fields without
 /// custom contract resolvers; the source `Conversation` record is
-/// unchanged. Public so `FableJsonConverter` reflects into the
-/// record fields rather than emitting `{}`; nothing outside this
-/// module references these types.
+/// unchanged. Public so the `FableConverters` record converter
+/// reflects into the record fields rather than emitting `{}`;
+/// nothing outside this module references these types.
 type ExportedConversation = {
     ConversationId: ConversationId
     SchemaVersion: int
@@ -92,8 +92,8 @@ let private sanitiseConversation (header: Conversation) (turns: ConversationTurn
 }
 
 // `ExportedConversation` carries `int option` / `DateTime` which
-// FableJsonConverter round-trips cleanly; system-text-json mangles
-// F# option types. Mirror the JsonSettings shape established by
+// FableConverters round-trips cleanly; bare-STJ defaults mangle
+// F# option types. Mirror the options shape established by
 // `DataObjectStoreExporter`.
 let private jsonOptions = FableConverters.create ()
 

@@ -19,7 +19,7 @@ let private HandlerName = "data-objects"
 
 // DataObject carries an F# Map + a VersioningPolicy DU; the platform
 // standard (DataObjectStore.fs / ConfigStore.fs) round-trips these via
-// Newtonsoft + FableJsonConverter. System.Text.Json mangles both.
+// STJ + FableConverters. Bare-STJ defaults mangle both.
 let private jsonOptions = FableConverters.create ()
 
 /// `IDataExporter` for the data-object store. Emits the latest-version

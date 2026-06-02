@@ -52,7 +52,7 @@ module PlatformDefaults =
     /// `ClientModuleContext.PlatformConfig`) into a typed
     /// `PlatformDefaults`. Falls back to `defaults` for any missing
     /// or malformed field — never throws. Compiles for both server
-    /// and Fable: pure string handling, no Newtonsoft / SimpleJson
+    /// and Fable: pure string handling, no JSON converter
     /// dependency.
     let fromConfig (platformConfig: Map<string, string>) : PlatformDefaults =
         let currency =

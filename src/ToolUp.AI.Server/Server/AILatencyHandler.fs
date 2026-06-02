@@ -41,8 +41,8 @@ let private SourceModule = "_platform.ai.latency"
 /// time slice.
 let private rollingWindow = TimeSpan.FromMinutes 60.0
 
-// ─── JSON deserialiser (must match `latencyJsonSettings` in
-//     AIAgentEngine.fs — both rely on `FableJsonConverter` to
+// ─── JSON deserialiser (must match `latencyJsonOptions` in
+//     AIAgentEngine.fs — both rely on `FableConverters` to
 //     round-trip `option` and DUs). ─────────────────────────────
 
 let private payloadJsonOptions = FableConverters.create ()

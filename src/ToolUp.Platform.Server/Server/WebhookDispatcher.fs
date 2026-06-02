@@ -94,9 +94,9 @@ let private rateLimitKeyFor (sub: WebhookSubscription) : RateLimitKey =
 
 /// Outbound payloads target third-party receivers (Slack, Zapier,
 /// customer ingestion) — not the Fable admin UI — so use plain
-/// `System.Text.Json` camelCase rather than `FableJsonConverter`.
+/// bare `System.Text.Json` camelCase rather than `FableConverters`.
 /// Receivers can document the wire format from the camelCase shape;
-/// the persisted delivery log uses `FableJsonConverter` separately.
+/// the persisted delivery log uses `FableConverters` separately.
 let private outboundJsonOptions =
     let opts = JsonSerializerOptions(PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
 
@@ -124,7 +124,7 @@ let private serialiseOutbound (payload: WebhookDeliveryPayload) : byte[] =
 
 // ─── Audit-event payloads ────────────────────────────────────────
 
-/// Persisted audit-event payloads use `FableJsonConverter` because the
+/// Persisted audit-event payloads use `FableConverters` because the
 /// admin UI deserialises them via Fable.Remoting/SimpleJson.
 let private auditJsonOptions = FableConverters.create ()
 

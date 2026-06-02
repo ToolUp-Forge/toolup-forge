@@ -97,8 +97,9 @@ type Msg =
 
 // `withMultipartOptimization` is required for the `byte[]` argument on
 // `UploadDocument`: Fable.Remoting's default JSON transport encodes byte
-// arrays as a JSON array of ints, which Newtonsoft cannot deserialise
-// into `System.Byte[]` (it expects base64). Multipart sends each byte[]
+// arrays as a JSON array of ints, which the byte[] converter cannot
+// deserialise into `System.Byte[]` (it expects base64). Multipart
+// sends each byte[]
 // arg as `application/octet-stream` and the rest as JSON parts.
 let private knowledgeApi =
     Api.makeProxy<KnowledgeApi> (customOptions = (UserSession.withRequestHeaders >> Remoting.withMultipartOptimization))

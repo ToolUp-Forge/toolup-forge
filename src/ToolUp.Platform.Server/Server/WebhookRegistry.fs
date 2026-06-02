@@ -45,7 +45,7 @@ let private allDeliveriesRoot = "webhooks/"
 // ─── JSON ────────────────────────────────────────────────────────
 //
 // Subscriptions and deliveries both round-trip to the Fable admin UI,
-// so use `FableJsonConverter` (DU-aware shape compatible with
+// so use `FableConverters` (DU-aware shape compatible with
 // `Fable.SimpleJson` on the client). Same pattern as `BlobConfigStore`.
 
 module private Json =

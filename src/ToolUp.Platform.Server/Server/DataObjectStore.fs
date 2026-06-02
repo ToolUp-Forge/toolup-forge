@@ -81,9 +81,9 @@ let private sha256Hex (content: byte[]) : string =
 
 // ─── JSON serialisation ──────────────────────────────────────────
 //
-// Match `ConfigStore.fs:16–26` / `TeamManagement.fs` — Newtonsoft +
-// `FableJsonConverter`. The DataObject record carries a
-// `Map<string, string>` and a `VersioningPolicy` DU; FableJsonConverter
+// Match `ConfigStore.fs:16–26` / `TeamManagement.fs` — STJ +
+// `FableConverters`. The DataObject record carries a
+// `Map<string, string>` and a `VersioningPolicy` DU; FableConverters
 // round-trips both losslessly.
 
 module private Json =

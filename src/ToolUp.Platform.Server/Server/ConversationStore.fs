@@ -34,7 +34,7 @@ open ToolUp.Platform.EntityQueryTypes
 // `IConversationWriter` + `IConversationEraser`).
 
 // ─── JSON helpers ────────────────────────────────────────────────
-// FableJsonConverter so DU cases (`ConversationStatus`,
+// FableConverters so DU cases (`ConversationStatus`,
 // `AIContentPart`, the per-image variants) round-trip cleanly. Same
 // pattern as `ResultStore.fs` / `AIAssistantHandler.fs`.
 
@@ -302,9 +302,9 @@ module private Events =
 // append).
 
 /// Persisted manifest payload. Not marked `private` because
-/// Newtonsoft.Json's deserialiser requires the synthesised
-/// constructor to be visible — F# private records hide it and
-/// trigger `Unable to find a constructor` at deserialise time.
+/// the STJ FableConverters set's record deserialiser requires the
+/// synthesised constructor to be visible — F# private records hide it
+/// and trigger a "no constructor" failure at deserialise time.
 /// Module-internal usage is enforced by convention (no external
 /// file references this type).
 type ManifestBody = {

@@ -17,14 +17,14 @@ open ToolUp.Platform
 ///
 /// ## Serialisation
 ///
-/// Envelopes are serialised with `FableJsonConverter` so the wire
+/// Envelopes are serialised with `FableConverters` so the wire
 /// format matches the SSE payload shape (Phase 6a). This is future-
 /// proofing: a Redis-backed deployment could replay envelopes straight
 /// from the channel into an SSE stream without a re-serialisation hop.
-/// `Notification` is a DU; without the converter `Fable.SimpleJson` on
-/// future client-side replay paths could not deserialise the
-/// `{"Case":"X","Fields":[...]}` shape that Newtonsoft produces by
-/// default.
+/// `Notification` is a DU; without the converter set `Fable.SimpleJson`
+/// on future client-side replay paths could not deserialise the
+/// `{"Case":"X","Fields":[...]}` shape that the System.Text.Json
+/// default contract emits.
 ///
 /// ## Handler dispatch
 ///
@@ -61,7 +61,7 @@ type RedisNotificationChannel(multiplexer: IConnectionMultiplexer, logger: ILogg
     /// options instance, so a fresh instance per call would re-pay the
     /// reflection cost. `FableConverters.create ()` returns a fully-
     /// configured options instance; behaviour is byte-equal to the
-    /// pre-migration Newtonsoft pipeline.
+    /// pre-migration converter pipeline.
     let jsonOptions = FableConverters.create ()
 
     let subscriptions =

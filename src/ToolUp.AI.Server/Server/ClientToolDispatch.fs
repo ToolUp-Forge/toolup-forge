@@ -58,11 +58,11 @@ type ClientToolDispatchRegistry() =
 
 // ─── /api/ai/tool-result POST handler ────────────────────────────
 
-/// Phase 6g.A: serialiser for the result payload. Newtonsoft with
-/// `FableJsonConverter` matches the wire format the rest of the AI
+/// Phase 6g.A: serialiser for the result payload. STJ with
+/// `FableConverters` matches the wire format the rest of the AI
 /// surface uses (Fable.Remoting client serialises with the same
-/// converter on the way in, AIStreamEvent rendering uses it on the
-/// way out — see `SSEHandler.fableJsonSettings`).
+/// converter set on the way in, AIStreamEvent rendering uses it on the
+/// way out — see `SSEHandler.jsonOptions`).
 let private resultJsonOptions = FableConverters.create ()
 
 /// Phase 6g.A: Giraffe handler for `/api/ai/tool-result`. Browsers

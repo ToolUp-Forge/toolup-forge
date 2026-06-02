@@ -70,7 +70,7 @@ type FlagChangeAction =
 
 /// Audit-event payload recorded in `IEventStore` whenever a feature
 /// flag override is set or cleared. Serialised as JSON (via
-/// `FableJsonConverter` server-side) and stored in
+/// `FableConverters` server-side) and stored in
 /// `ModuleEvent.Payload`. Event `ScopeId` matches the flag scope's
 /// slug so team-scoped audit queries remain isolated (team
 /// isolation). Platform-scope flag changes land in the reserved

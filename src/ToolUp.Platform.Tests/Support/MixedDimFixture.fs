@@ -5,7 +5,8 @@ module ToolUp.Platform.Tests.Support.MixedDimFixture
 
 open System
 open System.IO
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Phase 14k WS5 — mixed-dim fixture loader ──────────────────────
 //
@@ -101,7 +102,7 @@ let load (path: string) : Fixture =
         failwithf "Mixed-dim fixture not found at %s" path
 
     let json = File.ReadAllText path
-    let meta = JsonConvert.DeserializeObject<FixtureMetadata>(json)
+    let meta = JsonSerializer.Deserialize<FixtureMetadata>(json, FableConverters.shared)
     let rng = Random meta.seed
 
     let textCorpus =

@@ -17,15 +17,16 @@ open ToolUp.Remoting.Json.SystemTextJson
 // `ToolUp.Remoting.Json`) so the module's `aiTools` definition stays
 // focused on the actual tool logic.
 //
-// **Two JSON stacks deliberately:**
-//   - `System.Text.Json` for walking the incoming args (`JsonElement`) —
-//     fast and allocation-light for primitive property access.
-//   - `Newtonsoft.Json` + `ToolUp.Remoting.Json.FableJsonConverter` for
-//     any (de)serialisation that touches F# discriminated unions, option
-//     types, or records containing them. `System.Text.Json` has no DU
-//     converter and silently produces "F# discriminated union
-//     serialization is not supported" runtime failures the moment a tool
-//     returns or consumes a DU-bearing record.
+// **Two JSON entry points deliberately:**
+//   - Raw `JsonElement` walks for the incoming args — fast and
+//     allocation-light for primitive property access.
+//   - `JsonSerializer` configured with
+//     `ToolUp.Remoting.Json.SystemTextJson.FableConverters` for any
+//     (de)serialisation that touches F# discriminated unions, option
+//     types, or records containing them. The bare `System.Text.Json`
+//     stack has no DU converter and silently produces "F# discriminated
+//     union serialization is not supported" runtime failures the moment
+//     a tool returns or consumes a DU-bearing record.
 
 /// `ToolExecutor` type alias — the executor signature for an AI tool.
 /// Receives the per-request `HttpContext` (so handlers can resolve
@@ -122,11 +123,11 @@ let optionalBool (args: JsonElement) (name: string) (defaultValue: bool) : bool 
     | _ -> defaultValue
 
 /// Read a complex-shape argument (DU, record, array) and deserialise it
-/// into the F# type `'T` using `FableJsonConverter`. On failure, raises
+/// into the F# type `'T` using `FableConverters`. On failure, raises
 /// `ToolArgumentError` carrying a message that names the parameter, the
 /// expected shape, and the value the caller actually sent — so the
 /// agent loop's tool-result message tells the model exactly what to
-/// change, instead of leaking a raw Newtonsoft exception classified
+/// change, instead of leaking a raw STJ exception classified
 /// (incorrectly) as a tool fault worth retrying with the same args.
 ///
 /// `typeHint` is a short cleartext description of the F# type, ideally

@@ -108,10 +108,11 @@ let private constantTimeEquals (a: byte[]) (b: byte[]) : bool =
 // resource is detected without trusting the embedded values — the
 // persisted record stays the source of truth.
 
-/// Public so Newtonsoft's reflection-based serialisation through
-/// `FableJsonConverter` round-trips the fields. A `private` F# record
-/// hides its accessors from the converter, which silently produces
-/// `{}` and breaks the Validate path. Same gotcha as
+/// Public so the STJ FableConverters record converter can read
+/// the synthesised public constructor and round-trip the fields.
+/// A `private` F# record hides the constructor from the converter,
+/// which silently produces `{}` and breaks the Validate path. Same
+/// gotcha as
 /// `JobStore.IdempotencyEntry`.
 type SignedPayload = {
     TokenId: string

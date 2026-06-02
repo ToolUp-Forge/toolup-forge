@@ -11,7 +11,7 @@ open ToolUp.Platform
 // It is a thin adapter over the configured `IEventStore`:
 //
 //   * `Record` serialises the `AuditEvent` payload via
-//     `FableJsonConverter`, builds a `ModuleEvent` with
+//     `FableConverters`, builds a `ModuleEvent` with
 //     `SourceModule = AuditSourceModule.value`, and calls
 //     `IEventStore.Write`. Failures are logged at `Warn` and
 //     swallowed — audit emission must never fail the primary
@@ -25,7 +25,7 @@ open ToolUp.Platform
 //     memory. Cross-scope reads are structurally impossible —
 //     the underlying store is keyed by `scopeId`.
 //
-// `FableJsonConverter` is the canonical converter for non-Remoting
+// `FableConverters` is the canonical STJ converter set for non-Remoting
 // JSON crossing the server/Fable boundary (PascalCase, DU-friendly).
 // We use it for audit payloads even though they are server-only
 // today, so any future client-facing audit query surface (e.g. an

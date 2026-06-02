@@ -18,8 +18,9 @@ open ToolUp.AI.AIAgentEngine
 open ToolUp.AI.SSEHandler
 
 // ─── JSON helpers ────────────────────────────────────────────────
-// Uses FableJsonConverter (from ToolUp.Remoting.Json) so that persisted
-// conversations with F# DUs serialize in Fable-compatible format.
+// Uses FableConverters (from ToolUp.Remoting.Json.SystemTextJson) so
+// that persisted conversations with F# DUs serialize in Fable-
+// compatible format.
 
 let private jsonOptions = FableConverters.create ()
 

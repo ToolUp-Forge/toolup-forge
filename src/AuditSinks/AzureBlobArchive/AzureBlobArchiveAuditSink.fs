@@ -37,7 +37,7 @@ open ToolUp.Platform.BlobStorage
 // batches land in the same wall-clock second.
 //
 // **JSONL format.** One `AuditEvent` per line, JSON-serialised via
-// `FableJsonConverter` (the SDK's canonical converter for non-
+// `FableConverters` (the SDK's canonical STJ converter set for non-
 // Remoting JSON crossing the server/Fable boundary). Auditors
 // reading the archive parse line-by-line; gzip-compression is
 // transparent to most tooling (GNU `zcat`, `az storage blob

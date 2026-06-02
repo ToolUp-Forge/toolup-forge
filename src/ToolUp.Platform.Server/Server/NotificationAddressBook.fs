@@ -19,7 +19,7 @@ open ToolUp.Platform.BlobStorage
 //
 //   * `BlobBackedNotificationAddressBook` — looks up
 //     `_platform/contacts/{scopeId}/{userId}.json` and round-trips
-//     the persisted `UserContact` shape via `FableJsonConverter`.
+//     the persisted `UserContact` shape via `FableConverters`.
 //     Apps populate the directory through their own user-management
 //     flows (an admin UI, a CSV import tool, an authenticated
 //     "save my email" flow); the SDK doesn't ship a write-side
@@ -95,7 +95,7 @@ type BlobBackedNotificationAddressBook(storage: IBlobStorage, logger: ILogger op
                     let contact = JsonSerializer.Deserialize<UserContact>(json, contactJsonOptions)
 
                     // Defensive null-check in case a corrupt JSON literal
-                    // round-trips to a `null` reference (Newtonsoft will
+                    // round-trips to a `null` reference (STJ will
                     // happily produce one for `"null"` payloads).
                     if isNull (box contact) then
                         return UserContact.empty userId

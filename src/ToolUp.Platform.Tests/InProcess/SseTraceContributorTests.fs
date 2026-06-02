@@ -3,8 +3,10 @@ module ToolUp.Platform.Tests.InProcess.SseTraceContributorTests
 open System
 open System.Threading
 open System.Text
+open System.Text.Json
 open Expecto
 open ToolUp.Platform
+open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -226,7 +228,7 @@ let tests =
             // serialised JSON contains the headline fields. Using a
             // simple string check rather than full JSON parse keeps
             // the test free of converter dependencies.
-            let json = Newtonsoft.Json.JsonConvert.SerializeObject(payload)
+            let json = JsonSerializer.Serialize(payload, FableConverters.shared)
             Expect.stringContains json "Broadcasts" "shape includes Broadcasts list"
             Expect.stringContains json "RegisteredScopes" "shape includes RegisteredScopes map"
             Expect.stringContains json "Summary" "shape includes Summary block"

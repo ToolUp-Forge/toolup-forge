@@ -1484,3 +1484,22 @@ module FableConverters =
         let opts = JsonSerializerOptions()
         addTo opts
         opts
+
+    /// Lazily-initialised singleton for the canonical default-shape options.
+    /// Hidden behind the `shared` accessor below — direct mutation is
+    /// neither possible (STJ freezes the instance on first use) nor
+    /// supported (re-use is the whole point).
+    let private cached = lazy (create ())
+
+    /// Canonical singleton JsonSerializerOptions for default-shape
+    /// serialisation. Prefer this over `create ()` at every call site that
+    /// uses the default-shape options — one shared instance reuses the
+    /// reflection-cache warm-up across the process.
+    ///
+    /// Use `create ()` instead only when you need a fresh mutable instance
+    /// to override one of the defaults (e.g. `WriteIndented = true` for
+    /// diagnostics output). STJ's `JsonSerializerOptions` becomes read-only
+    /// on first `Serialize` / `Deserialize` call, so re-use is the correct
+    /// shape and per-call construction wastes the converter set's first-
+    /// touch reflection cost.
+    let shared: JsonSerializerOptions = cached.Value

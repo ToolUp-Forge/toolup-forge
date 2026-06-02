@@ -21,7 +21,7 @@ open ToolUp.Platform.TeamManagement
 // timestamp (for the column's "last seen at" rendering), so we read
 // the underlying `ModuleEvent`s directly via `IEventStore.ReadBySource`
 // and decode the four known OAuth-refresh event types here.
-// `FableJsonConverter` matches `AuditLog.fs`'s emission settings, so
+// `FableConverters` matches `AuditLog.fs`'s emission settings, so
 // payloads round-trip without re-deriving the wire shape.
 
 let private oauthRefreshJsonOptions = FableConverters.create ()

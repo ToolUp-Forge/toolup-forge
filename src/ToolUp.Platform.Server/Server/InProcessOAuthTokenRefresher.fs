@@ -117,9 +117,9 @@ module InProcessOAuthTokenRefresher =
 
     // ─── Internal helpers ────────────────────────────────────────
 
-    /// `Newtonsoft.Json` settings for descriptor (de)serialisation —
-    /// uses `FableJsonConverter` so the payload shape matches the
-    /// SDK convention everywhere else. Settings are private; the
+    /// STJ options for descriptor (de)serialisation — uses
+    /// `FableConverters` so the payload shape matches the SDK
+    /// convention everywhere else. Options are private; the
     /// helpers below are the public surface.
     let private jsonOptions = FableConverters.create ()
 

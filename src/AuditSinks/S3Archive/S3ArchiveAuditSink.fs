@@ -38,7 +38,7 @@ open ToolUp.Platform.BlobStorage
 // this happens routinely under load.
 //
 // **JSONL format.** One `AuditEvent` per line, JSON-serialised via
-// `FableJsonConverter` (the SDK's canonical converter for non-
+// `FableConverters` (the SDK's canonical STJ converter set for non-
 // Remoting JSON crossing the server/Fable boundary). Auditors
 // reading the archive parse line-by-line; gzip-compression is
 // transparent to most tooling (GNU `zcat`, `aws s3 cp ... -` plus
@@ -86,7 +86,7 @@ let private archiveJsonOptions = FableConverters.create ()
 /// The shape is deliberately flat-and-stable: any change to it bumps
 /// `AuditSchemaVersion.current`. The `Subject` field carries the
 /// `AuditSubject` discriminated union which serialises as a tagged
-/// object via `FableJsonConverter` (e.g.
+/// object via `FableConverters` (e.g.
 /// `{"Case":"TeamAudit","Fields":["u-1","t-1"]}`).
 type private S3ArchiveLine = {
     SchemaVersion: int

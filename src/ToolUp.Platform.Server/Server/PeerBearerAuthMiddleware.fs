@@ -84,7 +84,7 @@ open ToolUp.Platform.Secrets
 //                                 primitive on the surface.
 //
 // No framework-specific serialisation attributes on the payloads;
-// `FableJsonConverter` is the universal converter used elsewhere in
+// `FableConverters` is the universal converter set used elsewhere in
 // the SDK (matches `JobScheduler.fs` and `WebhookDispatcher.fs`).
 
 [<Literal>]

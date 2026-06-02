@@ -25,7 +25,7 @@ let private maxRunsPerJob = 50
 // ─── Lifecycle event payloads ────────────────────────────────────
 //
 // Persisted to `IEventStore` under `SourceModule = "_platform.jobs"`.
-// `FableJsonConverter` (mirrors `AuditLog.fs:34-43` and Webhook
+// `FableConverters` (mirrors `AuditLog.fs:34-43` and Webhook
 // dispatcher) so the admin-UI can deserialise via `Fable.SimpleJson`
 // without an extra converter.
 

@@ -67,7 +67,7 @@ let private hashKey (key: string) =
 // ─── JSON ────────────────────────────────────────────────────────
 //
 // `JobDefinition` and `JobRun` both round-trip to the Fable admin UI
-// (Phase 9b's `JobApi`), so use `FableJsonConverter` (DU-aware shape
+// (Phase 9b's `JobApi`), so use `FableConverters` (DU-aware shape
 // compatible with `Fable.SimpleJson` on the client). Same pattern as
 // `WebhookRegistry`, `ConfigStore`, `LineageStore`.
 
@@ -90,9 +90,9 @@ module private Json =
 /// Denormalised payload stored inside an idempotency-index `.ref`
 /// blob. Carries enough to evaluate the TTL filter and return the
 /// matching `JobId` without resolving the canonical definition.
-/// Public so Newtonsoft's reflection-based serialisation works
-/// through `FableJsonConverter` — a `private` F# record exposes
-/// non-public properties that the converter cannot round-trip.
+/// Public so the STJ FableConverters record converter can read
+/// the synthesised public constructor — a `private` F# record
+/// hides it and the converter cannot round-trip.
 type IdempotencyEntry = { JobId: JobId; CreatedAt: DateTime }
 
 // ─── Concurrency helper ──────────────────────────────────────────

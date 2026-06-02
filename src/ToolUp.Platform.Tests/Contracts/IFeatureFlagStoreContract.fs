@@ -15,7 +15,7 @@ open ToolUp.Platform
 ///   * kind isolation — a user with the same id string as a team is
 ///     still a different scope on the wire (the `FlagScope` DU's whole
 ///     reason to exist);
-///   * DU round-trip — `FlagValue` survives `FableJsonConverter`
+///   * DU round-trip — `FlagValue` survives STJ `FableConverters`
 ///     serialisation for both `Bool` and `Variant` shapes.
 let tests (name: string) (factory: unit -> IFeatureFlagStore) =
     let uniqueId prefix =

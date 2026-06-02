@@ -81,9 +81,10 @@ let private extractDateFromBlobName (blobName: string) (scopeId: string) : DateT
 
 // ─── Serialisation ───────────────────────────────────────────────
 //
-// `FableJsonConverter` mirrors `AuditLog.fs:34-43`. Settings instance
-// is reused across calls — Newtonsoft is thread-safe for read-only
-// settings.
+// `FableConverters` mirrors `AuditLog.fs:34-43`. The options
+// instance is reused across calls — STJ's JsonSerializerOptions is
+// thread-safe once it has been used for a serialise call (it
+// freezes on first use).
 
 let private jsonOptions = FableConverters.create ()
 

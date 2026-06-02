@@ -40,7 +40,7 @@ open ToolUp.Platform.TeamManagement
 //                                or   "Admin|"
 //
 // Plain-text was chosen over JSON for round-trip stability — the
-// substrate's blob serialiser is `FableJsonConverter`, which can
+// substrate's blob serialiser is `FableConverters`, which can
 // interact awkwardly with JSON nested inside a `string option` field
 // across the writeback-on-MarkUsed path. The simple format is
 // trivially round-trippable through any serialiser.

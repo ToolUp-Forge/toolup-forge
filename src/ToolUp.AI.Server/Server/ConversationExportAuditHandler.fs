@@ -32,7 +32,7 @@ open ToolUp.Platform
 // trusted from the client body.
 
 // Wire shape — must match Client/ConversationPanel.fs. Plain record
-// decoded via FableJsonConverter (same idiom as `FastPathBeacon`).
+// decoded via FableConverters (same idiom as `FastPathBeacon`).
 type ExportAuditRequest = {
     ConversationId: Guid
     IncludeToolDetails: bool
