@@ -4,8 +4,8 @@ open System
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Giraffe
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── JSON serialization ──────────────────────────────────────────
@@ -17,13 +17,10 @@ open ToolUp.Platform
 // Fable client will read manually (SSE, persisted DU data) must go
 // through this converter.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private serializeEnvelope (env: NotificationEnvelope) =
-    JsonConvert.SerializeObject(env, jsonSettings)
+    JsonSerializer.Serialize(env, jsonOptions)
 
 // ─── Giraffe handler ─────────────────────────────────────────────
 

@@ -5,8 +5,8 @@ module ToolUp.Platform.BlobProviderProfile
 
 open System
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
@@ -23,16 +23,13 @@ open ToolUp.Platform.Providers
 // System.Text.Json cannot round-trip without hand-rolling the shape.
 
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: 'T) : string =
-        JsonConvert.SerializeObject(value, settings)
+        JsonSerializer.Serialize(value, options)
 
     let deserialize<'T> (json: string) : 'T =
-        JsonConvert.DeserializeObject<'T>(json, settings)
+        JsonSerializer.Deserialize<'T>(json, options)
 
 /// Blob name within a scope's (already scope-isolated) container.
 let private blobName = "provider-profile.json"

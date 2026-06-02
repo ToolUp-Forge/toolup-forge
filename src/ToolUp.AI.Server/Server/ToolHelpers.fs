@@ -3,6 +3,7 @@ module ToolUp.AI.ToolHelpers
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── AI tool helpers ─────────────────────────────────────────────
 //
@@ -44,25 +45,23 @@ type ToolExecutor = HttpContext -> string -> Async<string>
 /// call.
 exception ToolArgumentError of message: string
 
-let private fableJsonSettings =
-    let s = Newtonsoft.Json.JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private fableJsonOptions = FableConverters.create ()
 
-/// Serialise a value to JSON using `FableJsonConverter` so F#
+/// Serialise a value to JSON using the FableConverters set so F#
 /// discriminated unions, options, and records round-trip cleanly.
 /// Use for every executor return value that contains module domain
-/// types — `System.Text.Json` would silently drop DU cases.
+/// types — vanilla `JsonSerializer` (without these converters) would
+/// silently drop DU cases.
 let fableSerialize (value: obj) : string =
-    Newtonsoft.Json.JsonConvert.SerializeObject(value, fableJsonSettings)
+    JsonSerializer.Serialize(value, fableJsonOptions)
 
-/// Deserialise a JSON string into the given F# type using
-/// `FableJsonConverter`. Use for executor arguments that the AI agent
+/// Deserialise a JSON string into the given F# type using the
+/// FableConverters set. Use for executor arguments that the AI agent
 /// passes back from a prior tool call (the prior call's result was
 /// serialised via `fableSerialize`, so deserialising on the way in
-/// must use the same settings).
+/// must use the same options).
 let fableDeserialize<'T> (json: string) : 'T =
-    Newtonsoft.Json.JsonConvert.DeserializeObject<'T>(json, fableJsonSettings)
+    JsonSerializer.Deserialize<'T>(json, fableJsonOptions)
 
 /// Require a string argument. Throws with a clear message if absent or
 /// wrong type. `hint` is appended to the error — use it to point the
@@ -145,7 +144,7 @@ let requireTypedArg<'T> (args: JsonElement) (name: string) (typeHint: string) (h
         let raw = v.GetRawText()
 
         try
-            Newtonsoft.Json.JsonConvert.DeserializeObject<'T>(raw, fableJsonSettings)
+            JsonSerializer.Deserialize<'T>(raw, fableJsonOptions)
         with _ ->
             let truncated =
                 if raw.Length > 200 then
@@ -171,7 +170,7 @@ let optionalTypedArg<'T> (args: JsonElement) (name: string) (typeHint: string) :
         let raw = v.GetRawText()
 
         try
-            Some(Newtonsoft.Json.JsonConvert.DeserializeObject<'T>(raw, fableJsonSettings))
+            Some(JsonSerializer.Deserialize<'T>(raw, fableJsonOptions))
         with _ ->
             let truncated =
                 if raw.Length > 200 then

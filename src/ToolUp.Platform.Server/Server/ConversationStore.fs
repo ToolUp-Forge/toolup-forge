@@ -7,8 +7,8 @@ open System
 open System.Collections.Concurrent
 open System.Security.Cryptography
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.EntityQueryTypes
 
@@ -38,18 +38,15 @@ open ToolUp.Platform.EntityQueryTypes
 // `AIContentPart`, the per-image variants) round-trip cleanly. Same
 // pattern as `ResultStore.fs` / `AIAssistantHandler.fs`.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private toJsonBytes (value: 'T) : byte[] =
-    JsonConvert.SerializeObject(value, jsonSettings) |> Encoding.UTF8.GetBytes
+    JsonSerializer.Serialize(value, jsonOptions) |> Encoding.UTF8.GetBytes
 
 let private fromJsonBytes<'T> (bytes: byte[]) : 'T =
     bytes
     |> Encoding.UTF8.GetString
-    |> fun s -> JsonConvert.DeserializeObject<'T>(s, jsonSettings)
+    |> fun s -> JsonSerializer.Deserialize<'T>(s, jsonOptions)
 
 // ─── Digest helpers ──────────────────────────────────────────────
 
@@ -215,7 +212,7 @@ module private Events =
             match eventStore with
             | None -> return ()
             | Some store ->
-                let payloadJson = JsonConvert.SerializeObject(payload, jsonSettings)
+                let payloadJson = JsonSerializer.Serialize(payload, jsonOptions)
 
                 let event: ModuleEvent = {
                     Id = Guid.NewGuid()

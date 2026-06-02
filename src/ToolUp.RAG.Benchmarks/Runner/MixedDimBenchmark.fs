@@ -3,7 +3,8 @@ module ToolUp.RAG.Benchmarks.MixedDimBenchmark
 open System
 open System.Diagnostics
 open System.IO
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.IVectorStore
@@ -27,9 +28,9 @@ open ToolUp.RAG.Benchmarks.BenchmarkRunner
 // this runner measures p50/p95/p99 latency under a mixed-dim load, not
 // retrieval quality.
 
-// CLIMutable + Newtonsoft.Json deserialisation requires the record type
-// to be public — F# `type private` emits non-public CLR members that
-// Newtonsoft's reflection-based deserialiser silently skips.
+// CLIMutable + STJ FableConverters deserialisation requires the record
+// type to be public — F# `type private` emits non-public CLR members
+// that reflection-based deserialisers silently skip.
 [<CLIMutable>]
 type FixtureMetadata = {
     name: string
@@ -91,7 +92,8 @@ let private loadFixture (path: string) : LoadedFixture =
         failwithf "Mixed-dim fixture not found at %s" path
 
     let json = File.ReadAllText path
-    let meta = JsonConvert.DeserializeObject<FixtureMetadata>(json)
+    let options = FableConverters.create ()
+    let meta = JsonSerializer.Deserialize<FixtureMetadata>(json, options)
     let rng = Random meta.seed
 
     let textCorpus =

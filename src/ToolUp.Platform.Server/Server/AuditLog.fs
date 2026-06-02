@@ -1,8 +1,8 @@
 module ToolUp.Platform.AuditLog
 
 open System
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── Audit log default implementation ────────────────────────────
@@ -31,16 +31,13 @@ open ToolUp.Platform
 // today, so any future client-facing audit query surface (e.g. an
 // admin UI) can deserialise without re-deriving the wire shape.
 
-let private auditJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private auditJsonOptions = FableConverters.create ()
 
 let private toAuditJson (value: 'T) =
-    JsonConvert.SerializeObject(value, auditJsonSettings)
+    JsonSerializer.Serialize(value, auditJsonOptions)
 
 let private fromAuditJson<'T> (json: string) =
-    JsonConvert.DeserializeObject<'T>(json, auditJsonSettings)
+    JsonSerializer.Deserialize<'T>(json, auditJsonOptions)
 
 // Phase 62 — `PremiumGranted` / `PremiumRevoked` are tuple-shaped DU
 // cases; the serialised form is an anonymous record on the write

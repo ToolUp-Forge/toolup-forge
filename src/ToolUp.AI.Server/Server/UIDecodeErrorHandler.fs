@@ -6,7 +6,8 @@ module ToolUp.AI.UIDecodeErrorHandler
 open System
 open System.IO
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
 
@@ -60,10 +61,7 @@ type private UIDecodeErrorEventPayload = {
     DecoderError: string
 }
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private resolveScope (ctx: HttpContext) : StorageScope =
     match ctx.Items.TryGetValue "ToolUp.StorageScope" with
@@ -85,7 +83,7 @@ let uiDecodeErrorHandler: HttpHandler =
         try
             use reader = new StreamReader(ctx.Request.Body)
             let! body = reader.ReadToEndAsync()
-            let report = JsonConvert.DeserializeObject<UIDecodeErrorReport>(body, jsonSettings)
+            let report = JsonSerializer.Deserialize<UIDecodeErrorReport>(body, jsonOptions)
 
             if isNull (box report) then
                 ctx.Response.StatusCode <- 400
@@ -108,7 +106,7 @@ let uiDecodeErrorHandler: HttpHandler =
                         ScopeId = scope.ScopeId
                         SourceModule = UIDecodeErrorSourceModule
                         EventType = UIDecodeErrorEventType
-                        Payload = JsonConvert.SerializeObject(payload, jsonSettings)
+                        Payload = JsonSerializer.Serialize(payload, jsonOptions)
                     }
 
                     try

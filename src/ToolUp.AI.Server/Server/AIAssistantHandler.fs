@@ -5,7 +5,8 @@ open System.Text
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
@@ -20,17 +21,14 @@ open ToolUp.AI.SSEHandler
 // Uses FableJsonConverter (from ToolUp.Remoting.Json) so that persisted
 // conversations with F# DUs serialize in Fable-compatible format.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private toJson obj =
-    JsonConvert.SerializeObject(obj, jsonSettings)
+    JsonSerializer.Serialize(obj, jsonOptions)
 
 let private fromJson<'T> (bytes: byte[]) =
     let json = Encoding.UTF8.GetString(bytes)
-    JsonConvert.DeserializeObject<'T>(json, jsonSettings)
+    JsonSerializer.Deserialize<'T>(json, jsonOptions)
 
 // ─── Phase 6h follow-up — bounded waits on the chat path ─────────
 //

@@ -5,8 +5,8 @@ module ToolUp.Platform.PremiumUserApi
 
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── Phase 61 — Premium-user list admin endpoint ──────────────────
@@ -24,10 +24,7 @@ open ToolUp.Platform
 // the existing endpoint family rather than duplicating it here.
 // This handler covers only the missing piece — the list read.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
@@ -51,7 +48,7 @@ let private writeError (ctx: HttpContext) (statusCode: int) (message: string) : 
 }
 
 let private writeJson (ctx: HttpContext) (statusCode: int) (payload: 'T) : HttpFuncResult = task {
-    let json = JsonConvert.SerializeObject(payload, jsonSettings)
+    let json = JsonSerializer.Serialize(payload, jsonOptions)
     ctx.Response.StatusCode <- statusCode
     ctx.Response.ContentType <- "application/json; charset=utf-8"
     return! ctx.WriteTextAsync json

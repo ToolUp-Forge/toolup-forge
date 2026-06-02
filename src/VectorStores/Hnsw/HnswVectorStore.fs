@@ -3,7 +3,8 @@ module ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore
 open System
 open System.Collections.Generic
 open System.Threading
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open HNSW.Net
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -28,13 +29,33 @@ open ToolUp.Platform.IVectorStore
 // canonical surfacing case) shares the singleton across threads, and
 // the RNG races.
 //
-// Fix: each `HnswVectorStore` instance gets its own RNG. Internally
+// Fix 1: each `HnswVectorStore` instance gets its own RNG. Internally
 // thread-safe (the store's own `state.Lock` already serialises graph
 // builds within one store, but the lock guarantees the RNG sees no
 // cross-store races without depending on the consumer's discipline).
+//
+// Fix 2: the per-store RNG is *seeded* with a fixed value. HNSW.Net
+// uses the RNG to pick per-item level assignments, which determine
+// graph topology — same data + same RNG sequence → byte-identical
+// graph. An unseeded `Random()` (time-derived seed in older .NET,
+// thread-local seed in modern .NET) produces a different graph on
+// every process start, so the same fixture can yield different
+// recall on different runs. That non-determinism surfaces as
+// intermittent CI failures on the recall-fidelity smoke test
+// (`HnswFidelityTests.fs`), where the graph can dip below the
+// loose recall-gap budget on a "bad" RNG draw even though the
+// average recall is comfortably above it. Seeding makes graph
+// builds reproducible — for a given corpus + parameters, every
+// build produces the same graph, every test run is repeatable,
+// and a real regression is distinguishable from a stochastic dip.
+// 1337 is arbitrary; the choice doesn't matter, only that it's
+// fixed.
+
+[<Literal>]
+let private graphBuildSeed = 1337
 
 type private LocalRandomGenerator() =
-    let rng = Random()
+    let rng = Random graphBuildSeed
     let lockObj = obj ()
 
     interface IProvideRandomValues with
@@ -120,16 +141,13 @@ let private toDoubleArray (v: float32 array) =
 
 // ─── JSON helpers ─────────────────────────────────────────────────
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private toJson o =
-    JsonConvert.SerializeObject(o, jsonSettings)
+    JsonSerializer.Serialize(o, jsonOptions)
 
 let private fromJson<'T> (s: string) =
-    JsonConvert.DeserializeObject<'T>(s, jsonSettings)
+    JsonSerializer.Deserialize<'T>(s, jsonOptions)
 
 // ─── Per-scope state ──────────────────────────────────────────────
 

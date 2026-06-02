@@ -2,7 +2,8 @@ module ToolUp.Platform.PersistentNarrativeStore
 
 open System
 open System.Text
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
@@ -43,19 +44,16 @@ let private blobName (scopeId: string) (entry: NarrativeEntry) =
 
 // ─── JSON serialisation ──────────────────────────────────────────
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private serialize (entry: NarrativeEntry) : byte[] =
-    let json = JsonConvert.SerializeObject(entry, jsonSettings)
+    let json = JsonSerializer.Serialize(entry, jsonOptions)
     Encoding.UTF8.GetBytes(json)
 
 let private deserialize (bytes: byte[]) : NarrativeEntry option =
     try
         let json = Encoding.UTF8.GetString(bytes)
-        Some(JsonConvert.DeserializeObject<NarrativeEntry>(json, jsonSettings))
+        Some(JsonSerializer.Deserialize<NarrativeEntry>(json, jsonOptions))
     with _ ->
         None
 

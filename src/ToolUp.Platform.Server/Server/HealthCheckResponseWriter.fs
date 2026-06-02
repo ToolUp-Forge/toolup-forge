@@ -2,8 +2,8 @@ module ToolUp.Platform.HealthCheckResponseWriter
 
 open System
 open System.Threading.Tasks
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Diagnostics.HealthChecks
 
@@ -42,10 +42,10 @@ type private HealthCheckResponse = {
     checks: HealthCheckEntry list
 }
 
-let private jsonSettings =
-    let s = JsonSerializerSettings(Formatting = Formatting.Indented)
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions =
+    let o = FableConverters.create ()
+    o.WriteIndented <- true
+    o
 
 let private statusName (status: HealthStatus) =
     match status with
@@ -87,5 +87,5 @@ let writeResponse (ctx: HttpContext) (report: HealthReport) : Task =
         checks = entries
     }
 
-    let body = JsonConvert.SerializeObject(payload, jsonSettings)
+    let body = JsonSerializer.Serialize(payload, jsonOptions)
     ctx.Response.WriteAsync body

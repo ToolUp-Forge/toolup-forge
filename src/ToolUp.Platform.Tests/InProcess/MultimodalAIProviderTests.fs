@@ -2,8 +2,9 @@ module ToolUp.Platform.Tests.InProcess.MultimodalAIProviderTests
 
 open System
 open System.Text
+open System.Text.Json
 open Expecto
-open Newtonsoft.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
@@ -158,14 +159,11 @@ let private errorTests =
 // `ai-conversations/{id}.json` blob. Plain-text turns continue to
 // round-trip with `Parts = []` byte-for-byte.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private roundTrip (msg: ConversationMessage) : ConversationMessage =
-    let json = JsonConvert.SerializeObject(msg, jsonSettings)
-    JsonConvert.DeserializeObject<ConversationMessage>(json, jsonSettings)
+    let json = JsonSerializer.Serialize(msg, jsonOptions)
+    JsonSerializer.Deserialize<ConversationMessage>(json, jsonOptions)
 
 let private persistenceTests =
     testList "ConversationMessage persistence round-trip (Phase 6o follow-up B)" [

@@ -4,8 +4,8 @@ open System
 open System.Security.Cryptography
 open System.Text
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
@@ -181,13 +181,10 @@ let constantTimeEquals (expected: string) (actual: string) : bool =
 
 // ─── Audit emission helpers ──────────────────────────────────────────
 
-let private fableJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private fableJsonOptions = FableConverters.create ()
 
 let private serialize (value: 'T) : string =
-    JsonConvert.SerializeObject(value, fableJsonSettings)
+    JsonSerializer.Serialize(value, fableJsonOptions)
 
 /// Write a `_platform.peer.bearer` event. Best-effort: failures are
 /// swallowed so a flaky event store never affects the request outcome

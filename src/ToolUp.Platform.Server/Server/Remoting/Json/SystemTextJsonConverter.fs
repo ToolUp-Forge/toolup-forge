@@ -18,7 +18,8 @@ open FSharp.Reflection
 
 [<AutoOpen>]
 module private UnionReflection =
-    let bindingFlags = BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance
+    let bindingFlags =
+        BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance
 
     type UnionCase = {
         Uci: UnionCaseInfo
@@ -40,32 +41,42 @@ module private UnionReflection =
         FSharpType.GetUnionCases(t, bindingFlags).[0].DeclaringType
 
     let getInfo (t: Type) : UnionInfo =
-        cache.GetOrAdd(canonicalUnion t, fun union ->
-            let cases =
-                FSharpType.GetUnionCases(union, bindingFlags)
-                |> Array.map (fun uci ->
-                    let fields = uci.GetFields()
-                    let reader =
-                        if fields.Length > 0 then
-                            FSharpValue.PreComputeUnionReader(uci, bindingFlags) |> ValueSome
-                        else
-                            ValueNone
-                    {
-                        Uci = uci
-                        FieldTypes = fields |> Array.map (fun pi -> pi.PropertyType)
-                        FieldReader = reader
-                        Constructor = FSharpValue.PreComputeUnionConstructor(uci, bindingFlags)
-                    })
-            let byName =
-                let d = Dictionary<string, UnionCase>(cases.Length)
-                for c in cases do d.Add(c.Uci.Name, c)
-                d :> IReadOnlyDictionary<_, _>
-            {
-                UnionType = union
-                TagReader = FSharpValue.PreComputeUnionTagReader(union, bindingFlags)
-                Cases = cases
-                CaseByName = byName
-            })
+        cache.GetOrAdd(
+            canonicalUnion t,
+            fun union ->
+                let cases =
+                    FSharpType.GetUnionCases(union, bindingFlags)
+                    |> Array.map (fun uci ->
+                        let fields = uci.GetFields()
+
+                        let reader =
+                            if fields.Length > 0 then
+                                FSharpValue.PreComputeUnionReader(uci, bindingFlags) |> ValueSome
+                            else
+                                ValueNone
+
+                        {
+                            Uci = uci
+                            FieldTypes = fields |> Array.map (fun pi -> pi.PropertyType)
+                            FieldReader = reader
+                            Constructor = FSharpValue.PreComputeUnionConstructor(uci, bindingFlags)
+                        })
+
+                let byName =
+                    let d = Dictionary<string, UnionCase>(cases.Length)
+
+                    for c in cases do
+                        d.Add(c.Uci.Name, c)
+
+                    d :> IReadOnlyDictionary<_, _>
+
+                {
+                    UnionType = union
+                    TagReader = FSharpValue.PreComputeUnionTagReader(union, bindingFlags)
+                    Cases = cases
+                    CaseByName = byName
+                }
+        )
 
 [<AutoOpen>]
 module private RecordReflection =
@@ -78,25 +89,47 @@ module private RecordReflection =
         Reader: obj -> obj[]
         Constructor: obj[] -> obj
         FieldIndexByName: IReadOnlyDictionary<string, int>
+        FieldIndexByNameInsensitive: IReadOnlyDictionary<string, int>
     }
 
     let private cache = ConcurrentDictionary<Type, RecordInfo>()
 
     let getInfo (t: Type) : RecordInfo =
-        cache.GetOrAdd(t, fun t ->
-            let fields = FSharpType.GetRecordFields(t, UnionReflection.bindingFlags)
-            let nameIndex =
-                let d = Dictionary<string, int>(fields.Length)
-                for i in 0 .. fields.Length - 1 do d.Add(fields.[i].Name, i)
-                d :> IReadOnlyDictionary<_, _>
-            {
-                RecordType = t
-                FieldNames = fields |> Array.map (fun pi -> pi.Name)
-                FieldTypes = fields |> Array.map (fun pi -> pi.PropertyType)
-                Reader = FSharpValue.PreComputeRecordReader(t, UnionReflection.bindingFlags)
-                Constructor = FSharpValue.PreComputeRecordConstructor(t, UnionReflection.bindingFlags)
-                FieldIndexByName = nameIndex
-            })
+        cache.GetOrAdd(
+            t,
+            fun t ->
+                let fields = FSharpType.GetRecordFields(t, UnionReflection.bindingFlags)
+
+                let nameIndex =
+                    let d = Dictionary<string, int>(fields.Length)
+
+                    for i in 0 .. fields.Length - 1 do
+                        d.Add(fields.[i].Name, i)
+
+                    d :> IReadOnlyDictionary<_, _>
+                // Case-insensitive lookup table used when the consumer's
+                // JsonSerializerOptions sets PropertyNameCaseInsensitive = true
+                // (the default in FableConverters.create — preserves
+                // Newtonsoft.Json-default behaviour for camelCase → PascalCase
+                // round-trips that pre-migration consumers relied on).
+                let nameIndexInsensitive =
+                    let d = Dictionary<string, int>(fields.Length, StringComparer.OrdinalIgnoreCase)
+
+                    for i in 0 .. fields.Length - 1 do
+                        d.Add(fields.[i].Name, i)
+
+                    d :> IReadOnlyDictionary<_, _>
+
+                {
+                    RecordType = t
+                    FieldNames = fields |> Array.map (fun pi -> pi.Name)
+                    FieldTypes = fields |> Array.map (fun pi -> pi.PropertyType)
+                    Reader = FSharpValue.PreComputeRecordReader(t, UnionReflection.bindingFlags)
+                    Constructor = FSharpValue.PreComputeRecordConstructor(t, UnionReflection.bindingFlags)
+                    FieldIndexByName = nameIndex
+                    FieldIndexByNameInsensitive = nameIndexInsensitive
+                }
+        )
 
 [<AutoOpen>]
 module private TupleReflection =
@@ -110,13 +143,15 @@ module private TupleReflection =
     let private cache = ConcurrentDictionary<Type, TupleInfo>()
 
     let getInfo (t: Type) : TupleInfo =
-        cache.GetOrAdd(t, fun t ->
-            {
+        cache.GetOrAdd(
+            t,
+            fun t -> {
                 TupleType = t
                 ElementTypes = FSharpType.GetTupleElements(t)
                 Reader = FSharpValue.PreComputeTupleReader(t)
                 Constructor = FSharpValue.PreComputeTupleConstructor(t)
-            })
+            }
+        )
 
 // =============================================================================
 // F# Union converter (Kind.Union)
@@ -142,42 +177,44 @@ type FSharpUnionConverter<'T>() =
 
     let unionOfRecords =
         info.Cases
-        |> Array.forall (fun case ->
-            case.FieldTypes.Length = 1 && FSharpType.IsRecord(case.FieldTypes.[0]))
+        |> Array.forall (fun case -> case.FieldTypes.Length = 1 && FSharpType.IsRecord(case.FieldTypes.[0]))
 
     let lookupCaseInsensitive (name: string) =
         let upper = name.ToUpperInvariant()
         info.Cases |> Array.tryFind (fun c -> c.Uci.Name.ToUpperInvariant() = upper)
 
     override _.Write(writer: Utf8JsonWriter, value: 'T, options: JsonSerializerOptions) =
-        let case = info.Cases.[info.TagReader (box value)]
+        let case = info.Cases.[info.TagReader(box value)]
+
         match case.FieldReader with
-        | ValueNone ->
-            writer.WriteStringValue(case.Uci.Name)
+        | ValueNone -> writer.WriteStringValue(case.Uci.Name)
         | ValueSome reader ->
             let fields = reader (box value)
             writer.WriteStartObject()
             writer.WritePropertyName(case.Uci.Name)
+
             if fields.Length = 1 then
                 JsonSerializer.Serialize(writer, fields.[0], case.FieldTypes.[0], options)
             else
                 writer.WriteStartArray()
+
                 for i in 0 .. fields.Length - 1 do
                     JsonSerializer.Serialize(writer, fields.[i], case.FieldTypes.[i], options)
+
                 writer.WriteEndArray()
+
             writer.WriteEndObject()
 
     override _.Read(reader: byref<Utf8JsonReader>, _typeToConvert: Type, options: JsonSerializerOptions) =
         match reader.TokenType with
-        | JsonTokenType.Null ->
-            Unchecked.defaultof<'T>
+        | JsonTokenType.Null -> Unchecked.defaultof<'T>
 
         | JsonTokenType.String ->
             let name = reader.GetString()
+
             match info.CaseByName.TryGetValue(name) with
             | true, case -> case.Constructor [||] :?> 'T
-            | false, _ ->
-                failwithf "Unknown case '%s' for union type %s" name typeof<'T>.FullName
+            | false, _ -> failwithf "Unknown case '%s' for union type %s" name typeof<'T>.FullName
 
         | JsonTokenType.StartObject ->
             use doc = JsonDocument.ParseValue(&reader)
@@ -195,12 +232,18 @@ type FSharpUnionConverter<'T>() =
 
             if hasTagShape then
                 let caseName = root.GetProperty("name").GetString()
+
                 let case =
                     match info.CaseByName.TryGetValue(caseName) with
                     | true, c -> c
                     | false, _ ->
-                        failwithf "Unknown case '%s' (Fable-runtime shape) for union type %s" caseName typeof<'T>.FullName
+                        failwithf
+                            "Unknown case '%s' (Fable-runtime shape) for union type %s"
+                            caseName
+                            typeof<'T>.FullName
+
                 let fieldsArr = root.GetProperty("fields")
+
                 if case.FieldTypes.Length = 0 then
                     case.Constructor [||] :?> 'T
                 elif case.FieldTypes.Length = 1 then
@@ -210,18 +253,20 @@ type FSharpUnionConverter<'T>() =
                     case.Constructor [| v |] :?> 'T
                 else
                     let elements = fieldsArr.EnumerateArray() |> Seq.toArray
+
                     let values =
                         Array.init case.FieldTypes.Length (fun i ->
                             elements.[i].Deserialize(case.FieldTypes.[i], options))
+
                     case.Constructor values :?> 'T
 
             elif hasTypename && unionOfRecords then
                 let caseName = typenameElement.GetString()
+
                 let case =
                     match lookupCaseInsensitive caseName with
                     | Some c -> c
-                    | None ->
-                        failwithf "Unknown __typename '%s' for union type %s" caseName typeof<'T>.FullName
+                    | None -> failwithf "Unknown __typename '%s' for union type %s" caseName typeof<'T>.FullName
                 // The whole root deserialises to the single record field.
                 let v = root.Deserialize(case.FieldTypes.[0], options)
                 case.Constructor [| v |] :?> 'T
@@ -229,10 +274,13 @@ type FSharpUnionConverter<'T>() =
             else
                 // Shape 2: single-property writer roundtrip — {"<Case>": value-or-array}.
                 let mutable enumerator = root.EnumerateObject()
+
                 if not (enumerator.MoveNext()) then
                     failwithf "Empty object cannot be deserialised as union %s" typeof<'T>.FullName
+
                 let prop = enumerator.Current
                 let caseName = prop.Name
+
                 match info.CaseByName.TryGetValue(caseName) with
                 | true, case ->
                     let values =
@@ -244,40 +292,52 @@ type FSharpUnionConverter<'T>() =
                             if prop.Value.ValueKind <> JsonValueKind.Array then
                                 failwithf
                                     "Union case '%s' of %s has %d fields but JSON value is %A, not an array"
-                                    caseName typeof<'T>.FullName case.FieldTypes.Length prop.Value.ValueKind
+                                    caseName
+                                    typeof<'T>.FullName
+                                    case.FieldTypes.Length
+                                    prop.Value.ValueKind
+
                             let elements = prop.Value.EnumerateArray() |> Seq.toArray
+
                             if elements.Length <> case.FieldTypes.Length then
                                 failwithf
                                     "Union case '%s' of %s expected %d fields, got %d"
-                                    caseName typeof<'T>.FullName case.FieldTypes.Length elements.Length
+                                    caseName
+                                    typeof<'T>.FullName
+                                    case.FieldTypes.Length
+                                    elements.Length
+
                             Array.init case.FieldTypes.Length (fun i ->
                                 elements.[i].Deserialize(case.FieldTypes.[i], options))
+
                     case.Constructor values :?> 'T
-                | false, _ ->
-                    failwithf "Unknown case '%s' for union type %s" caseName typeof<'T>.FullName
+                | false, _ -> failwithf "Unknown case '%s' for union type %s" caseName typeof<'T>.FullName
 
         | JsonTokenType.StartArray ->
             // Shape 5: ["<Case>", <f1>, ...].
             use doc = JsonDocument.ParseValue(&reader)
             let elements = doc.RootElement.EnumerateArray() |> Seq.toArray
+
             if elements.Length = 0 then
                 failwithf "Empty array cannot be deserialised as union %s" typeof<'T>.FullName
+
             let caseName = elements.[0].GetString()
+
             let case =
                 match info.CaseByName.TryGetValue(caseName) with
                 | true, c -> c
-                | false, _ ->
-                    failwithf "Unknown case '%s' (array shape) for union type %s" caseName typeof<'T>.FullName
+                | false, _ -> failwithf "Unknown case '%s' (array shape) for union type %s" caseName typeof<'T>.FullName
+
             if case.FieldTypes.Length = 0 then
                 case.Constructor [||] :?> 'T
             else
                 let values =
                     Array.init case.FieldTypes.Length (fun i ->
                         elements.[i + 1].Deserialize(case.FieldTypes.[i], options))
+
                 case.Constructor values :?> 'T
 
-        | other ->
-            failwithf "Unexpected token %A when reading union %s" other typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading union %s" other typeof<'T>.FullName
 
 /// Detect Fable.Core.PojoAttribute / StringEnumAttribute on a type without
 /// requiring a reference to Fable.Core (matches by attribute FullName, same
@@ -305,7 +365,9 @@ type FSharpUnionConverterFactory() =
     override _.CanConvert(typeToConvert: Type) = isUnionTypeWeConvert typeToConvert
 
     override _.CreateConverter(typeToConvert: Type, _options: JsonSerializerOptions) =
-        let converterType = typedefof<FSharpUnionConverter<_>>.MakeGenericType(typeToConvert)
+        let converterType =
+            typedefof<FSharpUnionConverter<_>>.MakeGenericType(typeToConvert)
+
         Activator.CreateInstance(converterType) :?> JsonConverter
 
 // =============================================================================
@@ -323,20 +385,25 @@ type FSharpPojoDUConverter<'T>() =
     inherit JsonConverter<'T>()
 
     let info = UnionReflection.getInfo typeof<'T>
-    let [<Literal>] PojoDuTag = "type"
+
+    [<Literal>]
+    let PojoDuTag = "type"
 
     override _.Write(writer: Utf8JsonWriter, value: 'T, options: JsonSerializerOptions) =
-        let case = info.Cases.[info.TagReader (box value)]
+        let case = info.Cases.[info.TagReader(box value)]
         writer.WriteStartObject()
         writer.WriteString(PojoDuTag, case.Uci.Name)
+
         match case.FieldReader with
         | ValueNone -> ()
         | ValueSome reader ->
             let fields = reader (box value)
             let fieldInfos = case.Uci.GetFields()
+
             for i in 0 .. fields.Length - 1 do
                 writer.WritePropertyName(fieldInfos.[i].Name)
                 JsonSerializer.Serialize(writer, fields.[i], case.FieldTypes.[i], options)
+
         writer.WriteEndObject()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -345,31 +412,37 @@ type FSharpPojoDUConverter<'T>() =
         | JsonTokenType.StartObject ->
             use doc = JsonDocument.ParseValue(&reader)
             let root = doc.RootElement
+
             match root.TryGetProperty(PojoDuTag) with
             | true, typeElement ->
                 let caseName = typeElement.GetString()
+
                 let case =
                     match info.CaseByName.TryGetValue(caseName) with
                     | true, c -> c
-                    | false, _ ->
-                        failwithf "Unknown PojoDU case '%s' for union type %s" caseName typeof<'T>.FullName
+                    | false, _ -> failwithf "Unknown PojoDU case '%s' for union type %s" caseName typeof<'T>.FullName
+                // Missing PojoDU fields → type-appropriate default; same
+                // reasoning as FSharpRecordConverter (value-type positions
+                // cannot accept null at union-constructor time).
                 let values =
                     case.Uci.GetFields()
                     |> Array.mapi (fun i fi ->
                         match root.TryGetProperty(fi.Name) with
                         | true, fieldEl -> fieldEl.Deserialize(case.FieldTypes.[i], options)
-                        | false, _ -> null)
+                        | false, _ ->
+                            let t = case.FieldTypes.[i]
+                            if t.IsValueType then Activator.CreateInstance(t) else null)
+
                 case.Constructor values :?> 'T
-            | false, _ ->
-                failwithf "PojoDU JSON missing 'type' discriminator for %s" typeof<'T>.FullName
-        | other ->
-            failwithf "Unexpected token %A when reading PojoDU %s" other typeof<'T>.FullName
+            | false, _ -> failwithf "PojoDU JSON missing 'type' discriminator for %s" typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading PojoDU %s" other typeof<'T>.FullName
 
 type FSharpPojoDUConverterFactory() =
     inherit JsonConverterFactory()
 
     override _.CanConvert(t: Type) =
-        FSharpType.IsUnion(t, UnionReflection.bindingFlags) && UnionAttributes.hasPojoAttribute t
+        FSharpType.IsUnion(t, UnionReflection.bindingFlags)
+        && UnionAttributes.hasPojoAttribute t
 
     override _.CreateConverter(t: Type, _options: JsonSerializerOptions) =
         let converterType = typedefof<FSharpPojoDUConverter<_>>.MakeGenericType(t)
@@ -397,7 +470,7 @@ type FSharpStringEnumConverter<'T>() =
         | _ -> uci.Name.Substring(0, 1).ToLowerInvariant() + uci.Name.Substring(1)
 
     override _.Write(writer: Utf8JsonWriter, value: 'T, _: JsonSerializerOptions) =
-        let case = info.Cases.[info.TagReader (box value)]
+        let case = info.Cases.[info.TagReader(box value)]
         writer.WriteStringValue(nameForCase case.Uci)
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, _: JsonSerializerOptions) =
@@ -405,21 +478,19 @@ type FSharpStringEnumConverter<'T>() =
         | JsonTokenType.Null -> Unchecked.defaultof<'T>
         | JsonTokenType.String ->
             let wire = reader.GetString()
-            let matched =
-                info.Cases
-                |> Array.tryFind (fun c -> nameForCase c.Uci = wire)
+            let matched = info.Cases |> Array.tryFind (fun c -> nameForCase c.Uci = wire)
+
             match matched with
             | Some case -> case.Constructor [||] :?> 'T
-            | None ->
-                failwithf "Unknown StringEnum value '%s' for %s" wire typeof<'T>.FullName
-        | other ->
-            failwithf "Unexpected token %A when reading StringEnum %s" other typeof<'T>.FullName
+            | None -> failwithf "Unknown StringEnum value '%s' for %s" wire typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading StringEnum %s" other typeof<'T>.FullName
 
 type FSharpStringEnumConverterFactory() =
     inherit JsonConverterFactory()
 
     override _.CanConvert(t: Type) =
-        FSharpType.IsUnion(t, UnionReflection.bindingFlags) && UnionAttributes.hasStringEnumAttribute t
+        FSharpType.IsUnion(t, UnionReflection.bindingFlags)
+        && UnionAttributes.hasStringEnumAttribute t
 
     override _.CreateConverter(t: Type, _options: JsonSerializerOptions) =
         let converterType = typedefof<FSharpStringEnumConverter<_>>.MakeGenericType(t)
@@ -436,8 +507,7 @@ type FSharpOptionConverter<'T>() =
 
     override _.Write(writer: Utf8JsonWriter, value: 'T option, options: JsonSerializerOptions) =
         match value with
-        | Some inner ->
-            JsonSerializer.Serialize(writer, inner, typeof<'T>, options)
+        | Some inner -> JsonSerializer.Serialize(writer, inner, typeof<'T>, options)
         | None ->
             // Defensive — STJ's default null-handling means this is unlikely
             // to fire (None has runtime value null for the ref-typed Option<'T>).
@@ -473,10 +543,12 @@ type FSharpTupleConverter<'T>() =
     let info = TupleReflection.getInfo typeof<'T>
 
     override _.Write(writer: Utf8JsonWriter, value: 'T, options: JsonSerializerOptions) =
-        let elements = info.Reader (box value)
+        let elements = info.Reader(box value)
         writer.WriteStartArray()
+
         for i in 0 .. elements.Length - 1 do
             JsonSerializer.Serialize(writer, elements.[i], info.ElementTypes.[i], options)
+
         writer.WriteEndArray()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -485,12 +557,12 @@ type FSharpTupleConverter<'T>() =
         | JsonTokenType.StartArray ->
             use doc = JsonDocument.ParseValue(&reader)
             let elements = doc.RootElement.EnumerateArray() |> Seq.toArray
+
             let values =
-                Array.init info.ElementTypes.Length (fun i ->
-                    elements.[i].Deserialize(info.ElementTypes.[i], options))
+                Array.init info.ElementTypes.Length (fun i -> elements.[i].Deserialize(info.ElementTypes.[i], options))
+
             info.Constructor values :?> 'T
-        | other ->
-            failwithf "Unexpected token %A when reading tuple %s" other typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading tuple %s" other typeof<'T>.FullName
 
 type FSharpTupleConverterFactory() =
     inherit JsonConverterFactory()
@@ -513,11 +585,13 @@ type FSharpRecordConverter<'T>() =
     let info = RecordReflection.getInfo typeof<'T>
 
     override _.Write(writer: Utf8JsonWriter, value: 'T, options: JsonSerializerOptions) =
-        let values = info.Reader (box value)
+        let values = info.Reader(box value)
         writer.WriteStartObject()
+
         for i in 0 .. info.FieldNames.Length - 1 do
             writer.WritePropertyName(info.FieldNames.[i])
             JsonSerializer.Serialize(writer, values.[i], info.FieldTypes.[i], options)
+
         writer.WriteEndObject()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -525,15 +599,42 @@ type FSharpRecordConverter<'T>() =
         | JsonTokenType.Null -> Unchecked.defaultof<'T>
         | JsonTokenType.StartObject ->
             use doc = JsonDocument.ParseValue(&reader)
-            let values = Array.zeroCreate<obj> info.FieldNames.Length
+            // F# record constructors take an obj[] of field values via
+            // PreComputeRecordConstructor. Value-type fields (int64, bool,
+            // DateTime, struct DUs, etc.) cannot accept null — passing null
+            // for a value-type field at construction throws
+            // NullReferenceException via the unbox. So initialise each
+            // position with the type-appropriate default: zero for value
+            // types (so a missing JSON property yields 0L / false / etc.),
+            // null for reference types (string / list / Option / DU — F#
+            // None is null, the empty list is null, etc.). Matches the
+            // Newtonsoft.Json behaviour of leniently absorbing missing
+            // properties without throwing.
+            let values =
+                Array.init info.FieldNames.Length (fun i ->
+                    let t = info.FieldTypes.[i]
+                    if t.IsValueType then Activator.CreateInstance(t) else null)
+            // Newtonsoft's default JsonConvert.DeserializeObject is
+            // case-insensitive for record property matching; FableConverters
+            // sets PropertyNameCaseInsensitive = true by default so the
+            // Fable.SimpleJson PascalCase wire shape AND external camelCase
+            // emitters (e.g. fast-path-resolver companions) both round-trip
+            // into PascalCase F# fields. Consumers wanting strict case
+            // matching can override via `options.PropertyNameCaseInsensitive
+            // <- false` BEFORE first serialise.
+            let lookup =
+                if options.PropertyNameCaseInsensitive then
+                    info.FieldIndexByNameInsensitive
+                else
+                    info.FieldIndexByName
+
             for prop in doc.RootElement.EnumerateObject() do
-                match info.FieldIndexByName.TryGetValue(prop.Name) with
-                | true, idx ->
-                    values.[idx] <- prop.Value.Deserialize(info.FieldTypes.[idx], options)
-                | false, _ -> ()  // ignore extra fields
+                match lookup.TryGetValue(prop.Name) with
+                | true, idx -> values.[idx] <- prop.Value.Deserialize(info.FieldTypes.[idx], options)
+                | false, _ -> () // ignore extra fields
+
             info.Constructor values :?> 'T
-        | other ->
-            failwithf "Unexpected token %A when reading record %s" other typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading record %s" other typeof<'T>.FullName
 
 type FSharpRecordConverterFactory() =
     inherit JsonConverterFactory()
@@ -546,7 +647,8 @@ type FSharpRecordConverterFactory() =
     // Newtonsoft writes them via Type.GetProperties (different order possible)
     // AND omits null-valued properties.
     override _.CanConvert(t: Type) =
-        FSharpType.IsRecord(t, UnionReflection.bindingFlags) && not (hasCliMutableAttribute t)
+        FSharpType.IsRecord(t, UnionReflection.bindingFlags)
+        && not (hasCliMutableAttribute t)
 
     override _.CreateConverter(t: Type, _options: JsonSerializerOptions) =
         let converterType = typedefof<FSharpRecordConverter<_>>.MakeGenericType(t)
@@ -566,11 +668,14 @@ type FSharpCliMutableRecordConverter<'T>() =
 
     override _.Write(writer: Utf8JsonWriter, value: 'T, options: JsonSerializerOptions) =
         writer.WriteStartObject()
+
         for prop in properties do
             let v = prop.GetValue(value, null)
+
             if not (isNull v) then
                 writer.WritePropertyName(prop.Name)
                 JsonSerializer.Serialize(writer, v, prop.PropertyType, options)
+
         writer.WriteEndObject()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -579,15 +684,24 @@ type FSharpCliMutableRecordConverter<'T>() =
         | JsonTokenType.StartObject ->
             use doc = JsonDocument.ParseValue(&reader)
             let root = doc.RootElement
+            // Missing properties → type-appropriate default. For value-type
+            // properties (int64, bool, DateTime, etc.) passing null to the
+            // record constructor unboxes to NullReferenceException; supply
+            // the zero value of the type instead. Reference types stay null
+            // (matches the prior behaviour for string / list / Option).
             let args =
                 properties
                 |> Array.map (fun prop ->
                     match root.TryGetProperty(prop.Name) with
                     | true, el -> el.Deserialize(prop.PropertyType, options)
-                    | false, _ -> null)
+                    | false, _ ->
+                        if prop.PropertyType.IsValueType then
+                            Activator.CreateInstance(prop.PropertyType)
+                        else
+                            null)
+
             Activator.CreateInstance(typeof<'T>, args) :?> 'T
-        | other ->
-            failwithf "Unexpected token %A when reading CLIMutable record %s" other typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading CLIMutable record %s" other typeof<'T>.FullName
 
 type FSharpCliMutableRecordConverterFactory() =
     inherit JsonConverterFactory()
@@ -610,13 +724,15 @@ type FSharpCliMutableRecordConverterFactory() =
 // Wire: Set<T> → [v1, v2, ...]. F# Set's IEnumerable iterates in sorted order
 // (since Set requires `comparison`).
 
-type FSharpSetConverter<'T when 'T : comparison>() =
+type FSharpSetConverter<'T when 'T: comparison>() =
     inherit JsonConverter<Set<'T>>()
 
     override _.Write(writer: Utf8JsonWriter, value: Set<'T>, options: JsonSerializerOptions) =
         writer.WriteStartArray()
+
         for item in value do
             JsonSerializer.Serialize(writer, item, typeof<'T>, options)
+
         writer.WriteEndArray()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -625,12 +741,13 @@ type FSharpSetConverter<'T when 'T : comparison>() =
         | JsonTokenType.StartArray ->
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Set.empty
+
             for el in doc.RootElement.EnumerateArray() do
                 let item = el.Deserialize<'T>(options)
                 result <- Set.add item result
+
             result
-        | other ->
-            failwithf "Unexpected token %A when reading Set<%s>" other typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading Set<%s>" other typeof<'T>.FullName
 
 type FSharpSetConverterFactory() =
     inherit JsonConverterFactory()
@@ -658,8 +775,10 @@ type FSharpListConverter<'T>() =
 
     override _.Write(writer: Utf8JsonWriter, value: 'T list, options: JsonSerializerOptions) =
         writer.WriteStartArray()
+
         for item in value do
             JsonSerializer.Serialize(writer, item, typeof<'T>, options)
+
         writer.WriteEndArray()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -667,11 +786,11 @@ type FSharpListConverter<'T>() =
         | JsonTokenType.Null -> []
         | JsonTokenType.StartArray ->
             use doc = JsonDocument.ParseValue(&reader)
+
             doc.RootElement.EnumerateArray()
             |> Seq.map (fun el -> el.Deserialize<'T>(options))
             |> List.ofSeq
-        | other ->
-            failwithf "Unexpected token %A when reading %s list" other typeof<'T>.FullName
+        | other -> failwithf "Unexpected token %A when reading %s list" other typeof<'T>.FullName
 
 type FSharpListConverterFactory() =
     inherit JsonConverterFactory()
@@ -695,9 +814,11 @@ type FSharpMapStringKeyConverter<'V>() =
 
     override _.Write(writer: Utf8JsonWriter, value: Map<string, 'V>, options: JsonSerializerOptions) =
         writer.WriteStartObject()
+
         for KeyValue(k, v) in value do
             writer.WritePropertyName(k)
             JsonSerializer.Serialize(writer, v, typeof<'V>, options)
+
         writer.WriteEndObject()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -706,34 +827,40 @@ type FSharpMapStringKeyConverter<'V>() =
         | JsonTokenType.StartObject ->
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Map.empty
+
             for prop in doc.RootElement.EnumerateObject() do
                 let v = prop.Value.Deserialize<'V>(options)
                 result <- Map.add prop.Name v result
+
             result
         | JsonTokenType.StartArray ->
             // Accept array-of-pairs form: [["k", v], ...]
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Map.empty
+
             for pair in doc.RootElement.EnumerateArray() do
                 let elements = pair.EnumerateArray() |> Seq.toArray
                 let k = elements.[0].GetString()
                 let v = elements.[1].Deserialize<'V>(options)
                 result <- Map.add k v result
+
             result
-        | other ->
-            failwithf "Unexpected token %A when reading Map<string,%s>" other typeof<'V>.FullName
+        | other -> failwithf "Unexpected token %A when reading Map<string,%s>" other typeof<'V>.FullName
 
 type FSharpMapStringKeyConverterFactory() =
     inherit JsonConverterFactory()
 
     override _.CanConvert(t: Type) =
         t.IsGenericType
-        && t.GetGenericTypeDefinition() = typedefof<Map<_,_>>
+        && t.GetGenericTypeDefinition() = typedefof<Map<_, _>>
         && t.GetGenericArguments().[0] = typeof<string>
 
     override _.CreateConverter(t: Type, _options: JsonSerializerOptions) =
         let valueType = t.GetGenericArguments().[1]
-        let converterType = typedefof<FSharpMapStringKeyConverter<_>>.MakeGenericType(valueType)
+
+        let converterType =
+            typedefof<FSharpMapStringKeyConverter<_>>.MakeGenericType(valueType)
+
         Activator.CreateInstance(converterType) :?> JsonConverter
 
 // =============================================================================
@@ -748,10 +875,10 @@ type FSharpMapStringKeyConverterFactory() =
 [<AbstractClass>]
 type private NonStringKeyMapReaderHelper() =
     // Subclassed by FSharpMapNonStringKeyConverter<'K,'V> for the typed read path.
-    abstract member ReadFromArray : JsonElement * JsonSerializerOptions -> obj
-    abstract member ReadFromObject : JsonElement * JsonSerializerOptions -> obj
+    abstract member ReadFromArray: JsonElement * JsonSerializerOptions -> obj
+    abstract member ReadFromObject: JsonElement * JsonSerializerOptions -> obj
 
-type FSharpMapNonStringKeyConverter<'K, 'V when 'K : comparison>() =
+type FSharpMapNonStringKeyConverter<'K, 'V when 'K: comparison>() =
     inherit JsonConverter<Map<'K, 'V>>()
 
     let writerOptionsFor (options: JsonSerializerOptions) =
@@ -761,17 +888,24 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K : comparison>() =
         // latter escapes far more aggressively and would diverge from the
         // value-side encoder set by FableConverters.addTo).
         JsonWriterOptions(
-            Encoder = (if isNull options.Encoder then JavaScriptEncoder.UnsafeRelaxedJsonEscaping else options.Encoder),
+            Encoder =
+                (if isNull options.Encoder then
+                     JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                 else
+                     options.Encoder),
             Indented = false,
-            SkipValidation = false)
+            SkipValidation = false
+        )
 
     let isUnionCaseWithoutFields (t: Type) (name: string) =
         if FSharpType.IsUnion(t, UnionReflection.bindingFlags) then
             let info = UnionReflection.getInfo t
+
             match info.CaseByName.TryGetValue(name) with
             | true, case -> case.FieldTypes.Length = 0
             | false, _ -> false
-        else false
+        else
+            false
 
     // Fable clients (via Fable.SimpleJson) emit Map<K, V> object form with
     // unquoted property names: `{"<value>": ...}`. When the JSON parser
@@ -808,11 +942,11 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K : comparison>() =
         t = typeof<DateTimeOffset>
         || t = typeof<DateTime>
         || t = typeof<TimeOnly>
-        || t = typeof<int64> || t = typeof<uint64>
+        || t = typeof<int64>
+        || t = typeof<uint64>
         || t = typeof<System.Numerics.BigInteger>
 
-    let quoted (s: string) =
-        s.StartsWith "\"" && s.EndsWith "\""
+    let quoted (s: string) = s.StartsWith "\"" && s.EndsWith "\""
 
     override _.Write(writer: Utf8JsonWriter, value: Map<'K, 'V>, options: JsonSerializerOptions) =
         // Allocate the temp stream + writer ONCE per Map (not per key) — reset
@@ -823,6 +957,7 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K : comparison>() =
         use stream = new MemoryStream()
         use keyWriter = new Utf8JsonWriter(stream, writerOptionsFor options)
         writer.WriteStartObject()
+
         for KeyValue(k, v) in value do
             // Serialise key via STJ to capture its JSON form, then use that
             // string verbatim as the property name. Newtonsoft does the same
@@ -834,6 +969,7 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K : comparison>() =
             let keyJson = Encoding.UTF8.GetString(stream.ToArray())
             writer.WritePropertyName(keyJson)
             JsonSerializer.Serialize(writer, v, typeof<'V>, options)
+
         writer.WriteEndObject()
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
@@ -842,6 +978,7 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K : comparison>() =
         | JsonTokenType.StartObject ->
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Map.empty
+
             for prop in doc.RootElement.EnumerateObject() do
                 let key =
                     if typeof<'K> = typeof<Guid> then
@@ -850,41 +987,48 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K : comparison>() =
                     else
                         let shouldQuoteKey =
                             not (quoted prop.Name)
-                            && (isUnionCaseWithoutFields typeof<'K> prop.Name
-                                || isNonStringPrimitive typeof<'K>)
+                            && (isUnionCaseWithoutFields typeof<'K> prop.Name || isNonStringPrimitive typeof<'K>)
+
                         let quotedKey =
-                            if shouldQuoteKey then "\"" + prop.Name + "\""
-                            else prop.Name
+                            if shouldQuoteKey then
+                                "\"" + prop.Name + "\""
+                            else
+                                prop.Name
+
                         JsonSerializer.Deserialize<'K>(quotedKey, options)
+
                 let value = prop.Value.Deserialize<'V>(options)
                 result <- Map.add key value result
+
             result
         | JsonTokenType.StartArray ->
             // Array-of-pairs form: [[k, v], ...] where each k uses its native JSON form.
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Map.empty
+
             for pair in doc.RootElement.EnumerateArray() do
                 let elements = pair.EnumerateArray() |> Seq.toArray
                 let k = elements.[0].Deserialize<'K>(options)
                 let v = elements.[1].Deserialize<'V>(options)
                 result <- Map.add k v result
+
             result
-        | other ->
-            failwithf
-                "Unexpected token %A when reading Map<%s,%s>"
-                other typeof<'K>.FullName typeof<'V>.FullName
+        | other -> failwithf "Unexpected token %A when reading Map<%s,%s>" other typeof<'K>.FullName typeof<'V>.FullName
 
 type FSharpMapNonStringKeyConverterFactory() =
     inherit JsonConverterFactory()
 
     override _.CanConvert(t: Type) =
         t.IsGenericType
-        && t.GetGenericTypeDefinition() = typedefof<Map<_,_>>
+        && t.GetGenericTypeDefinition() = typedefof<Map<_, _>>
         && t.GetGenericArguments().[0] <> typeof<string>
 
     override _.CreateConverter(t: Type, _options: JsonSerializerOptions) =
         let args = t.GetGenericArguments()
-        let converterType = typedefof<FSharpMapNonStringKeyConverter<_,_>>.MakeGenericType(args.[0], args.[1])
+
+        let converterType =
+            typedefof<FSharpMapNonStringKeyConverter<_, _>>.MakeGenericType(args.[0], args.[1])
+
         Activator.CreateInstance(converterType) :?> JsonConverter
 
 // =============================================================================
@@ -912,8 +1056,7 @@ type Int64Converter() =
             let lowBytes = BitConverter.GetBytes(low)
             let highBytes = BitConverter.GetBytes(high)
             BitConverter.ToInt64(Array.append lowBytes highBytes, 0)
-        | other ->
-            failwithf "Unexpected token %A when reading int64" other
+        | other -> failwithf "Unexpected token %A when reading int64" other
 
 type UInt64Converter() =
     inherit JsonConverter<uint64>()
@@ -933,8 +1076,7 @@ type UInt64Converter() =
             let lowBytes = BitConverter.GetBytes(low)
             let highBytes = BitConverter.GetBytes(high)
             BitConverter.ToUInt64(Array.append lowBytes highBytes, 0)
-        | other ->
-            failwithf "Unexpected token %A when reading uint64" other
+        | other -> failwithf "Unexpected token %A when reading uint64" other
 
 type BigIntConverter() =
     inherit JsonConverter<System.Numerics.BigInteger>()
@@ -946,8 +1088,7 @@ type BigIntConverter() =
         match reader.TokenType with
         | JsonTokenType.String -> System.Numerics.BigInteger.Parse(reader.GetString())
         | JsonTokenType.Number -> System.Numerics.BigInteger(reader.GetInt64())
-        | other ->
-            failwithf "Unexpected token %A when reading BigInteger" other
+        | other -> failwithf "Unexpected token %A when reading BigInteger" other
 
 // =============================================================================
 // DateTime / TimeSpan (Kind.DateTime, Kind.TimeSpan)
@@ -966,12 +1107,32 @@ type DateTimeConverter() =
 
     override _.Write(writer: Utf8JsonWriter, value: DateTime, _: JsonSerializerOptions) =
         let universal =
-            if value.Kind = DateTimeKind.Local then value.ToUniversalTime() else value
+            if value.Kind = DateTimeKind.Local then
+                value.ToUniversalTime()
+            else
+                value
+
         writer.WriteStringValue(universal.ToString("O", System.Globalization.CultureInfo.InvariantCulture))
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, _: JsonSerializerOptions) =
         match reader.TokenType with
-        | JsonTokenType.String -> DateTime.Parse(reader.GetString())
+        | JsonTokenType.String ->
+            // DateTime.Parse with default DateTimeStyles forces "Z"-suffixed
+            // UTC inputs through a UTC→Local conversion: same instant, but
+            // the returned DateTime has Kind=Local and Ticks expressed in
+            // the local frame. Two DateTimes representing the same instant
+            // in different Kinds have DIFFERENT Ticks values (Ticks count
+            // from 0001-01-01 in the specified Kind's frame), so structural
+            // equality fails on round-trip through a non-UTC machine.
+            //
+            // `DateTimeStyles.RoundtripKind` preserves the Kind embedded in
+            // the source string — Z-suffixed inputs round-trip to Kind=Utc
+            // with Ticks unchanged, matching the value the writer emitted.
+            DateTime.Parse(
+                reader.GetString(),
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind
+            )
         | other -> failwithf "Unexpected token %A when reading DateTime" other
 
 // =============================================================================
@@ -989,6 +1150,7 @@ type StringConverter() =
 
     static let appendEscaped (sb: StringBuilder) (c: char) =
         let cp = int c
+
         match cp with
         | 0x22 -> sb.Append('\\').Append('"') |> ignore
         | 0x5C -> sb.Append('\\').Append('\\') |> ignore
@@ -1006,8 +1168,10 @@ type StringConverter() =
         else
             let sb = StringBuilder(value.Length + 2)
             sb.Append('"') |> ignore
+
             for c in value do
                 appendEscaped sb c
+
             sb.Append('"') |> ignore
             // skipInputValidation=true because we know the produced JSON string
             // is well-formed by construction.
@@ -1025,10 +1189,18 @@ module private DoubleFormat =
     /// 0.0, but Newtonsoft writes "0.0" — the latter is the wire-format contract.
     let newtonsoftStyle (v: double) : string =
         let s = v.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
-        if s.Contains('.') || s.Contains('e') || s.Contains('E')
-           || s = "NaN" || s = "Infinity" || s = "-Infinity"
-        then s
-        else s + ".0"
+
+        if
+            s.Contains('.')
+            || s.Contains('e')
+            || s.Contains('E')
+            || s = "NaN"
+            || s = "Infinity"
+            || s = "-Infinity"
+        then
+            s
+        else
+            s + ".0"
 
 /// Double converter — matches Newtonsoft's preserve-trailing-zero behaviour
 /// for whole-valued floats.
@@ -1036,11 +1208,10 @@ type DoubleConverter() =
     inherit JsonConverter<double>()
 
     override _.Write(writer: Utf8JsonWriter, value: double, _: JsonSerializerOptions) =
-        let s : string = DoubleFormat.newtonsoftStyle value
+        let s: string = DoubleFormat.newtonsoftStyle value
         writer.WriteRawValue(s)
 
-    override _.Read(reader: byref<Utf8JsonReader>, _: Type, _: JsonSerializerOptions) =
-        reader.GetDouble()
+    override _.Read(reader: byref<Utf8JsonReader>, _: Type, _: JsonSerializerOptions) = reader.GetDouble()
 
 type TimeSpanConverter() =
     inherit JsonConverter<TimeSpan>()
@@ -1048,7 +1219,7 @@ type TimeSpanConverter() =
     override _.Write(writer: Utf8JsonWriter, value: TimeSpan, _: JsonSerializerOptions) =
         // TotalMilliseconds is a double; reuse the Newtonsoft-style format so
         // whole-millisecond TimeSpans round-trip as "X.0" not "X".
-        let s : string = DoubleFormat.newtonsoftStyle value.TotalMilliseconds
+        let s: string = DoubleFormat.newtonsoftStyle value.TotalMilliseconds
         writer.WriteRawValue(s)
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, _: JsonSerializerOptions) =
@@ -1115,8 +1286,10 @@ type ByteArrayConverter() =
     inherit JsonConverter<byte[]>()
 
     override _.Write(writer: Utf8JsonWriter, value: byte[], _: JsonSerializerOptions) =
-        if isNull value then writer.WriteNullValue()
-        else writer.WriteBase64StringValue(ReadOnlySpan(value))
+        if isNull value then
+            writer.WriteNullValue()
+        else
+            writer.WriteBase64StringValue(ReadOnlySpan(value))
 
     override _.Read(reader: byref<Utf8JsonReader>, _: Type, _: JsonSerializerOptions) =
         match reader.TokenType with
@@ -1130,6 +1303,7 @@ type ByteArrayConverter() =
             // we re-add the leniency here for Fable client compatibility.
             let result = ResizeArray<byte>()
             let mutable continueLoop = true
+
             while continueLoop do
                 if not (reader.Read()) then
                     failwith "Unexpected end of stream while reading byte[]"
@@ -1137,13 +1311,10 @@ type ByteArrayConverter() =
                     match reader.TokenType with
                     | JsonTokenType.EndArray -> continueLoop <- false
                     | JsonTokenType.Number -> result.Add(reader.GetByte())
-                    | other ->
-                        failwithf
-                            "Unexpected token %A inside byte[] array body (expected number)"
-                            other
+                    | other -> failwithf "Unexpected token %A inside byte[] array body (expected number)" other
+
             result.ToArray()
-        | other ->
-            failwithf "Unexpected token %A when reading byte[]" other
+        | other -> failwithf "Unexpected token %A when reading byte[]" other
 
 // =============================================================================
 // DataTable / DataSet
@@ -1176,8 +1347,7 @@ type DataTableConverter() =
             table.ReadXmlSchema(new StringReader(schema))
             table.ReadXml(new StringReader(data)) |> ignore
             table
-        | other ->
-            failwithf "Unexpected token %A when reading DataTable" other
+        | other -> failwithf "Unexpected token %A when reading DataTable" other
 
 type DataSetConverter() =
     inherit JsonConverter<System.Data.DataSet>()
@@ -1203,8 +1373,7 @@ type DataSetConverter() =
             dataset.ReadXmlSchema(new StringReader(schema))
             dataset.ReadXml(new StringReader(data)) |> ignore
             dataset
-        | other ->
-            failwithf "Unexpected token %A when reading DataSet" other
+        | other -> failwithf "Unexpected token %A when reading DataSet" other
 
 // =============================================================================
 // Setup helper — register the full converter set on a JsonSerializerOptions
@@ -1240,6 +1409,16 @@ module FableConverters =
         // via WriteRawValue to bypass the encoder entirely. See
         // BYTE-COMPAT-MAP.md §12.
         options.Encoder <- JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+
+        // Case-insensitive record-property matching by default. Newtonsoft
+        // matches case-insensitively without a custom contract resolver;
+        // the FSharpRecordConverter consults this flag to pick the
+        // insensitive lookup table built in RecordReflection.getInfo. This
+        // preserves the camelCase → PascalCase round-trip that pre-
+        // migration external clients (fast-path-resolver companion, any
+        // hand-rolled curl POST) rely on. Consumers wanting strict case
+        // matching set this back to false BEFORE first serialise.
+        options.PropertyNameCaseInsensitive <- true
 
         // Newtonsoft is lenient about reading numeric primitives from JSON
         // strings: JsonConvert.DeserializeObject<int>("\"42\"") returns 42,

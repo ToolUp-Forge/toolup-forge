@@ -6,8 +6,8 @@ module ToolUp.Platform.ConsentApiHandler
 open System
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── Phase 59 — server-side consent-audit endpoint ────────────────
@@ -26,10 +26,7 @@ open ToolUp.Platform
 
 let private PlatformScope = "_platform"
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private readBody (ctx: HttpContext) : System.Threading.Tasks.Task<string> = task {
     use reader = new System.IO.StreamReader(ctx.Request.Body)
@@ -42,7 +39,7 @@ let private consentHandler: HttpHandler =
 
         let event =
             try
-                Some(JsonConvert.DeserializeObject<ConsentEvent>(body, jsonSettings))
+                Some(JsonSerializer.Deserialize<ConsentEvent>(body, jsonOptions))
             with _ ->
                 None
 

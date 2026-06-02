@@ -1,8 +1,8 @@
 module ToolUp.Platform.NotificationAddressBook
 
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -37,10 +37,7 @@ open ToolUp.Platform.BlobStorage
 [<Literal>]
 let private PlatformContainer = "_platform"
 
-let private contactJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private contactJsonOptions = FableConverters.create ()
 
 /// Reserved blob name for a user's persisted contact record. The
 /// container is `_platform`; this nested path keeps each scope's
@@ -95,7 +92,7 @@ type BlobBackedNotificationAddressBook(storage: IBlobStorage, logger: ILogger op
             | Ok bytes ->
                 try
                     let json = Encoding.UTF8.GetString bytes
-                    let contact = JsonConvert.DeserializeObject<UserContact>(json, contactJsonSettings)
+                    let contact = JsonSerializer.Deserialize<UserContact>(json, contactJsonOptions)
 
                     // Defensive null-check in case a corrupt JSON literal
                     // round-trips to a `null` reference (Newtonsoft will
@@ -139,7 +136,7 @@ type BlobBackedNotificationAddressBook(storage: IBlobStorage, logger: ILogger op
 /// address book do so server-side from their own user-profile flow.
 /// Future phases may add an `IConfigStore`-style write API.
 let saveContact (storage: IBlobStorage) (scopeId: string) (contact: UserContact) : Async<Result<unit, string>> = async {
-    let json = JsonConvert.SerializeObject(contact, contactJsonSettings)
+    let json = JsonSerializer.Serialize(contact, contactJsonOptions)
     let bytes = Encoding.UTF8.GetBytes json
     let blobName = contactBlobName scopeId contact.UserId
     let! result = storage.Upload(PlatformContainer, blobName, bytes)

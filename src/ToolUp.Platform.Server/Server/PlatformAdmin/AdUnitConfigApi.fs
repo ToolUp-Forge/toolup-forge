@@ -6,8 +6,8 @@ module ToolUp.Platform.AdUnitConfigApi
 open System
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityStore
@@ -78,10 +78,7 @@ module private AdSlotEntity =
         Style = entity.Style
     }
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
@@ -122,7 +119,7 @@ let private ensureRegistered (registry: EntityRegistry) : unit =
     registry.Register registration
 
 let private writeJson (ctx: HttpContext) (statusCode: int) (payload: 'T) : HttpFuncResult = task {
-    let json = JsonConvert.SerializeObject(payload, jsonSettings)
+    let json = JsonSerializer.Serialize(payload, jsonOptions)
     ctx.Response.StatusCode <- statusCode
     ctx.Response.ContentType <- "application/json; charset=utf-8"
     return! ctx.WriteTextAsync json
@@ -151,7 +148,7 @@ let private tryDeserialise<'T> (body: string) : 'T option =
         None
     else
         try
-            Some(JsonConvert.DeserializeObject<'T>(body, jsonSettings))
+            Some(JsonSerializer.Deserialize<'T>(body, jsonOptions))
         with _ ->
             None
 

@@ -1,8 +1,8 @@
 module ToolUp.Platform.FeatureFlagStore
 
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -14,18 +14,15 @@ open ToolUp.Platform.BlobStorage
 /// `FlagValue` is a DU that must round-trip through `Fable.SimpleJson`
 /// on the client (the platform's non-Remoting serialisation rule).
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (m: Map<string, FlagValue>) : byte[] =
-        JsonConvert.SerializeObject(m, settings) |> Encoding.UTF8.GetBytes
+        JsonSerializer.Serialize(m, options) |> Encoding.UTF8.GetBytes
 
     let tryDeserialize (bytes: byte[]) : Map<string, FlagValue> option =
         try
             let json = Encoding.UTF8.GetString(bytes)
-            Some(JsonConvert.DeserializeObject<Map<string, FlagValue>>(json, settings))
+            Some(JsonSerializer.Deserialize<Map<string, FlagValue>>(json, options))
         with _ ->
             None
 

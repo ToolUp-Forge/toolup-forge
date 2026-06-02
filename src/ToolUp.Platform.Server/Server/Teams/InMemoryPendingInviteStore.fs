@@ -5,8 +5,9 @@ namespace ToolUp.Platform.Teams
 
 open System
 open System.Text
+open System.Text.Json
 open System.Threading
-open Newtonsoft.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -53,6 +54,8 @@ open ToolUp.Platform.BlobStorage
 /// remains until every in-tree caller has migrated.
 module PendingInviteStore =
 
+    let private jsonOptions = FableConverters.create ()
+
     type private CacheEntry = {
         Map: Map<string, PendingInviteByEmail>
         LoadedAt: DateTime
@@ -74,7 +77,7 @@ module PendingInviteStore =
     let private blobName = "pending-invites.json"
 
     let private encodeMap (map: Map<string, PendingInviteByEmail>) : byte[] =
-        map |> JsonConvert.SerializeObject |> Encoding.UTF8.GetBytes
+        JsonSerializer.Serialize(map, jsonOptions) |> Encoding.UTF8.GetBytes
 
     let private decodeMap (bytes: byte[]) : Map<string, PendingInviteByEmail> =
         if isNull bytes || bytes.Length = 0 then
@@ -86,7 +89,10 @@ module PendingInviteStore =
                 // 0.4.4 — `Option.ofObj` requires `'T : null`, which F# Map
                 // doesn't satisfy. Box then null-check; defensive against
                 // a deserialiser that hands back null on malformed input.
-                match JsonConvert.DeserializeObject<Map<string, PendingInviteByEmail>>(json) |> box with
+                match
+                    JsonSerializer.Deserialize<Map<string, PendingInviteByEmail>>(json, jsonOptions)
+                    |> box
+                with
                 | null -> Map.empty
                 | _ as o -> o :?> Map<string, PendingInviteByEmail>
             with _ ->

@@ -5,6 +5,7 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 
@@ -20,13 +21,10 @@ open ToolUp.AI.AIToolRegistry
 
 // ─── JSON helpers ────────────────────────────────────────────────
 
-let private fableJsonSettings =
-    let s = Newtonsoft.Json.JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private fableJsonOptions = FableConverters.create ()
 
 let private fableSerialize (value: obj) : string =
-    Newtonsoft.Json.JsonConvert.SerializeObject(value, fableJsonSettings)
+    JsonSerializer.Serialize(value, fableJsonOptions)
 
 // ─── list_narratives ─────────────────────────────────────────────
 

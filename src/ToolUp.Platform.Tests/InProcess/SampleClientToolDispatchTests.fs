@@ -30,7 +30,8 @@ module ToolUp.Platform.Tests.InProcess.SampleClientToolDispatchTests
 
 open Expecto
 open Microsoft.Extensions.DependencyInjection
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
@@ -87,14 +88,19 @@ type private SampleTestAuthorizer(denyTool: string) =
 /// Mirror of `ToolUp.AI.SampleClientTool.Client.SampleHandler.handler`
 /// for the .NET-side test. Parses `CalcRequest` from the agent loop's
 /// SSE-emitted argsJson, runs the shared `CalcOps.compute`, and
-/// returns a `CalcResponse` JSON. Newtonsoft serialises the records
-/// in PascalCase — matches what the agent loop ships to the model.
+/// returns a `CalcResponse` JSON. STJ + FableConverters serialises the
+/// records in PascalCase — matches what the agent loop ships to the
+/// model.
+let private calcSimulatorOptions = FableConverters.create ()
+
 let private calcSimulator (evt: AIStreamEvent) : string option =
     match evt with
     | ClientToolInvoke(_, _, _, argsJson, _, _) ->
-        let request = JsonConvert.DeserializeObject<CalcRequest>(argsJson)
+        let request =
+            JsonSerializer.Deserialize<CalcRequest>(argsJson, calcSimulatorOptions)
+
         let response = CalcOps.compute request
-        Some(JsonConvert.SerializeObject response)
+        Some(JsonSerializer.Serialize(response, calcSimulatorOptions))
     | _ -> None
 
 // ─── Tests ───────────────────────────────────────────────────────────

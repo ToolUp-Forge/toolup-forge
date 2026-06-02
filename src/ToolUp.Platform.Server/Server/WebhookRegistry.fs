@@ -2,8 +2,8 @@ module ToolUp.Platform.WebhookRegistry
 
 open System
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -49,18 +49,15 @@ let private allDeliveriesRoot = "webhooks/"
 // `Fable.SimpleJson` on the client). Same pattern as `BlobConfigStore`.
 
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: 'T) : byte[] =
-        JsonConvert.SerializeObject(value, settings) |> Encoding.UTF8.GetBytes
+        JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
 
     let tryDeserialize<'T> (bytes: byte[]) : 'T option =
         try
             let json = Encoding.UTF8.GetString bytes
-            Some(JsonConvert.DeserializeObject<'T>(json, settings))
+            Some(JsonSerializer.Deserialize<'T>(json, options))
         with _ ->
             None
 

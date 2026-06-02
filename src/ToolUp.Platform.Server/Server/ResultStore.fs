@@ -4,8 +4,7 @@ open System
 open System.Collections.Concurrent
 open System.Text
 open System.Text.Json
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── ResultStore implementations ────────────────────────────────
@@ -134,13 +133,10 @@ module private Events =
     /// `ConfigStore` / `DataObjectStore`. `LineageLink` payloads
     /// round-trip the `LinkType` DU losslessly, which
     /// `System.Text.Json` does not.
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let private serialize (value: 'T) : string =
-        JsonConvert.SerializeObject(value, settings)
+        JsonSerializer.Serialize(value, options)
 
     /// Best-effort: callers `Async.Start` this. Any failure is the
     /// `IEventStore`'s problem to log; we don't surface it back to

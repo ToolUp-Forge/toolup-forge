@@ -4,8 +4,8 @@ open System
 open System.IO
 open System.IO.Compression
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -77,10 +77,7 @@ module AzureBlobArchiveSettings =
         PathPrefix = None
     }
 
-let private archiveJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private archiveJsonOptions = FableConverters.create ()
 
 /// Wire-format wrapper for one persisted JSONL line. Each line of the
 /// archive is one of these records — `Subject`, `OccurredAt`,
@@ -115,7 +112,7 @@ let private serializeBatch (batch: AuditEnvelope list) : byte[] =
                 Event = envelope.Event
             }
 
-            JsonConvert.SerializeObject(line, archiveJsonSettings))
+            JsonSerializer.Serialize(line, archiveJsonOptions))
 
     let jsonl = String.Join("\n", lines)
     let bytes = Encoding.UTF8.GetBytes jsonl

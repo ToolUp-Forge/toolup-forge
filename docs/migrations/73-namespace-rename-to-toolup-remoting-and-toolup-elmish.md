@@ -59,7 +59,7 @@ Fully-qualified type references (less common; usually only in adapter / wiring c
 +ToolUp.Remoting.Json.FableJsonConverter()
 ```
 
-> **Note.** The `FableJsonConverter` itself is marked `[<Obsolete>]` and a follow-up migration to `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()` is tracked separately in TIDY-UP — that migration produces byte-equal wire output via System.Text.Json with no Newtonsoft.Json transitive dep. Phase 73 doesn't gate that follow-up; rename the type now, drop Newtonsoft when convenient.
+> **Note.** The legacy Newtonsoft-backed `FableJsonConverter` was retired in the STJ migration that followed Phase 73 — `Newtonsoft.Json` is no longer a forge dependency. Replace every `ToolUp.Remoting.Json.FableJsonConverter()` site with `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()`, swap `JsonConvert.SerializeObject` / `JsonConvert.DeserializeObject` calls for `System.Text.Json.JsonSerializer.Serialize` / `Deserialize`, and drop `open Newtonsoft.Json`. The STJ converter set ships with the F# Option / DU / tuple / record / CLIMutable / list / Map / Set / DateTime / decimal / byte[] etc. converters pre-registered; `addTo` also sets `PropertyNameCaseInsensitive = true` so camelCase inputs round-trip into PascalCase F# fields the same way Newtonsoft did by default. See the consumer-side worked example in the upgrade notes for any consumer still on Newtonsoft.
 
 ### Elmish
 

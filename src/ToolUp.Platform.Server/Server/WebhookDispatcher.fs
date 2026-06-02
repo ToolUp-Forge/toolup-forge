@@ -8,7 +8,7 @@ open System.Text.Json
 open System.Threading
 open System.Threading.Channels
 open Microsoft.Extensions.Hosting
-open Newtonsoft.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Tracing
 
@@ -126,13 +126,10 @@ let private serialiseOutbound (payload: WebhookDeliveryPayload) : byte[] =
 
 /// Persisted audit-event payloads use `FableJsonConverter` because the
 /// admin UI deserialises them via Fable.Remoting/SimpleJson.
-let private auditJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private auditJsonOptions = FableConverters.create ()
 
 let private toAuditJson (value: 'T) =
-    JsonConvert.SerializeObject(value, auditJsonSettings)
+    JsonSerializer.Serialize(value, auditJsonOptions)
 
 // ─── Single-attempt HTTP delivery ────────────────────────────────
 

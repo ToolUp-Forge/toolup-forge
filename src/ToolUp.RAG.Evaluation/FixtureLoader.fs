@@ -1,15 +1,18 @@
 module ToolUp.RAG.Evaluation.FixtureLoader
 
 open System.IO
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.Evaluation.EvalTypes
 
-// JSON-on-disk shape. Newtonsoft cannot round-trip the `VectorScope` DU
-// without a converter, so fixtures use a flat string form (`"platform"`,
-// `"deployment"`, `"team:<id>"`) and we parse / unparse explicitly. Same
-// convention as `EventStoreRetrievalTracer`'s payload — reading a fixture
-// alongside a retrieval trace stays unambiguous.
+// JSON-on-disk shape. The FableConverters STJ converter set handles
+// CLIMutable records natively; the `VectorScope` DU is stored as a flat
+// string form (`"platform"`, `"deployment"`, `"team:<id>"`) parsed
+// explicitly below so fixtures stay readable alongside `EventStoreRetrievalTracer`
+// payloads without going through a DU converter.
+
+let private jsonOptions = FableConverters.create ()
 
 [<CLIMutable>]
 type JsonCorpusEntry = {
@@ -67,7 +70,7 @@ let private toLabelledQuery (j: JsonQuery) : LabelledQuery = {
 
 let load (path: string) : Fixture =
     let json = File.ReadAllText path
-    let parsed = JsonConvert.DeserializeObject<JsonFixture>(json)
+    let parsed = JsonSerializer.Deserialize<JsonFixture>(json, jsonOptions)
 
     let corpus = if isNull (box parsed.corpus) then [||] else parsed.corpus
     let queries = if isNull (box parsed.queries) then [||] else parsed.queries

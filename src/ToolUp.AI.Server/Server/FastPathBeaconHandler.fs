@@ -4,7 +4,8 @@ open System
 open System.IO
 open System.Text
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -114,17 +115,14 @@ let private MaxBeaconTextLen = 16384
 //     conversation blob format so the LLM sees the synthetic turns
 //     in the right shape). ────────────────────────────────────────
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private toJson obj =
-    JsonConvert.SerializeObject(obj, jsonSettings)
+    JsonSerializer.Serialize(obj, jsonOptions)
 
 let private fromJson<'T> (bytes: byte[]) =
     let json = Encoding.UTF8.GetString(bytes)
-    JsonConvert.DeserializeObject<'T>(json, jsonSettings)
+    JsonSerializer.Deserialize<'T>(json, jsonOptions)
 
 let private conversationBlobName (conversationId: Guid) =
     $"ai-conversations/{conversationId}.json"
@@ -383,8 +381,8 @@ let private buildAssistantMessage (beacon: FastPathBeacon) : ConversationMessage
         // enough that history readers see consistent records. The
         // exact byte layout is not load-bearing — readers only inspect
         // `ToolName`.
-        let escapedField = JsonConvert.ToString(beacon.FieldName)
-        let escapedPattern = JsonConvert.ToString(beacon.PatternMatched)
+        let escapedField = JsonSerializer.Serialize(beacon.FieldName, jsonOptions)
+        let escapedPattern = JsonSerializer.Serialize(beacon.PatternMatched, jsonOptions)
 
         let value =
             if beacon.JsonFragment = "" then
@@ -595,7 +593,7 @@ let beaconHandler: HttpHandler =
         try
             use reader = new StreamReader(ctx.Request.Body)
             let! body = reader.ReadToEndAsync()
-            let beacon = JsonConvert.DeserializeObject<FastPathBeacon>(body, jsonSettings)
+            let beacon = JsonSerializer.Deserialize<FastPathBeacon>(body, jsonOptions)
 
             if isNull (box beacon) then
                 warn "FastPath beacon rejected: unparseable request body."
@@ -824,8 +822,7 @@ let sequencedClauseBeaconHandler: HttpHandler =
             use reader = new StreamReader(ctx.Request.Body)
             let! body = reader.ReadToEndAsync()
 
-            let beacon =
-                JsonConvert.DeserializeObject<SequencedClauseBeacon>(body, jsonSettings)
+            let beacon = JsonSerializer.Deserialize<SequencedClauseBeacon>(body, jsonOptions)
 
             if isNull (box beacon) then
                 warn "Sequenced fast-path clause beacon rejected: unparseable request body."
@@ -878,8 +875,7 @@ let sequenceOutcomeBeaconHandler: HttpHandler =
             use reader = new StreamReader(ctx.Request.Body)
             let! body = reader.ReadToEndAsync()
 
-            let beacon =
-                JsonConvert.DeserializeObject<SequenceOutcomeBeacon>(body, jsonSettings)
+            let beacon = JsonSerializer.Deserialize<SequenceOutcomeBeacon>(body, jsonOptions)
 
             if isNull (box beacon) then
                 warn "Sequenced fast-path outcome beacon rejected: unparseable request body."

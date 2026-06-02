@@ -2,8 +2,8 @@ module ToolUp.Platform.WebhookApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.TeamManagement
 open ToolUp.Platform.WebhookDispatcher
@@ -16,13 +16,10 @@ open ToolUp.Platform.WebhookDispatcher
 // keep both sides consistent so admin tooling can render any
 // payload uniformly.
 
-let private auditJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private auditJsonOptions = FableConverters.create ()
 
 let private toAuditJson (value: 'T) =
-    JsonConvert.SerializeObject(value, auditJsonSettings)
+    JsonSerializer.Serialize(value, auditJsonOptions)
 
 /// Build the `IWebhookApi` Fable.Remoting handler. Resolves
 /// `IWebhookRegistry`, `IWebhookDeliveryLog`, `IWebhookDispatcher`,

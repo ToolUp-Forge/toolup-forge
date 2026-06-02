@@ -3,9 +3,9 @@ module ToolUp.Platform.ConfigDriftDetector
 open System
 open System.Security.Cryptography
 open System.Text
-open Newtonsoft.Json
-open Newtonsoft.Json.Linq
-open ToolUp.Remoting.Json
+open System.Text.Json
+open System.Text.Json.Nodes
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -62,34 +62,44 @@ let private redactedString (length: int) = sprintf "<redacted:length=%d>" length
 // redaction marker, sized to the original value's length. Non-string
 // secrets (an unlikely shape, but covered) are stringified first so
 // the marker sizes still convey "there was something here, this big".
-let rec private redact (token: JToken) =
-    match token with
-    | :? JObject as obj ->
-        for prop in obj.Properties() do
-            if shouldRedact prop.Name then
-                match prop.Value.Type with
-                | JTokenType.Null -> ()
-                | JTokenType.String ->
-                    let s = prop.Value.Value<string>()
-                    prop.Value <- JValue(redactedString s.Length)
-                | _ ->
-                    let serialised = prop.Value.ToString(Formatting.None)
-                    prop.Value <- JValue(redactedString serialised.Length)
-            else
-                redact prop.Value
-    | :? JArray as arr ->
-        for item in arr do
-            redact item
-    | _ -> ()
+//
+// Snapshots property names before mutating — mutating a JsonObject
+// during enumeration would raise InvalidOperationException.
+let rec private redact (node: JsonNode) : unit =
+    if isNull node then
+        ()
+    else
+        match node with
+        | :? JsonObject as obj ->
+            let names = obj |> Seq.map (fun kvp -> kvp.Key) |> Seq.toArray
 
-let private serializerSettings () =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+            for name in names do
+                let child = obj.[name]
 
-let private serializeConfig (config: ServerConfig) : JObject =
-    let raw = JsonConvert.SerializeObject(config, serializerSettings ())
-    let parsed = JObject.Parse raw
+                if shouldRedact name then
+                    if isNull child then
+                        ()
+                    else
+                        match child.GetValueKind() with
+                        | JsonValueKind.Null -> ()
+                        | JsonValueKind.String ->
+                            let s = child.GetValue<string>()
+                            obj.[name] <- JsonValue.Create(redactedString s.Length) :> JsonNode
+                        | _ ->
+                            let serialised = child.ToJsonString()
+                            obj.[name] <- JsonValue.Create(redactedString serialised.Length) :> JsonNode
+                else
+                    redact child
+        | :? JsonArray as arr ->
+            for child in arr do
+                redact child
+        | _ -> ()
+
+let private jsonOptions = FableConverters.create ()
+
+let private serializeConfig (config: ServerConfig) : JsonObject =
+    let raw = JsonSerializer.Serialize(config, jsonOptions)
+    let parsed = JsonNode.Parse raw :?> JsonObject
     redact parsed
     parsed
 
@@ -121,50 +131,65 @@ let private hashCompanionSet (set: string list) : string =
     let bytes = sha.ComputeHash(Encoding.UTF8.GetBytes joined)
     bytes |> Array.map (sprintf "%02x") |> String.concat ""
 
-let private buildSnapshot (config: ServerConfig) (set: string list) (hash: string) (now: DateTime) : JObject =
+let private buildSnapshot (config: ServerConfig) (set: string list) (hash: string) (now: DateTime) : JsonObject =
     let configJson = serializeConfig config
 
-    let companions = set |> List.map (fun s -> JValue s :> JToken) |> List.toArray
+    let companions = JsonArray()
 
-    JObject(
-        JProperty("schema", JValue snapshotSchema),
-        JProperty("snapshotTakenAt", JValue(now.ToUniversalTime().ToString("o"))),
-        JProperty("companionSet", JArray(companions)),
-        JProperty("companionSetHash", JValue hash),
-        JProperty("config", configJson)
-    )
+    for s in set do
+        companions.Add(JsonValue.Create(s))
+
+    let snapshot = JsonObject()
+    snapshot.["schema"] <- JsonValue.Create(snapshotSchema)
+    snapshot.["snapshotTakenAt"] <- JsonValue.Create(now.ToUniversalTime().ToString("o"))
+    snapshot.["companionSet"] <- companions
+    snapshot.["companionSetHash"] <- JsonValue.Create(hash)
+    snapshot.["config"] <- configJson
+    snapshot
 
 // Render a leaf for the audit-event payload. Objects / arrays are
 // stringified compactly so the audit-payload size stays bounded.
 // `null` values surface as `None` so the audit consumer can tell
 // "field absent" from "field present and equal to null literal".
-let private renderLeaf (t: JToken) : string option =
-    if t = null then
+let private renderLeaf (n: JsonNode) : string option =
+    if isNull n then
         None
     else
-        match t.Type with
-        | JTokenType.Null -> None
-        | _ -> Some(t.ToString(Formatting.None))
+        match n.GetValueKind() with
+        | JsonValueKind.Null -> None
+        | _ -> Some(n.ToJsonString())
 
-// Diff a JToken pair, accumulating dotted-path changes
+// Diff a JsonNode pair, accumulating dotted-path changes
 // (`AuditLog`, `RateLimit.RequestsPerWindow`,
 // `SecurityHeaders["X-Frame-Options"]`-style paths). Walker is
 // post-order so the change list reflects in-order traversal — the
 // caller reverses to surface paths in document order.
 let rec private diffTokens
     (path: string)
-    (prev: JToken)
-    (curr: JToken)
+    (prev: JsonNode)
+    (curr: JsonNode)
     (acc: ConfigDriftChange list)
     : ConfigDriftChange list =
-    if prev.Type = JTokenType.Object && curr.Type = JTokenType.Object then
-        let prevObj = prev :?> JObject
-        let currObj = curr :?> JObject
+    let prevKind =
+        if isNull prev then
+            JsonValueKind.Null
+        else
+            prev.GetValueKind()
+
+    let currKind =
+        if isNull curr then
+            JsonValueKind.Null
+        else
+            curr.GetValueKind()
+
+    if prevKind = JsonValueKind.Object && currKind = JsonValueKind.Object then
+        let prevObj = prev.AsObject()
+        let currObj = curr.AsObject()
 
         let allKeys =
             seq {
-                yield! prevObj.Properties() |> Seq.map _.Name
-                yield! currObj.Properties() |> Seq.map _.Name
+                yield! prevObj |> Seq.map (fun kvp -> kvp.Key)
+                yield! currObj |> Seq.map (fun kvp -> kvp.Key)
             }
             |> Seq.distinct
             |> Seq.sort
@@ -173,28 +198,28 @@ let rec private diffTokens
         |> Seq.fold
             (fun acc key ->
                 let childPath = if path = "" then key else $"{path}.{key}"
-                let p = prevObj[key]
-                let c = currObj[key]
+                let p = prevObj.[key]
+                let c = currObj.[key]
 
-                match p, c with
-                | null, null -> acc
-                | null, _ ->
+                match isNull p, isNull c with
+                | true, true -> acc
+                | true, false ->
                     {
                         Path = childPath
                         From = None
                         To = renderLeaf c
                     }
                     :: acc
-                | _, null ->
+                | false, true ->
                     {
                         Path = childPath
                         From = renderLeaf p
                         To = None
                     }
                     :: acc
-                | _ -> diffTokens childPath p c acc)
+                | false, false -> diffTokens childPath p c acc)
             acc
-    elif JToken.DeepEquals(prev, curr) then
+    elif JsonNode.DeepEquals(prev, curr) then
         acc
     else
         {
@@ -218,22 +243,24 @@ let run (storage: IBlobStorage) (auditLog: IAuditLog) (logger: ILogger) (config:
         let hash = hashCompanionSet set
         let newSnapshot = buildSnapshot config set hash now
 
+        let indentedOptions = JsonSerializerOptions(WriteIndented = true)
+
         let newSnapshotBytes =
-            newSnapshot.ToString(Formatting.Indented) |> Encoding.UTF8.GetBytes
+            newSnapshot.ToJsonString(indentedOptions) |> Encoding.UTF8.GetBytes
 
         let! previousResult = storage.Download(deployContainer, snapshotBlobName)
 
         match previousResult with
         | Ok bytes ->
             try
-                let prevSnapshot = JObject.Parse(Encoding.UTF8.GetString bytes)
-                let prevConfig = prevSnapshot["config"]
-                let currConfig = newSnapshot["config"]
+                let prevSnapshot = JsonNode.Parse(Encoding.UTF8.GetString bytes) :?> JsonObject
+                let prevConfig = prevSnapshot.["config"]
+                let currConfig = newSnapshot.["config"]
 
                 let prevHash =
-                    prevSnapshot["companionSetHash"]
+                    prevSnapshot.["companionSetHash"]
                     |> Option.ofObj
-                    |> Option.map (fun t -> t.Value<string>())
+                    |> Option.map (fun n -> n.GetValue<string>())
 
                 let changes =
                     if prevConfig <> null && currConfig <> null then

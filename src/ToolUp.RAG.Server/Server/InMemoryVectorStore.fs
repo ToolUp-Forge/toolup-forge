@@ -3,7 +3,8 @@ module ToolUp.RAG.InMemoryVectorStore
 open System
 open System.Collections.Concurrent
 open System.Threading
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -67,16 +68,13 @@ let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/index.json
 
 // ─── JSON helpers ─────────────────────────────────────────────────
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private toJson o =
-    JsonConvert.SerializeObject(o, jsonSettings)
+    JsonSerializer.Serialize(o, jsonOptions)
 
 let private fromJson<'T> (s: string) =
-    JsonConvert.DeserializeObject<'T>(s, jsonSettings)
+    JsonSerializer.Deserialize<'T>(s, jsonOptions)
 
 // ─── In-memory store ──────────────────────────────────────────────
 

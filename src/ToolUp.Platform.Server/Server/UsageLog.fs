@@ -8,8 +8,8 @@ open System.Threading
 open System.Threading.Channels
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Usage
@@ -85,13 +85,10 @@ let private extractDateFromBlobName (blobName: string) (scopeId: string) : DateT
 // is reused across calls — Newtonsoft is thread-safe for read-only
 // settings.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private toJson (records: UsageRecord list) : byte[] =
-    let json = JsonConvert.SerializeObject(records, jsonSettings)
+    let json = JsonSerializer.Serialize(records, jsonOptions)
     Encoding.UTF8.GetBytes json
 
 let private fromJson (bytes: byte[]) : UsageRecord list =
@@ -105,7 +102,7 @@ let private fromJson (bytes: byte[]) : UsageRecord list =
             // don't satisfy. Box then null-check, which keeps the
             // "deserialiser returned null -> []" defensive shape without
             // tripping the type-constraint check.
-            match JsonConvert.DeserializeObject<UsageRecord list>(json, jsonSettings) |> box with
+            match JsonSerializer.Deserialize<UsageRecord list>(json, jsonOptions) |> box with
             | null -> []
             | _ as o -> o :?> UsageRecord list
         with _ ->

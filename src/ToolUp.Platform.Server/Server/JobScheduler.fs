@@ -7,8 +7,8 @@ open System.Text
 open System.Threading
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Tracing
 
@@ -109,13 +109,10 @@ type JobSchedulerTickMissedPayload = {
 // ─── JSON helper ─────────────────────────────────────────────────
 
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: 'T) : string =
-        JsonConvert.SerializeObject(value, settings)
+        JsonSerializer.Serialize(value, options)
 
 // ─── InProcessJobScheduler ───────────────────────────────────────
 //

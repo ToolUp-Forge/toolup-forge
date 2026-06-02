@@ -206,15 +206,20 @@ let private platformContainer = "_platform"
 [<Literal>]
 let private stateBlobName = "embeddings/_local-tfidf-state.json"
 
-/// Wire-format DTO for the persisted IDF state. Kept simple and
-/// Newtonsoft-friendly (no F# DUs); `df` is a plain
-/// `Dictionary<string,int>` so the JSON shape is `{"docCount": N,
-/// "df": {"term": count, ...}}`.
+/// Wire-format DTO for the persisted IDF state. No F# DUs — plain
+/// settable properties and a `Dictionary<string,int>` so the JSON
+/// shape is `{"docCount": N, "df": {"term": count, ...}}`. STJ handles
+/// this shape directly (case-insensitive matching enabled by the
+/// FableConverters options preserves the prior wire format which used
+/// camelCase property names).
 type private TfIdfStateDto() =
     member val DocCount: int = 0 with get, set
 
     member val Df: System.Collections.Generic.Dictionary<string, int> =
         System.Collections.Generic.Dictionary() with get, set
+
+let private localTfIdfJsonOptions =
+    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
 
 let private serializeState (docCount: int) (df: ConcurrentDictionary<string, int>) : byte[] =
     let dto = TfIdfStateDto(DocCount = docCount)
@@ -222,13 +227,15 @@ let private serializeState (docCount: int) (df: ConcurrentDictionary<string, int
     for kv in df do
         dto.Df[kv.Key] <- kv.Value
 
-    let json = Newtonsoft.Json.JsonConvert.SerializeObject(dto)
+    let json = System.Text.Json.JsonSerializer.Serialize(dto, localTfIdfJsonOptions)
     Encoding.UTF8.GetBytes json
 
 let private deserializeState (bytes: byte[]) : (int * Map<string, int>) option =
     try
         let json = Encoding.UTF8.GetString bytes
-        let dto = Newtonsoft.Json.JsonConvert.DeserializeObject<TfIdfStateDto>(json)
+
+        let dto =
+            System.Text.Json.JsonSerializer.Deserialize<TfIdfStateDto>(json, localTfIdfJsonOptions)
 
         if isNull (box dto) then
             None

@@ -4,7 +4,8 @@
 module ToolUp.RAG.RAGCitationDevEndpoint
 
 open System
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.AI
@@ -21,10 +22,7 @@ open ToolUp.AI
 // Fable-free; primitives + lists only. Recent rewrites surface up
 // to a small per-bucket sample so operators can spot drift trends.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 type private RewriteRow = {
     OccurredAt: DateTime
@@ -87,7 +85,7 @@ let private citationHandler: HttpHandler =
             | _ -> NoOpCitationCounters() :> ICitationCounters
 
         let report = buildReport (counters.Snapshot())
-        let json = JsonConvert.SerializeObject(report, jsonSettings)
+        let json = JsonSerializer.Serialize(report, jsonOptions)
 
         ctx.SetHttpHeader("Cache-Control", "no-store")
         ctx.SetContentType "application/json"

@@ -6,7 +6,8 @@ open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.Platform.IRetrievalTracer
 open ToolUp.Platform.IRagTelemetry
 open ToolUp.AI.SystemPromptBuilder
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 
 /// Threshold below which `RAGPromptBuilder.withRetrieval` emits a
 /// `KnowledgeRetrievalMiss` diagnostic via `IRetrievalTracer.Miss`.
@@ -18,14 +19,11 @@ let private MissThreshold = 2
 
 // ─── Source reference deserialisation ────────────────────────────
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private tryDeserialise<'T> (json: string) =
     try
-        Some(JsonConvert.DeserializeObject<'T>(json, jsonSettings))
+        Some(JsonSerializer.Deserialize<'T>(json, jsonOptions))
     with _ ->
         None
 

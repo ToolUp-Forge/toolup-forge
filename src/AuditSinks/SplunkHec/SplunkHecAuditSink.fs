@@ -4,8 +4,8 @@ open System
 open System.Net.Http
 open System.Net.Http.Headers
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
@@ -78,10 +78,7 @@ module SplunkHecSettings =
         Host = None
     }
 
-let private hecJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private hecJsonOptions = FableConverters.create ()
 
 /// Convert one `AuditEnvelope` into the wire-format JSON line Splunk
 /// expects. The audit event itself goes into `event`; bookkeeping
@@ -90,8 +87,8 @@ let private hecJsonSettings =
 /// filter by audit-schema version and route per subject without parsing
 /// the nested `event` payload.
 let private serializeEventLine (settings: SplunkHecSettings) (envelope: AuditEnvelope) : string =
-    let payload = JsonConvert.SerializeObject(envelope.Event, hecJsonSettings)
-    let subjectPayload = JsonConvert.SerializeObject(envelope.Subject, hecJsonSettings)
+    let payload = JsonSerializer.Serialize(envelope.Event, hecJsonOptions)
+    let subjectPayload = JsonSerializer.Serialize(envelope.Subject, hecJsonOptions)
     // SDK doesn't carry a per-event UUID at the AuditEvent layer
     // (the underlying ModuleEvent does, but the dispatcher decodes
     // before passing the batch). Fall back to a fresh GUID for

@@ -5,7 +5,8 @@ open System.Collections.Concurrent
 open System.Threading.Tasks
 open System.IO
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.AI
 open ToolUp.Platform
@@ -62,10 +63,7 @@ type ClientToolDispatchRegistry() =
 /// surface uses (Fable.Remoting client serialises with the same
 /// converter on the way in, AIStreamEvent rendering uses it on the
 /// way out — see `SSEHandler.fableJsonSettings`).
-let private resultJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private resultJsonOptions = FableConverters.create ()
 
 /// Phase 6g.A: Giraffe handler for `/api/ai/tool-result`. Browsers
 /// POST a `ClientToolResultRequest` after running a `ClientResident`
@@ -107,7 +105,7 @@ let clientToolResultHandler: HttpHandler =
             let! body = reader.ReadToEndAsync()
 
             let req =
-                JsonConvert.DeserializeObject<ClientToolResultRequest>(body, resultJsonSettings)
+                JsonSerializer.Deserialize<ClientToolResultRequest>(body, resultJsonOptions)
 
             let registry =
                 ctx.RequestServices.GetService(typeof<ClientToolDispatchRegistry>) :?> ClientToolDispatchRegistry

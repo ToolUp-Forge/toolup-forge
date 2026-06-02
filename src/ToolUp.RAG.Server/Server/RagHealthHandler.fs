@@ -2,14 +2,11 @@ module ToolUp.RAG.RagHealthHandler
 
 open Microsoft.AspNetCore.Http
 open Giraffe
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.IRagTelemetry
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 /// `/health/rag` route: returns the current `RagTelemetrySnapshot` as JSON.
 /// Resolves `IRagTelemetry` from DI — `composeWithRAG` registers a default
@@ -36,7 +33,7 @@ let healthHandler: HttpHandler =
             // 60s rolling-window aggregate; dashboards scraping at 1-10 Hz
             // would otherwise let CDN/proxy layers cache it indefinitely.
             ctx.SetHttpHeader("Cache-Control", "max-age=10, must-revalidate")
-            let json = JsonConvert.SerializeObject(snapshot, jsonSettings)
+            let json = JsonSerializer.Serialize(snapshot, jsonOptions)
             return! text json next ctx
     }
 

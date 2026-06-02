@@ -31,13 +31,11 @@ open KnowledgeBase.ServerIndexStorage
 
 // ─── JSON helpers ────────────────────────────────────────────────
 
-let private fableJsonSettings =
-    let s = Newtonsoft.Json.JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private fableJsonOptions =
+    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
 
 let private fableSerialize (value: obj) : string =
-    Newtonsoft.Json.JsonConvert.SerializeObject(value, fableJsonSettings)
+    JsonSerializer.Serialize(value, fableJsonOptions)
 
 // ─── Scope / storage resolution ──────────────────────────────────
 

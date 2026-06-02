@@ -10,9 +10,8 @@ open System.Net
 open System.Net.Http
 open System.Text
 open System.Threading.Tasks
-open ToolUp.Remoting.Json
-open Newtonsoft.Json
-open Newtonsoft.Json.Linq
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
 
@@ -122,15 +121,12 @@ module InProcessOAuthTokenRefresher =
     /// uses `FableJsonConverter` so the payload shape matches the
     /// SDK convention everywhere else. Settings are private; the
     /// helpers below are the public surface.
-    let private jsonSettings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private jsonOptions = FableConverters.create ()
 
     /// Serialise a descriptor to a JSON string (for
     /// `JobRegistration.Payload`).
     let serializeDescriptor (descriptor: OAuthRefreshDescriptor) : string =
-        JsonConvert.SerializeObject(descriptor, jsonSettings)
+        JsonSerializer.Serialize(descriptor, jsonOptions)
 
     /// Deserialise a descriptor from a JSON string. Returns `None`
     /// when the payload is unparseable; the job handler treats this
@@ -138,7 +134,7 @@ module InProcessOAuthTokenRefresher =
     /// structurally broken).
     let tryDeserializeDescriptor (payload: string) : OAuthRefreshDescriptor option =
         try
-            Some(JsonConvert.DeserializeObject<OAuthRefreshDescriptor>(payload, jsonSettings))
+            Some(JsonSerializer.Deserialize<OAuthRefreshDescriptor>(payload, jsonOptions))
         with _ ->
             None
 
@@ -159,14 +155,15 @@ module InProcessOAuthTokenRefresher =
     /// missing required fields (caller maps the raise to
     /// `PermanentError`).
     let private parseRefreshSuccess (body: string) : string * int * string option =
-        let parsed = JObject.Parse body
-        let access = parsed["access_token"].Value<string>()
-        let expiresIn = parsed["expires_in"].Value<int>()
+        use doc = JsonDocument.Parse body
+        let root = doc.RootElement
+        let access = root.GetProperty("access_token").GetString()
+        let expiresIn = root.GetProperty("expires_in").GetInt32()
 
         let rotated =
-            match parsed["refresh_token"] with
-            | null -> None
-            | t -> Some(t.Value<string>())
+            match root.TryGetProperty("refresh_token") with
+            | true, el when el.ValueKind = JsonValueKind.String -> Some(el.GetString())
+            | _ -> None
 
         access, expiresIn, rotated
 
@@ -177,11 +174,11 @@ module InProcessOAuthTokenRefresher =
     /// that mapping override the refresher.
     let private isInvalidGrantResponse (body: string) : bool =
         try
-            let parsed = JObject.Parse body
+            use doc = JsonDocument.Parse body
 
-            match parsed["error"] with
-            | null -> false
-            | t -> t.Value<string>() = "invalid_grant"
+            match doc.RootElement.TryGetProperty("error") with
+            | true, el when el.ValueKind = JsonValueKind.String -> el.GetString() = "invalid_grant"
+            | _ -> false
         with _ ->
             false
 

@@ -4,8 +4,8 @@
 module ToolUp.Platform.ConversationExporter
 
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.IDataExporter
 
@@ -95,10 +95,7 @@ let private sanitiseConversation (header: Conversation) (turns: ConversationTurn
 // FableJsonConverter round-trips cleanly; system-text-json mangles
 // F# option types. Mirror the JsonSettings shape established by
 // `DataObjectStoreExporter`.
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 /// `IDataExporter` for the conversation substrate. Emits the
 /// sanitised projection of every conversation in the caller's scope
@@ -136,7 +133,7 @@ type ConversationExporter(reader: IConversationReader) =
                     if List.isEmpty payload then
                         return []
                     else
-                        let json = JsonConvert.SerializeObject(payload, jsonSettings)
+                        let json = JsonSerializer.Serialize(payload, jsonOptions)
 
                         return [
                             {

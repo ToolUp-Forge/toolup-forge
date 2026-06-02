@@ -7,33 +7,34 @@ open System.IO
 
 [<RequireQualifiedAccess>]
 module TypeInfo =
-    let rec flattenFuncTypes (typeDef: Type) =
-        [| if FSharpType.IsFunction typeDef then
-               let (domain, range) = FSharpType.GetFunctionElements typeDef
-               yield! flattenFuncTypes domain
-               yield! flattenFuncTypes range
-           else
-               yield typeDef |]
+    let rec flattenFuncTypes (typeDef: Type) = [|
+        if FSharpType.IsFunction typeDef then
+            let (domain, range) = FSharpType.GetFunctionElements typeDef
+            yield! flattenFuncTypes domain
+            yield! flattenFuncTypes range
+        else
+            yield typeDef
+    |]
 
 type ParsingArgumentsError = { ParsingArgumentsError: string }
 
 /// Route information that is propagated to error handler when exceptions are thrown
-type RouteInfo<'ctx> =
-    {
-        /// The full path of the request
-        path: string
-        /// The last part of the path of the request
-        methodName: string
-        /// The HttpContext of the request
-        httpContext: 'ctx
-        /// The text content of the request, if any
-        requestBodyText: string option
-    }
+type RouteInfo<'ctx> = {
+    /// The full path of the request
+    path: string
+    /// The last part of the path of the request
+    methodName: string
+    /// The HttpContext of the request
+    httpContext: 'ctx
+    /// The text content of the request, if any
+    requestBodyText: string option
+}
 
-type CustomErrorResult<'a> =
-    { error: 'a
-      ignored: bool
-      handled: bool }
+type CustomErrorResult<'a> = {
+    error: 'a
+    ignored: bool
+    handled: bool
+}
 
 /// Phase 69b.E — error categorisation.
 ///
@@ -70,12 +71,13 @@ type ErrorCategory =
 /// `X-Remoting-Schema: <n>` and reading the value back from the
 /// envelope. Older clients ignore the additive field (forwards-
 /// compatible by JSON convention).
-type CategorisedErrorResult<'a> =
-    { error: 'a
-      ignored: bool
-      handled: bool
-      category: string
-      __schema_version: int }
+type CategorisedErrorResult<'a> = {
+    error: 'a
+    ignored: bool
+    handled: bool
+    category: string
+    __schema_version: int
+}
 
 /// The ErrorResult lets you choose whether you want to propagate a custom error back to the client or to ignore it. Either case, an exception is thrown on the call-site from the client.
 /// Phase 69b.E adds `PropagateCategorised` so a handler can attach an `ErrorCategory` for client-side branching.
@@ -111,18 +113,19 @@ type SerializationType =
 
 /// Which JSON serializer to use for the API's wire format.
 ///
-/// `NewtonsoftJson` (the default) keeps the existing behaviour:
-/// `ToolUp.Remoting.Json.FableJsonConverter` registered against a
-/// `JsonSerializerSettings`. Existing consumers see no change.
+/// Single backend: `SystemTextJson opts` — System.Text.Json with a
+/// `JsonSerializerOptions` instance. Typically constructed via
+/// `FableConverters.create()` from `ToolUp.Remoting.Json.SystemTextJson`,
+/// which registers the F# converter set (Option / DU / tuple / record /
+/// list / Map / Set / number / string / date / byte[] etc.) for the
+/// Fable wire shape. Consumers wanting strict-STJ defaults can pass
+/// `JsonSerializerOptions()` instead.
 ///
-/// `SystemTextJson opts` opts in to the System.Text.Json path. Pass a fully
-/// configured `JsonSerializerOptions` (typically `FableConverters.create()`
-/// from `ToolUp.Remoting.Json.SystemTextJson`). The STJ converter set produces
-/// byte-equal wire output to the Newtonsoft converters across the
-/// ToolUp.Remoting.Json byte-compat matrix.
-type JsonSerializerBackend =
-    | NewtonsoftJson
-    | SystemTextJson of System.Text.Json.JsonSerializerOptions
+/// The single-case DU shape is retained for forward compatibility with
+/// alternative backends (e.g. a future protobuf or MsgPack-mirror JSON
+/// path); right now it is structurally equivalent to a JsonSerializerOptions
+/// wrapper.
+type JsonSerializerBackend = SystemTextJson of System.Text.Json.JsonSerializerOptions
 
 type internal IShapeFSharpAsyncOrTask =
     abstract Element: TypeShape
@@ -138,26 +141,29 @@ type internal ShapeFSharpAsyncOrTask<'T>() =
 ///     parser the deserialise path picks can re-parse this text. Previously
 ///     this carried a `Newtonsoft.Json.Linq.JToken`, which prevented STJ-only
 ///     consumers from dropping the Newtonsoft transitive dep.
-type internal InvocationPropsInt =
-    { Arguments: Choice<byte[], string> list
-      IsProxyHeaderPresent: bool
-      Output: Stream }
+type internal InvocationPropsInt = {
+    Arguments: Choice<byte[], string> list
+    IsProxyHeaderPresent: bool
+    Output: Stream
+}
 
-type InvocationProps<'impl> =
-    { Input: Stream
-      Output: Stream
-      ImplementationBuilder: unit -> 'impl
-      EndpointName: string
-      HttpVerb: string
-      InputContentType: string
-      IsProxyHeaderPresent: bool }
+type InvocationProps<'impl> = {
+    Input: Stream
+    Output: Stream
+    ImplementationBuilder: unit -> 'impl
+    EndpointName: string
+    HttpVerb: string
+    InputContentType: string
+    IsProxyHeaderPresent: bool
+}
 
-type MakeEndpointProps =
-    { FieldName: string
-      RecordName: string
-      ResponseSerialization: SerializationType
-      JsonSerializer: JsonSerializerBackend
-      FlattenedTypes: Type[] }
+type MakeEndpointProps = {
+    FieldName: string
+    RecordName: string
+    ResponseSerialization: SerializationType
+    JsonSerializer: JsonSerializerBackend
+    FlattenedTypes: Type[]
+}
 
 type InvocationResult =
     | Success of isBinaryOutput: bool
@@ -168,16 +174,15 @@ type InvocationResult =
 // an example is a list of arguments and the description of the example
 type Example = obj list * string
 
-type RouteDocs =
-    {
-        Route: string option
-        /// An alias for the method name
-        Alias: string option
-        /// The description of the method
-        Description: string option
-        /// Examples are objects and optionally, their description
-        Examples: Example list
-    }
+type RouteDocs = {
+    Route: string option
+    /// An alias for the method name
+    Alias: string option
+    /// The description of the method
+    Description: string option
+    /// Examples are objects and optionally, their description
+    Examples: Example list
+}
 
 /// Contains documented routes for an API
 type Documentation = Documentation of string * RouteDocs list
@@ -254,25 +259,24 @@ type AuditKind =
 /// Phase 69h — audit event emitted on every successful invocation of
 /// an `[<Audit>]`-attributed method. PII fields are redacted unless
 /// the field carries `[<PiiSafe>]`.
-type AuditEvent =
-    {
-        /// The audit category from the `[<Audit kind>]` attribute.
-        Kind: AuditKind
-        /// The invoked method's bare name (e.g. `PromoteToAdmin`).
-        MethodName: string
-        /// Subject id from the resolved auth context, or `"anonymous"`.
-        SubjectId: string
-        /// Request correlation id (Phase 69b.D) for end-to-end joining.
-        CorrelationId: string option
-        /// Wall-clock timestamp of emission.
-        Timestamp: System.DateTimeOffset
-        /// PII-redacted snapshot of the input argument shape. Fields without
-        /// a `[<PiiSafe>]` attribute are redacted to `<redacted>`; fields
-        /// with one carry their string-shape value. Empty when the method
-        /// took no arguments or the audit attribute opted into SubjectOnly
-        /// payload mode.
-        Payload: Map<string, string>
-    }
+type AuditEvent = {
+    /// The audit category from the `[<Audit kind>]` attribute.
+    Kind: AuditKind
+    /// The invoked method's bare name (e.g. `PromoteToAdmin`).
+    MethodName: string
+    /// Subject id from the resolved auth context, or `"anonymous"`.
+    SubjectId: string
+    /// Request correlation id (Phase 69b.D) for end-to-end joining.
+    CorrelationId: string option
+    /// Wall-clock timestamp of emission.
+    Timestamp: System.DateTimeOffset
+    /// PII-redacted snapshot of the input argument shape. Fields without
+    /// a `[<PiiSafe>]` attribute are redacted to `<redacted>`; fields
+    /// with one carry their string-shape value. Empty when the method
+    /// took no arguments or the audit attribute opted into SubjectOnly
+    /// payload mode.
+    Payload: Map<string, string>
+}
 
 /// Phase 69h — audit-event emission hook. Async-shaped: emission can
 /// route to a remote audit log without blocking the dispatcher's
@@ -309,11 +313,12 @@ type MultipartCapExceededException(message: string) =
 /// Stripe-pattern footgun where a client reuses an idempotency key
 /// against a mutated body and silently gets back the prior response.
 /// Empty string for legacy entries materialised by 0.1.14 stores.
-type MemoisedResponse =
-    { Body: byte[]
-      StatusCode: int
-      ContentType: string
-      RequestBodyHash: string }
+type MemoisedResponse = {
+    Body: byte[]
+    StatusCode: int
+    ContentType: string
+    RequestBodyHash: string
+}
 
 /// Phase 69f — idempotency substrate. Captures the first call's
 /// response under a `(subjectScope, methodName, idempotencyKey)` triple
@@ -400,11 +405,12 @@ type MethodOutcome =
 /// the sink can correlate across calls + propagate to logs / metrics
 /// / audit rows. Value is what the dispatcher established for the
 /// request (header value if present, generated GUID otherwise).
-type MethodTelemetry =
-    { MethodName: string
-      ElapsedMs: int
-      Outcome: MethodOutcome
-      CorrelationId: string option }
+type MethodTelemetry = {
+    MethodName: string
+    ElapsedMs: int
+    Outcome: MethodOutcome
+    CorrelationId: string option
+}
 
 /// Phase 69b.C — telemetry hook contract.
 ///
@@ -447,51 +453,50 @@ type BodyNormalisation =
     | Enabled
     | Disabled
 
-type RemotingOptions<'context, 'serverImpl> =
-    {
-        Implementation: ProtocolImplementation<'context, 'serverImpl>
-        RouteBuilder: string -> string -> string
-        ErrorHandler: ErrorHandler<'context> option
-        DiagnosticsLogger: (string -> unit) option
-        Docs: string option * Option<Documentation>
-        ResponseSerialization: SerializationType
-        JsonSerializer: JsonSerializerBackend
-        RmsManager: Microsoft.IO.RecyclableMemoryStreamManager option
-        BodyNormalisation: BodyNormalisation
-        Telemetry: IRemotingTelemetry option
-        AuthContextResolver: ('context -> Async<IAuthContext>) option
-        RateLimitStore: IRateLimitStore option
-        AuditEmitter: IAuditEmitter option
-        IdempotencyStore: IIdempotencyStore option
-        IdempotencyTtl: System.TimeSpan
-        /// Phase 69j — `__schema_version` field stamped on every
-        /// dispatcher-emitted envelope. Default `1` matches the post-69b.E
-        /// shape (categorised errors). Future wire-format evolutions
-        /// increment this and consult an `X-Remoting-Schema` request header
-        /// to optionally route to a per-version handler shape.
-        SchemaVersion: int
-        /// 0.1.15 — per-multipart-section byte cap. Applied per part inside
-        /// `multipart/form-data` bodies so a single hostile section can't
-        /// materialise an unbounded `byte[]` and OOM the host. Default 16
-        /// MiB matches a generous mobile-upload ceiling; raise via
-        /// composition for genuine large-file paths.
-        MaxMultipartSectionBytes: int64
-        /// 0.1.15 — per-request multipart section count cap. Caps how many
-        /// parts a single multipart request may carry. Default 64; raise via
-        /// composition only when the application genuinely needs more.
-        MaxMultipartSections: int
-        /// 0.1.15 — per-request remote IP resolver. Used by the rate-limit
-        /// fallback so anonymous callers partition by client IP (not
-        /// reverse-proxy IP). Default `None` → the dispatcher reads
-        /// `ctx.Connection.RemoteIpAddress` (socket-level) — correct for
-        /// hosts NOT behind a CDN / reverse proxy. Production deployments
-        /// behind Cloudflare / CloudFront / ALB / nginx should compose a
-        /// resolver that reads `X-Forwarded-For` (or the cloud-specific
-        /// `CF-Connecting-IP` / `X-Real-IP`) after configuring ASP.NET's
-        /// `ForwardedHeadersMiddleware` with `KnownProxies` /
-        /// `KnownNetworks` to whitelist trusted hops. Without this, every
-        /// anonymous request from the Internet collapses into a single
-        /// rate-limit bucket per proxy IP — defeating the 0.1.14
-        /// per-IP partition.
-        RemoteIpResolver: ('context -> string option) option
-    }
+type RemotingOptions<'context, 'serverImpl> = {
+    Implementation: ProtocolImplementation<'context, 'serverImpl>
+    RouteBuilder: string -> string -> string
+    ErrorHandler: ErrorHandler<'context> option
+    DiagnosticsLogger: (string -> unit) option
+    Docs: string option * Option<Documentation>
+    ResponseSerialization: SerializationType
+    JsonSerializer: JsonSerializerBackend
+    RmsManager: Microsoft.IO.RecyclableMemoryStreamManager option
+    BodyNormalisation: BodyNormalisation
+    Telemetry: IRemotingTelemetry option
+    AuthContextResolver: ('context -> Async<IAuthContext>) option
+    RateLimitStore: IRateLimitStore option
+    AuditEmitter: IAuditEmitter option
+    IdempotencyStore: IIdempotencyStore option
+    IdempotencyTtl: System.TimeSpan
+    /// Phase 69j — `__schema_version` field stamped on every
+    /// dispatcher-emitted envelope. Default `1` matches the post-69b.E
+    /// shape (categorised errors). Future wire-format evolutions
+    /// increment this and consult an `X-Remoting-Schema` request header
+    /// to optionally route to a per-version handler shape.
+    SchemaVersion: int
+    /// 0.1.15 — per-multipart-section byte cap. Applied per part inside
+    /// `multipart/form-data` bodies so a single hostile section can't
+    /// materialise an unbounded `byte[]` and OOM the host. Default 16
+    /// MiB matches a generous mobile-upload ceiling; raise via
+    /// composition for genuine large-file paths.
+    MaxMultipartSectionBytes: int64
+    /// 0.1.15 — per-request multipart section count cap. Caps how many
+    /// parts a single multipart request may carry. Default 64; raise via
+    /// composition only when the application genuinely needs more.
+    MaxMultipartSections: int
+    /// 0.1.15 — per-request remote IP resolver. Used by the rate-limit
+    /// fallback so anonymous callers partition by client IP (not
+    /// reverse-proxy IP). Default `None` → the dispatcher reads
+    /// `ctx.Connection.RemoteIpAddress` (socket-level) — correct for
+    /// hosts NOT behind a CDN / reverse proxy. Production deployments
+    /// behind Cloudflare / CloudFront / ALB / nginx should compose a
+    /// resolver that reads `X-Forwarded-For` (or the cloud-specific
+    /// `CF-Connecting-IP` / `X-Real-IP`) after configuring ASP.NET's
+    /// `ForwardedHeadersMiddleware` with `KnownProxies` /
+    /// `KnownNetworks` to whitelist trusted hops. Without this, every
+    /// anonymous request from the Internet collapses into a single
+    /// rate-limit bucket per proxy IP — defeating the 0.1.14
+    /// per-IP partition.
+    RemoteIpResolver: ('context -> string option) option
+}

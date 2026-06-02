@@ -4,9 +4,9 @@ open System
 open System.Formats.Tar
 open System.IO
 open System.Text
-open Newtonsoft.Json
-open Newtonsoft.Json.Linq
-open ToolUp.Remoting.Json
+open System.Text.Json
+open System.Text.Json.Nodes
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -87,35 +87,47 @@ let private shouldRedact (propName: string) =
 
 let private redactedString (length: int) = sprintf "<redacted:length=%d>" length
 
-let rec private redact (token: JToken) : unit =
-    match token with
-    | :? JObject as obj ->
-        for prop in obj.Properties() do
-            if shouldRedact prop.Name then
-                match prop.Value.Type with
-                | JTokenType.Null -> ()
-                | JTokenType.String ->
-                    let s = prop.Value.Value<string>()
-                    prop.Value <- JValue(redactedString s.Length)
-                | _ ->
-                    let serialised = prop.Value.ToString(Formatting.None)
-                    prop.Value <- JValue(redactedString serialised.Length)
-            else
-                redact prop.Value
-    | :? JArray as arr ->
-        for item in arr do
-            redact item
-    | _ -> ()
+let rec private redact (node: JsonNode) : unit =
+    if isNull node then
+        ()
+    else
+        match node with
+        | :? JsonObject as obj ->
+            // Snapshot keys before mutating — JsonObject raises
+            // InvalidOperationException if mutated during enumeration.
+            let names = obj |> Seq.map (fun kvp -> kvp.Key) |> Seq.toArray
+
+            for name in names do
+                let child = obj.[name]
+
+                if shouldRedact name then
+                    if isNull child then
+                        ()
+                    else
+                        match child.GetValueKind() with
+                        | JsonValueKind.Null -> ()
+                        | JsonValueKind.String ->
+                            let s = child.GetValue<string>()
+                            obj.[name] <- JsonValue.Create(redactedString s.Length) :> JsonNode
+                        | _ ->
+                            let serialised = child.ToJsonString()
+                            obj.[name] <- JsonValue.Create(redactedString serialised.Length) :> JsonNode
+                else
+                    redact child
+        | :? JsonArray as arr ->
+            for child in arr do
+                redact child
+        | _ -> ()
 
 // ─── JSON helpers ────────────────────────────────────────────────────
 
-let private jsonSettings =
-    let s = JsonSerializerSettings(Formatting = Formatting.Indented)
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions =
+    let o = FableConverters.create ()
+    o.WriteIndented <- true
+    o
 
 let private renderJson (value: obj) : string =
-    JsonConvert.SerializeObject(value, jsonSettings)
+    JsonSerializer.Serialize(value, jsonOptions)
 
 let private utf8 (s: string) = Encoding.UTF8.GetBytes s
 
@@ -132,20 +144,20 @@ let private buildInspectJson
     : Async<byte[]> =
     async {
         let! report = DevDiagnosticsHandler.buildReport config capture ctx
-        let raw = JsonConvert.SerializeObject(report, jsonSettings)
-        let parsed = JObject.Parse raw
+        let raw = JsonSerializer.Serialize(report, jsonOptions)
+        let parsed = JsonNode.Parse raw
         redact parsed
-        return parsed.ToString(Formatting.Indented) |> utf8
+        return parsed.ToJsonString(jsonOptions) |> utf8
     }
 
 /// `config.json` — resolved `ServerConfig` serialised + redacted via
 /// the same suffix allowlist `ConfigDriftDetector` uses for its
 /// persisted startup snapshot.
 let private buildConfigJson (config: ServerConfig) : byte[] =
-    let raw = JsonConvert.SerializeObject(config, jsonSettings)
-    let parsed = JObject.Parse raw
+    let raw = JsonSerializer.Serialize(config, jsonOptions)
+    let parsed = JsonNode.Parse raw
     redact parsed
-    parsed.ToString(Formatting.Indented) |> utf8
+    parsed.ToJsonString(jsonOptions) |> utf8
 
 /// `validators.json` — `IConfigValidator` preflight snapshot
 /// (Phase 9m). Empty when no validators registered or
@@ -392,26 +404,24 @@ let private buildAuditTailJsonl
 
             for evt in merged do
                 if not truncated then
-                    let payloadToken =
+                    let payloadNode =
                         try
-                            JToken.Parse evt.Payload
+                            JsonNode.Parse evt.Payload
                         with _ ->
-                            JValue(evt.Payload) :> JToken
+                            JsonValue.Create(evt.Payload) :> JsonNode
 
-                    redact payloadToken
+                    redact payloadNode
 
                     let line =
-                        let obj =
-                            JObject(
-                                JProperty("Id", JValue(string evt.Id)),
-                                JProperty("OccurredAt", JValue(evt.OccurredAt.ToUniversalTime().ToString("o"))),
-                                JProperty("ScopeId", JValue evt.ScopeId),
-                                JProperty("SourceModule", JValue evt.SourceModule),
-                                JProperty("EventType", JValue evt.EventType),
-                                JProperty("Payload", payloadToken)
-                            )
+                        let obj = JsonObject()
+                        obj.["Id"] <- JsonValue.Create(string evt.Id)
+                        obj.["OccurredAt"] <- JsonValue.Create(evt.OccurredAt.ToUniversalTime().ToString("o"))
+                        obj.["ScopeId"] <- JsonValue.Create(evt.ScopeId)
+                        obj.["SourceModule"] <- JsonValue.Create(evt.SourceModule)
+                        obj.["EventType"] <- JsonValue.Create(evt.EventType)
+                        obj.["Payload"] <- payloadNode
 
-                        obj.ToString(Formatting.None)
+                        obj.ToJsonString()
 
                     let lineBytes = Encoding.UTF8.GetByteCount(line + "\n") |> int64
 

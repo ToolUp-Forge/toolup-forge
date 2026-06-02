@@ -5,7 +5,6 @@ module ToolUp.Platform.Teams.TeamInvitationHandler
 
 open System
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage

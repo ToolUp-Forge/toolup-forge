@@ -6,8 +6,8 @@ module ToolUp.AI.ConversationReplay
 open System
 open System.Security.Cryptography
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
@@ -53,10 +53,7 @@ open ToolUp.AI
 
 // ─── JSON + digest helpers (shared with ConversationStore) ────────
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private sha256Hex (bytes: byte[]) : string =
     let hash = SHA256.HashData(bytes)
@@ -66,7 +63,7 @@ let private digestSystemPrompt (text: string) : string =
     text |> Encoding.UTF8.GetBytes |> sha256Hex
 
 let private digestContent (content: AIMessageContent) : string =
-    JsonConvert.SerializeObject(content, jsonSettings)
+    JsonSerializer.Serialize(content, jsonOptions)
     |> Encoding.UTF8.GetBytes
     |> sha256Hex
 
@@ -101,7 +98,7 @@ let private emitReplayedAudit
                 ScopeId = scopeId
                 SourceModule = ConversationsSourceModule.value
                 EventType = "ConversationReplayed"
-                Payload = JsonConvert.SerializeObject(payload, jsonSettings)
+                Payload = JsonSerializer.Serialize(payload, jsonOptions)
             }
 
             do! store.Write event

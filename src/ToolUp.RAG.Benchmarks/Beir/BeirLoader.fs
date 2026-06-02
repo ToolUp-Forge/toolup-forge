@@ -4,8 +4,7 @@ open System
 open System.IO
 open System.IO.Compression
 open System.Net.Http
-open Newtonsoft.Json
-open Newtonsoft.Json.Linq
+open System.Text.Json.Nodes
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.Benchmarks.EvalCore
 open ToolUp.RAG.Benchmarks.BeirTypes
@@ -67,10 +66,19 @@ let download (name: string) : Async<string> = async {
 
 // ─── JSONL streaming parsers ─────────────────────────────────────
 
+/// Stringify a JsonNode property, returning "" when absent or null. The
+/// JsonValue.GetValue<string>() form is the canonical STJ path; .ToString()
+/// on a JsonValue holding a string returns the string unquoted, matching
+/// the prior Newtonsoft behaviour.
+let private stringFrom (o: JsonObject) (key: string) : string =
+    match o.[key] with
+    | null -> ""
+    | n -> n.GetValue<string>()
+
 /// Parse `corpus.jsonl` — one `{"_id": "...", "title": "...", "text": "..."}`
 /// object per line. Streams line-by-line so memory peak is one line rather
 /// than file size. FiQA's corpus is ~80 MB; loading whole-file via
-/// `JsonConvert.DeserializeObject<BeirCorpusDoc list>` would blow up.
+/// `JsonSerializer.Deserialize<BeirCorpusDoc list>` would blow up.
 let parseCorpusJsonl (path: string) : BeirCorpusDoc list =
     let docs = ResizeArray()
     use reader = new StreamReader(path)
@@ -79,18 +87,12 @@ let parseCorpusJsonl (path: string) : BeirCorpusDoc list =
 
     while not (isNull line) do
         if line.Trim() <> "" then
-            let o = JObject.Parse line
+            let o = JsonNode.Parse line :?> JsonObject
 
             docs.Add {
-                Id = o["_id"].ToString()
-                Title =
-                    match o["title"] with
-                    | null -> ""
-                    | t -> t.ToString()
-                Text =
-                    match o["text"] with
-                    | null -> ""
-                    | t -> t.ToString()
+                Id = stringFrom o "_id"
+                Title = stringFrom o "title"
+                Text = stringFrom o "text"
             }
 
         line <- reader.ReadLine()
@@ -106,11 +108,11 @@ let parseQueriesJsonl (path: string) : BeirQuery list =
 
     while not (isNull line) do
         if line.Trim() <> "" then
-            let o = JObject.Parse line
+            let o = JsonNode.Parse line :?> JsonObject
 
             queries.Add {
-                Id = o["_id"].ToString()
-                Text = o["text"].ToString()
+                Id = stringFrom o "_id"
+                Text = stringFrom o "text"
             }
 
         line <- reader.ReadLine()

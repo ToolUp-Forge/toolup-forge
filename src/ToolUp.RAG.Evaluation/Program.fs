@@ -2,7 +2,8 @@ module ToolUp.RAG.Evaluation.Program
 
 open System
 open System.IO
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.RAG.InMemoryVectorStore
@@ -75,13 +76,12 @@ let private printReport (report: EvalReport) =
     printfn ""
 
 let private writeReport (path: string) (report: EvalReport) =
-    let settings =
-        let s = JsonSerializerSettings()
-        s.Formatting <- Formatting.Indented
-        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-        s
+    let options =
+        let o = FableConverters.create ()
+        o.WriteIndented <- true
+        o
 
-    let json = JsonConvert.SerializeObject(report, settings)
+    let json = JsonSerializer.Serialize(report, options)
     Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
     File.WriteAllText(path, json)
     printfn "Report written to %s" path
@@ -144,12 +144,9 @@ let main argv =
                 | Some path ->
                     let json = File.ReadAllText path
 
-                    let settings =
-                        let s = JsonSerializerSettings()
-                        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-                        s
+                    let options = FableConverters.create ()
 
-                    let baseline = JsonConvert.DeserializeObject<EvalReport>(json, settings)
+                    let baseline = JsonSerializer.Deserialize<EvalReport>(json, options)
 
                     match RetrievalEval.detectRegression 0.05 baseline report with
                     | Ok() -> printfn "✓ No regression vs baseline (%s)" path

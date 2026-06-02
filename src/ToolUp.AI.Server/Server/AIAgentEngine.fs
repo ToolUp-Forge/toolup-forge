@@ -4,7 +4,8 @@ open System
 open System.Diagnostics
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Metrics
@@ -221,10 +222,7 @@ let private ProviderSendTimeoutMs = 50_000
 /// `FableJsonConverter` round-trips F# DUs / `option` / records
 /// losslessly so `/dev/ai-latency` reads back the same shape that
 /// `IEventStore.Write` persisted.
-let private latencyJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private latencyJsonOptions = FableConverters.create ()
 
 /// Resolve the caller's storage scope from the request. Mirrors the
 /// fallback shape used by `FastPathBeaconHandler` so latency records
@@ -384,7 +382,7 @@ let runAgentLoop
                         ScopeId = latencyScope.ScopeId
                         SourceModule = AILatencyRecord.SourceModule
                         EventType = AILatencyRecord.EventType
-                        Payload = JsonConvert.SerializeObject(payload, latencyJsonSettings)
+                        Payload = JsonSerializer.Serialize(payload, latencyJsonOptions)
                     }
 
                     // Phase 6h follow-up: bound the event-store write so a
@@ -477,7 +475,7 @@ let runAgentLoop
                     ScopeId = latencyScope.ScopeId
                     SourceModule = "_platform.ai.tool_allowlist_denial"
                     EventType = "ToolAllowlistDenied"
-                    Payload = JsonConvert.SerializeObject(payload, latencyJsonSettings)
+                    Payload = JsonSerializer.Serialize(payload, latencyJsonOptions)
                 }
 
                 try

@@ -4,8 +4,8 @@ open System
 open System.Threading
 open System.Threading.Channels
 open Microsoft.Extensions.Hosting
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -45,16 +45,13 @@ open ToolUp.Platform.BlobStorage
 
 let private cursorContainer = "_platform"
 
-let private cursorJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private cursorJsonOptions = FableConverters.create ()
 
 let private toCursorJson (cursor: AuditReplicatorCursor) =
-    JsonConvert.SerializeObject(cursor, cursorJsonSettings)
+    JsonSerializer.Serialize(cursor, cursorJsonOptions)
 
 let private fromCursorJson (json: string) =
-    JsonConvert.DeserializeObject<AuditReplicatorCursor>(json, cursorJsonSettings)
+    JsonSerializer.Deserialize<AuditReplicatorCursor>(json, cursorJsonOptions)
 
 let private cursorBlobName (sinkName: string) (scopeId: string) =
     $"audit-replicator/{sinkName}/{scopeId}.cursor"
@@ -340,177 +337,165 @@ type AuditReplicator
                                 | "UserLoggedIn" ->
                                     Some(
                                         UserLoggedIn(
-                                            JsonConvert.DeserializeObject<UserLoggedInPayload>(
-                                                json,
-                                                cursorJsonSettings
-                                            )
+                                            JsonSerializer.Deserialize<UserLoggedInPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "TeamCreated" ->
                                     Some(
                                         TeamCreated(
-                                            JsonConvert.DeserializeObject<TeamCreatedPayload>(json, cursorJsonSettings)
+                                            JsonSerializer.Deserialize<TeamCreatedPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "MemberAdded" ->
                                     Some(
                                         MemberAdded(
-                                            JsonConvert.DeserializeObject<MemberAddedPayload>(json, cursorJsonSettings)
+                                            JsonSerializer.Deserialize<MemberAddedPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "MemberRemoved" ->
                                     Some(
                                         MemberRemoved(
-                                            JsonConvert.DeserializeObject<MemberRemovedPayload>(
-                                                json,
-                                                cursorJsonSettings
-                                            )
+                                            JsonSerializer.Deserialize<MemberRemovedPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "MemberRoleChanged" ->
                                     Some(
                                         MemberRoleChanged(
-                                            JsonConvert.DeserializeObject<MemberRoleChangedPayload>(
+                                            JsonSerializer.Deserialize<MemberRoleChangedPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "FileUploaded" ->
                                     Some(
                                         FileUploaded(
-                                            JsonConvert.DeserializeObject<FileUploadedPayload>(
-                                                json,
-                                                cursorJsonSettings
-                                            )
+                                            JsonSerializer.Deserialize<FileUploadedPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "FileDeleted" ->
                                     Some(
                                         FileDeleted(
-                                            JsonConvert.DeserializeObject<FileDeletedPayload>(json, cursorJsonSettings)
+                                            JsonSerializer.Deserialize<FileDeletedPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "AnalysisRun" ->
                                     Some(
                                         AnalysisRun(
-                                            JsonConvert.DeserializeObject<AnalysisRunPayload>(json, cursorJsonSettings)
+                                            JsonSerializer.Deserialize<AnalysisRunPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "PermissionChanged" ->
                                     Some(
                                         PermissionChanged(
-                                            JsonConvert.DeserializeObject<PermissionChangedPayload>(
+                                            JsonSerializer.Deserialize<PermissionChangedPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "NotificationSent" ->
                                     Some(
                                         NotificationSent(
-                                            JsonConvert.DeserializeObject<NotificationSentPayload>(
+                                            JsonSerializer.Deserialize<NotificationSentPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "NotificationDeliveryFailed" ->
                                     Some(
                                         NotificationDeliveryFailed(
-                                            JsonConvert.DeserializeObject<NotificationDeliveryFailedPayload>(
+                                            JsonSerializer.Deserialize<NotificationDeliveryFailedPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "HealthStateChanged" ->
                                     Some(
                                         HealthStateChanged(
-                                            JsonConvert.DeserializeObject<HealthStateChangedPayload>(
+                                            JsonSerializer.Deserialize<HealthStateChangedPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "EncryptionKeyCreated" ->
                                     Some(
                                         EncryptionKeyCreated(
-                                            JsonConvert.DeserializeObject<EncryptionKeyEventPayload>(
+                                            JsonSerializer.Deserialize<EncryptionKeyEventPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "EncryptionKeyRotated" ->
                                     Some(
                                         EncryptionKeyRotated(
-                                            JsonConvert.DeserializeObject<EncryptionKeyEventPayload>(
+                                            JsonSerializer.Deserialize<EncryptionKeyEventPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "EncryptionKeyDestroyed" ->
                                     Some(
                                         EncryptionKeyDestroyed(
-                                            JsonConvert.DeserializeObject<EncryptionKeyEventPayload>(
+                                            JsonSerializer.Deserialize<EncryptionKeyEventPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "EntityCreated" ->
                                     Some(
                                         EntityCreated(
-                                            JsonConvert.DeserializeObject<EntityLifecycleEventPayload>(
+                                            JsonSerializer.Deserialize<EntityLifecycleEventPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "EntityUpdated" ->
                                     Some(
                                         EntityUpdated(
-                                            JsonConvert.DeserializeObject<EntityLifecycleEventPayload>(
+                                            JsonSerializer.Deserialize<EntityLifecycleEventPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "EntityDeleted" ->
                                     Some(
                                         EntityDeleted(
-                                            JsonConvert.DeserializeObject<EntityLifecycleEventPayload>(
+                                            JsonSerializer.Deserialize<EntityLifecycleEventPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "FormSubmitted" ->
                                     Some(
                                         FormSubmitted(
-                                            JsonConvert.DeserializeObject<FormSubmittedPayload>(
-                                                json,
-                                                cursorJsonSettings
-                                            )
+                                            JsonSerializer.Deserialize<FormSubmittedPayload>(json, cursorJsonOptions)
                                         )
                                     )
                                 | "FormSubmissionUpdated" ->
                                     Some(
                                         FormSubmissionUpdated(
-                                            JsonConvert.DeserializeObject<FormSubmissionUpdatedPayload>(
+                                            JsonSerializer.Deserialize<FormSubmissionUpdatedPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )
                                 | "WorkflowTransitioned" ->
                                     Some(
                                         WorkflowTransitioned(
-                                            JsonConvert.DeserializeObject<WorkflowTransitionedPayload>(
+                                            JsonSerializer.Deserialize<WorkflowTransitionedPayload>(
                                                 json,
-                                                cursorJsonSettings
+                                                cursorJsonOptions
                                             )
                                         )
                                     )

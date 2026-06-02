@@ -1,7 +1,8 @@
 module ToolUp.AI.FastPathTelemetryHandler
 
 open System
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -193,15 +194,17 @@ let private buildBreakdown (events: (FastPathEventPayload * DateTime) list) : Ti
 
 // ─── Event-store read + decode ──────────────────────────────────
 
-let private payloadJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private payloadJsonOptions = FableConverters.create ()
+
+let private indentedJsonOptions =
+    let o = FableConverters.create ()
+    o.WriteIndented <- true
+    o
 
 let private decodePayload (evt: ModuleEvent) : (FastPathEventPayload * DateTime) option =
     try
         let payload =
-            JsonConvert.DeserializeObject<FastPathEventPayload>(evt.Payload, payloadJsonSettings)
+            JsonSerializer.Deserialize<FastPathEventPayload>(evt.Payload, payloadJsonOptions)
 
         if isNull (box payload) then
             None
@@ -213,7 +216,7 @@ let private decodePayload (evt: ModuleEvent) : (FastPathEventPayload * DateTime)
 let private decodeSequenceOutcome (evt: ModuleEvent) : (SequenceOutcomeBeacon * DateTime) option =
     try
         let payload =
-            JsonConvert.DeserializeObject<SequenceOutcomeBeacon>(evt.Payload, payloadJsonSettings)
+            JsonSerializer.Deserialize<SequenceOutcomeBeacon>(evt.Payload, payloadJsonOptions)
 
         if isNull (box payload) then
             None
@@ -292,7 +295,7 @@ let private buildReport (ctx: HttpContext) : Async<FastPathReport> = async {
 // ─── Route handler ──────────────────────────────────────────────
 
 let private renderJson (report: FastPathReport) =
-    JsonConvert.SerializeObject(report, Formatting.Indented)
+    JsonSerializer.Serialize(report, indentedJsonOptions)
 
 /// JSON handler for `/dev/ai-fastpath`. Sets `Cache-Control: no-store`
 /// so dev-tools sees fresh stats on every refresh.

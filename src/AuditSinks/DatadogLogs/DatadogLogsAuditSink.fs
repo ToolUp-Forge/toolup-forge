@@ -3,8 +3,8 @@ module ToolUp.Platform.AuditSinks.DatadogLogs
 open System
 open System.Net.Http
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
@@ -71,10 +71,7 @@ module DatadogLogsSettings =
         Host = None
     }
 
-let private logsJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private logsJsonOptions = FableConverters.create ()
 
 /// Phase 9g — best-effort scope-id extraction from an `AuditEvent`
 /// payload. Pre-Phase-66, sinks introspected the payload per-case to
@@ -289,7 +286,7 @@ let private serializeBatch (settings: DatadogLogsSettings) (batch: AuditEnvelope
     let entries =
         batch
         |> List.map (fun envelope ->
-            let payloadJson = JsonConvert.SerializeObject(envelope.Event, logsJsonSettings)
+            let payloadJson = JsonSerializer.Serialize(envelope.Event, logsJsonOptions)
             let eventTypeName = AuditEvent.eventTypeName envelope.Event
             let subjectTags = buildSubjectTags envelope.Subject
 

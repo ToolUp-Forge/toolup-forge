@@ -1,7 +1,7 @@
 module ToolUp.Platform.DataIngestionJobHandler
 
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── DataIngestionJobHandler ─────────────────────────────────────
@@ -26,17 +26,14 @@ let JobHandlerName = "_platform.dataingestion.run"
 type RunPayload = { sourceId: string; table: string }
 
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: 'T) : string =
-        JsonConvert.SerializeObject(value, settings)
+        JsonSerializer.Serialize(value, options)
 
     let tryDeserialize (json: string) : RunPayload option =
         try
-            Some(JsonConvert.DeserializeObject<RunPayload>(json, settings))
+            Some(JsonSerializer.Deserialize<RunPayload>(json, options))
         with _ ->
             None
 

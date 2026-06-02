@@ -1,85 +1,96 @@
 namespace ToolUp.Remoting.Server
 
-// Docs schema serialisation still uses FableJsonConverter (Newtonsoft).
-// Generating the API documentation is not on the byte-compat hot path; the
-// Newtonsoft path here is supported until the next major version.
-#nowarn "44"
-
 open Microsoft.FSharp.Quotations
-open ToolUp.Remoting.Json
-open Newtonsoft.Json
-open Newtonsoft.Json.Linq
 open System
+open System.Text.Json
+open System.Text.Json.Nodes
 open FSharp.Reflection
+open ToolUp.Remoting.Json.SystemTextJson
 
 /// Helper class that constructs documented routes
-type ApiDocs<'t>() = 
+type ApiDocs<'t>() =
     /// Document a route
-    member this.route<'u>(expr: Expr<'t -> Async<'u>>) = 
-        match expr with 
-        | Patterns.ProxyLambda (name, []) -> 
-            { Route = Some name;
-              Alias = None 
-              Description = None; 
-              Examples = [] } 
-        | _ -> 
-            { Route = None;
-              Alias = None 
-              Description = None; 
-              Examples = [] } 
-    
+    member this.route<'u>(expr: Expr<'t -> Async<'u>>) =
+        match expr with
+        | Patterns.ProxyLambda(name, []) -> {
+            Route = Some name
+            Alias = None
+            Description = None
+            Examples = []
+          }
+        | _ -> {
+            Route = None
+            Alias = None
+            Description = None
+            Examples = []
+          }
+
     /// Document a route
-    member this.route<'v, 'u>(expr: Expr<'t -> ('v -> Async<'u>)>) = 
-        match expr with 
-        | Patterns.ProxyLambda (name, []) -> 
-            { Route = Some name;
-              Alias = None 
-              Description = None; 
-              Examples = [] } 
-        | _ -> 
-            { Route = None;
-              Alias = None 
-              Description = None; 
-              Examples = [] } 
-    
+    member this.route<'v, 'u>(expr: Expr<'t -> ('v -> Async<'u>)>) =
+        match expr with
+        | Patterns.ProxyLambda(name, []) -> {
+            Route = Some name
+            Alias = None
+            Description = None
+            Examples = []
+          }
+        | _ -> {
+            Route = None
+            Alias = None
+            Description = None
+            Examples = []
+          }
+
     /// Adds a description to the route definition
-    member this.description (desc: string) (route: RouteDocs) = 
-        { route with Description = Some desc } 
-    
+    member this.description (desc: string) (route: RouteDocs) = { route with Description = Some desc }
+
     /// Adds example to the route definition form the way you would use the remote function
-    member this.example (expr: Expr<'t -> Async<'u>>) (route: RouteDocs) = 
-        match expr with 
-        | Patterns.ProxyLambda (name, args) when Some name = route.Route ->
-            { route with Examples = List.append route.Examples [(args, "")] }
-        | _ -> route 
+    member this.example (expr: Expr<'t -> Async<'u>>) (route: RouteDocs) =
+        match expr with
+        | Patterns.ProxyLambda(name, args) when Some name = route.Route -> {
+            route with
+                Examples = List.append route.Examples [ (args, "") ]
+          }
+        | _ -> route
 
     /// Add human-friendly alias for the remote function name
-    member this.alias (name: string) (route: RouteDocs) = 
-        { route with Alias = Some name }
+    member this.alias (name: string) (route: RouteDocs) = { route with Alias = Some name }
 
-module Docs = 
-    
-    let createFor<'t>() = ApiDocs<'t>()
+module Docs =
 
-    let private fableConverter = new FableJsonConverter() :> JsonConverter
+    let createFor<'t> () = ApiDocs<'t>()
 
-    let serialize result = JsonConvert.SerializeObject(result, [| fableConverter |])
+    /// Pre-configured FableConverters options for argument serialisation.
+    /// Reused across calls — STJ caches reflection state on the options
+    /// instance, so a fresh instance per call would re-pay the cost.
+    let private serializeOptions = FableConverters.create ()
+
+    let serialize result =
+        JsonSerializer.Serialize(result, serializeOptions)
 
     let routeMethod fieldType =
         match TypeInfo.flattenFuncTypes fieldType with
-        | [| simpleAsyncValue |] when simpleAsyncValue.FullName.StartsWith("Microsoft.FSharp.Control.FSharpAsync`1") -> "GET"
+        | [| simpleAsyncValue |] when simpleAsyncValue.FullName.StartsWith("Microsoft.FSharp.Control.FSharpAsync`1") ->
+            "GET"
         | [| input; _ |] when input = typeof<unit> -> "GET"
         | _ -> "POST"
 
-    let makeDocsSchema (recordType: Type) (Documentation(docsName, routesDefs)) (routeBuilder: string -> string -> string) =
-        let schema = JObject()
-        let routes = JArray()
+    let makeDocsSchema
+        (recordType: Type)
+        (Documentation(docsName, routesDefs))
+        (routeBuilder: string -> string -> string)
+        =
+        let schema = JsonObject()
+        let routes = JsonArray()
+
         for fieldInfo in FSharpType.GetRecordFields recordType do
-            let routeDocs = List.tryFind (fun routeDocs -> routeDocs.Route = Some fieldInfo.Name) routesDefs
-            let route = JObject()
-            route.Add(JProperty("remoteFunction", fieldInfo.Name))
-            route.Add(JProperty("httpMethod", routeMethod fieldInfo.PropertyType))
-            route.Add(JProperty("route", routeBuilder recordType.Name fieldInfo.Name))
+            let routeDocs =
+                List.tryFind (fun routeDocs -> routeDocs.Route = Some fieldInfo.Name) routesDefs
+
+            let route = JsonObject()
+            route.["remoteFunction"] <- JsonValue.Create(fieldInfo.Name)
+            route.["httpMethod"] <- JsonValue.Create(routeMethod fieldInfo.PropertyType)
+            route.["route"] <- JsonValue.Create(routeBuilder recordType.Name fieldInfo.Name)
 
             let description =
                 routeDocs
@@ -91,24 +102,34 @@ module Docs =
                 |> Option.bind (fun route -> route.Alias)
                 |> Option.defaultValue fieldInfo.Name
 
-            route.Add(JProperty("description", description))
-            route.Add(JProperty("alias", alias))
+            route.["description"] <- JsonValue.Create(description)
+            route.["alias"] <- JsonValue.Create(alias)
 
-            let examplesJson = JArray()
+            let examplesJson = JsonArray()
+
             match routeDocs with
             | None -> ()
             | Some routeDocs ->
                 for (exampleArgs, description) in routeDocs.Examples do
-                    let argsJson = JArray()
-                    for arg in exampleArgs do argsJson.Add(JToken.Parse(serialize arg))
-                    let exampleJson = JObject()
-                    exampleJson.Add(JProperty("description", description))
-                    exampleJson.Add(JProperty("arguments", argsJson))
+                    let argsJson = JsonArray()
+
+                    for arg in exampleArgs do
+                        // Round-trip each arg through STJ to land it as a
+                        // JsonNode for embedding (matches the prior JToken.Parse
+                        // pattern). Each arg's `serialize` produces the
+                        // FableConverters wire shape; JsonNode.Parse reads
+                        // that JSON into a JsonNode the tree can absorb.
+                        let argText = serialize arg
+                        argsJson.Add(JsonNode.Parse argText)
+
+                    let exampleJson = JsonObject()
+                    exampleJson.["description"] <- JsonValue.Create(description)
+                    exampleJson.["arguments"] <- argsJson
                     examplesJson.Add(exampleJson)
 
-            route.Add(JProperty("examples", examplesJson))
+            route.["examples"] <- examplesJson
             routes.Add(route)
 
-        schema.Add(JProperty("name", docsName))
-        schema.Add(JProperty("routes", routes))
+        schema.["name"] <- JsonValue.Create(docsName)
+        schema.["routes"] <- routes
         schema

@@ -5,7 +5,8 @@ open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Channels
 open Microsoft.Extensions.Hosting
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IVectorStore
@@ -83,13 +84,10 @@ type ReembeddingBackgroundService
 
     let sem = new SemaphoreSlim(maxConcurrency, maxConcurrency)
 
-    let jsonSettings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-        s
+    let jsonOptions = FableConverters.create ()
 
     let toJson o =
-        JsonConvert.SerializeObject(o, jsonSettings)
+        JsonSerializer.Serialize(o, jsonOptions)
 
     let scopeId (scope: VectorScope) =
         match scope with

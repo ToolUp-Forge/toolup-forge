@@ -1,8 +1,8 @@
 module ToolUp.Platform.FeatureFlagHandler
 
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.TeamManagement
 
@@ -14,10 +14,7 @@ open ToolUp.Platform.TeamManagement
 /// is never surfaced to the client), but keeping the converter keeps
 /// the persisted representation consistent with every other SDK store
 /// and future-proofs direct Fable consumers.
-let private eventJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private eventJsonOptions = FableConverters.create ()
 
 /// Build the `IFeatureFlagApi` Fable.Remoting handler. Resolves
 /// `FlagEvaluator`, `IFeatureFlagStore`, and `AccessContext` lazily
@@ -147,7 +144,7 @@ let featureFlagApi (declared: FeatureFlag list) (ctx: HttpContext) : IFeatureFla
                     ChangedBy = accessContext.UserId
                 }
 
-                let json = JsonConvert.SerializeObject(payload, eventJsonSettings)
+                let json = JsonSerializer.Serialize(payload, eventJsonOptions)
 
                 let evt =
                     Events.create

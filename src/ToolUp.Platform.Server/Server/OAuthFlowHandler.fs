@@ -5,8 +5,8 @@ open System.Text
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -190,18 +190,15 @@ type CredentialMetadata = {
 }
 
 module private MetadataJson =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: CredentialMetadata) : byte[] =
-        JsonConvert.SerializeObject(value, settings) |> Encoding.UTF8.GetBytes
+        JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
 
     let tryDeserialize (bytes: byte[]) : CredentialMetadata option =
         try
             let json = Encoding.UTF8.GetString bytes
-            Some(JsonConvert.DeserializeObject<CredentialMetadata>(json, settings))
+            Some(JsonSerializer.Deserialize<CredentialMetadata>(json, options))
         with _ ->
             None
 

@@ -2,8 +2,8 @@ module ToolUp.Platform.NotificationChannels.Redis
 
 open System
 open System.Collections.Concurrent
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open StackExchange.Redis
 open ToolUp.Platform
 
@@ -56,14 +56,13 @@ type RedisNotificationChannel(multiplexer: IConnectionMultiplexer, logger: ILogg
 
     let subscriber = multiplexer.GetSubscriber()
 
-    /// Shared JSON settings with FableJsonConverter registered. Reused
-    /// across publishes to avoid the ~5ms settings-construction cost
-    /// on every call (Newtonsoft warms an internal cache keyed by the
-    /// settings instance).
-    let jsonSettings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    /// Shared JSON options with the STJ-backed FableConverters registered.
+    /// Reused across publishes — STJ caches type-resolver state on the
+    /// options instance, so a fresh instance per call would re-pay the
+    /// reflection cost. `FableConverters.create ()` returns a fully-
+    /// configured options instance; behaviour is byte-equal to the
+    /// pre-migration Newtonsoft pipeline.
+    let jsonOptions = FableConverters.create ()
 
     let subscriptions =
         ConcurrentDictionary<NotificationSubscriptionId, string * (NotificationEnvelope -> unit) * ChannelMessageQueue>()
@@ -84,7 +83,7 @@ type RedisNotificationChannel(multiplexer: IConnectionMultiplexer, logger: ILogg
     interface INotificationChannel with
         member _.Publish(scopeId, notification) = async {
             let envelope = NotificationEnvelope.create scopeId notification
-            let payload = JsonConvert.SerializeObject(envelope, jsonSettings)
+            let payload = JsonSerializer.Serialize(envelope, jsonOptions)
 
             let! _ =
                 subscriber.PublishAsync(channelName scopeId, RedisValue.op_Implicit payload)
@@ -108,7 +107,7 @@ type RedisNotificationChannel(multiplexer: IConnectionMultiplexer, logger: ILogg
                     let payload = string channelMessage.Message
 
                     let envelope =
-                        JsonConvert.DeserializeObject<NotificationEnvelope>(payload, jsonSettings)
+                        JsonSerializer.Deserialize<NotificationEnvelope>(payload, jsonOptions)
 
                     handler envelope
                 with ex ->

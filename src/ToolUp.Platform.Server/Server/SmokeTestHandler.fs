@@ -2,8 +2,8 @@ module ToolUp.Platform.SmokeTestHandler
 
 open System
 open System.Diagnostics
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -115,15 +115,12 @@ type private SmokeAuditPayload = {
     Tests: SmokeAuditEntry list
 }
 
-let private auditJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private auditJsonOptions = FableConverters.create ()
 
-let private responseJsonSettings =
-    let s = JsonSerializerSettings(Formatting = Formatting.Indented)
-    s.Converters.Add(FableJsonConverter())
-    s
+let private responseJsonOptions =
+    let o = FableConverters.create ()
+    o.WriteIndented <- true
+    o
 
 let private truncate (max: int) (s: string) =
     if isNull s then ""
@@ -173,7 +170,7 @@ let private emitAudit (eventStore: IEventStore) (logger: ILogger) (response: Smo
                 "_platform"
                 SmokeTest.AuditSourceModule
                 SmokeTest.AuditEventType
-                (JsonConvert.SerializeObject(payload, auditJsonSettings))
+                (JsonSerializer.Serialize(payload, auditJsonOptions))
 
         do! eventStore.Write evt
     with ex ->
@@ -217,7 +214,7 @@ let smokeHandler: HttpHandler =
             ctx.Response.StatusCode <- (if allPass then 200 else 503)
             ctx.Response.ContentType <- "application/json; charset=utf-8"
 
-            let body = JsonConvert.SerializeObject(response, responseJsonSettings)
+            let body = JsonSerializer.Serialize(response, responseJsonOptions)
             return! ctx.WriteTextAsync body
     }
 

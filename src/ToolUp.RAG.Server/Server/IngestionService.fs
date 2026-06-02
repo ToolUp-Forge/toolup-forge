@@ -3,7 +3,8 @@ module ToolUp.RAG.IngestionService
 open System
 open System.Threading
 open Microsoft.Extensions.Hosting
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.IEmbeddingProvider
@@ -54,13 +55,10 @@ type IngestionBackgroundService
 
     let sem = new SemaphoreSlim(maxConcurrency, maxConcurrency)
 
-    let jsonSettings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-        s
+    let jsonOptions = FableConverters.create ()
 
     let toJson o =
-        JsonConvert.SerializeObject(o, jsonSettings)
+        JsonSerializer.Serialize(o, jsonOptions)
 
     let emitIndexed (job: IngestionJob) = async {
         let payload =

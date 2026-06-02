@@ -6,8 +6,8 @@ module ToolUp.Platform.RateLimitEventApi
 open System
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── Phase 61 — RateLimit recent-decisions admin endpoint ─────────
@@ -45,10 +45,7 @@ open ToolUp.Platform
 //   6. Precision at the lower bound — n/a; the read returns timestamps
 //                              the writer set, no scheduling semantics.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
@@ -72,7 +69,7 @@ let private writeError (ctx: HttpContext) (statusCode: int) (message: string) : 
 }
 
 let private writeJson (ctx: HttpContext) (statusCode: int) (payload: 'T) : HttpFuncResult = task {
-    let json = JsonConvert.SerializeObject(payload, jsonSettings)
+    let json = JsonSerializer.Serialize(payload, jsonOptions)
     ctx.Response.StatusCode <- statusCode
     ctx.Response.ContentType <- "application/json; charset=utf-8"
     return! ctx.WriteTextAsync json

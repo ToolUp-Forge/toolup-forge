@@ -6,8 +6,8 @@ module ToolUp.Platform.GrantPremiumApiHandler
 open System
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── Phase 62 — operator grant / revoke endpoint ──────────────────
@@ -21,10 +21,7 @@ open ToolUp.Platform
 // touching any provider (the audit trail still captures the operator
 // intent).
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private PlatformScope = "_platform"
 
@@ -75,7 +72,7 @@ let private readReason (ctx: HttpContext) : System.Threading.Tasks.Task<string o
         return None
     else
         try
-            let parsed = JsonConvert.DeserializeObject<PremiumBody>(body, jsonSettings)
+            let parsed = JsonSerializer.Deserialize<PremiumBody>(body, jsonOptions)
             return parsed.Reason
         with _ ->
             return None
@@ -150,7 +147,7 @@ let private statusHandler: HttpHandler =
         let claims = resolveUserClaims ctx
         let! status = claims.GetPremiumStatus userId |> Async.StartAsTask
 
-        let json = JsonConvert.SerializeObject(status, jsonSettings)
+        let json = JsonSerializer.Serialize(status, jsonOptions)
         ctx.Response.StatusCode <- 200
         ctx.Response.ContentType <- "application/json; charset=utf-8"
         return! ctx.WriteTextAsync json

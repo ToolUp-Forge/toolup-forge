@@ -4,7 +4,8 @@
 module ToolUp.Platform.Tests.InProcess.FastPathSequencerTelemetryTests
 
 open Expecto
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI.FastPathBeaconHandler
 open ToolUp.AI.FastPathTelemetryHandler
 
@@ -24,10 +25,7 @@ open ToolUp.AI.FastPathTelemetryHandler
 // pattern for the conversation beacon; mirroring it here would
 // duplicate scaffolding without exercising new behaviour.
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private outcome (kind: string) (clauseCount: int) : SequenceOutcomeBeacon = {
     Outcome = kind
@@ -146,7 +144,7 @@ let private wireRoundTripTests =
                 """{"clauseIndex":1,"clauseText":"set brand to Dove","patternMatched":"set brand to {value}","actionKind":"set-field","totalClauses":2}"""
 
             let clause =
-                JsonConvert.DeserializeObject<SequencedClauseBeacon>(clauseJson, jsonSettings)
+                JsonSerializer.Deserialize<SequencedClauseBeacon>(clauseJson, jsonOptions)
 
             Expect.equal clause.ClauseIndex 1 "clauseIndex → ClauseIndex"
             Expect.equal clause.ClauseText "set brand to Dove" "clauseText → ClauseText"
@@ -158,7 +156,7 @@ let private wireRoundTripTests =
                 """{"outcome":"all-resolved","instruction":"set country to UK and set brand to Dove","clauseCount":2,"clausesCompleted":2}"""
 
             let outcome =
-                JsonConvert.DeserializeObject<SequenceOutcomeBeacon>(outcomeJson, jsonSettings)
+                JsonSerializer.Deserialize<SequenceOutcomeBeacon>(outcomeJson, jsonOptions)
 
             Expect.equal outcome.Outcome "all-resolved" "outcome → Outcome"
             Expect.equal outcome.Instruction "set country to UK and set brand to Dove" "instruction → Instruction"
@@ -179,10 +177,10 @@ let private wireRoundTripTests =
                 ClausesCompleted = 0
             }
 
-            let payloadJson = JsonConvert.SerializeObject(original, jsonSettings)
+            let payloadJson = JsonSerializer.Serialize(original, jsonOptions)
 
             let decoded =
-                JsonConvert.DeserializeObject<SequenceOutcomeBeacon>(payloadJson, jsonSettings)
+                JsonSerializer.Deserialize<SequenceOutcomeBeacon>(payloadJson, jsonOptions)
 
             Expect.equal decoded original "every field round-trips through the event-store JSON"
     ]

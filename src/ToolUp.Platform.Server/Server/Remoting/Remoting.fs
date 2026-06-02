@@ -17,61 +17,59 @@ module Remoting =
 
     /// Starts with the default configuration for building an API.
     ///
-    /// **Default JSON serializer is now System.Text.Json** (since the
-    /// Newtonsoft-retirement work). The wire format is byte-equal to the
-    /// previous Newtonsoft default — verified by 349 byte-pin tests in
-    /// `ToolUp.Remoting.Json.Tests/WireFormatTests.fs` running the same
-    /// assertions against both serializers. Existing Fable / DotnetClient
-    /// clients see no change in the bytes they read on the wire.
-    ///
-    /// To opt back into Newtonsoft.Json (e.g. during migration), pipe
-    /// through `Remoting.withNewtonsoftJson`. That helper is marked
-    /// `[<Obsolete>]` — it will be removed in a future major version when
-    /// the legacy Newtonsoft path is deleted from `ToolUp.Remoting.Json`
-    /// entirely.
-    let createApi () =
-        { Implementation = Empty
-          RouteBuilder = sprintf "/%s/%s"
-          ErrorHandler = None
-          DiagnosticsLogger = None
-          Docs = None, None
-          ResponseSerialization = Json
-          JsonSerializer = SystemTextJson defaultStjOptions
-          RmsManager = None
-          BodyNormalisation = Enabled
-          Telemetry = None
-          AuthContextResolver = None
-          RateLimitStore = None
-          AuditEmitter = None
-          IdempotencyStore = None
-          IdempotencyTtl = System.TimeSpan.FromHours 1.0
-          SchemaVersion = 1
-          MaxMultipartSectionBytes = 16L * 1024L * 1024L // 16 MiB
-          MaxMultipartSections = 64
-          RemoteIpResolver = None }
+    /// **JSON serializer: System.Text.Json + ToolUp.Remoting.Json.SystemTextJson
+    /// FableConverters**. Wire format is the Fable.SimpleJson-compatible shape
+    /// (PascalCase fields, DU as `{"Case": ...}` / `{"CaseName": [fields]}`,
+    /// Option as inner-value-or-null). Verified by byte-pin tests in the
+    /// Remoting suite.
+    let createApi () = {
+        Implementation = Empty
+        RouteBuilder = sprintf "/%s/%s"
+        ErrorHandler = None
+        DiagnosticsLogger = None
+        Docs = None, None
+        ResponseSerialization = Json
+        JsonSerializer = SystemTextJson defaultStjOptions
+        RmsManager = None
+        BodyNormalisation = Enabled
+        Telemetry = None
+        AuthContextResolver = None
+        RateLimitStore = None
+        AuditEmitter = None
+        IdempotencyStore = None
+        IdempotencyTtl = System.TimeSpan.FromHours 1.0
+        SchemaVersion = 1
+        MaxMultipartSectionBytes = 16L * 1024L * 1024L // 16 MiB
+        MaxMultipartSections = 64
+        RemoteIpResolver = None
+    }
 
     /// Defines how routes are built using the type name and method name. By default, the generated routes are of the form `/typeName/methodName`.
     let withRouteBuilder builder options = { options with RouteBuilder = builder }
 
     /// Enables the diagnostics logger that will log what steps the library is taking when a request comes in. This could help troubleshoot serialization issues but it could be also be interesting to see what is going on under the hood.
-    let withDiagnosticsLogger logger options =
-        { options with
-            DiagnosticsLogger = Some logger }
+    let withDiagnosticsLogger logger options = {
+        options with
+            DiagnosticsLogger = Some logger
+    }
 
     /// Enables the automatic generation of API documentation based on type-metadata
-    let withDocs (url: string) (docs: Documentation) options =
-        { options with
-            Docs = Some url, Some docs }
+    let withDocs (url: string) (docs: Documentation) options = {
+        options with
+            Docs = Some url, Some docs
+    }
 
     /// Enables you to define a custom error handler for unhandled exceptions thrown by your remote functions. It can also be used for logging purposes or if you wanted to propagate errors back to client.
-    let withErrorHandler handler options =
-        { options with
-            ErrorHandler = Some handler }
+    let withErrorHandler handler options = {
+        options with
+            ErrorHandler = Some handler
+    }
 
     /// Specifies that the API only uses binary serialization
-    let withBinarySerialization (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            ResponseSerialization = MessagePack }
+    let withBinarySerialization (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            ResponseSerialization = MessagePack
+    }
 
     /// Override the System.Text.Json options used by this API.
     ///
@@ -100,23 +98,16 @@ module Remoting =
         (jsonOptions: System.Text.Json.JsonSerializerOptions)
         (options: RemotingOptions<'t, 'implementation>)
         =
-        { options with
-            JsonSerializer = SystemTextJson jsonOptions }
-
-    /// Opt back into the legacy Newtonsoft.Json serializer path. Useful for
-    /// migration — pin an API to the old serializer while you verify the
-    /// STJ path is byte-equal in your specific deployment. Will be removed
-    /// in a future major version along with the Newtonsoft converter and
-    /// the transitive Newtonsoft package reference.
-    [<System.Obsolete "The Newtonsoft.Json path is deprecated and will be removed in a future major version. The new default (System.Text.Json with ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()) produces byte-equal wire output. See MIGRATION.md for the migration path.">]
-    let withNewtonsoftJson (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            JsonSerializer = NewtonsoftJson }
+        {
+            options with
+                JsonSerializer = SystemTextJson jsonOptions
+        }
 
     /// Enables you to provide your own instance of a recyclable memory stream manager
-    let withRecyclableMemoryStreamManager rmsManager options =
-        { options with
-            RmsManager = Some rmsManager }
+    let withRecyclableMemoryStreamManager rmsManager options = {
+        options with
+            RmsManager = Some rmsManager
+    }
 
     /// Phase 69b.C — compose an `IRemotingTelemetry` sink that receives
     /// a `MethodTelemetry` record per method invocation (success or
@@ -141,8 +132,10 @@ module Remoting =
     /// |> Remoting.withTelemetry telemetry
     /// |> Remoting.buildHttpHandler
     /// ```
-    let withTelemetry (sink: IRemotingTelemetry) (options: RemotingOptions<'t, 'implementation>) =
-        { options with Telemetry = Some sink }
+    let withTelemetry (sink: IRemotingTelemetry) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            Telemetry = Some sink
+    }
 
     /// Phase 69d — compose an `IAuthContext` resolver. The resolver is
     /// invoked per request (between body normalisation and dispatch).
@@ -155,9 +148,10 @@ module Remoting =
     /// entirely; methods marked `[<AllowAnonymous>]` resolve the
     /// context but don't enforce; unclassified methods cause startup
     /// to refuse — the consumer must annotate every API record field.
-    let withAuthContext (resolver: 'ctx -> Async<IAuthContext>) (options: RemotingOptions<'ctx, 't>) =
-        { options with
-            AuthContextResolver = Some resolver }
+    let withAuthContext (resolver: 'ctx -> Async<IAuthContext>) (options: RemotingOptions<'ctx, 't>) = {
+        options with
+            AuthContextResolver = Some resolver
+    }
 
     /// Phase 69g — compose an `IRateLimitStore` against which per-method
     /// `[<RateLimit(count, windowSeconds)>]` attributes are enforced. The
@@ -173,9 +167,10 @@ module Remoting =
     /// pass for the call to proceed. The first denial returns
     /// `ErrorCategory.RateLimit` envelope + status 429 + `Retry-After`
     /// header.
-    let withRateLimitStore (store: IRateLimitStore) (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            RateLimitStore = Some store }
+    let withRateLimitStore (store: IRateLimitStore) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            RateLimitStore = Some store
+    }
 
     /// Phase 69h — compose an `IAuditEmitter` that receives an
     /// `AuditEvent` after every successful invocation of an
@@ -186,9 +181,10 @@ module Remoting =
     /// Default: not composed (zero per-call cost). Methods with
     /// `[<Audit>]` attributes silently pass when no emitter is
     /// registered.
-    let withAudit (emitter: IAuditEmitter) (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            AuditEmitter = Some emitter }
+    let withAudit (emitter: IAuditEmitter) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            AuditEmitter = Some emitter
+    }
 
     /// Phase 69f — compose an `IIdempotencyStore` against which
     /// `[<Idempotent>]`-attributed methods are enforced. Calls against
@@ -202,23 +198,28 @@ module Remoting =
     /// With a store registered, the dispatcher enforces the contract.
     ///
     /// Default TTL is 1 hour; override via `withIdempotencyTtl`.
-    let withIdempotencyStore (store: IIdempotencyStore) (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            IdempotencyStore = Some store }
+    let withIdempotencyStore (store: IIdempotencyStore) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            IdempotencyStore = Some store
+    }
 
     /// Phase 69f — override the default idempotency-cache TTL (1h).
     /// The TTL applies uniformly to every idempotent method; per-method
     /// TTL is a future seam.
-    let withIdempotencyTtl (ttl: System.TimeSpan) (options: RemotingOptions<'t, 'implementation>) =
-        { options with IdempotencyTtl = ttl }
+    let withIdempotencyTtl (ttl: System.TimeSpan) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            IdempotencyTtl = ttl
+    }
 
     /// Phase 69j — set the `__schema_version` integer stamped on every
     /// dispatcher-emitted envelope (errors today; success-shape wrapping
     /// is a future evolution). Defaults to `1` (post-69b.E baseline).
     /// Bump when shipping a wire-format evolution so clients
     /// negotiating via `X-Remoting-Schema` can branch on the version.
-    let withSchemaVersion (version: int) (options: RemotingOptions<'t, 'implementation>) =
-        { options with SchemaVersion = version }
+    let withSchemaVersion (version: int) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            SchemaVersion = version
+    }
 
     /// Opt out of the built-in body normalisation for `unit -> Async<'T>`
     /// methods. By default, requests carrying the `x-remoting-proxy`
@@ -232,14 +233,16 @@ module Remoting =
     /// separate consumer-side middleware into the dispatcher itself.
     /// Idempotent on the wire: a request that's already `[]` flows
     /// through unchanged.
-    let withoutBodyNormalisation (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            BodyNormalisation = Disabled }
+    let withoutBodyNormalisation (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            BodyNormalisation = Disabled
+    }
 
     /// Builds the API using a function that takes the incoming Http context and returns a protocol implementation. You can use the Http context to read information about the incoming request and also use the Http context to resolve dependencies using the underlying dependency injection mechanism.
-    let fromContext (f: 'ctx -> 't) (options: RemotingOptions<'ctx, 't>) =
-        { options with
-            Implementation = FromContext f }
+    let fromContext (f: 'ctx -> 't) (options: RemotingOptions<'ctx, 't>) = {
+        options with
+            Implementation = FromContext f
+    }
 
     /// Phase 69b.B — builds the API using an **async** function that takes
     /// the incoming Http context and returns an `Async<'impl>`. The resolver
@@ -267,30 +270,34 @@ module Remoting =
     ///     })
     ///     |> Remoting.buildHttpHandler
     /// ```
-    let fromContextAsync (f: 'ctx -> Async<'t>) (options: RemotingOptions<'ctx, 't>) =
-        { options with
-            Implementation = FromContextAsync f }
+    let fromContextAsync (f: 'ctx -> Async<'t>) (options: RemotingOptions<'ctx, 't>) = {
+        options with
+            Implementation = FromContextAsync f
+    }
 
     /// Builds the API using the provided static protocol implementation
-    let fromValue (serverImpl: 'implementation) (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            Implementation = StaticValue serverImpl }
+    let fromValue (serverImpl: 'implementation) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            Implementation = StaticValue serverImpl
+    }
 
     /// 0.1.15 — override the per-section byte cap inside
     /// `multipart/form-data` request bodies. Default is 16 MiB; raise
     /// for genuine large-file upload paths, lower for tighter DoS
     /// posture. A section that exceeds the cap returns
     /// `ErrorCategory.User` / 400 without materialising the bytes.
-    let withMaxMultipartSectionBytes (bytes: int64) (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            MaxMultipartSectionBytes = bytes }
+    let withMaxMultipartSectionBytes (bytes: int64) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            MaxMultipartSectionBytes = bytes
+    }
 
     /// 0.1.15 — override the per-request multipart section count cap.
     /// Default is 64. A request carrying more parts returns
     /// `ErrorCategory.User` / 400 without iterating further.
-    let withMaxMultipartSections (count: int) (options: RemotingOptions<'t, 'implementation>) =
-        { options with
-            MaxMultipartSections = count }
+    let withMaxMultipartSections (count: int) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            MaxMultipartSections = count
+    }
 
     /// 0.1.15 — compose a custom remote-IP resolver for the rate-limit
     /// per-IP partition. Use when the host runs behind a reverse proxy
@@ -303,6 +310,7 @@ module Remoting =
     /// `KnownNetworks`) for hardened production setups; this resolver
     /// reads the resulting `ctx.Connection.RemoteIpAddress` after
     /// rewriting.
-    let withRemoteIpResolver (resolver: 'ctx -> string option) (options: RemotingOptions<'ctx, 'implementation>) =
-        { options with
-            RemoteIpResolver = Some resolver }
+    let withRemoteIpResolver (resolver: 'ctx -> string option) (options: RemotingOptions<'ctx, 'implementation>) = {
+        options with
+            RemoteIpResolver = Some resolver
+    }

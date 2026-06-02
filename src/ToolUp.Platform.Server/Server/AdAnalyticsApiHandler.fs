@@ -6,8 +6,8 @@ module ToolUp.Platform.AdAnalyticsApiHandler
 open System
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── Phase 60 — server-side ad-analytics endpoint ─────────────────
@@ -20,10 +20,7 @@ open ToolUp.Platform
 // Recorded under `_platform` scope (deployment-wide; no tenant
 // scope — ads run on anonymous traffic).
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private PlatformScope = "_platform"
 
@@ -38,7 +35,7 @@ let private impressionHandler: HttpHandler =
 
         let event =
             try
-                Some(JsonConvert.DeserializeObject<AdImpression>(body, jsonSettings))
+                Some(JsonSerializer.Deserialize<AdImpression>(body, jsonOptions))
             with _ ->
                 None
 
@@ -63,7 +60,7 @@ let private clickHandler: HttpHandler =
 
         let event =
             try
-                Some(JsonConvert.DeserializeObject<AdClick>(body, jsonSettings))
+                Some(JsonSerializer.Deserialize<AdClick>(body, jsonOptions))
             with _ ->
                 None
 

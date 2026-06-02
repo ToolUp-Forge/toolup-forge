@@ -1,15 +1,14 @@
 namespace ToolUp.Remoting.Server
 
 open System
-open Newtonsoft.Json.Linq
 open System.Text
+open System.Text.Json.Nodes
 
 module DocsApp =
 
-    let append (input: string) (builder: StringBuilder) =
-        builder.Append(input)
+    let append (input: string) (builder: StringBuilder) = builder.Append(input)
 
-    let embedded (name: string) (url: string) (schema: JObject) =
+    let embedded (name: string) (url: string) (schema: JsonObject) =
         let app =
             """
             <!DOCTYPE html>
@@ -326,6 +325,4 @@ module DocsApp =
             """
 
         // Poor man's view engine
-        app.Replace("\r\n", "\n")
-           .Replace("{AppTitle}", name)
-           .Replace("{SchemaUrl}", url)
+        app.Replace("\r\n", "\n").Replace("{AppTitle}", name).Replace("{SchemaUrl}", url)

@@ -155,7 +155,6 @@
     <PackageVersion Include="Microsoft.NET.StringTools" Version="18.4" />
     <PackageVersion Include="MimeKit" Version="4.16" />
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
-    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <!-- Phase 16c — OTLP exporter for the cloud umbrella packages.
          Pulled by all three (ToolUp.Cloud.Azure / .Aws / .Gcp) as
          the universal collector-side metrics path. Consumers configure

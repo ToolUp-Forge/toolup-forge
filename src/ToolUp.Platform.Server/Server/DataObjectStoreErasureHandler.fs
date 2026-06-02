@@ -1,8 +1,8 @@
 module ToolUp.Platform.DataObjectStoreErasureHandler
 
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.IDataExporter
 
@@ -20,10 +20,7 @@ let private HandlerName = "data-objects"
 // DataObject carries an F# Map + a VersioningPolicy DU; the platform
 // standard (DataObjectStore.fs / ConfigStore.fs) round-trips these via
 // Newtonsoft + FableJsonConverter. System.Text.Json mangles both.
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 /// `IDataExporter` for the data-object store. Emits the latest-version
 /// metadata of every object in the caller's scope that names the
@@ -48,7 +45,7 @@ type DataObjectStoreExporter(store: IDataObjectStore) =
                 if List.isEmpty matched then
                     return []
                 else
-                    let json = JsonConvert.SerializeObject(matched, jsonSettings)
+                    let json = JsonSerializer.Serialize(matched, jsonOptions)
 
                     return [
                         {

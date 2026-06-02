@@ -5,7 +5,8 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Text.RegularExpressions
 open System.Threading
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -59,16 +60,13 @@ let private scopeToKey (scope: VectorScope) =
 
 let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/bm25.json"
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private toJson o =
-    JsonConvert.SerializeObject(o, jsonSettings)
+    JsonSerializer.Serialize(o, jsonOptions)
 
 let private fromJson<'T> (s: string) =
-    JsonConvert.DeserializeObject<'T>(s, jsonSettings)
+    JsonSerializer.Deserialize<'T>(s, jsonOptions)
 
 // ─── Per-scope index state ────────────────────────────────────────
 

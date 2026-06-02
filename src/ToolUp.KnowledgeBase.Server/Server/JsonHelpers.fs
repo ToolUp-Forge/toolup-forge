@@ -1,16 +1,14 @@
 module KnowledgeBase.ServerJsonHelpers
 
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── JSON helpers ─────────────────────────────────────────────────
 
-let jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let jsonOptions = FableConverters.create ()
 
 let toJson o =
-    JsonConvert.SerializeObject(o, jsonSettings)
+    JsonSerializer.Serialize(o, jsonOptions)
 
 let fromJson<'T> (s: string) =
-    JsonConvert.DeserializeObject<'T>(s, jsonSettings)
+    JsonSerializer.Deserialize<'T>(s, jsonOptions)

@@ -2,8 +2,8 @@ module ToolUp.Platform.ConfigStore
 
 open System
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -14,16 +14,13 @@ open ToolUp.Platform.BlobStorage
 /// DUs, and `option` types losslessly so modules can hand the store
 /// their domain records without hand-rolling a DTO layer.
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: 'T) : string =
-        JsonConvert.SerializeObject(value, settings)
+        JsonSerializer.Serialize(value, options)
 
     let deserialize<'T> (json: string) : 'T =
-        JsonConvert.DeserializeObject<'T>(json, settings)
+        JsonSerializer.Deserialize<'T>(json, options)
 
     /// Deserialise the flat `Map<string, string>` persistence shape
     /// from a single blob. Kept out of the typed `deserialize<'T>`
@@ -32,12 +29,12 @@ module private Json =
     let tryDeserializeMap (bytes: byte[]) : Map<string, string> option =
         try
             let json = Encoding.UTF8.GetString(bytes)
-            Some(JsonConvert.DeserializeObject<Map<string, string>>(json, settings))
+            Some(JsonSerializer.Deserialize<Map<string, string>>(json, options))
         with _ ->
             None
 
     let serializeMap (values: Map<string, string>) : byte[] =
-        JsonConvert.SerializeObject(values, settings) |> Encoding.UTF8.GetBytes
+        JsonSerializer.Serialize(values, options) |> Encoding.UTF8.GetBytes
 
 // ─── Validation ──────────────────────────────────────────────────
 
@@ -48,73 +45,83 @@ module private Json =
 /// in a canonical shape (e.g. trimmed strings) without diverging from
 /// the input the admin UI supplied.
 module private Validate =
-    open Newtonsoft.Json.Linq
 
-    let private parse (json: string) : JToken option =
+    /// Parse json into a JsonDocument. The document owns the buffer
+    /// backing every JsonElement returned from `RootElement` / property
+    /// accessors, so the caller MUST dispose / use it within the same
+    /// scope as the JsonElement reads. `field` below does both inline.
+    let private tryParse (json: string) : JsonDocument option =
         try
-            Some(JToken.Parse(json))
+            Some(JsonDocument.Parse(json))
         with _ ->
             None
 
-    let private number (token: JToken) =
-        match token.Type with
-        | JTokenType.Integer
-        | JTokenType.Float -> Some(token.Value<double>())
-        | _ -> None
-
     let field (schema: ConfigFieldSchema) (json: string) : Result<string, string> =
-        match parse json with
+        match tryParse json with
         | None -> Error $"Field '{schema.Key}': value is not valid JSON."
-        | Some token ->
+        | Some doc ->
+            use doc = doc
+            let el = doc.RootElement
+
             match schema.Kind with
             | ConfigFieldKind.Bool ->
-                if token.Type = JTokenType.Boolean then
-                    Ok(token.ToString(Formatting.None))
-                else
-                    Error $"Field '{schema.Key}': expected boolean."
+                match el.ValueKind with
+                | JsonValueKind.True -> Ok "true"
+                | JsonValueKind.False -> Ok "false"
+                | _ -> Error $"Field '{schema.Key}': expected boolean."
             | ConfigFieldKind.Int(minO, maxO) ->
-                if token.Type <> JTokenType.Integer then
+                // JSON numbers are arbitrary precision; require integer
+                // shape (no fractional part). STJ's TryGetInt32 returns
+                // false on non-integer numbers as well as on non-numeric
+                // values, which is exactly the gate this branch needs.
+                if el.ValueKind <> JsonValueKind.Number then
                     Error $"Field '{schema.Key}': expected integer."
                 else
-                    let v = token.Value<int64>() |> int
+                    match el.TryGetInt32() with
+                    | true, v ->
+                        let inBounds =
+                            (minO |> Option.forall (fun m -> v >= m))
+                            && (maxO |> Option.forall (fun m -> v <= m))
 
-                    let inBounds =
-                        (minO |> Option.forall (fun m -> v >= m))
-                        && (maxO |> Option.forall (fun m -> v <= m))
-
-                    if inBounds then
-                        Ok(string v)
-                    else
-                        Error $"Field '{schema.Key}': integer out of range."
+                        if inBounds then
+                            Ok(string v)
+                        else
+                            Error $"Field '{schema.Key}': integer out of range."
+                    | false, _ -> Error $"Field '{schema.Key}': expected integer."
             | ConfigFieldKind.Float(minO, maxO) ->
-                match number token with
-                | None -> Error $"Field '{schema.Key}': expected number."
-                | Some v ->
+                if el.ValueKind <> JsonValueKind.Number then
+                    Error $"Field '{schema.Key}': expected number."
+                else
+                    let v = el.GetDouble()
+
                     let inBounds =
                         (minO |> Option.forall (fun m -> v >= m))
                         && (maxO |> Option.forall (fun m -> v <= m))
 
                     if inBounds then
-                        Ok(token.ToString(Formatting.None))
+                        // GetRawText preserves the wire-format representation
+                        // (e.g. `3.14`, `1e-6`) without going through a
+                        // round-trip stringification.
+                        Ok(el.GetRawText())
                     else
                         Error $"Field '{schema.Key}': number out of range."
             | ConfigFieldKind.String maxLenO ->
-                if token.Type <> JTokenType.String then
+                if el.ValueKind <> JsonValueKind.String then
                     Error $"Field '{schema.Key}': expected string."
                 else
-                    let s = token.Value<string>()
+                    let s = el.GetString()
 
                     match maxLenO with
                     | Some n when s.Length > n -> Error $"Field '{schema.Key}': string exceeds max length {n}."
-                    | _ -> Ok(JsonConvert.SerializeObject s)
+                    | _ -> Ok(JsonSerializer.Serialize s)
             | ConfigFieldKind.Choice options ->
-                if token.Type <> JTokenType.String then
+                if el.ValueKind <> JsonValueKind.String then
                     Error $"Field '{schema.Key}': expected choice string."
                 else
-                    let s = token.Value<string>()
+                    let s = el.GetString()
 
                     if List.contains s options then
-                        Ok(JsonConvert.SerializeObject s)
+                        Ok(JsonSerializer.Serialize s)
                     else
                         Error $"Field '{schema.Key}': '{s}' is not one of the allowed options."
 
@@ -271,7 +278,7 @@ type BlobConfigStore(storage: IBlobStorage) =
         member _.Set<'T>(scope, moduleKey, value: 'T, schema) = async {
             try
                 let json = Json.serialize value
-                let asMap = JsonConvert.DeserializeObject<Map<string, string>>(json)
+                let asMap = Json.deserialize<Map<string, string>> json
 
                 match Validate.map schema asMap with
                 | Error msg -> return Error msg

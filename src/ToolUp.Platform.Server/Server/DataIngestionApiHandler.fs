@@ -3,8 +3,8 @@ module ToolUp.Platform.DataIngestionApiHandler
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
@@ -24,14 +24,11 @@ open ToolUp.Platform.TeamManagement
 // `FableJsonConverter` matches `AuditLog.fs`'s emission settings, so
 // payloads round-trip without re-deriving the wire shape.
 
-let private oauthRefreshJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private oauthRefreshJsonOptions = FableConverters.create ()
 
 let private decodeOAuthRefreshPayload<'T> (json: string) : 'T option =
     try
-        Some(JsonConvert.DeserializeObject<'T>(json, oauthRefreshJsonSettings))
+        Some(JsonSerializer.Deserialize<'T>(json, oauthRefreshJsonOptions))
     with _ ->
         None
 

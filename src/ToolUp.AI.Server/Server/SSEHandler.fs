@@ -15,16 +15,13 @@ open ToolUp.AI
 // NOT Newtonsoft's DiscriminatedUnionConverter format:
 //   {"Case":"CaseName","Fields":[field1, field2]}
 
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private serializeEvent (event: AIStreamEvent) =
-    JsonConvert.SerializeObject(event, jsonSettings)
+    JsonSerializer.Serialize(event, jsonOptions)
 
 // ─── AI dispatcher ───────────────────────────────────────────────
 

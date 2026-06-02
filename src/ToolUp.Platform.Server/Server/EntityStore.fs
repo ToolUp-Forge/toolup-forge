@@ -3,9 +3,9 @@ module ToolUp.Platform.EntityStore
 open System
 open System.Collections.Concurrent
 open System.Text
+open System.Text.Json
 open Microsoft.FSharp.Reflection
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.SecondaryIndex
@@ -40,16 +40,13 @@ open ToolUp.Platform.IEntityStore
 // `ConcurrentDictionary` for the store's lifetime. Save updates every
 // declared index for the entity type; Delete drops every entry.
 
-let private auditJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private auditJsonOptions = FableConverters.create ()
 
 let private serialise (value: 'T) =
-    JsonConvert.SerializeObject(value, auditJsonSettings)
+    JsonSerializer.Serialize(value, auditJsonOptions)
 
 let private deserialise<'T> (json: string) : 'T =
-    JsonConvert.DeserializeObject<'T>(json, auditJsonSettings)
+    JsonSerializer.Deserialize<'T>(json, auditJsonOptions)
 
 [<Literal>]
 let private EntityObjectIdPrefix = "_entity__"
@@ -523,9 +520,11 @@ type BlobEntityStore
 
                     let readFieldString (fieldName: string) (json: string) =
                         try
-                            let jObj = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(json)
-                            let token = jObj[fieldName]
-                            if isNull token then None else Some(token.ToString())
+                            use doc = JsonDocument.Parse(json)
+
+                            match doc.RootElement.TryGetProperty(fieldName) with
+                            | true, prop -> Some(prop.ToString())
+                            | false, _ -> None
                         with _ ->
                             None
 

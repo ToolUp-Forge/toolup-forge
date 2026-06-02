@@ -1,7 +1,8 @@
 module ToolUp.AI.AILatencyHandler
 
 open System
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -44,10 +45,12 @@ let private rollingWindow = TimeSpan.FromMinutes 60.0
 //     AIAgentEngine.fs — both rely on `FableJsonConverter` to
 //     round-trip `option` and DUs). ─────────────────────────────
 
-let private payloadJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private payloadJsonOptions = FableConverters.create ()
+
+let private indentedJsonOptions =
+    let o = FableConverters.create ()
+    o.WriteIndented <- true
+    o
 
 // ─── Wire shape (kept local — duplicates `AILatencyRecord` /
 //     `ToolCallTiming` fields in DTO form so the JSON shape we
@@ -129,7 +132,7 @@ let private percentileOpt (values: float option[]) (p: float) : float option =
 let private decodePayload (evt: ModuleEvent) : (AILatencyRecord * DateTime) option =
     try
         let payload =
-            JsonConvert.DeserializeObject<AILatencyRecord>(evt.Payload, payloadJsonSettings)
+            JsonSerializer.Deserialize<AILatencyRecord>(evt.Payload, payloadJsonOptions)
 
         if isNull (box payload) then
             None
@@ -268,7 +271,7 @@ let private buildReport (ctx: HttpContext) : Async<LatencyReport> = async {
 // ─── Route handler ──────────────────────────────────────────────
 
 let private renderJson (report: LatencyReport) =
-    JsonConvert.SerializeObject(report, Formatting.Indented)
+    JsonSerializer.Serialize(report, indentedJsonOptions)
 
 /// JSON handler for `/dev/ai-latency`. Sets `Cache-Control: no-store`
 /// so dev-tools sees fresh stats on every refresh.

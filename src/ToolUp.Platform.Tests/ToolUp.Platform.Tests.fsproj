@@ -439,6 +439,5 @@
         <PackageReference Include="MailKit" />
         <PackageReference Include="WebPush" />
         <PackageReference Include="HNSW" />
-        <PackageReference Include="Newtonsoft.Json" />
     </ItemGroup>
 </Project>

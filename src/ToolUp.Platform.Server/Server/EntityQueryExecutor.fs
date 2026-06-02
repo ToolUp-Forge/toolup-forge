@@ -1,8 +1,8 @@
 module ToolUp.Platform.EntityQueryExecutor
 
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.SecondaryIndex
@@ -33,13 +33,10 @@ open ToolUp.Platform.EntityQueryTypes
 // range-style predicates. A future commit may add range-aware
 // indexes; v1 trades query cost for implementation simplicity.
 
-let private fableJsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private fableJsonOptions = FableConverters.create ()
 
 let private deserialise<'T> (json: string) : 'T =
-    JsonConvert.DeserializeObject<'T>(json, fableJsonSettings)
+    JsonSerializer.Deserialize<'T>(json, fableJsonOptions)
 
 /// I/O surface the executor needs. Injected by the caller; tests
 /// supply in-memory implementations.

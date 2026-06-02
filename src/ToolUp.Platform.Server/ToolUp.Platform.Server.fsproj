@@ -48,7 +48,6 @@
              Server/Proxy.fs) come in via ProjectReference to
              ToolUp.Platform.Core which carries the folded MsgPack
              source. -->
-        <Compile Include="Server\Remoting\Json\NewtonsoftConverter.fs" />
         <Compile Include="Server\Remoting\Json\SystemTextJsonConverter.fs" />
         <Compile Include="Server\Remoting\Types.fs" />
         <Compile Include="Server\Remoting\CallContext.fs" />
@@ -429,7 +428,6 @@
          was a transitive dep of ToolUp.Remoting.Server / Giraffe /
          AspNetCore — now declared explicitly. -->
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
-    <PackageReference Include="Newtonsoft.Json" />
     <!-- 0.4.4 — explicit FSharp.Core PackageReference. Pre-fold, the
          transitively-resolved FSharp.Core was 10.1.300 (Directory.Packages.props
          pins). Post-fold, one of the dropped ToolUp.Remoting.* packages

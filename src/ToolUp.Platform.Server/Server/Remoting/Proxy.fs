@@ -1,127 +1,52 @@
 module ToolUp.Remoting.Server.Proxy
 
-// This module is the INTERNAL implementation of both serializer paths. It
-// uses `ToolUp.Remoting.Json.FableJsonConverter` (deprecated) for the
-// Newtonsoft branch the consumer opted into via `Remoting.withNewtonsoftJson`.
-// External consumers see the deprecation warning if they touch the type
-// directly; the internal Newtonsoft branch is a supported legacy path until
-// the next major version, so suppress here.
-#nowarn "44"
-
-open ToolUp.Remoting.Json
-open Newtonsoft.Json
 open TypeShape
 open ToolUp.Remoting
 open System
 open System.Buffers
-open Newtonsoft.Json.Linq
 open System.IO
 open System.Text
+open System.Text.Json
 open System.Threading.Tasks
 open Microsoft.Net.Http.Headers
 open Microsoft.AspNetCore.WebUtilities
 
-let private settings =
-    JsonSerializerSettings(DateParseHandling = DateParseHandling.None)
-
-let private fableSerializer =
-    let serializer = JsonSerializer()
-    serializer.Converters.Add(FableJsonConverter())
-    serializer
-
-let private jsonEncoding = UTF8Encoding false
-
-let jsonSerialize (o: 'a) (stream: Stream) =
-    use sw = new StreamWriter(stream, jsonEncoding, 1024, true)
-    use writer = new JsonTextWriter(sw, CloseOutput = false)
-    fableSerializer.Serialize(writer, o)
-
 /// Serialise the value to the output stream using the configured backend.
-/// `NewtonsoftJson` → existing FableJsonConverter path; `SystemTextJson opts`
-/// → System.Text.Json.JsonSerializer.Serialize with the provided options.
-///
-/// Public so sibling adapters (Suave, Falco, AspNetCore, AwsLambda,
-/// AzureFunctions.Worker, Giraffe) can route their response-path serialisation
-/// (docs schema, error bodies, etc.) through the same backend-aware path the
-/// main proxy uses. Without this, those adapters' helper functions would
-/// silently fall back to Newtonsoft for docs / error responses even when
-/// the consumer opted in to STJ.
+/// Backend is `SystemTextJson opts` → `JsonSerializer.Serialize` with the
+/// provided options. Public so sibling adapters (Giraffe, AspNetCore,
+/// AwsLambda, AzureFunctions.Worker) can route their response-path
+/// serialisation (docs schema, error bodies, etc.) through the same code
+/// path the main proxy uses.
 let jsonSerializeWithBackend (backend: JsonSerializerBackend) (o: 'a) (stream: Stream) =
     match backend with
-    | NewtonsoftJson -> jsonSerialize o stream
-    | SystemTextJson stjOptions -> System.Text.Json.JsonSerializer.Serialize<'a>(stream, o, stjOptions)
+    | SystemTextJson stjOptions -> JsonSerializer.Serialize<'a>(stream, o, stjOptions)
 
 /// Parse the outer arguments-array JSON text into a list of raw per-argument
-/// JSON strings, branching on backend. The result is backend-agnostic — any
-/// parser the per-argument deserialise path picks can re-parse each element's
-/// text. STJ consumers therefore exercise no Newtonsoft code path at runtime.
+/// JSON strings. Each per-argument element is captured as its raw JSON text;
+/// the per-argument deserialise path re-parses it with the configured options.
 let private parseArgumentArray
-    (backend: JsonSerializerBackend)
+    (_backend: JsonSerializerBackend)
     (functionName: string)
     (expectedArgCount: int)
     (text: string)
     : string list =
-    match backend with
-    | NewtonsoftJson ->
-        let token = JsonConvert.DeserializeObject<JToken>(text, settings)
+    use doc = JsonDocument.Parse(text)
 
-        if token.Type <> JTokenType.Array then
-            failwithf
-                "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
-                functionName
-                expectedArgCount
+    if doc.RootElement.ValueKind <> JsonValueKind.Array then
+        failwithf
+            "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
+            functionName
+            expectedArgCount
 
-        token :?> JArray
-        |> Seq.map (fun el -> el.ToString(Formatting.None))
-        |> Seq.toList
-    | SystemTextJson _ ->
-        use doc = System.Text.Json.JsonDocument.Parse(text)
+    doc.RootElement.EnumerateArray()
+    |> Seq.map (fun el -> el.GetRawText())
+    |> Seq.toList
 
-        if doc.RootElement.ValueKind <> System.Text.Json.JsonValueKind.Array then
-            failwithf
-                "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
-                functionName
-                expectedArgCount
-
-        doc.RootElement.EnumerateArray()
-        |> Seq.map (fun el -> el.GetRawText())
-        |> Seq.toList
-
-// A dedicated JsonSerializer instance for per-argument Newtonsoft
-// deserialise. Has DateParseHandling.None applied directly — required to
-// preserve DateTimeOffset offsets through the nested JTokenReader inside
-// the FableJsonConverter's Kind.Union case branch. Without this, a Just
-// (DTO +5:00) round-trip on the Newtonsoft path silently rewrites the
-// offset to the server's local timezone (surfaced by the Maybe<DateTimeOffset>
-// canary test in LegacyNewtonsoftIntegrationTests.fs).
-let private fableArgSerializer =
-    let serializer = JsonSerializer()
-    serializer.DateParseHandling <- DateParseHandling.None
-    serializer.DateTimeZoneHandling <- DateTimeZoneHandling.RoundtripKind
-    serializer.DateFormatHandling <- DateFormatHandling.IsoDateFormat
-    serializer.Converters.Add(FableJsonConverter())
-    serializer
-
-/// Parse one already-extracted argument's raw JSON text into 'inp using the
-/// configured backend.
-///
-/// Newtonsoft path: re-parses argText into a JToken with DateParseHandling.None
-/// (keeps date strings as String JValues, no auto-conversion to DateTime),
-/// then uses `JToken.ToObject<'inp>(fableArgSerializer)` for the typed
-/// conversion. The fableArgSerializer ALSO has DateParseHandling.None — this
-/// is load-bearing for DateTimeOffset preservation: the typed conversion
-/// goes through a nested JTokenReader inside FableJsonConverter's Kind.Union
-/// branch, and that reader inherits DateParseHandling from the serializer.
-/// With DateParseHandling.DateTime (the default), DateTimeOffset round-trips
-/// silently lose their original offset.
-///
-/// STJ path: direct deserialise via STJ — no Newtonsoft API touched.
+/// Parse one already-extracted argument's raw JSON text into 'inp using
+/// `JsonSerializer.Deserialize` with the configured options.
 let private deserialiseArgWithBackend<'inp> (backend: JsonSerializerBackend) (argText: string) : 'inp =
     match backend with
-    | NewtonsoftJson ->
-        let token = JsonConvert.DeserializeObject<JToken>(argText, settings)
-        token.ToObject<'inp>(fableArgSerializer)
-    | SystemTextJson stjOptions -> System.Text.Json.JsonSerializer.Deserialize<'inp>(argText, stjOptions)
+    | SystemTextJson stjOptions -> JsonSerializer.Deserialize<'inp>(argText, stjOptions)
 
 type private MsgPackSerializer<'a> =
     static let serializer = MsgPack.Write.makeSerializer<'a> ()
@@ -194,65 +119,64 @@ let private copyWithCap (source: Stream) (target: Stream) (cap: int64) (sectionI
     }
     :> System.Threading.Tasks.Task
 
-let private readMultipartArgs props (options: RemotingOptions<_, _>) =
-    task {
-        let mediaType = MediaTypeHeaderValue.Parse props.InputContentType
-        let boundary = HeaderUtilities.RemoveQuotes mediaType.Boundary
+let private readMultipartArgs props (options: RemotingOptions<_, _>) = task {
+    let mediaType = MediaTypeHeaderValue.Parse props.InputContentType
+    let boundary = HeaderUtilities.RemoveQuotes mediaType.Boundary
 
-        if
-            Microsoft.Extensions.Primitives.StringSegment.IsNullOrEmpty boundary
-            || boundary.Length > 70
-        then
-            failwith "Multipart boundary missing or too long"
+    if
+        Microsoft.Extensions.Primitives.StringSegment.IsNullOrEmpty boundary
+        || boundary.Length > 70
+    then
+        failwith "Multipart boundary missing or too long"
 
-        let reader = MultipartReader(boundary.ToString(), props.Input)
-        let parts = ResizeArray()
-        let mutable go = true
-        let mutable sectionIdx = 0
-        let sectionCap = options.MaxMultipartSectionBytes
-        let sectionCountCap = options.MaxMultipartSections
+    let reader = MultipartReader(boundary.ToString(), props.Input)
+    let parts = ResizeArray()
+    let mutable go = true
+    let mutable sectionIdx = 0
+    let sectionCap = options.MaxMultipartSectionBytes
+    let sectionCountCap = options.MaxMultipartSections
 
-        while go do
-            let! section = reader.ReadNextSectionAsync()
+    while go do
+        let! section = reader.ReadNextSectionAsync()
 
-            if isNull section then
-                go <- false
-            else
-                if sectionIdx >= sectionCountCap then
-                    // 0.1.16 — typed exception (see copyWithCap above).
-                    raise (
-                        MultipartCapExceededException(
-                            sprintf
-                                "Multipart request exceeds the configured section count cap (%d). Adjust via Remoting.withMaxMultipartSections if your application requires more sections."
-                                sectionCountCap
-                        )
+        if isNull section then
+            go <- false
+        else
+            if sectionIdx >= sectionCountCap then
+                // 0.1.16 — typed exception (see copyWithCap above).
+                raise (
+                    MultipartCapExceededException(
+                        sprintf
+                            "Multipart request exceeds the configured section count cap (%d). Adjust via Remoting.withMaxMultipartSections if your application requires more sections."
+                            sectionCountCap
                     )
+                )
 
-                if section.ContentType.Equals("application/octet-stream", StringComparison.Ordinal) then
-                    use buffer =
-                        (getRecyclableMemoryStreamManager options).GetStream "remoting-input-multipart"
+            if section.ContentType.Equals("application/octet-stream", StringComparison.Ordinal) then
+                use buffer =
+                    (getRecyclableMemoryStreamManager options).GetStream "remoting-input-multipart"
 
-                    do! copyWithCap section.Body buffer sectionCap sectionIdx
-                    parts.Add(buffer.GetReadOnlySequence().ToArray() |> Choice1Of2)
-                else
-                    // Text sections also need to be bounded — drain into a
-                    // capped MemoryStream then decode as UTF-8.
-                    use buffer =
-                        (getRecyclableMemoryStreamManager options).GetStream "remoting-input-multipart-text"
+                do! copyWithCap section.Body buffer sectionCap sectionIdx
+                parts.Add(buffer.GetReadOnlySequence().ToArray() |> Choice1Of2)
+            else
+                // Text sections also need to be bounded — drain into a
+                // capped MemoryStream then decode as UTF-8.
+                use buffer =
+                    (getRecyclableMemoryStreamManager options).GetStream "remoting-input-multipart-text"
 
-                    do! copyWithCap section.Body buffer sectionCap sectionIdx
+                do! copyWithCap section.Body buffer sectionCap sectionIdx
 
-                    let text =
-                        System.Text.Encoding.UTF8.GetString(buffer.GetReadOnlySequence().ToArray())
-                    // Multipart JSON sections are single values (one argument per
-                    // multipart part), so the section's text IS the raw JSON text
-                    // for that argument — no outer array unwrap required.
-                    parts.Add(Choice2Of2 text)
+                let text =
+                    System.Text.Encoding.UTF8.GetString(buffer.GetReadOnlySequence().ToArray())
+                // Multipart JSON sections are single values (one argument per
+                // multipart part), so the section's text IS the raw JSON text
+                // for that argument — no outer array unwrap required.
+                parts.Add(Choice2Of2 text)
 
-                sectionIdx <- sectionIdx + 1
+            sectionIdx <- sectionIdx + 1
 
-        return Seq.toList parts
-    }
+    return Seq.toList parts
+}
 
 let rec private makeEndpointProxy<'fieldPart>
     (makeProps: MakeEndpointProps)
@@ -297,26 +221,26 @@ let rec private makeEndpointProxy<'fieldPart>
                 member _.Visit<'result>() =
                     let isBinaryOutput = typeof<'result> = typeof<byte[]>
 
-                    wrap (fun (s: Async<'result>) props ->
-                        task {
-                            validateArgumentCount props makeProps
-                            let! result = s
-                            writeToOutputMemoryStream isBinaryOutput props result
-                            return Success isBinaryOutput
-                        }) }
+                    wrap (fun (s: Async<'result>) props -> task {
+                        validateArgumentCount props makeProps
+                        let! result = s
+                        writeToOutputMemoryStream isBinaryOutput props result
+                        return Success isBinaryOutput
+                    })
+            }
     | Task t ->
         t.Element.Accept
             { new ITypeVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
                 member _.Visit<'result>() =
                     let isBinaryOutput = typeof<'result> = typeof<byte[]>
 
-                    wrap (fun (s: Task<'result>) props ->
-                        task {
-                            validateArgumentCount props makeProps
-                            let! result = s
-                            writeToOutputMemoryStream isBinaryOutput props result
-                            return Success isBinaryOutput
-                        }) }
+                    wrap (fun (s: Task<'result>) props -> task {
+                        validateArgumentCount props makeProps
+                        let! result = s
+                        writeToOutputMemoryStream isBinaryOutput props result
+                        return Success isBinaryOutput
+                    })
+            }
     | Shape.FSharpFunc func ->
         func.Accept
             { new IFSharpFuncVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
@@ -355,7 +279,8 @@ let rec private makeEndpointProxy<'fieldPart>
                                 makeProps.FieldName
                                 (makeProps.FlattenedTypes.Length - 1)
                                 typeInfo
-                                props.Arguments.Length) }
+                                props.Arguments.Length)
+            }
     | _ ->
         // Phase 69c — streaming methods returning IAsyncEnumerable<'T>
         // are handled by the adapter's SSE short-circuit BEFORE the proxy
@@ -403,66 +328,67 @@ let makeApiProxy<'impl, 'ctx>
             { new IReadOnlyMemberVisitor<'impl, InvocationProps<'impl> -> Task<InvocationResult>> with
                 member _.Visit(shape: ReadOnlyMember<'impl, 'field>) =
                     let fieldProxy =
-                        makeEndpointProxy<'field>
-                            { FieldName = shape.MemberInfo.Name
-                              RecordName = typeof<'impl>.Name
-                              ResponseSerialization = options.ResponseSerialization
-                              JsonSerializer = options.JsonSerializer
-                              FlattenedTypes = flattenedTypes }
+                        makeEndpointProxy<'field> {
+                            FieldName = shape.MemberInfo.Name
+                            RecordName = typeof<'impl>.Name
+                            ResponseSerialization = options.ResponseSerialization
+                            JsonSerializer = options.JsonSerializer
+                            FlattenedTypes = flattenedTypes
+                        }
 
                     let isNoArg =
                         flattenedTypes.Length = 1
                         || (flattenedTypes.Length = 2 && flattenedTypes.[0] = typeof<unit>)
 
-                    wrap (fun (props: InvocationProps<'impl>) ->
-                        task {
-                            let mutable requestBodyText = None
+                    wrap (fun (props: InvocationProps<'impl>) -> task {
+                        let mutable requestBodyText = None
 
-                            try
-                                if
-                                    not (props.HttpVerb.Equals("POST", StringComparison.OrdinalIgnoreCase))
-                                    && not (
-                                        isNoArg && props.HttpVerb.Equals("GET", StringComparison.OrdinalIgnoreCase)
-                                    )
-                                then
-                                    return InvalidHttpVerb
-                                elif
-                                    props.InputContentType.StartsWith("multipart/form-data", StringComparison.Ordinal)
-                                then
-                                    let! args = readMultipartArgs props options
+                        try
+                            if
+                                not (props.HttpVerb.Equals("POST", StringComparison.OrdinalIgnoreCase))
+                                && not (isNoArg && props.HttpVerb.Equals("GET", StringComparison.OrdinalIgnoreCase))
+                            then
+                                return InvalidHttpVerb
+                            elif
+                                props.InputContentType.StartsWith("multipart/form-data", StringComparison.Ordinal)
+                            then
+                                let! args = readMultipartArgs props options
 
-                                    let props' =
-                                        { Arguments = args
-                                          IsProxyHeaderPresent = props.IsProxyHeaderPresent
-                                          Output = props.Output }
+                                let props' = {
+                                    Arguments = args
+                                    IsProxyHeaderPresent = props.IsProxyHeaderPresent
+                                    Output = props.Output
+                                }
 
-                                    return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
-                                else
-                                    use sr = new StreamReader(props.Input)
-                                    let! text = sr.ReadToEndAsync()
+                                return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
+                            else
+                                use sr = new StreamReader(props.Input)
+                                let! text = sr.ReadToEndAsync()
 
-                                    let args =
-                                        if String.IsNullOrEmpty text then
-                                            []
-                                        else
-                                            requestBodyText <- Some text
+                                let args =
+                                    if String.IsNullOrEmpty text then
+                                        []
+                                    else
+                                        requestBodyText <- Some text
 
-                                            parseArgumentArray
-                                                options.JsonSerializer
-                                                shape.MemberInfo.Name
-                                                (flattenedTypes.Length - 1)
-                                                text
-                                            |> List.map Choice2Of2
+                                        parseArgumentArray
+                                            options.JsonSerializer
+                                            shape.MemberInfo.Name
+                                            (flattenedTypes.Length - 1)
+                                            text
+                                        |> List.map Choice2Of2
 
-                                    let props' =
-                                        { Arguments = args
-                                          IsProxyHeaderPresent = props.IsProxyHeaderPresent
-                                          Output = props.Output }
+                                let props' = {
+                                    Arguments = args
+                                    IsProxyHeaderPresent = props.IsProxyHeaderPresent
+                                    Output = props.Output
+                                }
 
-                                    return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
-                            with e ->
-                                return InvocationResult.Exception(e, shape.MemberInfo.Name, requestBodyText)
-                        }) }
+                                return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
+                        with e ->
+                            return InvocationResult.Exception(e, shape.MemberInfo.Name, requestBodyText)
+                    })
+            }
 
     match shapeof<'impl> with
     | Shape.FSharpRecord(:? ShapeFSharpRecord<'impl> as shape) ->

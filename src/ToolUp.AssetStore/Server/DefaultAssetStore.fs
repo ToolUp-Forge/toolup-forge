@@ -5,8 +5,8 @@ namespace ToolUp.AssetStore
 
 open System
 open System.Security.Cryptography
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -19,16 +19,12 @@ open ToolUp.Platform.BlobStorage
 type private AssetRecordWire = AssetRecord
 
 module private AssetJson =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
-    let toJson (v: 'T) =
-        JsonConvert.SerializeObject(v, settings)
+    let toJson (v: 'T) = JsonSerializer.Serialize(v, options)
 
     let fromJson<'T> (s: string) =
-        JsonConvert.DeserializeObject<'T>(s, settings)
+        JsonSerializer.Deserialize<'T>(s, options)
 
 /// Default `IAssetStore` implementation. Wraps the SDK's
 /// configured `IBlobStorage`:

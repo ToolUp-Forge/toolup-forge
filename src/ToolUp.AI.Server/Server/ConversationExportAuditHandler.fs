@@ -6,7 +6,8 @@ module ToolUp.AI.ConversationExportAuditHandler
 open System
 open System.IO
 open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
 
@@ -37,10 +38,7 @@ type ExportAuditRequest = {
     IncludeToolDetails: bool
 }
 
-let private jsonSettings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-    s
+let private jsonOptions = FableConverters.create ()
 
 let private resolveScope (ctx: HttpContext) : StorageScope =
     match ctx.Items.TryGetValue "ToolUp.StorageScope" with
@@ -67,7 +65,7 @@ let exportAuditHandler: HttpHandler =
         try
             use reader = new StreamReader(ctx.Request.Body)
             let! body = reader.ReadToEndAsync()
-            let req = JsonConvert.DeserializeObject<ExportAuditRequest>(body, jsonSettings)
+            let req = JsonSerializer.Deserialize<ExportAuditRequest>(body, jsonOptions)
 
             if isNull (box req) then
                 ctx.Response.StatusCode <- 400

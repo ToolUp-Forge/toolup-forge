@@ -141,17 +141,14 @@ let private makeVectorisationHook
     (logger: ILogger)
     : ProcessedData * ProcessedFileEntry * StorageScope -> Async<unit> =
 
-    let jsonSettings =
-        let s = Newtonsoft.Json.JsonSerializerSettings()
-        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-        s
+    let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
 
     let writeEvent (scopeId: string) (eventName: string) (payload: obj) = async {
         match eventStoreRef.Value with
         | None -> ()
         | Some es ->
             try
-                let json = Newtonsoft.Json.JsonConvert.SerializeObject(payload, jsonSettings)
+                let json = System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions)
                 let evt = Events.create scopeId "ToolUp.RAG" eventName json
                 do! es.Write evt
             with ex ->

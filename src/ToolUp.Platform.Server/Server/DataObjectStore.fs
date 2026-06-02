@@ -3,8 +3,8 @@ module ToolUp.Platform.DataObjectStore
 open System
 open System.Text
 open System.Security.Cryptography
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -87,18 +87,15 @@ let private sha256Hex (content: byte[]) : string =
 // round-trips both losslessly.
 
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: DataObject) : byte[] =
-        JsonConvert.SerializeObject(value, settings) |> Encoding.UTF8.GetBytes
+        JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
 
     let tryDeserialize (bytes: byte[]) : DataObject option =
         try
             let json = Encoding.UTF8.GetString(bytes)
-            Some(JsonConvert.DeserializeObject<DataObject>(json, settings))
+            Some(JsonSerializer.Deserialize<DataObject>(json, options))
         with _ ->
             None
 

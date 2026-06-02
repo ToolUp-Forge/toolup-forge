@@ -5,8 +5,8 @@ module ToolUp.AI.LegacyAIConfigProviderProfile
 
 open System
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
@@ -65,13 +65,10 @@ type private LegacyConfig = {
 }
 
 module private LegacyJson =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let deserialize (json: string) : LegacyConfig =
-        JsonConvert.DeserializeObject<LegacyConfig>(json, settings)
+        JsonSerializer.Deserialize<LegacyConfig>(json, options)
 
 [<Literal>]
 let private legacyBlobName = "ai-config.json"

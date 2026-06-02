@@ -1,7 +1,7 @@
 module ToolUp.Platform.ModuleQueryBus
 
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Tracing
 
@@ -18,19 +18,16 @@ open ToolUp.Platform.Tracing
 /// through DUs, options, and records (the platform's SSE serialisation
 /// rule).
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize<'T> (value: 'T) : string =
-        JsonConvert.SerializeObject(value, settings)
+        JsonSerializer.Serialize(value, options)
 
     let deserialize<'T> (payload: string) : 'T =
         if System.String.IsNullOrEmpty payload then
-            JsonConvert.DeserializeObject<'T>("null", settings)
+            JsonSerializer.Deserialize<'T>("null", options)
         else
-            JsonConvert.DeserializeObject<'T>(payload, settings)
+            JsonSerializer.Deserialize<'T>(payload, options)
 
 // ─── Typed handler constructor ────────────────────────────────────
 

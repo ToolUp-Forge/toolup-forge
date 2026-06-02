@@ -2,8 +2,8 @@ module ToolUp.Platform.LineageStore
 
 open System
 open System.Collections.Generic
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── EventStoreLineageStore ──────────────────────────────────────
@@ -27,17 +27,13 @@ open ToolUp.Platform
 
 // ─── JSON serialisation ──────────────────────────────────────────
 
-let private settings =
-    let s = JsonSerializerSettings()
-    s.Converters.Add(FableJsonConverter())
-    s
+let private options = FableConverters.create ()
 
-let private serialize (link: LineageLink) : string =
-    JsonConvert.SerializeObject(link, settings)
+let private serialize (link: LineageLink) : string = JsonSerializer.Serialize(link, options)
 
 let private tryDeserialize (payload: string) : LineageLink option =
     try
-        Some(JsonConvert.DeserializeObject<LineageLink>(payload, settings))
+        Some(JsonSerializer.Deserialize<LineageLink>(payload, options))
     with _ ->
         None
 

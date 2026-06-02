@@ -1,7 +1,8 @@
 namespace ToolUp.Platform
 
 open System
-open Newtonsoft.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 
@@ -49,17 +50,14 @@ module NarrativeNotifications =
 /// harnesses without a channel working).
 type NotifyingNarrativeStore(inner: INarrativeStore, channel: INotificationChannel) =
 
-    let jsonSettings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(ToolUp.Remoting.Json.FableJsonConverter())
-        s
+    let jsonOptions = FableConverters.create ()
 
     let publishPayload (scopeId: string) (key: string) (payload: obj) : Async<unit> = async {
         if isNull (box channel) then
             return ()
         else
             try
-                let payloadJson = JsonConvert.SerializeObject(payload, jsonSettings)
+                let payloadJson = JsonSerializer.Serialize(payload, jsonOptions)
                 let notification = CustomNotification(key, payloadJson)
                 do! channel.Publish(scopeId, notification)
             with _ ->

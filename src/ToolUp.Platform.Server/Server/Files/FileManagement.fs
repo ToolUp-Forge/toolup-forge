@@ -135,8 +135,8 @@ let processFile (dataTypes: DataType list) (fileName: string) (dataTypeId: DataT
 // converter every existing `ProcessedFileEntry` traversal of an SDK
 // boundary uses today.
 module ProcessedEntryStore =
-    open Newtonsoft.Json
-    open ToolUp.Remoting.Json
+    open System.Text.Json
+    open ToolUp.Remoting.Json.SystemTextJson
 
     [<Literal>]
     let private Prefix = "_processed_entry__"
@@ -148,10 +148,7 @@ module ProcessedEntryStore =
     [<Literal>]
     let DataType = "_processed_entry"
 
-    let private jsonSettings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private jsonOptions = FableConverters.create ()
 
     /// Build the `IDataObjectStore` ObjectId for a file's entry sidecar.
     let objectIdFor (fileName: string) : string = Prefix + fileName
@@ -172,7 +169,7 @@ module ProcessedEntryStore =
         (entry: ProcessedFileEntry)
         : Async<unit> =
         async {
-            let json = JsonConvert.SerializeObject(entry, jsonSettings)
+            let json = JsonSerializer.Serialize(entry, jsonOptions)
             let bytes = Text.Encoding.UTF8.GetBytes json
 
             do!
@@ -197,7 +194,7 @@ module ProcessedEntryStore =
             | Ok(_, bytes) ->
                 try
                     let json = Text.Encoding.UTF8.GetString bytes
-                    let entry = JsonConvert.DeserializeObject<ProcessedFileEntry>(json, jsonSettings)
+                    let entry = JsonSerializer.Deserialize<ProcessedFileEntry>(json, jsonOptions)
                     return Some entry
                 with ex ->
                     logger

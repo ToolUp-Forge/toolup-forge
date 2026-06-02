@@ -6,8 +6,8 @@ module ToolUp.Platform.JobSchedulerBuildOrchestrator
 open System
 open System.Collections.Concurrent
 open System.Threading
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── JobSchedulerBuildOrchestrator (Phase 26 substrate default) ──────
@@ -49,16 +49,13 @@ let BuildScopeId = "_platform"
 // ─── JSON helper ─────────────────────────────────────────────────
 
 module private Json =
-    let private settings =
-        let s = JsonSerializerSettings()
-        s.Converters.Add(FableJsonConverter())
-        s
+    let private options = FableConverters.create ()
 
     let serialize (value: 'T) : string =
-        JsonConvert.SerializeObject(value, settings)
+        JsonSerializer.Serialize(value, options)
 
     let deserialize<'T> (json: string) : 'T =
-        JsonConvert.DeserializeObject<'T>(json, settings)
+        JsonSerializer.Deserialize<'T>(json, options)
 
 // ─── Audit payloads ──────────────────────────────────────────────
 //

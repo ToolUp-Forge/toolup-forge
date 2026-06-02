@@ -2,8 +2,8 @@ module ToolUp.Platform.DevDiagnosticsHandler
 
 open System
 open System.Text
-open Newtonsoft.Json
-open ToolUp.Remoting.Json
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -529,13 +529,13 @@ let private buildContributors (ctx: HttpContext) : Async<Map<string, string>> = 
                 if winner = (workTask :> System.Threading.Tasks.Task) then
                     let! (name, payload) = workTask |> Async.AwaitTask
 
-                    let json = JsonConvert.SerializeObject(payload, FableJsonConverter())
+                    let json = JsonSerializer.Serialize(payload, FableConverters.create ())
 
                     return Some(name, json)
                 else
                     return Some(c.GetType().Name, "\"<contributor timed out after 2s>\"")
             with ex ->
-                return Some(c.GetType().Name, JsonConvert.SerializeObject(sprintf "<contributor threw: %s>" ex.Message))
+                return Some(c.GetType().Name, JsonSerializer.Serialize(sprintf "<contributor threw: %s>" ex.Message))
         }
 
         let! results = contributors |> List.map safeContribute |> Async.Parallel
@@ -676,13 +676,13 @@ let buildReport
 // records, `option`, and `Map<string,_>` losslessly. The dev endpoint
 // has no DUs on the wire (every DU on the report path is pre-mapped
 // to a case-name string), so the output stays human-friendly.
-let private jsonSettings =
-    let s = JsonSerializerSettings(Formatting = Formatting.Indented)
-    s.Converters.Add(FableJsonConverter())
-    s
+let private jsonOptions =
+    let o = FableConverters.create ()
+    o.WriteIndented <- true
+    o
 
 let private renderJson (report: DevDiagnosticsReport) : string =
-    JsonConvert.SerializeObject(report, jsonSettings)
+    JsonSerializer.Serialize(report, jsonOptions)
 
 /// Minimal HTML view — one section per top-level field, plain `<pre>`
 /// + `<table>` for browser-friendly eyeballing. Deliberately no CSS
