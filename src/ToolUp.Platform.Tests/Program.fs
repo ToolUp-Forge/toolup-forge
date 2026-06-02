@@ -163,6 +163,15 @@ let allTests =
         AnonymousSessionMigrationMiddlewareTests.tests
         SubjectWildcardAnalyzerTests.tests
         IAIProviderContract.tests
+        // Phase 26 — deploy-plane substrate contract packs bound to
+        // their single-node defaults + in-memory mocks. The
+        // DockerLocal Docker-backed leg is env-gated; CI without a
+        // local Docker socket skips that pack.
+        DeployPlaneTests.tenantFleetTests
+        DeployPlaneTests.buildOrchestratorTests
+        DeployPlaneTests.deployPipelineTests
+        DeployPlaneTests.containerSchedulerInMemoryTests
+        DeployPlaneTests.containerSchedulerDockerLocalTests
     ]
 
 [<EntryPoint>]

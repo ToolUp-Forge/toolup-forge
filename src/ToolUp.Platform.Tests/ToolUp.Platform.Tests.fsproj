@@ -43,6 +43,11 @@
         <Compile Include="Contracts\ISmokeTestContract.fs" />
         <Compile Include="Contracts\IConfigValidatorContract.fs" />
         <Compile Include="Contracts\IEntityStoreContract.fs" />
+        <!-- Phase 26 — deploy-plane substrate contract packs. -->
+        <Compile Include="Contracts\IBuildOrchestratorContract.fs" />
+        <Compile Include="Contracts\ITenantFleetContract.fs" />
+        <Compile Include="Contracts\IDeployPipelineContract.fs" />
+        <Compile Include="Contracts\IContainerSchedulerContract.fs" />
         <Compile Include="Contracts\IUsageLogContract.fs" />
         <Compile Include="Contracts\ITeamQuotaPolicyContract.fs" />
         <Compile Include="Contracts\IMetricsSinkContract.fs" />
@@ -321,6 +326,13 @@
              self-audit that ratchets against future cross-shape
              wildcard fallbacks. -->
         <Compile Include="InProcess\SubjectWildcardAnalyzerTests.fs" />
+        <!-- Phase 26 — deploy-plane substrate bindings. Real
+             EntityStoreTenantFleet (over BlobEntityStore + in-memory
+             mocks for the injected IContainerScheduler / IDeployPipeline)
+             + in-memory IBuildOrchestrator / IDeployPipeline /
+             IContainerScheduler bindings + Docker-socket-gated
+             DockerLocalContainerScheduler binding. -->
+        <Compile Include="InProcess\DeployPlaneTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -405,6 +417,10 @@
         <!-- Phase 66 Stream C.5 / D.8 — RevokeOnIssuerRemoved share-token
              decorator companion, exercised by the D.8 integration tests. -->
         <ProjectReference Include="..\ShareTokenStoreDecorators\RevokeOnIssuerRemoved\ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved.fsproj" />
+        <!-- Phase 26 — DockerLocal reference IContainerScheduler companion.
+             Binds the IContainerSchedulerContract pack against a real
+             Docker socket when available; env-gated skip otherwise. -->
+        <ProjectReference Include="..\ContainerSchedulers\DockerLocal\ToolUp.ContainerSchedulers.DockerLocal.fsproj" />
     </ItemGroup>
     <!-- Phase 14k WS5 Item 2 — mixed-dim fixture JSON co-located with the
          existing eval-baseline.json in the RAG.Evaluation project. Linked
