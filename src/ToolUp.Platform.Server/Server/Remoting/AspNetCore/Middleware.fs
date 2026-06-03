@@ -60,7 +60,11 @@ module internal Middleware =
                 let responseBody = System.Text.Encoding.UTF8.GetString(ms.ToArray())
                 return! writeStringAsync responseBody ctx logger
             | None ->
-                jsonSerializeWithBackend backend response ctx.Response.Body
+                // 0.5.9 — use async overload. Kestrel rejects sync writes
+                // into Response.Body with `AllowSynchronousIO=false`. Same
+                // fix as the Giraffe adapter; see Proxy.fs comment on
+                // `jsonSerializeWithBackendAsync`.
+                do! jsonSerializeWithBackendAsync backend response ctx.Response.Body
                 return Some ctx
         }
 

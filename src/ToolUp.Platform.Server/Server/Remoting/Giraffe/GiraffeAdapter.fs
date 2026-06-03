@@ -31,7 +31,14 @@ module GiraffeUtil =
                 return! setBodyFromString responseBody next ctx
             | None ->
                 ctx.Response.ContentType <- "application/json; charset=utf-8"
-                jsonSerializeWithBackend backend response ctx.Response.Body
+                // 0.5.9 — use async overload. Kestrel runs with
+                // `AllowSynchronousIO=false` by default, which rejects the
+                // sync `JsonSerializer.Serialize(stream,...)` overload
+                // when `stream` is `HttpResponse.Body` with
+                // `InvalidOperationException: Synchronous operations are
+                // disallowed.` Bug introduced by F6 direct-write; this
+                // fix preserves the direct-write perf win.
+                do! jsonSerializeWithBackendAsync backend response ctx.Response.Body
                 return! next ctx
         }
 

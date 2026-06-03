@@ -21,6 +21,17 @@ let jsonSerializeWithBackend (backend: JsonSerializerBackend) (o: 'a) (stream: S
     match backend with
     | SystemTextJson stjOptions -> JsonSerializer.Serialize<'a>(stream, o, stjOptions)
 
+/// Async overload of `jsonSerializeWithBackend` for hot-path direct-writes
+/// into `HttpResponse.Body`. Kestrel runs with `AllowSynchronousIO=false`
+/// by default, which rejects the sync `JsonSerializer.Serialize(stream,...)`
+/// overload with `InvalidOperationException: Synchronous operations are
+/// disallowed.` Callers writing the envelope directly into the response
+/// body (Giraffe `setJsonBody` / `setResponseBody` hot path, AspNetCore
+/// middleware equivalent) must use this overload.
+let jsonSerializeWithBackendAsync (backend: JsonSerializerBackend) (o: 'a) (stream: Stream) =
+    match backend with
+    | SystemTextJson stjOptions -> JsonSerializer.SerializeAsync<'a>(stream, o, stjOptions)
+
 /// Phase 69m — parse the outer arguments-array JSON into a list of
 /// per-argument `JsonElement` clones. Each element is `Clone()`d so it
 /// survives the parent JsonDocument's disposal (the clone produces a
