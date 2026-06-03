@@ -107,8 +107,15 @@ module private GraphState =
 
 // ─── Internal: Graph response shape ──────────────────────────────────
 
+// 0.5.12 — STJ requires a PUBLIC parameterless constructor.
+// `type private` on the record makes `[<CLIMutable>]`'s generated
+// ctor non-public, and `JsonSerializer.Deserialize` rejects it with
+// `Deserialization of types without a parameterless constructor ...
+// is not supported. Type 'GraphUsersResponse'`. Dropping `private`
+// keeps the type module-internal (still not exported from the .fs
+// file's namespace surface) but gives STJ a public ctor to reach.
 [<CLIMutable>]
-type private GraphUser = {
+type GraphUser = {
     id: string
     displayName: string
     mail: string
@@ -116,7 +123,7 @@ type private GraphUser = {
 }
 
 [<CLIMutable>]
-type private GraphUsersResponse = { value: GraphUser array }
+type GraphUsersResponse = { value: GraphUser array }
 
 // ─── Internal: invitation-email rendering ────────────────────────────
 
