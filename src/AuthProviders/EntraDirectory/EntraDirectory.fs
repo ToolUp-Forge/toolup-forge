@@ -222,9 +222,20 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
                             safeQuery
                             safeQuery
 
+                    // 0.5.11 — `$count=true` is REQUIRED on the Users
+                    // collection when `$filter` combines multiple
+                    // `startswith` clauses with `or`. Without it, Graph
+                    // applies only the first clause and silently returns
+                    // an empty (or partial) array — the response is 200
+                    // OK but the operator sees an empty dropdown when
+                    // typing an email or UPN prefix. Per Graph "advanced
+                    // query" docs, the trio is: `$count=true` +
+                    // `ConsistencyLevel: eventual` header + the OR
+                    // filter. The header was already set; the count
+                    // param was the missing piece.
                     let url =
                         sprintf
-                            "%s/v1.0/users?$top=%d&$select=id,displayName,mail,userPrincipalName&$filter=%s"
+                            "%s/v1.0/users?$count=true&$top=%d&$select=id,displayName,mail,userPrincipalName&$filter=%s"
                             normalisedEndpoint
                             take
                             (Uri.EscapeDataString filter)
