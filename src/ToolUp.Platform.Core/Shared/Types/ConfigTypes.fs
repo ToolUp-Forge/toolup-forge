@@ -198,3 +198,16 @@ module ConfigKeys =
 
         [<Literal>]
         let PushEnabled = "push.enabled"
+
+        /// Phase 30d — per-scope upper bound on
+        /// `IDataCatalog.GetSyntheticSample`'s row `count`.
+        /// `ModulePermission.SchemaOnly` partner-sandbox callers cannot
+        /// exceed this value (the catalog gate clamps before generation).
+        /// Unset = SDK default
+        /// (`SyntheticSampleGenerator.DefaultMaxSampleRows`). The key
+        /// lives on `_platform.notification_prefs` because that schema is
+        /// already the per-scope partner-policy lane; folding it in
+        /// avoids minting a new platform module for one field. Despite
+        /// the lane name, this is unrelated to notification delivery.
+        [<Literal>]
+        let SchemaOnlyMaxSampleRows = "schemaOnly.maxSampleRows"

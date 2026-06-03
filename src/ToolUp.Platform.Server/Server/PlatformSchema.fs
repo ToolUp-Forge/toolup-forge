@@ -121,6 +121,24 @@ let internal sdkNotificationPrefsSchema: ModuleConfigEntry = {
                 Required = true
                 DefaultJson = "false"
             }
+            // Phase 30d — Schema-only sandbox row cap. Clamps
+            // `IDataCatalog.GetSyntheticSample`'s `count` parameter
+            // for `ModulePermission.SchemaOnly` callers. Sits on this
+            // schema because `_platform.notification_prefs` is the
+            // established per-scope partner-policy lane; the field
+            // name is unrelated to notification delivery despite the
+            // schema's name. Default `100` matches
+            // `SyntheticSampleGenerator.DefaultMaxSampleRows`.
+            {
+                Key = ConfigKeys.NotificationPrefsKeys.SchemaOnlyMaxSampleRows
+                DisplayName = "Schema-only sandbox sample cap"
+                Description =
+                    Some
+                        "Maximum synthetic-row count a partner with the Schema-only RBAC grant may request via IDataCatalog.GetSyntheticSample. Larger requests are clamped, not refused. Default 100; raise if partner integration tests need more rows."
+                Kind = ConfigFieldKind.Int(Some 1, Some 100_000)
+                Required = false
+                DefaultJson = "100"
+            }
         ]
     }
 }

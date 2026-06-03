@@ -307,4 +307,286 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
             Expect.equal inA.Length 1 "scopeA sees its object"
             Expect.equal inB.Length 0 "scopeB sees nothing"
         }
+
+        // ─── Phase 30d — GetSyntheticSample reproducibility + adversarial ───
+
+        testCaseAsync "GetSyntheticSample returns byte-identical bytes for identical (typeId, count, seed)"
+        <| async {
+            let schema = {
+                Description = "Test"
+                Columns = [
+                    {
+                        Name = "Region"
+                        Type = StringColumn
+                        Required = true
+                        Description = None
+                    }
+                    {
+                        Name = "Revenue"
+                        Type = NumberColumn
+                        Required = true
+                        Description = None
+                    }
+                    {
+                        Name = "AsOf"
+                        Type = DateColumn
+                        Required = false
+                        Description = None
+                    }
+                    {
+                        Name = "IsActive"
+                        Type = BooleanColumn
+                        Required = false
+                        Description = None
+                    }
+                ]
+            }
+
+            let salesType = mkType "Sales" "Sales Data" (Some schema)
+            let store = inMemoryObjectStore ()
+            let catalog, _, _ = factory ([ "SalesAnalysis", salesType ], store)
+
+            let! (objA, bytesA) = catalog.GetSyntheticSample("Sales", 10, 42)
+            let! (objB, bytesB) = catalog.GetSyntheticSample("Sales", 10, 42)
+
+            Expect.equal bytesA bytesB "byte-identical for same seed"
+            Expect.equal objA.ContentHash objB.ContentHash "ContentHash byte-identical for same seed"
+            Expect.equal objA.ObjectId objB.ObjectId "ObjectId stable for same seed"
+        }
+
+        testCaseAsync "GetSyntheticSample with different seeds returns different bytes"
+        <| async {
+            let schema = {
+                Description = "Test"
+                Columns = [
+                    {
+                        Name = "Region"
+                        Type = StringColumn
+                        Required = true
+                        Description = None
+                    }
+                ]
+            }
+
+            let salesType = mkType "Sales" "Sales Data" (Some schema)
+            let store = inMemoryObjectStore ()
+            let catalog, _, _ = factory ([ "SalesAnalysis", salesType ], store)
+
+            let! (_, bytesA) = catalog.GetSyntheticSample("Sales", 20, 1)
+            let! (_, bytesB) = catalog.GetSyntheticSample("Sales", 20, 2)
+
+            Expect.notEqual bytesA bytesB "different seeds yield different bytes"
+        }
+
+        testCaseAsync "GetSyntheticSample on unknown typeId returns well-formed header-only CSV"
+        <| async {
+            let store = inMemoryObjectStore ()
+            let catalog, _, _ = factory ([], store)
+
+            let! (obj, bytes) = catalog.GetSyntheticSample("Nonexistent", 5, 42)
+            let body = System.Text.Encoding.UTF8.GetString bytes
+
+            // Unknown type id surfaces no Schema; the generator falls
+            // back to a header-only placeholder column so the bytes
+            // are still valid CSV (header present + no rows because
+            // schema-less + the explicit fallback column).
+            Expect.isTrue (body.Contains "_synthetic_empty") "fallback placeholder header present"
+            Expect.equal obj.ScopeId "_synthetic" "synthetic sentinel scope"
+            Expect.equal obj.CreatedBy "_synthetic" "synthetic sentinel CreatedBy"
+        }
+
+        testCaseAsync "GetSyntheticSample DataObject metadata records seed + count"
+        <| async {
+            let schema = {
+                Description = "Test"
+                Columns = [
+                    {
+                        Name = "X"
+                        Type = StringColumn
+                        Required = false
+                        Description = None
+                    }
+                ]
+            }
+
+            let salesType = mkType "Sales" "Sales Data" (Some schema)
+            let store = inMemoryObjectStore ()
+            let catalog, _, _ = factory ([ "SalesAnalysis", salesType ], store)
+
+            let! (obj, _) = catalog.GetSyntheticSample("Sales", 7, 99)
+
+            Expect.equal (obj.Metadata |> Map.tryFind "synthetic.seed") (Some "99") "seed recorded"
+            Expect.equal (obj.Metadata |> Map.tryFind "synthetic.count") (Some "7") "count recorded"
+            Expect.equal obj.DataType "Sales" "DataType preserved"
+        }
+
+        testCaseAsync "GetSyntheticSample never touches the real object store"
+        <| async {
+            // Adversarial: if a SchemaOnly caller's GetSyntheticSample
+            // somehow returned bytes from the real store, the partner
+            // would see real-row data. This asserts the substrate
+            // path: a sample call must produce its bytes from the
+            // schema-driven generator, never from a real-blob read.
+            //
+            // We assert this structurally — pre-populate the real
+            // store with bytes that include an unmistakable canary
+            // string, generate a sample, and verify the canary is
+            // absent from the synthetic bytes regardless of seed.
+            let schema = {
+                Description = "Test"
+                Columns = [
+                    {
+                        Name = "Notes"
+                        Type = StringColumn
+                        Required = false
+                        Description = None
+                    }
+                ]
+            }
+
+            let salesType = mkType "Sales" "Sales Data" (Some schema)
+            let store = inMemoryObjectStore ()
+            let catalog, scopeA, _ = factory ([ "SalesAnalysis", salesType ], store)
+
+            let canary = "PHASE_30D_REAL_DATA_CANARY_DO_NOT_LEAK"
+
+            let! _ =
+                store.Save(
+                    scopeA,
+                    "real-1",
+                    System.Text.Encoding.UTF8.GetBytes canary,
+                    "Sales",
+                    "u",
+                    Map.empty,
+                    Unversioned
+                )
+
+            for seed in 0..9 do
+                let! (_, bytes) = catalog.GetSyntheticSample("Sales", 5, seed)
+                let body = System.Text.Encoding.UTF8.GetString bytes
+                Expect.isFalse (body.Contains canary) (sprintf "synthetic bytes do not leak real data (seed=%d)" seed)
+        }
+
+        testCaseAsync "GetSyntheticSample adversarial typeId — sub-path traversal does not return real bytes"
+        <| async {
+            // Adversarial: partners might submit typeId values with
+            // path-traversal characters, wildcard escapes, JSON-
+            // injection sequences, or container-name sentinels. The
+            // generator must handle each as an opaque string — never
+            // resolve into a real-blob path.
+            let schema = {
+                Description = "Test"
+                Columns = [
+                    {
+                        Name = "C"
+                        Type = StringColumn
+                        Required = false
+                        Description = None
+                    }
+                ]
+            }
+
+            let salesType = mkType "Sales" "Sales Data" (Some schema)
+            let store = inMemoryObjectStore ()
+            let catalog, scopeA, _ = factory ([ "SalesAnalysis", salesType ], store)
+
+            let canary = "PHASE_30D_TRAVERSAL_CANARY"
+
+            let! _ =
+                store.Save(scopeA, "x", System.Text.Encoding.UTF8.GetBytes canary, "Sales", "u", Map.empty, Unversioned)
+
+            let adversarial = [
+                "../_data/sales"
+                "../../_platform"
+                "Sales/../../_data"
+                "*.json"
+                "\"; DROP TABLE; --"
+                "{\"$gte\":\"\"}"
+                "_synthetic"
+                "_content"
+                System.String('A', 4096)
+            ]
+
+            for typeId in adversarial do
+                let! (_, bytes) = catalog.GetSyntheticSample(typeId, 3, 1)
+                let body = System.Text.Encoding.UTF8.GetString bytes
+                Expect.isFalse (body.Contains canary) (sprintf "synthetic bytes opaque on adversarial typeId %A" typeId)
+        }
+
+        // ─── Phase 30d — SchemaOnlyGuard contract ──────────────────────
+
+        testCaseAsync "SchemaOnlyGuard: caller with only [SchemaOnly] is gated"
+        <| async {
+            let ctx = {
+                UserId = "partner-x"
+                TeamId = Some "team-x"
+                Subject = TeamMember("partner-x", "team-x")
+                ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly ] ]
+                PlatformRole = None
+            }
+
+            Expect.isTrue (SchemaOnlyGuard.isSchemaOnlyCaller ctx "Sales") "SchemaOnly-only caller flagged"
+        }
+
+        testCaseAsync "SchemaOnlyGuard: caller with [SchemaOnly; Read] is NOT gated"
+        <| async {
+            let ctx = {
+                UserId = "u"
+                TeamId = Some "t"
+                Subject = TeamMember("u", "t")
+                ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly; ModulePermission.Read ] ]
+                PlatformRole = None
+            }
+
+            Expect.isFalse (SchemaOnlyGuard.isSchemaOnlyCaller ctx "Sales") "real-data grant lifts the gate"
+        }
+
+        testCaseAsync "SchemaOnlyGuard: caller with only [Read] is NOT gated"
+        <| async {
+            let ctx = {
+                UserId = "u"
+                TeamId = Some "t"
+                Subject = TeamMember("u", "t")
+                ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.Read ] ]
+                PlatformRole = None
+            }
+
+            Expect.isFalse (SchemaOnlyGuard.isSchemaOnlyCaller ctx "Sales") "Read-only is not gated"
+        }
+
+        testCaseAsync "SchemaOnlyGuard: unrestricted (empty map) caller is NOT gated"
+        <| async {
+            let ctx = AccessContext.unrestricted (TeamMember("u", "t"))
+            Expect.isFalse (SchemaOnlyGuard.isSchemaOnlyCaller ctx "Sales") "unrestricted is fail-open"
+        }
+
+        testCaseAsync "ModulePermission.implies — Admin / Write / Read all imply SchemaOnly"
+        <| async {
+            Expect.isTrue
+                (ModulePermission.implies ModulePermission.Admin ModulePermission.SchemaOnly)
+                "Admin -> SchemaOnly"
+
+            Expect.isTrue
+                (ModulePermission.implies ModulePermission.Write ModulePermission.SchemaOnly)
+                "Write -> SchemaOnly"
+
+            Expect.isTrue
+                (ModulePermission.implies ModulePermission.Read ModulePermission.SchemaOnly)
+                "Read -> SchemaOnly"
+        }
+
+        testCaseAsync "ModulePermission.implies — SchemaOnly does NOT imply Read / Write / Admin"
+        <| async {
+            Expect.isFalse
+                (ModulePermission.implies ModulePermission.SchemaOnly ModulePermission.Read)
+                "SchemaOnly does not imply Read"
+
+            Expect.isFalse
+                (ModulePermission.implies ModulePermission.SchemaOnly ModulePermission.Write)
+                "SchemaOnly does not imply Write"
+
+            Expect.isFalse
+                (ModulePermission.implies ModulePermission.SchemaOnly ModulePermission.Admin)
+                "SchemaOnly does not imply Admin"
+        }
     ]

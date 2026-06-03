@@ -146,6 +146,11 @@
              ModulePermission.SchemaOnly partner-sandbox role. -->
         <Compile Include="Server\SyntheticSampleGenerator.fs" />
         <Compile Include="Server\DataCatalog.fs" />
+        <!-- Phase 30d — canonical real-data-read guard for handlers.
+             Refuses SchemaOnly-only callers + emits
+             SchemaOnlyAccessAttempted audit. Compiled after AuditLog
+             so it can reference IAuditLog as the audit sink. -->
+        <Compile Include="Server\SchemaOnlyGuard.fs" />
         <Compile Include="Server\IResultStore.fs" />
         <Compile Include="Server\ILineageStore.fs" />
         <Compile Include="Server\ResultStore.fs" />
