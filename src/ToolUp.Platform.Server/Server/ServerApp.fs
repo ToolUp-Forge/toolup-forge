@@ -577,6 +577,17 @@ type ServerApp = {
     /// pre-9b.B behaviour, where modules wanting a cron resolved
     /// `IJobScheduler` from the built `IServiceProvider` themselves.
     ScheduledJobs: ScheduledJobDeclaration list
+    /// 0.5.7 — optional directory-lookup substrate. When `Some`,
+    /// `compose` registers the impl as the `IUserDirectory` DI
+    /// singleton so `UserDirectoryApiHandler` can resolve it
+    /// per-request and the SDK's `Forms.Input.userTypeahead` typeahead
+    /// returns matching directory entries. `None` (default) leaves the
+    /// substrate unregistered — the handler short-circuits every
+    /// `SearchUsers` call to `Ok []` and the typeahead UI degrades to
+    /// a plain text input. Wired via `ServerApp.withUserDirectory`
+    /// (typically with `EntraDirectory.fromManagedIdentity` from the
+    /// `ToolUp.AuthProviders.EntraDirectory` companion).
+    UserDirectory: IUserDirectory option
     /// Phase 1h — dotted-name of every companion-set composition that
     /// opts into the duplicate-guard. Currently only
     /// `"ToolUp.Forms"` (see `FormsCompose.composeForms`). A second
@@ -633,6 +644,7 @@ module ServerApp =
         ModuleSurfaceDefaults = []
         RouteSurfaceOverrides = []
         ScheduledJobs = []
+        UserDirectory = None
         ComposedCompanions = []
     }
 
@@ -699,6 +711,24 @@ module ServerApp =
     }
 
     let withNotifications (n: INotificationChannel) (app: ServerApp) : ServerApp = { app with Notifications = Some n }
+
+    /// 0.5.7 — register a directory-lookup companion. The impl is
+    /// registered as the `IUserDirectory` DI singleton at compose
+    /// time so `UserDirectoryApiHandler.userDirectoryApi` can resolve
+    /// it per-request from `HttpContext.RequestServices`. The SDK's
+    /// `TeamManagerUI` invite-form typeahead surfaces the substrate's
+    /// matches to the operator typing into the "Invite a member"
+    /// field. Without a directory companion, every `SearchUsers`
+    /// call short-circuits to `Ok []` and the typeahead degrades to
+    /// a plain text input (the operator still types the full email
+    /// and the existing invite-by-email flow accepts it). Typical
+    /// companion: `ToolUp.AuthProviders.EntraDirectory` —
+    /// `EntraDirectory.fromManagedIdentity` reads the App Service
+    /// managed identity to call Microsoft Graph's `/users` endpoint.
+    let withUserDirectory (directory: IUserDirectory) (app: ServerApp) : ServerApp = {
+        app with
+            UserDirectory = Some directory
+    }
 
     /// Phase 6f — register an out-of-band transactional notification
     /// sink (email / SMS / push). Each sink advertises a `Kind`
@@ -1311,10 +1341,22 @@ module ServerApp =
                     (fun acc exp -> appendRegistration acc (fun s -> s.AddSingleton<IDataExporter>(exp)))
                     withProviderProfileService
 
-            app.ErasureHandlers
-            |> List.fold
-                (fun acc h -> appendRegistration acc (fun s -> s.AddSingleton<IErasureHandler>(h)))
-                withExporters
+            let withErasureHandlers =
+                app.ErasureHandlers
+                |> List.fold
+                    (fun acc h -> appendRegistration acc (fun s -> s.AddSingleton<IErasureHandler>(h)))
+                    withExporters
+
+            // 0.5.7 — fold the optional `IUserDirectory` companion into
+            // the DI graph. When `None`, no registration is appended —
+            // `UserDirectoryApiHandler.resolveDirectory` reads `None`
+            // from DI and short-circuits every `SearchUsers` call to
+            // `Ok []`. When `Some`, the companion is registered as a
+            // singleton; the handler resolves it lazily per request.
+            match app.UserDirectory with
+            | None -> withErasureHandlers
+            | Some directory ->
+                appendRegistration withErasureHandlers (fun s -> s.AddSingleton<IUserDirectory>(directory))
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default
         // chains `RunBlocking()` to preserve `int` exit code semantics.

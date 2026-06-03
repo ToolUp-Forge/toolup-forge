@@ -389,6 +389,10 @@
         <Compile Include="Server\PlatformSchema.fs" />
         <Compile Include="Server\PlatformApiHandler.fs" />
         <Compile Include="Server\PlatformAdminApiHandler.fs" />
+        <!-- 0.5.7 — IUserDirectoryApi handler. Proxies typeahead queries
+             to the registered IUserDirectory companion; short-circuits
+             to Ok [] when no companion is wired. -->
+        <Compile Include="Server\UserDirectoryApiHandler.fs" />
         <Compile Include="Server\BlobXmlRepository.fs" />
         <Compile Include="Server\LocaleResolver.fs" />
         <!-- Phase 11.G — reference-app probe + validator list helpers. -->

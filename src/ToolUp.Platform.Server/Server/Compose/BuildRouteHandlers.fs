@@ -276,6 +276,13 @@ let buildRouteHandlers
 
     let platformAdminApiHandler: HttpHandler list = [ makeApi PlatformAdminApiHandler.platformAdminApi ]
 
+    // 0.5.7 — IUserDirectoryApi mount. Always-on so the client typeahead
+    // resolves at runtime regardless of whether a directory companion
+    // is wired; the handler short-circuits to Ok [] when DI has no
+    // IUserDirectory registered, so deployments without a companion pay
+    // a single per-request DI miss and return an empty suggestion list.
+    let userDirectoryApiHandler: HttpHandler list = [ makeApi UserDirectoryApiHandler.userDirectoryApi ]
+
     // Phase 3d — ITeamInviteApi mount. Auto-injected unconditionally
     // so the client `Api.makeProxy<ITeamInviteApi>` (used by the
     // `/invite/{token}` accept page and `TeamManagerUI`'s invite UI)
@@ -458,6 +465,7 @@ let buildRouteHandlers
                 dataCatalogApiHandler config
             ]
             @ platformAdminApiHandler
+            @ userDirectoryApiHandler
             @ teamInvitationApiHandler
             @ configHandler
             @ featureFlagHandler

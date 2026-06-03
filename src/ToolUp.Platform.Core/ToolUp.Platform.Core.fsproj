@@ -131,6 +131,12 @@
         <Compile Include="Shared\Types\TeamInviteTypes.fs" />
         <Compile Include="Shared\IPendingInviteStore.fs" />
         <Compile Include="Shared\ITeamInviteApi.fs" />
+        <!-- 0.5.7 — Generic directory-lookup substrate + Fable.Remoting
+             contract. Companion impls (e.g. ToolUp.AuthProviders.EntraDirectory)
+             plug into IUserDirectory; the SDK's TeamManagerUI typeahead
+             calls IUserDirectoryApi. Returns Ok [] when no companion
+             is registered. -->
+        <Compile Include="Shared\Types\UserDirectoryTypes.fs" />
         <Compile Include="Shared\WebhookTypes.fs" />
         <Compile Include="Shared\WebhookApi.fs" />
         <Compile Include="Shared\DataObjectTypes.fs" />

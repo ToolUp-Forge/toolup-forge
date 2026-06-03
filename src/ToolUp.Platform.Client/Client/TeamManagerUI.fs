@@ -772,10 +772,13 @@ let private addMemberForm (teamId: string) (model: Model) (dispatch: Msg -> unit
                 Html.p [
                     prop.className "text-xs text-muted"
                     prop.text
-                        "Enter an email address to send a pending invite — the recipient is added to the team automatically when they next sign in. Advanced: paste a raw identity-provider user id (e.g. an Entra `oid`) to add the member directly without an invite step."
+                        "Start typing a name or email — directory matches appear as you type. Select one, or enter an email manually to send a pending invite (the recipient is added when they next sign in). Advanced: paste a raw identity-provider user id (e.g. an Entra `oid`) to add the member directly without an invite step."
                 ]
 
-                Forms.Input.text model.AddMemberUserId (fun v -> dispatch (SetAddMemberUserId v)) "person@example.com"
+                UserDirectoryTypeahead.userTypeahead
+                    model.AddMemberUserId
+                    (fun v -> dispatch (SetAddMemberUserId v))
+                    "person@example.com"
 
                 Html.div [
                     prop.className "flex items-center gap-3"
