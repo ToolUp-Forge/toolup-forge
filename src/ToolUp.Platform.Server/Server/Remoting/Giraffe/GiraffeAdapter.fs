@@ -1145,6 +1145,34 @@ module GiraffeUtil =
                                                 requestBodyText = requestBodyText
                                             }
 
+                                            // 0.5.13 — unconditional stderr breadcrumb.
+                                            // The Remoting transport otherwise swallows
+                                            // the exception into the `Errors.unhandled`
+                                            // envelope with no detail, leaving operators
+                                            // blind to the actual failure. eprintfn lands
+                                            // in stderr → captured by Docker into the
+                                            // App Service default_docker.log
+                                            // unconditionally; no DI, no logger plumbing
+                                            // needed. Cheap (one printf per 500); the
+                                            // genuine cold-path cost is the exception
+                                            // itself, not the log line.
+                                            eprintfn
+                                                "[remoting] EXCEPTION in %s: %s: %s"
+                                                functionName
+                                                (e.GetType().FullName)
+                                                e.Message
+
+                                            if not (isNull e.StackTrace) then
+                                                eprintfn "[remoting] stack:\n%s" e.StackTrace
+
+                                            match e.InnerException with
+                                            | null -> ()
+                                            | inner ->
+                                                eprintfn
+                                                    "[remoting] inner: %s: %s"
+                                                    (inner.GetType().FullName)
+                                                    inner.Message
+
                                             emitTelemetry (MethodOutcome.Failed e)
                                             return! fail e routeInfo options next ctx
                                     | InvalidHttpVerb -> return halt
