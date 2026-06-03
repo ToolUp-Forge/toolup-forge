@@ -163,6 +163,10 @@ let allTests =
         SurfaceEnforcementMiddlewareTests.tests
         AnonymousSessionMigrationMiddlewareTests.tests
         SubjectWildcardAnalyzerTests.tests
+        // Phase 69l — Telemetry seam zero-cost gate (GP 13 alignment).
+        // Source-audit-shape pack pinning the gate composition in
+        // `Api.fs` + the dispatcher's gate-read before allocation.
+        TelemetryZeroCostGateTests.tests
         IAIProviderContract.tests
         // Phase 26 — deploy-plane substrate contract packs bound to
         // their single-node defaults + in-memory mocks. The

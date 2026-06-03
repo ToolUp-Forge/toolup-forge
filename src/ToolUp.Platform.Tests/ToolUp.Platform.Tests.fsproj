@@ -357,6 +357,12 @@
              self-audit that ratchets against future cross-shape
              wildcard fallbacks. -->
         <Compile Include="InProcess\SubjectWildcardAnalyzerTests.fs" />
+        <!-- Phase 69l — Telemetry seam zero-cost gate (GP 13 alignment).
+             Textual checks pin the gate composition in Api.make + the
+             dispatcher's gate read before allocation. An integration-shape
+             allocation-pin test is deferred to a TIDY-UP follow-up (requires
+             a TestServer scaffold this repo doesn't have today). -->
+        <Compile Include="InProcess\TelemetryZeroCostGateTests.fs" />
         <!-- Phase 26 — deploy-plane substrate bindings. Real
              EntityStoreTenantFleet (over BlobEntityStore + in-memory
              mocks for the injected IContainerScheduler / IDeployPipeline)

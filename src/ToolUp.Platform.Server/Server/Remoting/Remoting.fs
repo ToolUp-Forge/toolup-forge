@@ -33,6 +33,7 @@ module Remoting =
         RmsManager = None
         BodyNormalisation = Enabled
         Telemetry = None
+        TelemetryGate = None
         AuthContextResolver = None
         RateLimitStore = None
         AuditEmitter = None
@@ -135,6 +136,24 @@ module Remoting =
     let withTelemetry (sink: IRemotingTelemetry) (options: RemotingOptions<'t, 'implementation>) = {
         options with
             Telemetry = Some sink
+    }
+
+    /// Phase 69l — compose a telemetry-allocation gate paired with a
+    /// `Telemetry` sink. The dispatcher invokes the gate before every
+    /// per-request `Stopwatch` + `MethodTelemetry` allocation; a `false`
+    /// return skips the entire path. Use to honour GP 13 ("zero cost
+    /// when off") with a default-bridge sink that's wired-but-dormant
+    /// — the canonical case is `Api.make`'s default
+    /// `IRemotingTelemetry` bridging to forge's `IMetricsSink`, which
+    /// resolves to `NoOpMetricsSink` on `NoMetricsEndpoint` deployments.
+    ///
+    /// The gate is invoked once per request (cheap); the gate function
+    /// itself is expected to memoise its decision since the underlying
+    /// `IMetricsSink` is a process-lifetime singleton. Without composing
+    /// a gate, the dispatcher allocates whenever `Telemetry = Some _`.
+    let withTelemetryGate (gate: unit -> bool) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            TelemetryGate = Some gate
     }
 
     /// Phase 69d — compose an `IAuthContext` resolver. The resolver is

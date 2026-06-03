@@ -244,20 +244,35 @@ module GiraffeUtil =
                 // (complete / error). Bridges the streaming branch
                 // back into the per-method-completion contract of
                 // `IRemotingTelemetry`.
-                let streamingStopwatch = System.Diagnostics.Stopwatch.StartNew()
+                //
+                // Phase 69l — gated symmetrically with the non-streaming
+                // branch: `Api.make` + `NoMetricsEndpoint` deployments
+                // skip the Stopwatch + MethodTelemetry alloc entirely.
+                let streamingTelemetryActive =
+                    options.Telemetry.IsSome
+                    && (match options.TelemetryGate with
+                        | Some gate -> gate ()
+                        | None -> true)
+
+                let streamingStopwatch =
+                    if streamingTelemetryActive then
+                        System.Diagnostics.Stopwatch.StartNew()
+                    else
+                        Unchecked.defaultof<_>
 
                 let emitStreamingTelemetry (outcome: MethodOutcome) =
-                    match options.Telemetry with
-                    | Some sink ->
-                        streamingStopwatch.Stop()
+                    if streamingTelemetryActive then
+                        match options.Telemetry with
+                        | Some sink ->
+                            streamingStopwatch.Stop()
 
-                        sink.OnMethodCompleted {
-                            MethodName = streamingPath
-                            ElapsedMs = int streamingStopwatch.ElapsedMilliseconds
-                            Outcome = outcome
-                            CorrelationId = Some correlationId
-                        }
-                    | None -> ()
+                            sink.OnMethodCompleted {
+                                MethodName = streamingPath
+                                ElapsedMs = int streamingStopwatch.ElapsedMilliseconds
+                                Outcome = outcome
+                                CorrelationId = Some correlationId
+                            }
+                        | None -> ()
 
                 // 0.1.16 — wrap the streaming setup in a try/with so
                 // setup-time exceptions (null funcObj from invokeMethod,
@@ -846,20 +861,38 @@ module GiraffeUtil =
                                     let lastSlash = p.LastIndexOf '/'
                                     if lastSlash >= 0 then p.Substring(lastSlash + 1) else p
 
-                                let stopwatch = System.Diagnostics.Stopwatch.StartNew()
+                                // Phase 69l — telemetry-allocation gate. Skips the
+                                // Stopwatch + MethodTelemetry alloc + Map.ofList tags
+                                // entirely when the gate returns false (the canonical
+                                // `Api.make` + `NoMetricsEndpoint` shape — `IMetricsSink`
+                                // resolves to `NoOpMetricsSink`, so emitting would
+                                // do nothing anyway). Consumer-supplied sinks never
+                                // compose a gate, so they always emit.
+                                let telemetryActive =
+                                    options.Telemetry.IsSome
+                                    && (match options.TelemetryGate with
+                                        | Some gate -> gate ()
+                                        | None -> true)
+
+                                let stopwatch =
+                                    if telemetryActive then
+                                        System.Diagnostics.Stopwatch.StartNew()
+                                    else
+                                        Unchecked.defaultof<_>
 
                                 let emitTelemetry (outcome: MethodOutcome) =
-                                    match options.Telemetry with
-                                    | Some sink ->
-                                        stopwatch.Stop()
+                                    if telemetryActive then
+                                        match options.Telemetry with
+                                        | Some sink ->
+                                            stopwatch.Stop()
 
-                                        sink.OnMethodCompleted {
-                                            MethodName = methodName
-                                            ElapsedMs = int stopwatch.ElapsedMilliseconds
-                                            Outcome = outcome
-                                            CorrelationId = Some correlationId
-                                        }
-                                    | None -> ()
+                                            sink.OnMethodCompleted {
+                                                MethodName = methodName
+                                                ElapsedMs = int stopwatch.ElapsedMilliseconds
+                                                Outcome = outcome
+                                                CorrelationId = Some correlationId
+                                            }
+                                        | None -> ()
 
                                 match! proxy props with
                                 | Success isBinaryOutput ->

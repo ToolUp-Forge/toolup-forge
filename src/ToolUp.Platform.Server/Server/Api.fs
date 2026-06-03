@@ -83,11 +83,53 @@ module internal ApiSeams =
     /// reuse between requests is therefore harmless for this seam.
     let requestServices = AsyncLocal<System.IServiceProvider>()
 
+    /// Phase 69l — process-wide memoised "is the registered
+    /// `IMetricsSink` actually a real sink?" flag. Resolved on the
+    /// first call where `requestServices.Value` is non-null. `IMetricsSink`
+    /// is registered as a Singleton ([`ComposeRuntimeServices.fs`])
+    /// so the cached value is correct for the process lifetime. A
+    /// `false` cached value means "the registered sink is
+    /// `NoOpMetricsSink` — the default-bridge can short-circuit
+    /// upstream of any allocation". Used by `defaultBridgeGate` below.
+    let mutable private metricsSinkActive: bool option = None
+    let private metricsSinkActiveLock = obj ()
+
+    /// Phase 69l — telemetry-allocation gate paired with
+    /// `defaultMetricsBridge`. Returns `false` once the registered
+    /// `IMetricsSink` is observed to be `NoOpMetricsSink`, telling the
+    /// dispatcher to skip the per-request `Stopwatch` +
+    /// `MethodTelemetry` allocation entirely. Until the first request
+    /// has populated `requestServices.Value`, returns `true` (safe
+    /// default — caller emits, the AsyncLocal-stashed sink falls
+    /// through `NoOpMetricsSink.Record` exactly as pre-69l).
+    let defaultBridgeGate () : bool =
+        match metricsSinkActive with
+        | Some v -> v
+        | None ->
+            match requestServices.Value with
+            | null -> true
+            | services ->
+                lock metricsSinkActiveLock (fun () ->
+                    match metricsSinkActive with
+                    | Some v -> v
+                    | None ->
+                        let result =
+                            match services.GetService(typeof<IMetricsSink>) with
+                            | :? NoOpMetricsSink -> false
+                            | _ -> true
+
+                        metricsSinkActive <- Some result
+                        result)
+
     /// Default `IRemotingTelemetry` that bridges per-method completion
     /// events to forge's registered `IMetricsSink`. No-op when no
     /// `IServiceProvider` has been stashed (test paths that bypass the
     /// wrapper) or when `IMetricsSink` resolves to `NoOpMetricsSink`
-    /// (`NoMetricsEndpoint` deployments).
+    /// (`NoMetricsEndpoint` deployments). Phase 69l: `Api.make` pairs
+    /// this bridge with `defaultBridgeGate` so the per-request
+    /// `Stopwatch` + `MethodTelemetry` allocation is gated upstream of
+    /// `OnMethodCompleted` — `NoMetricsEndpoint` deployments pay
+    /// nothing per request, fulfilling GP 13.
     let defaultMetricsBridge: IRemotingTelemetry =
         { new IRemotingTelemetry with
             member _.OnMethodCompleted t =
@@ -216,11 +258,16 @@ type Api =
     /// behaviour. Source signature is unchanged: existing
     /// `Api.make (api, errorHandler = eh)` callers pick the seams up
     /// at the next package upgrade with no consumer code change.
-    /// `NoMetricsEndpoint` deployments resolve `IMetricsSink` to
-    /// `NoOpMetricsSink`, so the telemetry seam is genuinely zero-
-    /// cost when metrics are off (GP 13). API records that don't
-    /// declare any forge auth attributes skip the default
-    /// `ForgeAuthContext` resolver entirely.
+    /// API records that don't declare any forge auth attributes skip
+    /// the default `ForgeAuthContext` resolver entirely.
+    ///
+    /// Phase 69l — telemetry seam is now genuinely zero-cost when
+    /// metrics are off (GP 13). The default-bridge composition pairs
+    /// the bridge with `ApiSeams.defaultBridgeGate`, which short-
+    /// circuits per-request `Stopwatch` + `MethodTelemetry` allocation
+    /// once it observes the registered `IMetricsSink` is
+    /// `NoOpMetricsSink`. Consumer-supplied `?telemetry` sinks bypass
+    /// the gate — the consumer opted in, so the dispatcher emits.
     static member make<'T>
         (
             api: HttpContext -> 'T,
@@ -256,15 +303,20 @@ type Api =
                 else
                     None
 
-        // Phase 69b.tail — resolve effective telemetry. The default
-        // bridges to forge's `IMetricsSink`. With `NoMetricsEndpoint`
-        // the resolved sink is `NoOpMetricsSink`, so the bridge's
-        // `Record` call falls through to a no-op method — true zero-
-        // cost path when metrics are off.
+        // Phase 69b.tail / 69l — resolve effective telemetry + gate.
+        // The default bridge wires forge's `IMetricsSink` over
+        // `IRemotingTelemetry`; Phase 69l pairs it with
+        // `defaultBridgeGate` so the per-request `Stopwatch` +
+        // `MethodTelemetry` allocation is skipped entirely when the
+        // registered sink is `NoOpMetricsSink` (the `NoMetricsEndpoint`
+        // default). Consumer-supplied sinks are NOT gated — the
+        // consumer asked for telemetry, so the dispatcher emits.
         let effectiveTelemetry: IRemotingTelemetry =
             match telemetry with
             | Some sink -> sink
             | None -> ApiSeams.defaultMetricsBridge
+
+        let telemetryIsDefault = telemetry.IsNone
 
         // Bridge: ForgeAuthContext (declared on Platform.Core) →
         // IAuthContext (declared on ToolUp.Remoting.Server). Trivial
@@ -297,5 +349,9 @@ type Api =
             | Some resolver -> Remoting.withAuthContext resolver
             | None -> id)
         |> Remoting.withTelemetry effectiveTelemetry
+        |> (if telemetryIsDefault then
+                Remoting.withTelemetryGate ApiSeams.defaultBridgeGate
+            else
+                id)
         |> customOptions
         |> Remoting.buildHttpHandler

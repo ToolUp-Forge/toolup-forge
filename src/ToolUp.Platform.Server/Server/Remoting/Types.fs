@@ -464,6 +464,21 @@ type RemotingOptions<'context, 'serverImpl> = {
     RmsManager: Microsoft.IO.RecyclableMemoryStreamManager option
     BodyNormalisation: BodyNormalisation
     Telemetry: IRemotingTelemetry option
+    /// Phase 69l — telemetry seam zero-cost gate. When `Some`, the
+    /// dispatcher invokes this function before allocating the
+    /// per-request `Stopwatch` + `MethodTelemetry` record. A `false`
+    /// return short-circuits the entire telemetry-allocation path
+    /// (substring, stopwatch, record, tag map, sink dispatch). Used by
+    /// `Api.make` to honour GP 13 when the default `IMetricsSink`
+    /// resolves to `NoOpMetricsSink` — the seam pays nothing per
+    /// request on the canonical `NoMetricsEndpoint` deployment shape.
+    ///
+    /// Default `None` — the dispatcher emits whenever `Telemetry =
+    /// Some _` (the pre-69l behaviour). Consumer-supplied sinks pass
+    /// through the gate by never composing one.
+    ///
+    /// Compose via `Remoting.withTelemetryGate`.
+    TelemetryGate: (unit -> bool) option
     AuthContextResolver: ('context -> Async<IAuthContext>) option
     RateLimitStore: IRateLimitStore option
     AuditEmitter: IAuditEmitter option
