@@ -20,6 +20,9 @@
     <Compile Include="Server\IPeerHandshake.fs" />
     <Compile Include="Server\IPeerRegistry.fs" />
     <Compile Include="Server\JwtPeerAuthProvider.fs" />
+    <Compile Include="Server\DefaultPlatformPeer.fs" />
+    <Compile Include="Server\BlobPeerRegistry.fs" />
+    <Compile Include="Server\InMemoryPeerHandshake.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
