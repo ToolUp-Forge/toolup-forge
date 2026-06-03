@@ -178,6 +178,7 @@ let private decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
         | "SurfaceDenied" -> Some(SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> evt.Payload))
         | "AuthScopeResolutionFailed" ->
             Some(AuthScopeResolutionFailed(fromAuditJson<ScopeResolutionFailedPayload> evt.Payload))
+        | "PeerCallCompleted" -> Some(PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> evt.Payload))
         | _ -> None
     with _ ->
         None
@@ -303,6 +304,7 @@ type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger) =
         // killing the structured diagnostic on every denial.
         | SurfaceDenied p -> toAuditJson p
         | AuthScopeResolutionFailed p -> toAuditJson p
+        | PeerCallCompleted p -> toAuditJson p
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {

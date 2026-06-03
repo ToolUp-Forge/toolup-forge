@@ -204,6 +204,27 @@ module JsonRpcPeerHost =
         }
 
     // ─── Giraffe host surface ────────────────────────────────────────
+    //
+    // The peer providers (`IPeerAuthProvider`, `IPlatformPeer`, the
+    // optional `PeerJobFusion`, `IAuditLog`) are resolved per-request
+    // from `ctx.RequestServices`, not closed over at route-build time.
+    // They can only be constructed *inside* compose (they depend on the
+    // resolved `ISecretStore` / `IBlobStorage` / `IJobScheduler`), so
+    // `PeerCompose` registers them as DI singletons and the handlers read
+    // them back here. This keeps `routes` a parameterless value the
+    // compose hook appends to the deployment's router.
+
+    /// Resolve a required DI service for the current request.
+    let private getService<'T> (ctx: HttpContext) : 'T =
+        ctx.RequestServices.GetService(typeof<'T>) :?> 'T
+
+    /// Resolve an optional DI service — `None` when nothing was
+    /// registered (e.g. `PeerJobFusion` is absent when the deployment has
+    /// no job substrate; `IAuditLog` is absent only in partial test hosts).
+    let private tryGetService<'T> (ctx: HttpContext) : 'T option =
+        match ctx.RequestServices.GetService(typeof<'T>) with
+        | null -> None
+        | svc -> Some(svc :?> 'T)
 
     /// Extract the bearer token from the `Authorization` header.
     let private bearerToken (ctx: HttpContext) : string option =
@@ -229,10 +250,44 @@ module JsonRpcPeerHost =
             ctx.SetContentType "application/json"
             ctx.WriteStringAsync(JsonRpc.serialize response)
 
+    /// Emit the best-effort `PeerCallCompleted` audit row for a resolved
+    /// inbound call. Resolved per-request; a partial test host without an
+    /// `IAuditLog` registered simply records nothing.
+    let private auditPeerCall
+        (ctx: HttpContext)
+        (contractId: string)
+        (methodName: string)
+        (callerPeerId: string)
+        (rootRequestId: string)
+        (result: Result<string, PeerError>)
+        : System.Threading.Tasks.Task =
+        task {
+            match tryGetService<IAuditLog> ctx with
+            | None -> ()
+            | Some auditLog ->
+                let payload: PeerCallCompletedPayload = {
+                    ContractId = contractId
+                    MethodName = methodName
+                    CallerPeerId = callerPeerId
+                    RootRequestId = rootRequestId
+                    Succeeded = Result.isOk result
+                    Outcome =
+                        match result with
+                        | Ok _ -> "ok"
+                        | Error e -> JsonRpc.errorCaseName e
+                    OccurredAt = DateTimeOffset.UtcNow
+                }
+
+                do! auditLog.Record(PeerJob.Scope, PeerCallCompleted payload) |> Async.StartAsTask
+        }
+
     /// `POST /peer/v1/{contractId}` — authenticate, rebuild the trusted
     /// call context from the validated principal, dispatch.
-    let private contractHandler (auth: IPeerAuthProvider) (peer: IPlatformPeer) (contractId: string) : HttpHandler =
+    let private contractHandler (contractId: string) : HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
+            let auth = getService<IPeerAuthProvider> ctx
+            let peer = getService<IPlatformPeer> ctx
+
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
@@ -258,6 +313,15 @@ module JsonRpcPeerHost =
                             peer.Handle(contractId, trustedContext, request.Method, payload.Arguments)
                             |> Async.StartAsTask
 
+                        do!
+                            auditPeerCall
+                                ctx
+                                contractId
+                                request.Method
+                                principal.Caller.PeerId
+                                trustedContext.RootRequestId
+                                result
+
                         match result with
                         | Ok resultJson ->
                             // Build the response by hand so the
@@ -277,8 +341,11 @@ module JsonRpcPeerHost =
     /// `GET /peer/v1/capabilities` — authenticate, then answer the
     /// capability handshake. Auth-gated for the same fail-closed posture
     /// as contract dispatch; capability discovery is not anonymous.
-    let private capabilitiesHandler (auth: IPeerAuthProvider) (peer: IPlatformPeer) : HttpHandler =
+    let private capabilitiesHandler: HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
+            let auth = getService<IPeerAuthProvider> ctx
+            let peer = getService<IPlatformPeer> ctx
+
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
@@ -301,13 +368,11 @@ module JsonRpcPeerHost =
     /// the client transport's `PollJob` expects. `contractId` is part of
     /// the route for symmetry with the invoke leg; the store is keyed by
     /// scope + job id, so it is not needed for the lookup.
-    let private jobStatusHandler
-        (auth: IPeerAuthProvider)
-        (fusion: PeerJobFusion option)
-        (contractId: string)
-        (jobId: Guid)
-        : HttpHandler =
+    let private jobStatusHandler (contractId: string) (jobId: Guid) : HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
+            let auth = getService<IPeerAuthProvider> ctx
+            let fusion = tryGetService<PeerJobFusion> ctx
+
             match bearerToken ctx with
             | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
             | Some token ->
@@ -339,14 +404,16 @@ module JsonRpcPeerHost =
         }
 
     /// The peer host's Giraffe routes. Mount under the deployment's root
-    /// router when the peer substrate is enabled. `fusion` is `Some` when
-    /// the job-fusion substrate is present (enables long-running call
-    /// polling); `None` leaves the jobs route reporting a clear
-    /// "not enabled" error.
-    let routes (auth: IPeerAuthProvider) (peer: IPlatformPeer) (fusion: PeerJobFusion option) : HttpHandler =
+    /// router when the peer substrate is enabled. Every handler resolves
+    /// its providers (`IPeerAuthProvider`, `IPlatformPeer`, the optional
+    /// `PeerJobFusion`, `IAuditLog`) per-request from `ctx.RequestServices`
+    /// — the compose hook registers them as DI singletons. The jobs route
+    /// reports a clear "not enabled" error when no `PeerJobFusion` is
+    /// registered.
+    let routes: HttpHandler =
         choose [
-            GET >=> route "/peer/v1/capabilities" >=> capabilitiesHandler auth peer
+            GET >=> route "/peer/v1/capabilities" >=> capabilitiesHandler
             GET
-            >=> routef "/peer/v1/%s/jobs/%O" (fun (contractId, jobId) -> jobStatusHandler auth fusion contractId jobId)
-            POST >=> routef "/peer/v1/%s" (contractHandler auth peer)
+            >=> routef "/peer/v1/%s/jobs/%O" (fun (contractId, jobId) -> jobStatusHandler contractId jobId)
+            POST >=> routef "/peer/v1/%s" contractHandler
         ]

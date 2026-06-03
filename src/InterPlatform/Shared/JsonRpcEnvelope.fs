@@ -126,6 +126,21 @@ module JsonRpc =
         | PeerHandler message -> $"Peer handler error: {message}"
         | PeerDeserialization message -> $"Peer (de)serialization error: {message}"
 
+    /// The `PeerError` DU case name, with no payload detail — the safe
+    /// outcome label for audit (`PeerCallCompletedPayload.Outcome`) and
+    /// metrics, where the message text could leak handler internals.
+    let errorCaseName (err: PeerError) : string =
+        match err with
+        | PeerUnauthorized _ -> "PeerUnauthorized"
+        | PeerContractNotFound _ -> "PeerContractNotFound"
+        | PeerMethodNotFound _ -> "PeerMethodNotFound"
+        | PeerVersionMismatch _ -> "PeerVersionMismatch"
+        | PeerLoopDetected _ -> "PeerLoopDetected"
+        | PeerHopLimitExceeded -> "PeerHopLimitExceeded"
+        | PeerTransport _ -> "PeerTransport"
+        | PeerHandler _ -> "PeerHandler"
+        | PeerDeserialization _ -> "PeerDeserialization"
+
     /// Build a JSON-RPC success response carrying a serialised result.
     let success (id: string) (result: 'T) : JsonRpcResponse = {
         JsonRpc = version

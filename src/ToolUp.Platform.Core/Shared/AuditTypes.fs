@@ -1569,6 +1569,32 @@ type SchemaOnlyAccessAttemptedPayload = {
     AttemptedResource: string
 }
 
+/// Phase 18 — a typed inter-platform peer contract call resolved on the
+/// receiver (the host dispatched it to a terminal outcome). Emitted once
+/// per inbound call by the peer host's contract handler. Reserved
+/// `SourceModule = "_platform.peer"`. PII-free: identities are peer ids
+/// plus a correlation id — never end-user payload.
+type PeerCallCompletedPayload = {
+    /// The hosted `contractId` the call targeted.
+    ContractId: string
+    /// The contract method name dispatched.
+    MethodName: string
+    /// `PeerId` of the validated *calling* peer, taken from the
+    /// authenticated `PeerPrincipal` — never the self-asserted wire body.
+    CallerPeerId: string
+    /// The cascade-wide correlation id shared across every hop, so a
+    /// federated call is reconstructable end to end from audit alone.
+    RootRequestId: string
+    /// `true` when dispatch returned `Ok`; `false` on a `PeerError`.
+    Succeeded: bool
+    /// Short outcome label: `"ok"` on success, else the `PeerError` DU
+    /// case name (e.g. `"PeerMethodNotFound"`). Operator dashboards group
+    /// peer-call failures by this label without reading message detail.
+    Outcome: string
+    /// Wall-clock time the call resolved.
+    OccurredAt: DateTimeOffset
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -1902,6 +1928,11 @@ type AuditEvent =
     /// data was read. Distinct from `SurfaceDenied` — fires at the
     /// substrate / handler layer, not at the route surface.
     | SchemaOnlyAccessAttempted of SchemaOnlyAccessAttemptedPayload
+    /// Phase 18 — a typed inter-platform peer contract call resolved on
+    /// the receiver. Emitted once per inbound call by the peer host's
+    /// contract handler after dispatch reaches a terminal outcome.
+    /// Reserved `SourceModule = "_platform.peer"`.
+    | PeerCallCompleted of PeerCallCompletedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1990,6 +2021,7 @@ module AuditEvent =
         | ArtifactRejected _ -> "ArtifactRejected"
         | SyntheticSampleGenerated _ -> "SyntheticSampleGenerated"
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
+        | PeerCallCompleted _ -> "PeerCallCompleted"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
