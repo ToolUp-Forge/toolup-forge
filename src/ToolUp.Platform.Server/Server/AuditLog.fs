@@ -171,6 +171,13 @@ let private decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
             Some(SyntheticSampleGenerated(fromAuditJson<SyntheticSampleGeneratedPayload> evt.Payload))
         | "SchemaOnlyAccessAttempted" ->
             Some(SchemaOnlyAccessAttempted(fromAuditJson<SchemaOnlyAccessAttemptedPayload> evt.Payload))
+        // Phase 66 auth-observability A1/A2 — paired with the matching
+        // cases in `serialise` so round-trip read-back of denial /
+        // resolution-failure events through `GetAuditTrail` resolves
+        // their typed payloads rather than dropping them as `None`.
+        | "SurfaceDenied" -> Some(SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> evt.Payload))
+        | "AuthScopeResolutionFailed" ->
+            Some(AuthScopeResolutionFailed(fromAuditJson<ScopeResolutionFailedPayload> evt.Payload))
         | _ -> None
     with _ ->
         None
@@ -287,6 +294,15 @@ type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger) =
         | ArtifactRejected p -> toAuditJson p
         | SyntheticSampleGenerated p -> toAuditJson p
         | SchemaOnlyAccessAttempted p -> toAuditJson p
+        // Phase 66 auth-observability A1/A2 cases. Pre-0.5.2 these were
+        // missing here; every emission from `SurfaceEnforcementMiddleware`
+        // / `ScopeResolutionMiddleware` produced an incomplete-pattern-
+        // match exception that the surrounding `try/with` caught and
+        // logged as `[AuditLog] write failed scope=_platform
+        // eventType=SurfaceDenied: The match cases were incomplete`,
+        // killing the structured diagnostic on every denial.
+        | SurfaceDenied p -> toAuditJson p
+        | AuthScopeResolutionFailed p -> toAuditJson p
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {

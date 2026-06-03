@@ -371,22 +371,14 @@ let private buildProvider
                 // endpoints and would be noisy at Warn.
                 match e with
                 | NoToken ->
-                    // 0.5.0 diagnostic — elevate from Debug to Info AND stamp
-                    // the request path so operators can distinguish "401 on
-                    // an endpoint that legitimately expects no creds" from
-                    // "401 because the client failed to attach the Bearer
-                    // header it was supposed to". Per-request Info is
-                    // moderately noisy by design — restore to Debug once the
-                    // proximate auth issue is diagnosed.
-                    log.Info(
-                        sprintf
-                            "OIDC auth (lenient): no token in request → anonymous (path=%s%s)"
-                            httpCtx.Request.Path.Value
-                            (if httpCtx.Request.QueryString.HasValue then
-                                 httpCtx.Request.QueryString.Value
-                             else
-                                 "")
-                    )
+                    // No credential on the request. This is the expected,
+                    // high-volume case for genuinely unauthenticated
+                    // endpoints, so it stays off the Warn channel. Logged at
+                    // Debug so a 401 on an endpoint that *should* have carried
+                    // a Bearer can be traced to "no token arrived" by raising
+                    // the log level — rather than requiring client-bundle
+                    // archaeology to prove no Authorization header was sent.
+                    log.Debug "OIDC auth (lenient): no token in request → anonymous"
                 | _ -> log.Warn $"OIDC auth failed (lenient): {JwtValidationError.toMessage e}"
 
                 return AuthenticatedUser.anonymous
