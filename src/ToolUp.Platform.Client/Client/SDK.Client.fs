@@ -1388,13 +1388,42 @@ module Client =
             else
                 None
 
-        // Compose the switcher with any caller-supplied HeaderAction.
-        // Both render side-by-side in the page header.
+        // 0.5.7 — sign-out affordance. Rendered in the page header
+        // when `ClientConfig.Handlers.SignOutHandler` is `Some _`
+        // (typically wired by the OIDC / Clerk companion at compose
+        // time). Mirrors the existing `OidcAuthUI.UserMenu`
+        // contract; the SDK no longer requires the consumer to
+        // hand-roll a header-mounted sign-out button. Consumers
+        // wanting bespoke UX (confirmation modal, profile dropdown,
+        // etc.) leave `SignOutHandler = None` and continue to mount
+        // their own affordance via `ClientConfig.HeaderAction` /
+        // `ExtraChrome` — wiring both is harmless but renders two.
+        let signOutAction =
+            match config.Handlers.SignOutHandler with
+            | None -> None
+            | Some signOut ->
+                Some(
+                    Html.button [
+                        prop.className [
+                            "text-sm px-3 py-1.5 rounded transition-colors"
+                            "border border-border text-text"
+                            "hover:bg-gray-100"
+                        ]
+                        prop.text "Sign out"
+                        prop.onClick (fun _ -> signOut ())
+                    ]
+                )
+
+        // Compose the switcher with any caller-supplied HeaderAction
+        // and the SDK's default sign-out button. All three render
+        // side-by-side in the page header.
         let combinedHeaderAction =
-            match teamSwitcher, chrome.HeaderAction with
-            | None, x -> x
-            | Some sw, None -> Some sw
-            | Some sw, Some ha -> Some(Html.div [ prop.className "flex items-center gap-3"; prop.children [ sw; ha ] ])
+            let pieces = [ teamSwitcher; chrome.HeaderAction; signOutAction ] |> List.choose id
+
+            match pieces with
+            | [] -> None
+            | [ single ] -> Some single
+            | many -> Some(Html.div [ prop.className "flex items-center gap-3"; prop.children many ])
 
         let shell =
             Toolup.UIToolkit.Layout.AppShell

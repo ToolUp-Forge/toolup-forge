@@ -825,6 +825,22 @@ type ClientHandlerRegistry = {
     /// reads this to decide whether to show the Save-to-KB button.
     /// Default: `None` (the button hides itself).
     NarrativeCommitHandler: NarrativeCommitHandler option
+
+    /// 0.5.7 — Sign-out broker. `Some` when an auth-UI companion that
+    /// owns the sign-in flow also owns the sign-out flow (`OidcClient`,
+    /// `ClerkUI`, future provider) — the consumer wires its
+    /// `signOutHandler` value here at compose time and the shell renders
+    /// a "Sign out" affordance in the page header that calls it.
+    /// `None` (default) leaves the header without a sign-out button —
+    /// suitable for `NoAuthUI` deployments and for consumers that ship
+    /// their own header chrome via `ClientConfig.HeaderAction` /
+    /// `ExtraChrome`.
+    ///
+    /// The thunk fires unmodified — no SDK-side confirmation modal — so
+    /// any "Are you sure?" UX is the consumer's call. Wraps the
+    /// companion-specific async into a unit-returning function so the
+    /// shell doesn't need an Async dependency in its render path.
+    SignOutHandler: (unit -> unit) option
 }
 
 module ClientHandlerRegistry =
@@ -835,6 +851,7 @@ module ClientHandlerRegistry =
         AuthUIHandlers = []
         DataSourceCredentialHandlers = []
         NarrativeCommitHandler = None
+        SignOutHandler = None
     }
 
 /// Width constraint applied to the inputs (left) child of a

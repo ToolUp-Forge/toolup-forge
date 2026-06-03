@@ -85,6 +85,16 @@ type Model = {
     /// On the Members tab: which member is selected for the override
     /// editor. Defaults to the first member after load.
     SelectedMember: string option
+    /// 0.5.7 — Local-edit overlay for per-member overrides, keyed by
+    /// `(userId, moduleName)`. Mirrors the `EditingDefaults` /
+    /// `SaveDefaults` pattern: checkbox toggles update the overlay
+    /// only, and the operator commits the whole diff via an explicit
+    /// "Update" button rather than the SDK firing one round-trip per
+    /// click. Empty Map = nothing pending; absence of a key for a
+    /// `(userId, moduleName)` cell means the rendering layer falls
+    /// back to the persisted override / team default. Reset on
+    /// snapshot reload, member-select switch, and successful save.
+    EditingMembers: Map<string * string, ModulePermission list>
     /// Save round-trips are not pipelined — one writer at a time.
     SaveInFlight: bool
     /// Banner under the tab bar: success / error after a save round-
@@ -109,9 +119,27 @@ type Msg =
     /// User picked a member from the left-pane list.
     | SelectMember of userId: string
     /// User toggled `(userId, moduleName, ModulePermission)` on the
-    /// per-member override matrix. Round-trips through
-    /// `PermissionApi.SetMemberPermissions` (atomic per cell).
+    /// per-member override matrix. 0.5.7 — Updates the `EditingMembers`
+    /// overlay only; no server round-trip until `SaveMembers`. The
+    /// snapshot reload that previously rebuilt the page on every
+    /// click is gone — the checkbox responds locally and the operator
+    /// commits the whole diff via the "Update" button.
     | ToggleMemberPermission of userId: string * moduleName: string * ModulePermission
+    /// 0.5.7 — Select-all / clear-all for a single column on the
+    /// per-member override matrix. Applies the level to every managed
+    /// module in `EditingMembers` for the given user — either grants
+    /// the level on every module (`add = true`) or strips it from
+    /// every module (`add = false`). Idempotent: re-applying does not
+    /// duplicate the level on rows that already carry it.
+    | ToggleMemberColumn of userId: string * level: ModulePermission * add: bool
+    /// 0.5.7 — Discard uncommitted edits in `EditingMembers` for the
+    /// given user.
+    | ResetMembers of userId: string
+    /// 0.5.7 — Round-trip every cell in `EditingMembers` for the
+    /// given user through `PermissionApi.SetMemberPermissions`, one
+    /// call per touched module, in dispatched order. The previous
+    /// per-cell round-trip dies with the local-overlay model.
+    | SaveMembers of userId: string
     | SaveMemberResult of userId: string * moduleName: string * Result<unit, string>
     /// Banner dismissal.
     | DismissBanner
@@ -217,6 +245,7 @@ let init () : Model * Cmd<Msg> =
         Snapshot = Loading
         EditingDefaults = None
         SelectedMember = None
+        EditingMembers = Map.empty
         SaveInFlight = false
         Banner = None
     }
@@ -245,6 +274,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Snapshot = Loading
                 EditingDefaults = None
+                EditingMembers = Map.empty
                 Banner = None
         },
         loadSnapshotCmd ()
@@ -259,6 +289,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Snapshot = Loaded snap
                 EditingDefaults = Some snap.Permissions.Defaults
+                EditingMembers = Map.empty
                 SelectedMember = firstMember
                 Banner = None
         },
@@ -269,6 +300,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Snapshot = LoadError msg
                 EditingDefaults = None
+                EditingMembers = Map.empty
         },
         Cmd.none
 
@@ -354,37 +386,131 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         Cmd.none
 
     | ToggleMemberPermission(userId, moduleName, perm) ->
+        // 0.5.7 — overlay-only mutation. Read the cell's current
+        // effective value (overlay if present, else persisted override
+        // or team default), toggle the level, persist to overlay.
         match snapshotOpt model with
         | None -> model, Cmd.none
-        | Some snap when model.SaveInFlight -> { model with Banner = None }, Cmd.none
         | Some snap ->
+            let key = (userId, moduleName)
+
             let current =
-                memberPerms snap.Permissions userId moduleName |> Option.defaultValue []
+                match Map.tryFind key model.EditingMembers with
+                | Some v -> v
+                | None ->
+                    match memberPerms snap.Permissions userId moduleName with
+                    | Some ps -> ps
+                    | None -> Map.tryFind moduleName snap.Permissions.Defaults |> Option.defaultValue []
 
             let next = toggleInList perm current
 
-            { model with SaveInFlight = true }, saveMemberCmd snap.TeamId userId moduleName next
+            {
+                model with
+                    EditingMembers = model.EditingMembers |> Map.add key next
+                    Banner = None
+            },
+            Cmd.none
+
+    | ToggleMemberColumn(userId, level, add) ->
+        // 0.5.7 — Select-all / clear-all for one column on the given
+        // user's row set. Walks every managed module and applies the
+        // overlay update; cells that already carry the level when
+        // `add=true` are left alone, cells that don't carry it when
+        // `add=false` are left alone.
+        match snapshotOpt model with
+        | None -> model, Cmd.none
+        | Some snap ->
+            let editing' =
+                snap.Managed
+                |> List.fold
+                    (fun acc moduleName ->
+                        let key = (userId, moduleName)
+
+                        let current =
+                            match Map.tryFind key acc with
+                            | Some v -> v
+                            | None ->
+                                match memberPerms snap.Permissions userId moduleName with
+                                | Some ps -> ps
+                                | None -> Map.tryFind moduleName snap.Permissions.Defaults |> Option.defaultValue []
+
+                        let next =
+                            if add && not (List.contains level current) then
+                                current @ [ level ]
+                            elif not add && List.contains level current then
+                                current |> List.filter (fun p -> p <> level)
+                            else
+                                current
+
+                        if next = current then acc else acc |> Map.add key next)
+                    model.EditingMembers
+
+            {
+                model with
+                    EditingMembers = editing'
+                    Banner = None
+            },
+            Cmd.none
+
+    | ResetMembers userId ->
+        // Drop every pending overlay entry for the given user.
+        let editing' = model.EditingMembers |> Map.filter (fun (uid, _) _ -> uid <> userId)
+
+        {
+            model with
+                EditingMembers = editing'
+                Banner = None
+        },
+        Cmd.none
+
+    | SaveMembers userId ->
+        match snapshotOpt model with
+        | None -> model, Cmd.none
+        | Some snap when not model.SaveInFlight ->
+            // Dispatch one save per touched (userId, moduleName) cell.
+            // The SDK's `PermissionApi.SetMemberPermissions` is per-
+            // member-per-module today; bulk-set is tracked separately.
+            let pending =
+                model.EditingMembers
+                |> Map.toList
+                |> List.choose (fun ((uid, moduleName), next) -> if uid = userId then Some(moduleName, next) else None)
+
+            if List.isEmpty pending then
+                { model with Banner = None }, Cmd.none
+            else
+                let cmds =
+                    pending
+                    |> List.map (fun (moduleName, next) -> saveMemberCmd snap.TeamId userId moduleName next)
+
+                { model with SaveInFlight = true }, Cmd.batch cmds
+        | _ -> model, Cmd.none
 
     | SaveMemberResult(userId, moduleName, Ok()) ->
-        // Apply the new value locally without a refetch.
-        let model' =
-            match snapshotOpt model with
-            | None -> model
-            | Some snap ->
-                // Re-derive `next` from what's currently persisted +
-                // the toggle decision is lost at this point because we
-                // dispatched the diff at the toggle site, so reload
-                // the snapshot rather than guess. Cheaper than a
-                // sequence of guess-and-patch updates.
-                model
+        // 0.5.7 — drop the pending overlay entry on success. When the
+        // last pending entry for the user clears, end the SaveInFlight
+        // and reload the snapshot once to refresh the persisted view.
+        let key = (userId, moduleName)
 
-        // Trigger a quiet reload so member-edit reflects truth.
-        {
-            model' with
-                SaveInFlight = false
-                Banner = Some(false, $"Saved override for {userId} / {moduleName}.")
-        },
-        loadSnapshotCmd ()
+        let editing' = model.EditingMembers |> Map.remove key
+
+        let remainingForUser =
+            editing' |> Map.filter (fun (uid, _) _ -> uid = userId) |> Map.isEmpty |> not
+
+        if remainingForUser then
+            {
+                model with
+                    EditingMembers = editing'
+                    Banner = Some(false, $"Saved {moduleName} for {userId}.")
+            },
+            Cmd.none
+        else
+            {
+                model with
+                    EditingMembers = editing'
+                    SaveInFlight = false
+                    Banner = Some(false, $"Saved permissions for {userId}.")
+            },
+            loadSnapshotCmd ()
 
     | SaveMemberResult(userId, moduleName, Error msg) ->
         {
@@ -480,7 +606,18 @@ let private permRow
         ]
     ]
 
-let private permTable (header: string) (rows: ReactElement list) =
+/// 0.5.7 — Column action shape. When `permTable` is called with
+/// `Some onColumnAction`, each non-header column gets a tiny "all /
+/// none" toggle in its header. `allOn` is computed by the caller (it
+/// needs the underlying overlay/snapshot state to decide); the
+/// callback receives `(level, add)` and either grants or clears the
+/// level across every row.
+type private PermColumnAction = {
+    allOn: ModulePermission -> bool
+    onToggle: ModulePermission * bool -> unit
+}
+
+let private permTable (header: string) (rows: ReactElement list) (columnAction: PermColumnAction option) =
     if List.isEmpty rows then
         Html.p [
             prop.className "text-sm text-gray-500 italic"
@@ -505,7 +642,26 @@ let private permTable (header: string) (rows: ReactElement list) =
                                         for level in allPermLevels do
                                             Html.th [
                                                 prop.className "text-left px-3 py-2 font-medium text-gray-600 w-24"
-                                                prop.text (permLabel level)
+                                                prop.children [
+                                                    Html.div [
+                                                        prop.className "flex flex-col gap-0.5"
+                                                        prop.children [
+                                                            Html.span [ prop.text (permLabel level) ]
+                                                            match columnAction with
+                                                            | Some action ->
+                                                                let on = action.allOn level
+
+                                                                Html.button [
+                                                                    prop.className
+                                                                        "text-[10px] text-brand hover:underline self-start"
+                                                                    prop.text (if on then "Clear all" else "Select all")
+                                                                    prop.onClick (fun _ ->
+                                                                        action.onToggle (level, not on))
+                                                                ]
+                                                            | None -> ()
+                                                        ]
+                                                    ]
+                                                ]
                                             ]
                                     ]
                                 ]
@@ -577,7 +733,28 @@ let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> u
                     ]
                 ]
             ]
-            permTable "Module" rows
+            // 0.5.7 — column "Select all" / "Clear all" on team
+            // defaults. Reads from the local `edits` overlay so the
+            // toggle reflects the operator's in-progress changes
+            // rather than the persisted snapshot.
+            let columnAction = {
+                allOn =
+                    fun level ->
+                        snap.Managed
+                        |> List.forall (fun m ->
+                            edits |> Map.tryFind m |> Option.defaultValue [] |> List.contains level)
+                onToggle =
+                    fun (level, add) ->
+                        for m in snap.Managed do
+                            let current = edits |> Map.tryFind m |> Option.defaultValue []
+
+                            let already = List.contains level current
+
+                            if add <> already then
+                                dispatch (ToggleDefault(m, level))
+            }
+
+            permTable "Module" rows (Some columnAction)
         ]
     ]
 
@@ -586,6 +763,21 @@ let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> u
 let private memberListItem (model: Model) (snap: TeamView) (m: TeamMembership) (dispatch: Msg -> unit) =
     let selected = model.SelectedMember = Some m.UserId
     let hasOver = hasOverride snap.Permissions m.UserId
+
+    // 0.5.7 — for the currently-signed-in user, prefer the JWT-derived
+    // display name / email over the raw UserId. For other members we
+    // still fall back to UserId — a per-member profile-lookup
+    // substrate (`IUserProfileStore` mirroring Entra Graph) is
+    // tracked separately.
+    let isSelf = UserSession.getUserId () = m.UserId
+
+    let displayLabel =
+        if isSelf then
+            UserSession.getDisplayName () |> Option.defaultValue m.UserId
+        else
+            m.UserId
+
+    let emailSubtitle = if isSelf then UserSession.getEmail () else None
 
     Html.button [
         prop.className [
@@ -600,7 +792,7 @@ let private memberListItem (model: Model) (snap: TeamView) (m: TeamMembership) (
             Html.div [
                 prop.className "flex items-center justify-between"
                 prop.children [
-                    Html.span [ prop.className "font-medium text-sm"; prop.text m.UserId ]
+                    Html.span [ prop.className "font-medium text-sm"; prop.text displayLabel ]
                     if hasOver then
                         Html.span [
                             prop.className
@@ -609,20 +801,29 @@ let private memberListItem (model: Model) (snap: TeamView) (m: TeamMembership) (
                         ]
                 ]
             ]
+            match emailSubtitle with
+            | Some email -> Html.div [ prop.className "text-xs text-gray-500 truncate"; prop.text email ]
+            | None -> ()
             Html.div [ prop.className "text-xs text-gray-500"; prop.text (string m.Role) ]
         ]
     ]
 
 let private memberOverrideEditor (model: Model) (snap: TeamView) (userId: string) (dispatch: Msg -> unit) =
+    // 0.5.7 — Read effective cell value from the overlay first
+    // (operator's in-progress local edits), then the persisted
+    // override, then the team default.
+    let effectivePerms (moduleName: string) =
+        match Map.tryFind (userId, moduleName) model.EditingMembers with
+        | Some v -> v
+        | None ->
+            match memberPerms snap.Permissions userId moduleName with
+            | Some ps -> ps
+            | None -> Map.tryFind moduleName snap.Permissions.Defaults |> Option.defaultValue []
+
     let rows =
         snap.Managed
         |> List.map (fun m ->
-            // Effective: override if any, else defaults.
-            let perms =
-                match memberPerms snap.Permissions userId m with
-                | Some ps -> ps
-                | None -> Map.tryFind m snap.Permissions.Defaults |> Option.defaultValue []
-
+            let perms = effectivePerms m
             permRow m perms model.SaveInFlight (fun level -> dispatch (ToggleMemberPermission(userId, m, level))))
 
     let overrideKeys =
@@ -630,26 +831,82 @@ let private memberOverrideEditor (model: Model) (snap: TeamView) (userId: string
         | Some modMap -> Map.toList modMap |> List.map fst |> List.sort
         | None -> []
 
+    let dirty = model.EditingMembers |> Map.exists (fun (uid, _) _ -> uid = userId)
+
+    // 0.5.7 — Display name for the heading: prefer JWT name/email for
+    // self, fall back to the raw UserId for others.
+    let isSelf = UserSession.getUserId () = userId
+
+    let displayLabel =
+        if isSelf then
+            UserSession.getDisplayName () |> Option.defaultValue userId
+        else
+            userId
+
+    let columnAction = {
+        allOn = fun level -> snap.Managed |> List.forall (fun m -> effectivePerms m |> List.contains level)
+        onToggle = fun (level, add) -> dispatch (ToggleMemberColumn(userId, level, add))
+    }
+
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
         prop.children [
             Html.div [
-                prop.className "mb-4"
+                prop.className "mb-4 flex items-start justify-between gap-4"
                 prop.children [
-                    Html.h2 [ prop.className "text-lg font-semibold"; prop.text $"Overrides — {userId}" ]
-                    Html.p [
-                        prop.className "text-xs text-gray-500"
-                        prop.text
-                            "Toggle any cell to set an explicit per-member override. Effective permissions resolve to the override if present, otherwise the team default. Setting every level off for a module clears the override (member falls back to defaults)."
-                    ]
-                    if not (List.isEmpty overrideKeys) then
-                        Html.p [
-                            prop.className "text-xs text-gray-500 mt-1"
-                            prop.text (sprintf "Active overrides on: %s" (String.concat ", " overrideKeys))
+                    Html.div [
+                        prop.children [
+                            Html.h2 [
+                                prop.className "text-lg font-semibold"
+                                prop.text $"Overrides — {displayLabel}"
+                            ]
+                            Html.p [
+                                prop.className "text-xs text-gray-500"
+                                prop.text
+                                    "Toggle any cell to stage an explicit per-member override. Use the column \"Select all\" links to grant or clear a level across every module. Effective permissions resolve to the override if present, otherwise the team default. Setting every level off for a module clears the override (member falls back to defaults)."
+                            ]
+                            if not (List.isEmpty overrideKeys) then
+                                Html.p [
+                                    prop.className "text-xs text-gray-500 mt-1"
+                                    prop.text (sprintf "Active overrides on: %s" (String.concat ", " overrideKeys))
+                                ]
                         ]
+                    ]
+                    // 0.5.7 — Reset + Update actions. Edits stay
+                    // local until "Update" is pressed; no round-trip
+                    // per checkbox click.
+                    Html.div [
+                        prop.className "flex items-center gap-2 shrink-0"
+                        prop.children [
+                            Html.button [
+                                prop.className [
+                                    "px-3 py-1.5 text-sm border rounded transition-colors"
+                                    if dirty && not model.SaveInFlight then
+                                        "border-gray-300 text-gray-700 hover:bg-gray-100"
+                                    else
+                                        "border-gray-200 text-gray-400 cursor-not-allowed"
+                                ]
+                                prop.disabled (not dirty || model.SaveInFlight)
+                                prop.text "Reset"
+                                prop.onClick (fun _ -> dispatch (ResetMembers userId))
+                            ]
+                            Html.button [
+                                prop.className [
+                                    "px-3 py-1.5 text-sm font-medium border rounded transition-colors"
+                                    if dirty && not model.SaveInFlight then
+                                        "bg-brand text-white border-brand hover:opacity-90"
+                                    else
+                                        "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                ]
+                                prop.disabled (not dirty || model.SaveInFlight)
+                                prop.text (if model.SaveInFlight then "Saving..." else "Update")
+                                prop.onClick (fun _ -> dispatch (SaveMembers userId))
+                            ]
+                        ]
+                    ]
                 ]
             ]
-            permTable "Module" rows
+            permTable "Module" rows (Some columnAction)
         ]
     ]
 

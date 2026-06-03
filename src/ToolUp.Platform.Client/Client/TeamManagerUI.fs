@@ -315,19 +315,54 @@ let update (msg: Msg) (model: Model) =
     | SetAddMemberRole role -> { model with AddMemberRole = role }, Cmd.none
 
     | AddMember teamId ->
-        if model.AddMemberUserId.Trim() = "" then
+        let raw = model.AddMemberUserId.Trim()
+
+        if raw = "" then
             {
                 model with
-                    Error = Some "User ID can't be empty"
+                    Error = Some "User ID or email can't be empty"
             },
             Cmd.none
-        else
+        // 0.5.7 — Detect email format and route through the
+        // pending-invite flow. Pre-0.5.7 the form passed the raw input
+        // straight to `AddTeamMember`, which stored it as the literal
+        // `TeamMembership.UserId`. An operator typing an email got a
+        // membership keyed by the email string — but the invitee's
+        // JWT carries their `oid` (post-0.5.4) or `sub`, so
+        // `GetMyTeams(jwtUserId)` returned `[]` and the invitee
+        // landed as `UserKind` with a `user-<jwtUserId>` scope. The
+        // team's storage scope (`team-<teamId>`) stayed invisible to
+        // them — they could sign in but couldn't see any team data,
+        // modules, or permissions.
+        //
+        // `IssuePendingInviteByEmail` instead stores a pending entry
+        // keyed by email. When the invitee signs in,
+        // `ScopeResolutionMiddleware` matches the email claim against
+        // pending entries and auto-creates a `TeamMembership` keyed
+        // by the JWT's resolved user-id (oid for Entra). The team
+        // becomes visible immediately.
+        //
+        // Detection: a simple `@` + dot heuristic catches the common
+        // email shape. Operators with a real oid (UUID-shaped or
+        // base64url `sub`) bypass the heuristic and land on the
+        // direct-add path — useful for SSO replication scripts that
+        // already know the identity-provider-resolved id.
+        elif raw.Contains('@') && raw.IndexOf('.', raw.IndexOf('@')) > 0 then
             model,
             Cmd.OfRemoting.call
-                teamApi.AddTeamMember
-                (teamId, model.AddMemberUserId.Trim(), model.AddMemberRole)
-                MemberAdded
-                (fun e -> ApiError e.Message)
+                inviteApi.IssuePendingInviteByEmail
+                {
+                    TeamId = teamId
+                    Email = raw
+                    Role = model.AddMemberRole
+                    ExpiresIn = Some(TimeSpan.FromDays 7.0)
+                }
+                (fun r -> IssueByEmailSubmitted(teamId, r))
+                (fun e -> IssueByEmailSubmitted(teamId, Error e.Message))
+        else
+            model,
+            Cmd.OfRemoting.call teamApi.AddTeamMember (teamId, raw, model.AddMemberRole) MemberAdded (fun e ->
+                ApiError e.Message)
 
     | MemberAdded(Ok()) ->
         let refresh =
@@ -485,21 +520,37 @@ let update (msg: Msg) (model: Model) =
 
     | IssueByEmailSubmitted(teamId, Ok()) ->
         // Modal closes on success; refresh the list so the new
-        // entry appears.
-        { model with IssueByEmailModal = None }, Cmd.ofMsg (LoadPendingByEmail teamId)
-
-    | IssueByEmailSubmitted(_, Error e) ->
+        // entry appears. 0.5.7 — also clear the AddMemberUserId
+        // field, since the "Add a member" form's email-detect path
+        // routes through this same Msg without going through the
+        // modal flow.
         {
             model with
-                IssueByEmailModal =
-                    model.IssueByEmailModal
-                    |> Option.map (fun m -> {
-                        m with
-                            Submitting = false
-                            SubmitError = Some e
-                    })
+                IssueByEmailModal = None
+                AddMemberUserId = ""
+                Error = None
         },
-        Cmd.none
+        Cmd.ofMsg (LoadPendingByEmail teamId)
+
+    | IssueByEmailSubmitted(_, Error e) ->
+        // 0.5.7 — when triggered from the modal, surface the error
+        // inside the modal (modal stays open for retry). When
+        // triggered from the email-detect path of "Add a member" (no
+        // modal), surface as the page-level Error banner so the
+        // operator sees what happened.
+        match model.IssueByEmailModal with
+        | Some m ->
+            {
+                model with
+                    IssueByEmailModal =
+                        Some {
+                            m with
+                                Submitting = false
+                                SubmitError = Some e
+                        }
+            },
+            Cmd.none
+        | None -> { model with Error = Some e }, Cmd.none
 
     | OpenRevokeByEmailConfirm(teamId, email) ->
         {
@@ -714,14 +765,17 @@ let private memberRow
     ]
 
 let private addMemberForm (teamId: string) (model: Model) (dispatch: Msg -> unit) =
-    Layout.Panel.panel "Add a member" [
+    Layout.Panel.panel "Invite a member" [
         Html.div [
             prop.className "flex flex-col gap-3"
             prop.children [
-                Forms.Input.text
-                    model.AddMemberUserId
-                    (fun v -> dispatch (SetAddMemberUserId v))
-                    "User ID (e.g. email or identity-provider `sub` claim)"
+                Html.p [
+                    prop.className "text-xs text-muted"
+                    prop.text
+                        "Enter an email address to send a pending invite — the recipient is added to the team automatically when they next sign in. Advanced: paste a raw identity-provider user id (e.g. an Entra `oid`) to add the member directly without an invite step."
+                ]
+
+                Forms.Input.text model.AddMemberUserId (fun v -> dispatch (SetAddMemberUserId v)) "person@example.com"
 
                 Html.div [
                     prop.className "flex items-center gap-3"
@@ -742,7 +796,7 @@ let private addMemberForm (teamId: string) (model: Model) (dispatch: Msg -> unit
                     ]
                 ]
 
-                Html.div [ Forms.Button.primary "Add member" (fun () -> dispatch (AddMember teamId)) ]
+                Html.div [ Forms.Button.primary "Invite member" (fun () -> dispatch (AddMember teamId)) ]
             ]
         ]
     ]
