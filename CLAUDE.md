@@ -28,6 +28,7 @@ toolup-forge/
 │   ├── ToolUp.KnowledgeBase.{Core,Server,Client}/    # document ingestion + extraction
 │   ├── ToolUp.Forms.{Core,Server,Client}/            # schema-driven forms + workflows
 │   ├── ToolUp.Scheduling.{Core,Server}/              # booking + recurrence
+│   ├── InterPlatform/                                # opt-in cross-deployment typed peer RPC (server-only)
 │   ├── AIProviders/{Claude,OpenAI}/                  # LLM providers
 │   ├── EmbeddingProviders/{Local,OpenAI}/            # embedding providers
 │   ├── AuthProviders/{Oidc,OidcClient,ClerkUI}/      # auth providers
@@ -96,6 +97,12 @@ Public-form surface adds `IPublicFormApi` (token-gated submit at `/api/public/fo
 ### `ToolUp.Scheduling` — booking + recurrence
 
 `IBookingScheduler` interface (per-resource concurrency lock, conflict detector), `RecurrenceExpander`, `iCalendar` types, `SchedulingApi` ToolUp.Remoting contract, `SchedulingCompose`. Consumers wire it into modules that surface booking-grid UIs.
+
+### `ToolUp.InterPlatform` — cross-deployment peer RPC
+
+Opt-in, server-only companion that lets one deployment call a **typed contract** hosted by another ToolUp deployment (a *peer*) over the wire. A contract is an ordinary record of functions (same shape ToolUp.Remoting uses for in-deployment APIs); the substrate produces a typed initiator proxy (`JsonRpcPeerClient.create<'TApi>`) on the caller and a fail-closed JSON-RPC 2.0 host (`JsonRpcPeerHost.contract` + `routes`) on the receiver. Wire format is **JSON-RPC 2.0 over HTTP** — a deliberately open, language-neutral peer contract, *not* the in-tree ToolUp.Remoting transport. Two method shapes: immediate (`… -> Async<'T>`) and long-running (`… -> Async<PeerJobHandle<'T>>`, fused onto `IJobScheduler`). Identity rides a fail-closed HS256 JWT layer (`JwtPeerAuthProvider`, keys read per-call from `ISecretStore`); the receiver rebuilds the call context from the *validated* principal, never the self-asserted wire body.
+
+Selected by `ServerConfig.PeerSubstrate = EnabledPeerSubstrate` (default `NoPeerSubstrate`). Compose with `PeerServerApp.run` (the `PeerCompose` companion root), which wraps a base `ServerApp`, registers the peer DI singletons from already-present substrate (`IBlobStorage` / `ISecretStore` / optionally `IJobScheduler` / `IAuditLog`), and mounts `/peer/v1/*`. When `NoPeerSubstrate`, `run` short-circuits byte-for-byte to `ServerApp.run` — zero cost when unused (GP 13). See [`src/InterPlatform/README.md`](src/InterPlatform/README.md) + [`TECHNICAL_GUIDE.md`](src/InterPlatform/TECHNICAL_GUIDE.md).
 
 ## Guiding Principles
 
