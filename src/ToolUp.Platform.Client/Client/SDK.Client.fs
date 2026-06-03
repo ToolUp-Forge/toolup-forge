@@ -1941,12 +1941,6 @@ module Client =
     /// future RAG / Forms / KB top-level composers). Idempotent — the
     /// underlying setters / installers all guard against double-init.
     let boot (config: ClientConfig) (modules: ErasedModule list) : unit =
-        // Browser-console attribution — mirrors the server-side
-        // `ConsoleLogger.fromEnv` first-line emission so the SDK
-        // identifier appears above the `[client.bootstrap] [ToolUp]
-        // composed | …` summary that follows.
-        log.Info "Powered by ToolUp-Forge — https://toolup-forge.io"
-
         // Phase 13a — populate per-tab handler caches from explicit
         // config (replaces companion module-load register() side
         // effects).
