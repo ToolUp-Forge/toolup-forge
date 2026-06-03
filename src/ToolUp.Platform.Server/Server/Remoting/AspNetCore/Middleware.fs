@@ -49,10 +49,19 @@ module internal Middleware =
 
     let setResponseBody (backend: JsonSerializerBackend) (response: obj) logger : HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
-            use ms = new MemoryStream()
-            jsonSerializeWithBackend backend response ms
-            let responseBody = System.Text.Encoding.UTF8.GetString(ms.ToArray())
-            return! writeStringAsync responseBody ctx logger
+            // TIDY-UP "ToolUp.Remoting per-request cleanups" (F6) — direct-
+            // write into the response stream; mirrors the Giraffe adapter
+            // change. Diagnostics breadcrumb keeps the legacy stream → string
+            // path only when a logger is composed (cold debug path).
+            match logger with
+            | Some _ ->
+                use ms = new MemoryStream()
+                jsonSerializeWithBackend backend response ms
+                let responseBody = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+                return! writeStringAsync responseBody ctx logger
+            | None ->
+                jsonSerializeWithBackend backend response ctx.Response.Body
+                return Some ctx
         }
 
     /// Sets the content type of the Http response

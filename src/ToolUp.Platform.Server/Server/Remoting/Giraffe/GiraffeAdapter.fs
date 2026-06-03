@@ -10,13 +10,30 @@ open System.Threading.Tasks
 
 module GiraffeUtil =
     let setJsonBody (backend: JsonSerializerBackend) (response: obj) (logger: Option<string -> unit>) : HttpHandler =
-        fun (next: HttpFunc) (ctx: HttpContext) ->
-            use ms = new MemoryStream()
-            jsonSerializeWithBackend backend response ms
-            let responseBody = System.Text.Encoding.UTF8.GetString(ms.ToArray())
-            Diagnostics.outputPhase logger responseBody
-            ctx.Response.ContentType <- "application/json; charset=utf-8"
-            setBodyFromString responseBody next ctx
+        fun (next: HttpFunc) (ctx: HttpContext) -> task {
+            // TIDY-UP "ToolUp.Remoting per-request cleanups" (F6) — direct-
+            // write JSON into the response stream instead of the legacy
+            // MemoryStream → byte[] → string → write triple-allocation. STJ
+            // serialises straight into the stream; the byte-pin tests in the
+            // Remoting suite confirm the wire shape is byte-identical to
+            // pre-TIDY-UP. Diagnostics breadcrumb still emits the response
+            // body when a logger is composed — only difference is the path:
+            // serialise to a small temporary stream for the breadcrumb when
+            // a logger is present (cold debug path); otherwise the response
+            // stream IS the only materialisation.
+            match logger with
+            | Some _ ->
+                use ms = new MemoryStream()
+                jsonSerializeWithBackend backend response ms
+                let responseBody = System.Text.Encoding.UTF8.GetString(ms.ToArray())
+                Diagnostics.outputPhase logger responseBody
+                ctx.Response.ContentType <- "application/json; charset=utf-8"
+                return! setBodyFromString responseBody next ctx
+            | None ->
+                ctx.Response.ContentType <- "application/json; charset=utf-8"
+                jsonSerializeWithBackend backend response ctx.Response.Body
+                return! next ctx
+        }
 
     /// Handles thrown exceptions
     let fail (ex: exn) (routeInfo: RouteInfo<HttpContext>) (options: RemotingOptions<HttpContext, 't>) : HttpHandler =
@@ -75,8 +92,14 @@ module GiraffeUtil =
 
     let private normaliseRemotingBody (ctx: HttpContext) : System.Threading.Tasks.Task =
         task {
-            ctx.Request.EnableBuffering()
-
+            // TIDY-UP "ToolUp.Remoting per-request cleanups" (F7) — the
+            // outer non-streaming branch (line ~443 below) already calls
+            // `ctx.Request.EnableBuffering()` unconditionally before
+            // invoking this normaliser. Calling it a second time here is
+            // idempotent (one bool check on `HttpRequest.Body.CanSeek`),
+            // but the prior double-call read as if buffering happened
+            // independently. Single call now; the outer call is the
+            // single source of truth.
             use reader =
                 new System.IO.StreamReader(ctx.Request.Body, System.Text.Encoding.UTF8, leaveOpen = true)
 
@@ -455,6 +478,13 @@ module GiraffeUtil =
                 // "did EnableBuffering get called upstream?" hazard that
                 // caused audit emission to silently break when
                 // `BodyNormalisation = Disabled` in 0.1.14.
+                //
+                // TIDY-UP "ToolUp.Remoting per-request cleanups" (F7) —
+                // this is the ONLY EnableBuffering call on the non-streaming
+                // branch. `normaliseRemotingBody` (the conditional follow-on
+                // below) previously called it again; that duplicate was
+                // dropped because buffering at the request level is global
+                // and the second call was misleading rather than necessary.
                 ctx.Request.EnableBuffering()
 
                 if isProxyHeaderPresent && options.BodyNormalisation = Enabled then
