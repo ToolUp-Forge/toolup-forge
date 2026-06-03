@@ -673,13 +673,36 @@ let private memberRow
             ]
         ]
 
+    // 0.5.6 — render the current user's display name + email when the
+    // JWT carried `name` / `email` (or `preferred_username`) claims.
+    // Other members fall back to the raw UserId — a full per-member
+    // profile-lookup substrate is tracked separately (would require
+    // an `IUserProfileStore` server-side companion that mirrors Entra
+    // Graph or equivalent for the active deployment).
+    let primaryLabel, secondaryLabel =
+        if isSelf then
+            let name = UserSession.getDisplayName () |> Option.defaultValue membership.UserId
+
+            let email = UserSession.getEmail ()
+            name, email
+        else
+            membership.UserId, None
+
     Html.div [
         prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2"
         prop.children [
             Html.div [
-                prop.className "flex items-center gap-2"
+                prop.className "flex items-center gap-3"
                 prop.children [
-                    Html.span [ prop.className "font-medium"; prop.text membership.UserId ]
+                    Html.div [
+                        prop.className "flex flex-col"
+                        prop.children [
+                            Html.span [ prop.className "font-medium"; prop.text primaryLabel ]
+                            match secondaryLabel with
+                            | Some email -> Html.span [ prop.className "text-xs text-muted"; prop.text email ]
+                            | None -> ()
+                        ]
+                    ]
                     if canManage && not isSelf then roleDropdown else roleBadge
                     if isSelf then
                         Html.span [ prop.className "text-xs text-brand font-medium"; prop.text "(you)" ]
@@ -1018,13 +1041,13 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let errorBanner =
         match model.Error with
         | Some msg ->
             Html.div [
                 prop.className
-                    "mt-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
+                    "p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
                 prop.children [
                     Html.span [ prop.text msg ]
                     Html.button [
@@ -1042,10 +1065,10 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
         | TeamDetails teamId -> teamDetailsView teamId model dispatch
         | PendingInvites teamId -> pendingInvitesView teamId model dispatch
 
-    // Two-panel layout matches other module views. Team UI is
-    // admin-oriented so both panels contain scrollable page content
-    // rather than separating input/output.
-    body, errorBanner
+    // 0.5.6 — settings-shape FullWidth render. Error banner stacks
+    // above the body so it's immediately above the user's current
+    // context instead of in a separate squashed right pane.
+    Html.div [ prop.className "flex flex-col gap-3"; prop.children [ errorBanner; body ] ]
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -1075,7 +1098,7 @@ let create (config: TeamManagerConfig option) : ErasedModule =
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.TeamManager"
     |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Admin"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

@@ -902,7 +902,7 @@ let private tabBar (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let errorBanner =
         match model.Error with
         | Some msg ->
@@ -935,7 +935,11 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
             prop.children [ tabBar model dispatch; content ]
         ]
 
-    body, errorBanner
+    // 0.5.6 — FullWidth render. Error banner stacks above the body.
+    Html.div [
+        prop.className "flex flex-col gap-3 h-full"
+        prop.children [ errorBanner; body ]
+    ]
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -962,7 +966,7 @@ let create (config: TeamConfigConfig option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.TeamConfig"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Admin"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

@@ -223,32 +223,29 @@ let private renderControls (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) =
-    let body =
-        Html.div [
-            prop.className "p-4"
-            prop.children [
-                Html.h2 [ prop.className "text-lg font-semibold text-gray-800 mb-2"; prop.text "Usage" ]
-                Html.p [
-                    prop.className "text-sm text-gray-600 mb-4"
-                    prop.text
-                        "Per-team consumption — AI tokens, storage bytes, ingestion rows, request counts. Owner / Admin only."
-                ]
-                renderControls model dispatch
-
-                match model.Aggregate with
-                | NotLoaded -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Click Refresh." ]
-                | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
-                | Loaded rows -> renderTable rows
-                | LoadError err ->
-                    Html.div [
-                        prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
-                        prop.text err
-                    ]
+let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    Html.div [
+        prop.className "p-4"
+        prop.children [
+            Html.h2 [ prop.className "text-lg font-semibold text-gray-800 mb-2"; prop.text "Usage" ]
+            Html.p [
+                prop.className "text-sm text-gray-600 mb-4"
+                prop.text
+                    "Per-team consumption — AI tokens, storage bytes, ingestion rows, request counts. Owner / Admin only."
             ]
-        ]
+            renderControls model dispatch
 
-    body, Html.none
+            match model.Aggregate with
+            | NotLoaded -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Click Refresh." ]
+            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+            | Loaded rows -> renderTable rows
+            | LoadError err ->
+                Html.div [
+                    prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+                    prop.text err
+                ]
+        ]
+    ]
 
 // ─── Module creation ─────────────────────────────────────────────
 
@@ -269,7 +266,7 @@ let create (config: UsageDashboardConfig option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.UsageDashboard"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Admin"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

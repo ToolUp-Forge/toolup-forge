@@ -539,7 +539,7 @@ let private tabBar (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.ActiveTab with
         | LiveHealthTab -> liveHealthTabView model dispatch
@@ -551,7 +551,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
             prop.children [ tabBar model dispatch; content ]
         ]
 
-    body, Html.none
+    body
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -582,7 +582,7 @@ let create (config: HealthMonitorConfig option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.HealthMonitor"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Admin"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

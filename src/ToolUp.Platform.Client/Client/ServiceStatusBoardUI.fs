@@ -428,14 +428,14 @@ let private boardView (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let body =
         Html.div [
             prop.className "flex flex-col h-full"
             prop.children [ boardView model dispatch ]
         ]
 
-    body, Html.none
+    body
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -457,7 +457,7 @@ let create (config: ServiceStatusBoardConfig option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.ServiceStatusBoard"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Admin"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

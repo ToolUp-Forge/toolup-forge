@@ -16,15 +16,32 @@ let private storageKey = "toolup-user-id"
 /// Auth token key in browser storage
 let private tokenKey = "toolup-auth-token"
 
-/// Token-derived user-id key. Set when `setAuthToken` decodes a JWT and
-/// extracts the `sub` claim; cleared on `clearAuthToken`. Read by
-/// `getUserId` so the same canonical id flows through the
-/// `Authorization: Bearer <jwt>` POST path AND the EventSource
-/// `?userId=` query-param path. Without this, the auth provider
-/// resolves one userId on POSTs (from the JWT sub) while SSE
-/// connections register under a different localStorage userId, and
-/// every server-side broadcast misses every connection.
+/// Token-derived user-id key. Set when `setAuthToken` decodes a JWT
+/// and extracts the resolved identity (pre-0.5.6: `sub` only; 0.5.6+:
+/// `oid` when present, falling back to `sub` — mirrors the server-side
+/// `OidcAuthProvider.userFromPayload` for Entra issuers, so client
+/// and server agree on the canonical user-id wire shape). Cleared on
+/// `clearAuthToken`. Read by `getUserId` so the same canonical id
+/// flows through the `Authorization: Bearer <jwt>` POST path AND the
+/// EventSource `?userId=` query-param path. Without this, the auth
+/// provider resolves one userId on POSTs while SSE connections
+/// register under a different localStorage userId, and every server-
+/// side broadcast misses every connection.
 let private tokenUserIdKey = "toolup-token-user-id"
+
+/// 0.5.6 — token-derived display name (Entra `name` claim, or any
+/// OIDC provider's `name`). Cleared on `clearAuthToken`. Read by
+/// `getDisplayName` for rendering "(you)" rows, member lists, and any
+/// "show the signed-in user's name" affordance — preferred over the
+/// raw `UserId` so users don't see their own `oid` UUID in the UI.
+let private tokenDisplayNameKey = "toolup-token-display-name"
+
+/// 0.5.6 — token-derived email address. Reads JWT `email` first, then
+/// `preferred_username` as a fallback (Microsoft Entra v2 omits
+/// `email` by default and surfaces the address on `preferred_username`
+/// instead). Cleared on `clearAuthToken`. Read by `getEmail` for
+/// member-row rendering.
+let private tokenEmailKey = "toolup-token-email"
 
 /// Cookie name used by the SSE-handshake auth path. The server-side
 /// auth provider reads this cookie when configured with
@@ -87,7 +104,43 @@ let private base64UrlToB64 (s: string) =
     | 3 -> replaced + "="
     | _ -> replaced
 
-let private decodeJwtSub (token: string) : string option =
+/// 0.5.6 — decoded identity claims the SDK cares about for client-
+/// side identity continuity. The `UserId` field MIRRORS the server-
+/// side identity resolution shape (see `OidcAuthProvider.userFromPayload`
+/// in 0.5.4): prefer the tenant-stable `oid` claim over the pairwise
+/// pseudonymous `sub` when both are present (Microsoft Entra v2),
+/// fall back to `sub` for non-Entra IdPs. Mismatch between client
+/// and server identity sources silently breaks `TeamMembership`
+/// self-lookups (member row `UserId` is the server's resolved id;
+/// `UserSession.getUserId ()` was the client's local decode — under
+/// the pre-0.5.6 `sub`-only client decode against a 0.5.4+ `oid`-
+/// preferring server, these never matched, `canManage` stayed false,
+/// and the "Add member" / "Pending invites" affordances stayed
+/// hidden).
+///
+/// `DisplayName` reads Entra's `name` claim (also present on most
+/// non-Microsoft OIDC providers). `Email` reads `email` first, then
+/// falls back to `preferred_username` — Microsoft Entra v2 omits
+/// `email` by default and surfaces the email address on
+/// `preferred_username` instead. Both are `None` for tokens that
+/// don't carry either claim; the rendering layer falls back to
+/// `UserId` in that case.
+type private DecodedIdentity = {
+    UserId: string
+    DisplayName: string option
+    Email: string option
+}
+
+let private tryGetString (payload: obj) (key: string) : string option =
+    let v = payload?(key)
+
+    match box v with
+    | null -> None
+    | _ ->
+        let s = string v
+        if System.String.IsNullOrEmpty s then None else Some s
+
+let private decodeJwtIdentity (token: string) : DecodedIdentity option =
     try
         let parts = token.Split('.')
 
@@ -97,11 +150,28 @@ let private decodeJwtSub (token: string) : string option =
             let payloadJson = atob (base64UrlToB64 parts[1])
             let payload = jsonParse payloadJson
 
-            match payload?sub with
-            | null -> None
-            | sub ->
-                let s = string sub
-                if System.String.IsNullOrEmpty s then None else Some s
+            // Prefer oid over sub — mirrors server-side
+            // `OidcAuthProvider.userFromPayload` when
+            // `AuthConfig.PreferOidWhenPresent = Some true`. For non-
+            // Entra tokens (no `oid` claim), the SDK server-side and
+            // client-side both fall through to `sub`, so identity
+            // continuity is preserved regardless of IdP.
+            let userId =
+                match tryGetString payload "oid" with
+                | Some _ as oid -> oid
+                | None -> tryGetString payload "sub"
+
+            match userId with
+            | None -> None
+            | Some uid ->
+                Some {
+                    UserId = uid
+                    DisplayName = tryGetString payload "name"
+                    Email =
+                        match tryGetString payload "email" with
+                        | Some _ as e -> e
+                        | None -> tryGetString payload "preferred_username"
+                }
     with _ ->
         None
 
@@ -219,22 +289,56 @@ let setAuthToken (token: string) =
     Browser.Dom.window.localStorage.setItem (tokenKey, token)
     setAuthCookie token
 
-    match decodeJwtSub token with
-    | Some sub -> Browser.Dom.window.localStorage.setItem (tokenUserIdKey, sub)
+    match decodeJwtIdentity token with
+    | Some identity ->
+        Browser.Dom.window.localStorage.setItem (tokenUserIdKey, identity.UserId)
+
+        match identity.DisplayName with
+        | Some name -> Browser.Dom.window.localStorage.setItem (tokenDisplayNameKey, name)
+        | None -> Browser.Dom.window.localStorage.removeItem tokenDisplayNameKey
+
+        match identity.Email with
+        | Some email -> Browser.Dom.window.localStorage.setItem (tokenEmailKey, email)
+        | None -> Browser.Dom.window.localStorage.removeItem tokenEmailKey
     | None ->
-        // Opaque or malformed token — leave any previously-stored value
-        // in place. `getUserId` falls back to the localStorage Guid if
-        // tokenUserIdKey is missing.
+        // Opaque or malformed token — leave any previously-stored
+        // identity values in place. `getUserId` falls back to the
+        // localStorage GUID if `tokenUserIdKey` is missing; display
+        // helpers return None and the rendering layer falls back to
+        // showing the raw UserId.
         ()
 
 /// Clear the auth token (called on sign-out). Also clears the
-/// token-derived userId so the next sign-in resolves a fresh subject,
-/// AND the SSE auth cookie so a stale cookie doesn't outlive the
-/// session.
+/// token-derived userId, display name, email, AND the SSE auth cookie
+/// so the next sign-in resolves a fresh subject and a stale cookie
+/// doesn't outlive the session.
 let clearAuthToken () =
     Browser.Dom.window.localStorage.removeItem tokenKey
     Browser.Dom.window.localStorage.removeItem tokenUserIdKey
+    Browser.Dom.window.localStorage.removeItem tokenDisplayNameKey
+    Browser.Dom.window.localStorage.removeItem tokenEmailKey
     clearAuthCookie ()
+
+/// 0.5.6 — read the token-derived display name (JWT `name` claim).
+/// `None` when no JWT has been persisted, when the JWT didn't carry a
+/// `name` claim, or after `clearAuthToken`. The rendering layer
+/// (TeamManagerUI member rows, "(you)" badges, header chrome) reads
+/// this and falls back to the user-id when None.
+let getDisplayName () : string option =
+    match Browser.Dom.window.localStorage.getItem tokenDisplayNameKey with
+    | null
+    | "" -> None
+    | name -> Some name
+
+/// 0.5.6 — read the token-derived email address (JWT `email` claim,
+/// or `preferred_username` fallback for Entra). `None` when no JWT
+/// has been persisted, when the JWT didn't carry either claim, or
+/// after `clearAuthToken`.
+let getEmail () : string option =
+    match Browser.Dom.window.localStorage.getItem tokenEmailKey with
+    | null
+    | "" -> None
+    | email -> Some email
 
 /// Get the current auth token, if any.
 let getAuthToken () =

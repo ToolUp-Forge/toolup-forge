@@ -612,7 +612,7 @@ let private bannerView (model: Model) (dispatch: Msg -> unit) =
     | OkBanner msg -> render "bg-green-50 border-green-200 text-green-700" msg
     | ErrorBanner msg -> render "bg-red-50 border-red-200 text-red-700" msg
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let body =
         Html.div [
             prop.className "flex flex-col"
@@ -629,7 +629,11 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
             ]
         ]
 
-    body, bannerView model dispatch
+    // 0.5.6 — FullWidth render. Banner stacks above the body.
+    Html.div [
+        prop.className "flex flex-col gap-3 h-full"
+        prop.children [ bannerView model dispatch; body ]
+    ]
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -654,7 +658,7 @@ let create (config: DataSubjectRequestAdminConfig option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.DataSubjectRequests"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Admin"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

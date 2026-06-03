@@ -799,7 +799,7 @@ let private errorPane (msg: string) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.Snapshot with
         | NotLoaded
@@ -815,13 +815,10 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
             | MembersTab -> membersView model snap dispatch
             | ModulesTab -> modulesView snap
 
-    let body =
-        Html.div [
-            prop.className "flex flex-col h-full"
-            prop.children [ tabBar model dispatch; banner model dispatch; content ]
-        ]
-
-    body, Html.none
+    Html.div [
+        prop.className "flex flex-col h-full"
+        prop.children [ tabBar model dispatch; banner model dispatch; content ]
+    ]
 
 // ─── Module registration ─────────────────────────────────────────────
 
@@ -847,7 +844,7 @@ let create (config: PermissionsAdminConfig option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.PermissionsAdmin"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Admin"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

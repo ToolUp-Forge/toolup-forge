@@ -1432,6 +1432,42 @@ module ClientModule =
                 PageViews = Some viewMap
         }
 
+    /// 0.5.6 — Single-page module variant whose page renders as
+    /// `PageContent.FullWidth` rather than the legacy `withView`
+    /// `SplitPanel(left, right)` tuple. Sugar over `withPages` with
+    /// a single anonymous-route page — saves the boilerplate of
+    /// declaring a `PageConfig` for modules that don't expose
+    /// multiple routes.
+    ///
+    /// Suits settings-shaped modules (Permissions, Team Manager,
+    /// Webhook Admin, Health Monitor, Data Ingestion config,
+    /// Platform Admin tabs) that don't have a separate "controls
+    /// left, output right" affordance and would otherwise render
+    /// squashed inside the shell's `SplitPanel` wrap (the typical
+    /// `body, Html.none` tuple from a single-pane view).
+    ///
+    /// Caller's view returns the page's content `ReactElement`
+    /// directly; the helper wraps it in `PageContent.FullWidth` and
+    /// installs it under a single `PageConfig` that inherits the
+    /// module's `Definition.Name` and `Definition.Icon`. Mutually
+    /// exclusive with `withView` and `withPages` (only the last
+    /// applied wins, per the `register` invariant — `register`
+    /// fails fast when neither `View` nor `PageViews` is set).
+    let withFullWidthView
+        (view: 'Model -> ('Msg -> unit) -> ReactElement)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        let page: PageConfig = {
+            Route = ""
+            Title = m.Definition.Name
+            Icon = m.Definition.Icon
+        }
+
+        let pageView (model: 'Model) (dispatch: 'Msg -> unit) : PageContent =
+            PageContent.FullWidth(view model dispatch)
+
+        withPages [ page, pageView ] m
+
     /// Attach a narrative extractor to a strongly-typed `ClientModule`
     /// before erasure. The function receives the module's `Model` and the
     /// active page route; return `Some doc` if that page currently renders
