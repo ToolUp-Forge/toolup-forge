@@ -24,6 +24,7 @@
     <Compile Include="Server\BlobPeerRegistry.fs" />
     <Compile Include="Server\InMemoryPeerHandshake.fs" />
     <Compile Include="Server\PeerReflection.fs" />
+    <Compile Include="Server\PeerJobHandler.fs" />
     <Compile Include="Server\HttpPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerHost.fs" />

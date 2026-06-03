@@ -8,6 +8,7 @@ open System.Reflection
 open Microsoft.AspNetCore.Http
 open Microsoft.FSharp.Reflection
 open Giraffe
+open ToolUp.Platform
 open PeerReflection
 
 // ─── Layer 4 — typed receiver host ───────────────────────────────────
@@ -73,13 +74,72 @@ module JsonRpcPeerHost =
             | ex -> return Error(PeerHandler ex.Message)
         }
 
+    /// Render a `ScheduleError` to a one-line diagnostic for the
+    /// `PeerHandler` error returned when scheduling a long-running call
+    /// fails. The structured `ScheduleError` is server-internal — the peer
+    /// only ever sees a `PeerHandler` string — so this is a flattening,
+    /// not a wire mapping.
+    let private scheduleErrorMessage (e: ScheduleError) : string =
+        match e with
+        | ScheduleError.InvalidCron(expr, reason) -> $"invalid cron '{expr}': {reason}"
+        | ScheduleError.HandlerNotRegistered name -> $"job handler '{name}' is not registered"
+        | ScheduleError.PrecisionUnsupported(supplied, supported) ->
+            let sup = supported |> List.map string |> String.concat ", "
+            $"job precision {supplied} unsupported (supported: {sup})"
+        | ScheduleError.StorageFailure msg -> $"job storage failure: {msg}"
+
+    /// Build the per-method dispatch closure for a `LongRunning` field
+    /// when the job-fusion substrate is present: schedule a `_platform`
+    /// `Manual` job under the contract method's handler name, trigger it
+    /// once, and return the assigned `JobId` (serialised) for the caller
+    /// to poll. The job's *typed* result is captured by the registered
+    /// `PeerJobHandler` and parked in the `IPeerJobResultStore`; this
+    /// closure only kicks the job off and hands back the id.
+    let private scheduleDispatch
+        (fusion: PeerJobFusion)
+        (handlerName: string)
+        : string -> Async<Result<string, PeerError>> =
+        fun argsJson -> async {
+            let registration: JobRegistration = {
+                ScopeId = PeerJob.Scope
+                Handler = handlerName
+                Payload = argsJson
+                Trigger = Manual
+                Idempotency = None
+                RetryPolicy = JobRetryPolicy.defaults
+                ShardKey = None
+                Precision = JobPrecision.Minute
+                CreatedBy = PeerJob.SourceModule
+                Tags = Map.empty
+            }
+
+            let! scheduled = fusion.Scheduler.Schedule registration
+
+            match scheduled with
+            | Error e -> return Error(PeerHandler $"failed to schedule long-running peer job: {scheduleErrorMessage e}")
+            | Ok jobId ->
+                let! triggered = fusion.Scheduler.TriggerOnce(PeerJob.Scope, jobId, PeerJob.SourceModule)
+
+                match triggered with
+                | Error msg -> return Error(PeerHandler $"failed to trigger long-running peer job: {msg}")
+                | Ok() -> return Ok(JsonRpc.serialize jobId)
+        }
+
     /// Reflect over `'TApi` (a record whose fields are contract methods)
-    /// and return a `PeerContractRegistration` bound to `impl`. Each
-    /// `Immediate` method (`… -> Async<'T>`) dispatches inline.
-    /// `LongRunning` methods (`… -> Async<PeerJobHandle<'T>>`) require the
-    /// job-fusion substrate and fail with a clear `PeerHandler` error
-    /// until it lands.
-    let contract<'TApi> (contractId: string) (versions: ContractVersion list) (impl: 'TApi) : PeerContractRegistration =
+    /// and return a `PeerContractHost` bound to `impl` — the transport-
+    /// agnostic `PeerContractRegistration` plus the `(handlerName,
+    /// IJobHandler)` pairs the compose hook registers with the scheduler.
+    /// Each `Immediate` method (`… -> Async<'T>`) dispatches inline.
+    /// `LongRunning` methods (`… -> Async<PeerJobHandle<'T>>`) schedule a
+    /// background job when `fusion` is `Some`; when `fusion` is `None`
+    /// (the substrate is off, or the deployment has no job substrate) they
+    /// fail with a clear `PeerHandler` error and contribute no job handler.
+    let contract<'TApi>
+        (contractId: string)
+        (versions: ContractVersion list)
+        (fusion: PeerJobFusion option)
+        (impl: 'TApi)
+        : PeerContractHost =
         let apiType = typeof<'TApi>
 
         if not (FSharpType.IsRecord apiType) then
@@ -87,7 +147,10 @@ module JsonRpcPeerHost =
 
         let implObj = box impl
 
-        let methodMap =
+        // Each field yields its (methodName, dispatch) pair and, for a
+        // fusion-backed long-running method, an optional (handlerName,
+        // IJobHandler) the compose hook registers with the scheduler.
+        let perField =
             FSharpType.GetRecordFields apiType
             |> Array.map (fun field ->
                 let argTypes, retType = functionSignature field.PropertyType
@@ -96,20 +159,34 @@ module JsonRpcPeerHost =
                     retType.IsGenericType
                     && retType.GetGenericTypeDefinition() = typedefof<PeerJobHandle<_>>
 
-                let handler =
-                    if isLongRunning then
-                        fun (_: string) -> async {
-                            return
-                                Error(
-                                    PeerHandler
-                                        $"Long-running contract method '{field.Name}' requires the peer job-fusion substrate, which is not yet enabled"
-                                )
-                        }
-                    else
-                        immediateDispatch implObj field argTypes retType
+                if isLongRunning then
+                    match fusion with
+                    | Some f ->
+                        let innerType = retType.GetGenericArguments().[0]
+                        let funcValue = field.GetValue impl
+                        let hName = PeerJob.handlerName contractId field.Name
+                        let dispatch = scheduleDispatch f hName
 
-                field.Name, handler)
-            |> Map.ofArray
+                        let jobHandler =
+                            PeerJobHandler(funcValue, argTypes, innerType, f.ResultStore) :> IJobHandler
+
+                        (field.Name, dispatch), Some(hName, jobHandler)
+                    | None ->
+                        let dispatch =
+                            fun (_: string) -> async {
+                                return
+                                    Error(
+                                        PeerHandler
+                                            $"Long-running contract method '{field.Name}' requires the peer job-fusion substrate, which is not enabled"
+                                    )
+                            }
+
+                        (field.Name, dispatch), None
+                else
+                    (field.Name, immediateDispatch implObj field argTypes retType), None)
+
+        let methodMap = perField |> Array.map fst |> Map.ofArray
+        let jobHandlers = perField |> Array.choose snd |> Array.toList
 
         let dispatch: PeerDispatch =
             fun _context methodName argsJson ->
@@ -118,9 +195,12 @@ module JsonRpcPeerHost =
                 | None -> async { return Error(PeerMethodNotFound methodName) }
 
         {
-            ContractId = contractId
-            Versions = versions
-            Dispatch = dispatch
+            Registration = {
+                ContractId = contractId
+                Versions = versions
+                Dispatch = dispatch
+            }
+            JobHandlers = jobHandlers
         }
 
     // ─── Giraffe host surface ────────────────────────────────────────
@@ -213,10 +293,60 @@ module JsonRpcPeerHost =
                     return! ctx.WriteStringAsync(JsonRpc.serialize capabilities)
         }
 
+    /// `GET /peer/v1/{contractId}/jobs/{jobId}` — authenticate, then
+    /// return the long-running call's current status from the result
+    /// store. `None` (the job has not finished) is reported as `Pending`;
+    /// a finished job reports its stored terminal status. The status rides
+    /// in `Result` as a serialised `PeerJobStatus<string>`, matching what
+    /// the client transport's `PollJob` expects. `contractId` is part of
+    /// the route for symmetry with the invoke leg; the store is keyed by
+    /// scope + job id, so it is not needed for the lookup.
+    let private jobStatusHandler
+        (auth: IPeerAuthProvider)
+        (fusion: PeerJobFusion option)
+        (contractId: string)
+        (jobId: Guid)
+        : HttpHandler =
+        fun (next: HttpFunc) (ctx: HttpContext) -> task {
+            match bearerToken ctx with
+            | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
+            | Some token ->
+                let! validation = auth.ValidatePeerToken token |> Async.StartAsTask
+
+                match validation with
+                | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
+                | Ok _ ->
+                    match fusion with
+                    | None ->
+                        return!
+                            writeJson
+                                200
+                                (JsonRpc.failure "" (PeerHandler "peer job-fusion substrate is not enabled"))
+                                next
+                                ctx
+                    | Some f ->
+                        let! status = f.ResultStore.TryGetResult(PeerJob.Scope, jobId) |> Async.StartAsTask
+                        let resolved = status |> Option.defaultValue PeerJobStatus.Pending
+
+                        let response = {
+                            JsonRpc = JsonRpc.version
+                            Result = Some(JsonRpc.serialize resolved)
+                            Error = None
+                            Id = ""
+                        }
+
+                        return! writeJson 200 response next ctx
+        }
+
     /// The peer host's Giraffe routes. Mount under the deployment's root
-    /// router when the peer substrate is enabled.
-    let routes (auth: IPeerAuthProvider) (peer: IPlatformPeer) : HttpHandler =
+    /// router when the peer substrate is enabled. `fusion` is `Some` when
+    /// the job-fusion substrate is present (enables long-running call
+    /// polling); `None` leaves the jobs route reporting a clear
+    /// "not enabled" error.
+    let routes (auth: IPeerAuthProvider) (peer: IPlatformPeer) (fusion: PeerJobFusion option) : HttpHandler =
         choose [
             GET >=> route "/peer/v1/capabilities" >=> capabilitiesHandler auth peer
+            GET
+            >=> routef "/peer/v1/%s/jobs/%O" (fun (contractId, jobId) -> jobStatusHandler auth fusion contractId jobId)
             POST >=> routef "/peer/v1/%s" (contractHandler auth peer)
         ]
