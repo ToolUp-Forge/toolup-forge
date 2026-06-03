@@ -417,6 +417,31 @@ let teamInvitationApi
                         match! pendingStore.Upsert(req.Email, pending) with
                         | Error err -> return Error(sprintf "Could not store pending invite: %A" err)
                         | Ok() ->
+                            // 0.5.8 — Diagnostic logging path. Resolve the
+                            // SDK logger so each step in the post-Upsert
+                            // chain emits a breadcrumb. The 0.5.7 path was
+                            // 500ing somewhere between Upsert and the
+                            // function-return; the logs identify which
+                            // line. Logger resolution falls back to a
+                            // throwaway no-op if DI hasn't wired one (test
+                            // paths) so logging itself never throws.
+                            let logger =
+                                match ctx.RequestServices.GetService(typeof<ILogger>) with
+                                | :? ILogger as l -> l
+                                | _ ->
+                                    // No-op fallback for test paths that bypass
+                                    // compose-time DI registration. ConsoleLogger
+                                    // requires LogLevel + Set<string> args; the
+                                    // simpler floor is a synthetic logger that
+                                    // swallows every level so logging itself
+                                    // never throws.
+                                    { new ILogger with
+                                        member _.Debug(_: string) = ()
+                                        member _.Info(_: string) = ()
+                                        member _.Warn(_: string) = ()
+                                        member _.Error(_: string, _: exn option) = ()
+                                    }
+
                             let payload: TeamInviteIssuedPayload = {
                                 TeamId = req.TeamId
                                 // No token-id for the pending-by-email
@@ -431,7 +456,24 @@ let teamInvitationApi
                                 MaxUses = 1
                             }
 
-                            do! auditLog.Record(scopeOf req.TeamId, TeamInviteIssued payload)
+                            // 0.5.8 — wrap audit-log emission. The
+                            // pending-invite store has already accepted
+                            // the row, so the user-facing invitation is
+                            // durable regardless of audit success. If
+                            // Record throws (audit sink misconfigured,
+                            // serialisation bug, EventStore unreachable),
+                            // log it and continue — failing the invite
+                            // would be the wrong trade.
+                            logger.Info "[invite] audit Record: starting"
+
+                            try
+                                do! auditLog.Record(scopeOf req.TeamId, TeamInviteIssued payload)
+                                logger.Info "[invite] audit Record: ok"
+                            with ex ->
+                                logger.Error(
+                                    sprintf "[invite] audit Record FAILED: %s | %s" (ex.GetType().FullName) ex.Message,
+                                    Some ex
+                                )
 
                             // 0.5.7 — opportunistic invitation email.
                             // Resolves IUserDirectory from DI; when registered
@@ -444,9 +486,17 @@ let teamInvitationApi
                             // operator just has to tell them out of band.
                             // The audit row recording the invite issuance is
                             // also already durable.
+                            //
+                            // 0.5.8 — each step emits a breadcrumb so the
+                            // App Service log identifies the failing line
+                            // when the operator reports a 500.
+                            logger.Info "[invite] opportunistic email: entering"
+
                             try
                                 match ctx.RequestServices.GetService(typeof<IUserDirectory>) with
                                 | :? IUserDirectory as directory ->
+                                    logger.Info "[invite] IUserDirectory: resolved"
+
                                     // Resolve the inviter's display name from the
                                     // directory itself when possible; the invite
                                     // path doesn't otherwise carry one. A single
@@ -454,6 +504,7 @@ let teamInvitationApi
                                     // id is cheap (one Graph round-trip) and
                                     // surfaces a friendly From-line in the email.
                                     let! inviterSummary = directory.SearchUsers(access.UserId, 1)
+                                    logger.Info(sprintf "[invite] SearchUsers: %A" inviterSummary)
 
                                     let inviterName =
                                         match inviterSummary with
@@ -461,6 +512,7 @@ let teamInvitationApi
                                         | _ -> None
 
                                     let! teamLookup = teamStore.GetTeam req.TeamId
+                                    logger.Info(sprintf "[invite] GetTeam: %A" teamLookup)
 
                                     let teamName =
                                         match teamLookup with
@@ -512,27 +564,44 @@ let teamInvitationApi
                                         Role = req.Role
                                     }
 
+                                    logger.Info "[invite] NotifyInvitation: calling"
+
                                     // Best-effort. The Error branch carries the
                                     // companion's reason (e.g. "notification
                                     // disabled: SenderUserId not set") which is
                                     // useful for log grepping but not actionable
                                     // at the API layer — the invite is durable
                                     // either way.
-                                    let! _ = directory.NotifyInvitation notification
-                                    ()
+                                    let! notifyResult = directory.NotifyInvitation notification
+                                    logger.Info(sprintf "[invite] NotifyInvitation: %A" notifyResult)
                                 | _ ->
                                     // No directory companion wired — the
                                     // pre-0.5.7 "operator tells the invitee out
                                     // of band" path. Nothing to do.
-                                    ()
-                            with _ ->
+                                    logger.Info "[invite] IUserDirectory: not registered"
+                            with ex ->
                                 // Defensive — a Graph 5xx, a Network exception,
                                 // a DI surprise — any of these would otherwise
                                 // surface to the operator as a failed invite,
                                 // which is wrong. The invite succeeded; the
-                                // notification didn't. Swallow.
-                                ()
+                                // notification didn't. Swallow but log so
+                                // the operator can diagnose.
+                                logger.Error(
+                                    sprintf
+                                        "[invite] opportunistic email FAILED: %s | %s | inner=%s"
+                                        (ex.GetType().FullName)
+                                        ex.Message
+                                        (if isNull ex.InnerException then
+                                             "<none>"
+                                         else
+                                             sprintf
+                                                 "%s: %s"
+                                                 (ex.InnerException.GetType().FullName)
+                                                 ex.InnerException.Message),
+                                    Some ex
+                                )
 
+                            logger.Info "[invite] returning Ok"
                             return Ok()
             }
 
