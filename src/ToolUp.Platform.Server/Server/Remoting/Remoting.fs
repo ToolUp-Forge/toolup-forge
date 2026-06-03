@@ -277,20 +277,12 @@ module Remoting =
     /// time. The recommended pattern for any platform integration that needs
     /// async-resolved per-request context.
     ///
-    /// **Performance caveat (until Phase 69n ships):** the Giraffe adapter
-    /// currently rebuilds the entire dispatcher table (TypeShape proxy +
-    /// the six attribute-driven classifier maps) on every request when
-    /// `fromContextAsync` is the composed implementation shape. The async
-    /// resolver itself runs per request as intended, but the substrate
-    /// construction also pays per request — a load-bearing latent landmine
-    /// for any consumer adopting this pattern at scale. Phase 69n (ToolUp.
-    /// Remoting `fromContextAsync` — hoist dispatcher table out of the
-    /// per-request closure) lifts the substrate build to compose time. Until
-    /// that phase ships, consumers with high RPS on a `fromContextAsync`-
-    /// composed API should either (a) use `fromContext` with a closure-
-    /// captured impl + a per-request token re-read at the seam where the
-    /// async work is needed, or (b) accept the per-request substrate cost
-    /// as the price of the build-once / read-per-call contract.
+    /// Phase 69n: the Giraffe adapter builds the dispatcher table (TypeShape
+    /// proxy + the six attribute-driven classifier maps) ONCE at compose
+    /// time. Only the async resolver runs per request; the substrate cost
+    /// is amortised across every dispatch. (Pre-69n the Giraffe adapter
+    /// rebuilt the substrate per request; the caveat that recommended
+    /// avoiding `fromContextAsync` at high RPS is retired.)
     ///
     /// ```fsharp
     /// open ToolUp.Remoting.Server

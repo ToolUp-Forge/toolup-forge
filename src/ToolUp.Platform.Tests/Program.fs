@@ -171,6 +171,10 @@ let allTests =
         // pack pinning the JsonElement-shaped argument arm + the
         // InputBytes cache plumbing.
         DispatcherBodyAndArgFastpathTests.tests
+        // Phase 69n — fromContextAsync build-once dispatcher table.
+        // Source-audit pack pinning the `buildDispatcherTable` carve +
+        // the compose-time bind in the FromContextAsync arm.
+        FromContextAsyncBuildOnceTests.tests
         IAIProviderContract.tests
         // Phase 26 — deploy-plane substrate contract packs bound to
         // their single-node defaults + in-memory mocks. The
