@@ -279,10 +279,15 @@ let tests: Test =
 
         // ─── Rule 10 — preset auto-added scopes dropped ────────
 
-        testCase "Rule 10: workforce preset + Scopes missing the api://...access_as_user → WARN"
+        testCase "Rule 10: workforce preset + Scopes missing the api://...access_as_user → ERROR"
         <| fun () ->
             // The single most dangerous regression — consumer
             // override of Scopes dropped the load-bearing scope.
+            // 0.4.3 promoted this case from Warning to Error: Entra
+            // mints an opaque Microsoft Graph token without the
+            // scope, every authenticated request 401s post-auth, and
+            // the app boots cleanly so the failure is invisible
+            // until first API call — not recoverable at runtime.
             let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
 
             let stripped = {
@@ -293,9 +298,9 @@ let tests: Test =
             let outcomes = evaluate stripped
 
             Expect.isTrue
-                (hasWarningMatching "auto-adds" outcomes
-                 && hasWarningMatching "access_as_user" outcomes)
-                "missing api scope must surface as a warning that names it"
+                (hasErrorMatching "auto-adds" outcomes
+                 && hasErrorMatching "access_as_user" outcomes)
+                "missing api scope must surface as an error that names it"
 
         testCase "Rule 10: workforce preset + intact Scopes → no rule-10 warning"
         <| fun () ->
@@ -345,6 +350,59 @@ let tests: Test =
                     | _ -> false)
 
             Expect.isFalse hasPresetOk "without Preset on config, no provenance Ok message emitted"
+
+        // ─── Rule 12 — Generic preset + ValidateIdToken=None ───
+        //
+        // 0.4.3 flipped `generic.ValidateIdToken`'s default from
+        // `None` to `Some true`. Landing back on `None` is now an
+        // explicit opt-out from defence-in-depth id_token validation;
+        // Rule 12 surfaces it as a Warning so the choice is visible
+        // at startup rather than assumed-safe by silence.
+
+        testCase "Rule 12: Generic preset + ValidateIdToken = None → WARN"
+        <| fun () ->
+            let cfg = generic "https://issuer.example.test" "client-id" "https://app/cb"
+
+            let optedOut = { cfg with ValidateIdToken = None }
+
+            let outcomes = evaluate optedOut
+
+            Expect.isTrue
+                (hasWarningMatching "Preset `generic`" outcomes
+                 && hasWarningMatching "ValidateIdToken = None" outcomes)
+                "explicit opt-out from id_token validation must surface as a warning that names the preset and the field"
+
+        testCase "Rule 12: Generic preset + ValidateIdToken = Some true (default) → no rule-12 warning"
+        <| fun () ->
+            let cfg = generic "https://issuer.example.test" "client-id" "https://app/cb"
+
+            let outcomes = evaluate cfg
+
+            let hasRule12Warn =
+                outcomes
+                |> List.exists (function
+                    | RuleWarning m -> m.Contains "ValidateIdToken = None"
+                    | _ -> false)
+
+            Expect.isFalse hasRule12Warn ""
+
+        testCase "Rule 12: non-Generic preset + ValidateIdToken = None → no rule-12 warning"
+        <| fun () ->
+            // entraWorkforce defaults ValidateIdToken = None; Rule 12
+            // is generic-specific, so this case must not trip it.
+            let cfg = entraWorkforce "tenant-guid" "client-id" "https://app/cb"
+
+            Expect.equal cfg.ValidateIdToken None "precondition: workforce preset defaults to None"
+
+            let outcomes = evaluate cfg
+
+            let hasRule12Warn =
+                outcomes
+                |> List.exists (function
+                    | RuleWarning m -> m.Contains "ValidateIdToken = None"
+                    | _ -> false)
+
+            Expect.isFalse hasRule12Warn "rule 12 is generic-specific — other presets opt out without surfacing"
 
         // ─── Happy path ─────────────────────────────────────────
 

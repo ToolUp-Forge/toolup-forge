@@ -58,10 +58,18 @@ let tests: Test =
             testCase "PresetKind.expectsDecodableAccessToken = false"
             <| fun () -> Expect.isFalse (PresetKind.expectsDecodableAccessToken Generic) ""
 
-            testCase "ValidateIdToken defaults to None"
+            testCase "ValidateIdToken defaults to Some true (0.4.3 defence-in-depth)"
             <| fun () ->
+                // Without first-class provider knowledge the SDK has
+                // no way to know whether the chosen IdP is internal
+                // or customer-facing, so the safer default is to
+                // re-check id_token signature / iss / aud / exp on
+                // every callback. Consumers who explicitly trust the
+                // post-callback channel can set it back to None;
+                // Rule 12 of OidcCoherenceValidator surfaces that
+                // opt-out at startup so the decision is visible.
                 let cfg = generic "https://issuer.example.test" testClientId testRedirectUri
-                Expect.equal cfg.ValidateIdToken None ""
+                Expect.equal cfg.ValidateIdToken (Some true) ""
 
             testCase "Audience defaults to ClientId"
             <| fun () ->
