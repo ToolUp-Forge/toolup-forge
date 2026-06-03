@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- See README.md alongside this file. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AuthProviders\EntraDirectory\EntraDirectory.fsproj" />
+    <ProjectReference Include="..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+</Project>
