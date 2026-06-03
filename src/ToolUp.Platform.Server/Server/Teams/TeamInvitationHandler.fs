@@ -433,6 +433,106 @@ let teamInvitationApi
 
                             do! auditLog.Record(scopeOf req.TeamId, TeamInviteIssued payload)
 
+                            // 0.5.7 — opportunistic invitation email.
+                            // Resolves IUserDirectory from DI; when registered
+                            // (e.g. ToolUp.AuthProviders.EntraDirectory with
+                            // a SenderUserId), sends the invitee a branded
+                            // "you've been added to <team>" email. Failure is
+                            // non-fatal — the pending-invite store entry is
+                            // already written, the invitee can sign in and
+                            // pick up the membership without the email; the
+                            // operator just has to tell them out of band.
+                            // The audit row recording the invite issuance is
+                            // also already durable.
+                            try
+                                match ctx.RequestServices.GetService(typeof<IUserDirectory>) with
+                                | :? IUserDirectory as directory ->
+                                    // Resolve the inviter's display name from the
+                                    // directory itself when possible; the invite
+                                    // path doesn't otherwise carry one. A single
+                                    // SearchUsers call against the inviter's own
+                                    // id is cheap (one Graph round-trip) and
+                                    // surfaces a friendly From-line in the email.
+                                    let! inviterSummary = directory.SearchUsers(access.UserId, 1)
+
+                                    let inviterName =
+                                        match inviterSummary with
+                                        | Ok(s :: _) -> s.DisplayName
+                                        | _ -> None
+
+                                    let! teamLookup = teamStore.GetTeam req.TeamId
+
+                                    let teamName =
+                                        match teamLookup with
+                                        | Some t -> t.Name
+                                        | None ->
+                                            // Race against deletion — fall back to
+                                            // the team id so the recipient still
+                                            // sees a meaningful identifier rather
+                                            // than a blank.
+                                            req.TeamId
+
+                                    // The SDK has no consumer-supplied app name
+                                    // field on ServerConfig. Walk
+                                    // TOOLUP_APP_NAME → request host header →
+                                    // "ToolUp" fallback so the email's brand line
+                                    // matches whatever the deployment surfaces to
+                                    // its users.
+                                    let appName =
+                                        match System.Environment.GetEnvironmentVariable "TOOLUP_APP_NAME" with
+                                        | null
+                                        | "" ->
+                                            let host = ctx.Request.Host.Value
+
+                                            if System.String.IsNullOrWhiteSpace host then
+                                                "ToolUp"
+                                            else
+                                                host
+                                        | n -> n
+
+                                    let redirectUrl =
+                                        // Server has no first-class knowledge of
+                                        // its public URL; walk the request's
+                                        // Origin / scheme+host headers.
+                                        let originHeader = ctx.Request.Headers.["Origin"].ToString()
+
+                                        if not (System.String.IsNullOrWhiteSpace originHeader) then
+                                            originHeader.TrimEnd('/') + "/"
+                                        else
+                                            let scheme = ctx.Request.Scheme
+                                            let host = ctx.Request.Host.Value
+                                            sprintf "%s://%s/" scheme host
+
+                                    let notification = {
+                                        Email = req.Email
+                                        TeamName = teamName
+                                        InviterName = inviterName
+                                        AppName = appName
+                                        RedirectUrl = redirectUrl
+                                        Role = req.Role
+                                    }
+
+                                    // Best-effort. The Error branch carries the
+                                    // companion's reason (e.g. "notification
+                                    // disabled: SenderUserId not set") which is
+                                    // useful for log grepping but not actionable
+                                    // at the API layer — the invite is durable
+                                    // either way.
+                                    let! _ = directory.NotifyInvitation notification
+                                    ()
+                                | _ ->
+                                    // No directory companion wired — the
+                                    // pre-0.5.7 "operator tells the invitee out
+                                    // of band" path. Nothing to do.
+                                    ()
+                            with _ ->
+                                // Defensive — a Graph 5xx, a Network exception,
+                                // a DI surprise — any of these would otherwise
+                                // surface to the operator as a failed invite,
+                                // which is wrong. The invite succeeded; the
+                                // notification didn't. Swallow.
+                                ()
+
                             return Ok()
             }
 

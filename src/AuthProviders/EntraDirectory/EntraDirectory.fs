@@ -1,20 +1,30 @@
 module ToolUp.AuthProviders.EntraDirectory
 
 open System
+open System.Net
 open System.Net.Http
 open System.Net.Http.Headers
+open System.Text
 open System.Text.Json
-open System.Threading
 open Azure.Core
 open Azure.Identity
 open ToolUp.Platform
 
 // ─── 0.5.7 — Microsoft Graph IUserDirectory companion ───────────────
 //
-// Implements `IUserDirectory` against the Microsoft Graph `/users`
-// endpoint, returning matching directory entries for the SDK's
-// `TeamManagerUI` typeahead. Plugs into `ServerApp.withUserDirectory`
-// at compose time.
+// Implements `IUserDirectory` against Microsoft Graph:
+//
+//   * `SearchUsers` → `GET /users?$filter=startswith(displayName,'q') …`
+//     Requires `User.ReadBasic.All` (or `User.Read.All`) application
+//     permission. Powers the SDK's invitation-form typeahead.
+//
+//   * `NotifyInvitation` → `POST /users/{senderOid}/sendMail`
+//     Requires `Mail.Send` application permission, scoped to the
+//     mailbox identified by `SenderUserId`. Sends a branded
+//     "you've been invited to <team>" email to the invitee.
+//     When `SenderUserId = None`, the call returns `Error` and the
+//     team-invite handler silently skips notification — the invite
+//     still lands via the existing pending-by-email store.
 //
 // **Authentication model.** App-only via Azure Identity's
 // `DefaultAzureCredential`:
@@ -25,55 +35,54 @@ open ToolUp.Platform
 //     Azure CLI (`az login`) → Azure PowerShell. For local dev, run
 //     `az login` once; the SDK caches the access token.
 //
-// The caller identity must hold the `User.ReadBasic.All` (or
-// `User.Read.All`) **application** permission on Microsoft Graph and
-// the deploying tenant admin must have consented to it. For a managed
-// identity, grant the role via:
+// Both permissions are application-scoped — the calling identity
+// (typically a managed identity) gets the role assignment in Entra
+// once; tenant admin consent is required. See README for the
+// PowerShell snippet.
 //
-// ```powershell
-// $msi = Get-AzADServicePrincipal -DisplayName "<app-service-name>"
-// $graph = Get-AzADServicePrincipal -ApplicationId "00000003-0000-0000-c000-000000000000"
-// $role = $graph.AppRole | ? { $_.Value -eq "User.ReadBasic.All" }
-// New-AzADAppRoleAssignment `
-//     -ObjectId $msi.Id `
-//     -PrincipalId $msi.Id `
-//     -ResourceId $graph.Id `
-//     -AppRoleId $role.Id
-// ```
-//
-// **Query shape.** Graph's `$filter=startswith(...)` against multiple
-// fields is the most operator-friendly: matches against displayName,
-// mail, and userPrincipalName all surface. The `ConsistencyLevel:
-// eventual` header is required for `$count` / advanced query semantics
-// but isn't strictly needed for plain `startswith` — included anyway
-// because it future-proofs the query if we later want `$search`.
+// **Query shape.** Graph's `$filter=startswith(...)` against
+// `displayName`, `mail`, and `userPrincipalName` is the most
+// operator-friendly: matches against any of the three surface.
+// The `ConsistencyLevel: eventual` header future-proofs the request
+// for `$count` / `$search` semantics we may want later.
 //
 // **Caching.** A single `HttpClient` + a single `TokenCredential` are
 // shared across calls. Azure Identity caches tokens in-process; the
 // companion does not add its own cache layer.
 //
 // **Errors.** Transient Graph 429 / 5xx surface as
-// `Error "directory unavailable: …"` — the UI renders the string
-// under the typeahead. Empty / blank queries short-circuit upstream
-// in `UserDirectoryApiHandler` before reaching this companion.
+// `Error "directory unavailable: …"`. Mail-send failures surface as
+// `Error "notification unavailable: …"` — `TeamInvitationHandler`
+// swallows the error and the pending-invite store entry remains
+// authoritative.
 
-/// Configuration for `EntraDirectoryUserDirectory`. The only mandatory
-/// field is the Graph endpoint — overridable so the companion can run
-/// against the Graph national clouds (Government, China) where the
-/// default `graph.microsoft.com` host doesn't resolve. The default is
-/// the commercial cloud, which covers the overwhelming majority of
-/// deployments.
+/// Configuration for `EntraDirectoryUserDirectory`. Two fields:
+///
+/// - `GraphEndpoint` — Graph base URL. Defaults to commercial cloud;
+///   national clouds (US Gov, China) override.
+/// - `SenderUserId` — Entra `oid` of the mailbox outbound invitation
+///   emails are sent FROM. `None` disables `NotifyInvitation` (the
+///   companion still does directory search). Wire a dedicated service
+///   account such as `invites@yourdomain.example` so the From: header
+///   matches the brand voice of the email.
 type EntraDirectoryConfig = {
     /// Graph endpoint base — e.g. `https://graph.microsoft.com` (default,
     /// commercial cloud), `https://graph.microsoft.us` (US Gov),
     /// `https://microsoftgraph.chinacloudapi.cn` (China). Trailing slash
     /// optional; the companion normalises.
     GraphEndpoint: string
+    /// Entra `oid` of the mailbox that outbound `NotifyInvitation`
+    /// emails are sent FROM. Set to the object id of a service-account
+    /// mailbox the managed identity has `Mail.Send` over. `None`
+    /// disables `NotifyInvitation` (the substrate's other capability —
+    /// `SearchUsers` — is unaffected).
+    SenderUserId: string option
 }
 
 module EntraDirectoryConfig =
     let defaults = {
         GraphEndpoint = "https://graph.microsoft.com"
+        SenderUserId = None
     }
 
 // ─── Internal: shared HttpClient + token credential ──────────────────
@@ -109,6 +118,53 @@ type private GraphUser = {
 [<CLIMutable>]
 type private GraphUsersResponse = { value: GraphUser array }
 
+// ─── Internal: invitation-email rendering ────────────────────────────
+
+let private roleLabel (role: TeamRole) =
+    match role with
+    | Owner -> "Owner"
+    | Admin -> "Admin"
+    | Member -> "Member"
+
+let private renderInvitationHtml (n: InvitationNotification) : string =
+    let enc (s: string) = WebUtility.HtmlEncode s
+
+    let inviterLine =
+        match n.InviterName with
+        | Some name -> sprintf "<p>%s has invited you" (enc name)
+        | None -> "<p>You've been invited"
+
+    sprintf
+        """<html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #222;">
+%s to join the <strong>%s</strong> team on <strong>%s</strong> as a <strong>%s</strong>.</p>
+<p><a href="%s" style="display: inline-block; padding: 10px 18px; background: #6b21a8; color: white; text-decoration: none; border-radius: 6px;">Open %s</a></p>
+<p style="color: #666; font-size: 12px;">Sign in with your work account to accept this invitation. If the button doesn't work, paste this URL into your browser: %s</p>
+</body></html>"""
+        inviterLine
+        (enc n.TeamName)
+        (enc n.AppName)
+        (roleLabel n.Role)
+        n.RedirectUrl
+        (enc n.AppName)
+        n.RedirectUrl
+
+let private buildSendMailPayload (n: InvitationNotification) : string =
+    // Build the Graph `sendMail` request body by hand. Hand-rolling
+    // (rather than reaching for a JSON object DOM) keeps the
+    // dependency surface to just `System.Text.Json`. The HTML body
+    // and free-form fields are escaped via `JsonEncodedText` /
+    // `JsonSerializer.Serialize` so quotes / backslashes round-trip
+    // cleanly through Graph.
+    let encStr (s: string) = JsonSerializer.Serialize s
+    let html = renderInvitationHtml n
+    let subject = sprintf "You've been invited to %s on %s" n.TeamName n.AppName
+
+    sprintf
+        """{"message":{"subject":%s,"body":{"contentType":"HTML","content":%s},"toRecipients":[{"emailAddress":{"address":%s}}]},"saveToSentItems":false}"""
+        (encStr subject)
+        (encStr html)
+        (encStr n.Email)
+
 // ─── IUserDirectory implementation ───────────────────────────────────
 
 /// Graph-backed `IUserDirectory`. One instance per deployment;
@@ -127,8 +183,22 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
     // double them up. Graph rejects unescaped quotes with a 400.
     let escapeODataLiteral (s: string) = s.Replace("'", "''")
 
+    let acquireGraphToken () = async {
+        let! ct = Async.CancellationToken
+        let request = TokenRequestContext scopes
+
+        let! token =
+            GraphState.getCredential().GetTokenAsync(request, ct).AsTask()
+            |> Async.AwaitTask
+
+        return token.Token
+    }
+
+    let nonEmpty (s: string) =
+        if String.IsNullOrWhiteSpace s then None else Some s
+
     interface IUserDirectory with
-        member _.Search (query: string) (maxResults: int) = async {
+        member _.SearchUsers(query: string, take: int) = async {
             try
                 let! ct = Async.CancellationToken
                 let trimmed = query.Trim()
@@ -141,14 +211,7 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
                 if trimmed.Length < 2 then
                     return Ok []
                 else
-                    // Token acquisition. Synchronous from the caller's
-                    // perspective; Azure Identity returns from cache when
-                    // the token is fresh.
-                    let tokenRequest = TokenRequestContext scopes
-
-                    let! token =
-                        GraphState.getCredential().GetTokenAsync(tokenRequest, ct).AsTask()
-                        |> Async.AwaitTask
+                    let! token = acquireGraphToken ()
 
                     let safeQuery = escapeODataLiteral trimmed
 
@@ -163,14 +226,11 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
                         sprintf
                             "%s/v1.0/users?$top=%d&$select=id,displayName,mail,userPrincipalName&$filter=%s"
                             normalisedEndpoint
-                            maxResults
+                            take
                             (Uri.EscapeDataString filter)
 
                     use request = new HttpRequestMessage(HttpMethod.Get, url)
-                    request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token.Token)
-                    // ConsistencyLevel: eventual is required for $count
-                    // / $search; harmless on plain $filter requests but
-                    // future-proofs the call if we later want $search.
+                    request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
                     request.Headers.Add("ConsistencyLevel", "eventual")
 
                     let client = GraphState.getClient ()
@@ -206,33 +266,24 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
                             else
                                 parsed.value
                                 |> Array.toList
-                                |> List.map (fun u ->
-                                    let displayName =
-                                        if String.IsNullOrWhiteSpace u.displayName then
-                                            (if isNull u.userPrincipalName then
-                                                 "(unknown)"
-                                             else
-                                                 u.userPrincipalName)
-                                        else
-                                            u.displayName
+                                |> List.choose (fun u ->
+                                    match nonEmpty u.id with
+                                    | None ->
+                                        // Defensive — Graph always returns id, but
+                                        // a malformed response is safer to drop
+                                        // than to surface a blank-id row.
+                                        None
+                                    | Some uid ->
+                                        let email =
+                                            match nonEmpty u.mail with
+                                            | Some _ as m -> m
+                                            | None -> nonEmpty u.userPrincipalName
 
-                                    let email =
-                                        if not (String.IsNullOrWhiteSpace u.mail) then
-                                            u.mail
-                                        elif not (String.IsNullOrWhiteSpace u.userPrincipalName) then
-                                            u.userPrincipalName
-                                        else
-                                            ""
-
-                                    {
-                                        UserId = (if isNull u.id then "" else u.id)
-                                        DisplayName = displayName
-                                        Email = email
-                                    })
-                                // Drop entries that arrived without an oid — defensive;
-                                // Graph always returns id, but a malformed response is
-                                // safer to drop than to surface a blank-id row.
-                                |> List.filter (fun s -> s.UserId <> "")
+                                        Some {
+                                            UserId = uid
+                                            DisplayName = nonEmpty u.displayName
+                                            Email = email
+                                        })
 
                         return Ok summaries
             with
@@ -240,29 +291,87 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
             | ex -> return Error(sprintf "directory unavailable: %s" ex.Message)
         }
 
+        member _.NotifyInvitation(notification: InvitationNotification) = async {
+            match config.SenderUserId with
+            | None ->
+                // The companion was wired without a mail-send mailbox.
+                // Surface the reason so an operator inspecting logs can
+                // either ignore it (invites still land via the pending-
+                // store) or wire a sender id to enable email.
+                return Error "notification disabled: EntraDirectoryConfig.SenderUserId not set"
+            | Some sender ->
+                try
+                    let! ct = Async.CancellationToken
+                    let! token = acquireGraphToken ()
+
+                    let url = sprintf "%s/v1.0/users/%s/sendMail" normalisedEndpoint sender
+
+                    use request = new HttpRequestMessage(HttpMethod.Post, url)
+                    request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+                    let payload = buildSendMailPayload notification
+
+                    request.Content <- new StringContent(payload, Encoding.UTF8, "application/json")
+
+                    let client = GraphState.getClient ()
+                    let! response = client.SendAsync(request, ct) |> Async.AwaitTask
+
+                    if response.IsSuccessStatusCode then
+                        return Ok()
+                    else
+                        let! body = response.Content.ReadAsStringAsync ct |> Async.AwaitTask
+
+                        return
+                            Error(
+                                sprintf
+                                    "notification unavailable: %d %s — %s"
+                                    (int response.StatusCode)
+                                    (if isNull response.ReasonPhrase then
+                                         ""
+                                     else
+                                         response.ReasonPhrase)
+                                    (if isNull body then
+                                         ""
+                                     else
+                                         body.Substring(0, min 200 body.Length))
+                            )
+                with
+                | :? OperationCanceledException -> return Error "notification request cancelled"
+                | ex -> return Error(sprintf "notification unavailable: %s" ex.Message)
+        }
+
 // ─── Public entry points ─────────────────────────────────────────────
 
-/// Construct an `IUserDirectory` from an `EntraDirectoryConfig`. The
-/// underlying Graph HTTP client is lazily initialised on the first
-/// `Search` call; no startup work, no eager auth probe.
+/// Construct an `IUserDirectory` from an explicit
+/// `EntraDirectoryConfig`. The underlying Graph HTTP client is lazily
+/// initialised on the first `SearchUsers` / `NotifyInvitation` call;
+/// no startup work, no eager auth probe.
 let create (config: EntraDirectoryConfig) : IUserDirectory =
     EntraDirectoryUserDirectory config :> IUserDirectory
 
 /// Default-cloud convenience — equivalent to
 /// `create EntraDirectoryConfig.defaults`. Suitable for any deployment
 /// targeting the commercial Microsoft Graph cloud
-/// (`https://graph.microsoft.com`); national-cloud deployments use
-/// `create` with an overridden `GraphEndpoint`.
+/// (`https://graph.microsoft.com`). `NotifyInvitation` is disabled
+/// (returns `Error`) because no `SenderUserId` is supplied; use
+/// `create` with `{ EntraDirectoryConfig.defaults with SenderUserId = Some "<oid>" }`
+/// or `fromEnv` when invitation emails are wanted.
 let fromManagedIdentity () : IUserDirectory = create EntraDirectoryConfig.defaults
 
-/// Read the Graph endpoint from `TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT`
-/// and construct the companion. Returns `None` when the env var is
-/// unset / empty AND no `TOOLUP_ENTRA_DIRECTORY_ENABLED=1` opt-in is
-/// set — composition roots that read this should fall back to wiring
-/// the typeahead without a directory companion (the SDK handler
-/// short-circuits to `Ok []` and the UI degrades gracefully). When
-/// `TOOLUP_ENTRA_DIRECTORY_ENABLED=1` is set without an explicit
-/// endpoint, the commercial cloud default is used.
+/// Environment-driven factory. Reads:
+///
+/// * `TOOLUP_ENTRA_DIRECTORY_ENABLED` — `1` / `true` to opt in.
+/// * `TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT` — Graph base URL override
+///   (defaults to commercial cloud).
+/// * `TOOLUP_ENTRA_DIRECTORY_SENDER_OID` — Entra `oid` of the mailbox
+///   that outbound `NotifyInvitation` emails are sent FROM. When unset
+///   the companion's `NotifyInvitation` returns `Error` and the
+///   team-invite handler skips the email step (pending-store entry
+///   still lands).
+///
+/// Returns `None` when neither `_ENABLED` is `1` nor `_GRAPH_ENDPOINT`
+/// is set — composition roots that read this should fall back to
+/// wiring the typeahead without a directory companion (the SDK
+/// handler short-circuits to `Ok []` and the UI degrades gracefully).
 let fromEnv () : IUserDirectory option =
     let enabled =
         match Environment.GetEnvironmentVariable "TOOLUP_ENTRA_DIRECTORY_ENABLED" with
@@ -277,27 +386,44 @@ let fromEnv () : IUserDirectory option =
         | "" -> None
         | url -> Some url
 
+    let senderOid =
+        match Environment.GetEnvironmentVariable "TOOLUP_ENTRA_DIRECTORY_SENDER_OID" with
+        | null
+        | "" -> None
+        | v -> Some v
+
+    let baseEndpoint =
+        explicitEndpoint
+        |> Option.defaultValue EntraDirectoryConfig.defaults.GraphEndpoint
+
     match enabled, explicitEndpoint with
     | false, None -> None
-    | _, Some endpoint -> Some(create { GraphEndpoint = endpoint })
-    | true, None -> Some(fromManagedIdentity ())
+    | _ ->
+        Some(
+            create {
+                GraphEndpoint = baseEndpoint
+                SenderUserId = senderOid
+            }
+        )
 
 // ─── Phase 9c portability audit (six rules) ──────────────────────────
 //
-// 1. Identity by value — `IUserDirectory.Search` returns
-//    `Result<UserSummary list, string>`; UserSummary carries only
-//    strings.
+// 1. Identity by value — both `IUserDirectory.SearchUsers` and
+//    `NotifyInvitation` operate over plain records / strings.
 // 2. Async at every boundary — every method returns `Async<_>`; HTTP
 //    Tasks bridged via `Async.AwaitTask`.
 // 3. Retry as data — none expressed by this companion. The Graph
 //    `HttpClient` could be wrapped in a Polly retry handler by the
-//    composition root if needed; the companion stays a pure pass-through
-//    so failure modes surface as `Error` strings the UI renders.
+//    composition root if needed; the companion stays a pure
+//    pass-through so failure modes surface as `Error` strings the
+//    caller (the team-invite handler or the typeahead UI) can render
+//    or swallow as appropriate.
 // 4. Stateless between calls — the cached HttpClient + TokenCredential
 //    are shared across calls; no per-call state survives. Distributed-
 //    safe: every node with the same managed identity / app role
 //    produces identical results.
 // 5. No cross-shard ordering — Graph returns results in its own natural
-//    order; the UI sorts by displayName for stable rendering.
+//    order; the UI sorts by displayName for stable rendering. Mail
+//    delivery ordering is the SMTP / Graph mailer's concern.
 // 6. Precision at the lower bound — N/A; `IUserDirectory` has no
 //    timing semantics.

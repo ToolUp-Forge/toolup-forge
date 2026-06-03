@@ -85,6 +85,6 @@ let userDirectoryApi (ctx: HttpContext) : IUserDirectoryApi = {
                         // No companion registered — the typeahead degrades to
                         // a plain text input. Caller renders no suggestions.
                         return Ok []
-                    | Some directory -> return! directory.Search trimmed clampedMax
+                    | Some directory -> return! directory.SearchUsers(trimmed, clampedMax)
         }
 }

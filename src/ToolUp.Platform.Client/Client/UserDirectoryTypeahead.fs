@@ -44,11 +44,32 @@ let private directoryApi: IUserDirectoryApi =
 /// when the user selects a directory suggestion, the suggestion's email
 /// is written into the input through `onChange` and the typed prefix is
 /// discarded. `placeholder` is rendered when the input is empty.
+/// Pick the best human-readable label for a directory entry. Falls
+/// back along display-name → email → user-id so the dropdown always
+/// renders something meaningful even for partial entries.
+let private summaryLabel (s: UserSummary) =
+    match s.DisplayName with
+    | Some n when not (System.String.IsNullOrWhiteSpace n) -> n
+    | _ ->
+        match s.Email with
+        | Some e when not (System.String.IsNullOrWhiteSpace e) -> e
+        | _ -> s.UserId
+
+/// Resolved string to feed back into the parent input when a
+/// suggestion is picked. Prefers email (the invite-by-email path
+/// expects one) and falls back to the user id so the existing
+/// AddTeamMember path still has a stable identifier.
+let private summaryPickValue (s: UserSummary) =
+    match s.Email with
+    | Some e when not (System.String.IsNullOrWhiteSpace e) -> e
+    | _ -> s.UserId
+
 [<ReactComponent>]
 let userTypeahead (value: string) (onChange: string -> unit) (placeholder: string) =
     let displayValue, setDisplayValue = React.useState value
     let suggestions, setSuggestions = React.useState ([]: UserSummary list)
     let isOpen, setIsOpen = React.useState false
+    let activeIndex, setActiveIndex = React.useState -1
     let containerRef = React.useRef<Browser.Types.HTMLDivElement option> None
     let timerRef = React.useRef<float option> None
 
@@ -99,6 +120,7 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
         if query.Trim().Length < 2 then
             setSuggestions []
             setIsOpen false
+            setActiveIndex -1
         else
             let handle =
                 Browser.Dom.window.setTimeout (
@@ -110,12 +132,14 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
                             | Ok matches ->
                                 setSuggestions matches
                                 setIsOpen (not matches.IsEmpty)
+                                setActiveIndex -1
                             | Error _ ->
                                 // Silent — render no suggestions, keep the input usable.
                                 // Surfacing a Graph error inline would feel surprising;
                                 // operators just type the email manually.
                                 setSuggestions []
                                 setIsOpen false
+                                setActiveIndex -1
                         }
                         |> Async.StartImmediate),
                     250
@@ -125,21 +149,39 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
 
     let handleChange (s: string) =
         setDisplayValue s
+        setActiveIndex -1
         scheduleSearch s
 
     let handleSelect (summary: UserSummary) =
-        setDisplayValue summary.Email
-        onChange summary.Email
+        let resolved = summaryPickValue summary
+        setDisplayValue resolved
+        onChange resolved
         setIsOpen false
         setSuggestions []
+        setActiveIndex -1
 
     let handleKeyDown (e: Browser.Types.KeyboardEvent) =
-        if e.key = "Enter" then
+        match e.key with
+        | "ArrowDown" when isOpen && not suggestions.IsEmpty ->
+            e.preventDefault ()
+            let next = min (suggestions.Length - 1) (activeIndex + 1)
+            setActiveIndex next
+        | "ArrowUp" when isOpen && not suggestions.IsEmpty ->
+            e.preventDefault ()
+            // -1 keeps "no suggestion highlighted" reachable via ArrowUp from row 0.
+            let next = max -1 (activeIndex - 1)
+            setActiveIndex next
+        | "Enter" when isOpen && activeIndex >= 0 && activeIndex < suggestions.Length ->
+            e.preventDefault ()
+            handleSelect suggestions.[activeIndex]
+        | "Enter" ->
             e.preventDefault ()
             setIsOpen false
             onChange displayValue
-        elif e.key = "Escape" then
+        | "Escape" ->
             setIsOpen false
+            setActiveIndex -1
+        | _ -> ()
 
     let handleBlur () =
         // Commit the typed value on blur — mirrors `Forms.Input.text`'s
@@ -148,14 +190,30 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
         // straight onto the submit button.
         onChange displayValue
 
-    let suggestionItem (summary: UserSummary) =
+    let suggestionItem (i: int) (summary: UserSummary) =
+        let isActive = i = activeIndex
+        let label = summaryLabel summary
+
+        // Secondary line — render the email when the primary label is
+        // already the display name (so the row carries both). When the
+        // label IS the email (no display name available), suppress the
+        // secondary line to avoid showing the same string twice.
+        let secondaryLine =
+            match summary.DisplayName with
+            | Some _ ->
+                match summary.Email with
+                | Some e when not (System.String.IsNullOrWhiteSpace e) ->
+                    Html.div [ prop.className "text-xs text-muted"; prop.text e ]
+                | _ -> Html.none
+            | None -> Html.none
+
         Html.li [
             prop.key summary.UserId
             prop.className [
                 "px-3 py-2"
                 "cursor-pointer"
-                "hover:bg-gray-100"
                 "border-b border-gray-100 last:border-b-0"
+                if isActive then "bg-brand/10" else "hover:bg-gray-100"
             ]
             // mouseDown fires before the input's blur — using mouseDown
             // instead of click ensures the selection lands before the
@@ -163,12 +221,13 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
             prop.onMouseDown (fun e ->
                 e.preventDefault ()
                 handleSelect summary)
+            // mouseEnter syncs the keyboard cursor to the mouse so
+            // ArrowDown / Enter behave intuitively after the operator
+            // hovers a row.
+            prop.onMouseEnter (fun _ -> setActiveIndex i)
             prop.children [
-                Html.div [
-                    prop.className "text-sm font-medium text-text"
-                    prop.text summary.DisplayName
-                ]
-                Html.div [ prop.className "text-xs text-muted"; prop.text summary.Email ]
+                Html.div [ prop.className "text-sm font-medium text-text"; prop.text label ]
+                secondaryLine
             ]
         ]
 
@@ -201,7 +260,7 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
                         "border border-border rounded-lg shadow-md"
                         "max-h-64 overflow-auto"
                     ]
-                    prop.children [ for s in suggestions -> suggestionItem s ]
+                    prop.children [ for i, s in List.indexed suggestions -> suggestionItem i s ]
                 ]
             else
                 Html.none

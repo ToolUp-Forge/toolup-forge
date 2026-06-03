@@ -1,9 +1,14 @@
 # ToolUp.AuthProviders.EntraDirectory
 
-Microsoft Graph directory-search companion for ToolUp Platform. Implements
-the `IUserDirectory` substrate against Microsoft Entra (Azure AD) tenants
-so the SDK's team-invite UI can surface a typeahead of matching directory
-entries instead of asking the operator to memorise an email.
+Microsoft Graph directory companion for ToolUp Platform. Implements the
+`IUserDirectory` substrate against Microsoft Entra (Azure AD) tenants
+so the SDK's team-invite UI can:
+
+1. Surface a typeahead of matching directory entries instead of asking
+   the operator to memorise an email (`SearchUsers`).
+2. Send the invitee a branded "you've been invited to <team>" email
+   when an invitation is issued (`NotifyInvitation`), so the operator
+   doesn't have to message them out of band.
 
 ## When to use it
 
@@ -15,11 +20,13 @@ Wire this companion when:
   full email.
 - The deploying tenant is willing to grant the calling identity the
   `User.ReadBasic.All` (or `User.Read.All`) Graph **application**
-  permission.
+  permission, and (optionally) `Mail.Send` to a dedicated mailbox.
 
 Without this companion, the typeahead degrades to a plain text input
-and the operator types the full email — the existing
-invite-by-email flow still works.
+and the operator types the full email — the existing invite-by-email
+flow still works, the invitee is just told out of band. Without
+`Mail.Send` granted (or `SenderUserId` unset), the typeahead still
+works; the invitation email is silently skipped.
 
 ## Wiring
 
@@ -37,8 +44,22 @@ ServerApp.empty
 
 `fromManagedIdentity ()` uses the commercial Microsoft Graph cloud
 (`https://graph.microsoft.com`) and Azure Identity's
-`DefaultAzureCredential` for token acquisition. The credential chain
-resolves in the following order:
+`DefaultAzureCredential` for token acquisition. It enables `SearchUsers`
+only — `NotifyInvitation` returns `Error "notification disabled: …"`
+because no sender mailbox is configured.
+
+To enable invitation emails, use `create` with an explicit config or
+`fromEnv` with `TOOLUP_ENTRA_DIRECTORY_SENDER_OID` set:
+
+```fsharp
+|> ServerApp.withUserDirectory (
+    EntraDirectory.create {
+        EntraDirectoryConfig.defaults with
+            SenderUserId = Some "<entra-oid-of-invites-mailbox>"
+    })
+```
+
+The credential chain resolves in the following order:
 
 1. Environment variables (`AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` /
    `AZURE_TENANT_ID`).
@@ -59,26 +80,47 @@ National-cloud deployments override the endpoint:
 EntraDirectory.create { GraphEndpoint = "https://graph.microsoft.us" }
 ```
 
-## Granting the Graph permission
+## Granting the Graph permissions
 
-The calling identity needs the `User.ReadBasic.All` Graph application
-permission. For a system-assigned managed identity on Azure App
-Service:
+The calling identity needs:
+
+- `User.ReadBasic.All` — for directory search (always required).
+- `Mail.Send` — for `NotifyInvitation` (only when invitation emails
+  are wanted). Scope this to the dedicated invitations mailbox via
+  an [application access policy](https://learn.microsoft.com/en-us/graph/auth-limit-mailbox-access)
+  so the managed identity can only `sendMail` from that one mailbox.
+
+For a system-assigned managed identity on Azure App Service:
 
 ```powershell
 $msi = Get-AzADServicePrincipal -DisplayName "<app-service-name>"
 $graph = Get-AzADServicePrincipal -ApplicationId "00000003-0000-0000-c000-000000000000"
-$role = $graph.AppRole | ? { $_.Value -eq "User.ReadBasic.All" }
 
+# User.ReadBasic.All — directory search
+$readRole = $graph.AppRole | ? { $_.Value -eq "User.ReadBasic.All" }
 New-AzADAppRoleAssignment `
     -ObjectId $msi.Id `
     -PrincipalId $msi.Id `
     -ResourceId $graph.Id `
-    -AppRoleId $role.Id
+    -AppRoleId $readRole.Id
+
+# Mail.Send — invitation emails (optional)
+$mailRole = $graph.AppRole | ? { $_.Value -eq "Mail.Send" }
+New-AzADAppRoleAssignment `
+    -ObjectId $msi.Id `
+    -PrincipalId $msi.Id `
+    -ResourceId $graph.Id `
+    -AppRoleId $mailRole.Id
 ```
 
-The tenant admin must consent to the permission. Once consented, the
-companion picks it up automatically — no app restart needed.
+The tenant admin must consent to both permissions. Once consented, the
+companion picks them up automatically — no app restart needed.
+
+Set `SenderUserId` to the Entra `oid` of the mailbox emails are sent
+FROM. A dedicated `invites@yourdomain.example` service account is a
+good choice — the From: line on the invitation matches the brand
+voice rather than coming from the operator's mailbox or a random
+managed-identity name.
 
 ## What the companion returns
 
@@ -98,16 +140,18 @@ server-side; shorter queries return `Ok []` without hitting Graph.
 
 ## Environment-driven wiring
 
-`EntraDirectory.fromEnv ()` reads two env vars:
+`EntraDirectory.fromEnv ()` reads three env vars:
 
 | Variable | Purpose |
 |---|---|
 | `TOOLUP_ENTRA_DIRECTORY_ENABLED` | `1` / `true` to enable the companion. |
 | `TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT` | Override the Graph endpoint (default `https://graph.microsoft.com`). |
+| `TOOLUP_ENTRA_DIRECTORY_SENDER_OID` | Entra `oid` of the mailbox `NotifyInvitation` emails are sent FROM. Unset → email path disabled. |
 
-Returns `None` when both are unset — the composition root falls back to
-wiring the typeahead without a directory companion. Useful for the
-"same code on dev + prod, different behaviour per env" pattern.
+Returns `None` when neither `_ENABLED` is `1` nor `_GRAPH_ENDPOINT` is
+set — the composition root falls back to wiring the typeahead without
+a directory companion. Useful for the "same code on dev + prod,
+different behaviour per env" pattern.
 
 ## Errors
 
