@@ -411,6 +411,41 @@ type MetricsEndpointMode =
     /// fan-out so a single emission hits every registered sink.
     | EnabledMetricsEndpoint
 
+/// Selects whether `compose` registers the inter-platform peer
+/// substrate (Phase 18) — opt-in, cross-deployment typed-RPC where one
+/// ToolUp deployment can call a typed contract exposed by another
+/// ToolUp deployment (peer), with identity propagation, versioning,
+/// and audit. Default: `NoPeerSubstrate` — no `/peer/v1/{contractId}`
+/// route is mounted, no `IPlatformPeer` / `IPeerClient` /
+/// `IPeerAuthProvider` resolved in DI, no peer audit emission wired.
+/// Zero cost when not enabled (GP 13). Enable with
+/// `EnabledPeerSubstrate` to activate the substrate; contracts are
+/// hosted via `PeerCompose.compose` and the JSON-RPC 2.0 host.
+///
+/// Distinct from `PeerRoutePrefixes` (the simpler shared-bearer
+/// peer-call middleware) — the two coexist on different route
+/// prefixes; this richer substrate adds JWT / delegated assertions,
+/// a version handshake, and job-substrate fusion for long-running
+/// peer calls.
+///
+/// Mirrors `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in).
+type PeerSubstrateMode =
+    /// No peer-substrate infrastructure registered. The
+    /// `/peer/v1/{contractId}` route is not mounted; `IPlatformPeer`,
+    /// `IPeerClient`, `IPeerAuthProvider`, `IPeerHandshake`, and
+    /// `IPeerRegistry` are absent from DI; no peer audit events are
+    /// emitted. Default — keeps the SDK lean and the public attack
+    /// surface closed for deployments that don't federate.
+    | NoPeerSubstrate
+    /// JSON-RPC 2.0 peer host mounted at `/peer/v1/{contractId}`;
+    /// `JwtPeerAuthProvider` (fail-closed HS256), `BlobPeerRegistry`,
+    /// and `InMemoryPeerHandshake` registered as defaults; peer-call
+    /// and handshake lifecycle events emitted via `IEventStore` under
+    /// `SourceModule = "_platform.peer"`. Contracts are authored as
+    /// `IPlatformPeer`-shaped records and hosted through
+    /// `PeerCompose.compose`.
+    | EnabledPeerSubstrate
+
 /// Sink-level cardinality cap configuration. The
 /// `MetricDefinition.Tags` allowlist is the structural defence
 /// against caller-side cardinality explosions; this knob is the
@@ -2234,6 +2269,13 @@ type ServerConfig = {
     /// honour both knobs; external implementations may use the policy as
     /// guidance or layer their own retention.
     NarrativeRetention: NarrativeRetentionPolicy
+    /// Inter-platform peer substrate selection (Phase 18). Default:
+    /// `NoPeerSubstrate` — no `/peer/v1/{contractId}` route, no peer
+    /// interfaces in DI, no peer audit emission. Enable with
+    /// `EnabledPeerSubstrate` to host typed cross-deployment contracts
+    /// over JSON-RPC 2.0 with identity propagation, version handshake,
+    /// and job-substrate fusion. Zero cost when not enabled (GP 13).
+    PeerSubstrate: PeerSubstrateMode
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -2475,6 +2517,7 @@ module ServerConfig =
         AdAnalytics = NoAdAnalytics
         TeamCreationPolicy = PlatformAdminOnly
         NarrativeRetention = NarrativeRetentionPolicy.defaults
+        PeerSubstrate = NoPeerSubstrate
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

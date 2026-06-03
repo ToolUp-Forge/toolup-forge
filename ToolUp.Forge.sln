@@ -215,6 +215,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DockerLocal", "DockerLocal"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.ContainerSchedulers.DockerLocal", "src\ContainerSchedulers\DockerLocal\ToolUp.ContainerSchedulers.DockerLocal.fsproj", "{E9D23E1D-60B6-4A51-87AB-68364983ACA8}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "InterPlatform", "src\InterPlatform\InterPlatform.fsproj", "{B2F24F60-2F8F-4A78-BADB-40E749B387E0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1161,6 +1163,18 @@ Global
 		{E9D23E1D-60B6-4A51-87AB-68364983ACA8}.Release|x64.Build.0 = Release|Any CPU
 		{E9D23E1D-60B6-4A51-87AB-68364983ACA8}.Release|x86.ActiveCfg = Release|Any CPU
 		{E9D23E1D-60B6-4A51-87AB-68364983ACA8}.Release|x86.Build.0 = Release|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Debug|x64.Build.0 = Debug|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Debug|x86.Build.0 = Debug|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Release|x64.ActiveCfg = Release|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Release|x64.Build.0 = Release|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Release|x86.ActiveCfg = Release|Any CPU
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1267,5 +1281,6 @@ Global
 		{4ED85916-0EBD-AE5F-C1BD-1701C711488E} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{9CDA2D56-2FF1-6D01-9D55-32CF0070ACCF} = {4ED85916-0EBD-AE5F-C1BD-1701C711488E}
 		{E9D23E1D-60B6-4A51-87AB-68364983ACA8} = {9CDA2D56-2FF1-6D01-9D55-32CF0070ACCF}
+		{B2F24F60-2F8F-4A78-BADB-40E749B387E0} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 	EndGlobalSection
 EndGlobal

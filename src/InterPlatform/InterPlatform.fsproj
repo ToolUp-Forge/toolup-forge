@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.InterPlatform</PackageId>
+    <Description>Opt-in inter-platform peer substrate for ToolUp.Platform — typed cross-deployment RPC over JSON-RPC 2.0 with identity propagation, version handshake, job-substrate fusion, and audit. Off by default; zero cost when not enabled.</Description>
+    <PackageTags>fsharp;sdk;peer;federation;json-rpc;cross-deployment;rpc</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 18 inter-platform peer substrate (foundation). Server-only
+       companion: no Fable client surface. The "Shared/" types are
+       shared between two peer deployments (server-to-server), not
+       between a server and a Fable client. -->
+  <ItemGroup>
+    <Compile Include="Shared\PeerTypes.fs" />
+    <Compile Include="Shared\PeerJobHandle.fs" />
+    <Compile Include="Shared\JsonRpcEnvelope.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- ToolUp.Remoting.Json.SystemTextJson (FableConverters) + Giraffe +
+       ASP.NET Core flow transitively from ToolUp.Platform.Server.
+       FSharp.Core is implicit via the .NET SDK. -->
+</Project>
