@@ -9,6 +9,10 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- Content-only template-asset package; no DLL + suppressed deps =
+         empty symbols package, which NU5017s. Override the workspace
+         default. -->
+    <IncludeSymbols>false</IncludeSymbols>
   </PropertyGroup>
 
   <!-- This is a template-asset host. No production .fs code today; the
