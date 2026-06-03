@@ -28,6 +28,22 @@ type RouteHandlers = {
     DevDiagnosticsRoutes: DevDiagnosticsHandler.DevDiagnosticsCapture -> HttpHandler list
 }
 
+// 0.5.14 — module-level resolver. Surfaces unregistered services as a
+// named-type Exception instead of the generic NullReferenceException
+// the F# `:?>` cast emits when boxing-then-UnboxGeneric a null. F#
+// inner-let bindings can't carry explicit type parameters, so this
+// lives at module scope.
+let inline private requireService<'t> (ctx: HttpContext) : 't =
+    match ctx.RequestServices.GetService(typeof<'t>) with
+    | null ->
+        failwithf
+            "Required DI service '%s' is not registered. Check the consumer's \
+             ServerConfig composition — the SDK auto-injects ITeamStore + \
+             IShareTokenStore + IAuditLog by default, but a consumer override may \
+             have removed one."
+            typeof<'t>.FullName
+    | svc -> svc :?> 't
+
 let buildRouteHandlers
     (config: ServerConfig)
     (handlers: HttpHandler list)
@@ -296,12 +312,9 @@ let buildRouteHandlers
     let teamInvitationApiHandler: HttpHandler list = [
         Api.make (
             (fun (ctx: HttpContext) ->
-                let shareTokenStore =
-                    ctx.RequestServices.GetService(typeof<IShareTokenStore>) :?> IShareTokenStore
-
-                let teamStore = ctx.RequestServices.GetService(typeof<ITeamStore>) :?> ITeamStore
-
-                let auditLog = ctx.RequestServices.GetService(typeof<IAuditLog>) :?> IAuditLog
+                let shareTokenStore = requireService<IShareTokenStore> ctx
+                let teamStore = requireService<ITeamStore> ctx
+                let auditLog = requireService<IAuditLog> ctx
 
                 TeamInvitationHandler.teamInvitationApi shareTokenStore teamStore auditLog config ctx),
             routeBuilder = TeamInviteApi.routeBuilder
