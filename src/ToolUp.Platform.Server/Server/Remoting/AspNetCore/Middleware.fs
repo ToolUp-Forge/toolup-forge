@@ -157,6 +157,12 @@ module internal Middleware =
                 ImplementationBuilder = (fun () -> implBuilder ctx)
                 EndpointName = ctx.Request.Path.Value
                 Input = ctx.Request.Body
+                // Phase 69m — the AspNetCore middleware adapter has no
+                // body cache (the Phase 69b–69k pre-flight chain refuses
+                // to compose against this adapter per the seam-parity
+                // guard above). The proxy falls back to the stream-read
+                // path; behaviour unchanged for this adapter.
+                InputBytes = None
                 IsProxyHeaderPresent = isProxyHeaderPresent
                 HttpVerb = ctx.Request.Method
                 InputContentType = ctx.Request.ContentType

@@ -21,15 +21,22 @@ let jsonSerializeWithBackend (backend: JsonSerializerBackend) (o: 'a) (stream: S
     match backend with
     | SystemTextJson stjOptions -> JsonSerializer.Serialize<'a>(stream, o, stjOptions)
 
-/// Parse the outer arguments-array JSON text into a list of raw per-argument
-/// JSON strings. Each per-argument element is captured as its raw JSON text;
-/// the per-argument deserialise path re-parses it with the configured options.
+/// Phase 69m — parse the outer arguments-array JSON into a list of
+/// per-argument `JsonElement` clones. Each element is `Clone()`d so it
+/// survives the parent JsonDocument's disposal (the clone produces a
+/// self-contained JsonElement backed by a fresh small JsonDocument
+/// holding only that element's bytes). The per-argument deserialise
+/// path consumes the JsonElement directly — no re-parse per argument.
+///
+/// Previously this function returned `string list` (raw JSON text per
+/// argument) and the deserialise path re-parsed each slice into its
+/// own JsonDocument, costing N+1 parses for N arguments.
 let private parseArgumentArray
     (_backend: JsonSerializerBackend)
     (functionName: string)
     (expectedArgCount: int)
     (text: string)
-    : string list =
+    : JsonElement list =
     use doc = JsonDocument.Parse(text)
 
     if doc.RootElement.ValueKind <> JsonValueKind.Array then
@@ -38,15 +45,37 @@ let private parseArgumentArray
             functionName
             expectedArgCount
 
-    doc.RootElement.EnumerateArray()
-    |> Seq.map (fun el -> el.GetRawText())
-    |> Seq.toList
+    doc.RootElement.EnumerateArray() |> Seq.map (fun el -> el.Clone()) |> Seq.toList
 
-/// Parse one already-extracted argument's raw JSON text into 'inp using
-/// `JsonSerializer.Deserialize` with the configured options.
-let private deserialiseArgWithBackend<'inp> (backend: JsonSerializerBackend) (argText: string) : 'inp =
+/// Phase 69m — parse the outer arguments-array from cached bytes
+/// directly (no string materialisation). Used when the adapter's body
+/// cache already holds the bytes for upstream pre-flight stages
+/// (validation / audit / idempotency-hash); the proxy reads from there
+/// instead of re-allocating a string + re-reading the request stream.
+let private parseArgumentArrayBytes
+    (_backend: JsonSerializerBackend)
+    (functionName: string)
+    (expectedArgCount: int)
+    (bytes: byte[])
+    : JsonElement list =
+    use doc = JsonDocument.Parse(System.ReadOnlyMemory bytes)
+
+    if doc.RootElement.ValueKind <> JsonValueKind.Array then
+        failwithf
+            "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
+            functionName
+            expectedArgCount
+
+    doc.RootElement.EnumerateArray() |> Seq.map (fun el -> el.Clone()) |> Seq.toList
+
+/// Phase 69m — deserialise one `JsonElement` argument into `'inp`.
+/// `JsonElement.Deserialize` walks the existing element's tokens; no
+/// re-parse. Previously this function took raw JSON text and called
+/// `JsonSerializer.Deserialize<'inp>(text, opts)`, which re-parsed
+/// the slice into its own JsonDocument per argument.
+let private deserialiseArgWithBackend<'inp> (backend: JsonSerializerBackend) (argElement: JsonElement) : 'inp =
     match backend with
-    | SystemTextJson stjOptions -> JsonSerializer.Deserialize<'inp>(argText, stjOptions)
+    | SystemTextJson stjOptions -> argElement.Deserialize<'inp>(stjOptions)
 
 type private MsgPackSerializer<'a> =
     static let serializer = MsgPack.Write.makeSerializer<'a> ()
@@ -166,12 +195,14 @@ let private readMultipartArgs props (options: RemotingOptions<_, _>) = task {
 
                 do! copyWithCap section.Body buffer sectionCap sectionIdx
 
-                let text =
-                    System.Text.Encoding.UTF8.GetString(buffer.GetReadOnlySequence().ToArray())
-                // Multipart JSON sections are single values (one argument per
-                // multipart part), so the section's text IS the raw JSON text
-                // for that argument — no outer array unwrap required.
-                parts.Add(Choice2Of2 text)
+                // Phase 69m — multipart JSON sections are single values
+                // (one argument per multipart part), so the section's
+                // payload IS the per-argument JSON. Parse directly from
+                // the buffer's bytes into a `JsonElement` (then `Clone`
+                // for survival beyond the JsonDocument's `using` scope).
+                let bytes = buffer.GetReadOnlySequence().ToArray()
+                use sectionDoc = JsonDocument.Parse(System.ReadOnlyMemory bytes)
+                parts.Add(Choice2Of2(sectionDoc.RootElement.Clone()))
 
             sectionIdx <- sectionIdx + 1
 
@@ -258,14 +289,14 @@ let rec private makeEndpointProxy<'fieldPart>
 
                             let inp = box bytes :?> 'inp
                             outp (f inp) { props with Arguments = t }
-                        | Choice2Of2 argText :: t ->
-                            // Per-Phase 4f: argText is the raw JSON text for
-                            // this single argument. The outer array was
-                            // already parsed (in the request body parser or
-                            // multipart reader, branched on backend), so the
-                            // per-arg path is also fully backend-agnostic —
-                            // STJ consumers exercise no Newtonsoft code path.
-                            let inp = deserialiseArgWithBackend<'inp> makeProps.JsonSerializer argText
+                        | Choice2Of2 argElement :: t ->
+                            // Phase 69m: argElement is a self-contained
+                            // (Clone'd) `JsonElement`. `JsonElement.Deserialize`
+                            // walks the existing element tokens — no re-parse.
+                            // Previous behaviour was N+1 parses (outer array
+                            // parse + per-argument re-parse from text); the
+                            // new shape is one parse total.
+                            let inp = deserialiseArgWithBackend<'inp> makeProps.JsonSerializer argElement
                             outp (f inp) { props with Arguments = t }
                         | [] when typeof<'inp> = typeof<unit> ->
                             let inp = box () :?> _
@@ -362,21 +393,47 @@ let makeApiProxy<'impl, 'ctx>
 
                                 return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
                             else
-                                use sr = new StreamReader(props.Input)
-                                let! text = sr.ReadToEndAsync()
+                                // Phase 69m — if the adapter populated
+                                // `InputBytes` (cached body bytes from an
+                                // upstream pre-flight stage), parse directly
+                                // from bytes — no second string materialisation
+                                // and no second stream read on `ctx.Request.Body`.
+                                // Fallback (no cache) reads the stream as before.
+                                let! args = task {
+                                    match props.InputBytes with
+                                    | Some bytes when bytes.Length > 0 ->
+                                        // `requestBodyText` stays None on the
+                                        // happy path; the exception arm
+                                        // materialises text from these bytes
+                                        // lazily for error reporting.
+                                        return
+                                            parseArgumentArrayBytes
+                                                options.JsonSerializer
+                                                shape.MemberInfo.Name
+                                                (flattenedTypes.Length - 1)
+                                                bytes
+                                            |> List.map Choice2Of2
+                                    | Some _ ->
+                                        // Empty cached bytes — same shape as
+                                        // an empty stream read.
+                                        return []
+                                    | None ->
+                                        use sr = new StreamReader(props.Input)
+                                        let! text = sr.ReadToEndAsync()
 
-                                let args =
-                                    if String.IsNullOrEmpty text then
-                                        []
-                                    else
-                                        requestBodyText <- Some text
+                                        if String.IsNullOrEmpty text then
+                                            return []
+                                        else
+                                            requestBodyText <- Some text
 
-                                        parseArgumentArray
-                                            options.JsonSerializer
-                                            shape.MemberInfo.Name
-                                            (flattenedTypes.Length - 1)
-                                            text
-                                        |> List.map Choice2Of2
+                                            return
+                                                parseArgumentArray
+                                                    options.JsonSerializer
+                                                    shape.MemberInfo.Name
+                                                    (flattenedTypes.Length - 1)
+                                                    text
+                                                |> List.map Choice2Of2
+                                }
 
                                 let props' = {
                                     Arguments = args
@@ -386,7 +443,22 @@ let makeApiProxy<'impl, 'ctx>
 
                                 return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
                         with e ->
-                            return InvocationResult.Exception(e, shape.MemberInfo.Name, requestBodyText)
+                            // Phase 69m — when the cached-bytes path was
+                            // taken, `requestBodyText` is None on the happy
+                            // path. Materialise text from cached bytes here
+                            // (cold path; cost only paid on actual errors)
+                            // so error reporting still carries the request
+                            // body context.
+                            let resolvedBodyText =
+                                match requestBodyText with
+                                | Some _ -> requestBodyText
+                                | None ->
+                                    match props.InputBytes with
+                                    | Some bytes when bytes.Length > 0 ->
+                                        Some(System.Text.Encoding.UTF8.GetString bytes)
+                                    | _ -> None
+
+                            return InvocationResult.Exception(e, shape.MemberInfo.Name, resolvedBodyText)
                     })
             }
 

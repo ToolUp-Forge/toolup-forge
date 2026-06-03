@@ -550,6 +550,13 @@ module GiraffeUtil =
                     ImplementationBuilder = fun _ -> implBuilder ctx
                     EndpointName = SubRouting.getNextPartOfPath ctx
                     Input = ctx.Request.Body
+                    // Phase 69m — populated just before `proxy props` is
+                    // invoked (below, after the pre-flight chain). When an
+                    // upstream pre-flight stage forced the body cache,
+                    // the proxy parses from the cached bytes — no second
+                    // stream read on `ctx.Request.Body`, no second string
+                    // materialisation.
+                    InputBytes = None
                     IsProxyHeaderPresent = isProxyHeaderPresent
                     HttpVerb = ctx.Request.Method
                     InputContentType =
@@ -646,6 +653,13 @@ module GiraffeUtil =
                     // bytes.
                     let validationInputType = validationInputTypes |> Map.tryFind methodNameForAuth
 
+                    // Phase 69m — cache the first-arg value validation
+                    // parses so the audit emission below can reuse it
+                    // (when audit AND validation are armed for the same
+                    // method). Saves a second `parseFirstArgFromBody`
+                    // call per request on dual-armed methods.
+                    let validationParsedFirstArg: obj option ref = ref None
+
                     // 0.1.16 — lazy body read: validation only forces
                     // the cache when its method actually has validation
                     // attributes AND the STJ backend is composed.
@@ -655,7 +669,9 @@ module GiraffeUtil =
                             let! bodyText = readCachedBodyText ()
 
                             match Validation.parseFirstArgFromBody bodyText inputT stjOptions with
-                            | Some inputValue -> return Validation.evaluate inputT inputValue
+                            | Some inputValue ->
+                                validationParsedFirstArg.Value <- Some inputValue
+                                return Validation.evaluate inputT inputValue
                             | None -> return []
                         | _ -> return []
                     }
@@ -924,7 +940,17 @@ module GiraffeUtil =
                                             }
                                         | None -> ()
 
-                                match! proxy props with
+                                // Phase 69m — hand cached bytes to the proxy
+                                // when an upstream pre-flight stage forced
+                                // the cache. The proxy then parses from
+                                // bytes directly; no second stream read +
+                                // no second string materialisation.
+                                let propsWithCache = {
+                                    props with
+                                        InputBytes = cachedBodyBytesCell.Value
+                                }
+
+                                match! proxy propsWithCache with
                                 | Success isBinaryOutput ->
                                     ctx.Response.StatusCode <- 200
 
@@ -1010,15 +1036,25 @@ module GiraffeUtil =
                                         // subsequent reads (validation,
                                         // idempotency mismatch) return
                                         // the cached value.
+                                        //
+                                        // Phase 69m — when validation
+                                        // parsed the first-arg value
+                                        // earlier in the same request,
+                                        // reuse the cached value instead
+                                        // of re-running `parseFirstArgFromBody`
+                                        // a second time.
                                         let! payload = task {
                                             match validationInputTypes |> Map.tryFind methodName with
                                             | Some inputT ->
-                                                let (SystemTextJson stjOpts) = options.JsonSerializer
-                                                let! bodyText = readCachedBodyText ()
-
-                                                match Validation.parseFirstArgFromBody bodyText inputT stjOpts with
+                                                match validationParsedFirstArg.Value with
                                                 | Some v -> return Audit.payloadFromInputRecord inputT v
-                                                | None -> return Map.empty
+                                                | None ->
+                                                    let (SystemTextJson stjOpts) = options.JsonSerializer
+                                                    let! bodyText = readCachedBodyText ()
+
+                                                    match Validation.parseFirstArgFromBody bodyText inputT stjOpts with
+                                                    | Some v -> return Audit.payloadFromInputRecord inputT v
+                                                    | None -> return Map.empty
                                             | None -> return Map.empty
                                         }
 

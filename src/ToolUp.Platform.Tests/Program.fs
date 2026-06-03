@@ -167,6 +167,10 @@ let allTests =
         // Source-audit-shape pack pinning the gate composition in
         // `Api.fs` + the dispatcher's gate-read before allocation.
         TelemetryZeroCostGateTests.tests
+        // Phase 69m — Dispatcher body + arg-parse fastpath. Source-audit
+        // pack pinning the JsonElement-shaped argument arm + the
+        // InputBytes cache plumbing.
+        DispatcherBodyAndArgFastpathTests.tests
         IAIProviderContract.tests
         // Phase 26 — deploy-plane substrate contract packs bound to
         // their single-node defaults + in-memory mocks. The

@@ -363,6 +363,18 @@
              allocation-pin test is deferred to a TIDY-UP follow-up (requires
              a TestServer scaffold this repo doesn't have today). -->
         <Compile Include="InProcess\TelemetryZeroCostGateTests.fs" />
+        <!-- Phase 69m — Dispatcher body + argument-parse fastpath.
+             Textual checks pin (a) InvocationPropsInt.Arguments holding
+             JsonElement (not raw text); (b) InvocationProps.InputBytes
+             for cached-body re-use; (c) bytes-direct outer-array parse
+             function; (d) Clone() on each per-arg JsonElement; (e)
+             JsonElement.Deserialize per arg (not re-parse); (f) Giraffe
+             adapter populating InputBytes from the lazy cache; (g)
+             AspNetCore adapter defaulting InputBytes = None; (h) audit
+             reuses validation-parsed first-arg; (i) exception-path text
+             materialisation from cached bytes. Same TestServer-scaffold
+             deferral as the 69l pack. -->
+        <Compile Include="InProcess\DispatcherBodyAndArgFastpathTests.fs" />
         <!-- Phase 26 — deploy-plane substrate bindings. Real
              EntityStoreTenantFleet (over BlobEntityStore + in-memory
              mocks for the injected IContainerScheduler / IDeployPipeline)

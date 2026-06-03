@@ -4,6 +4,7 @@ open System
 open FSharp.Reflection
 open TypeShape
 open System.IO
+open System.Text.Json
 
 [<RequireQualifiedAccess>]
 module TypeInfo =
@@ -142,13 +143,28 @@ type internal ShapeFSharpAsyncOrTask<'T>() =
 ///     this carried a `Newtonsoft.Json.Linq.JToken`, which prevented STJ-only
 ///     consumers from dropping the Newtonsoft transitive dep.
 type internal InvocationPropsInt = {
-    Arguments: Choice<byte[], string> list
+    /// Phase 69m — second arm is now `JsonElement` (was `string`). The
+    /// outer arguments array parses once into a JsonDocument; each
+    /// element is `Clone`d so it survives the document's disposal and
+    /// can be deserialised without re-parsing. Previously the second
+    /// arm was raw JSON text and the per-argument deserialise re-parsed
+    /// each slice into its own JsonDocument — N+1 parses per call.
+    Arguments: Choice<byte[], JsonElement> list
     IsProxyHeaderPresent: bool
     Output: Stream
 }
 
 type InvocationProps<'impl> = {
     Input: Stream
+    /// Phase 69m — when the adapter's body cache has already
+    /// materialised the request bytes (via validation / audit /
+    /// idempotency-hash pre-flight stages forcing the lazy cache),
+    /// the adapter populates this so the proxy parses directly from
+    /// the cached bytes instead of re-reading `Input`. When `None`
+    /// (no cache materialised), the proxy falls back to the stream
+    /// read — unchanged behaviour for non-Giraffe adapters that don't
+    /// implement a body cache.
+    InputBytes: byte[] option
     Output: Stream
     ImplementationBuilder: unit -> 'impl
     EndpointName: string
