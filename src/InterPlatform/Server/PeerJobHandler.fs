@@ -137,8 +137,13 @@ type private PeerJobInvoker =
 /// deterministic peer computation would double-execute it.
 type PeerJobHandler(funcValue: obj, argTypes: Type list, innerType: Type, resultStore: IPeerJobResultStore) =
 
+    // NonPublic is load-bearing: `PeerJobInvoker` is a `private` type, so
+    // F# emits its (F#-public) static members with non-public IL
+    // visibility. Without NonPublic the lookup returns null and the
+    // handler ctor NREs.
     static let resolveSerializeMethod =
-        typeof<PeerJobInvoker>.GetMethod("ResolveSerialize", BindingFlags.Static ||| BindingFlags.Public)
+        typeof<PeerJobInvoker>
+            .GetMethod("ResolveSerialize", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
 
     let resolveSerialize = resolveSerializeMethod.MakeGenericMethod(innerType)
 

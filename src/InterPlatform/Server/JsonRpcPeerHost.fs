@@ -45,8 +45,12 @@ type private HostInvoker =
 /// record-of-functions contract type.
 module JsonRpcPeerHost =
 
+    // NonPublic is load-bearing: `HostInvoker` is a `private` type, so F#
+    // emits its (F#-public) static members with non-public IL visibility.
+    // Without NonPublic the lookup returns null and dispatch NREs.
     let private awaitSerializeMethod =
-        typeof<HostInvoker>.GetMethod("AwaitSerialize", BindingFlags.Static ||| BindingFlags.Public)
+        typeof<HostInvoker>
+            .GetMethod("AwaitSerialize", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
 
     /// Build the per-method dispatch closure for an `Immediate` field:
     /// unmarshal args → apply to the implementation function → await +

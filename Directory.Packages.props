@@ -128,6 +128,10 @@
     <PackageVersion Include="MessagePack" Version="3.1.4" />
     <PackageVersion Include="MessagePack.Annotations" Version="3.1.4" />
     <PackageVersion Include="MessagePackAnalyzer" Version="3.1.4" />
+    <!-- Phase 18 — TestServer harness for the InterPlatform peer-substrate
+         buyer->seller worked example (in ToolUp.Platform.Tests). Pinned to
+         the installed ASP.NET Core runtime (10.0.8). -->
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.8" />
     <PackageVersion Include="Microsoft.AspNetCore.WebUtilities" Version="8.0.23" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.0.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.2.0" />

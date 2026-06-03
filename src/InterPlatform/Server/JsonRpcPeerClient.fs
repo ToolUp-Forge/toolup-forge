@@ -96,11 +96,16 @@ type private ProxyInvoker =
 /// Builds typed peer proxies from a record-of-functions contract type.
 module JsonRpcPeerClient =
 
+    // NonPublic is load-bearing: `ProxyInvoker` is a `private` type, so F#
+    // emits its (F#-public) static members with non-public IL visibility.
+    // Without NonPublic the lookup returns null and the proxy build NREs.
     let private immediateMethod =
-        typeof<ProxyInvoker>.GetMethod("Immediate", BindingFlags.Static ||| BindingFlags.Public)
+        typeof<ProxyInvoker>
+            .GetMethod("Immediate", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
 
     let private longRunningMethod =
-        typeof<ProxyInvoker>.GetMethod("LongRunning", BindingFlags.Static ||| BindingFlags.Public)
+        typeof<ProxyInvoker>
+            .GetMethod("LongRunning", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
 
     /// Reflect over `'TApi` (a record whose fields are contract methods)
     /// and return a live proxy bound to `config`. Each method call routes

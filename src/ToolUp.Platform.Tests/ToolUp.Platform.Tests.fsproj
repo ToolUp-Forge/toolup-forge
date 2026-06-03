@@ -81,6 +81,9 @@
         <Compile Include="Contracts\IUserClaimsContract.fs" />
         <!-- Phase 66 Stream D.1 — ISubjectResolver four-step resolution contract. -->
         <Compile Include="Contracts\ISubjectResolverContract.fs" />
+        <!-- Phase 18 — IPlatformPeer contract pack (inter-platform peer
+             substrate: registration, dispatch, guard paths, job fusion). -->
+        <Compile Include="Contracts\IPlatformPeerContract.fs" />
         <!-- Phase 11a.A — module-level mutable cache reset registry.
              Tests touching a (b)-class cache call CacheReset.invalidateAll
              at setup. See docs/platform/testing-conventions.md. -->
@@ -361,6 +364,10 @@
              IContainerScheduler bindings + Docker-socket-gated
              DockerLocalContainerScheduler binding. -->
         <Compile Include="InProcess\DeployPlaneTests.fs" />
+        <!-- Phase 18 — IPlatformPeer in-process binding + buyer→seller
+             TestServer worked example (identity validation, audit
+             emission, matching RootRequestId across the HTTP boundary). -->
+        <Compile Include="InProcess\PlatformPeerTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -449,6 +456,9 @@
              Binds the IContainerSchedulerContract pack against a real
              Docker socket when available; env-gated skip otherwise. -->
         <ProjectReference Include="..\ContainerSchedulers\DockerLocal\ToolUp.ContainerSchedulers.DockerLocal.fsproj" />
+        <!-- Phase 18 — inter-platform peer substrate, exercised by the
+             IPlatformPeer contract pack + buyer→seller worked example. -->
+        <ProjectReference Include="..\InterPlatform\InterPlatform.fsproj" />
     </ItemGroup>
     <!-- Phase 14k WS5 Item 2 — mixed-dim fixture JSON co-located with the
          existing eval-baseline.json in the RAG.Evaluation project. Linked
@@ -467,5 +477,7 @@
         <PackageReference Include="MailKit" />
         <PackageReference Include="WebPush" />
         <PackageReference Include="HNSW" />
+        <!-- Phase 18 — TestServer host for the buyer→seller worked example. -->
+        <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     </ItemGroup>
 </Project>

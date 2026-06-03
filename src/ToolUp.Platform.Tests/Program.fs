@@ -197,6 +197,12 @@ let allTests =
         // reads a pre-migration blob fails loudly here rather than
         // silently in production if the wire shape drifts.
         StjBackwardCompatTests.tests
+        // Phase 18 — inter-platform peer substrate: the IPlatformPeer
+        // contract pack (in-process binding) + the buyer→seller TestServer
+        // worked example (identity validation, audit emission, matching
+        // RootRequestId across the HTTP boundary).
+        PlatformPeerTests.inProcessTests
+        PlatformPeerTests.workedExampleTests
     ]
 
 [<EntryPoint>]
