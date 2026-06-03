@@ -94,7 +94,23 @@ module Forms =
                     e.preventDefault ()
                     onChange displayValue
 
-            let handleBlur () = setDisplayValue value
+            // 0.5.5 — commit `displayValue` to the parent model on blur
+            // instead of discarding it. The pre-0.5.5 reset (`setDisplayValue
+            // value`) created a fatal interaction with submit buttons that
+            // sit alongside the input: a `mouseDown` on the button moves
+            // focus → fires `blur` on the input → resets the local state
+            // back to the model's stale value → button's `click` fires
+            // and dispatches against an empty model field. Symptom:
+            // `TeamManagerUI` reported "Team name can't be empty" after
+            // the user typed a name and clicked Create.
+            //
+            // Commit-on-blur preserves the "submit on Enter / button click"
+            // convention (no per-keystroke Elmish dispatch) while also
+            // capturing the typed value for any next-tick reader — the
+            // useEffect above re-syncs `displayValue ← value` after a
+            // successful submission resets the model field to "", so
+            // the input visibly clears once the round-trip lands.
+            let handleBlur () = onChange displayValue
 
             Html.input [
                 prop.type' "text"

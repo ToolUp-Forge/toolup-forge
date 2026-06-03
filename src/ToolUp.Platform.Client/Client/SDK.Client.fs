@@ -197,6 +197,19 @@ module Client =
         /// for non-admins, Anonymous mode, and any error path) leaves
         /// it `None` so the group stays hidden.
         | PlatformRoleLoaded of bool
+        /// 0.5.5 — `UserSession.localStorage.toolup-auth-token`
+        /// transitioned `None → Some`. Re-runs the boot-time API
+        /// fetches (perms / configs / flags / role / team list /
+        /// active team) that were deliberately skipped at `init` in
+        /// deployments that require auth but had no token present at
+        /// program start.
+        ///
+        /// Dispatched by the `programLifetime` effect wrapping
+        /// `UserSession.onAuthTokenChange`. Idempotent — re-firing the
+        /// loaders against an already-populated model just refreshes
+        /// the state with whatever the server now reports under the
+        /// authenticated identity.
+        | AuthTokenAcquired
         /// Initial load of the user's active team id. Fired on init in
         /// team-scoped modes so the header switcher can highlight the
         /// current selection without an extra round-trip.
@@ -535,6 +548,47 @@ module Client =
                 | None -> []
             | None -> [])
 
+    /// 0.5.5 — boot-time API fetches packaged as a single `Cmd<Msg>`
+    /// so `init` and the `AuthTokenAcquired` update arm dispatch the
+    /// same set. Called from `init` only when a token is already
+    /// present (returning user / silent SSO carry-over), and from
+    /// `update` on `AuthTokenAcquired` after the OIDC PKCE callback
+    /// persists a fresh JWT (signal arrives via the
+    /// `auth-token-acquired` `programLifetime` effect).
+    let private bootLoadCommandsFor (config: ClientConfig) : Cmd<Msg> =
+        let loadPerms =
+            Cmd.OfAsync.perform (fun () -> withCsrf loadAccessibleModules) () AccessibleModulesLoaded
+
+        let loadConfigs =
+            Cmd.OfAsync.perform (fun () -> withCsrf loadAllConfigs) () ConfigsLoaded
+
+        let loadFlags =
+            Cmd.OfAsync.perform (fun () -> withCsrf loadResolvedFlags) () FlagsLoaded
+
+        // Team-scoped deployments load the user's team list and active-
+        // team id so the header (when `HeaderSwitcher`-UX) can render
+        // a switcher and the shell can populate
+        // `ClientModuleContext.TeamId` for module init. Other
+        // deployment shapes skip the round-trips.
+        let teamScopedLoaders =
+            if ClientConfig.hasTeamScope config then
+                [
+                    Cmd.OfAsync.perform (fun () -> withCsrf loadMyTeams) () MyTeamsLoaded
+                    Cmd.OfAsync.perform (fun () -> withCsrf loadActiveTeam) () ActiveTeamLoaded
+                ]
+            else
+                []
+
+        Cmd.batch (
+            [
+                loadPerms
+                loadConfigs
+                loadFlags
+                Cmd.OfAsync.perform (fun () -> loadPlatformRole) () PlatformRoleLoaded
+            ]
+            @ teamScopedLoaders
+        )
+
     let init (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) () =
         // Phase 6g.C: publish the registered module list so companion
         // packages (e.g. a client-resident navigate executor) can
@@ -593,28 +647,11 @@ module Client =
             ResetCounters = Map.empty
         }
 
-        let loadPerms =
-            Cmd.OfAsync.perform (fun () -> withCsrf loadAccessibleModules) () AccessibleModulesLoaded
-
-        let loadConfigs =
-            Cmd.OfAsync.perform (fun () -> withCsrf loadAllConfigs) () ConfigsLoaded
-
-        let loadFlags =
-            Cmd.OfAsync.perform (fun () -> withCsrf loadResolvedFlags) () FlagsLoaded
-
-        // Team-scoped deployments load the user's team list and
-        // active-team id so the header (when `HeaderSwitcher`-UX) can
-        // render a switcher and the shell can populate
-        // `ClientModuleContext.TeamId` for module init. Other
-        // deployment shapes skip the round-trips.
-        let teamScopedLoaders =
-            if ClientConfig.hasTeamScope _config then
-                [
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadMyTeams) () MyTeamsLoaded
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadActiveTeam) () ActiveTeamLoaded
-                ]
-            else
-                []
+        // 0.5.5 — Boot-time fetches are gated on auth state below.
+        // The load Cmds live in `bootLoadCommandsFor` (above `init`)
+        // so both `init` and the `AuthTokenAcquired` update arm
+        // dispatch the same set.
+        let bootLoadCommands = bootLoadCommandsFor _config
 
         // Shell dispatcher capture lives at the `Program.run` site via
         // `Program.withDispatcherHandle` (ToolUp.Elmish primitive) — see
@@ -634,17 +671,21 @@ module Client =
         // page-navigation that the 0.4.0 README headlines as resolved.
         // See `programLifetimeEffects` below.
 
-        model,
-        Cmd.batch (
-            [
-                Cmd.map ModuleMsg cmd
-                loadPerms
-                loadConfigs
-                loadFlags
-                Cmd.OfAsync.perform (fun () -> loadPlatformRole) () PlatformRoleLoaded
-            ]
-            @ teamScopedLoaders
-        )
+        let needsAuth = ClientConfig.requiresAnyAuth _config
+        let hasToken = UserSession.getAuthToken () |> Option.isSome
+
+        let initCmds =
+            if needsAuth && not hasToken then
+                // Welcome-Page case: the user hasn't signed in yet and
+                // every auth-required fetch would 401. Drop them
+                // entirely; the `auth-token-acquired` lifetime effect
+                // dispatches `AuthTokenAcquired` once `setAuthToken`
+                // runs and we re-fire `bootLoadCommands` then.
+                [ Cmd.map ModuleMsg cmd ]
+            else
+                [ Cmd.map ModuleMsg cmd; bootLoadCommands ]
+
+        model, Cmd.batch initCmds
 
     let update (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let newModel, cmd =
@@ -828,6 +869,21 @@ module Client =
                 { model with PlatformRole = role }, Cmd.none
 
             | ActiveTeamLoaded teamId -> { model with ActiveTeamId = teamId }, Cmd.none
+
+            | AuthTokenAcquired ->
+                // 0.5.5 — `UserSession.localStorage.toolup-auth-token`
+                // transitioned `None → Some`. The auth-required boot
+                // fetches that `init` deliberately skipped now have a
+                // Bearer token to attach via
+                // `CsrfClient.installRequestGuard`'s identity getter,
+                // so dispatch them. Idempotent against the model:
+                // re-firing the loaders against an already-populated
+                // model just refreshes the state with whatever the
+                // server now reports under the authenticated identity
+                // — useful when a sign-in happens mid-session (e.g.
+                // an explicit "sign in" tab from a deployment that
+                // serves both anonymous and authenticated surfaces).
+                model, bootLoadCommandsFor _config
 
             | ResetModule moduleId ->
                 // Phase 12c — clear the named module's state, bump its
@@ -2117,24 +2173,102 @@ module Client =
 
         let notificationsEffect =
             EffectHandle.programLifetime "notifications-stream" (fun dispatch ->
+                let onEnvelope (envelope: NotificationEnvelope) =
+                    match envelope.Notification with
+                    | Notification.ModuleAction(moduleId, actionKey, payloadJson) ->
+                        dispatch (ModuleActionReceived(moduleId, actionKey, payloadJson))
+                    | Notification.MembershipChanged payload ->
+                        // Server-side bridge filters by AffectedUserId
+                        // before forwarding to this connection — every
+                        // event delivered here targets this user. Route
+                        // by `ChangeKind` to internal Msgs that compare
+                        // against `model.ActiveTeamId` (this closure
+                        // can't read the model directly).
+                        match payload.ChangeKind with
+                        | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId)
+                        | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId)
+                        | MembershipChangeKind.Added
+                        | MembershipChangeKind.RoleChanged -> ()
+                    | _ -> ()
+
+                // 0.5.5 — gate the SSE subscribe on auth state. In an
+                // auth-required deployment, opening the EventSource
+                // before sign-in produces a guaranteed 401 (the server
+                // can't read an Authorization header — EventSource
+                // doesn't send custom headers — and the cookie isn't
+                // populated yet either). The pre-0.5.5 path eagerly
+                // subscribed at boot, the connection 401'd, and SSE's
+                // no-retry policy kept it closed for the rest of the
+                // session — so even a successful sign-in didn't restore
+                // notifications. Defer the subscribe until a token is
+                // present; re-subscribe on `None → Some` transitions so
+                // sign-in mid-session restores the channel without
+                // a page reload.
+                let needsAuth = ClientConfig.requiresAnyAuth config
+                let mutable currentUnsubscribe: (unit -> unit) option = None
+
+                let subscribeNow () =
+                    if currentUnsubscribe.IsNone then
+                        currentUnsubscribe <- Some(NotificationClient.subscribe onEnvelope)
+
+                let unsubscribeNow () =
+                    match currentUnsubscribe with
+                    | Some u ->
+                        u ()
+                        currentUnsubscribe <- None
+                    | None -> ()
+
+                let hasTokenNow () =
+                    UserSession.getAuthToken () |> Option.isSome
+
+                if not needsAuth || hasTokenNow () then
+                    subscribeNow ()
+
+                let stopWatcher =
+                    if needsAuth then
+                        UserSession.onAuthTokenChange (fun token ->
+                            match token with
+                            | Some _ -> subscribeNow ()
+                            | None -> unsubscribeNow ())
+                    else
+                        ignore
+
+                { new System.IDisposable with
+                    member _.Dispose() =
+                        stopWatcher ()
+                        unsubscribeNow ()
+                })
+
+        // 0.5.5 — auth-token-acquired observer. Polls
+        // `localStorage.toolup-auth-token` via
+        // `UserSession.onAuthTokenChange` and dispatches
+        // `AuthTokenAcquired` when it transitions `None → Some` (the
+        // OIDC PKCE callback's `setAuthToken` runs, or the bridge's
+        // periodic refresh delivers a first token). Pairs with the
+        // auth-gate in `init`: deployments that require auth + have
+        // no token at program start skip the boot-time API fetches,
+        // and this effect re-fires them when sign-in completes —
+        // restoring the previously-noisy 401 storm on the Welcome
+        // Page to a single token-arrival event followed by a clean
+        // batch of authenticated loads.
+        //
+        // `None → Some` is the only transition that fires the dispatch.
+        // `Some → Some` (rotation / refresh) and `Some → None`
+        // (sign-out) are no-ops — the shell's `TeamSwitched` /
+        // `MembershipRevoked` paths and the `Cmd.OfRemoting`
+        // categorised-error interceptor handle those concerns.
+        let authTokenAcquiredEffect =
+            EffectHandle.programLifetime "auth-token-acquired" (fun dispatch ->
+                let mutable lastWasNone = UserSession.getAuthToken () |> Option.isNone
+
                 let unsubscribe =
-                    NotificationClient.subscribe (fun envelope ->
-                        match envelope.Notification with
-                        | Notification.ModuleAction(moduleId, actionKey, payloadJson) ->
-                            dispatch (ModuleActionReceived(moduleId, actionKey, payloadJson))
-                        | Notification.MembershipChanged payload ->
-                            // Server-side bridge filters by AffectedUserId
-                            // before forwarding to this connection — every
-                            // event delivered here targets this user. Route
-                            // by `ChangeKind` to internal Msgs that compare
-                            // against `model.ActiveTeamId` (this closure
-                            // can't read the model directly).
-                            match payload.ChangeKind with
-                            | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId)
-                            | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId)
-                            | MembershipChangeKind.Added
-                            | MembershipChangeKind.RoleChanged -> ()
-                        | _ -> ())
+                    UserSession.onAuthTokenChange (fun token ->
+                        match lastWasNone, token with
+                        | true, Some _ ->
+                            lastWasNone <- false
+                            dispatch AuthTokenAcquired
+                        | _, None -> lastWasNone <- true
+                        | false, Some _ -> ())
 
                 { new System.IDisposable with
                     member _.Dispose() = unsubscribe ()
@@ -2144,6 +2278,7 @@ module Client =
         |> Program.withErrorReporter elmishReporter
         |> Program.withEffect navigationEffect
         |> Program.withEffect notificationsEffect
+        |> Program.withEffect authTokenAcquiredEffect
 
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
     /// the full shell bootstrap (the dispatcher has rendered its own program).
