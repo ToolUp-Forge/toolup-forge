@@ -593,6 +593,17 @@ let Sidebar
                         prop.src toolupForgeLogoUrl
                         prop.alt "ToolUp-Forge"
                         prop.className "w-5 h-5 flex-shrink-0 object-contain"
+                        // Defensive inline sizing — guarantees the 20×20
+                        // footer slot even when a consumer's Tailwind
+                        // purge config drops `w-5` / `h-5`. The 1024×1024
+                        // master downsamples cleanly to 20px via
+                        // `object-contain`.
+                        prop.style [
+                            style.custom ("width", "20px")
+                            style.custom ("height", "20px")
+                            style.custom ("maxWidth", "20px")
+                            style.custom ("maxHeight", "20px")
+                        ]
                     ]
                     if isExpanded then
                         Html.span [
