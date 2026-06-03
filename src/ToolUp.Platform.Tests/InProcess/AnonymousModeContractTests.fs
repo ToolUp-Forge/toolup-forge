@@ -43,7 +43,7 @@ let tests =
             let config = cfg Surfaces.anonymous names
             let ctx = unrestricted (AnonymousSession "anonymous")
 
-            let r = computeAccessibleModules config ctx false
+            let r = computeAccessibleModules config ctx false false
 
             Expect.equal r.Managed names "Managed is the configured ModuleNames"
             Expect.equal r.Accessible names "Anonymous short-circuit surfaces every Managed module"
@@ -65,7 +65,7 @@ let tests =
                     (unrestricted (AnonymousSession "anon-session"))
                     (Map.ofList [ "Convert", [ ModulePermission.Read ] ])
 
-            let r = computeAccessibleModules config ctx false
+            let r = computeAccessibleModules config ctx false false
 
             Expect.equal r.Accessible names "Anonymous short-circuits even when ModulePermissions is non-empty"
         }
@@ -73,7 +73,7 @@ let tests =
         test "Anonymous surface + empty ModuleNames → empty Accessible (no managed to surface)" {
             let config = cfg Surfaces.anonymous []
             let ctx = unrestricted (AnonymousSession "anon")
-            let r = computeAccessibleModules config ctx false
+            let r = computeAccessibleModules config ctx false false
 
             Expect.equal r.Managed [] "no modules registered"
             Expect.equal r.Accessible [] "no modules to surface"
@@ -84,7 +84,7 @@ let tests =
             let config = cfg Surfaces.individual names
             let ctx = unrestricted (AuthenticatedUser "user-1")
 
-            let r = computeAccessibleModules config ctx false
+            let r = computeAccessibleModules config ctx false false
 
             Expect.equal r.Accessible names "empty ModulePermissions = unrestricted, every module accessible"
         }
@@ -100,7 +100,7 @@ let tests =
                     (unrestricted (AuthenticatedUser "user-1"))
                     (Map.ofList [ "Sales", [ ModulePermission.Read ]; "Marketing", [] ])
 
-            let r = computeAccessibleModules config ctx false
+            let r = computeAccessibleModules config ctx false false
 
             Expect.equal r.Managed names "Managed surfaces every registered module"
 
@@ -119,7 +119,7 @@ let tests =
                     (unrestricted (TeamMember("user-1", "team-a")))
                     (Map.ofList [ "Sales", [ ModulePermission.Read ] ])
 
-            let r = computeAccessibleModules config ctx false
+            let r = computeAccessibleModules config ctx false false
 
             Expect.equal r.Accessible [ "Sales" ] "intersection applies for Team surface with active team"
         }
@@ -136,7 +136,7 @@ let tests =
             let config = cfg Surfaces.team names
             let ctx = unrestricted (AuthenticatedUser "user-1")
 
-            let r = computeAccessibleModules config ctx true
+            let r = computeAccessibleModules config ctx true false
 
             Expect.equal r.Managed names "Managed is still populated so the auto-injected TeamManager renders"
             Expect.equal r.Accessible [] "team-onboarding shape returns empty Accessible"
@@ -147,7 +147,7 @@ let tests =
             let config = cfg Surfaces.multiTeam names
             let ctx = unrestricted (AuthenticatedUser "user-1")
 
-            let r = computeAccessibleModules config ctx true
+            let r = computeAccessibleModules config ctx true false
 
             Expect.equal r.Accessible [] "MultiTeam shares the team-onboarding shape with Team"
         }
@@ -163,7 +163,7 @@ let tests =
             let config = cfg Surfaces.anonymous names
             let ctx = unrestricted (AnonymousSession "anon")
 
-            let r = computeAccessibleModules config ctx true
+            let r = computeAccessibleModules config ctx true false
 
             Expect.equal r.Accessible names "Anonymous wins over noActiveTeamInTeamMode"
         }

@@ -29,11 +29,35 @@ let private envVar (name: string) =
     | "" -> None
     | v -> Some v
 
+/// 0.5.3 — derive `TokenLocation` from the SSE auth mode env var.
+/// `TOOLUP_SSE_AUTH=cookie` (or `cookies` / `cookieonly`) signals that
+/// the deployment serves SSE via EventSource, which the browser can only
+/// auth via cookie — so the OIDC provider must accept the JWT from
+/// EITHER the Authorization header (REST path) OR the
+/// `toolup-auth-token` cookie (SSE path). Without this, every
+/// authenticated SSE handshake 401s while REST keeps working, breaking
+/// real-time notifications + AI chat streams in any consumer that runs
+/// SSE behind OIDC.
+///
+/// Any other value (including unset / empty) keeps the historical
+/// `BearerHeader`-only behaviour — deployments that don't use SSE pay
+/// nothing for the fallback (GP 11 + GP 13).
+let private tokenLocationFromEnv () : TokenLocation =
+    match envVar "TOOLUP_SSE_AUTH" |> Option.map _.ToLowerInvariant() with
+    | Some "cookie"
+    | Some "cookies"
+    | Some "cookieonly" ->
+        // The cookie name is fixed in `UserSession.fs` client-side
+        // (`toolup-auth-token`). Hardcoded server-side to avoid two
+        // independent string literals drifting; both must agree.
+        BearerOrCookie "toolup-auth-token"
+    | _ -> BearerHeader
+
 let private buildAuthConfig (issuer: string) (audience: string option) : AuthConfig = {
     Issuer = Some issuer
     Audience = audience
     KeySource = JwksDiscovery issuer
-    TokenLocation = BearerHeader
+    TokenLocation = tokenLocationFromEnv ()
     ClockSkewSeconds = None
     AcceptedAlgorithms = None
 }

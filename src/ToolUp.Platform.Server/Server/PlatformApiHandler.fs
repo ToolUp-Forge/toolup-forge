@@ -454,9 +454,9 @@ let permissionApiHandler (_config: ServerConfig) =
 
 /// Phase 55 pinning seam — the pure decision the `AccessibilityApi`
 /// handler folds over. Extracted so the contract pack can pin the
-/// three intertwined branches (Anonymous short-circuit, team-mode
-/// onboarding, default RBAC intersection) without standing up a
-/// full `HttpContext` per case.
+/// four intertwined branches (Anonymous short-circuit, platform-admin
+/// override, team-mode onboarding, default RBAC intersection) without
+/// standing up a full `HttpContext` per case.
 ///
 /// Branches in priority order:
 ///   1. Anonymous subject → every Managed module is Accessible. An
@@ -467,12 +467,26 @@ let permissionApiHandler (_config: ServerConfig) =
 ///      deployment-wide mode, so a mixed-mode deployment serving both
 ///      anonymous and authenticated surfaces resolves each request on
 ///      its own subject.
-///   2. `noActiveTeamInTeamMode` (team-scoped Mode with no active
-///      team) → Accessible is empty. The freshly-signed-up case
-///      where every team-scoped API call would fail with
-///      `NoActiveTeam`; reporting non-team modules as Accessible
+///   2. **0.5.3 — `isPlatformAdmin` short-circuit.** Platform admins
+///      are deployment-wide superusers; they need cross-cutting
+///      visibility into every module so they can triage / configure /
+///      audit any tenant's surface. Pre-0.5.3 the team-mode-no-active-
+///      team branch hid every module from a platform admin who hadn't
+///      joined a team, leaving them with only the SDK-built-in
+///      `_sdk.platform-admin.*` group visible — operationally
+///      backwards from the role's purpose. The admin override fires
+///      BEFORE the team-mode branch and grants the full Managed list
+///      regardless of team scope. Per-team RBAC `ModulePermissions`
+///      intersection is bypassed too: a platform admin without an
+///      active team has no per-team permission record by definition,
+///      and the pre-RBAC default ("empty map = unrestricted") already
+///      mirrors this for the active-team path.
+///   3. `noActiveTeamInTeamMode` (team-scoped Mode with no active
+///      team, NOT a platform admin) → Accessible is empty. The freshly-
+///      signed-up case where every team-scoped API call would fail
+///      with `NoActiveTeam`; reporting non-team modules as Accessible
 ///      would be confusing click-then-error UX.
-///   3. Default → intersect Managed with the caller's
+///   4. Default → intersect Managed with the caller's
 ///      `AccessContext.ModulePermissions`. Empty permissions map
 ///      (pre-RBAC default) is unrestricted per
 ///      `AccessContext.canAccessModule`.
@@ -480,9 +494,13 @@ let computeAccessibleModules
     (config: ServerConfig)
     (accessCtx: AccessContext)
     (noActiveTeamInTeamMode: bool)
+    (isPlatformAdmin: bool)
     : AccessibleModulesResponse =
     let accessible =
         if AccessContext.isAnonymous accessCtx then
+            config.ModuleNames
+        elif isPlatformAdmin then
+            // Branch 2 — platform-admin override.
             config.ModuleNames
         elif noActiveTeamInTeamMode then
             []
@@ -528,7 +546,22 @@ let accessibilityApiHandler (config: ServerConfig) =
                     let noActiveTeamInTeamMode =
                         DeploymentConfig.hasTeamScope config && accessCtx.TeamId.IsNone
 
-                    return computeAccessibleModules config accessCtx noActiveTeamInTeamMode
+                    // 0.5.3 — platform admins bypass the team-mode
+                    // blanket-hide. Resolves `IPlatformAdminStore` per
+                    // request (DI Singleton) and queries `IsPlatformAdmin`
+                    // against the resolved subject's user id. The check
+                    // is async + IO-bound but cheap in steady state:
+                    // `BlobBackedPlatformAdminStore` caches the admin
+                    // list on first read and hits storage only on
+                    // membership change events. Falls back to `false`
+                    // when no store is wired (Anonymous-only deploys —
+                    // the Anonymous branch above wins anyway).
+                    let! isPlatformAdmin =
+                        match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
+                        | :? IPlatformAdminStore as store -> store.IsPlatformAdmin accessCtx.UserId
+                        | _ -> async { return false }
+
+                    return computeAccessibleModules config accessCtx noActiveTeamInTeamMode isPlatformAdmin
                 }
         })
 

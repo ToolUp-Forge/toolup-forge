@@ -1483,20 +1483,31 @@ module Client =
         // the app's modules so the Admin section's first-occurrence
         // position lands at the bottom of the sidebar.
 
-        // Team manager is only meaningful when the deployment declares
-        // a single-team `Team` surface (`Switching = NoSwitcher`) —
-        // non-team and multi-team deployments either have no teams to
-        // manage or use the header switcher UX. Opt-out is
-        // `TeamManager = NoTeamManager` in ClientConfig; explicit
-        // swap is `ExternalTeamManager m`.
-        let isSingleTeamSurface =
+        // Team manager is injected for ANY `Team` surface (both
+        // `NoSwitcher` single-team and `HeaderSwitcher` multi-team).
+        //
+        // 0.5.3 — broadened from "single-team only" to "any team surface".
+        // The previous gate left multi-team deployments without a team
+        // manager UI on the theory that the header switcher handled team
+        // selection, but the switcher only renders when `MyTeams.Length
+        // >= 2` (line ~1269), so a freshly-signed-in multi-team user
+        // with 0 teams had no UI to CREATE a first team — and the
+        // team-mode-no-active-team filter blanket-hid every other module,
+        // leaving them with only the Platform Admin group visible. The
+        // manager handles create / join / settings; the switcher adds
+        // the in-session swap-active-team affordance on top. Both
+        // surfaces coexist cleanly for multi-team.
+        //
+        // Opt-out remains `TeamManager = NoTeamManager` in ClientConfig;
+        // explicit swap is `ExternalTeamManager m`.
+        let hasTeamSurface =
             config.Surfaces
             |> List.exists (function
-                | SurfaceProfile.Team { Switching = NoSwitcher } -> true
+                | SurfaceProfile.Team _ -> true
                 | _ -> false)
 
         let teamManager =
-            match isSingleTeamSurface, config.TeamManager with
+            match hasTeamSurface, config.TeamManager with
             | true, DefaultTeamManager -> [ TeamManagerUI.create None ]
             | true, ConfiguredTeamManager tmConfig -> [ TeamManagerUI.create (Some tmConfig) ]
             | true, ExternalTeamManager custom -> [ custom ]

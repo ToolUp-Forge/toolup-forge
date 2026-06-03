@@ -97,6 +97,19 @@ type TokenLocation =
     /// Token value is the named header's value. Used for non-standard
     /// protocols that expose tokens outside the bearer convention.
     | CustomHeader of name: string
+    /// 0.5.3 — Check `Authorization: Bearer <token>` first, then fall
+    /// back to the named cookie when the header is absent. Required for
+    /// deployments that serve BOTH the standard REST auth path
+    /// (Authorization-header-bearing XHR/fetch) AND SSE (EventSource,
+    /// which the browser will only ever auth via cookie — the
+    /// EventSource spec forbids custom request headers). The single-
+    /// location cases above force a deployment to pick one transport
+    /// or the other and silently break the unpicked path; this case
+    /// admits both. Pairs with `ServerConfig.SseAuthMode = CookieRequired`
+    /// and `UserSession.setAuthToken` on the client side, which already
+    /// writes the JWT into both `localStorage` (for the Authorization
+    /// header) and the matching cookie (for SSE).
+    | BearerOrCookie of cookieName: string
 
 /// Declarative configuration for an `IAuthProvider`. Providers read
 /// the fields they care about and ignore the rest — e.g.

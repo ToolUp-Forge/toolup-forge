@@ -128,26 +128,36 @@ let private tryReadClaims (metrics: IMetricsSink) (rawToken: string) : EntraClai
         incr AuthMetrics.EntraClaimParseFailed
         emptyClaims
 
+let private extractFromBearerHeader (ctx: HttpContext) : string option =
+    match ctx.Request.Headers.TryGetValue "Authorization" with
+    | true, values when values.Count > 0 ->
+        let value = string values[0]
+
+        if value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) then
+            Some(value.Substring 7)
+        else
+            None
+    | _ -> None
+
+let private extractFromCookie (name: string) (ctx: HttpContext) : string option =
+    match ctx.Request.Cookies.TryGetValue name with
+    | true, value when not (String.IsNullOrEmpty value) -> Some value
+    | _ -> None
+
 let private extractRawToken (location: TokenLocation) (ctx: HttpContext) : string option =
     match location with
-    | BearerHeader ->
-        match ctx.Request.Headers.TryGetValue "Authorization" with
-        | true, values when values.Count > 0 ->
-            let value = string values[0]
-
-            if value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) then
-                Some(value.Substring 7)
-            else
-                None
-        | _ -> None
-    | Cookie name ->
-        match ctx.Request.Cookies.TryGetValue name with
-        | true, value when not (String.IsNullOrEmpty value) -> Some value
-        | _ -> None
+    | BearerHeader -> extractFromBearerHeader ctx
+    | Cookie name -> extractFromCookie name ctx
     | CustomHeader name ->
         match ctx.Request.Headers.TryGetValue name with
         | true, values when values.Count > 0 -> Some(string values[0])
         | _ -> None
+    | BearerOrCookie cookieName ->
+        // 0.5.3 — mirrors `OidcAuthProvider.extractToken` BearerOrCookie
+        // handling. Try Bearer header first, fall back to cookie.
+        match extractFromBearerHeader ctx with
+        | Some _ as token -> token
+        | None -> extractFromCookie cookieName ctx
 
 // ─── Entra-flavoured user projection ─────────────────────────────────
 
