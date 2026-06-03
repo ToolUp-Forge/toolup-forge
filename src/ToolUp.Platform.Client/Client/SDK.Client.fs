@@ -1789,41 +1789,35 @@ module Client =
             | Some s -> s
             | None -> ""
 
-    /// Forge brand mark — same PNG the sidebar footer renders. Imported
-    /// here so the browser-console attribution banner can embed it as a
-    /// CSS `background-image` in the `%c`-styled pill.
-    let private toolupForgeLogoUrl: string =
-        Fable.Core.JsInterop.importDefault "./icons/toolup-forge.png"
-
     /// Browser-console attribution banner — styled `console.log` mirror
     /// of the server-side `ConsoleLogger.fromEnv` first-line emission and
     /// the SSR-side `Attribution.poweredByBadge`. A `%c`-formatted pill
-    /// renders the forge brand mark inline as a CSS `background-image`
-    /// and adapts to `prefers-color-scheme` (white-on-dark pill for dark
-    /// consoles, dark-on-light pill for light consoles), matching the
-    /// `<picture>` srcset story the SSR badge uses for the same brand.
-    /// Emitted once, before the `[client.bootstrap] [ToolUp] composed | …`
+    /// + URL adapts to `prefers-color-scheme` (white-on-dark pill for
+    /// dark consoles, dark-on-light pill for light consoles). Emitted
+    /// once, before the `[client.bootstrap] [ToolUp] composed | …`
     /// summary, so the SDK identifier is the first thing the browser
     /// console shows on app load. Defensive: no-op when `window.console`
     /// is unavailable (SSR / prerender contexts).
+    ///
+    /// Note: deliberately text-only — `background-image: url(...)` inside
+    /// a `%c` console style works inconsistently across browsers (Chrome
+    /// / Firefox / Safari each handle relative + bundler-rewritten asset
+    /// URLs differently in the console-log context). The rich visual
+    /// brand surface ships through the sidebar footer and the SSR
+    /// `Attribution.poweredByBadge`; the dev-console banner is operator
+    /// chrome that just needs to be identifiable.
     let private emitBrandedBootBanner () : unit =
         Fable.Core.JsInterop.emitJsStatement
-            toolupForgeLogoUrl
+            ()
             """(function () {
                 if (typeof window === 'undefined' || !window.console || !window.console.log) return;
                 var dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                var bg = dark ? '#1a1a1a' : '#f5f5f5';
-                var fg = dark ? '#fff' : '#1a1a1a';
-                var border = dark ? '' : 'border:1px solid #e0e0e0;';
-                var brand =
-                    'color:' + fg + ';' +
-                    'background:' + bg + ' url("' + $0 + '") no-repeat 6px center / 16px 16px;' +
-                    'padding:4px 10px 4px 28px;' +
-                    'border-radius:4px;font-weight:bold;font-size:12px;' +
-                    border;
-                var url =
-                    (dark ? 'color:#9ecbff;' : 'color:#0366d6;') +
-                    'margin-left:8px;font-size:11px;';
+                var brand = dark
+                    ? 'color:#fff;background:#1a1a1a;padding:3px 10px;border-radius:4px;font-weight:bold;font-size:12px;'
+                    : 'color:#1a1a1a;background:#f5f5f5;padding:3px 10px;border-radius:4px;font-weight:bold;font-size:12px;border:1px solid #e0e0e0;';
+                var url = dark
+                    ? 'color:#9ecbff;margin-left:8px;font-size:11px;'
+                    : 'color:#0366d6;margin-left:8px;font-size:11px;';
                 window.console.log('%cPowered by ToolUp-Forge%c  https://toolup-forge.io', brand, url);
             })()"""
 

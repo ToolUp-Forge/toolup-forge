@@ -56,10 +56,17 @@ let PinnedKey = "_pinned"
 let OtherKey = "_other"
 
 // Vite's default-export of a non-`?react` asset import is the file's
-// built URL — usable directly as an `<img src>`. The PNG is the
-// transparent-bg brand mark from `Brand Assets/logos/iconset/repo/`
-// (1024×1024 master; downsamples cleanly to the 20px footer slot).
-let private toolupForgeLogoUrl: string = importDefault "../icons/toolup-forge.png"
+// built URL — usable directly as an `<img src>`. The shell sidebar
+// is permanently dark (slate-900-ish background), so we ship the
+// dark-surface brand-mark variant from `Brand Assets/logos/iconset/repo/`
+// (`icon-mark-256.png` — light brackets + purple chevron on the brand's
+// own dark `#1a1a1a` square; 256×256, ~73 KB; downsamples cleanly to
+// the 20px footer slot). The transparent-bg `toolup-forge.png` is kept
+// alongside for future light-surface use; once a transparent-bg /
+// light-ink variant is authored upstream, this swap can collapse to a
+// single `<picture>`-style pair like `Attribution.poweredByBadge`.
+let private toolupForgeLogoUrl: string =
+    importDefault "../icons/toolup-forge-dark.png"
 
 let private toSidebarModule (pinned: Set<string>) (m: SidebarModuleView) : SidebarModule = {
     Id = m.Id
