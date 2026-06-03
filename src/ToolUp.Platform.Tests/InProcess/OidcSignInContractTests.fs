@@ -506,6 +506,7 @@ let tests: Test =
                         TokenLocation = BearerHeader
                         ClockSkewSeconds = None
                         AcceptedAlgorithms = None
+                        PreferOidWhenPresent = None
                     }
 
                     let provider = OidcAuthProvider.fromConfigWith (new HttpClient()) None config

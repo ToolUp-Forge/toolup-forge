@@ -53,6 +53,30 @@ let private tokenLocationFromEnv () : TokenLocation =
         BearerOrCookie "toolup-auth-token"
     | _ -> BearerHeader
 
+/// 0.5.4 — derive `PreferOidWhenPresent` from the issuer. Microsoft
+/// Entra v2 endpoints (`login.microsoftonline.com/<tenant>/v2.0` and
+/// the External-ID `<tenant>.ciamlogin.com` shape) mint tokens
+/// carrying the tenant-stable `oid` claim alongside the pairwise-
+/// pseudonymous `sub`. `oid` is the right operational identifier for
+/// `TOOLUP_INITIAL_PLATFORM_ADMIN`, RBAC entries, and audit identity
+/// — `sub` rotates per app registration and breaks identity continuity
+/// when an operator looks up a user in the Entra portal. The match
+/// is permissive: any host suffix of `microsoftonline.com` /
+/// `ciamlogin.com` qualifies; non-Microsoft issuers (Auth0, Clerk,
+/// AWS Cognito, custom IdPs) leave the flag `None` and the provider
+/// preserves the pre-0.5.4 `sub`-only behaviour (GP 11).
+let private preferOidFromIssuer (issuer: string) : bool option =
+    let host =
+        try
+            (System.Uri issuer).Host.ToLowerInvariant()
+        with _ ->
+            ""
+
+    let isEntra =
+        host.EndsWith "login.microsoftonline.com" || host.EndsWith "ciamlogin.com"
+
+    if isEntra then Some true else None
+
 let private buildAuthConfig (issuer: string) (audience: string option) : AuthConfig = {
     Issuer = Some issuer
     Audience = audience
@@ -60,6 +84,7 @@ let private buildAuthConfig (issuer: string) (audience: string option) : AuthCon
     TokenLocation = tokenLocationFromEnv ()
     ClockSkewSeconds = None
     AcceptedAlgorithms = None
+    PreferOidWhenPresent = preferOidFromIssuer issuer
 }
 
 /// Build the deployment's `IAuthProvider` from `TOOLUP_AUTH_MODE`.

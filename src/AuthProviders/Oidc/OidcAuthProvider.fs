@@ -190,24 +190,30 @@ let private extractToken (location: TokenLocation) (ctx: HttpContext) : string o
 /// `Roles` remain empty — provider-specific claim shapes (Clerk's
 /// `org_id`, Auth0's custom roles claim, etc.) are a future concern
 /// handled by a claim-mapper hook or a provider-specific sub-companion.
-let private userFromPayload (payload: JwtPayload) : AuthenticatedUser =
-    // Phase 6l.H — sanitise the JWT `sub` claim before constructing
-    // an AuthenticatedUser. A self-issued or misconfigured IdP can
-    // deliver a malicious `sub` (`../target`, `\0`, control chars,
-    // Windows reserved names). Reject those by mapping to "anonymous"
-    // — auth-enforcement middleware then refuses the request in any
-    // mode requiring auth. Defence-in-depth on top of the JWT
-    // signature validation already performed upstream.
-    let rawSub = payload.Subject |> Option.defaultValue "anonymous"
-
-    let sub =
-        match IdentitySanitiser.sanitiseScopeId rawSub with
+///
+/// 0.5.4 — `preferOid` chooses between Entra's tenant-stable `oid`
+/// claim and the OIDC `sub` claim for the resolved `UserId`. When
+/// `true` and `payload.Oid` is `Some _`, `oid` wins; otherwise the
+/// historical `sub`-only behaviour applies (so non-Entra IdPs and
+/// pre-0.5.4 deployments preserve identity continuity verbatim).
+/// Both claims go through `IdentitySanitiser.sanitiseScopeId` —
+/// defence-in-depth against a self-issued / misconfigured IdP
+/// delivering a malicious id (`../target`, `\0`, control chars,
+/// Windows reserved names).
+let private userFromPayload (preferOid: bool) (payload: JwtPayload) : AuthenticatedUser =
+    let sanitise raw =
+        match IdentitySanitiser.sanitiseScopeId raw with
         | Result.Ok value -> value
         | Result.Error _ -> "anonymous"
 
+    let resolvedId =
+        match preferOid, payload.Oid with
+        | true, Some rawOid -> sanitise rawOid
+        | _ -> payload.Subject |> Option.defaultValue "anonymous" |> sanitise
+
     {
-        UserId = sub
-        DisplayName = payload.Name |> Option.defaultValue sub
+        UserId = resolvedId
+        DisplayName = payload.Name |> Option.defaultValue resolvedId
         Email = payload.Email
         TenantId = None
         Roles = []
@@ -332,7 +338,9 @@ let private validate
                                                 )
 
                                             incr AuthMetrics.ValidateSuccess
-                                            return Ok(userFromPayload jwt.Payload)
+                                            let preferOid = config.PreferOidWhenPresent |> Option.defaultValue false
+
+                                            return Ok(userFromPayload preferOid jwt.Payload)
     }
 
 // ─── No-op logger fallback ───────────────────────────────────────────

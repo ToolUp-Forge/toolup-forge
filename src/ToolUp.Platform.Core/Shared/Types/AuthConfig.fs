@@ -153,4 +153,28 @@ type AuthConfig = {
     /// the SDK. `HS256` is intentionally not a member: symmetric
     /// flows belong to `StaticJwtAuthProvider`.
     AcceptedAlgorithms: JwsAlgorithm list option
+    /// 0.5.4 — When `Some true`, the OIDC provider's `userFromPayload`
+    /// prefers the JWT `oid` claim over `sub` when constructing
+    /// `AuthenticatedUser.UserId`. `oid` is Microsoft Entra's tenant-
+    /// wide stable user identifier; `sub` is a pairwise pseudonymous
+    /// identifier specific to the relying party (different per app
+    /// registration). Bootstrapping platform admins, RBAC entries,
+    /// and audit identity by the tenant-stable `oid` is operationally
+    /// correct for Entra deployments — the operator looks up the
+    /// admin's `oid` in the Entra portal once and the value stays
+    /// stable across app registrations / token refreshes.
+    ///
+    /// `None` or `Some false` (default) preserves the provider's pre-
+    /// 0.5.4 behaviour (`sub` only) — the SDK never silently switches
+    /// identity sources for an existing deployment (GP 11).
+    ///
+    /// `AuthProvider.fromEnv` auto-enables this flag when the
+    /// configured `Issuer` matches `https://login.microsoftonline.com/`
+    /// — any other issuer leaves the flag `None`. Consumers wiring
+    /// `AuthConfig` directly can set it explicitly.
+    ///
+    /// When the flag is on but the inbound token has no `oid` claim,
+    /// the provider falls back to `sub` — never breaks the request
+    /// path on a missing optional claim.
+    PreferOidWhenPresent: bool option
 }

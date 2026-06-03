@@ -217,6 +217,10 @@ let private toAuthConfig (config: EntraExternalIdConfig) : AuthConfig =
         // SDK default whitelist (`[ RS256 ]`) so the inner provider's
         // posture is byte-for-byte unchanged by Phase 3.A.
         AcceptedAlgorithms = None
+        // 0.5.4 — the EntraExternalId companion does its own `oid` →
+        // UserId remapping via `applyEntraMapping` post-validation,
+        // so the inner OIDC provider keeps `sub`-only behaviour here.
+        PreferOidWhenPresent = None
     }
 
 let private wrapWithEntraMapping

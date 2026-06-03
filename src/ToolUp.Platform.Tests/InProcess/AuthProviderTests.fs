@@ -521,6 +521,7 @@ let private oidcTests =
             TokenLocation = BearerHeader
             ClockSkewSeconds = None
             AcceptedAlgorithms = None
+            PreferOidWhenPresent = None
         }
 
         OidcAuthProvider.fromConfigWith client None config
@@ -539,6 +540,7 @@ let private oidcTests =
             TokenLocation = BearerHeader
             ClockSkewSeconds = None
             AcceptedAlgorithms = None
+            PreferOidWhenPresent = None
         }
 
         OidcAuthProvider.fromConfigWith client None config
@@ -797,6 +799,7 @@ let private oidcTests =
                 TokenLocation = BearerHeader
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS256; RS384 ]
+                PreferOidWhenPresent = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -823,6 +826,7 @@ let private oidcTests =
                 TokenLocation = BearerHeader
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS512 ]
+                PreferOidWhenPresent = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -852,6 +856,7 @@ let private oidcTests =
                 TokenLocation = BearerHeader
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ PS256 ]
+                PreferOidWhenPresent = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -880,6 +885,7 @@ let private oidcTests =
                 TokenLocation = BearerHeader
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS256; ES256 ]
+                PreferOidWhenPresent = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -911,6 +917,7 @@ let private oidcTests =
                 TokenLocation = BearerHeader
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS256 ]
+                PreferOidWhenPresent = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -946,6 +953,7 @@ let private oidcMetricsTests =
         TokenLocation = BearerHeader
         ClockSkewSeconds = None
         AcceptedAlgorithms = None
+        PreferOidWhenPresent = None
     }
 
     testList "OidcAuthProvider — metrics emission" [
@@ -1080,6 +1088,7 @@ let private oidcMockIssuerContract =
             TokenLocation = BearerHeader
             ClockSkewSeconds = None
             AcceptedAlgorithms = None
+            PreferOidWhenPresent = None
         }
 
         let provider = OidcAuthProvider.fromConfigWith (new HttpClient()) None config

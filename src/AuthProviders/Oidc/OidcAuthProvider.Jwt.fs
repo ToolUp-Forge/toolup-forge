@@ -89,6 +89,19 @@ type JwtPayload = {
     /// is absent.
     Audience: string list
     Subject: string option
+    /// 0.5.4 — Microsoft Entra `oid` (object id) claim, present on
+    /// every v2 endpoint token from `login.microsoftonline.com`. The
+    /// `oid` is a tenant-wide stable identifier for the user across
+    /// every app registration in the tenant, where `sub` is a
+    /// PAIRWISE PSEUDONYMOUS identifier specific to the relying
+    /// party. Consumers identifying users for cross-app artefacts
+    /// (admin lists, RBAC entries, audit records) want `oid` — `sub`
+    /// rotates per app and breaks identity continuity. The provider's
+    /// `userFromPayload` prefers `oid` over `sub` when
+    /// `AuthConfig.PreferOidWhenPresent = true` (auto-enabled by
+    /// `AuthProvider.fromEnv` for `login.microsoftonline.com`
+    /// issuers); the field is `None` and ignored on non-Microsoft IdPs.
+    Oid: string option
     Name: string option
     Email: string option
     ExpiresAt: int64 option
@@ -168,6 +181,7 @@ let parseJwt (raw: string) : Result<ParsedJwt, JwtValidationError> =
                     Issuer = tryGetString "iss" root
                     Audience = audience
                     Subject = tryGetString "sub" root
+                    Oid = tryGetString "oid" root
                     Name = tryGetString "name" root
                     Email = tryGetString "email" root
                     ExpiresAt = tryGetInt64 "exp" root
