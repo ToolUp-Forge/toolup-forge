@@ -33,9 +33,9 @@ open Microsoft.FSharp.Reflection
 [<NoEquality; NoComparison>]
 type TypeShapeInfo =
     | Basic of Type
-    | Enum of enumTy:Type * underlying:Type
-    | Array of element:Type * rank:int
-    | Generic of definition:Type * args:Type []
+    | Enum of enumTy: Type * underlying: Type
+    | Array of element: Type * rank: int
+    | Generic of definition: Type * args: Type[]
 
 /// Used to extract the type variable contained in a specific shape
 type ITypeVisitor<'R> =
@@ -44,11 +44,13 @@ type ITypeVisitor<'R> =
 /// Encapsulates a type variable that can be accessed using type shape visitors
 [<AbstractClass>]
 type TypeShape =
-    [<CompilerMessage("TypeShape constructor should not be consumed.", 4224); EditorBrowsable(EditorBrowsableState.Never)>]
-    internal new () = { }
-    abstract Type : Type
-    abstract ShapeInfo : TypeShapeInfo
-    abstract Accept : ITypeVisitor<'R> -> 'R
+    [<CompilerMessage("TypeShape constructor should not be consumed.", 4224);
+      EditorBrowsable(EditorBrowsableState.Never)>]
+    internal new() = { }
+
+    abstract Type: Type
+    abstract ShapeInfo: TypeShapeInfo
+    abstract Accept: ITypeVisitor<'R> -> 'R
 
 /// Encapsulates a type variable that can be accessed using type shape visitors
 [<Sealed>]
@@ -57,6 +59,7 @@ type TypeShape<'T> private () =
 
     static let shapeInfo =
         let t = typeof<'T>
+
         if t.IsEnum then
             Enum(t, Enum.GetUnderlyingType t)
         elif t.IsArray then
@@ -71,68 +74,82 @@ type TypeShape<'T> private () =
 
     override _.Type = typeof<'T>
     override _.ShapeInfo = shapeInfo
-    override _.Accept v = v.Visit<'T> ()
+    override _.Accept v = v.Visit<'T>()
     override _.Equals o = o :? TypeShape<'T>
     override _.GetHashCode() = hash typeof<'T>
 
-exception UnsupportedShape of Type:Type
-    with
+exception UnsupportedShape of Type: Type with
     override e.Message = sprintf "Unsupported TypeShape '%O'" e.Type
 
 [<AutoOpen>]
 module private TypeShapeImpl =
 
-    let fsharpCoreRuntimeVersion =
-        typeof<unit>.Assembly.GetName().Version
+    let fsharpCoreRuntimeVersion = typeof<unit>.Assembly.GetName().Version
 
-    let fsharpCore41Version = Version(4,4,1,0)
+    let fsharpCore41Version = Version(4, 4, 1, 0)
 
     [<Literal>]
     let AllMembers =
-        BindingFlags.NonPublic ||| BindingFlags.Public |||
-            BindingFlags.Instance ||| BindingFlags.Static |||
-                BindingFlags.FlattenHierarchy
+        BindingFlags.NonPublic
+        ||| BindingFlags.Public
+        ||| BindingFlags.Instance
+        ||| BindingFlags.Static
+        ||| BindingFlags.FlattenHierarchy
 
     [<Literal>]
     let AllInstanceMembers =
         BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance
 
     type MemberInfo with
-        member inline m.ContainsAttr<'Attr when 'Attr :> Attribute> (inheritAttr) =
+        member inline m.ContainsAttr<'Attr when 'Attr :> Attribute>(inheritAttr) =
             m.GetCustomAttributes(inheritAttr)
-            |> Array.exists (function :? 'Attr -> true | _ -> false)
+            |> Array.exists (function
+                | :? 'Attr -> true
+                | _ -> false)
 
-        member inline m.TryGetAttribute<'Attr when 'Attr :> Attribute> (inheritAttr) =
+        member inline m.TryGetAttribute<'Attr when 'Attr :> Attribute>(inheritAttr) =
             m.GetCustomAttributes(inheritAttr)
-            |> Array.tryPick (function :? 'Attr as attr -> Some attr | _ -> None)
+            |> Array.tryPick (function
+                | :? 'Attr as attr -> Some attr
+                | _ -> None)
 
-    let activateGeneric (templateTy:Type) (typeArgs : Type[]) (args:obj[]) =
+    let activateGeneric (templateTy: Type) (typeArgs: Type[]) (args: obj[]) =
         let templateTy =
-            if typeArgs.Length = 0 then templateTy
-            elif not templateTy.IsGenericType then invalidArg (string templateTy) "not generic."
+            if typeArgs.Length = 0 then
+                templateTy
+            elif not templateTy.IsGenericType then
+                invalidArg (string templateTy) "not generic."
             elif not templateTy.IsGenericTypeDefinition then
                 templateTy.GetGenericTypeDefinition().MakeGenericType typeArgs
             else
                 templateTy.MakeGenericType typeArgs
 
         let ctypes = args |> Array.map (fun o -> o.GetType())
-        let ctor = templateTy.GetConstructor(AllMembers, null, CallingConventions.Standard, ctypes, [||])
+
+        let ctor =
+            templateTy.GetConstructor(AllMembers, null, CallingConventions.Standard, ctypes, [||])
+
         ctor.Invoke args
 
     /// correctly resolves if type is assignable to interface
-    let rec isInterfaceAssignableFrom (iface : Type) (ty : Type) =
-        let proj (t : Type) = t.Assembly, t.Namespace, t.Name, t.MetadataToken
-        if iface = ty then true
-        elif ty.GetInterfaces() |> Array.exists(fun if0 -> proj if0 = proj iface) then true
+    let rec isInterfaceAssignableFrom (iface: Type) (ty: Type) =
+        let proj (t: Type) =
+            t.Assembly, t.Namespace, t.Name, t.MetadataToken
+
+        if iface = ty then
+            true
+        elif ty.GetInterfaces() |> Array.exists (fun if0 -> proj if0 = proj iface) then
+            true
         else
             match ty.BaseType with
             | null -> false
             | bt -> isInterfaceAssignableFrom iface bt
 
     // walks the type hierarchy for fields
-    let gatherMembers (f : Type -> #seq<'Member>) (t : Type) =
+    let gatherMembers (f: Type -> #seq<'Member>) (t: Type) =
         let members = ResizeArray()
-        let rec aux (t : Type) =
+
+        let rec aux (t: Type) =
             match t.BaseType with
             | null -> ()
             | bt ->
@@ -145,51 +162,52 @@ module private TypeShapeImpl =
     type private ReflectionHelper =
         static member GetInstance<'T>() = TypeShape<'T>.Instance
 
-    let private genInstanceGetter = typeof<ReflectionHelper>.GetMethod("GetInstance", BindingFlags.NonPublic ||| BindingFlags.Static)
+    let private genInstanceGetter =
+        typeof<ReflectionHelper>.GetMethod("GetInstance", BindingFlags.NonPublic ||| BindingFlags.Static)
+
     let private canon = Type.GetType "System.__Canon"
 
-    let inline internal isUnsupported (typ: Type) =
-        typ.IsPointer ||
-        typ.IsByRef
+    let inline internal isUnsupported (typ: Type) = typ.IsPointer || typ.IsByRef
 
-    let resolveTypeShape(typ : Type) =
-        if isNull typ then raise <| ArgumentNullException("TypeShape: System.Type cannot be null.")
+    let resolveTypeShape (typ: Type) =
+        if isNull typ then
+            raise <| ArgumentNullException("TypeShape: System.Type cannot be null.")
 
-        if  typ.IsGenericTypeDefinition ||
-            typ.IsGenericParameter ||
-            typ = canon ||
-            isUnsupported typ
+        if
+            typ.IsGenericTypeDefinition
+            || typ.IsGenericParameter
+            || typ = canon
+            || isUnsupported typ
         then
             raise <| UnsupportedShape typ
 
-        let genInstanceGetter = genInstanceGetter.MakeGenericMethod [|typ|]
+        let genInstanceGetter = genInstanceGetter.MakeGenericMethod [| typ |]
         genInstanceGetter.Invoke(null, [||]) :?> TypeShape
 
 type Activator with
     /// Generic edition of the activator method which support type parameters and private types
-    static member CreateInstanceGeneric<'Template>(?typeArgs : Type[], ?args:obj[]) : obj =
+    static member CreateInstanceGeneric<'Template>(?typeArgs: Type[], ?args: obj[]) : obj =
         let typeArgs = defaultArg typeArgs [||]
         let args = defaultArg args [||]
         activateGeneric typeof<'Template> typeArgs args
 
 type Type with
     /// Correctly resolves if type is assignable to interface
-    member iface.IsInterfaceAssignableFrom(ty : Type) : bool =
-        isInterfaceAssignableFrom iface ty
+    member iface.IsInterfaceAssignableFrom(ty: Type) : bool = isInterfaceAssignableFrom iface ty
 
 type TypeShape with
     /// <summary>
     ///     Creates a type shape instance for given type
     /// </summary>
     /// <param name="typ">System.Type to be resolved.</param>
-    static member Create(typ : Type) : TypeShape = resolveTypeShape typ
+    static member Create(typ: Type) : TypeShape = resolveTypeShape typ
 
     /// <summary>
     ///     Creates a type shape instance from the underlying
     ///     type of a given value.
     /// </summary>
     /// <param name="obj">Non-null value to extract shape data from.</param>
-    static member FromValue(obj : obj) : TypeShape =
+    static member FromValue(obj: obj) : TypeShape =
         match obj with
         | null -> raise <| ArgumentNullException()
         | obj -> resolveTypeShape (obj.GetType())
@@ -208,95 +226,92 @@ let shapeof<'T> = TypeShape<'T>.Instance
 // Enum types
 
 type IEnumVisitor<'R> =
-    abstract Visit<'Enum, 'Underlying when 'Enum : enum<'Underlying>
-                                       and 'Enum : struct
-                                       and 'Enum :> ValueType
-                                       and 'Enum : (new : unit -> 'Enum)> : unit -> 'R
+    abstract Visit<'Enum, 'Underlying
+        when 'Enum: enum<'Underlying> and 'Enum: struct and 'Enum :> ValueType and 'Enum: (new: unit -> 'Enum)> :
+        unit -> 'R
 
 type IShapeEnum =
-    abstract Underlying : TypeShape
-    abstract Accept : IEnumVisitor<'R> -> 'R
+    abstract Underlying: TypeShape
+    abstract Accept: IEnumVisitor<'R> -> 'R
 
-type private ShapeEnum<'Enum, 'Underlying when 'Enum : enum<'Underlying>
-                                           and 'Enum : struct
-                                           and 'Enum :> ValueType
-                                           and 'Enum : (new : unit -> 'Enum)>() =
+type private ShapeEnum<'Enum, 'Underlying
+    when 'Enum: enum<'Underlying> and 'Enum: struct and 'Enum :> ValueType and 'Enum: (new: unit -> 'Enum)>() =
     interface IShapeEnum with
         member _.Underlying = shapeof<'Underlying> :> _
-        member _.Accept v = v.Visit<'Enum, 'Underlying> ()
+        member _.Accept v = v.Visit<'Enum, 'Underlying>()
 
 // Nullable types
 
 type INullableVisitor<'R> =
-    abstract Visit<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> : unit -> 'R
+    abstract Visit<'T when 'T: (new: unit -> 'T) and 'T :> ValueType and 'T: struct> : unit -> 'R
 
 type IShapeNullable =
-    abstract Element : TypeShape
-    abstract Accept : INullableVisitor<'R> -> 'R
+    abstract Element: TypeShape
+    abstract Accept: INullableVisitor<'R> -> 'R
 
-type private ShapeNullable<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () =
+type private ShapeNullable<'T when 'T: (new: unit -> 'T) and 'T :> ValueType and 'T: struct>() =
     interface IShapeNullable with
         member _.Element = shapeof<'T> :> _
-        member _.Accept v = v.Visit<'T> ()
+        member _.Accept v = v.Visit<'T>()
 
 
 // Default Constructor types
 
 type IDefaultConstructorVisitor<'R> =
-    abstract Visit<'T when 'T : (new : unit -> 'T)> : unit -> 'R
+    abstract Visit<'T when 'T: (new: unit -> 'T)> : unit -> 'R
 
 type IShapeDefaultConstructor =
-    abstract Accept : IDefaultConstructorVisitor<'R> -> 'R
+    abstract Accept: IDefaultConstructorVisitor<'R> -> 'R
 
-type private ShapeDefaultConstructor<'T when 'T : (new : unit -> 'T)>() =
+type private ShapeDefaultConstructor<'T when 'T: (new: unit -> 'T)>() =
     interface IShapeDefaultConstructor with
         member _.Accept v = v.Visit<'T>()
 
 // Equality Types
 
 type IEqualityVisitor<'R> =
-    abstract Visit<'T when 'T : equality> : unit -> 'R
+    abstract Visit<'T when 'T: equality> : unit -> 'R
 
 type IShapeEquality =
-    abstract Accept : IEqualityVisitor<'R> -> 'R
+    abstract Accept: IEqualityVisitor<'R> -> 'R
 
-type private ShapeEquality<'T when 'T : equality>() =
+type private ShapeEquality<'T when 'T: equality>() =
     interface IShapeEquality with
         member _.Accept v = v.Visit<'T>()
 
 // Comparison Types
 
 type IComparisonVisitor<'R> =
-    abstract Visit<'T when 'T : comparison> : unit -> 'R
+    abstract Visit<'T when 'T: comparison> : unit -> 'R
 
 type IShapeComparison =
-    abstract Accept : IComparisonVisitor<'R> -> 'R
+    abstract Accept: IComparisonVisitor<'R> -> 'R
 
-type private ShapeComparison<'T when 'T : comparison>() =
+type private ShapeComparison<'T when 'T: comparison>() =
     interface IShapeComparison with
         member _.Accept v = v.Visit<'T>()
 
 // Struct Types
 
 type IStructVisitor<'R> =
-    abstract Visit<'T when 'T : struct> : unit -> 'R
+    abstract Visit<'T when 'T: struct> : unit -> 'R
 
 type IShapeStruct =
-    abstract Accept : IStructVisitor<'R> -> 'R
+    abstract Accept: IStructVisitor<'R> -> 'R
 
-type private ShapeStruct<'T when 'T : struct>() =
+type private ShapeStruct<'T when 'T: struct>() =
     interface IShapeStruct with
         member _.Accept v = v.Visit<'T>()
 
 // Reference Types
 
 type INotStructVisitor<'R> =
-    abstract Visit<'T when 'T : not struct and 'T : null> : unit -> 'R
+    abstract Visit<'T when 'T: not struct and 'T: null> : unit -> 'R
 
 type IShapeNotStruct =
-    abstract Accept : INotStructVisitor<'R> -> 'R
+    abstract Accept: INotStructVisitor<'R> -> 'R
 
-type private ShapeNotStruct<'T when 'T : not struct and 'T : null>() =
+type private ShapeNotStruct<'T when 'T: not struct and 'T: null>() =
     interface IShapeNotStruct with
         member _.Accept v = v.Visit<'T>()
 
@@ -306,7 +321,7 @@ type IDelegateVisitor<'R> =
     abstract Visit<'Delegate when 'Delegate :> Delegate> : unit -> 'R
 
 type IShapeDelegate =
-    abstract Accept : IDelegateVisitor<'R> -> 'R
+    abstract Accept: IDelegateVisitor<'R> -> 'R
 
 type private ShapeDelegate<'Delegate when 'Delegate :> Delegate>() =
     interface IShapeDelegate with
@@ -318,29 +333,29 @@ type IFSharpFuncVisitor<'R> =
     abstract Visit<'Domain, 'CoDomain> : unit -> 'R
 
 type IShapeFSharpFunc =
-    abstract Domain : TypeShape
-    abstract CoDomain : TypeShape
-    abstract Accept : IFSharpFuncVisitor<'R> -> 'R
+    abstract Domain: TypeShape
+    abstract CoDomain: TypeShape
+    abstract Accept: IFSharpFuncVisitor<'R> -> 'R
 
-type private ShapeFSharpFunc<'Domain, 'CoDomain> () =
+type private ShapeFSharpFunc<'Domain, 'CoDomain>() =
     interface IShapeFSharpFunc with
         member _.Domain = shapeof<'Domain> :> _
         member _.CoDomain = shapeof<'CoDomain> :> _
-        member _.Accept v = v.Visit<'Domain, 'CoDomain> ()
+        member _.Accept v = v.Visit<'Domain, 'CoDomain>()
 
 // System.Exception
 
 type IExceptionVisitor<'R> =
-    abstract Visit<'exn when 'exn :> exn and 'exn : not struct and 'exn : null> : unit -> 'R
+    abstract Visit<'exn when 'exn :> exn and 'exn: not struct and 'exn: null> : unit -> 'R
 
 type IShapeException =
-    abstract IsFSharpException : bool
-    abstract Accept : IExceptionVisitor<'R> -> 'R
+    abstract IsFSharpException: bool
+    abstract Accept: IExceptionVisitor<'R> -> 'R
 
-type private ShapeException<'exn when 'exn :> exn and 'exn : not struct and 'exn : null> (isFSharpExn : bool) =
+type private ShapeException<'exn when 'exn :> exn and 'exn: not struct and 'exn: null>(isFSharpExn: bool) =
     interface IShapeException with
         member _.IsFSharpException = isFSharpExn
-        member _.Accept v = v.Visit<'exn> ()
+        member _.Accept v = v.Visit<'exn>()
 
 
 //-----------------------------------
@@ -352,13 +367,13 @@ type IEnumerableVisitor<'R> =
     abstract Visit<'Enum, 'T when 'Enum :> seq<'T>> : unit -> 'R
 
 type IShapeEnumerable =
-    abstract Element : TypeShape
-    abstract Accept : IEnumerableVisitor<'R> -> 'R
+    abstract Element: TypeShape
+    abstract Accept: IEnumerableVisitor<'R> -> 'R
 
-type private ShapeEnumerable<'Enum, 'T when 'Enum :> seq<'T>> () =
+type private ShapeEnumerable<'Enum, 'T when 'Enum :> seq<'T>>() =
     interface IShapeEnumerable with
         member _.Element = shapeof<'T> :> _
-        member _.Accept v = v.Visit<'Enum, 'T> ()
+        member _.Accept v = v.Visit<'Enum, 'T>()
 
 // Collection
 
@@ -366,13 +381,13 @@ type ICollectionVisitor<'R> =
     abstract Visit<'Collection, 'T when 'Collection :> ICollection<'T>> : unit -> 'R
 
 type IShapeCollection =
-    abstract Element : TypeShape
-    abstract Accept : ICollectionVisitor<'R> -> 'R
+    abstract Element: TypeShape
+    abstract Accept: ICollectionVisitor<'R> -> 'R
 
-type private ShapeCollection<'Collection, 'T when 'Collection :> ICollection<'T>> () =
+type private ShapeCollection<'Collection, 'T when 'Collection :> ICollection<'T>>() =
     interface IShapeCollection with
         member _.Element = shapeof<'T> :> _
-        member _.Accept v = v.Visit<'Collection, 'T> ()
+        member _.Accept v = v.Visit<'Collection, 'T>()
 
 // KeyValuePair
 
@@ -380,24 +395,24 @@ type IKeyValuePairVisitor<'R> =
     abstract Visit<'K, 'V> : unit -> 'R
 
 type IShapeKeyValuePair =
-    abstract Key : TypeShape
-    abstract Value : TypeShape
-    abstract Accept : IKeyValuePairVisitor<'R> -> 'R
+    abstract Key: TypeShape
+    abstract Value: TypeShape
+    abstract Accept: IKeyValuePairVisitor<'R> -> 'R
 
-type private ShapeKeyValuePair<'K,'V> () =
+type private ShapeKeyValuePair<'K, 'V>() =
     interface IShapeKeyValuePair with
         member _.Key = shapeof<'K> :> _
         member _.Value = shapeof<'V> :> _
-        member _.Accept v = v.Visit<'K, 'V> ()
+        member _.Accept v = v.Visit<'K, 'V>()
 
 // System.Array
 
 type IShapeArray =
     /// Gets the rank of the array type shape
-    abstract Rank : int
-    abstract Element : TypeShape
+    abstract Rank: int
+    abstract Element: TypeShape
 
-type private ShapeArray<'T>(rank : int) =
+type private ShapeArray<'T>(rank: int) =
     interface IShapeArray with
         member _.Rank = rank
         member _.Element = shapeof<'T> :> _
@@ -406,15 +421,15 @@ type ISystemArrayVisitor<'R> =
     abstract Visit<'Array when 'Array :> System.Array> : unit -> 'R
 
 type IShapeSystemArray =
-    abstract Rank : int
-    abstract Element : TypeShape
-    abstract Accept : ISystemArrayVisitor<'R> -> 'R
+    abstract Rank: int
+    abstract Element: TypeShape
+    abstract Accept: ISystemArrayVisitor<'R> -> 'R
 
-type private ShapeSystemArray<'Array when 'Array :> System.Array>(elem : Type, rank : int) =
+type private ShapeSystemArray<'Array when 'Array :> System.Array>(elem: Type, rank: int) =
     interface IShapeSystemArray with
         member _.Rank = rank
         member _.Element = TypeShape.Create elem
-        member _.Accept v = v.Visit<'Array> ()
+        member _.Accept v = v.Visit<'Array>()
 
 
 // System.Collections.List
@@ -423,9 +438,9 @@ type IResizeArrayVisitor<'R> =
     abstract Visit<'T> : unit -> 'R
 
 type IShapeResizeArray =
-    abstract Element : TypeShape
+    abstract Element: TypeShape
 
-type private ShapeResizeArray<'T> () =
+type private ShapeResizeArray<'T>() =
     interface IShapeResizeArray with
         member _.Element = shapeof<'T> :> _
 
@@ -433,58 +448,58 @@ type private ShapeResizeArray<'T> () =
 // System.Collections.Dictionary
 
 type IDictionaryVisitor<'R> =
-    abstract Visit<'K, 'V when 'K : equality> : unit -> 'R
+    abstract Visit<'K, 'V when 'K: equality> : unit -> 'R
 
 type IShapeDictionary =
-    abstract Key : TypeShape
-    abstract Value : TypeShape
-    abstract Accept : IDictionaryVisitor<'R> -> 'R
+    abstract Key: TypeShape
+    abstract Value: TypeShape
+    abstract Accept: IDictionaryVisitor<'R> -> 'R
 
-type private ShapeDictionary<'K, 'V when 'K : equality> () =
+type private ShapeDictionary<'K, 'V when 'K: equality>() =
     interface IShapeDictionary with
         member _.Key = shapeof<'K> :> _
         member _.Value = shapeof<'V> :> _
-        member _.Accept v = v.Visit<'K, 'V> ()
+        member _.Accept v = v.Visit<'K, 'V>()
 
 // System.Collections.HashSet
 
 type IHashSetVisitor<'R> =
-    abstract Visit<'T when 'T : equality> : unit -> 'R
+    abstract Visit<'T when 'T: equality> : unit -> 'R
 
 type IShapeHashSet =
-    abstract Element : TypeShape
-    abstract Accept : IHashSetVisitor<'R> -> 'R
+    abstract Element: TypeShape
+    abstract Accept: IHashSetVisitor<'R> -> 'R
 
-type private ShapeHashSet<'T when 'T : equality> () =
+type private ShapeHashSet<'T when 'T: equality>() =
     interface IShapeHashSet with
         member _.Element = shapeof<'T> :> _
-        member _.Accept v = v.Visit<'T> ()
+        member _.Accept v = v.Visit<'T>()
 
 // F# Set
 
 type IFSharpSetVisitor<'R> =
-    abstract Visit<'T when 'T : comparison> : unit -> 'R
+    abstract Visit<'T when 'T: comparison> : unit -> 'R
 
 type IShapeFSharpSet =
-    abstract Element : TypeShape
-    abstract Accept : IFSharpSetVisitor<'R> -> 'R
+    abstract Element: TypeShape
+    abstract Accept: IFSharpSetVisitor<'R> -> 'R
 
-type private ShapeFSharpSet<'T when 'T : comparison> () =
+type private ShapeFSharpSet<'T when 'T: comparison>() =
     interface IShapeFSharpSet with
         member _.Element = shapeof<'T> :> _
-        member _.Accept v = v.Visit<'T> ()
+        member _.Accept v = v.Visit<'T>()
 
 // F# Map
 
 type IFSharpMapVisitor<'R> =
-    abstract Visit<'K, 'V when 'K : comparison> : unit -> 'R
+    abstract Visit<'K, 'V when 'K: comparison> : unit -> 'R
 
 type IShapeFSharpMap =
-    abstract Key : TypeShape
-    abstract Value : TypeShape
-    abstract Accept : IFSharpMapVisitor<'R> -> 'R
+    abstract Key: TypeShape
+    abstract Value: TypeShape
+    abstract Accept: IFSharpMapVisitor<'R> -> 'R
 
-type private ShapeFSharpMap<'K, 'V when 'K : comparison> () =
+type private ShapeFSharpMap<'K, 'V when 'K: comparison>() =
     interface IShapeFSharpMap with
         member _.Key = shapeof<'K> :> _
         member _.Value = shapeof<'V> :> _
@@ -493,27 +508,27 @@ type private ShapeFSharpMap<'K, 'V when 'K : comparison> () =
 // F# ref
 
 type IShapeFSharpRef =
-    abstract Element : TypeShape
+    abstract Element: TypeShape
 
-type private ShapeFSharpRef<'T> () =
+type private ShapeFSharpRef<'T>() =
     interface IShapeFSharpRef with
         member _.Element = shapeof<'T> :> _
 
 // F# option
 
 type IShapeFSharpOption =
-    abstract Element : TypeShape
+    abstract Element: TypeShape
 
-type private ShapeFSharpOption<'T> () =
+type private ShapeFSharpOption<'T>() =
     interface IShapeFSharpOption with
         member _.Element = shapeof<'T> :> _
 
 // F# List
 
 type IShapeFSharpList =
-    abstract Element : TypeShape
+    abstract Element: TypeShape
 
-type private ShapeFSharpList<'T> () =
+type private ShapeFSharpList<'T>() =
     interface IShapeFSharpList with
         member _.Element = shapeof<'T> :> _
 
@@ -524,28 +539,27 @@ type private ShapeFSharpList<'T> () =
 module private MemberUtils =
 
     let private untypedVisitor =
-        {
-            new ITypeVisitor<obj> with
-                member _.Visit<'T>() = Unchecked.defaultof<'T> :> obj
+        { new ITypeVisitor<obj> with
+            member _.Visit<'T>() = Unchecked.defaultof<'T> :> obj
         }
 
-    let defaultOfUntyped (ty : Type) =
+    let defaultOfUntyped (ty: Type) =
         TypeShape.Create(ty).Accept untypedVisitor
 
-    let inline invalidMember (memberInfo : MemberInfo) =
+    let inline invalidMember (memberInfo: MemberInfo) =
         sprintf "TypeShape internal error: invalid MemberInfo '%O'" memberInfo
         |> invalidOp
 
-    let isStructMember (path : MemberInfo[]) =
+    let isStructMember (path: MemberInfo[]) =
         path |> Array.exists (fun m -> m.DeclaringType.IsValueType)
 
-    let isPublicMember (memberInfo : MemberInfo) =
+    let isPublicMember (memberInfo: MemberInfo) =
         match memberInfo with
         | :? FieldInfo as f -> f.IsPublic
         | :? PropertyInfo as p -> p.GetGetMethod(true).IsPublic
         | _ -> invalidMember memberInfo
 
-    let isWriteableMember (path : MemberInfo[]) =
+    let isWriteableMember (path: MemberInfo[]) =
         path
         |> Array.forall (fun m ->
             match m with
@@ -553,32 +567,34 @@ module private MemberUtils =
             | :? PropertyInfo as p -> p.CanWrite
             | _ -> invalidMember m)
 
-    let inline getValue (obj:obj) (m:MemberInfo) =
+    let inline getValue (obj: obj) (m: MemberInfo) =
         match m with
         | :? FieldInfo as f -> f.GetValue(obj)
         | :? PropertyInfo as p -> p.GetValue(obj, null)
         | _ -> invalidMember m
 
-    let inline setValue (obj:obj) (m:MemberInfo) (value:obj) =
+    let inline setValue (obj: obj) (m: MemberInfo) (value: obj) =
         match m with
         | :? FieldInfo as f -> f.SetValue(obj, value)
         | :? PropertyInfo as p -> p.SetValue(obj, value, null)
         | _ -> invalidMember m
 
-    let inline project<'Type, 'Member> (path : MemberInfo[]) (value:'Type) =
+    let inline project<'Type, 'Member> (path: MemberInfo[]) (value: 'Type) =
         let mutable obj = box value
+
         for i = 0 to path.Length - 1 do
             obj <- getValue obj path.[i]
+
         obj :?> 'Member
 
-    let inline inject<'Type, 'Member> (isStructMember : bool) (path : MemberInfo[])
-                                        (instance : 'Type) (value : 'Member) =
+    let inline inject<'Type, 'Member> (isStructMember: bool) (path: MemberInfo[]) (instance: 'Type) (value: 'Member) =
         let n = path.Length
+
         if isStructMember then
             // we are trying to update a nested struct (e.g. a struct tuple of large arity)
             // in order to ensure that the change gets propagated to the original copy
             // we must box and update every intermediate value
-            let rec update (i : int) (instance : obj) =
+            let rec update (i: int) (instance: obj) =
                 if i < n - 1 then
                     let nested = getValue instance path.[i]
                     let updated = update (i + 1) nested
@@ -593,6 +609,7 @@ module private MemberUtils =
             // all nested instances are heap allocated,
             // just traverse to the leaf object and update it.
             let mutable obj = box instance
+
             for i = 0 to n - 2 do
                 obj <- getValue obj path.[i]
 
@@ -601,21 +618,22 @@ module private MemberUtils =
 
 #if TYPESHAPE_EXPR
 
-    let getDefaultValueExpr (t : Type) =
-        TypeShape.Create(t).Accept {
-            new ITypeVisitor<Expr> with
-                member _.Visit<'T> () = <@ Unchecked.defaultof<'T> @> :> _
-        }
+    let getDefaultValueExpr (t: Type) =
+        TypeShape.Create(t).Accept
+            { new ITypeVisitor<Expr> with
+                member _.Visit<'T>() = <@ Unchecked.defaultof<'T> @> :> _
+            }
 
-    let private castFor (m : MemberInfo) (e : Expr) =
-        if m.DeclaringType = e.Type then e
+    let private castFor (m: MemberInfo) (e: Expr) =
+        if m.DeclaringType = e.Type then
+            e
         elif e.Type.IsAssignableFrom m.DeclaringType then
             Expr.Coerce(e, m.DeclaringType)
         else
             invalidOp "TypeShape: internal error, cannot cast to member declaring type."
 
-    let projectExpr<'Record, 'Member> (path : MemberInfo[]) (expr : Expr<'Record>) =
-        let rec aux expr (m:MemberInfo) =
+    let projectExpr<'Record, 'Member> (path: MemberInfo[]) (expr: Expr<'Record>) =
+        let rec aux expr (m: MemberInfo) =
             match m with
             | :? FieldInfo as fI -> Expr.FieldGet(castFor fI expr, fI)
             | :? PropertyInfo as pI -> Expr.PropertyGet(castFor pI expr, pI)
@@ -623,9 +641,7 @@ module private MemberUtils =
 
         Expr.Cast<'Member>(Array.fold aux (expr :> _) path)
 
-    let injectExpr (path : MemberInfo[])
-                    (r : Expr<'TRecord>)
-                    (value : Expr<'MemberType>) =
+    let injectExpr (path: MemberInfo[]) (r: Expr<'TRecord>) (value: Expr<'MemberType>) =
 
         if typeof<'TRecord>.IsValueType then
             // this should use Expr.AddressOf, but most quotation libs don't support it
@@ -637,6 +653,7 @@ module private MemberUtils =
                     | m -> invalidMember m
                 else
                     let mkVar n t = Var(n, t, isMutable = true)
+
                     match path.[i] with
                     | :? FieldInfo as fI ->
                         let v = mkVar fI.Name fI.FieldType
@@ -652,7 +669,10 @@ module private MemberUtils =
                         Expr.Let(v, getter, Expr.Sequential(nestedSetter, setter))
                     | m -> invalidMember m
 
-            <@ (% Expr.Cast<_>(aux 0 r)) ; %r @>
+            <@
+                (%Expr.Cast<_>(aux 0 r))
+                %r
+            @>
         else
             let rec aux i expr =
                 if i = path.Length - 1 then
@@ -662,11 +682,14 @@ module private MemberUtils =
                     | m -> invalidMember m
                 else
                     match path.[i] with
-                    | :? FieldInfo as fI -> aux (i+1) (Expr.FieldGet(castFor fI expr, fI))
-                    | :? PropertyInfo as pI -> aux (i+1) (Expr.PropertyGet(castFor pI expr, pI))
+                    | :? FieldInfo as fI -> aux (i + 1) (Expr.FieldGet(castFor fI expr, fI))
+                    | :? PropertyInfo as pI -> aux (i + 1) (Expr.PropertyGet(castFor pI expr, pI))
                     | m -> invalidMember m
 
-            <@ (% Expr.Cast<_>(aux 0 r)) ; %r @>
+            <@
+                (%Expr.Cast<_>(aux 0 r))
+                %r
+            @>
 #endif
 
 //-------------------------
@@ -676,25 +699,25 @@ module private MemberUtils =
 /// in a class instance, typically a field or property
 type IShapeReadOnlyMember =
     /// Human-readable member identifier
-    abstract Label : string
+    abstract Label: string
     /// The actual System.Reflection.MemberInfo corresponding to member
-    abstract MemberInfo : MemberInfo
+    abstract MemberInfo: MemberInfo
     /// Type of value stored by member
-    abstract Member : TypeShape
+    abstract Member: TypeShape
     /// True iff member is contained within a struct
-    abstract IsStructMember : bool
+    abstract IsStructMember: bool
     /// True iff member is public
-    abstract IsPublic : bool
+    abstract IsPublic: bool
 
 /// Identifies an instance member that defines a read-only value
 /// in a class instance, typically a field or property
 type IShapeReadOnlyMember<'DeclaringType> =
     inherit IShapeReadOnlyMember
-    abstract Accept : IReadOnlyMemberVisitor<'DeclaringType, 'R> -> 'R
+    abstract Accept: IReadOnlyMemberVisitor<'DeclaringType, 'R> -> 'R
 
 /// Identifies an instance member that defines a read-only value
 /// in a class instance, typically a field or property
-and ReadOnlyMember<'DeclaringType, 'MemberType> internal (label : string, memberInfo : MemberInfo, path : MemberInfo[]) =
+and ReadOnlyMember<'DeclaringType, 'MemberType> internal (label: string, memberInfo: MemberInfo, path: MemberInfo[]) =
     let isStructMember = isStructMember path
     let isPublicMember = isPublicMember memberInfo
 
@@ -707,16 +730,15 @@ and ReadOnlyMember<'DeclaringType, 'MemberType> internal (label : string, member
     /// True iff member is public
     member _.IsPublic = isPublicMember
     /// Gets the current value from the given declaring type instance
-    member _.Get (instance : 'DeclaringType) : 'MemberType =
-        project path instance
+    member _.Get(instance: 'DeclaringType) : 'MemberType = project path instance
 
     /// Gets the current value from the given declaring type instance
     [<Obsolete("Deprecated, please use the 'Get' method instead")>]
-    member m.Project (instance : 'DeclaringType) : 'MemberType = m.Get instance
+    member m.Project(instance: 'DeclaringType) : 'MemberType = m.Get instance
 
 #if TYPESHAPE_EXPR
     /// Projects an instance to member of given value
-    member _.GetExpr (instance : Expr<'DeclaringType>) =
+    member _.GetExpr(instance: Expr<'DeclaringType>) =
         projectExpr<'DeclaringType, 'MemberType> path instance
 #endif
 
@@ -738,32 +760,31 @@ and IReadOnlyMemberVisitor<'DeclaringType, 'R> =
 /// a mutable value in a class instance, typically a field or property
 type IShapeMember<'Record> =
     inherit IShapeReadOnlyMember<'Record>
-    abstract Accept : IMemberVisitor<'Record,'R> -> 'R
+    abstract Accept: IMemberVisitor<'Record, 'R> -> 'R
 
 /// Identifies an instance member that defines
 /// a mutable value in a class instance, typically a field or property
-and [<Sealed>] ShapeMember<'DeclaringType, 'MemberType> private (label : string, memberInfo : MemberInfo, path : MemberInfo[]) =
+and [<Sealed>] ShapeMember<'DeclaringType, 'MemberType>
+    private (label: string, memberInfo: MemberInfo, path: MemberInfo[]) =
     inherit ReadOnlyMember<'DeclaringType, 'MemberType>(label, memberInfo, path)
 
     let isStructMember = isStructMember path
 
     /// Assigns value to the provided instance. NB this is a mutating operation
-    member _.Set (instance : 'DeclaringType) (field : 'MemberType) : 'DeclaringType =
+    member _.Set (instance: 'DeclaringType) (field: 'MemberType) : 'DeclaringType =
         inject isStructMember path instance field
 
     /// Assigns value to the provided instance. NB this is a mutating operation
     [<Obsolete("Deprecated, please use the 'Set' method instead")>]
-    member m.Inject (instance : 'DeclaringType) (field : 'MemberType) : 'DeclaringType =
-        m.Set instance field
+    member m.Inject (instance: 'DeclaringType) (field: 'MemberType) : 'DeclaringType = m.Set instance field
 
 #if TYPESHAPE_EXPR
     /// Injects a value to member of given instance
-    member _.SetExpr (instance : Expr<'DeclaringType>) (field : Expr<'MemberType>) =
-        injectExpr path instance field
+    member _.SetExpr (instance: Expr<'DeclaringType>) (field: Expr<'MemberType>) = injectExpr path instance field
 #endif
 
     interface IShapeMember<'DeclaringType> with
-        member s.Accept (v : IMemberVisitor<'DeclaringType, 'R>) = v.Visit s
+        member s.Accept(v: IMemberVisitor<'DeclaringType, 'R>) = v.Visit s
 
 and IMemberVisitor<'TRecord, 'R> =
     abstract Visit<'Field> : ShapeMember<'TRecord, 'Field> -> 'R
@@ -774,39 +795,39 @@ and IMemberVisitor<'TRecord, 'R> =
 /// Identifies a constructor implementation shape
 type IShapeConstructor =
     /// Denotes whether constructor is public
-    abstract IsPublic : bool
+    abstract IsPublic: bool
     /// Denotes the arity of the constructor arguments
-    abstract Arity : int
+    abstract Arity: int
     /// ConstructorInfo instance
-    abstract ConstructorInfo : ConstructorInfo
+    abstract ConstructorInfo: ConstructorInfo
     // A tuple type encoding all arguments passed to the constuctor
-    abstract Arguments : TypeShape
+    abstract Arguments: TypeShape
 
 /// Identifies a constructor implementation shape
 and IShapeConstructor<'DeclaringType> =
     inherit IShapeConstructor
-    abstract Accept : IConstructorVisitor<'DeclaringType, 'R> -> 'R
+    abstract Accept: IConstructorVisitor<'DeclaringType, 'R> -> 'R
 
 /// Identifies a constructor implementation shape
-and [<Sealed>] ShapeConstructor<'DeclaringType, 'CtorArgs> private (ctorInfo : ConstructorInfo, arity : int) =
+and [<Sealed>] ShapeConstructor<'DeclaringType, 'CtorArgs> private (ctorInfo: ConstructorInfo, arity: int) =
     let valueReader =
         match arity with
         | 0 -> fun _ -> [||]
-        | 1 -> fun x -> [|x|]
-        |_ -> FSharpValue.PreComputeTupleReader typeof<'CtorArgs>
+        | 1 -> fun x -> [| x |]
+        | _ -> FSharpValue.PreComputeTupleReader typeof<'CtorArgs>
 
     /// Creates an instance of declaring type with supplied constructor args
-    member _.Invoke(args : 'CtorArgs) =
+    member _.Invoke(args: 'CtorArgs) =
         let args = valueReader args
         ctorInfo.Invoke args :?> 'DeclaringType
 
 #if TYPESHAPE_EXPR
     /// Creates an instance of declaring type with supplied constructor args
-    member _.InvokeExpr(args : Expr<'CtorArgs>) : Expr<'DeclaringType> =
+    member _.InvokeExpr(args: Expr<'CtorArgs>) : Expr<'DeclaringType> =
         let exprArgs =
             match arity with
-            | 1 -> [args :> Expr]
-            | _ -> [for i in 0 .. arity - 1 -> Expr.TupleGet(args, i)]
+            | 1 -> [ args :> Expr ]
+            | _ -> [ for i in 0 .. arity - 1 -> Expr.TupleGet(args, i) ]
 
         Expr.Cast<'DeclaringType>(Expr.NewObject(ctorInfo, exprArgs))
 #endif
@@ -826,37 +847,42 @@ and IConstructorVisitor<'CtorType, 'R> =
 
 [<AutoOpen>]
 module private MemberUtils2 =
-    let mkMemberUntyped<'Record> (label : string) (memberInfo : MemberInfo) (path : MemberInfo[]) =
+    let mkMemberUntyped<'Record> (label: string) (memberInfo: MemberInfo) (path: MemberInfo[]) =
         let memberType =
             match path.[path.Length - 1] with
             | :? FieldInfo as fI -> fI.FieldType
             | :? PropertyInfo as pI -> pI.PropertyType
             | m -> invalidMember m
 
-        let tyArgs = [|typeof<'Record> ; memberType|]
-        let args = [|box label; box memberInfo; box path|]
-        if isWriteableMember path then
-            Activator.CreateInstanceGeneric<ShapeMember<_,_>>(tyArgs, args)
-            :?> IShapeReadOnlyMember<'Record>
-        else
-            Activator.CreateInstanceGeneric<ReadOnlyMember<_,_>>(tyArgs, args)
-            :?> IShapeReadOnlyMember<'Record>
+        let tyArgs = [| typeof<'Record>; memberType |]
+        let args = [| box label; box memberInfo; box path |]
 
-    let mkWriteMemberUntyped<'Record> (label : string) (memberInfo : MemberInfo) (path : MemberInfo[]) =
+        if isWriteableMember path then
+            Activator.CreateInstanceGeneric<ShapeMember<_, _>>(tyArgs, args) :?> IShapeReadOnlyMember<'Record>
+        else
+            Activator.CreateInstanceGeneric<ReadOnlyMember<_, _>>(tyArgs, args) :?> IShapeReadOnlyMember<'Record>
+
+    let mkWriteMemberUntyped<'Record> (label: string) (memberInfo: MemberInfo) (path: MemberInfo[]) =
         match mkMemberUntyped<'Record> label memberInfo path with
         | :? IShapeMember<'Record> as wm -> wm
-        | _ -> invalidOp <| sprintf "TypeShape internal error: Member '%O' is not writable" memberInfo
+        | _ ->
+            invalidOp
+            <| sprintf "TypeShape internal error: Member '%O' is not writable" memberInfo
 
-    let mkCtorUntyped<'Record> (ctorInfo : ConstructorInfo) =
+    let mkCtorUntyped<'Record> (ctorInfo: ConstructorInfo) =
         let argTypes = ctorInfo.GetParameters() |> Array.map (fun p -> p.ParameterType)
         let arity = argTypes.Length
+
         let argumentType =
             match arity with
             | 0 -> typeof<unit>
             | 1 -> argTypes.[0]
             | _ -> FSharpType.MakeTupleType argTypes
 
-        Activator.CreateInstanceGeneric<ShapeConstructor<_,_>>([|typeof<'Record>; argumentType|], [|box ctorInfo; box arity|])
+        Activator.CreateInstanceGeneric<ShapeConstructor<_, _>>(
+            [| typeof<'Record>; argumentType |],
+            [| box ctorInfo; box arity |]
+        )
         :?> IShapeConstructor<'Record>
 
 //--------------------
@@ -866,17 +892,17 @@ module private MemberUtils2 =
 module private ShapeTupleImpl =
 
     [<NoEquality; NoComparison>]
-    type TupleInfo =
-        {
-            Current : Type
-            Fields : (MemberInfo * FieldInfo) []
-            Nested : (FieldInfo * TupleInfo) option
-        }
+    type TupleInfo = {
+        Current: Type
+        Fields: (MemberInfo * FieldInfo)[]
+        Nested: (FieldInfo * TupleInfo) option
+    }
 
-    let rec mkTupleInfo (t : Type) =
+    let rec mkTupleInfo (t: Type) =
         if t.IsValueType then
             let fields = t.GetFields()
-            let getField (f : FieldInfo) = f :> MemberInfo, f
+            let getField (f: FieldInfo) = f :> MemberInfo, f
+
             let fs, nested =
                 if fields.Length = 8 then
                     let nestedField = fields.[7]
@@ -885,12 +911,17 @@ module private ShapeTupleImpl =
                 else
                     Array.map getField fields, None
 
-            { Current = t ; Fields = fs ; Nested = nested }
+            {
+                Current = t
+                Fields = fs
+                Nested = nested
+            }
         else
             let props = t.GetProperties()
             let fields = t.GetFields(BindingFlags.NonPublic ||| BindingFlags.Instance)
-            let getField (p : PropertyInfo) =
-                let field = fields |> Array.find(fun f -> f.Name = "m_" + p.Name)
+
+            let getField (p: PropertyInfo) =
+                let field = fields |> Array.find (fun f -> f.Name = "m_" + p.Name)
                 p :> MemberInfo, field
 
             let fs, nested =
@@ -901,28 +932,31 @@ module private ShapeTupleImpl =
                 else
                     Array.map getField props, None
 
-            { Current = t ; Fields = fs ; Nested = nested }
+            {
+                Current = t
+                Fields = fs
+                Nested = nested
+            }
 
-    let gatherTupleMembers (tI : TupleInfo) =
-        let rec aux (ctx : MemberInfo list) (tI : TupleInfo) = seq {
-            for p,f in tI.Fields do
+    let gatherTupleMembers (tI: TupleInfo) =
+        let rec aux (ctx: MemberInfo list) (tI: TupleInfo) = seq {
+            for p, f in tI.Fields do
                 yield p, f :> MemberInfo :: ctx |> List.rev |> List.toArray
 
             match tI.Nested with
-            | Some (fI,n) -> yield! aux (fI :> MemberInfo :: ctx) n
+            | Some(fI, n) -> yield! aux (fI :> MemberInfo :: ctx) n
             | None -> ()
         }
 
         aux [] tI
 
-    let gatherNestedFields (tI : TupleInfo) =
-        let rec aux fs (tI : TupleInfo) =
+    let gatherNestedFields (tI: TupleInfo) =
+        let rec aux fs (tI: TupleInfo) =
             match tI.Nested with
-            | Some (fI,n) -> aux (fI :: fs) n
+            | Some(fI, n) -> aux (fI :: fs) n
             | _ -> List.rev fs
 
-        aux [] tI
-        |> List.toArray
+        aux [] tI |> List.toArray
 
 //---------------------------
 // Shape Tuple Implementation
@@ -930,11 +964,11 @@ module private ShapeTupleImpl =
 /// Denotes a specific System.Tuple shape
 type IShapeTuple =
     /// Tuple element shape definitions
-    abstract Elements : IShapeReadOnlyMember[]
-    abstract Accept : ITupleVisitor<'R> -> 'R
+    abstract Elements: IShapeReadOnlyMember[]
+    abstract Accept: ITupleVisitor<'R> -> 'R
 
 and ITupleVisitor<'R> =
-    abstract Visit : ShapeTuple<'Tuple> -> 'R
+    abstract Visit: ShapeTuple<'Tuple> -> 'R
 
 /// Identifies a specific System.Tuple shape
 and [<Sealed>] ShapeTuple<'Tuple> private () =
@@ -944,7 +978,7 @@ and [<Sealed>] ShapeTuple<'Tuple> private () =
     let tupleElems =
         gatherTupleMembers tupleInfo
         |> Seq.mapi (fun i (pI, path) ->
-            let label = sprintf "Item%d" (i+1)
+            let label = sprintf "Item%d" (i + 1)
             mkWriteMemberUntyped<'Tuple> label pI path)
         |> Seq.toArray
 
@@ -953,12 +987,15 @@ and [<Sealed>] ShapeTuple<'Tuple> private () =
     member _.IsStructTuple = isStructTuple
     /// Tuple element shape definitions
     member _.Elements = tupleElems
+
     /// Creates an uninitialized tuple instance of given type
     member _.CreateUninitialized() : 'Tuple =
-        if isStructTuple then Unchecked.defaultof<'Tuple>
+        if isStructTuple then
+            Unchecked.defaultof<'Tuple>
         else
             let obj = FormatterServices.GetUninitializedObject typeof<'Tuple>
             let mutable this = obj
+
             for f in fieldStack do
                 let x = FormatterServices.GetUninitializedObject f.FieldType
                 f.SetValue(this, x)
@@ -971,7 +1008,9 @@ and [<Sealed>] ShapeTuple<'Tuple> private () =
         if isStructTuple then
             Expr.Cast<'Tuple>(Expr.DefaultValue typeof<'Tuple>)
         else
-            let values = tupleElems |> Seq.map (fun e -> getDefaultValueExpr e.Member.Type) |> Seq.toList
+            let values =
+                tupleElems |> Seq.map (fun e -> getDefaultValueExpr e.Member.Type) |> Seq.toList
+
             Expr.Cast<'Tuple>(Expr.NewTuple(values))
 #endif
 
@@ -984,24 +1023,28 @@ and [<Sealed>] ShapeTuple<'Tuple> private () =
 
 /// Denotes an F# record type
 type IShapeFSharpRecord =
-    abstract IsStructRecord : bool
-    abstract IsAnonymousRecord : bool
+    abstract IsStructRecord: bool
+    abstract IsAnonymousRecord: bool
 
     /// F# record field shapes
-    abstract Fields : IShapeReadOnlyMember[]
-    abstract Accept : IFSharpRecordVisitor<'R> -> 'R
+    abstract Fields: IShapeReadOnlyMember[]
+    abstract Accept: IFSharpRecordVisitor<'R> -> 'R
 
 /// Identifies an F# record type
 and [<Sealed>] ShapeFSharpRecord<'Record> private () =
     let isStructRecord = typeof<'Record>.IsValueType
     // Warning: ugly hack -- should derive from FSharp.Reflection
     let isAnonymousRecord = typeof<'Record>.Name.StartsWith "<>f__AnonymousType"
-    let ctorInfo = FSharpValue.PreComputeRecordConstructorInfo(typeof<'Record>, AllMembers)
+
+    let ctorInfo =
+        FSharpValue.PreComputeRecordConstructorInfo(typeof<'Record>, AllMembers)
+
     let props = FSharpType.GetRecordFields(typeof<'Record>, AllMembers)
     let fields = typeof<'Record>.GetFields(AllInstanceMembers)
-    let mkRecordField (prop : PropertyInfo) =
+
+    let mkRecordField (prop: PropertyInfo) =
         let backingField = fields |> Array.find (fun f -> f.Name = prop.Name + "@")
-        mkWriteMemberUntyped<'Record> prop.Name prop [|backingField :> MemberInfo|]
+        mkWriteMemberUntyped<'Record> prop.Name prop [| backingField :> MemberInfo |]
 
     let ctorParams = props |> Array.map (fun p -> defaultOfUntyped p.PropertyType)
 
@@ -1018,14 +1061,18 @@ and [<Sealed>] ShapeFSharpRecord<'Record> private () =
 
     /// Creates an uninitialized instance for given record
     member _.CreateUninitialized() : 'Record =
-        if isStructRecord then Unchecked.defaultof<'Record> else
-        ctorInfo.Invoke ctorParams :?> 'Record
+        if isStructRecord then
+            Unchecked.defaultof<'Record>
+        else
+            ctorInfo.Invoke ctorParams :?> 'Record
 
 #if TYPESHAPE_EXPR
     member _.CreateUninitializedExpr() : Expr<'Record> =
-        if isStructRecord then <@ Unchecked.defaultof<'Record> @> else
-        let values = props |> Seq.map (fun p -> getDefaultValueExpr p.PropertyType)
-        Expr.Cast<'Record>(Expr.NewObject(ctorInfo, Seq.toList values))
+        if isStructRecord then
+            <@ Unchecked.defaultof<'Record> @>
+        else
+            let values = props |> Seq.map (fun p -> getDefaultValueExpr p.PropertyType)
+            Expr.Cast<'Record>(Expr.NewObject(ctorInfo, Seq.toList values))
 #endif
 
     interface IShapeFSharpRecord with
@@ -1036,7 +1083,7 @@ and [<Sealed>] ShapeFSharpRecord<'Record> private () =
         member s.Accept v = v.Visit s
 
 and IFSharpRecordVisitor<'R> =
-    abstract Visit : ShapeFSharpRecord<'Record> -> 'R
+    abstract Visit: ShapeFSharpRecord<'Record> -> 'R
 
 //----------------------
 // F# Unions
@@ -1044,12 +1091,13 @@ and IFSharpRecordVisitor<'R> =
 /// Denotes an F# union case shape
 type IShapeFSharpUnionCase =
     /// Underlying FSharp.Reflection.UnionCaseInfo description
-    abstract CaseInfo : UnionCaseInfo
+    abstract CaseInfo: UnionCaseInfo
     /// Field shapes for union case
-    abstract Fields : IShapeReadOnlyMember[]
+    abstract Fields: IShapeReadOnlyMember[]
 
 /// Denotes an F# union case shape
-type [<Sealed>] ShapeFSharpUnionCase<'Union> private (uci : UnionCaseInfo) =
+[<Sealed>]
+type ShapeFSharpUnionCase<'Union> private (uci: UnionCaseInfo) =
     let properties = uci.GetFields()
     let ctorInfo = FSharpValue.PreComputeUnionConstructorInfo(uci, AllMembers)
     let ctorParams = properties |> Array.map (fun p -> defaultOfUntyped p.PropertyType)
@@ -1060,9 +1108,15 @@ type [<Sealed>] ShapeFSharpUnionCase<'Union> private (uci : UnionCaseInfo) =
         | _ ->
             let underlyingType = properties.[0].DeclaringType
             let allFields = underlyingType.GetFields(AllInstanceMembers)
-            let mkUnionField (p : PropertyInfo) =
-                let fieldInfo = allFields |> Array.find (fun f -> f.Name = "_" + p.Name || f.Name.Equals (p.Name, StringComparison.OrdinalIgnoreCase))
-                mkWriteMemberUntyped<'Union> p.Name p [|fieldInfo|]
+
+            let mkUnionField (p: PropertyInfo) =
+                let fieldInfo =
+                    allFields
+                    |> Array.find (fun f ->
+                        f.Name = "_" + p.Name
+                        || f.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase))
+
+                mkWriteMemberUntyped<'Union> p.Name p [| fieldInfo |]
 
             Array.map mkUnionField properties
 
@@ -1090,17 +1144,17 @@ type [<Sealed>] ShapeFSharpUnionCase<'Union> private (uci : UnionCaseInfo) =
 /// Denotes an F# Union shape
 type IShapeFSharpUnion =
     /// Case shapes for given union type
-    abstract UnionCases : IShapeFSharpUnionCase[]
-    abstract Accept : IFSharpUnionVisitor<'R> -> 'R
+    abstract UnionCases: IShapeFSharpUnionCase[]
+    abstract Accept: IFSharpUnionVisitor<'R> -> 'R
 
 /// Denotes an F# Union shape
 and [<Sealed>] ShapeFSharpUnion<'U> private () =
     let isStructUnion = typeof<'U>.IsValueType
+
     let ucis =
         FSharpType.GetUnionCases(typeof<'U>, AllMembers)
         |> Array.map (fun uci ->
-            Activator.CreateInstanceGeneric<ShapeFSharpUnionCase<'U>>([||],[|uci|])
-            :?> ShapeFSharpUnionCase<'U>)
+            Activator.CreateInstanceGeneric<ShapeFSharpUnionCase<'U>>([||], [| uci |]) :?> ShapeFSharpUnionCase<'U>)
 
 #if TYPESHAPE_EXPR
     let tagReaderInfo = FSharpValue.PreComputeUnionTagMemberInfo(typeof<'U>, AllMembers)
@@ -1114,28 +1168,31 @@ and [<Sealed>] ShapeFSharpUnion<'U> private () =
     /// Case shapes for given union type
     member _.UnionCases = ucis
     /// Gets the underlying tag id for given union instance
-    member _.GetTag (union : 'U) : int =
-        tagReader union
+    member _.GetTag(union: 'U) : int = tagReader union
 
     /// Gets the underlying tag id for given union case name
-    member _.GetTag (caseName : string) : int =
+    member _.GetTag(caseName: string) : int =
         let caseNames = caseNames
         let n = caseNames.Length
         let mutable i = 0
         let mutable notFound = true
+
         while notFound && i < n do
             if caseNames.[i] = caseName then
                 notFound <- false
             else
                 i <- i + 1
-        if notFound then raise <| KeyNotFoundException(sprintf "Union case: %A" caseName)
+
+        if notFound then
+            raise <| KeyNotFoundException(sprintf "Union case: %A" caseName)
+
         i
 
 #if TYPESHAPE_EXPR
-    member _.GetTagExpr (union : Expr<'U>) : Expr<int> =
+    member _.GetTagExpr(union: Expr<'U>) : Expr<int> =
         let expr =
             match tagReaderInfo with
-            | :? MethodInfo as m when m.IsStatic -> Expr.Call(m, [union])
+            | :? MethodInfo as m when m.IsStatic -> Expr.Call(m, [ union ])
             | :? MethodInfo as m -> Expr.Call(union, m, [])
             | :? PropertyInfo as p -> Expr.PropertyGet(union, p)
             | _ -> invalidOp <| sprintf "Unexpected tag reader info %O" tagReaderInfo
@@ -1149,7 +1206,7 @@ and [<Sealed>] ShapeFSharpUnion<'U> private () =
         member s.Accept v = v.Visit s
 
 and IFSharpUnionVisitor<'R> =
-    abstract Visit : ShapeFSharpUnion<'U> -> 'R
+    abstract Visit: ShapeFSharpUnion<'U> -> 'R
 
 //------------------------
 // C# DTOs
@@ -1158,21 +1215,20 @@ and IFSharpUnionVisitor<'R> =
 /// Carries a parameterless constructor and settable properties
 type IShapeCliMutable =
     /// Gettable and Settable properties for C# DTO
-    abstract Properties : IShapeReadOnlyMember[]
-    abstract Accept : ICliMutableVisitor<'R> -> 'R
+    abstract Properties: IShapeReadOnlyMember[]
+    abstract Accept: ICliMutableVisitor<'R> -> 'R
 
 /// Denotes a type that behaves like a C# record:
 /// Carries a parameterless constructor and settable properties
-and [<Sealed>] ShapeCliMutable<'Record> private (defaultCtor : ConstructorInfo) =
+and [<Sealed>] ShapeCliMutable<'Record> private (defaultCtor: ConstructorInfo) =
     let properties =
         typeof<'Record>.GetProperties(AllInstanceMembers)
         |> Seq.filter (fun p -> p.CanRead && p.CanWrite && p.GetIndexParameters().Length = 0)
-        |> Seq.map (fun p -> mkWriteMemberUntyped<'Record> p.Name p [|p|])
+        |> Seq.map (fun p -> mkWriteMemberUntyped<'Record> p.Name p [| p |])
         |> Seq.toArray
 
     /// Creates an uninitialized instance for given C# record
-    member _.CreateUninitialized() : 'Record =
-        defaultCtor.Invoke [||] :?> 'Record
+    member _.CreateUninitialized() : 'Record = defaultCtor.Invoke [||] :?> 'Record
 
 #if TYPESHAPE_EXPR
     /// Creates an uninitialized instance for given C# record
@@ -1190,7 +1246,7 @@ and [<Sealed>] ShapeCliMutable<'Record> private (defaultCtor : ConstructorInfo) 
         member s.Accept v = v.Visit s
 
 and ICliMutableVisitor<'R> =
-    abstract Visit : ShapeCliMutable<'Record> -> 'R
+    abstract Visit: ShapeCliMutable<'Record> -> 'R
 
 //--------------------------
 // Shape POCO
@@ -1198,16 +1254,16 @@ and ICliMutableVisitor<'R> =
 /// Denotes any .NET type that is either a class or a struct
 type IShapePoco =
     /// True iff POCO is a struct
-    abstract IsStruct : bool
+    abstract IsStruct: bool
     /// True iff POCO is a C# 9 record
-    abstract IsCSharpRecord : bool
+    abstract IsCSharpRecord: bool
     /// Constructor shapes for the type
-    abstract Constructors : IShapeConstructor[]
+    abstract Constructors: IShapeConstructor[]
     /// Field shapes for the type
-    abstract Fields : IShapeReadOnlyMember[]
+    abstract Fields: IShapeReadOnlyMember[]
     /// Property shapes for the type
-    abstract Properties : IShapeReadOnlyMember[]
-    abstract Accept : IPocoVisitor<'R> -> 'R
+    abstract Properties: IShapeReadOnlyMember[]
+    abstract Accept: IPocoVisitor<'R> -> 'R
 
 /// Denotes any .NET type that is either a class or a struct
 and [<Sealed>] ShapePoco<'Poco> private () =
@@ -1215,24 +1271,35 @@ and [<Sealed>] ShapePoco<'Poco> private () =
 
     let fields =
         gatherMembers (fun t -> t.GetFields(AllInstanceMembers ||| BindingFlags.FlattenHierarchy)) typeof<'Poco>
-        |> Array.map (fun f -> mkWriteMemberUntyped<'Poco> f.Name f [|f|])
+        |> Array.map (fun f -> mkWriteMemberUntyped<'Poco> f.Name f [| f |])
 
     let isCSharpRecord =
-        typeof<IEquatable<'Poco>>.IsAssignableFrom(typeof<'Poco>) &&
-        let cloner = typeof<'Poco>.GetMethod("<Clone>$", BindingFlags.Instance ||| BindingFlags.Public, null, types = [||], modifiers = null) in
-        not (isNull cloner) && cloner.IsVirtual
+        typeof<IEquatable<'Poco>>.IsAssignableFrom(typeof<'Poco>)
+        && let cloner =
+            typeof<'Poco>
+                .GetMethod(
+                    "<Clone>$",
+                    BindingFlags.Instance ||| BindingFlags.Public,
+                    null,
+                    types = [||],
+                    modifiers = null
+                ) in
+
+           not (isNull cloner) && cloner.IsVirtual
 
     let ctors =
         typeof<'Poco>.GetConstructors(AllInstanceMembers)
         // filter any ctors that accept byrefs or pointers
-        |> Seq.filter (fun c -> c.GetParameters() |> Array.forall(fun p -> not <| isUnsupported p.ParameterType))
+        |> Seq.filter (fun c ->
+            c.GetParameters()
+            |> Array.forall (fun p -> not <| isUnsupported p.ParameterType))
         |> Seq.map (fun c -> mkCtorUntyped<'Poco> c)
         |> Seq.toArray
 
     let properties =
         typeof<'Poco>.GetProperties(AllInstanceMembers)
         |> Seq.filter (fun p -> p.CanRead)
-        |> Seq.map (fun p -> mkMemberUntyped<'Poco> p.Name p [|p|])
+        |> Seq.map (fun p -> mkMemberUntyped<'Poco> p.Name p [| p |])
         |> Seq.toArray
 
     /// True iff POCO is a struct
@@ -1265,7 +1332,7 @@ and [<Sealed>] ShapePoco<'Poco> private () =
         member s.Accept v = v.Visit s
 
 and IPocoVisitor<'R> =
-    abstract Visit : ShapePoco<'Poco> -> 'R
+    abstract Visit: ShapePoco<'Poco> -> 'R
 
 //-----------------------------
 // Section: Shape ISerializable
@@ -1274,24 +1341,31 @@ type ISerializableVisitor<'R> =
     abstract Visit<'T when 'T :> ISerializable> : ShapeISerializable<'T> -> 'R
 
 and IShapeISerializable =
-    abstract CtorInfo : ConstructorInfo
-    abstract Accept : ISerializableVisitor<'R> -> 'R
+    abstract CtorInfo: ConstructorInfo
+    abstract Accept: ISerializableVisitor<'R> -> 'R
 
 and ShapeISerializable<'T when 'T :> ISerializable> private () =
-    let ctorTypes = [|typeof<SerializationInfo>; typeof<StreamingContext>|]
+    let ctorTypes = [| typeof<SerializationInfo>; typeof<StreamingContext> |]
     let ctorInfo = typeof<'T>.GetConstructor(AllInstanceMembers, null, ctorTypes, [||])
+
     let getCtorInfo () =
         match ctorInfo with
-        | null -> invalidOp <| sprintf "ISerializable constructor not available for type '%O'" typeof<'T>
+        | null ->
+            invalidOp
+            <| sprintf "ISerializable constructor not available for type '%O'" typeof<'T>
         | ctor -> ctor
 
     member _.CtorInfo = ctorInfo
-    member _.Create(serializationInfo : SerializationInfo, streamingContext : StreamingContext) : 'T =
-        getCtorInfo().Invoke [| serializationInfo ; streamingContext |] :?> 'T
+
+    member _.Create(serializationInfo: SerializationInfo, streamingContext: StreamingContext) : 'T =
+        getCtorInfo().Invoke [| serializationInfo; streamingContext |] :?> 'T
 
 #if TYPESHAPE_EXPR
-    member _.CreateExpr (serializationInfo : Expr<SerializationInfo>) (streamingContext : Expr<StreamingContext>) : Expr<'T> =
-        Expr.Cast<'T>(Expr.NewObject(getCtorInfo(), [serializationInfo; streamingContext]))
+    member _.CreateExpr
+        (serializationInfo: Expr<SerializationInfo>)
+        (streamingContext: Expr<StreamingContext>)
+        : Expr<'T> =
+        Expr.Cast<'T>(Expr.NewObject(getCtorInfo (), [ serializationInfo; streamingContext ]))
 #endif
 
     interface IShapeISerializable with
@@ -1305,7 +1379,8 @@ and ShapeISerializable<'T when 'T :> ISerializable> private () =
 module Shape =
 
     let SomeU = Some() // avoid allocating all the time
-    let inline test<'T> (s : TypeShape) =
+
+    let inline test<'T> (s: TypeShape) =
         match s with
         | :? TypeShape<'T> -> SomeU
         | _ -> None
@@ -1327,9 +1402,9 @@ module Shape =
     let (|Single|_|) s = test<single> s
     let (|Double|_|) s = test<double> s
     let (|Char|_|) s = test<char> s
-    let (|Primitive|_|) (s:TypeShape) =
-        if s.Type.IsPrimitive then SomeU
-        else None
+
+    let (|Primitive|_|) (s: TypeShape) =
+        if s.Type.IsPrimitive then SomeU else None
 
 #if !TYPESHAPE_DISABLE_BIGINT
     let (|BigInt|_|) s = test<bigint> s
@@ -1344,25 +1419,25 @@ module Shape =
     let (|DateTimeOffset|_|) s = test<DateTimeOffset> s
     let (|Unit|_|) s = test<unit> s
     let (|FSharpUnit|_|) s = test<unit> s
-    let (|ByteArray|_|) s = test<byte []> s
+    let (|ByteArray|_|) s = test<byte[]> s
 
     /// Recognizes any type that is a .NET enumeration
-    let (|Enum|_|) (s : TypeShape) =
+    let (|Enum|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Enum(e,u) ->
-            Activator.CreateInstanceGeneric<ShapeEnum<BindingFlags, int>> [|e;u|]
-            :?> IShapeEnum
+        | Enum(e, u) ->
+            Activator.CreateInstanceGeneric<ShapeEnum<BindingFlags, int>> [| e; u |] :?> IShapeEnum
             |> Some
         | _ -> None
 
     /// Recognizes any type that satisfies the F# `equality` constraint
-    let (|Equality|_|) (s : TypeShape) =
+    let (|Equality|_|) (s: TypeShape) =
         // Since equality & comparison constraints are not contained
         // in reflection metadata, we need to separately determine
         // whether they are satisfied
         // c.f. Section 5.2.10 of the F# Spec
-        let rec isEqualityConstraint (stack:Type list) (t:Type) =
-            if stack |> List.exists ((=) t) then true // recursive paths resolve to true always
+        let rec isEqualityConstraint (stack: Type list) (t: Type) =
+            if stack |> List.exists ((=) t) then
+                true // recursive paths resolve to true always
             elif FSharpType.IsUnion(t, AllMembers) then
                 if t.IsValueType then
                     t.GetProperties(AllMembers)
@@ -1371,8 +1446,10 @@ module Shape =
                     |> Seq.distinct
                     |> Seq.forall (isEqualityConstraint (t :: stack))
 
-                elif t.ContainsAttr<NoEqualityAttribute>(true) then false
-                elif t.ContainsAttr<CustomEqualityAttribute>(true) then true
+                elif t.ContainsAttr<NoEqualityAttribute>(true) then
+                    false
+                elif t.ContainsAttr<CustomEqualityAttribute>(true) then
+                    true
                 else
                     FSharpType.GetUnionCases(t, AllMembers)
                     |> Seq.collect (fun uci -> uci.GetFields())
@@ -1380,9 +1457,11 @@ module Shape =
                     |> Seq.distinct
                     |> Seq.forall (isEqualityConstraint (t :: stack))
 
-            elif t.ContainsAttr<NoEqualityAttribute>(false) then false
+            elif t.ContainsAttr<NoEqualityAttribute>(false) then
+                false
             elif FSharpType.IsRecord(t, AllMembers) then
-                if t.ContainsAttr<CustomEqualityAttribute>(true) then false
+                if t.ContainsAttr<CustomEqualityAttribute>(true) then
+                    false
                 else
                     FSharpType.GetRecordFields(t, AllMembers)
                     |> Seq.map (fun p -> p.PropertyType)
@@ -1394,28 +1473,30 @@ module Shape =
                 |> Seq.distinct
                 |> Seq.forall (isEqualityConstraint (t :: stack))
 
-            elif FSharpType.IsFunction t then false
+            elif FSharpType.IsFunction t then
+                false
             elif t.IsArray then
                 isEqualityConstraint (t :: stack) (t.GetElementType())
             else
                 true
 
         if isEqualityConstraint [] s.Type then
-            Activator.CreateInstanceGeneric<ShapeEquality<_>> [|s.Type|]
-            :?> IShapeEquality
+            Activator.CreateInstanceGeneric<ShapeEquality<_>> [| s.Type |] :?> IShapeEquality
             |> Some
         else
             None
 
     /// Recognizes any type that satisfies the F# `comparison` constraint
-    let (|Comparison|_|) (s : TypeShape) =
+    let (|Comparison|_|) (s: TypeShape) =
         // Since equality & comparison constraints are not contained
         // in reflection metadata, we need to separately determine
         // whether they are satisfied
         // c.f. Section 5.2.10 of the F# Spec
-        let rec isComparisonConstraint (stack:Type list) (t:Type) =
-            if t = typeof<IntPtr> || t = typeof<UIntPtr> then true
-            elif stack |> List.exists ((=) t) then true // recursive paths resolve to true always
+        let rec isComparisonConstraint (stack: Type list) (t: Type) =
+            if t = typeof<IntPtr> || t = typeof<UIntPtr> then
+                true
+            elif stack |> List.exists ((=) t) then
+                true // recursive paths resolve to true always
             elif FSharpType.IsUnion(t, AllMembers) then
                 if t.IsValueType then
                     t.GetProperties(AllMembers)
@@ -1424,8 +1505,10 @@ module Shape =
                     |> Seq.distinct
                     |> Seq.forall (isComparisonConstraint (t :: stack))
 
-                elif t.ContainsAttr<NoComparisonAttribute>(true) then false
-                elif t.ContainsAttr<CustomComparisonAttribute>(true) then true
+                elif t.ContainsAttr<NoComparisonAttribute>(true) then
+                    false
+                elif t.ContainsAttr<CustomComparisonAttribute>(true) then
+                    true
                 else
                     FSharpType.GetUnionCases(t, AllMembers)
                     |> Seq.collect (fun uci -> uci.GetFields())
@@ -1433,9 +1516,11 @@ module Shape =
                     |> Seq.distinct
                     |> Seq.forall (isComparisonConstraint (t :: stack))
 
-            elif t.ContainsAttr<NoComparisonAttribute>(false) then false
+            elif t.ContainsAttr<NoComparisonAttribute>(false) then
+                false
             elif FSharpType.IsRecord(t, AllMembers) then
-                if t.ContainsAttr<CustomComparisonAttribute>(true) then false
+                if t.ContainsAttr<CustomComparisonAttribute>(true) then
+                    false
                 else
                     FSharpType.GetRecordFields(t, AllMembers)
                     |> Seq.map (fun p -> p.PropertyType)
@@ -1453,267 +1538,245 @@ module Shape =
                 isInterfaceAssignableFrom typeof<IComparable> t
 
         if isComparisonConstraint [] s.Type then
-            Activator.CreateInstanceGeneric<ShapeComparison<_>> [|s.Type|]
-            :?> IShapeComparison
+            Activator.CreateInstanceGeneric<ShapeComparison<_>> [| s.Type |] :?> IShapeComparison
             |> Some
         else
             None
 
     /// Identifies whether shape satisfies the 'struct', 'not struct' or 'nullable' constraint
-    let (|Struct|NotStruct|Nullable|) (s : TypeShape) =
+    let (|Struct|NotStruct|Nullable|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<Nullable<_>> ->
+        | Generic(td, ta) when td = typedefof<Nullable<_>> ->
             let shape = Activator.CreateInstanceGeneric<ShapeNullable<_>>(ta) :?> IShapeNullable
             Nullable shape
 
         | _ when s.Type.IsValueType ->
-            let instance = Activator.CreateInstanceGeneric<ShapeStruct<_>> [|s.Type|] :?> IShapeStruct
+            let instance =
+                Activator.CreateInstanceGeneric<ShapeStruct<_>> [| s.Type |] :?> IShapeStruct
+
             Struct instance
         | _ ->
-            let instance = Activator.CreateInstanceGeneric<ShapeNotStruct<_>> [|s.Type|] :?> IShapeNotStruct
+            let instance =
+                Activator.CreateInstanceGeneric<ShapeNotStruct<_>> [| s.Type |] :?> IShapeNotStruct
+
             NotStruct instance
 
     /// Recognizes shapes that carry a parameterless constructor
-    let (|DefaultConstructor|_|) (shape : TypeShape) =
+    let (|DefaultConstructor|_|) (shape: TypeShape) =
         match shape.Type.GetConstructor(BindingFlags.Public ||| BindingFlags.Instance, null, [||], [||]) with
         | null -> None
         | _ ->
-            Activator.CreateInstanceGeneric<ShapeDefaultConstructor<_>>([|shape.Type|])
-            :?> IShapeDefaultConstructor
+            Activator.CreateInstanceGeneric<ShapeDefaultConstructor<_>>([| shape.Type |]) :?> IShapeDefaultConstructor
             |> Some
 
     /// Recognizes shapes that are instances of System.Collections.Generic.KeyValuePair<_,_>
-    let (|KeyValuePair|_|) (s : TypeShape) =
+    let (|KeyValuePair|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<KeyValuePair<_,_>> ->
-            Activator.CreateInstanceGeneric<ShapeKeyValuePair<_,_>>(ta)
-            :?> IShapeKeyValuePair
+        | Generic(td, ta) when td = typedefof<KeyValuePair<_, _>> ->
+            Activator.CreateInstanceGeneric<ShapeKeyValuePair<_, _>>(ta) :?> IShapeKeyValuePair
             |> Some
-        | _ ->
-            None
+        | _ -> None
 
     /// Recognizes shapes that are instances of System.Collections.Generic.Dictionary<_,_>
-    let (|Dictionary|_|) (s : TypeShape) =
+    let (|Dictionary|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<Dictionary<_,_>> ->
-            Activator.CreateInstanceGeneric<ShapeDictionary<_,_>>(ta)
-            :?> IShapeDictionary
+        | Generic(td, ta) when td = typedefof<Dictionary<_, _>> ->
+            Activator.CreateInstanceGeneric<ShapeDictionary<_, _>>(ta) :?> IShapeDictionary
             |> Some
-        | _ ->
-            None
+        | _ -> None
 
     /// Recognizes shapes that are instances of System.Collections.Generic.HashSet<_>
-    let (|HashSet|_|) (s : TypeShape) =
+    let (|HashSet|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<HashSet<_>> ->
-            Activator.CreateInstanceGeneric<ShapeHashSet<_>>(ta)
-            :?> IShapeHashSet
-            |> Some
-        | _ ->
-            None
+        | Generic(td, ta) when td = typedefof<HashSet<_>> ->
+            Activator.CreateInstanceGeneric<ShapeHashSet<_>>(ta) :?> IShapeHashSet |> Some
+        | _ -> None
 
     /// Recognizes shapes that are instances of System.Collections.Generic.List<_>
-    let (|ResizeArray|_|) (s : TypeShape) =
+    let (|ResizeArray|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<ResizeArray<_>> ->
-            Activator.CreateInstanceGeneric<ShapeResizeArray<_>>(ta)
-            :?> IShapeResizeArray
+        | Generic(td, ta) when td = typedefof<ResizeArray<_>> ->
+            Activator.CreateInstanceGeneric<ShapeResizeArray<_>>(ta) :?> IShapeResizeArray
             |> Some
-        | _ ->
-            None
+        | _ -> None
 
     /// Recognizes shapes that inherit from System.Delegate
-    let (|Delegate|_|) (s : TypeShape) =
+    let (|Delegate|_|) (s: TypeShape) =
         if typeof<System.Delegate>.IsAssignableFrom s.Type then
-            Activator.CreateInstanceGeneric<ShapeDelegate<_>>([|s.Type|])
-            :?> IShapeDelegate
+            Activator.CreateInstanceGeneric<ShapeDelegate<_>>([| s.Type |]) :?> IShapeDelegate
             |> Some
         else
             None
 
     /// Recognizes shapes that inherit from System.Exception
-    let (|Exception|_|) (s : TypeShape) =
+    let (|Exception|_|) (s: TypeShape) =
         if typeof<System.Exception>.IsAssignableFrom s.Type then
             let isFSharpExn = FSharpType.IsExceptionRepresentation(s.Type, AllMembers)
-            Activator.CreateInstanceGeneric<ShapeException<_>>([|s.Type|], [|isFSharpExn|])
-            :?> IShapeException
+
+            Activator.CreateInstanceGeneric<ShapeException<_>>([| s.Type |], [| isFSharpExn |]) :?> IShapeException
             |> Some
         else
             None
 
     /// Recognizes shapes that implement ISerializable
-    let (|ISerializable|_|) (shape : TypeShape) =
+    let (|ISerializable|_|) (shape: TypeShape) =
         if typeof<ISerializable>.IsInterfaceAssignableFrom shape.Type then
-            Activator.CreateInstanceGeneric<ShapeISerializable<_>>([|shape.Type|])
-            :?> IShapeISerializable
+            Activator.CreateInstanceGeneric<ShapeISerializable<_>>([| shape.Type |]) :?> IShapeISerializable
             |> Some
         else
             None
 
     /// Recognizes shapes that are .NET arrays
-    let (|Array|_|) (s : TypeShape) =
-        match s.ShapeInfo with
-        | TypeShapeInfo.Array(et,rk) ->
-            Activator.CreateInstanceGeneric<ShapeArray<_>>([|et|], [|box rk|])
-            :?> IShapeArray
-            |> Some
-        | _ ->
-            None
-
-    let (|SystemArray|_|) (s : TypeShape) =
+    let (|Array|_|) (s: TypeShape) =
         match s.ShapeInfo with
         | TypeShapeInfo.Array(et, rk) ->
-            Activator.CreateInstanceGeneric<ShapeSystemArray<_>>([|s.Type|], [|box et; box rk|])
+            Activator.CreateInstanceGeneric<ShapeArray<_>>([| et |], [| box rk |]) :?> IShapeArray
+            |> Some
+        | _ -> None
+
+    let (|SystemArray|_|) (s: TypeShape) =
+        match s.ShapeInfo with
+        | TypeShapeInfo.Array(et, rk) ->
+            Activator.CreateInstanceGeneric<ShapeSystemArray<_>>([| s.Type |], [| box et; box rk |])
             :?> IShapeSystemArray
             |> Some
-        | _ ->
-            None
+        | _ -> None
 
     /// Recognizes shapes of F# list types
-    let (|FSharpList|_|) (s : TypeShape) =
+    let (|FSharpList|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<_ list> ->
-            Activator.CreateInstanceGeneric<ShapeFSharpList<_>>(ta)
-            :?> IShapeFSharpList
+        | Generic(td, ta) when td = typedefof<_ list> ->
+            Activator.CreateInstanceGeneric<ShapeFSharpList<_>>(ta) :?> IShapeFSharpList
             |> Some
         | _ -> None
 
     /// Recognizes shapes of F# option types
-    let (|FSharpOption|_|) (s : TypeShape) =
+    let (|FSharpOption|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<_ option> ->
-            Activator.CreateInstanceGeneric<ShapeFSharpOption<_>>(ta)
-            :?> IShapeFSharpOption
+        | Generic(td, ta) when td = typedefof<_ option> ->
+            Activator.CreateInstanceGeneric<ShapeFSharpOption<_>>(ta) :?> IShapeFSharpOption
             |> Some
         | _ -> None
 
     /// Recognizes shapes of F# ref types
-    let (|FSharpRef|_|) (s : TypeShape) =
+    let (|FSharpRef|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<_ ref> ->
-            Activator.CreateInstanceGeneric<ShapeFSharpRef<_>>(ta)
-            :?> IShapeFSharpRef
+        | Generic(td, ta) when td = typedefof<_ ref> ->
+            Activator.CreateInstanceGeneric<ShapeFSharpRef<_>>(ta) :?> IShapeFSharpRef
             |> Some
         | _ -> None
 
     /// Recognizes shapes of F# set types
-    let (|FSharpSet|_|) (s : TypeShape) =
+    let (|FSharpSet|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<Set<_>> ->
-            Activator.CreateInstanceGeneric<ShapeFSharpSet<_>>(ta)
-            :?> IShapeFSharpSet
+        | Generic(td, ta) when td = typedefof<Set<_>> ->
+            Activator.CreateInstanceGeneric<ShapeFSharpSet<_>>(ta) :?> IShapeFSharpSet
             |> Some
         | _ -> None
 
     /// Recognizes shapes of F# map types
-    let (|FSharpMap|_|) (s : TypeShape) =
+    let (|FSharpMap|_|) (s: TypeShape) =
         match s.ShapeInfo with
-        | Generic(td,ta) when td = typedefof<Map<_,_>> ->
-            Activator.CreateInstanceGeneric<ShapeFSharpMap<_,_>>(ta)
-            :?> IShapeFSharpMap
+        | Generic(td, ta) when td = typedefof<Map<_, _>> ->
+            Activator.CreateInstanceGeneric<ShapeFSharpMap<_, _>>(ta) :?> IShapeFSharpMap
             |> Some
         | _ -> None
 
     /// Recognizes shapes of F# function types
-    let (|FSharpFunc|_|) (s : TypeShape) =
+    let (|FSharpFunc|_|) (s: TypeShape) =
         if FSharpType.IsFunction s.Type then
-            let d,c = FSharpType.GetFunctionElements s.Type
-            Activator.CreateInstanceGeneric<ShapeFSharpFunc<_,_>> [|d;c|]
-            :?> IShapeFSharpFunc
+            let d, c = FSharpType.GetFunctionElements s.Type
+
+            Activator.CreateInstanceGeneric<ShapeFSharpFunc<_, _>> [| d; c |] :?> IShapeFSharpFunc
             |> Some
-        else None
+        else
+            None
 
     /// Recognizes shapes that implement System.Collections.Generic.ICollection<_>
-    let (|Collection|_|) (s : TypeShape) =
+    let (|Collection|_|) (s: TypeShape) =
         match s.Type.GetInterface("ICollection`1") with
         | null ->
             match s.ShapeInfo with
-            | Generic(td,ta) when td = typedefof<ICollection<_>> ->
-                Activator.CreateInstanceGeneric<ShapeCollection<_,_>> [|s.Type; ta.[0]|]
-                :?> IShapeCollection
+            | Generic(td, ta) when td = typedefof<ICollection<_>> ->
+                Activator.CreateInstanceGeneric<ShapeCollection<_, _>> [| s.Type; ta.[0] |] :?> IShapeCollection
                 |> Some
             | _ -> None
         | iface ->
             let args = iface.GetGenericArguments()
-            Activator.CreateInstanceGeneric<ShapeCollection<_,_>> [|s.Type; args.[0]|]
-            :?> IShapeCollection
+
+            Activator.CreateInstanceGeneric<ShapeCollection<_, _>> [| s.Type; args.[0] |] :?> IShapeCollection
             |> Some
 
     /// Recognizes shapes that implement System.Collections.Generic.IEnumerable<_>
-    let (|Enumerable|_|) (s : TypeShape) =
+    let (|Enumerable|_|) (s: TypeShape) =
         match s.Type.GetInterface("IEnumerable`1") with
         | null ->
             match s.ShapeInfo with
-            | Generic(td,ta) when td = typedefof<IEnumerable<_>> ->
-                Activator.CreateInstanceGeneric<ShapeEnumerable<_,_>> [|s.Type; ta.[0]|]
-                :?> IShapeEnumerable
+            | Generic(td, ta) when td = typedefof<IEnumerable<_>> ->
+                Activator.CreateInstanceGeneric<ShapeEnumerable<_, _>> [| s.Type; ta.[0] |] :?> IShapeEnumerable
                 |> Some
             | _ -> None
         | iface ->
             let args = iface.GetGenericArguments()
-            Activator.CreateInstanceGeneric<ShapeEnumerable<_,_>> [|s.Type; args.[0]|]
-            :?> IShapeEnumerable
+
+            Activator.CreateInstanceGeneric<ShapeEnumerable<_, _>> [| s.Type; args.[0] |] :?> IShapeEnumerable
             |> Some
 
     /// Recognizes shapes that are F# records
-    let (|FSharpRecord|_|) (s : TypeShape) =
+    let (|FSharpRecord|_|) (s: TypeShape) =
         if FSharpType.IsRecord(s.Type, AllMembers) then
-            Activator.CreateInstanceGeneric<ShapeFSharpRecord<_>>([|s.Type|], [||])
-            :?> IShapeFSharpRecord
+            Activator.CreateInstanceGeneric<ShapeFSharpRecord<_>>([| s.Type |], [||]) :?> IShapeFSharpRecord
             |> Some
         else
             None
 
     /// Recognizes shapes that are F# unions
-    let (|FSharpUnion|_|) (s : TypeShape) =
+    let (|FSharpUnion|_|) (s: TypeShape) =
         if FSharpType.IsUnion(s.Type, AllMembers) then
             if s.Type.IsValueType && fsharpCoreRuntimeVersion < fsharpCore41Version then
-                sprintf "TypeShape error: FSharp.Core Runtime %A does not support struct unions. %A or later is required"
-                    fsharpCoreRuntimeVersion fsharpCore41Version
+                sprintf
+                    "TypeShape error: FSharp.Core Runtime %A does not support struct unions. %A or later is required"
+                    fsharpCoreRuntimeVersion
+                    fsharpCore41Version
                 |> invalidOp
 
-            Activator.CreateInstanceGeneric<ShapeFSharpUnion<_>>([|s.Type|], [||])
-            :?> IShapeFSharpUnion
+            Activator.CreateInstanceGeneric<ShapeFSharpUnion<_>>([| s.Type |], [||]) :?> IShapeFSharpUnion
             |> Some
         else
             None
 
     /// Recognizes shapes that are System.Tuple instances of arbitrary arity
-    let (|Tuple|_|) (s : TypeShape) =
+    let (|Tuple|_|) (s: TypeShape) =
         if FSharpType.IsTuple s.Type then
-            Activator.CreateInstanceGeneric<ShapeTuple<_>>([|s.Type|], [||])
-            :?> IShapeTuple
+            Activator.CreateInstanceGeneric<ShapeTuple<_>>([| s.Type |], [||]) :?> IShapeTuple
             |> Some
         else
             None
 
     /// Recognizes shapes that look like C# record classes
     /// They are classes with parameterless constructors and settable properties
-    let (|CliMutable|_|) (s : TypeShape) =
-        if s.Type.IsAbstract then None else
-        match s.Type.GetConstructor(AllInstanceMembers, null, [||], [||]) with
-        | null -> None
-        | ctor ->
-            Activator.CreateInstanceGeneric<ShapeCliMutable<_>>([|s.Type|], [|ctor|])
-            :?> IShapeCliMutable
-            |> Some
+    let (|CliMutable|_|) (s: TypeShape) =
+        if s.Type.IsAbstract then
+            None
+        else
+            match s.Type.GetConstructor(AllInstanceMembers, null, [||], [||]) with
+            | null -> None
+            | ctor ->
+                Activator.CreateInstanceGeneric<ShapeCliMutable<_>>([| s.Type |], [| ctor |]) :?> IShapeCliMutable
+                |> Some
 
     /// Recognizes POCO shapes, .NET types that are either classes, structs or C# records types
-    let (|Poco|_|) (s : TypeShape) =
-        let isPocoClass (t : Type) =
-            t.IsClass &&
-            not t.IsAbstract &&
-            not t.IsMarshalByRef
+    let (|Poco|_|) (s: TypeShape) =
+        let isPocoClass (t: Type) =
+            t.IsClass && not t.IsAbstract && not t.IsMarshalByRef
 
-        let isPocoStruct (t : Type) =
-            t.IsValueType &&
-            not t.IsPrimitive &&
-            not t.IsEnum
+        let isPocoStruct (t: Type) =
+            t.IsValueType && not t.IsPrimitive && not t.IsEnum
 
         if isPocoClass s.Type || isPocoStruct s.Type then
             let isNullable () =
                 match s.ShapeInfo with
-                | Generic(td,_) -> td = typedefof<Nullable<_>>
+                | Generic(td, _) -> td = typedefof<Nullable<_>>
                 | _ -> false
 
             let hasPointers () =
@@ -1724,10 +1787,10 @@ module Shape =
                     | _ -> None)
                 |> Seq.exists isUnsupported
 
-            if isNullable() || hasPointers() then None // do not recognize if type has pointer fields
+            if isNullable () || hasPointers () then
+                None // do not recognize if type has pointer fields
             else
-                Activator.CreateInstanceGeneric<ShapePoco<_>>([|s.Type|], [||])
-                :?> IShapePoco
+                Activator.CreateInstanceGeneric<ShapePoco<_>>([| s.Type |], [||]) :?> IShapePoco
                 |> Some
         else
             None

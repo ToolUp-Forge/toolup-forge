@@ -2,13 +2,15 @@
 // Copyright (c) Zaid Ajaj and Fable.Remoting contributors
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Remoting.Client 
+namespace ToolUp.Remoting.Client
 
 open System
 
-type HttpMethod = GET | POST 
+type HttpMethod =
+    | GET
+    | POST
 
-type RequestBody = 
+type RequestBody =
     | Empty
     | Json of string
     | Multipart of Browser.Types.Blob[]
@@ -17,14 +19,14 @@ type CustomResponseSerializer = byte[] -> Type -> obj
 
 type HttpRequest = {
     HttpMethod: HttpMethod
-    Url: string 
-    Headers: (string * string) list  
-    RequestBody : RequestBody
-    WithCredentials : bool
+    Url: string
+    Headers: (string * string) list
+    RequestBody: RequestBody
+    WithCredentials: bool
 }
- 
+
 type HttpResponse = {
-    StatusCode: int 
+    StatusCode: int
     ResponseBody: string
 }
 
@@ -38,8 +40,8 @@ type RemoteBuilderOptions = {
     IsMultipartEnabled: bool
 }
 
-type ProxyRequestException(response: HttpResponse, errorMsg, reponseText: string) = 
+type ProxyRequestException(response: HttpResponse, errorMsg, reponseText: string) =
     inherit System.Exception(errorMsg)
-    member this.Response = response 
+    member this.Response = response
     member this.StatusCode = response.StatusCode
-    member this.ResponseText = reponseText 
+    member this.ResponseText = reponseText

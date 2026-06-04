@@ -13,18 +13,20 @@ module Proxy =
         | None -> route
         | Some url -> sprintf "%s%s" (url.TrimEnd('/')) route
 
-    let isByteArray = function
+    let isByteArray =
+        function
         | TypeInfo.Array getElemType ->
-            match getElemType() with
+            match getElemType () with
             | TypeInfo.Byte -> true
             | otherwise -> false
         | otherwise -> false
 
-    let isAsyncOfByteArray = function
+    let isAsyncOfByteArray =
+        function
         | TypeInfo.Async getAsyncType ->
-            match getAsyncType() with
+            match getAsyncType () with
             | TypeInfo.Array getElemType ->
-                match getElemType() with
+                match getElemType () with
                 | TypeInfo.Byte -> true
                 | otherwise -> false
             | otherwise -> false
@@ -35,16 +37,16 @@ module Proxy =
             let _, res = Reflection.FSharpType.GetFunctionElements typ
             getReturnType res
         elif typ.IsGenericType then
-            typ.GetGenericArguments () |> Array.head
+            typ.GetGenericArguments() |> Array.head
         else
             typ
 
     let proxyFetch options typeName (func: RecordField) fieldType =
-        let funcArgs : (TypeInfo [ ]) =
+        let funcArgs: (TypeInfo[]) =
             match func.FieldType with
             | TypeInfo.Async inner -> [| func.FieldType |]
             | TypeInfo.Promise inner -> [| func.FieldType |]
-            | TypeInfo.Func getArgs -> getArgs()
+            | TypeInfo.Func getArgs -> getArgs ()
             | _ -> failwithf "Field %s does not have a valid definiton" func.FieldName
 
         let argumentCount = (Array.length funcArgs) - 1
@@ -57,6 +59,7 @@ module Proxy =
 
         let route = options.RouteBuilder typeName func.FieldName
         let url = combineRouteWithBaseUrl route options.BaseUrl
+
         let funcNeedParameters =
             match funcArgs with
             | [| TypeInfo.Async _ |] -> false
@@ -75,7 +78,8 @@ module Proxy =
             yield! options.CustomHeaders
             match options.Authorization with
             | Some authToken -> yield "Authorization", authToken
-            | None -> () ]
+            | None -> ()
+        ]
 
         let executeRequest =
             if options.CustomResponseSerialization.IsSome || isAsyncOfByteArray returnTypeAsync then
@@ -102,22 +106,34 @@ module Proxy =
                             |> Http.sendAndReadBinary
 
                     match statusCode with
-                    | 200 ->
-                        return onOk response
+                    | 200 -> return onOk response
                     | n ->
-                        let responseAsBlob = InternalUtilities.createBlobWithMimeType !^response "text/plain"
+                        let responseAsBlob =
+                            InternalUtilities.createBlobWithMimeType !^response "text/plain"
+
                         let! responseText = InternalUtilities.readBlobAsText responseAsBlob
-                        let response = { StatusCode = statusCode; ResponseBody = responseText }
-                        let errorMsg = if n = 500 then sprintf "Internal server error (500) while making request to %s" url else sprintf "Http error (%d) while making request to %s" n url
+
+                        let response = {
+                            StatusCode = statusCode
+                            ResponseBody = responseText
+                        }
+
+                        let errorMsg =
+                            if n = 500 then
+                                sprintf "Internal server error (500) while making request to %s" url
+                            else
+                                sprintf "Http error (%d) while making request to %s" n url
+
                         return! raise (ProxyRequestException(response, errorMsg, response.ResponseBody))
                 }
             else
                 let returnType =
                     match returnTypeAsync with
-                    | TypeInfo.Async getAsyncTypeArgument -> getAsyncTypeArgument()
-                    | TypeInfo.Promise getPromiseTypeArgument -> getPromiseTypeArgument()
+                    | TypeInfo.Async getAsyncTypeArgument -> getAsyncTypeArgument ()
+                    | TypeInfo.Promise getPromiseTypeArgument -> getPromiseTypeArgument ()
                     | TypeInfo.Any getReturnType ->
-                        let t = getReturnType()
+                        let t = getReturnType ()
+
                         if t.FullName.StartsWith "System.Threading.Tasks.Task`1" then
                             t.GetGenericArguments().[0] |> createTypeInfo
                         else
@@ -143,15 +159,41 @@ module Proxy =
                     | 200 ->
                         let parsedJson = SimpleJson.parseNative response.ResponseBody
                         return Convert.fromJsonAs parsedJson returnType
-                    | 500 -> return! raise (ProxyRequestException(response, sprintf "Internal server error (500) while making request to %s" url, response.ResponseBody))
-                    | n ->   return! raise (ProxyRequestException(response, sprintf "Http error (%d) from server occured while making request to %s" n url, response.ResponseBody))
+                    | 500 ->
+                        return!
+                            raise (
+                                ProxyRequestException(
+                                    response,
+                                    sprintf "Internal server error (500) while making request to %s" url,
+                                    response.ResponseBody
+                                )
+                            )
+                    | n ->
+                        return!
+                            raise (
+                                ProxyRequestException(
+                                    response,
+                                    sprintf "Http error (%d) from server occured while making request to %s" n url,
+                                    response.ResponseBody
+                                )
+                            )
                 }
 
         fun arg0 arg1 arg2 arg3 arg4 arg5 arg6 arg7 ->
             let inputArguments =
-               if funcNeedParameters
-               then Array.take argumentCount [| box arg0;box arg1;box arg2;box arg3; box arg4; box arg5; box arg6; box arg7 |]
-               else [| |]
+                if funcNeedParameters then
+                    Array.take argumentCount [|
+                        box arg0
+                        box arg1
+                        box arg2
+                        box arg3
+                        box arg4
+                        box arg5
+                        box arg6
+                        box arg7
+                    |]
+                else
+                    [||]
 
             let requestBody =
                 if isMultipart then
@@ -165,22 +207,25 @@ module Proxy =
                             InternalUtilities.createBlobWithMimeType (x :?> _) "application/octet-stream"
                         else
                             let json = Convert.serialize x typ
-                            InternalUtilities.createBlobWithMimeType !^json "application/json"
-                    )
-                    |> RequestBody.Multipart 
+                            InternalUtilities.createBlobWithMimeType !^json "application/json")
+                    |> RequestBody.Multipart
                 else
                     match inputArgumentTypes.Length with
                     | 1 when not (Convert.arrayLike inputArgumentTypes.[0]) ->
                         let typeInfo = TypeInfo.Tuple(fun _ -> inputArgumentTypes)
+
                         let requestBodyJson =
                             inputArguments
                             |> Array.tryHead
                             |> Option.map (fun arg -> Convert.serialize arg typeInfo)
                             |> Option.defaultValue "{}"
+
                         RequestBody.Json requestBodyJson
                     | 1 ->
                         // for array-like types, use an explicit array surranding the input array argument
-                        let requestBodyJson = Convert.serialize [| inputArguments.[0] |] (TypeInfo.Array (fun _ -> inputArgumentTypes.[0]))
+                        let requestBodyJson =
+                            Convert.serialize [| inputArguments.[0] |] (TypeInfo.Array(fun _ -> inputArgumentTypes.[0]))
+
                         RequestBody.Json requestBodyJson
                     | n ->
                         let typeInfo = TypeInfo.Tuple(fun _ -> inputArgumentTypes)
