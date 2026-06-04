@@ -128,6 +128,37 @@ module Layout =
             ]
         | Custom el -> el
 
+    /// 0.5.16 — content-area skeleton placeholder rendered by the shell
+    /// during its `Prefetching` lifecycle phase (`Client.InitPhase`).
+    /// Wrapped by the shell into `PageContent.Custom` so
+    /// `renderPageContent` emits it verbatim. Matches the visual rhythm of
+    /// `SplitPanel` — narrow inputs column + wide results pane — so the
+    /// layout doesn't reflow when the active module mounts on promotion
+    /// to `Ready`. Gray-100 + `animate-pulse` is the same idiom already
+    /// used by `HealthMonitorUI` / `ServiceStatusBoardUI` for "data is
+    /// arriving" affordances. `role="status"` + `aria-label="Loading"`
+    /// surfaces the placeholder to assistive tech without announcing
+    /// every block individually.
+    let loadingSkeleton () : ReactElement =
+        let pulse cls =
+            Html.div [ prop.className (sprintf "bg-gray-100 rounded animate-pulse %s" cls) ]
+
+        Html.div [
+            prop.role "status"
+            prop.ariaLabel "Loading"
+            prop.className "flex gap-6 p-6 min-h-full"
+            prop.children [
+                Html.div [
+                    prop.className "w-96 shrink-0 space-y-3"
+                    prop.children [ pulse "h-8 w-3/4"; pulse "h-32 w-full"; pulse "h-10 w-1/2" ]
+                ]
+                Html.div [
+                    prop.className "flex-1 min-w-0 space-y-3"
+                    prop.children [ pulse "h-8 w-1/4"; pulse "h-96 w-full" ]
+                ]
+            ]
+        ]
+
     /// Application shell - combines sidebar, header, main content, and optional side panel.
     /// `sections` is the structured sidebar layout (pinned / groups / other).
     /// `selectedModule` is the id of the currently active module.

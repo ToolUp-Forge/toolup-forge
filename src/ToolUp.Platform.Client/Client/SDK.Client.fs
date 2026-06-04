@@ -37,6 +37,40 @@ module Client =
     // resolution) gets its own `Prefetch<unit>` rather than another
     // enum case to add + remove from the set.
 
+    /// 0.5.16 — shell lifecycle phase. Gates whether the active module's
+    /// `Init` has run and whether its view is mounted. Eliminates the
+    /// cold-load "empty seed → real prefetched values" re-init that, on a
+    /// slow first paint (Issue #4 territory), destroyed AG Grid mid-flight
+    /// and produced the "table doesn't render until mouseover" symptom
+    /// reported as Issue #3.
+    ///
+    /// `Prefetching` — only entered when init detects an auth-required
+    /// deployment with a token present (so the boot-time loaders WILL
+    /// fire and populate real `ModuleConfigs` / `ResolvedFlags`). The
+    /// shell renders chrome (sidebar + header) plus a content-area
+    /// skeleton; the active module is NOT mounted and its `Init` has
+    /// NOT been called. `ConfigsLoaded` / `FlagsLoaded`'s second-arrival
+    /// promotes to `Ready` exactly once via
+    /// `initActiveOnFirstPrefetchReady`, calling `Init` against the now-
+    /// populated context.
+    ///
+    /// `Ready` — active module is mounted; `Init` has been called against
+    /// real (or anonymous-empty) context. The steady-state phase.
+    ///
+    /// `Reprefetching` — entered from `Ready` when `AuthTokenAcquired`
+    /// fires mid-session (the anonymous-side branch of a mixed-mode
+    /// deployment whose user just signed in, or a returning user whose
+    /// token surfaced after first render). Current view stays rendered
+    /// (stale) so the user keeps their place while loaders refresh.
+    /// Promoted back to `Ready` via the existing skip-when-unchanged
+    /// guard in `reinitActiveAfterPrefetch` — a true value change re-
+    /// inits (destroy / recreate softened by 0.5.15's `MemoizedGrid` +
+    /// `isDestroyed()`); a no-op refresh preserves the React subtree.
+    type InitPhase =
+        | Prefetching
+        | Ready
+        | Reprefetching
+
     // Public so that outer-program composition in companion packages
     // (e.g. ToolUp.AI.Client's AIClientConfig.fs) can wrap the shell MVU
     // without reaching into private internals.
@@ -122,6 +156,12 @@ module Client =
         /// reason every other per-team field is wiped — counters from
         /// the prior team don't apply to the new one.
         ResetCounters: Map<string, int>
+        /// 0.5.16 — shell lifecycle phase. See `InitPhase` doc-comment
+        /// for the three-state contract. Drives the
+        /// "defer-active-module-Init-until-prefetches-complete"
+        /// discipline that eliminates the cold-load AG-Grid-destroyed-
+        /// mid-flight race (Issue #3).
+        InitPhase: InitPhase
     }
 
     type Msg =
@@ -566,6 +606,37 @@ module Client =
                 Cmd.map ModuleMsg cmd
             | None -> reset, Cmd.none
 
+    /// 0.5.16 — first-load promotion helper: run the active module's
+    /// `Init` against the now-populated context and flip
+    /// `InitPhase = Ready`. Distinct from `reinitActiveAfterPrefetch`:
+    /// this is the FIRST init call for the active module, not a re-init.
+    /// There is no prior React subtree to preserve, so no wipe + no skip-
+    /// when-unchanged check applies. Called by `ConfigsLoaded` /
+    /// `FlagsLoaded` once the second prefetch lands AND `InitPhase` is
+    /// still `Prefetching` (the cold-load case). The shell's invariant
+    /// during `Prefetching` is `ModuleStates = Map.empty`; the helper
+    /// installs the first entry. Subsequent prefetch refreshes (token
+    /// acquired mid-session, team switch follow-on) take the
+    /// `reinitActiveAfterPrefetch` path instead.
+    let private initActiveOnFirstPrefetchReady
+        (config: ClientConfig)
+        (queryBus: IModuleQueryBus)
+        (modules: ErasedModule list)
+        (model: Model)
+        : Model * Cmd<Msg> =
+        match tryFind modules model.ActiveModuleId with
+        | Some moduleImpl ->
+            let ctx = buildContext config queryBus model model.ActiveModuleId
+            let state, cmd = moduleImpl.Init ctx
+
+            {
+                model with
+                    ModuleStates = Map.ofList [ moduleImpl.Definition.Id, state ]
+                    InitPhase = Ready
+            },
+            Cmd.map ModuleMsg cmd
+        | None -> { model with InitPhase = Ready }, Cmd.none
+
     /// Aggregate processed data from every module that exposes it.
     /// Pure — callers store the result in `Model.ProcessedData` and the
     /// shell's `view` then publishes it through `ProcessedDataContext`.
@@ -642,28 +713,58 @@ module Client =
             | Some id -> tryFind modules id |> Option.defaultValue modules[0]
             | None -> modules[0]
 
-        // Pre-fetch seed. The async `ConfigsLoaded` / `FlagsLoaded`
-        // messages below re-init the active module with the loaded
-        // values; modules that declare no config schema and no flag
-        // reads are unaffected by the re-init.
-        let seedCtx = {
-            Config = Map.empty
-            PlatformConfig = Map.empty
-            Flags = Map.empty
-            UserId = UserSession.getUserId ()
-            TeamId = None
-            QueryBus = queryBus
-            OnTeamSwitched = buildOnTeamSwitched _config
-        }
+        let needsAuth = ClientConfig.requiresAnyAuth _config
+        let hasToken = UserSession.getAuthToken () |> Option.isSome
 
-        let state, cmd = moduleImpl.Init seedCtx
-        let states = Map.ofList [ moduleImpl.Definition.Id, state ]
-        let processed = computeProcessedData modules states
+        // 0.5.16 — defer module `Init` only when prefetches are in flight
+        // AND will populate real values before the active module renders.
+        // That is: `needsAuth && hasToken`. The other two cases mount
+        // immediately:
+        //
+        // - `needsAuth && not hasToken` (Welcome Page / mixed-mode
+        //   anonymous-side): boot loaders are skipped below, so there's
+        //   no prefetch window to wait on. Module `Init` runs with the
+        //   empty seed; the auth gate covers the shell for single-auth
+        //   surfaces, and the anonymous side of mixed-mode legitimately
+        //   operates against an empty scope. Later sign-in dispatches
+        //   `AuthTokenAcquired` which flips Ready → Reprefetching and
+        //   takes the standard skip-when-unchanged path.
+        //
+        // - `not needsAuth` (anonymous-only deployment): loaders fire
+        //   and typically return empty maps from the server. Module
+        //   `Init` runs with the empty seed; on prefetch arrival the
+        //   existing `reinitActiveAfterPrefetch` skip-when-unchanged
+        //   guard preserves the React subtree (empty = empty).
+        //
+        // When `willDeferInit = true` we leave `ModuleStates` empty so
+        // the `Prefetching` invariant holds and the view renders the
+        // skeleton; `initActiveOnFirstPrefetchReady` populates the
+        // entry on Ready promotion.
+        let willDeferInit = needsAuth && hasToken
+
+        let initPhase, moduleStates, moduleInitCmd =
+            if willDeferInit then
+                Prefetching, Map.empty, Cmd.none
+            else
+                let seedCtx = {
+                    Config = Map.empty
+                    PlatformConfig = Map.empty
+                    Flags = Map.empty
+                    UserId = UserSession.getUserId ()
+                    TeamId = None
+                    QueryBus = queryBus
+                    OnTeamSwitched = buildOnTeamSwitched _config
+                }
+
+                let state, cmd = moduleImpl.Init seedCtx
+                Ready, Map.ofList [ moduleImpl.Definition.Id, state ], Cmd.map ModuleMsg cmd
+
+        let processed = computeProcessedData modules moduleStates
 
         let model = {
             ActiveModuleId = moduleImpl.Definition.Id
             ActivePageRoute = defaultPageRoute moduleImpl
-            ModuleStates = states
+            ModuleStates = moduleStates
             AccessibleModules = None
             ModuleConfigs = Map.empty
             PlatformConfig = Map.empty
@@ -676,6 +777,7 @@ module Client =
             ConfigsPrefetch = Prefetch.none
             FlagsPrefetch = Prefetch.none
             ResetCounters = Map.empty
+            InitPhase = initPhase
         }
 
         // 0.5.5 — Boot-time fetches are gated on auth state below.
@@ -702,9 +804,6 @@ module Client =
         // page-navigation that the 0.4.0 README headlines as resolved.
         // See `programLifetimeEffects` below.
 
-        let needsAuth = ClientConfig.requiresAnyAuth _config
-        let hasToken = UserSession.getAuthToken () |> Option.isSome
-
         let initCmds =
             if needsAuth && not hasToken then
                 // Welcome-Page case: the user hasn't signed in yet and
@@ -712,9 +811,9 @@ module Client =
                 // entirely; the `auth-token-acquired` lifetime effect
                 // dispatches `AuthTokenAcquired` once `setAuthToken`
                 // runs and we re-fire `bootLoadCommands` then.
-                [ Cmd.map ModuleMsg cmd ]
+                [ moduleInitCmd ]
             else
-                [ Cmd.map ModuleMsg cmd; bootLoadCommands ]
+                [ moduleInitCmd; bootLoadCommands ]
 
         model, Cmd.batch initCmds
 
@@ -759,7 +858,22 @@ module Client =
                         | Some r -> Some r
                         | None -> defaultPageRoute moduleImpl
 
-                    if model.ActiveModuleId = moduleId then
+                    // 0.5.16 — during `Prefetching` no module has been
+                    // initialised yet (invariant: `ModuleStates =
+                    // Map.empty`). A sidebar click just updates which
+                    // module will be the first to init when the prefetch
+                    // gate releases; do NOT call `Init` here (defeats the
+                    // entire point of deferring it). Skeleton view stays
+                    // on; sidebar `selected` highlight updates via
+                    // `ActiveModuleId` change.
+                    if model.InitPhase = Prefetching then
+                        {
+                            model with
+                                ActiveModuleId = moduleId
+                                ActivePageRoute = pageRoute
+                        },
+                        Cmd.none
+                    elif model.ActiveModuleId = moduleId then
                         {
                             model with
                                 ActivePageRoute = pageRoute
@@ -795,11 +909,10 @@ module Client =
                 // (ToolUp.Elmish 0.4.0 primitive). The persisted value is
                 // recorded on `ModuleConfigs` / `PlatformConfig`; the gate is
                 // a `Prefetch<unit>` that flips to `Loaded ()`. When *both*
-                // prefetches are complete the last handler wipes
-                // `ModuleStates` and re-runs `Init` against a context
-                // populated with both data sources — so the active module's
-                // `Init` runs exactly twice on cold load (empty seed +
-                // re-init), never three times.
+                // prefetches are complete the second handler promotes the
+                // shell out of the `Prefetching` skeleton (first-load) OR
+                // re-inits the active module via the skip-when-unchanged
+                // guard (Ready / Reprefetching follow-ups).
                 let platformCfg =
                     configs
                     |> Map.tryFind ConfigKeys.PlatformModuleKey
@@ -815,7 +928,21 @@ module Client =
                 }
 
                 if Prefetch.isComplete updated.FlagsPrefetch then
-                    reinitActiveAfterPrefetch _config queryBus modules model updated
+                    match updated.InitPhase with
+                    | Prefetching ->
+                        // First-load promotion. Module `Init` has not run;
+                        // call it now with the populated context and flip
+                        // to Ready.
+                        initActiveOnFirstPrefetchReady _config queryBus modules updated
+                    | Ready
+                    | Reprefetching ->
+                        // Already mounted. Apply the skip-when-unchanged
+                        // guard (0.5.15) — preserves the React subtree
+                        // when the refresh returned the same values, re-
+                        // inits when they differ. Flip back to Ready as a
+                        // side-effect.
+                        let resolved = { updated with InitPhase = Ready }
+                        reinitActiveAfterPrefetch _config queryBus modules model resolved
                 else
                     updated, Cmd.none
 
@@ -828,7 +955,12 @@ module Client =
                 }
 
                 if Prefetch.isComplete updated.ConfigsPrefetch then
-                    reinitActiveAfterPrefetch _config queryBus modules model updated
+                    match updated.InitPhase with
+                    | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
+                    | Ready
+                    | Reprefetching ->
+                        let resolved = { updated with InitPhase = Ready }
+                        reinitActiveAfterPrefetch _config queryBus modules model resolved
                 else
                     updated, Cmd.none
 
@@ -851,6 +983,16 @@ module Client =
                 // invokes `OnTeamSwitched` for both switch and create)
                 // can introduce a team that wasn't in the boot-time
                 // list.
+                // 0.5.16 — flip back to `Prefetching` for the reload
+                // window so the same skeleton-then-mount discipline that
+                // governs cold load applies to team switches. Reset both
+                // prefetch gates so `initActiveOnFirstPrefetchReady` fires
+                // exactly once when the second new loader lands (the
+                // pre-0.5.16 code left `ConfigsPrefetch` / `FlagsPrefetch`
+                // at `Loaded ()` from the prior cycle, so a single loader
+                // arrival would falsely satisfy the gate). Reduces the
+                // team-switch flicker that motivated the opener's
+                // recommendation.
                 let reset = {
                     model with
                         ActiveTeamId = newTeamIdOpt
@@ -860,6 +1002,9 @@ module Client =
                         AccessibleModules = None
                         ModuleStates = Map.empty
                         ResetCounters = Map.empty
+                        ConfigsPrefetch = Prefetch.none
+                        FlagsPrefetch = Prefetch.none
+                        InitPhase = Prefetching
                 }
 
                 reset,
@@ -907,14 +1052,31 @@ module Client =
                 // fetches that `init` deliberately skipped now have a
                 // Bearer token to attach via
                 // `CsrfClient.installRequestGuard`'s identity getter,
-                // so dispatch them. Idempotent against the model:
-                // re-firing the loaders against an already-populated
-                // model just refreshes the state with whatever the
-                // server now reports under the authenticated identity
-                // — useful when a sign-in happens mid-session (e.g.
-                // an explicit "sign in" tab from a deployment that
-                // serves both anonymous and authenticated surfaces).
-                model, bootLoadCommandsFor _config
+                // so dispatch them.
+                //
+                // 0.5.16 — when the shell is already `Ready` (anonymous-
+                // side branch of a mixed-mode deployment whose user just
+                // signed in, OR a Welcome Page path where `init`'s
+                // willDeferInit was false), flip to `Reprefetching` and
+                // reset both prefetch gates. Keeps the current view
+                // rendered (stale) while the new loaders arrive; the
+                // `ConfigsLoaded` / `FlagsLoaded` second-arrival promotes
+                // back to `Ready` via the skip-when-unchanged guard.
+                // `Prefetching` is unreachable here in practice (only set
+                // when `needsAuth && hasToken` at boot, which precludes
+                // a later `None → Some` token transition) but defensively
+                // a no-op: loaders are already in flight from `init`.
+                match model.InitPhase with
+                | Prefetching -> model, Cmd.none
+                | Ready
+                | Reprefetching ->
+                    {
+                        model with
+                            InitPhase = Reprefetching
+                            ConfigsPrefetch = Prefetch.none
+                            FlagsPrefetch = Prefetch.none
+                    },
+                    bootLoadCommandsFor _config
 
             | ResetModule moduleId ->
                 // Phase 12c — clear the named module's state, bump its
@@ -1165,49 +1327,61 @@ module Client =
         // `Error = Some` state). Without the team-id slot, switching teams
         // while the boundary was in error state would leave the error UI
         // stuck for the new team's data.
+        // 0.5.16 — when the shell is still gating on prefetch arrivals,
+        // render a skeleton in the content area while keeping sidebar +
+        // header chrome live. The active module is unmounted (its `Init`
+        // has not run yet); we don't reach `tryFind` below because
+        // `ModuleStates` is empty by the `Prefetching` invariant and the
+        // existing `Map.find` would crash. `Reprefetching` falls through
+        // to the steady-state render — the prior view stays mounted with
+        // stale data while new prefetches refresh.
         let content: PageContent =
-            match tryFind modules model.ActiveModuleId with
-            | Some moduleImpl ->
-                let currentState = model.ModuleStates |> Map.find model.ActiveModuleId
-                let dispatchMsg = ModuleMsg >> dispatch
+            match model.InitPhase with
+            | Prefetching -> Custom(Toolup.UIToolkit.Layout.loadingSkeleton ())
+            | Ready
+            | Reprefetching ->
+                match tryFind modules model.ActiveModuleId with
+                | Some moduleImpl ->
+                    let currentState = model.ModuleStates |> Map.find model.ActiveModuleId
+                    let dispatchMsg = ModuleMsg >> dispatch
 
-                let renderInner () : PageContent =
-                    match moduleImpl.PageViews, model.ActivePageRoute with
-                    | Some map, Some route when map.ContainsKey route ->
-                        let pageView = map[route]
-                        pageView currentState dispatchMsg
-                    | _ ->
-                        match moduleImpl.View with
-                        | Some v ->
-                            let left, right = v currentState dispatchMsg
-                            SplitPanel(left, right)
-                        | None ->
-                            // `register` rejects modules with neither View nor PageViews,
-                            // so this branch only fires when a multi-page module's
-                            // ActivePageRoute doesn't match any registered PageViews entry.
-                            SplitPanel(
-                                Html.div $"No view registered for page route {model.ActivePageRoute}",
-                                Html.div ""
-                            )
+                    let renderInner () : PageContent =
+                        match moduleImpl.PageViews, model.ActivePageRoute with
+                        | Some map, Some route when map.ContainsKey route ->
+                            let pageView = map[route]
+                            pageView currentState dispatchMsg
+                        | _ ->
+                            match moduleImpl.View with
+                            | Some v ->
+                                let left, right = v currentState dispatchMsg
+                                SplitPanel(left, right)
+                            | None ->
+                                // `register` rejects modules with neither View nor PageViews,
+                                // so this branch only fires when a multi-page module's
+                                // ActivePageRoute doesn't match any registered PageViews entry.
+                                SplitPanel(
+                                    Html.div $"No view registered for page route {model.ActivePageRoute}",
+                                    Html.div ""
+                                )
 
-                let teamPart = model.ActiveTeamId |> Option.defaultValue "_"
+                    let teamPart = model.ActiveTeamId |> Option.defaultValue "_"
 
-                let counter =
-                    model.ResetCounters |> Map.tryFind model.ActiveModuleId |> Option.defaultValue 0
+                    let counter =
+                        model.ResetCounters |> Map.tryFind model.ActiveModuleId |> Option.defaultValue 0
 
-                let resetKey = sprintf "%s-%d" teamPart counter
+                    let resetKey = sprintf "%s-%d" teamPart counter
 
-                let boundaryEl =
-                    Components.ModuleBoundary.wrap
-                        model.ActiveModuleId
-                        resetKey
-                        config.OnError
-                        (fun () -> dispatch (ResetModule model.ActiveModuleId))
-                        config.InputsPaneWidth
-                        renderInner
+                    let boundaryEl =
+                        Components.ModuleBoundary.wrap
+                            model.ActiveModuleId
+                            resetKey
+                            config.OnError
+                            (fun () -> dispatch (ResetModule model.ActiveModuleId))
+                            config.InputsPaneWidth
+                            renderInner
 
-                Custom boundaryEl
-            | None -> SplitPanel(Html.div "Error: Module not found", Html.div "")
+                    Custom boundaryEl
+                | None -> SplitPanel(Html.div "Error: Module not found", Html.div "")
 
         // Composite sidebar Id for the active-border highlight so that
         // the shell matches the sidebar entry emitted for the active
