@@ -101,7 +101,7 @@ Three SDK helpers — `BundleConstants`, `ClientConfigDefaults.fromBundleConstan
 
 **Roll your own when:** the deployment has a non-standard env-var scheme (different prefix, custom dispatch), needs synchronous bootstrap-time validation the helpers don't perform, or composes substrates that don't fit the resolver-list shape (e.g. multi-storage layering). Helpers are additive — you can call them for the dimensions that fit the standard pattern and hand-roll the dimensions that don't.
 
-## Combining companions on one pipeline (Phase 1h)
+## Combining companions on one pipeline
 
 The terminal `*ServerApp.run` pattern above is the right choice when one companion dominates the deployment — a pure-AI app, a pure-Forms app, a pure-RAG app. When the deployment needs **two or more** companion surfaces side-by-side — e.g. Forms with a `WorkflowDefinition` AND an AI assistant — use the additive `withForms` / `withAI` extensions on a single `ServerApp` pipeline:
 
@@ -124,7 +124,7 @@ ServerApp.empty
 
 The pipeline reads top-down: substrate setup on the outer `ServerApp`, then each `withX (fun x -> ...)` contributes its companion-specific config via the inner configurator, then `ServerApp.run` drives the final composition. The configurator should call only companion-specific helpers (`FormsServerApp.withFormSchema` / `AIServerApp.withAIConfig` / etc.); the delegating helpers (`withConfig` / `withAuth` / `withStorage` / …) exist on the inner type for backward compatibility but calling them overwrites the outer pipeline's existing configuration — set base configuration on the outer pipeline before invoking `withX`.
 
-**DI access in workflow guards / actions.** Phase 1h replaced the prior `WorkflowGuard` / `WorkflowAction` signature (`Submission * AccessContext -> _`) with a `WorkflowContext` record carrying the resolved `IServiceProvider`. Actions registered via `FormsServerApp.withAction` resolve `IEntityStore` / `INotificationChannel` / any DI-registered service directly:
+**DI access in workflow guards / actions.** `WorkflowGuard` / `WorkflowAction` receive a `WorkflowContext` record carrying the resolved `IServiceProvider` (an earlier signature took `Submission * AccessContext` and predated combinable composition roots). Actions registered via `FormsServerApp.withAction` resolve `IEntityStore` / `INotificationChannel` / any DI-registered service directly:
 
 ```fsharp
 let stampSubmission: WorkflowAction =
@@ -148,17 +148,17 @@ its routes — the cascading failures land at sink construction or
 first request). Combine all your ToolUp.Forms configuration in a
 single call (e.g. one withForms invocation that builds up every
 schema/workflow/action), or rebuild the pipeline from
-ServerApp.empty. (Phase 1h)
+ServerApp.empty.
 ```
 
-The pre-Phase-1h shape surfaced the same misuse as a duplicate-entity-registration crash deep inside `compose` or a route-double-mount at first request; the explicit validator catches it at the second `withForms` call. AI / RAG / Scheduling / Asset / PublicRendering still rely on their existing duplicate-detection paths (metric-sink construction / DI-singleton replace / route-double-mount); they may opt in to the same marker convention in a follow-up.
+Before the explicit validator landed, the same misuse surfaced as a duplicate-entity-registration crash deep inside `compose` or a route-double-mount at first request; the validator catches it at the second `withForms` call. AI / RAG / Scheduling / Asset / PublicRendering still rely on their existing duplicate-detection paths (metric-sink construction / DI-singleton replace / route-double-mount); they may opt in to the same marker convention in a follow-up.
 
-**Today.** `FormsCompose.withForms` and `AICompose.withAI` ship as the two additive extensions. `withRAG` is deferred — see the migration doc for why landing it before the prior refactor that lifts `composeWithRAG` onto `composeAI` would force AI's DI registrations to duplicate into the additive surface. A deployment that needs RAG today continues to use `RAGServerApp.run` as the terminal shape and composes Forms inside that pipeline via the inner `RAGServerApp.with*` helpers, the same way it would have pre-Phase-1h.
+**Today.** `FormsCompose.withForms` and `AICompose.withAI` ship as the two additive extensions. `withRAG` is deferred — see the migration doc for why landing it before the prior refactor that lifts `composeWithRAG` onto `composeAI` would force AI's DI registrations to duplicate into the additive surface. A deployment that needs RAG today continues to use `RAGServerApp.run` as the terminal shape and composes Forms inside that pipeline via the inner `RAGServerApp.with*` helpers.
 
 ## See also
 
 - [`surfaces.md`](surfaces.md) — the Subject / `SurfaceProfile` / `SurfaceRequirement` model and the `TOOLUP_PLATFORM_SURFACES` env-var contract.
 - [`../migrations/11g-fromenv-helpers.md`](../migrations/11g-fromenv-helpers.md) — full before/after diffs for the reference consumer migration.
-- [`../migrations/01h-combinable-composition-roots.md`](../migrations/01h-combinable-composition-roots.md) — Phase 1h consumer-side diff (`WorkflowContext`, `withForms` / `withAI`, conflict validator).
+- [`../migrations/01h-combinable-composition-roots.md`](../migrations/01h-combinable-composition-roots.md) — consumer-side diff for combinable composition roots (`WorkflowContext`, `withForms` / `withAI`, conflict validator).
 - [`../../samples/MinimalApp/`](../../samples/MinimalApp/) — runnable Anonymous-mode sample showing the single-companion pattern end-to-end.
-- [`../../samples/FormsAndAI/`](../../samples/FormsAndAI/) — Phase 1h reference sample stacking Forms + AI on one pipeline (compile-target sample; demonstrates the `WorkflowContext` DI access shape + the conflict validator).
+- [`../../samples/FormsAndAI/`](../../samples/FormsAndAI/) — reference sample stacking Forms + AI on one pipeline (compile-target sample; demonstrates the `WorkflowContext` DI access shape + the conflict validator).

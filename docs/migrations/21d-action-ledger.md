@@ -43,7 +43,7 @@ The `IActionLedgerContract` portability pack (`ToolUp.Forms.Tests/Contracts/IAct
 
 ### 3. Surface the new `FormError` variants in your UI
 
-The Fable.Remoting wire contract automatically picks up the new DU cases — no error-mapping middleware change is required. Client-side `match` statements over `FormError` are not exhaustive any more, however; add cases so the compiler stops flagging warnings:
+The ToolUp.Remoting wire contract automatically picks up the new DU cases — no error-mapping middleware change is required. Client-side `match` statements over `FormError` are not exhaustive any more, however; add cases so the compiler stops flagging warnings:
 
 ```fsharp
 match err with

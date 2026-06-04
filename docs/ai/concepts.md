@@ -26,7 +26,7 @@ The user sees text appear character-by-character (streaming), tool calls expand 
 
 A single SSE endpoint at `/api/notifications` carries every kind of notification (system messages, job progress, refresh requests, etc.). AI messages ride a separate channel: `POST /api/IAIAssistantApi/SubmitMessage` returns a `TaskId` immediately; the client subscribes to the SSE stream and routes named events (`AIMessageDelta`, `AIToolCallStarted`, etc.) to the active conversation.
 
-The streaming wire format uses `FableJsonConverter` (under the preserved `Fable.Remoting.Json` namespace; ships inside `ToolUp.Platform.Server`) so F# discriminated unions land as `{ "Case": "X", "Fields": [...] }` — the format `Fable.SimpleJson` on the client expects.
+The streaming wire format uses `System.Text.Json` with the F# converter set registered via `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()` (ships inside `ToolUp.Platform.Server`) so F# discriminated unions land as `{ "Case": "X", "Fields": [...] }` — the format `Fable.SimpleJson` on the client expects.
 
 Cross-process compatibility: if a deployment is multi-instance and the user's SSE connection lands on a different node than the one running the agent loop, the SSE event would never reach them. The default `InMemoryNotificationChannel` handles single-instance. For multi-instance, swap in `ToolUp.NotificationChannels.Redis` (or any future distributed channel companion) — per-scope topic isolation is structural (one topic per `ScopeId`), so routing across nodes works without extra config.
 

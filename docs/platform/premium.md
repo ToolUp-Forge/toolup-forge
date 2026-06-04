@@ -98,7 +98,7 @@ let PremiumOnlyChart () =
         Html.div [ Html.text "Sign in with a premium account to view this." ]
 ```
 
-The hook subscribes once on mount and caches the result; call `refresh ()` after a sign-in / sign-out transition that the consumer detects out-of-band. (Reactive auth-context binding is a follow-up — see the Phase 62 task list.)
+The hook subscribes once on mount and caches the result; call `refresh ()` after a sign-in / sign-out transition that the consumer detects out-of-band. Reactive auth-context binding is a follow-up.
 
 ## Composition with feature flags
 
@@ -133,7 +133,7 @@ The grant flow rides on the SDK's Platform-Admin role substrate. The operator mu
 
 `POST /api/_platform/users/{userId}/premium` with body `{ Reason: "..." }` writes through to the active `IUserClaims` and emits a `PremiumGranted` audit event under the `_platform.users` scope. `DELETE` on the same path emits `PremiumRevoked`. Both events carry grantor + grantee + reason for the GDPR DSAR pathway.
 
-A typical admin-UI surface for this lives in the PlatformAdmin premium-user list widget (Phase 61); the widget calls `ListPremiumUsers()` to enumerate current premium holders and exposes a single grant / revoke button per row.
+A typical admin-UI surface for this lives in the PlatformAdmin premium-user list widget; the widget calls `ListPremiumUsers()` to enumerate current premium holders and exposes a single grant / revoke button per row.
 
 ## Auth-provider note
 

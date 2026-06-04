@@ -95,7 +95,7 @@ The hardening surface, in order of increasing operator effort:
 1. **Refuse `Anonymous` on AI-using routes.** The default `ServerModule.DefaultSurfaceRequirement` is `userOrTeam`, which already excludes `AnonymousKind`. A deployment that wants to expose AI to anonymous subjects must declare the looser requirement explicitly — this is the design intent, not an accident.
 2. **Per-shape rate-limit ceilings.** A `RateLimitConfig.withOverrides` entry for `AnonymousKind` keyed on IP caps the burst rate one anonymous IP can issue. The ceiling does not stop a distributed attacker; it does stop single-source abuse and forces the attacker to pay infrastructure cost proportional to the request count.
 3. **Per-deployment AI provider keys, not per-user.** The default `IAIProviderFactory` resolves a single provider key for the deployment; every request bills to that key. This is the right shape for an internal-tools deployment serving authenticated subjects with already-bounded counts.
-4. **Platform-Admin-issued keys (Phase 70).** The shipped `IPlatformAIKeyStore` substrate lets a Platform-Admin role issue deployment-bound keys via the `PlatformAIKeysAdmin` module rather than the keys living in `appsettings.json` / environment variables. The capability rotates without redeploy; revoking a leaked key is a single admin action, not a config change.
+4. **Platform-Admin-issued keys.** The shipped `IPlatformAIKeyStore` substrate lets a Platform-Admin role issue deployment-bound keys via the `PlatformAIKeysAdmin` module rather than the keys living in `appsettings.json` / environment variables. The capability rotates without redeploy; revoking a leaked key is a single admin action, not a config change.
 5. **Bring-your-own-key (BYOK) per authenticated subject.** A deployment can wire `IAIProviderFactory` to resolve a user-issued key from `IConfigStore` per request, shifting the cost basis from "deployment owns the key" to "calling subject owns the key". The model is only meaningful for `UserKind` / `TeamMemberKind` subjects — anonymous subjects have no persistent identity to attach a key to. BYOK and `Anonymous` AI surfaces are mutually exclusive.
 
 The architecture's position is that anonymous AI access is operator-owned cost control, not a default the SDK provides. The [Pure-Anonymous public portal](surfaces.md#pure-anonymous-public-portal) archetype in `surfaces.md` cross-links here for that reason. A deployment that turns AI on for anonymous subjects without picking from this list is shipping an unbounded cost surface.
@@ -138,7 +138,7 @@ The CSRF carve-out (`CsrfMiddleware` skips when `AcceptedSubjects` admits `Anony
 
 **Defences worth verifying.** Every admin module's `DefaultSurfaceRequirement` is at minimum `userOrTeam` (the fail-closed default catches an undeclared module, but an *explicitly* mis-declared `public_` does not trigger the validator). Client-side `Visibility = visibleToAuthenticated` on every admin module (hides the surface from the anonymous sidebar; does not gate the API — the server `SurfaceRequirement` is the gate, but `Visibility` removes the discovery surface). `SurfaceCoherenceValidator` Rule 3 (module requirement unreachable under declared `Surfaces`) catches the inverse defect — a teamScoped module under `anonymousAndIndividual` would fail startup, surfacing the misconfiguration before it ships.
 
-The optional `IAnonymousSessionMigrator` is the hardening surface for the migration moment: an anonymous visitor who signs in lifts to `AuthenticatedUser`, and per-`userId` `SemaphoreSlim` locking in the middleware prevents the double-migration race (Phase 66 Stream C.1, design §3.7 E1). A deployment that wires no migrator and accepts the data-discard shape ships an acceptable state; a deployment that writes a custom migrator must honour the idempotency contract documented on `IAnonymousSessionMigrator`.
+The optional `IAnonymousSessionMigrator` is the hardening surface for the migration moment: an anonymous visitor who signs in lifts to `AuthenticatedUser`, and per-`userId` `SemaphoreSlim` locking in the middleware prevents the double-migration race. A deployment that wires no migrator and accepts the data-discard shape ships an acceptable state; a deployment that writes a custom migrator must honour the idempotency contract documented on `IAnonymousSessionMigrator`.
 
 #### Public landing + team SaaS + share links
 
@@ -160,7 +160,7 @@ The CSRF gate is the right shape for `userOrTeam` / `teamScoped` routes. Anonymo
 
 #### Audit visibility per subject kind
 
-`IAuditSink.Deliver` takes `AuditEnvelope list` (Phase 66 Stream B.7). The envelope carries `Subject: AuditSubject` (`AnonymousAudit` / `UserAudit` / `TeamAudit` / `ClaimAudit`), `ScopeId`, `OccurredAt`, and the original event. Sinks declare `SchemaVersion: int` (current = `2`); the `subject_kind` tag flows through every downstream observability path.
+`IAuditSink.Deliver` takes `AuditEnvelope list`. The envelope carries `Subject: AuditSubject` (`AnonymousAudit` / `UserAudit` / `TeamAudit` / `ClaimAudit`), `ScopeId`, `OccurredAt`, and the original event. Sinks declare `SchemaVersion: int` (current = `2`); the `subject_kind` tag flows through every downstream observability path.
 
 A mixed-mode deployment serving high anonymous traffic can swamp downstream sinks. `ServerConfig.AuditSamplingPolicy` (default `AuditSamplingPolicy.none` = keep every event) lets the operator opt into per-kind sampling — typically a low rate on `AnonymousKind` events that exist only for forensic visibility, full coverage on the authenticated subject kinds where each event ties to an accountable identity. The sampling decision is deterministic per event-id (hashed to a [0,1) value, compared to the per-kind rate), so re-runs and replays produce identical sampled sets.
 
@@ -168,7 +168,7 @@ The point: anonymous-shape audit volume should not constrain the authenticated-s
 
 #### Validator coverage as a hardening lever
 
-`SurfaceCoherenceValidator` refuses startup on ten rule violations (Phase 66 Stream B.2). The rules are listed in `src/ToolUp.Platform.Server/Server/SurfaceCoherenceValidator.fs`; the operator-facing summary:
+`SurfaceCoherenceValidator` refuses startup on ten rule violations. The rules are listed in `src/ToolUp.Platform.Server/Server/SurfaceCoherenceValidator.fs`; the operator-facing summary:
 
 | Rule | Fires when | Severity |
 |---|---|---|

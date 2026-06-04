@@ -40,7 +40,7 @@ let routine (input: string) : string = sprintf "did: %s" input
 ```fsharp
 // ClientModel.fs
 module HelloWorld.ClientModel
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 
 type Model = { Text: string }

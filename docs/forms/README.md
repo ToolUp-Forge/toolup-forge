@@ -24,8 +24,8 @@ Three packages:
 
 | Package | What it is |
 |---|---|
-| `ToolUp.Forms.Core` | Shared types: `FormSchema` / `FieldKind` / `ValidationRule` / `Submission` / `FieldValue` / `FormError` / `WorkflowDefinition` / `IFormApi` ToolUp.Remoting contract + `IPublicFormApi` for publishable surveys + `IActionLedger` (Phase 21d). |
-| `ToolUp.Forms.Server` | `IFormStore` + default `FormStore` (over `IEntityStore`), `IWorkflowEngine` + `WorkflowEngine`, `FormValidator`, `formApi` handler, `publicFormApi` handler (Phase 21b), `PublishableFormConfigValidator`, `InMemoryActionLedger` default + `IActionLedger` substrate (Phase 21d), `FormsCompose`. |
+| `ToolUp.Forms.Core` | Shared types: `FormSchema` / `FieldKind` / `ValidationRule` / `Submission` / `FieldValue` / `FormError` / `WorkflowDefinition` / `IFormApi` ToolUp.Remoting contract + `IPublicFormApi` for publishable surveys + `IActionLedger`. |
+| `ToolUp.Forms.Server` | `IFormStore` + default `FormStore` (over `IEntityStore`), `IWorkflowEngine` + `WorkflowEngine`, `FormValidator`, `formApi` handler, `publicFormApi` handler for publishable surveys, `PublishableFormConfigValidator`, `InMemoryActionLedger` default + `IActionLedger` substrate, `FormsCompose`. |
 | `ToolUp.Forms.Client` | `FormRenderer` (Feliz schema-driven inputs), `WorkflowBadge` (state pill), `FormSubmissionsList` (table), `PublicEmbed` (`/r/{token}` standalone respondent UI), `SurveyDashboardView` + `SurveyListView` (admin), `FormsClient.proxy` (ToolUp.Remoting proxy). |
 
 ## Required substrate
@@ -108,19 +108,19 @@ let onboardingView (schema: FormSchema) (dispatch: Map<string, FieldValue> -> un
 
 That's it. Validation runs server-side on submit; the workflow engine moves through transitions; the audit log records every state change.
 
-## Phase 21b — publishable surveys
+## Publishable surveys
 
 A `FormSchema` with `Visibility = Publishable` is a survey distributable to anonymous respondents via signed share-link tokens. Three distribution flows out of the box:
 
-1. **Platform-dispatched email** — `IFormApi.DispatchInvitationsByEmail` ships invitations via your registered `INotificationSink` (Phase 6f).
+1. **Platform-dispatched email** — `IFormApi.DispatchInvitationsByEmail` ships invitations via your registered `INotificationSink`.
 2. **Creator's own MTA** — `IFormApi.IssueTokens` returns token URLs; the creator sends them via their own tool.
 3. **Third-party survey provider with opaque handles** — `IssueTokens` with opaque `Handle` values; the platform never sees real emails / panel ids.
 
 The respondent visits `/r/{token}`; the `PublicEmbed` Feliz component (no app shell) renders the form; submission goes through `IPublicFormApi.SubmitWithToken` (token-gated). See [concepts.md](concepts.md) for the wire-format + cross-cutting validation chain.
 
-## Phase 21d — exactly-once workflow actions
+## Exactly-once workflow actions
 
-Workflow actions (`Transition.Action = Some "send-welcome-email"`) used to be fire-and-forget — an exception inside an action was warn-logged and swallowed, and a process restart between state-persist and action-completion re-fired the action on the next apply attempt. The Phase 21d action ledger turns invocation into an exactly-once primitive keyed by `(SubmissionId, transitionId, actionName)`. Combined with a per-action `ActionFailurePolicy` (`FailSubmission` / `DeadLetter` / `LogOnly`), the engine surfaces failures on three independent observability surfaces (metric, audit row, dead-letter ledger entry) so silent loss is structurally impossible. See [concepts.md](concepts.md) and [extending.md](extending.md) for details.
+Workflow actions (`Transition.Action = Some "send-welcome-email"`) used to be fire-and-forget — an exception inside an action was warn-logged and swallowed, and a process restart between state-persist and action-completion re-fired the action on the next apply attempt. The action ledger turns invocation into an exactly-once primitive keyed by `(SubmissionId, transitionId, actionName)`. Combined with a per-action `ActionFailurePolicy` (`FailSubmission` / `DeadLetter` / `LogOnly`), the engine surfaces failures on three independent observability surfaces (metric, audit row, dead-letter ledger entry) so silent loss is structurally impossible. See [concepts.md](concepts.md) and [extending.md](extending.md) for details.
 
 ## Concepts
 

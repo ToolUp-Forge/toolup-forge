@@ -2,7 +2,7 @@
 
 ## What changes
 
-Two related perf wins on the ToolUp.Remoting dispatcher hot path, surfaced by Findings F2 + F3 of [`application-plans/toolup-remoting-hot-path-perf.md`](../../../ToolUp-Diametrical/application-plans/toolup-remoting-hot-path-perf.md):
+Two related perf wins on the ToolUp.Remoting dispatcher hot path:
 
 **F2 — argument-parse single-walk.** Previously the dispatcher parsed the outer arguments-array JSON into a `JsonDocument`, captured each element's raw JSON text via `GetRawText()`, then re-parsed each captured string into its own `JsonDocument` via `JsonSerializer.Deserialize<'inp>(argText, opts)`. For an N-argument method that's `N + 1` parses per call.
 
@@ -63,7 +63,6 @@ Revert in this order:
 
 ## See also
 
-- [Phase 69b — `ToolUp.Remoting.Server` platform seams](../../../ToolUp-Diametrical/roadmap/phases/69b-toolup-remoting-server-platform-seams.md) — the substrate this fastpath composes on top of.
-- [Phase 69l — Telemetry seam zero-cost gate](69l-telemetry-zero-cost-gate.md) — sister perf phase; the allocation-pin pattern.
-- [Phase 69n — `fromContextAsync` build-once](../../../ToolUp-Diametrical/roadmap/phases/69n-remoting-fromcontextasync-build-once.md) — sequenced after this phase; lifts the per-request dispatcher rebuild on the `fromContextAsync` arm.
-- Source plan: [`application-plans/toolup-remoting-hot-path-perf.md`](../../../ToolUp-Diametrical/application-plans/toolup-remoting-hot-path-perf.md) (Findings F2 + F3 + audit-reuse refinement).
+- [`69b-remoting-platform-seams.md`](69b-remoting-platform-seams.md) — the `ToolUp.Remoting.Server` platform seams this fastpath composes on top of.
+- [`69l-telemetry-zero-cost-gate.md`](69l-telemetry-zero-cost-gate.md) — sister perf phase; the allocation-pin pattern.
+- [`69n-fromcontextasync-build-once.md`](69n-fromcontextasync-build-once.md) — sequenced after this phase; lifts the per-request dispatcher rebuild on the `fromContextAsync` arm.

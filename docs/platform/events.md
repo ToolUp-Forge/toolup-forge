@@ -52,7 +52,7 @@ ServerConfig.EventStore = PersistentBlobBacked (MaxAge (TimeSpan.FromDays 90.))
 Modules can publish their own events via `IEventStore.Write`. Conventions:
 - `SourceModule` matches the module's name (e.g. `"SalesAnalysis"`).
 - `EventType` is a domain verb in `PascalCase` (e.g. `"AnalysisCompleted"`).
-- `Payload` is JSON of a typed record; consumers parse with `Fable.Remoting.Json.FableJsonConverter`.
+- `Payload` is JSON of a typed record; consumers parse with `System.Text.Json` using the F# converter set from `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()`.
 - `CorrelationId` links related events from a single user action.
 
 Domain events flow through the same store as audit events; the `SourceModule` discriminator keeps them queryable separately.

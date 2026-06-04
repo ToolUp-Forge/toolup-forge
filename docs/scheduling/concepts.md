@@ -236,7 +236,7 @@ For high-frequency booking (real-time bidding, ticketing platforms), the per-res
 
 ## What scheduling does NOT cover
 
-- **Notifications** — sending email confirmations, SMS reminders. Use `INotificationSink` (Phase 6f) — wire a workflow action via `ToolUp.Forms` if you want the form-driven shape, or call the sink directly from your module.
+- **Notifications** — sending email confirmations, SMS reminders. Use `INotificationSink` — wire a workflow action via `ToolUp.Forms` if you want the form-driven shape, or call the sink directly from your module.
 - **Payment** — collecting deposits, processing refunds on cancel. Out of scope; integrate Stripe / payment provider at the module layer.
 - **Customer notes** — bookings have `Notes: string option`, not a full CRM record. For customer history, use a custom entity store via `IEntityStore` directly.
 - **Two-way calendar sync** — pulling availability from Google Calendar / Outlook in real-time so external events block slots. Out of scope; future companion work (`ICalendarSyncProvider`).

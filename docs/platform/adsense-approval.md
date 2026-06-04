@@ -22,7 +22,7 @@ For local development against the real AdSense bundle, use the test-mode paramet
 
 To exercise the slot rendering path without a real fill, append `?google_adtest=on` to the page URL **or** set `data-adtest="on"` on the `<ins>` element. AdSense serves real test ads from its test pool, ignores the site-approval check, and stamps `data-ad-status="filled"` so the `MutationObserver`-driven impression event fires for the analytics seam.
 
-The Phase 60 substrate does not currently surface a typed `Style`-level affordance for `data-adtest`. Two workarounds:
+The substrate does not currently surface a typed `Style`-level affordance for `data-adtest`. Two workarounds:
 
 1. **Query-string toggle** — append `?google_adtest=on` to the dev page URL; AdSense's bundle picks it up globally.
 2. **Per-slot DOM injection** — for a one-off dev verification, run a small post-mount script that adds `data-adtest="on"` to the `<ins>`. Don't ship this in production.
@@ -44,10 +44,10 @@ For a public-utility deployment (single calculator, viewer, or converter), the p
 AdSense's review checks for:
 
 - **A linked Privacy Policy** that names Google AdSense (and any other third-party tracking the site uses), explains the cookies / identifiers AdSense uses for personalised ads, and explains how users can opt out.
-- **A consent surface** for EU / UK / California users covering the Marketing / Personalisation categories. The Phase 60 substrate's consent-gate composition (via Phase 59's `IConsentProvider`) handles the gating; the visible CMP banner is provided by whichever consent provider the deployment wires. `FundingChoicesConsentProvider` is the path of least resistance — Funding Choices is Google's own CMP, AdSense-aware, and free.
+- **A consent surface** for EU / UK / California users covering the Marketing / Personalisation categories. The AdPanel substrate's consent-gate composition (via `IConsentProvider`) handles the gating; the visible CMP banner is provided by whichever consent provider the deployment wires. `FundingChoicesConsentProvider` is the path of least resistance — Funding Choices is Google's own CMP, AdSense-aware, and free.
 - **Targeted-advertising opt-out** mention in the policy, with a working mechanism (typically the CMP banner's "Reject all" or "Manage preferences" button).
 
-The Phase 60 substrate enforces the technical gating — `<AdSlot>` returns `Html.none` until the user grants the configured categories — but does not generate the privacy policy text. Author that yourself.
+The AdPanel substrate enforces the technical gating — `<AdSlot>` returns `Html.none` until the user grants the configured categories — but does not generate the privacy policy text. Author that yourself.
 
 ### 5. Traffic threshold and review delay
 
@@ -63,7 +63,7 @@ Even after approval, AdSense's content-policy bots check:
 - **No sticky-bottom ads** that overlap the page's primary content navigation.
 - **No more than three** ad units per page (current 2026 guideline; was unlimited pre-2018, now policy-throttled).
 
-The Phase 60 substrate does not enforce these limits — that's the consumer's layout responsibility.
+The AdPanel substrate does not enforce these limits — that's the consumer's layout responsibility.
 
 ## Post-approval verification
 

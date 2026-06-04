@@ -1,6 +1,6 @@
 # Concepts
 
-How `ToolUp.Forms` works under the hood. Three primary abstractions: schemas, submissions, workflows. Plus the publishable-survey extension and the Phase 21d action-ledger substrate.
+How `ToolUp.Forms` works under the hood. Three primary abstractions: schemas, submissions, workflows. Plus the publishable-survey extension and the exactly-once action-ledger substrate.
 
 ## Schema model
 
@@ -14,16 +14,16 @@ type FormVisibility =
     | Publishable
 
 type FormSchema = {
-    /// Phase 19 reflection contract — entity primary key.
+    /// Entity-store reflection contract — primary key.
     Id: FormSchemaId
-    /// Phase 19 reflection contract — entity type discriminator.
+    /// Entity-store reflection contract — entity-type discriminator.
     Type: string
-    /// Phase 19 reflection contract — overwritten by the store.
+    /// Entity-store reflection contract — overwritten by the store.
     Version: int
     DisplayName: string
     Description: string option
     Fields: FieldSchema list
-    /// Phase 21b — flip to `Publishable` for share-link distribution.
+    /// Flip to `Publishable` for share-link distribution.
     Visibility: FormVisibility
 }
 
@@ -92,7 +92,7 @@ The same pattern applies to workflow guards and actions — name-keyed, not clos
 
 ### Schemas persist as entities
 
-Each `FormSchema` is persisted as a Phase 19 entity via `IEntityStore`. Per-scope overrides are allowed: a deployment can register a global `customer-onboarding` schema at compose time and tenants can call `SaveSchema` at their own team scope to override it.
+Each `FormSchema` is persisted as a typed entity via `IEntityStore`. Per-scope overrides are allowed: a deployment can register a global `customer-onboarding` schema at compose time and tenants can call `SaveSchema` at their own team scope to override it.
 
 `DefaultedFormStore` is a decorator (wired automatically by `FormsServerApp.run`) that overlays compose-time-registered schemas as scope-wide fallbacks. When the server looks up a schema by `FormSchemaId`, it first checks the active scope's storage, then falls back to the registered default. Tenants without overrides see the default.
 
@@ -128,11 +128,11 @@ type SubmissionAuthor =
     | InvitedRespondent of tokenId: string * attributedHandle: string option
 
 type Submission = {
-    /// Phase 19 reflection contract — entity primary key.
+    /// Entity-store reflection contract — primary key.
     Id: SubmissionId
-    /// Phase 19 reflection contract — entity type discriminator.
+    /// Entity-store reflection contract — entity-type discriminator.
     Type: string
-    /// Phase 19 reflection contract — overwritten by the store.
+    /// Entity-store reflection contract — overwritten by the store.
     Version: int
     FormId: FormSchemaId
     /// Schema version at submission time (distinct from the entity's
@@ -180,12 +180,12 @@ type FormError =
     | Unauthorised
     | InvalidTransition of currentState: string * attemptedEvent: string
     | WorkflowNotFound of workflowId: string
-    /// Phase 21d — guard predicate threw during evaluation.
+    /// Guard predicate threw during evaluation.
     | GuardEvaluationFailed of guard: string * reason: string
-    /// Phase 21d — workflow action threw under `FailSubmission` policy.
+    /// Workflow action threw under `FailSubmission` policy.
     /// State write rolled back.
     | ActionFailed of actionName: string * reason: string
-    /// Phase 21d — a prior `Pending` ledger entry blocks this attempt
+    /// A prior `Pending` ledger entry blocks this attempt
     /// under the `FailSubmission` policy.
     | ActionPendingFromPriorAttempt of submissionId: string * actionName: string
 ```
@@ -237,7 +237,7 @@ The workflow engine is intentionally simple — no parallel branches, no compens
 
 ### Action ledger and failure policy
 
-Two production defects motivated the action-ledger substrate (Phase 21d):
+Two production defects motivated the action-ledger substrate:
 
 1. **Silent loss.** A pre-ledger action that threw was warn-logged and swallowed. The submission committed; the side effect (email send, webhook fan-out, downstream API) was lost with no metric, no audit, no dead-letter row. Operators only heard about the failure when the customer followed up.
 2. **Replay duplication.** A process restart between state-persist and action-completion re-fired the action on next `ApplyTransition`. Customers received two acknowledgement emails; payment captures double-debited; webhook subscribers got duplicate events.
@@ -285,7 +285,7 @@ Client-side validation in `FormRenderer` mirrors the same rules for UX feedback;
 
 `Custom` validators are looked up by name in the registry populated via `FormsServerApp.withCustomValidator`. Missing-by-name custom validators are a soft pass (no error) so renaming a validator doesn't break in-flight forms.
 
-## Publishable surveys (Phase 21b)
+## Publishable surveys
 
 A `FormSchema` with `Visibility = Publishable` is distributable to anonymous respondents via signed share-link tokens. The flow:
 
@@ -337,7 +337,7 @@ The `/api/public/forms/*` prefix is registered as an anonymous route via `Server
 
 ### Cross-cutting validation chain
 
-`PublishableFormConfigValidator` is an `IConfigValidator` that runs at preflight. Severity is **mode-aware** (Phase 21e):
+`PublishableFormConfigValidator` is an `IConfigValidator` that runs at preflight. Severity is **mode-aware**:
 
 | Condition | `Anonymous` / `AuthenticatedEphemeral` | `Individual` / `Team` / `MultiTeam` |
 |---|---|---|
@@ -351,7 +351,7 @@ The `Error` exists because a misconfigured production deployment that boots clea
 
 The `INotificationSink` checks emit `Warning` regardless of mode (deployments dispatching via the creator's own MTA legitimately skip the sink).
 
-### Per-token rate limit (Phase 21e)
+### Per-token rate limit
 
 Tokens issued via `IFormApi.IssueTokens` carry an optional `ShareTokenRateLimit` field:
 
@@ -366,7 +366,7 @@ type ShareTokenRateLimit = {
 
 `IPublicFormApi.SubmitWithToken` consults the registered `IShareTokenRateLimiter` before any validation or persistence side-effect; rejection returns `FormError.RateLimited`. The SDK default is `InMemoryShareTokenRateLimiter` (single-instance only); distributed deployments wire a Redis / `IRateLimitStore`-backed companion via `FormsServerApp.withShareTokenRateLimiter` so per-token windows are shared across replicas.
 
-### Public-embed message collapsing (Phase 21e)
+### Public-embed message collapsing
 
 `PublicEmbed.describeError` renders the same user-visible string — `"This link is no longer valid. Please ask the survey owner for a new link."` — for every token-rejection case (`Unauthorised`, `NotFound("token", "expired" / "revoked" / "use-limit-exceeded")`, `RateLimited`). Server-side audit log still distinguishes the cases so operator observability is unchanged; the collapse prevents a token-guessing attacker using the embed as a token-state oracle.
 
@@ -398,7 +398,7 @@ type AggregationSummary = {
 
 `SurveyDashboardView` (Feliz) consumes this for the admin UI. `SurveyListView` shows the multi-survey overview (one row per Publishable schema with response count + last response time) — backed by `IFormApi.ListSchemasOverview`.
 
-`IFormSubmissionAnalyser` is the extension stub for richer analysis (sentiment, clustering, thematic analysis). The default impl ships nothing; consumer companion packages plug in custom analysers; Phase 21c added `IAnalyserCache` for memoisation across calls.
+`IFormSubmissionAnalyser` is the extension stub for richer analysis (sentiment, clustering, thematic analysis). The default impl ships nothing; consumer companion packages plug in custom analysers; `IAnalyserCache` memoises results across calls.
 
 ## Audit + observability
 

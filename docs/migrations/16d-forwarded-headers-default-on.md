@@ -60,10 +60,10 @@ Staging deployments that legitimately run plaintext Kestrel behind upstream TLS 
 
 ## Rollback
 
-Set `TOOLUP_TRUST_FORWARDED_HEADERS=0` (or pin `TrustForwardedHeaders = false` in code) to revert to pre-Phase-16d behaviour for the deployment. The env var is still honoured; the default is the only thing that changed. No server-side or client-side bump is required to roll back — the consumer-side knob is the rollback path.
+Set `TOOLUP_TRUST_FORWARDED_HEADERS=0` (or pin `TrustForwardedHeaders = false` in code) to revert to the pre-default behaviour for the deployment. The env var is still honoured; the default is the only thing that changed. No server-side or client-side bump is required to roll back — the consumer-side knob is the rollback path.
 
 ## Consumers
 
-Pinned: `toolup-app`, Concord (Seller + Buyer), `Xcelsys/portal`. Per the workspace `SDK-ADOPTION.md`, the consumer-side adoption work is small — drop any defensive `=1` setting from `DEPLOYMENT.md` / per-environment config / Dockerfile ENV lines, and consider pairing with `RequireHttps = true` in authenticated production surfaces. `cookbook-apps` adopt via the next "Update Cookbook" recipe sweep.
+Consumer-side adoption work is small — drop any defensive `=1` setting from `DEPLOYMENT.md` / per-environment config / Dockerfile ENV lines, and consider pairing with `RequireHttps = true` in authenticated production surfaces.
 
-The migration is **N-A** for any consumer that has no production deploy behind a proxy and runs only against direct-bind localhost (e.g. a Fern-style standalone demo with no audit-log emission). Such consumers may still want to set `TOOLUP_TRUST_FORWARDED_HEADERS=0` explicitly to keep the validator quiet, but the runtime impact is zero.
+The migration is **N-A** for any consumer that has no production deploy behind a proxy and runs only against direct-bind localhost (e.g. a standalone demo with no audit-log emission). Such consumers may still want to set `TOOLUP_TRUST_FORWARDED_HEADERS=0` explicitly to keep the validator quiet, but the runtime impact is zero.

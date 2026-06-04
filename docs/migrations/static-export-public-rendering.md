@@ -83,6 +83,6 @@ Drop the `StaticExport` FAKE target from `Build.fs`; revert any deployment-pipel
 
 ## Consumers
 
-The migration applies only to SSR-only **website-class** deployments — consumers whose `ServerConfig.PublicRendering = EnabledPublicRendering _` AND who want to host on a static-file CDN instead of an always-on App Service / container. Application-class deployments (`toolup-app`, `Concord`, `Xcelsys/portal`) are intrinsically dynamic (auth, AI streaming, per-user state) and cannot static-export — they remain ⛔ N-A.
+The migration applies only to SSR-only **website-class** deployments — consumers whose `ServerConfig.PublicRendering = EnabledPublicRendering _` AND who want to host on a static-file CDN instead of an always-on App Service / container. Application-class deployments (auth, AI streaming, per-user state) are intrinsically dynamic and cannot static-export.
 
-`toolup-forge-io` is the first consumer; adopts in the same change set that lands this SDK addition.
+`toolup-forge-io` is the first consumer; it adopts in the same change set that lands this SDK addition.

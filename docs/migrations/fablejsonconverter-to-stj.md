@@ -109,7 +109,7 @@ This matters for redaction walks; see `ConfigDriftDetector.fs` / `DiagnosticBund
    - `dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj`
    - `dotnet run --project src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj`
    - `dotnet run --project src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj`
-   All expected green; the only pre-existing flakes the forge baseline carries are noted in `ToolUp-Diametrical/roadmap/TIDY-UP.md`.
+   All expected green.
 
 ## Rollback
 
@@ -149,6 +149,4 @@ This is Google's dep, not forge's. No forge code path executes Newtonsoft serial
 
 ## Cross-references
 
-- Workspace [`SDK-ADOPTION.md`](../../../SDK-ADOPTION.md) row for the cross-repo consumer rollout.
-- Forge `CLAUDE.md` "Serialisation" subsection — describes the canonical STJ pattern for new code.
-- TIDY-UP entry (workspace `ToolUp-Diametrical/roadmap/TIDY-UP.md`) — the original tracker that drove the sweep.
+- Forge [`CLAUDE.md`](../../CLAUDE.md) "Serialisation" subsection — describes the canonical STJ pattern for new code.

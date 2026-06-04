@@ -10,7 +10,7 @@ Higher-level compositions (e.g. a dedicated side-panel layer that pairs the AI a
 |---|---|---|
 | Multi-tenant SaaS with paid users only | `NoAdPanel` | Don't — paid-only apps generally want zero ad surface. |
 | Anonymous-mode public utility (calculators, viewers, converters) | `NoAdPanel` | Flip on when the funnel from anonymous → paid premium needs ad revenue to fund the free tier. |
-| Mixed free / premium | `NoAdPanel` | Flip on for anonymous + free-tier traffic; pair with the Phase 62 premium-claim substrate to suppress slot render for paid users. |
+| Mixed free / premium | `NoAdPanel` | Flip on for anonymous + free-tier traffic; pair with the premium-claim substrate to suppress slot render for paid users. |
 
 The default `ClientConfig.AdPanel = NoAdPanel` strips every `<AdSlot>` render path — the component returns `Html.none`, no AdSense script loads, no Funding Choices banner triggers. Bytes on the wire are identical to a build with no ads-related code.
 
@@ -77,13 +77,13 @@ The `config` parameter is the deployment's `ClientConfig` — the component bran
 
 ## Consent gate composition
 
-The `<AdSlot>` component wraps its render in `ConsentGate` (Phase 59 — see the [`IConsentProvider`](../../src/ToolUp.Platform.Client/Client/Consent/IConsentProvider.fs) interface header for the substrate shape and [migration doc](../migrations/59-iconsentprovider.md) for the consumer migration walk-through). The gate reads the deployment's `IConsentProvider`:
+The `<AdSlot>` component wraps its render in `ConsentGate` — see the [`IConsentProvider`](../../src/ToolUp.Platform.Client/Client/Consent/IConsentProvider.fs) interface header for the substrate shape and the [consent-provider migration](../migrations/59-iconsentprovider.md) for the consumer migration walk-through. The gate reads the deployment's `IConsentProvider`:
 
 ```fsharp
 type ClientConfig = {
     // ...
-    AdPanel: AdPanelMode             // Phase 60
-    ConsentProvider: ConsentProvider // Phase 59
+    AdPanel: AdPanelMode
+    ConsentProvider: ConsentProvider
 }
 ```
 
@@ -153,7 +153,7 @@ See [`adsense-approval.md`](adsense-approval.md) for the operator-facing checkli
 
 ## What this substrate does NOT cover
 
-Per the Phase 60 phase body, the substrate is deliberately narrow. The following are out of scope for the substrate itself; consumers compose them separately:
+The substrate is deliberately narrow. The following are out of scope for the substrate itself; consumers compose them separately:
 
 - **Click-tracking redirect handler.** AdSense doesn't expose click events through `adsbygoogle.push`; capturing them requires a `/api/ads/click/{clickId}` redirect-handler pattern that consumers wanting click telemetry implement themselves. The `IAdAnalyticsSink.LogClick` method exists so the same sink interface covers both event types, but the substrate ships no default click-capture mechanism.
 - **Alternative ad networks** (header bidding, Google Ad Manager beyond basic AdSense, direct-sold inventory). A future companion package may introduce an `IAdProvider` abstraction once a second concrete provider lands; today's substrate is AdSense-specific.
@@ -162,7 +162,7 @@ Per the Phase 60 phase body, the substrate is deliberately narrow. The following
 
 ## See also
 
-- [`consent.md`](consent.md) — Phase 59 `IConsentProvider` substrate that gates `<AdSlot>` rendering.
+- [`consent.md`](consent.md) — the `IConsentProvider` substrate that gates `<AdSlot>` rendering.
 - [`portability-rules.md`](portability-rules.md) — the six rules audited on `IAdAnalyticsSink`.
 - [`migrations/60-adpanel-adsense.md`](../migrations/60-adpanel-adsense.md) — consumer migration doc (drop-in usage + verification + rollback).
 - [`adsense-approval.md`](adsense-approval.md) — AdSense site-approval gotchas.

@@ -107,30 +107,14 @@ The rename is a one-shot find-replace + recompile. To revert:
 
 ToolUp **does not ship transitional `namespace Fable.Remoting.X = namespace ToolUp.Remoting.X` aliases** — the rename is meant to be visible. If you need to roll back, roll back the PackageReference and the consumer-side opens together.
 
-## Consumer adoption tracking
+## Effort estimate
 
-This phase is shipped on the forge side and consumer adoption rolls through the workspace [`SDK-ADOPTION.md`](../../../SDK-ADOPTION.md) matrix:
+The rename is mechanical search-and-replace + recompile + smoke-test. Typical consumer file counts:
 
-| Consumer | Status |
-|---|---|
-| `toolup-app` | 🟡 pending |
-| Concord (Seller) | 🟡 pending |
-| Concord (Buyer) | 🟡 pending |
-| Xcelsys/portal | 🟡 pending |
-| TaxTimeMachine | 🟡 pending |
-| `cookbook-apps/` (recipe sweep) | 🟡 pending |
+- **Server side**: every handler file that opened `Fable.Remoting.Giraffe` / `Fable.Remoting.Server` / `Fable.Remoting.Json` — usually one file per registered API plus the composition root.
+- **Client side**: every module's `ClientModel.fs` (opens `Elmish`) plus every `*.Client` API-binding module (opens `Fable.Remoting.Client`) plus the composition root (opens `Elmish.React` / `Elmish.HMR`).
 
-Honest per-consumer file counts (sampled 2026-06-02; may have drifted — re-grep at adoption time):
-
-- **`toolup-app/src`**: ~44 files match `^(open|namespace) Elmish` — mostly each module's `ClientModel.fs` + composition-root files.
-- **Concord (Seller + Buyer combined)**: ~52 files.
-- **Xcelsys/portal**: ~10–20 files (smaller scope).
-- **TaxTimeMachine**: ~5–10 files.
-- **cookbook-apps/**: ~50–100 files aggregate across ~10 cooks.
-
-Per-consumer Fable.Remoting counts vary; the pattern is "every server-side handler file + every client-side API-binding module."
-
-**Per-consumer effort estimate**: ~30 minutes of mechanical find-replace + the consumer's own `dotnet build` + smoke-test cycle. Cells in `SDK-ADOPTION.md` flip from 🟡 → ✅ as adoption PRs land. None gate Phase 73's forge close-out.
+A consumer with ~10 modules typically has ~30–60 files touched. Per-consumer effort: ~30 minutes of mechanical edits driven by `git grep` + the consumer's own `dotnet build` + smoke-test cycle. Behaviour is byte-identical post-rename, so the build cycle is the gate, not a regression hunt.
 
 ## See also
 

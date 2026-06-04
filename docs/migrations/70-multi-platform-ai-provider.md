@@ -24,7 +24,7 @@
    - `AIUserConfigView` gains `PlatformProviderOverride: string option`.
    - `SetPlatformModelOverride` validation widens to accept any wired descriptor's models (was: only the single descriptor's models).
 
-7. **New `PlatformAIKeysApi`** Fable.Remoting contract (10 methods) + `PlatformAIKeysHandler` server-side handler. Gated on `AccessContext.canModifyPlatformConfig`. The current key value is never returned by any read path.
+7. **New `PlatformAIKeysApi`** ToolUp.Remoting contract (10 methods) + `PlatformAIKeysHandler` server-side handler. Gated on `AccessContext.canModifyPlatformConfig`. The current key value is never returned by any read path.
 
 8. **New `PlatformAIKeysAdminUI`** client module appended automatically by `AIClientConfig.appendAssistantModule`. Sits under the "Platform Admin" sidebar group with id `_ai.PlatformAIKeys`. Hidden from non-admin sidebars via the shell's role gate.
 
@@ -142,6 +142,6 @@ Revert to a single `AIPlatformProvider` bundle and pass `[bundle]` + `None` for 
 
 ## Risks
 
-- **Wire-contract change on `AISettingsApi`.** The `GetPlatformDescriptor` → `GetPlatformDescriptors` rename is a breaking Fable.Remoting wire change. Any external client that pinned the old method name needs to update. The built-in `AISettingsUI` was migrated in the same commit; no other forge consumer references the method.
+- **Wire-contract change on `AISettingsApi`.** The `GetPlatformDescriptor` → `GetPlatformDescriptors` rename is a breaking ToolUp.Remoting wire change. Any external client that pinned the old method name needs to update. The built-in `AISettingsUI` was migrated in the same commit; no other forge consumer references the method.
 - **Tests that construct `AIPlatformProvider` records by hand** need updating to the new field shape. The forge codebase has no such test today; downstream test suites may.
 - **`IPlatformAIKeyStore` is a new portability-rule-bearing substrate.** External implementations (Azure Key Vault, AWS Secrets Manager) need to satisfy the six rules (identity-by-value, async-at-every-boundary, retry-as-data, stateless, per-scope sharding, no implicit timing). The default `BlobPlatformAIKeyStore` over `ISecretStore` is the conformance reference.

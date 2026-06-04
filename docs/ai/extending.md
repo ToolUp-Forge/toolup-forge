@@ -198,7 +198,7 @@ For a complete reference, see [`ToolUp.AIProviders.Claude`](https://github.com/T
 
 ### Structured-output support
 
-`IAIProvider` carries a sibling `SendStructuredMessage` method for JSON-Schema-respecting structured output (Phase 67b). The schema rides as a string (same convention as `AIProviderToolDef.InputSchema`); providers parse internally and translate to their native wire format.
+`IAIProvider` carries a sibling `SendStructuredMessage` method for JSON-Schema-respecting structured output. The schema rides as a string (same convention as `AIProviderToolDef.InputSchema`); providers parse internally and translate to their native wire format.
 
 #### Provider-side: choose native or fallback
 

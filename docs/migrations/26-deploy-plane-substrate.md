@@ -24,7 +24,7 @@ A new substrate ships at the SDK boundary giving the typed contract any deploy b
 | `DockerLocalContainerScheduler` reference companion | `src/ContainerSchedulers/DockerLocal/` | companion package | ✅ `1a1bf22` |
 | `Tests/Contracts/I*Contract.fs` (×4) + in-process bindings | `Tests/Contracts/` + `Tests/InProcess/DeployPlaneTests.fs` | tests | ✅ `1a1bf22` |
 
-Every substrate surface, single-node default, the reference `DockerLocalContainerScheduler` companion, and the four contract packs now ship together. Operator-side `ServerConfig.DeployPlane = SingleNodeDeployPlane` lights up `IBuildOrchestrator` + `IDeployPipeline` + `ITenantFleet` automatically; `IContainerScheduler` remains consumer-supplied (the reference companion is one valid choice; cloud-specific implementations ship downstream — Diametrical's [Phase 26.C](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/diametrical-roadmap/phases/26-C-toolup-cloud-operation.md) ToolUp Cloud composition; a self-hosted operator on Docker Swarm; a Kubernetes-based shop).
+Every substrate surface, single-node default, the reference `DockerLocalContainerScheduler` companion, and the four contract packs now ship together. Operator-side `ServerConfig.DeployPlane = SingleNodeDeployPlane` lights up `IBuildOrchestrator` + `IDeployPipeline` + `ITenantFleet` automatically; `IContainerScheduler` remains consumer-supplied (the reference companion is one valid choice; cloud-specific implementations live in downstream consumer packages — a hosted-platform composition, a self-hosted operator on Docker Swarm, a Kubernetes-based shop).
 
 ## Placement deviation from the phase spec
 
@@ -77,8 +77,5 @@ The substrate is purely additive. Consumers that have not flipped `ServerConfig.
 
 ## See also
 
-- [Phase 26 — Layer 3 Deploy Plane substrate](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/roadmap/phases/26-layer-3-deploy-plane-mvp.md) (forge — substrate scope after the 2026-06-02 carve)
-- [Diametrical Phase 26.C — ToolUp Cloud operation](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/diametrical-roadmap/phases/26-C-toolup-cloud-operation.md) (commercial body composing against this substrate)
-- [Implementation plan](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/application-plans/forge-substrate-26-30a-30d-54-implementation.md) — Track A sub-sequence + risks
-- [Phase 9c Six portability rules](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/roadmap/phases/09c-distributed-task-framework-companion-support.md) (audited by every method on the four interfaces)
-- [Phase 19 — Entity Store substrate](https://github.com/ToolUp-Diametrical/ToolUp-Diametrical/blob/main/roadmap/phases/19-entity-store-substrate.md) (Tenant is registered as a typed entity here)
+- [`docs/platform/portability-rules.md`](../platform/portability-rules.md) — the six portability rules audited by every method on the four substrate interfaces.
+- [`docs/platform/storage.md`](../platform/storage.md) — `IEntityStore` substrate; Tenant is registered as a typed entity through that interface.

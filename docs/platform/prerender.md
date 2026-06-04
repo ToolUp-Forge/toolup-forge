@@ -2,10 +2,10 @@
 
 ToolUp Platform supports two distinct surfaces for indexable, crawlable content:
 
-| Surface | Phase | Use when | First paint | Hydration |
-|---|---|---|---|---|
-| **`IPublicContentApi` SSR** | Phase 38 | Marketing site, docs site, blog — content is markdown-driven, no SPA shell on the page | Server-rendered per request via Giraffe.ViewEngine | None — there is no SPA on the page |
-| **`ClientConfig.PrerenderRoutes`** | Phase 57 | Public-utility app with an SPA shell — home page + landing pages need to be indexable, but the rest of the app stays SPA | Build-time prerender of declared routes (static `dist/*.html`) | React `hydrateRoot` mounts the SPA on top of the prerendered DOM |
+| Surface | Use when | First paint | Hydration |
+|---|---|---|---|
+| **`IPublicContentApi` SSR** (the `ToolUp.PublicRendering` companion) | Marketing site, docs site, blog — content is markdown-driven, no SPA shell on the page | Server-rendered per request via Giraffe.ViewEngine | None — there is no SPA on the page |
+| **`ClientConfig.PrerenderRoutes`** (build-time static prerender) | Public-utility app with an SPA shell — home page + landing pages need to be indexable, but the rest of the app stays SPA | Build-time prerender of declared routes (static `dist/*.html`) | React `hydrateRoot` mounts the SPA on top of the prerendered DOM |
 
 Both surfaces are opt-in. SPA-only deployments (most internal / tenant-shaped apps) stay byte-for-byte unchanged.
 
@@ -17,7 +17,7 @@ This chapter applies to **ads-monetised public-utility deployments** — the pub
 
 > SEO matters more for ad revenue than the ads themselves. A 30% organic-traffic lift from indexable landing pages compounds against the AdSense RPM; lose the SEO floor and the ad-panel optimisation matters very little.
 
-## Phase 57 architecture
+## Build-time prerender architecture
 
 ```
 build time                                         runtime
@@ -101,7 +101,7 @@ The list is opt-in per `ClientConfig` field; an empty list (default) preserves S
 
 ## FAKE seam vs Vite seam
 
-Phase 57 supports two equivalent build-time prerender execution paths. Both produce identical output (same HTML, same marker, same metadata). Pick by deployment convention.
+The prerender substrate supports two equivalent build-time execution paths. Both produce identical output (same HTML, same marker, same metadata). Pick by deployment convention.
 
 ### FAKE seam — `dotnet run -- Prerender`
 
@@ -115,7 +115,7 @@ let config = { BuildConfig.defaults with Port = 5000 }
 let main args =
     init args
     registerTargets config
-    Prerender.registerTarget config prerenderRoutes  // Phase 57 target factory
+    Prerender.registerTarget config prerenderRoutes  // prerender FAKE target factory
     execute args
 ```
 
@@ -191,7 +191,7 @@ After wiring up:
 ## See also
 
 - [`docs/migrations/57-static-prerender.md`](../migrations/57-static-prerender.md) — diff to apply, rollback procedure.
-- [`docs/migrations/38-public-rendering-surface-ipubliccontentapi-ssr.md`](../migrations/) (when added) — the orthogonal full-SSR content-site surface (`IPublicContentApi`). Phase 38 is the right answer for marketing / docs sites with no SPA; Phase 57 is the right answer for SPA-shaped apps that need indexable landing pages.
+- [`docs/migrations/38-public-rendering-surface-ipubliccontentapi-ssr.md`](../migrations/) (when added) — the orthogonal full-SSR content-site surface (`IPublicContentApi`). `IPublicContentApi` is the right answer for marketing / docs sites with no SPA; `PrerenderRoutes` is the right answer for SPA-shaped apps that need indexable landing pages.
 - [`Client/Bootstrap/Hydration.fs`](../../src/ToolUp.Platform.Client/Client/Bootstrap/Hydration.fs) — the hydration-aware bootstrap.
 - [`Client/Bootstrap/MetadataHook.fs`](../../src/ToolUp.Platform.Client/Client/Bootstrap/MetadataHook.fs) — the per-route metadata updater.
 - [`Server/Static/PrerenderedRoutesHandler.fs`](../../src/ToolUp.Platform.Server/Server/Static/PrerenderedRoutesHandler.fs) — the Kestrel handler.

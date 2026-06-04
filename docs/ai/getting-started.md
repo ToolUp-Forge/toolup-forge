@@ -103,8 +103,8 @@ let main _ =
 In the client entry point:
 
 ```fsharp
-open Elmish
-open Elmish.React
+open ToolUp.Elmish
+open ToolUp.Elmish.React
 open ToolUp.Platform
 open ToolUp.AI
 

@@ -107,7 +107,7 @@ Configuration via environment variables (read by the provider at startup):
 
 Pair with `ToolUp.AuthProviders.Oidc.Client` for the browser-side sign-in flow.
 
-#### Wiring `IMetricsSink` (Phase 9e.A)
+#### Wiring `IMetricsSink`
 
 When the deployment registers a real `IMetricsSink` (default-shipped Prometheus sink under `MetricsEndpoint = EnabledMetricsEndpoint`, or the `OtelMetricsSink` companion), construct the auth provider via the metered overloads so the auth pipeline emits `toolup.auth.validate.*` counters tagged `provider=oidc` (or `provider=entra-external-id`) alongside the SDK's other observability metrics:
 
@@ -134,7 +134,7 @@ ServerApp.empty
 |> ...
 ```
 
-The non-metered constructors (`fromConfig` / `fromConfigWith` / `AuthProvider.fromEnv`) remain unchanged and elide emission. Each provider instance binds its own sink in its closure — there is no module-level mutable state. See [`docs/migrations/9e-A-auth-metrics-di.md`](../migrations/9e-A-auth-metrics-di.md) for the full migration shape (Entra mirrors this pattern via `createMetered` / `fromEnvMetered`).
+The non-metered constructors (`fromConfig` / `fromConfigWith` / `AuthProvider.fromEnv`) remain unchanged and elide emission. Each provider instance binds its own sink in its closure — there is no module-level mutable state. See [the auth-metrics DI migration doc](../migrations/9e-A-auth-metrics-di.md) for the full migration shape (Entra mirrors this pattern via `createMetered` / `fromEnvMetered`).
 
 #### Supported JWS algorithms
 
@@ -199,7 +199,7 @@ The sign-in button in the app's header invokes the OIDC flow:
 
 Token refresh: the client checks `exp` on the access token; when within 5 minutes of expiry, calls `{Issuer}/token` with the refresh token. No manual intervention.
 
-#### Client-side `id_token` validation (Phase 3b.A — opt-in)
+#### Client-side `id_token` validation (opt-in)
 
 By default, the callback handler binds the returned `id_token` to *this* sign-in attempt via nonce validation (mandatory; on by default since Cluster B1), then trusts the id_token's signature / `iss` / `aud` / `exp` until the server validates them on the next protected request. Opt in to immediate client-side validation by setting `OidcUIConfig.ValidateIdToken = Some true`:
 
@@ -216,7 +216,7 @@ With this enabled, after the nonce check the callback handler:
 3. Validates `iss` equals `OidcUIConfig.Issuer`, `aud` contains `OidcUIConfig.ClientId`, and `exp` is in the future (60s clock-skew tolerance — mirrors the server-side default).
 4. On any failure: clears local state and returns a typed `AuthError` (`MalformedIdToken` / `IdTokenSignatureInvalid` / `IdTokenIssuerInvalid` / `IdTokenAudienceInvalid` / `IdTokenExpired`).
 
-The pipeline is defence-in-depth — the server's `OidcAuthProvider.ValidateRequest` is the authoritative gate, but failing fast at the callback shortens the time between "issuer issued a bad token" and "user sees a clear error." `ValidateIdToken` defaults to `None` (off) in the 0.3.x line; the default flips to `true` in a coordinated minor bump once consumers have adopted. Algorithm dispatch currently supports RS256 only (the universal OIDC default); wider algorithm support (ES256 / RS384 / RS512 / PS256) lands as an additive follow-on alongside the server-side algorithm-list expansion in Phase 3.A.
+The pipeline is defence-in-depth — the server's `OidcAuthProvider.ValidateRequest` is the authoritative gate, but failing fast at the callback shortens the time between "issuer issued a bad token" and "user sees a clear error." `ValidateIdToken` defaults to `None` (off) in the 0.3.x line; the default flips to `true` in a coordinated minor bump once consumers have adopted. Algorithm dispatch currently supports RS256 only (the universal OIDC default); wider algorithm support (ES256 / RS384 / RS512 / PS256) lands as an additive follow-on alongside the server-side algorithm-list expansion.
 
 See [migration: 3b-A-oidc-id-token-validation](../migrations/3b-A-oidc-id-token-validation.md) for the consumer-side rollout.
 
@@ -353,8 +353,8 @@ open ToolUp.Platform.Auth
 type MyAuthProvider(config: MyAuthConfig) =
     interface IAuthProvider with
         member _.GetUser(ctx: RequestContext) = async {
-            // Phase 11.C.5 Tier 3 — unwrap the opaque `RequestContext`
-            // to the underlying `HttpContext` at one site per impl.
+            // Unwrap the opaque `RequestContext` to the underlying
+            // `HttpContext` at one site per impl.
             let httpCtx = RequestContext.value ctx :?> HttpContext
             let token = httpCtx.Request.Headers.["Authorization"].ToString().Replace("Bearer ", "")
             match validateToken token with
@@ -397,7 +397,7 @@ SSE has its own auth caveat — `EventSource` can't send custom headers, so OIDC
 
 - Real auth provider (not `HeaderAuthProvider`).
 - `ServerConfig.RequireHttps = true`.
-- `ServerConfig.TrustForwardedHeaders = true` (the Phase 16d default — opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0` only on a direct-bind dev shell).
+- `ServerConfig.TrustForwardedHeaders = true` (default; opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0` only on a direct-bind dev shell).
 - `ServerConfig.SecurityHeaders = StrictSecurityHeaders`.
 - `ServerConfig.CorsConfig` — explicit allow-list for browser callers.
 - `TOOLUP_INITIAL_PLATFORM_ADMIN` set for the bootstrap admin user.

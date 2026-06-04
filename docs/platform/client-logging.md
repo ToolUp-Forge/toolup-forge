@@ -64,7 +64,7 @@ Rules:
 
 - **One `log` per file**, not per function. Call sites read `log.Warn "..."` directly, not `let log = ...` re-declared inline.
 - **Immediately after `open`** declarations, before any other module-level binding. Keeps the file's "what category am I writing under?" question answerable from the first ~15 lines.
-- **`let private log`** — the value is internal to the compilation unit. Lowercase `log` is the canonical name (consistent across every SDK-internal call site that adopted the convention in the Phase 65 sweep).
+- **`let private log`** — the value is internal to the compilation unit. Lowercase `log` is the canonical name (consistent across every SDK-internal call site).
 - **No `private` qualifier needed in F# files that have no other module-level lets exposed publicly** — F# module bindings default to public, but `private` is fine and explicit.
 
 ## Injecting a non-default `ILogger`
@@ -89,7 +89,7 @@ This deliberately avoids module-level `mutable` state. The `defaultLogger` value
 
 ## Categories used by the SDK
 
-The Phase 65 sweep established the following file-to-category mapping inside `toolup-forge/src/*.Client/`:
+The SDK uses the following file-to-category mapping inside `toolup-forge/src/*.Client/`:
 
 | Category                  | File                                     |
 |---------------------------|------------------------------------------|

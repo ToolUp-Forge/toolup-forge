@@ -64,7 +64,7 @@ let cfg: ServerConfig = {
 
    on the consumer's server fsproj. The companion fsproj deliberately does NOT declare this — kept host-specific so non-Linux dev environments don't drag in Linux natives.
 
-5. **Browser-side upload.** The Fable.Remoting `IAssetApi` covers metadata + derivative reads. For browser file uploads use the multipart endpoint at `POST /api/assets/upload` (form fields: `file`, `altText`, optional `caption`, optional `profile`):
+5. **Browser-side upload.** The ToolUp.Remoting `IAssetApi` covers metadata + derivative reads. For browser file uploads use the multipart endpoint at `POST /api/assets/upload` (form fields: `file`, `altText`, optional `caption`, optional `profile`):
 
    ```javascript
    const fd = new FormData()
@@ -74,7 +74,7 @@ let cfg: ServerConfig = {
    const response = await fetch("/api/assets/upload", { method: "POST", body: fd })
    ```
 
-   Raw browser file uploads through Fable.Remoting were avoided deliberately — chunked-encoding via `FormData` POST is half the bytes and one less serialization layer.
+   Raw browser file uploads through ToolUp.Remoting were avoided deliberately — chunked-encoding via `FormData` POST is half the bytes and one less serialization layer.
 
 ## Verification
 

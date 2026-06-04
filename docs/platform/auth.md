@@ -95,7 +95,7 @@ The browser companion adds `offline_access` to the default scope set (External I
 
 The SSE auth caveat below applies unchanged to External-ID-issued tokens — the access token still rides in the `Authorization` header on the standard API path, and the SSE handshake follows whichever cookie/query-string fallback the deployment configured.
 
-See [`docs/companions/auth-providers.md`](../companions/auth-providers.md) and the Phase 3d migration [`docs/migrations/3d-entra-external-id-invitations.md`](../migrations/3d-entra-external-id-invitations.md) for the full operator playbook.
+See [`docs/companions/auth-providers.md`](../companions/auth-providers.md) and the [Entra External ID invitations migration](../migrations/3d-entra-external-id-invitations.md) for the full operator playbook.
 
 ### `ToolUp.AuthProviders.ClerkUI` (client-side)
 
@@ -189,7 +189,7 @@ Every event carries the actor's userId, the affected userId (if different), the 
 ## Hardening checklist for production
 
 - `ServerConfig.RequireHttps = true` — registers `app.UseHttpsRedirection()`.
-- `ServerConfig.TrustForwardedHeaders = true` — default-on since Phase 16d. Behind a TLS-terminating proxy this is needed so secure-cookie scoping and `Url.IsAbsoluteUri` see the originating scheme. Direct-bind dev shells with no proxy opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0`.
+- `ServerConfig.TrustForwardedHeaders = true` — default-on. Behind a TLS-terminating proxy this is needed so secure-cookie scoping and `Url.IsAbsoluteUri` see the originating scheme. Direct-bind dev shells with no proxy opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0`.
 - `ServerConfig.SecurityHeaders = StrictSecurityHeaders` — emits CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy.
 - `ServerConfig.RateLimit` — configure a per-team / per-user / per-IP partition with a sensible fixed-window cap. `/health`, `/ready`, and `/api/notifications` are excluded by default.
 - `ServerConfig.CorsConfig` — explicit allow-list for cross-origin browser callers; reject `*` for credentialed requests.

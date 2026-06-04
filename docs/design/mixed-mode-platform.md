@@ -72,7 +72,7 @@ Three companion types live in the same file:
 | Field | Line | Semantics |
 |---|---|---|
 | `Mode: PlatformMode` | 1277 | The deployment-wide mode. Drives every downstream selection. |
-| `AnonymousRoutePrefixes: string list` | 1435 | Path prefixes (case-insensitive `StartsWith`) that bypass `AuthEnforcementMiddleware` and `CsrfMiddleware`. Forms publishable surfaces register here (Phase 21b). Validated at startup. |
+| `AnonymousRoutePrefixes: string list` | 1435 | Path prefixes (case-insensitive `StartsWith`) that bypass `AuthEnforcementMiddleware` and `CsrfMiddleware`. Forms publishable surfaces register here. Validated at startup. |
 | `AcceptShallowAnonymousRoutePrefix: bool` | 1461 | Escape hatch for the prefix validator's refusal of coarse paths (`/`, `/api`, 2-segment prefixes). Default `false`. |
 | `PeerRoutePrefixes: string list` | 1454 | Path prefixes for `PeerBearerAuthMiddleware`. Peer-bearer routes are exempt from user auth; the bearer IS the authentication. Exempt from CSRF. Stamped `HttpContext.Items["PeerName"]`. Default empty. |
 | `AcceptHeaderAuthInAuthenticatedMode: bool` | 1725 | Opt-in to running `HeaderAuthProvider` (client-supplied `X-User-Id`) in auth-requiring Mode. Default `false`; validator refuses startup unless `true`. Intended for mTLS-proxy deployments. |
@@ -170,7 +170,7 @@ The Forms companion ships a complete anonymous-reach-into-authenticated-deployme
 
 **(c) `PeerBearerAuthPrefixes` + `PeerRouteRegistry`.**
 
-[`PeerRouteRegistry`](../../src/ToolUp.Platform.Server/Server/PeerRouteRegistry.fs) is the substrate for inter-deployment federation (Phase 37). `PeerBearerAuthMiddleware` validates a bearer-token-shaped peer credential and stamps `HttpContext.Items["PeerName"]`. The user-auth path is irrelevant for these routes — the peer name IS the identity. Federation-shaped consumers use this for site↔site delegated authority.
+[`PeerRouteRegistry`](../../src/ToolUp.Platform.Server/Server/PeerRouteRegistry.fs) is the substrate for inter-deployment federation. `PeerBearerAuthMiddleware` validates a bearer-token-shaped peer credential and stamps `HttpContext.Items["PeerName"]`. The user-auth path is irrelevant for these routes — the peer name IS the identity. Federation-shaped consumers use this for site↔site delegated authority.
 
 The three primitives are **decoupled**: a deployment can use any combination. They are *not* unified under a single concept; each is a distinct middleware exemption.
 
@@ -991,7 +991,7 @@ ServerApp.empty
 
 The `withAuth` requirement: a deployment with ONLY `Anonymous` in `Surfaces` doesn't need an auth provider — `withAuth` becomes optional. A deployment with any other shape requires it. The composition-root validator catches the omission at startup.
 
-**`fromEnv` helpers.** The Phase 11.G `ServerConfig.fromEnv` helper reads `TOOLUP_PLATFORM_MODE`; the new contract reads `TOOLUP_PLATFORM_SURFACES` (a comma-separated list: `anonymous,individual`, or `team,claim_bearer`, etc.). The old env var name is retired (no aliasing — clean cutover); migration guide carries the substitution. The `referenceApp` defaults in `ServerConfigOverrides` declare `Surfaces = Surfaces.individual` (matching today's behaviour).
+**`fromEnv` helpers.** The existing `ServerConfig.fromEnv` helper reads `TOOLUP_PLATFORM_MODE`; the new contract reads `TOOLUP_PLATFORM_SURFACES` (a comma-separated list: `anonymous,individual`, or `team,claim_bearer`, etc.). The old env var name is retired (no aliasing — clean cutover); migration guide carries the substitution. The `referenceApp` defaults in `ServerConfigOverrides` declare `Surfaces = Surfaces.individual` (matching today's behaviour).
 
 ### 3.5 Permission system integration
 

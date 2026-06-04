@@ -87,5 +87,5 @@ The template's README lists natural next steps (typing indicators, multi-room, m
 - [SAFE Stack get-started](https://safe-stack.github.io/docs/quickstart/) — the canonical SAFE quickstart; SAFER mirrors its shape and many of its idioms.
 - [`templates/platformsdk-solution/`](../../templates/platformsdk-solution/) — the production-multi-tenant scaffold.
 - [`docs/platform/architecture.md`](../platform/architecture.md) — SDK composition-root + `ServerApp` / `ClientConfig` model.
-- [`docs/platform/surfaces.md`](../platform/surfaces.md) — Subject / SurfaceProfile / SurfaceRequirement (Phase 66 model; SAFER's anonymous surface composes against this).
+- [`docs/platform/surfaces.md`](../platform/surfaces.md) — Subject / SurfaceProfile / SurfaceRequirement model; SAFER's anonymous surface composes against this.
 - [`NOTICE.md`](../../NOTICE.md) — upstream credit for the Fable.Remoting (Zaid Ajaj, MIT) and Fable.Elmish (Eugene Tolmachev + community, Apache 2.0) projects ToolUp's transport and runtime were forked from.

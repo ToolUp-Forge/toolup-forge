@@ -247,7 +247,7 @@ The first three (`Ingestion` / `SharedEmbeddingCache` / `StickyRoutedAi`) and th
 
 ## 8. Follow-on phase proposals
 
-One-paragraph proposals ready for `Suggest features forge` → `Accept suggestions forge` adoption. Each preserves GP 11 (backward-compatible defaults) and obeys GP 13 (deployments not setting the env var pay nothing). Numbered `71.x` as a placeholder family; the accept pass renumbers per the roadmap's next-free convention.
+One-paragraph proposals for follow-on phases. Each preserves GP 11 (backward-compatible defaults) and obeys GP 13 (deployments not setting the env var pay nothing). Letter-suffix numbering is a placeholder; the next-free roadmap convention applies when these land.
 
 ### Phase 71.A — Surfaces env-var precedence inversion
 
@@ -299,7 +299,7 @@ Two server-side `string list` fields, both runtime-liftable. Add `TOOLUP_WEBHOOK
 - ✅ Every `ClientConfig` field classified (35 entries).
 - ✅ Surfaces precedence trap rooted (§3.1) with a specific recommendation (§3.2 — option (a)) and implementation shape (§3.3).
 - ✅ Top three liftable fields identified (`Surfaces`, `Port`, `PublicBaseUrl`) with full runtime contracts (§6).
-- ✅ Eleven follow-on phase proposals (71.A–71.K) drafted as one-paragraph entries ready for `Suggest features forge` → `Accept suggestions forge` (§8).
+- ✅ Eleven follow-on phase proposals drafted as one-paragraph entries (§8).
 - ✅ Six existing-source defects flagged with a recommended tidy-up vehicle (§7).
 - ✅ OSS publication-boundary clean — no private-sibling cross-references; no strategic-command names; deployment-archetype framing throughout.
 

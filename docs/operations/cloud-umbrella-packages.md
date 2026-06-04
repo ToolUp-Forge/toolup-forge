@@ -1,6 +1,6 @@
 # Cloud umbrella packages
 
-Phase 16c (2026-06-01) ships three meta-packages that bundle the per-cloud companion set into a single `<PackageReference>`:
+Three meta-packages bundle the per-cloud companion set into a single `<PackageReference>`:
 
 | Umbrella | What it pulls (transitive) |
 |---|---|
@@ -70,7 +70,7 @@ The umbrella sits in the composition-root tier as a packaging convenience, not a
 
 ## OpenTelemetry exporter selection — `TOOLUP_OTEL_EXPORTER` convention
 
-The umbrellas ship the OpenTelemetry **exporter packages** as transitive deps, but they do **not** register OTel in the SDK's composition root. Per [Phase 9y's audit conclusion](../migrations/09y-opentelemetry-default-on.md), OTel default-on was **DROPPED** as it would violate **GP 13** (zero-cost-when-not-used) — listener attachment flips emission hot paths from no-op to live.
+The umbrellas ship the OpenTelemetry **exporter packages** as transitive deps, but they do **not** register OTel in the SDK's composition root. Per the [OTel default-on audit conclusion](../migrations/09y-opentelemetry-default-on.md), default-on was **DROPPED** as it would violate **GP 13** (zero-cost-when-not-used) — listener attachment flips emission hot paths from no-op to live.
 
 Each consumer wires OTel in their `Program.fs` themselves. The `TOOLUP_OTEL_EXPORTER` env var is a recommended **convention** the consumer's startup code can read to switch between exporters at runtime:
 
@@ -155,5 +155,5 @@ The migration is **opt-in and reversible**. The umbrella is purely an ergonomic 
 - [`ToolUp.Cloud.Aws` README](https://github.com/ToolUp-Forge/toolup-forge/tree/main/src/Cloud/Aws/README.md) — AWS / ADOT wiring + exporter notes.
 - [`ToolUp.Cloud.Gcp` README](https://github.com/ToolUp-Forge/toolup-forge/tree/main/src/Cloud/Gcp/README.md) — GCP / Cloud Operations wiring + exporter notes.
 - [`docs/companions/storage-providers.md`](../companions/storage-providers.md) — per-cloud blob-storage companion deep-dive.
-- [`docs/migrations/16c-cloud-umbrella-packages.md`](../migrations/16c-cloud-umbrella-packages.md) — Phase 16c migration guide (consumer adoption).
+- [`docs/migrations/16c-cloud-umbrella-packages.md`](../migrations/16c-cloud-umbrella-packages.md) — umbrella-packages migration guide (consumer adoption).
 - [`docs/migrations/09y-opentelemetry-default-on.md`](../migrations/09y-opentelemetry-default-on.md) — OTel-default-on audit + DROPPED decision rationale.

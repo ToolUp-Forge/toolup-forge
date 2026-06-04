@@ -32,8 +32,5 @@ Revert the gate composition in `ToolUp.Platform.Server/Server/Api.fs` (the `|> i
 
 ## See also
 
-- [Phase 69b — `ToolUp.Remoting.Server` platform seams](../../../ToolUp-Diametrical/roadmap/phases/69b-toolup-remoting-server-platform-seams.md) — the substrate this gate composes on top of.
-- [Phase 69b.tail — Forge `Api.fs` wrapper composition](../../../ToolUp-Diametrical/roadmap/phases/69b-tail-forge-api-wrapper-composition.md) — the wrapper that introduced the default-bridge substitution this phase makes zero-cost.
-- [Phase 9e — `IMetricsSink` substrate](../../../ToolUp-Diametrical/roadmap/phases/09e-imetricssink-substrate.md) — the singleton sink the default bridge reads.
-- Source plan: [`application-plans/toolup-remoting-hot-path-perf.md`](../../../ToolUp-Diametrical/application-plans/toolup-remoting-hot-path-perf.md) (Finding F1).
-- Companion TIDY-UP bundle: [`ToolUp.Remoting per-request cleanups`](../../../ToolUp-Diametrical/roadmap/TIDY-UP.md).
+- [`69b-remoting-platform-seams.md`](69b-remoting-platform-seams.md) — the `ToolUp.Remoting.Server` platform seams substrate this gate composes on top of.
+- [`docs/platform/portability-rules.md`](../platform/portability-rules.md) — `IMetricsSink` is the singleton sink the default bridge reads.

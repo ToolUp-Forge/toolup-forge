@@ -41,11 +41,11 @@ type FieldSchema = {
 }
 
 type FormSchema = {
-    /// Phase 19 reflection contract — entity primary key.
+    /// Entity-store reflection contract — primary key.
     Id: FormSchemaId
-    /// Phase 19 reflection contract — entity type discriminator.
+    /// Entity-store reflection contract — entity-type discriminator.
     Type: string
-    /// Phase 19 reflection contract — overwritten by the store.
+    /// Entity-store reflection contract — overwritten by the store.
     Version: int
     DisplayName: string
     Description: string option
@@ -107,11 +107,11 @@ module SubmissionAuthor =
     val indexValueForToken : tokenId: string -> string
 
 type Submission = {
-    /// Phase 19 reflection contract — server-allocated primary key.
+    /// Entity-store reflection contract — server-allocated primary key.
     Id: SubmissionId
-    /// Phase 19 reflection contract — entity type discriminator.
+    /// Entity-store reflection contract — entity-type discriminator.
     Type: string
-    /// Phase 19 reflection contract — overwritten on each save.
+    /// Entity-store reflection contract — overwritten on each save.
     Version: int
     FormId: FormSchemaId
     /// Schema version at submission time.
@@ -157,11 +157,8 @@ type FormError =
     | Unauthorised
     | InvalidTransition of currentState: string * attemptedEvent: string
     | WorkflowNotFound of workflowId: string
-    /// Phase 21d
     | GuardEvaluationFailed of guard: string * reason: string
-    /// Phase 21d
     | ActionFailed of actionName: string * reason: string
-    /// Phase 21d
     | ActionPendingFromPriorAttempt of submissionId: string * actionName: string
 ```
 
@@ -188,7 +185,7 @@ type WorkflowDefinition = {
     Transitions: Transition list
 }
 
-/// Phase 21d — per-action policy on exception.
+/// Per-action policy on exception (consulted by the action ledger).
 type ActionFailurePolicy =
     | FailSubmission
     | DeadLetter
@@ -282,7 +279,7 @@ type ApplyTransitionRequest = {
     Event: TransitionEvent
 }
 
-/// Phase 21b — IssueTokens recipient (opaque handle).
+/// IssueTokens recipient (opaque handle — third-party survey provider shape).
 type IssueRecipient = {
     Handle: string
     DisplayName: string option
@@ -306,7 +303,7 @@ type IssuedToken = {
     ExpiresAt: DateTimeOffset
 }
 
-/// Phase 21b — DispatchInvitationsByEmail recipient (real email).
+/// DispatchInvitationsByEmail recipient (real email).
 type EmailInvitation = {
     Email: string
     DisplayName: string option
@@ -335,7 +332,7 @@ type DispatchSummary = {
     SuccessCount: int
 }
 
-/// Phase 21b — derived survey lifecycle status.
+/// Derived survey lifecycle status.
 type SurveyStatus =
     | Draft
     | Active
@@ -384,24 +381,24 @@ type IFormApi = {
         ApplyTransitionRequest -> Async<Result<Submission, FormError>>
     ListPossibleTransitions : SubmissionId -> Async<Transition list>
 
-    // Phase 21b — share-link issuance (Owner/Admin)
+    // Publishable surveys — share-link issuance (Owner/Admin)
     IssueTokens :
         IssueTokensRequest -> Async<Result<IssuedToken list, FormError>>
 
-    // Phase 21b — aggregation dashboard (Owner/Admin)
+    // Publishable surveys — aggregation dashboard (Owner/Admin)
     GetAggregations :
         FormSchemaId -> Async<Result<AggregationSummary, FormError>>
 
-    // Phase 21b (slice 6) — optional email-dispatch convenience
+    // Publishable surveys — optional email-dispatch convenience
     DispatchInvitationsByEmail :
         DispatchInvitationsRequest -> Async<Result<DispatchSummary, FormError>>
 
-    // Phase 21b (slice 7) — multi-survey admin
+    // Publishable surveys — multi-survey admin
     ListSchemasOverview : unit -> Async<SurveyOverviewRow list>
     CloseSurvey :
         CloseSurveyRequest -> Async<Result<CloseSurveyResult, FormError>>
 
-    // Phase 21c — analyser-output cache control (Owner/Admin)
+    // Analyser-output cache control (Owner/Admin)
     RebuildAnalyserOutputs : FormSchemaId -> Async<Result<int, FormError>>
 }
 
@@ -411,7 +408,7 @@ val routeBuilder : typeName: string -> methodName: string -> string
 
 ### `IPublicFormApi` (`module ToolUp.Forms.PublicFormApi`)
 
-Phase 21b — anonymous, token-gated public surface. Mounted at `/api/public/forms/<MethodName>`.
+Anonymous, token-gated public surface for publishable surveys. Mounted at `/api/public/forms/<MethodName>`.
 
 ```fsharp
 [<Literal>]
@@ -632,10 +629,8 @@ module FormsServerApp =
     val withAction :
         name: string -> WorkflowAction -> FormsServerApp -> FormsServerApp
 
-    // Phase 21c
     val withAnalyserCache : IAnalyserCache -> FormsServerApp -> FormsServerApp
 
-    // Phase 21d
     val withActionLedger : IActionLedger -> FormsServerApp -> FormsServerApp
     val withActionPolicy :
         actionName: string ->
@@ -751,8 +746,8 @@ Cmd.OfAsync.either (fun req -> FormsClient.proxy.Submit req) request onSuccess o
 - `FormSubmissionUpdated` — submission edited.
 - `WorkflowTransitioned` — workflow state change.
 - `WorkflowActionExecuted` — workflow-action invocation outcome (`succeeded` / `failed` / `skipped_replay` / `skipped_pending`).
-- `ShareTokensIssued` (Phase 21b) — issued via `IssueTokens` or `DispatchInvitationsByEmail`.
-- `SurveyClosed` (Phase 21b slice 7) — `CloseSurvey` invoked.
+- `ShareTokensIssued` — issued via `IssueTokens` or `DispatchInvitationsByEmail`.
+- `SurveyClosed` — `CloseSurvey` invoked.
 
 Each event carries actor (`AuthenticatedUser` or `InvitedRespondent`), schema id, submission id, and a server-side timestamp.
 
@@ -778,7 +773,7 @@ The browser-facing `/r/{token}` route for `PublicEmbed` is owned by the consumer
 `ToolUp.Forms.Tests` ships:
 - `IFormStoreContract` — schema CRUD + submission CRUD + indexed queries.
 - `IWorkflowEngineContract` — transition logic, guard semantics, action firing, audit emission.
-- `IActionLedgerContract` — ledger lifecycle invariants (Phase 21d).
+- `IActionLedgerContract` — ledger lifecycle invariants.
 - `IShareTokenStoreContract` (in `ToolUp.Platform.Tests`) — token issue / validate / use-limit / revoke / scope-isolation / cross-resource-splice rejection.
 
 External implementations bind to the same packs to validate against the conformance bar.

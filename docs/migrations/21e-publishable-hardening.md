@@ -29,7 +29,7 @@ Most production deployments do NOT want this — boot-failure on a missing token
 
 ### 2. Surface `FormError.RateLimited` in your UI
 
-The Fable.Remoting wire contract picks up the new DU case automatically. Client-side `match` statements over `FormError` are no longer exhaustive — add the case:
+The ToolUp.Remoting wire contract picks up the new DU case automatically. Client-side `match` statements over `FormError` are no longer exhaustive — add the case:
 
 ```fsharp
 match err with

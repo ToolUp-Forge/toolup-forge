@@ -115,16 +115,16 @@ Consumers who want a raw OIDC pair (e.g. targeting workforce Entra ID / Azure AD
 
 ### What changes
 
-A `ITeamInviteApi` Fable.Remoting endpoint set + a `/invite/{token}` accept page + an email-keyed pending-invite blob. Together they unlock "Platform-Admin-only team creation + Owner/Admin-issued invitations for the rest" — the operational shape the just-shipped Phase 5f `TeamCreationPolicy = PlatformAdminOnly` default targets.
+A `ITeamInviteApi` ToolUp.Remoting endpoint set + a `/invite/{token}` accept page + an email-keyed pending-invite blob. Together they unlock "Platform-Admin-only team creation + Owner/Admin-issued invitations for the rest" — the operational shape the just-shipped Phase 5f `TeamCreationPolicy = PlatformAdminOnly` default targets.
 
 The substrate composes over the existing `IShareTokenStore` (Phase 21b) — no new persistence layer; tokens live in the same blob layout as publishable Forms surveys, scoped by team.
 
 ### Server-side wiring
 
-`ITeamInviteApi` is constructed per-request via `TeamInvitationHandler.teamInvitationApi`. Wire the route into the existing Fable.Remoting handler block:
+`ITeamInviteApi` is constructed per-request via `TeamInvitationHandler.teamInvitationApi`. Wire the route into the existing ToolUp.Remoting handler block:
 
 ```fsharp
-open Fable.Remoting.Giraffe
+open ToolUp.Remoting.Giraffe
 open ToolUp.Platform.Teams.TeamInvitationHandler
 
 // alongside the existing Remoting.fromContext wirings:

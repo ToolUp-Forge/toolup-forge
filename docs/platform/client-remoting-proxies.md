@@ -1,6 +1,6 @@
 # Client Remoting proxy convention
 
-Every `*.Client` companion in this SDK constructs its ToolUp.Remoting proxy (built via `Remoting.buildProxy` under the preserved `Fable.Remoting.Client` namespace — the in-tree transport keeps the upstream API shape) as a **module-level value**, not as a per-call function. Header freshness — identity, CSRF token, anything else the deployment attaches to outgoing requests — is owned by the **send-time request-guard** the SDK installs at the XHR + fetch seam, not by the proxy's construction-time customiser.
+Every `*.Client` companion in this SDK constructs its ToolUp.Remoting proxy (built via `Remoting.buildProxy` under the `ToolUp.Remoting.Client` namespace — the in-tree transport keeps the upstream Fable.Remoting API shape under the renamed namespace) as a **module-level value**, not as a per-call function. Header freshness — identity, CSRF token, anything else the deployment attaches to outgoing requests — is owned by the **send-time request-guard** the SDK installs at the XHR + fetch seam, not by the proxy's construction-time customiser.
 
 This convention is load-bearing for codebase consistency and contributor onboarding. Read this page before adding a new `*.Client` companion or refactoring an existing one.
 
@@ -26,7 +26,7 @@ No `()` on the binding; no `()` at the call sites; no wrapping parens around `(f
 1. **One construction, faster boot.** `Api.makeProxy` does a small reflection pass over the API interface to build the dispatcher; doing it once per process beats doing it once per call.
 2. **One canonical re-introduction point for any future header-snapshot defect.** If someone ever changes `UserSession.withRequestHeaders` to splice header state, the defect surfaces uniformly at the customiser file — not silently across every per-call site that "looks defensive".
 3. **Reads as a value, not as a thunk.** Calling code says `fooApi.Method args` — the same shape as any other module-level Remoting client. New contributors don't have to grok why one type of API is "called twice" (once to construct, once to invoke).
-4. **Uniform with the rest of the SDK.** The 6 Category-B proxies (`FormsClient`, `AIAssistantUI`, `AISettingsUI`, `AIClientConfig`, `KnowledgeBase/ClientModel`, `KnowledgeBase/PlatformKnowledgeAdminUI`) have always been module-level. Phase 64 converged the rest of `ToolUp.Platform.Client/Client/` to match.
+4. **Uniform with the rest of the SDK.** The Category-B proxies (`FormsClient`, `AIAssistantUI`, `AISettingsUI`, `AIClientConfig`, `KnowledgeBase/ClientModel`, `KnowledgeBase/PlatformKnowledgeAdminUI`) have always been module-level; the rest of `ToolUp.Platform.Client/Client/` has been converged to match.
 
 ## Why this is safe — the send-time seam
 
@@ -35,7 +35,7 @@ Module-level construction is safe because **the customiser is a no-op passthroug
 ```fsharp
 // In ToolUp.Platform.Client/Client/UserSession.fs (line 342):
 
-/// Phase 9j — kept for source compatibility (every `Api.makeProxy
+/// Kept for source compatibility (every `Api.makeProxy
 /// (customOptions = UserSession.withRequestHeaders)` call site). Both
 /// the identity headers AND `X-CSRF-Token` are now attached at *send*
 /// time by the `CsrfClient` request-guard (the single seam, over XHR +
@@ -51,13 +51,13 @@ The request-guard itself is installed by `SDK.Client.fs`'s `installRequestGuard`
 
 So: the proxy's construction-time customiser doesn't matter for header freshness — the work happens at the wire, not in the proxy's options record.
 
-## When per-call would be needed — re-introducing a snapshot customiser is a Phase 9j regression
+## When per-call would be needed — re-introducing a snapshot customiser is a regression
 
-The per-call construction pattern (`let private fooApi () = …`) was the workaround for a pre-Phase-9j defect where `UserSession.withRequestHeaders` spliced live header state into the options record at construction time, freezing whatever was cached at that moment. That defect is gone. The workaround comments still appearing in pre-2026-05 history are descriptive of an architecture that no longer exists.
+The per-call construction pattern (`let private fooApi () = …`) was the workaround for a now-fixed defect where `UserSession.withRequestHeaders` spliced live header state into the options record at construction time, freezing whatever was cached at that moment. That defect is gone. Workaround comments still appearing in pre-2026-05 history are descriptive of an architecture that no longer exists.
 
-**Per-call is correct again only if** a future change re-introduces a header-snapshot customiser. That would itself be a Phase 9j regression worth discussing on its own merits — the right place to relitigate the trade-off is the customiser's PR review, not a defensive scattering across consumer modules. If that change ever lands, update this doc in the same PR and bring the per-call shape back along with the rationale.
+**Per-call is correct again only if** a future change re-introduces a header-snapshot customiser. That would itself be a regression worth discussing on its own merits — the right place to relitigate the trade-off is the customiser's PR review, not a defensive scattering across consumer modules. If that change ever lands, update this doc in the same PR and bring the per-call shape back along with the rationale.
 
-**Don't** add per-call construction "just to be safe" against a hypothetical future change. The Phase 9j docstring at `UserSession.fs:342-351` and this convention doc are the canonical defence against quiet re-introduction. Defensive ceremony scattered across consumer modules is the wrong layer.
+**Don't** add per-call construction "just to be safe" against a hypothetical future change. The docstring on `UserSession.withRequestHeaders` and this convention doc are the canonical defence against quiet re-introduction. Defensive ceremony scattered across consumer modules is the wrong layer.
 
 ## Special case: class-body bindings
 
@@ -72,7 +72,7 @@ type ClientModuleQueryBus(registry: Map<string, Map<string, ModuleQueryHandler>>
     ...
 ```
 
-If a future class-bound proxy author is tempted to write `let remoteApi () : … = …` as a per-call function inside a class body by analogy with the old workaround, the same Phase 9j logic applies: don't.
+If a future class-bound proxy author is tempted to write `let remoteApi () : … = …` as a per-call function inside a class body by analogy with the old workaround, the same logic applies: don't.
 
 ## Authoring checklist for new `*.Client` companions
 

@@ -142,7 +142,7 @@ let approvalGuard
 
 ## Workflow actions
 
-Side-effects fired after a successful transition. Receive `(Submission * AccessContext)`; return `Async<unit>`. The engine wraps every invocation in the Phase 21d `IActionLedger` lifecycle (exactly-once invocation across replays) and applies the per-action `ActionFailurePolicy` registered via `withActionPolicy` to decide what happens on exception. Without an explicit policy the engine defaults to `DeadLetter` — see [concepts.md](concepts.md) "Action ledger and failure policy" for the full table.
+Side-effects fired after a successful transition. Receive `(Submission * AccessContext)`; return `Async<unit>`. The engine wraps every invocation in the `IActionLedger` lifecycle (exactly-once invocation across replays) and applies the per-action `ActionFailurePolicy` registered via `withActionPolicy` to decide what happens on exception. Without an explicit policy the engine defaults to `DeadLetter` — see [concepts.md](concepts.md) "Action ledger and failure policy" for the full table.
 
 ```fsharp
 open ToolUp.Forms.FormSubmission
@@ -220,13 +220,13 @@ let onboardingActions
 
 Or use jobs / events as the multi-effect substrate — fire one action that publishes an event; multiple subscribers handle the event independently.
 
-## Phase 21d — `ActionFailurePolicy` and the action ledger
+## `ActionFailurePolicy` and the action ledger
 
 ### Why this matters
 
-Pre-21d, a workflow action that threw was warn-logged and swallowed. The submission committed; the side effect (email send, webhook fan-out, downstream API) was lost with no metric, no audit, no dead-letter row. Operators only heard about the failure when the customer followed up. Worse, a process restart between state-persist and action-completion re-fired the action on the next `ApplyTransition` — double emails, double payments, double webhook events.
+Pre-ledger, a workflow action that threw was warn-logged and swallowed. The submission committed; the side effect (email send, webhook fan-out, downstream API) was lost with no metric, no audit, no dead-letter row. Operators only heard about the failure when the customer followed up. Worse, a process restart between state-persist and action-completion re-fired the action on the next `ApplyTransition` — double emails, double payments, double webhook events.
 
-Phase 21d introduces two coordinated primitives:
+The action ledger introduces two coordinated primitives:
 
 1. **`IActionLedger`** — exactly-once invocation per `(SubmissionId, transitionId, actionName)`. Survives process restarts when wired to a durable backend.
 2. **`ActionFailurePolicy`** — per-action policy controlling what happens when the action throws.
@@ -421,7 +421,7 @@ The submission API still validates server-side via the schema's `ValidationRule`
 
 ## Submission analysers (extension stub)
 
-`IFormSubmissionAnalyser` is the extension point for richer analysis of submission corpora (sentiment, clustering, key-theme extraction). The default impl ships nothing; consumer companion packages plug in. Phase 21c added `IAnalyserCache` for memoising results across calls — wire via `FormsServerApp.withAnalyserCache` or let the compose step auto-construct a `ResultStoreAnalyserCache` when an `IResultStore` is in DI (Phase 8 substrate).
+`IFormSubmissionAnalyser` is the extension point for richer analysis of submission corpora (sentiment, clustering, key-theme extraction). The default impl ships nothing; consumer companion packages plug in. `IAnalyserCache` memoises results across calls — wire via `FormsServerApp.withAnalyserCache` or let the compose step auto-construct a `ResultStoreAnalyserCache` when an `IResultStore` is in DI.
 
 Skeleton for a custom analyser:
 
@@ -506,7 +506,7 @@ Wire via the SDK's DI registration (replacing the default `FormStore` factory). 
 
 The default `WorkflowEngine` constructor accepts `IFormStore`, `IAuditLog`, `IActionLedger`, `IMetricsSink`, a warn callback, plus the workflows / guards / actions / action-policies maps. Replacing it means mirroring that constructor shape so `FormsServerApp.run` can pass through.
 
-## Phase 21e — `IShareTokenRateLimiter`
+## `IShareTokenRateLimiter`
 
 Per-token rate-limit gate consulted by `IPublicFormApi.SubmitWithToken` before any validation or persistence side-effect. The default implementation (`InMemoryShareTokenRateLimiter`) is single-instance only; multi-replica deployments wire a distributed companion so per-token windows are shared across nodes.
 

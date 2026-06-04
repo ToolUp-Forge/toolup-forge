@@ -2,8 +2,6 @@
 
 ## What changes
 
-Closes Finding F4 from [`application-plans/toolup-remoting-hot-path-perf.md`](../../../ToolUp-Diametrical/application-plans/toolup-remoting-hot-path-perf.md).
-
 `Remoting.fromContextAsync` now matches the build-once / read-per-call semantics its docstring promises. Pre-69n the Giraffe adapter's `fromContextAsync` arm called `buildFromImplementation` on every request, rebuilding the entire dispatcher substrate (TypeShape proxy + six attribute-driven classifier maps + `rmsManager` + compose-time guards) per dispatch. The async resolver itself ran per request as intended, but the substrate cost was paid every time — a load-bearing latent landmine for any consumer adopting the documented pattern at scale.
 
 After 69n:
@@ -17,7 +15,7 @@ After 69n:
 
 **No consumer source change required.** Internal refactor; the public surface (the `Remoting.*` setters + `Api.make` wrapper + `buildHttpHandler`) is unchanged. Consumers pick up the build-once behaviour automatically at the next package upgrade.
 
-**The `SDK-ADOPTION.md` Phase 69b.B row** (`Remoting.fromContextAsync` per-request async resolver) continues to track pinned-consumer adoption. After 69n ships, consumers can adopt `fromContextAsync` without the per-request rebuild cost; the row can flip 🟡 → ✅ in each consumer's adoption PR. This 69n migration doc IS the perf alignment 69b.B always needed.
+Consumers that had been holding off on `fromContextAsync` because of the per-request rebuild cost can now adopt it at any scale; this migration is the perf alignment that pattern always needed.
 
 ## Verification
 
@@ -36,9 +34,7 @@ Revert in this order:
 
 ## See also
 
-- [Phase 69b — `ToolUp.Remoting.Server` platform seams](../../../ToolUp-Diametrical/roadmap/phases/69b-toolup-remoting-server-platform-seams.md) — the substrate this phase hoists.
-- [Phase 69b.B — `Remoting.fromContextAsync` per-request async resolver](../../../ToolUp-Diametrical/roadmap/phases/69b-toolup-remoting-server-platform-seams.md) — the pattern this phase makes safe at scale.
-- [Phase 69l — Telemetry seam zero-cost gate](69l-telemetry-zero-cost-gate.md) — sister perf phase in the same cluster.
-- [Phase 69m — Dispatcher body + arg-parse fastpath](69m-dispatcher-body-and-arg-fastpath.md) — sister perf phase; landed before this one.
-- Source plan: [`application-plans/toolup-remoting-hot-path-perf.md`](../../../ToolUp-Diametrical/application-plans/toolup-remoting-hot-path-perf.md) (Finding F4).
-- AspNetCore middleware adapter `FromContextAsync` refusal at [`Middleware.fs`](../../src/ToolUp.Platform.Server/Server/Remoting/AspNetCore/Middleware.fs) stays in place — that refusal is for Phase 69b–69k parity reasons (not the rebuild cost). Lifting it is a separate question, tracked under the existing AspNetCore-parity tail.
+- [`69b-remoting-platform-seams.md`](69b-remoting-platform-seams.md) — the `ToolUp.Remoting.Server` platform seams this phase hoists, and the `Remoting.fromContextAsync` per-request async resolver this phase makes safe at scale.
+- [`69l-telemetry-zero-cost-gate.md`](69l-telemetry-zero-cost-gate.md) — sister perf phase in the same cluster.
+- [`69m-dispatcher-body-and-arg-fastpath.md`](69m-dispatcher-body-and-arg-fastpath.md) — sister perf phase; landed before this one.
+- AspNetCore middleware adapter `FromContextAsync` refusal at [`Middleware.fs`](../../src/ToolUp.Platform.Server/Server/Remoting/AspNetCore/Middleware.fs) stays in place — that refusal is for adapter-parity reasons (not the rebuild cost). Lifting it is a separate question.

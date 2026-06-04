@@ -159,7 +159,7 @@ With `BYOKMode = AllowUserProviders`:
 
 Deployment defaults: `PlatformOnly` mode uses the platform's `_platform`-scoped key for every user. `AllowUserProviders` falls back to the platform default when the user hasn't configured one.
 
-## Operator config — startup validation env vars (Phase 9m.A)
+## Operator config — startup validation env vars
 
 Two always-on `IConfigValidator`s and one opt-in network probe catch operator typos at startup before the first chat request lands. All three self-skip when their gating env var is unset — zero cost for deployments that don't rely on them.
 

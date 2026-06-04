@@ -107,7 +107,7 @@ The default `InProcessJobScheduler` rejects `Second`-precision job registration 
 
 The six rules are the load-bearing core. These follow from them:
 
-- **No framework-specific serialisation attributes** (`[<Serializable>]`, `[<ProtoContract>]`, Akka `IWithUnboundedStash`, etc.) on any type in a shared `<Compile>` file. Wire format is JSON via `Fable.Remoting.Json.FableJsonConverter` for SDK SSE/persistence paths, vendor-specific for companion sinks.
+- **No framework-specific serialisation attributes** (`[<Serializable>]`, `[<ProtoContract>]`, Akka `IWithUnboundedStash`, etc.) on any type in a shared `<Compile>` file. Wire format for SDK SSE / persistence paths is JSON via `System.Text.Json` with the F# converter set registered through `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()`; companion sinks may use vendor-specific encodings.
 - **No `open Akka.*` / `open Orleans.*`** in any file under `ToolUp.Platform.*`. Distributed implementations live in companion packages (`src/JobScheduler/Akka/`, etc.) — the SDK interface never references a companion's types.
 - **Companion packages exist only at the SDK boundary.** The SDK interface never references a companion's types. Consumers pull both the SDK and the companion; the companion implements an SDK interface.
 
