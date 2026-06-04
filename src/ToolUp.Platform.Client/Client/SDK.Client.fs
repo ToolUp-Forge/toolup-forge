@@ -515,25 +515,56 @@ module Client =
     /// prefetch gate (`ConfigsLoaded` / `FlagsLoaded` after both have
     /// arrived) — both handlers used to do this unconditionally on
     /// every arrival, causing 3× active-module init per cold load.
+    ///
+    /// Skip-when-unchanged guard: a fresh `AuthTokenAcquired` (token
+    /// refresh, silent SSO carry-over) re-fires `bootLoadCommandsFor`
+    /// and the prefetches typically return BYTE-IDENTICAL `ModuleConfigs`
+    /// / `PlatformConfig` / `ResolvedFlags` to what the active module
+    /// has already consumed. In that case the re-init is pure noise —
+    /// the new `Init` would build a context out of the same inputs,
+    /// returning the same model — and the wipe path destroys the
+    /// active module's React subtree (AG Grid lifecycle, focused form
+    /// state, scroll position) for no observable gain. Detect this by
+    /// comparing the outgoing model against the model `prior` to the
+    /// prefetch arrival; skip the re-init when the active module is
+    /// already initialised AND none of the prefetched-data fields
+    /// actually changed. On a true cold load (active module init'd
+    /// against empty seed, prefetch then fills the real values), the
+    /// equality check fails and the re-init proceeds as before.
     let private reinitActiveAfterPrefetch
         (config: ClientConfig)
         (queryBus: IModuleQueryBus)
         (modules: ErasedModule list)
+        (prior: Model)
         (model: Model)
         : Model * Cmd<Msg> =
-        let reset = { model with ModuleStates = Map.empty }
+        let activeModuleAlreadyInit =
+            model.ModuleStates |> Map.containsKey model.ActiveModuleId
 
-        match tryFind modules reset.ActiveModuleId with
-        | Some moduleImpl ->
-            let ctx = buildContext config queryBus reset reset.ActiveModuleId
-            let state, cmd = moduleImpl.Init ctx
+        let configsUnchanged =
+            prior.ModuleConfigs = model.ModuleConfigs
+            && prior.PlatformConfig = model.PlatformConfig
 
-            {
-                reset with
-                    ModuleStates = Map.ofList [ moduleImpl.Definition.Id, state ]
-            },
-            Cmd.map ModuleMsg cmd
-        | None -> reset, Cmd.none
+        let flagsUnchanged = prior.ResolvedFlags = model.ResolvedFlags
+
+        if activeModuleAlreadyInit && configsUnchanged && flagsUnchanged then
+            // No observable change to the active module's context inputs —
+            // skip the destroy / re-init cycle.
+            model, Cmd.none
+        else
+            let reset = { model with ModuleStates = Map.empty }
+
+            match tryFind modules reset.ActiveModuleId with
+            | Some moduleImpl ->
+                let ctx = buildContext config queryBus reset reset.ActiveModuleId
+                let state, cmd = moduleImpl.Init ctx
+
+                {
+                    reset with
+                        ModuleStates = Map.ofList [ moduleImpl.Definition.Id, state ]
+                },
+                Cmd.map ModuleMsg cmd
+            | None -> reset, Cmd.none
 
     /// Aggregate processed data from every module that exposes it.
     /// Pure — callers store the result in `Model.ProcessedData` and the
@@ -784,7 +815,7 @@ module Client =
                 }
 
                 if Prefetch.isComplete updated.FlagsPrefetch then
-                    reinitActiveAfterPrefetch _config queryBus modules updated
+                    reinitActiveAfterPrefetch _config queryBus modules model updated
                 else
                     updated, Cmd.none
 
@@ -797,7 +828,7 @@ module Client =
                 }
 
                 if Prefetch.isComplete updated.ConfigsPrefetch then
-                    reinitActiveAfterPrefetch _config queryBus modules updated
+                    reinitActiveAfterPrefetch _config queryBus modules model updated
                 else
                     updated, Cmd.none
 

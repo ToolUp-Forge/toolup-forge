@@ -77,6 +77,44 @@ let ensureGridModulesRegistered () =
 
 let agGrid: obj = import "AgGridReact" "ag-grid-react"
 
+/// React-memoised wrapper around `AgGridReact`. The Elmish runtime feeds the
+/// grid a fresh props object on every shell re-render (state churn, prefetch
+/// arrivals, parent re-render); without memoisation `AgGridReact` would
+/// internally diff the new props against the prior render, often hitting the
+/// destroy-and-recreate path on prop-shape changes that aren't structurally
+/// meaningful (a closed-over callback reference flipping reference while
+/// pointing at the same logic, a fresh `rowData` array carrying byte-identical
+/// rows, a re-created `columnDefs` literal). The same problem hit `AgChart`
+/// and was resolved by the `MemoizedChart` pattern; this is the AG Grid twin.
+///
+/// Discriminates props by `JS.JSON.stringify`. That gives us reference
+/// stability when the data side of props is unchanged, at the cost of a
+/// known limitation: function-typed props (cellRenderer / valueFormatter /
+/// onCellClicked closures) are omitted by JSON serialisation, so a render
+/// whose ONLY change is a different callback closure will be deduplicated
+/// and the grid will keep the prior callbacks. In practice the data side of
+/// props changes alongside callback closures (an MVU state transition mints
+/// new rowData / configs at the same time it mints new closures), so this
+/// rarely surfaces; if a consumer hits a stale-callback bug, the escape
+/// hatch is to thread the changing state into a non-function prop (e.g.
+/// inject a token into `context` or `rowData`).
+///
+/// Must NOT be `private` — `AgGrid.grid` is a `static member inline` on an
+/// `[<Erase>]` type, so Fable inlines the call site and imports
+/// `MemoizedGrid` directly from consumer modules. The same rule that gates
+/// `MemoizedChart` (see forge `CLAUDE.md` "Build verification") applies.
+[<ReactComponent>]
+let MemoizedGrid (reactProps: obj) =
+    let prevJsonRef = React.useRef ""
+    let stableRef = React.useRef reactProps
+    let json = JS.JSON.stringify reactProps
+
+    if json <> prevJsonRef.current then
+        prevJsonRef.current <- json
+        stableRef.current <- reactProps
+
+    ReactLegacy.createElement (unbox<ReactElement> agGrid, stableRef.current)
+
 /// See https://www.ag-grid.com/react-data-grid/row-object/.
 [<Erase>]
 type IRowNode<'row> = {
@@ -136,6 +174,14 @@ type IGridApi<'row> =
     /// "bottom" or null. The position arg is `obj` here so callers
     /// can pass a string or null.
     abstract ensureNodeVisible: IRowNode<'row> -> obj -> unit
+    /// AG Grid v31+ — returns `true` once the grid has been destroyed
+    /// (React unmount, deliberate `destroy()` call, etc.). Per the
+    /// AG Grid lifecycle docs (warning #26), every API method called
+    /// after destroy logs a console warning and returns `undefined`;
+    /// callers that may run on a deferred callback (e.g. inside a
+    /// `setTimeout` scheduled from `onGridReady`) must gate on this
+    /// before touching any other API method.
+    abstract isDestroyed: unit -> bool
 
 // ─── Grid API registry (Phase 6g.C) ─────────────────────────────
 //
@@ -701,16 +747,20 @@ type AgGrid<'row> =
                     AutoSizeGroupColumns =
                         fun () ->
                             // Runs the column autoSize in a 0ms timeout so that the cellRenderer cells render before
-                            // the grid calculates how large each cell is
+                            // the grid calculates how large each cell is. Same destroy-window
+                            // hazard as `AutoSizeAllColumns` above: gate on `isDestroyed()` so
+                            // warning #26 doesn't fire when the grid was torn down between the
+                            // user's column-group toggle and the deferred autoSize call.
                             JS.setTimeout
                                 (fun () ->
-                                    let colIds =
-                                        ev?columnGroups
-                                        |> Seq.head
-                                        |> fun cg -> cg?children
-                                        |> Array.map (fun x -> x?colId)
+                                    if not (ev?api?isDestroyed ()) then
+                                        let colIds =
+                                            ev?columnGroups
+                                            |> Seq.head
+                                            |> fun cg -> cg?children
+                                            |> Array.map (fun x -> x?colId)
 
-                                    ev?api?autoSizeColumns colIds)
+                                        ev?api?autoSizeColumns colIds)
                                 0
                             |> ignore
                 |}
@@ -734,15 +784,18 @@ type AgGrid<'row> =
                         fun () ->
                             // Runs the column autoSize in a 0ms timeout so the cellRenderer
                             // cells render before the grid measures them. An Elmish re-render
-                            // can destroy the grid before the timeout fires; AG Grid v35 then
-                            // returns undefined from getColumns() (logging warning #26), so
-                            // guard the deferred map against a null/undefined column set.
+                            // (commonly the post-auth `Prefetch.onAllReady` active-module
+                            // re-init) can destroy the grid before the timeout fires; AG Grid
+                            // v31+ exposes `isDestroyed()` for exactly this case and warns
+                            // (#26) on every API call past destroy. Gate the whole block on
+                            // it so the warning never fires and we don't touch a dead api.
                             JS.setTimeout
                                 (fun () ->
-                                    let cols = ev.api.getColumns ()
+                                    if not (ev.api.isDestroyed ()) then
+                                        let cols = ev.api.getColumns ()
 
-                                    if not (isNull (box cols)) then
-                                        cols |> Array.map _.getColId() |> ev.api.autoSizeColumns)
+                                        if not (isNull (box cols)) then
+                                            cols |> Array.map _.getColId() |> ev.api.autoSizeColumns)
                                 0
                             |> ignore
                     Export = fun () -> ev.api.exportDataAsCsv (obj ())
@@ -797,4 +850,4 @@ type AgGrid<'row> =
 
     static member inline grid(props: IAgGridProp<'row> seq) =
         ensureGridModulesRegistered ()
-        ReactLegacy.createElement (unbox<ReactElement> agGrid, createObj !!props)
+        MemoizedGrid(createObj !!props)
