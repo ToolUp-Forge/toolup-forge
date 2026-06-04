@@ -26,14 +26,14 @@ let private withClient (test: HttpClient -> unit) : unit =
 
 let private withTelemetryClient (test: RecordingTelemetry -> HttpClient -> unit) : unit =
     let sink = RecordingTelemetry.create ()
-    use host = buildHost (Some (sink :> IRemotingTelemetry)) None
+    use host = buildHost (Some(sink :> IRemotingTelemetry)) None
     host.Start()
     use client = host.GetTestClient()
     test sink client
 
 let private withAuditClient (test: RecordingAuditEmitter -> HttpClient -> unit) : unit =
     let emitter = RecordingAuditEmitter.create ()
-    use host = buildHost None (Some (emitter :> IAuditEmitter))
+    use host = buildHost None (Some(emitter :> IAuditEmitter))
     host.Start()
     use client = host.GetTestClient()
     test emitter client
@@ -169,11 +169,11 @@ let tests =
                 Expect.equal events.Length 1 "One telemetry event expected for the failing call"
                 let evt = events.[0]
                 Expect.equal evt.MethodName "Boom" "MethodName captured even on failure"
+
                 match evt.Outcome with
                 | MethodOutcome.Failed ex ->
                     Expect.stringContains ex.Message "fuse-blown" "Exception carries the original reason"
-                | MethodOutcome.Succeeded ->
-                    failtest "Expected Failed outcome, got Succeeded"
+                | MethodOutcome.Succeeded -> failtest "Expected Failed outcome, got Succeeded"
 
         // ---- Phase 69b.D coverage: correlation-id ambient propagation ----
 
@@ -193,7 +193,9 @@ let tests =
                 let echoed =
                     if response.Headers.Contains("x-correlation-id") then
                         response.Headers.GetValues("x-correlation-id") |> Seq.head
-                    else "<missing>"
+                    else
+                        "<missing>"
+
                 Expect.equal echoed "abc-123-xyz" "Server stamps correlation id back on response header"
 
         testCase "WhereAreWe: missing x-correlation-id gets a generated GUID + response header"
@@ -209,12 +211,17 @@ let tests =
                 // Body is the generated GUID, quoted as a JSON string.
                 Expect.isGreaterThan body.Length 20 "Generated correlation id should be a non-trivial GUID string"
                 Expect.notEqual body "\"<absent>\"" "Dispatcher generates a correlation id when header absent"
+
                 let echoed =
                     if response.Headers.Contains("x-correlation-id") then
                         response.Headers.GetValues("x-correlation-id") |> Seq.head
-                    else "<missing>"
+                    else
+                        "<missing>"
                 // The echoed header should match the body value (sans JSON quotes).
-                Expect.equal ("\"" + echoed + "\"") body "Generated correlation id is consistent between body and response header"
+                Expect.equal
+                    ("\"" + echoed + "\"")
+                    body
+                    "Generated correlation id is consistent between body and response header"
 
         // ---- Phase 69d coverage: authorisation metadata ----
 
@@ -332,8 +339,7 @@ let tests =
                 req.Headers.Add("x-remoting-proxy", "true")
                 let response = client.SendAsync(req).Result
                 Expect.equal response.StatusCode HttpStatusCode.OK "200 expected"
-                let contentType =
-                    response.Content.Headers.ContentType.MediaType
+                let contentType = response.Content.Headers.ContentType.MediaType
                 Expect.equal contentType "text/event-stream" "Content-Type signals SSE"
 
         testCase "Streaming: emits chunk events + terminal complete event in order"
@@ -362,10 +368,12 @@ let tests =
         <| fun _ ->
             // Hand-rolled IGeneratedDispatchTable<HttpContext, IJobReportApi>.
             // In production the source-generator emits this from the API record.
-            let table : IGeneratedDispatchTable<HttpContext, IJobReportApi> =
+            let table: IGeneratedDispatchTable<HttpContext, IJobReportApi> =
                 { new IGeneratedDispatchTable<HttpContext, IJobReportApi> with
                     member _.ApiType = typeof<IJobReportApi>
-                    member _.RouteHandlers () = [] }
+                    member _.RouteHandlers() = []
+                }
+
             GeneratedDispatchRegistry.register<IJobReportApi> (box table)
             let resolved = GeneratedDispatchRegistry.tryGet<IJobReportApi> ()
             Expect.isTrue resolved.IsSome "Generated table resolves after registration"
@@ -404,13 +412,19 @@ let tests =
                 let mutable status = ""
                 let mutable attempts = 0
                 let pollBody = sprintf "[%s]" startBody
+
                 while not (status.Contains "Succeeded") && attempts < 30 do
                     System.Threading.Thread.Sleep 50
                     let response = postRemoting client "/api/IJobReportApi/GetReportStatus" pollBody
                     Expect.equal response.StatusCode HttpStatusCode.OK "Poll OK"
                     status <- readBody response
                     attempts <- attempts + 1
-                Expect.stringContains status "Succeeded" (sprintf "Status reached Succeeded within %d polls — last: %s" attempts status)
+
+                Expect.stringContains
+                    status
+                    "Succeeded"
+                    (sprintf "Status reached Succeeded within %d polls — last: %s" attempts status)
+
                 Expect.stringContains status "report-of-size-42" "Result payload preserved typed"
 
         testCase "JobHandle: unknown handle returns Failed status (not 500)"
@@ -435,7 +449,11 @@ let tests =
                 let response = postRemoting client "/api/IValidatedApi/CreateUser" body
                 Expect.equal response.StatusCode HttpStatusCode.OK "200 expected on valid input"
                 let respBody = readBody response
-                Expect.stringContains respBody "created:Andrew/42/andrew@example.com" "Handler executed with deserialised record"
+
+                Expect.stringContains
+                    respBody
+                    "created:Andrew/42/andrew@example.com"
+                    "Handler executed with deserialised record"
 
         testCase "Validation: short Name fails MinLength + NotEmpty hits, returns 400 + categorised Validation envelope"
         <| fun _ ->
@@ -540,6 +558,7 @@ let tests =
                 // — the handler's response embeds an incrementing call counter,
                 // so a real re-invocation produces a DIFFERENT body string.
                 let subject = "user-idem-replay-" + System.Guid.NewGuid().ToString("N")
+
                 let postWithKey key =
                     let r = new HttpRequestMessage(HttpMethod.Post, "/api/IIdempotentApi/Charge")
                     r.Content <- new StringContent("[42]", Encoding.UTF8, "application/json")
@@ -547,6 +566,7 @@ let tests =
                     r.Headers.Add("X-Subject", (subject: string))
                     r.Headers.Add("X-Idempotency-Key", (key: string))
                     client.SendAsync(r).Result
+
                 let first = postWithKey "key-stable-1"
                 Expect.equal first.StatusCode HttpStatusCode.OK "First call OK"
                 let body1 = readBody first
@@ -555,7 +575,11 @@ let tests =
                 Expect.equal second.StatusCode HttpStatusCode.OK "Replay returns 200"
                 let body2 = readBody second
                 Expect.equal body2 body1 "Replay returns byte-identical body — handler NOT re-invoked"
-                Expect.isTrue (second.Headers.Contains "x-idempotency-replay") "Replay marker header present on cache hit"
+
+                Expect.isTrue
+                    (second.Headers.Contains "x-idempotency-replay")
+                    "Replay marker header present on cache hit"
+
                 Expect.isFalse (first.Headers.Contains "x-idempotency-replay") "First call has no replay header"
 
         testCase "Idempotency: different X-Subject with same key is a different cache slot (security)"
@@ -573,13 +597,24 @@ let tests =
                 // cache slots. The handler returns a per-call body, so different
                 // bodies confirm independent handler runs (not a shared replay).
                 let sharedKey = "shared-key-" + System.Guid.NewGuid().ToString("N")
-                let alice = postAs ("alice-security-" + System.Guid.NewGuid().ToString("N")) sharedKey
+
+                let alice =
+                    postAs ("alice-security-" + System.Guid.NewGuid().ToString("N")) sharedKey
+
                 let bob = postAs ("bob-security-" + System.Guid.NewGuid().ToString("N")) sharedKey
                 Expect.equal alice.StatusCode HttpStatusCode.OK "Alice OK"
                 Expect.equal bob.StatusCode HttpStatusCode.OK "Bob OK"
-                Expect.notEqual (readBody alice) (readBody bob) "Different cache slots → different bodies (handler ran twice)"
+
+                Expect.notEqual
+                    (readBody alice)
+                    (readBody bob)
+                    "Different cache slots → different bodies (handler ran twice)"
+
                 Expect.isFalse (alice.Headers.Contains "x-idempotency-replay") "Alice's first call is no replay"
-                Expect.isFalse (bob.Headers.Contains "x-idempotency-replay") "Bob's first call is no replay (different subject)"
+
+                Expect.isFalse
+                    (bob.Headers.Contains "x-idempotency-replay")
+                    "Bob's first call is no replay (different subject)"
 
         testCase "Idempotency: method without [<Idempotent>] ignores X-Idempotency-Key"
         <| fun _ ->
@@ -593,7 +628,10 @@ let tests =
                 r.Headers.Add("X-Idempotency-Key", "unused-but-present")
                 let response = client.SendAsync(r).Result
                 Expect.equal response.StatusCode HttpStatusCode.OK "Non-idempotent method ignores the header entirely"
-                Expect.isFalse (response.Headers.Contains "x-idempotency-replay") "No replay header on non-idempotent path"
+
+                Expect.isFalse
+                    (response.Headers.Contains "x-idempotency-replay")
+                    "No replay header on non-idempotent path"
 
         // ---- Phase 69g coverage: rate-limit attribution ----
 
@@ -675,7 +713,9 @@ let tests =
         <| fun _ ->
             withClient
             <| fun client ->
-                let response = postRemoting client "/api/IHarnessApi/BoomCategorised" "[\"bad-input\"]"
+                let response =
+                    postRemoting client "/api/IHarnessApi/BoomCategorised" "[\"bad-input\"]"
+
                 Expect.equal response.StatusCode HttpStatusCode.InternalServerError "500 expected"
                 let body = readBody response
                 Expect.stringContains body "\"category\":\"user\"" "Categorised envelope carries category field"
@@ -689,7 +729,11 @@ let tests =
                 let response = postRemoting client "/api/IHarnessApi/Boom" "[\"old-style\"]"
                 Expect.equal response.StatusCode HttpStatusCode.InternalServerError "500 expected"
                 let body = readBody response
-                Expect.isFalse (body.Contains "\"category\"") "Legacy Propagate path emits no category field — backwards-compatible wire shape"
+
+                Expect.isFalse
+                    (body.Contains "\"category\"")
+                    "Legacy Propagate path emits no category field — backwards-compatible wire shape"
+
                 Expect.stringContains body "old-style" "Original reason preserved"
 
         testCase "Telemetry: MethodTelemetry includes the correlation id from the request"
@@ -731,6 +775,7 @@ let tests =
                     req.Headers.Add("X-Subject", (subject: string))
                     let response = client.SendAsync(req).Result
                     readBody response
+
                 let first = callWith "alice"
                 let second = callWith "bob"
                 Expect.equal first "\"alice\"" "First request resolves Alice"

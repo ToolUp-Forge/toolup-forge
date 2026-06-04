@@ -130,46 +130,44 @@ type InMemoryJobDispatcher(?maxJobs: int) =
             )
 
     interface IJobDispatcher with
-        member _.Enqueue<'T>(work: Async<'T>) : Async<JobHandle<'T>> =
-            async {
-                evictOldestIfFull ()
-                let jobId = Guid.NewGuid().ToString("N")
-                statuses[jobId] <- box (JobStatus<'T>.Queued)
-                order.Enqueue jobId
+        member _.Enqueue<'T>(work: Async<'T>) : Async<JobHandle<'T>> = async {
+            evictOldestIfFull ()
+            let jobId = Guid.NewGuid().ToString("N")
+            statuses[jobId] <- box (JobStatus<'T>.Queued)
+            order.Enqueue jobId
 
-                // Background runner. Updates status to Running on
-                // start, then Succeeded / Failed on completion. The
-                // intermediate `Running` arm is a one-shot transition
-                // — v0 doesn't track progress; consumers wanting
-                // progress wire their own dispatcher.
-                Async.Start(
-                    async {
-                        statuses[jobId] <- box (JobStatus<'T>.Running 0.0)
+            // Background runner. Updates status to Running on
+            // start, then Succeeded / Failed on completion. The
+            // intermediate `Running` arm is a one-shot transition
+            // — v0 doesn't track progress; consumers wanting
+            // progress wire their own dispatcher.
+            Async.Start(
+                async {
+                    statuses[jobId] <- box (JobStatus<'T>.Running 0.0)
 
-                        try
-                            let! result = work
-                            statuses[jobId] <- box (JobStatus<'T>.Succeeded result)
-                        with ex ->
-                            statuses[jobId] <- box (JobStatus<'T>.Failed ex.Message)
-                    }
-                )
+                    try
+                        let! result = work
+                        statuses[jobId] <- box (JobStatus<'T>.Succeeded result)
+                    with ex ->
+                        statuses[jobId] <- box (JobStatus<'T>.Failed ex.Message)
+                }
+            )
 
-                return JobHandle jobId
-            }
+            return JobHandle jobId
+        }
 
-        member _.GetStatus<'T>(handle: JobHandle<'T>) : Async<JobStatus<'T>> =
-            async {
-                let (JobHandle jobId) = handle
+        member _.GetStatus<'T>(handle: JobHandle<'T>) : Async<JobStatus<'T>> = async {
+            let (JobHandle jobId) = handle
 
-                match statuses.TryGetValue jobId with
-                | true, status ->
-                    // Type-erased unbox: relies on the caller using
-                    // the matching JobHandle<'T>. Safe because the
-                    // handle was created from the same Enqueue<'T>
-                    // call.
-                    return (status :?> JobStatus<'T>)
-                | false, _ -> return JobStatus<'T>.Failed "job-not-found"
-            }
+            match statuses.TryGetValue jobId with
+            | true, status ->
+                // Type-erased unbox: relies on the caller using
+                // the matching JobHandle<'T>. Safe because the
+                // handle was created from the same Enqueue<'T>
+                // call.
+                return (status :?> JobStatus<'T>)
+            | false, _ -> return JobStatus<'T>.Failed "job-not-found"
+        }
 
     /// Diagnostics: current tracked-job count for telemetry / health.
     member _.JobCount = statuses.Count

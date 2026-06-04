@@ -65,4 +65,5 @@ module CallContext =
         correlationIdLocal.Value <- value
 
         { new System.IDisposable with
-            member _.Dispose() = correlationIdLocal.Value <- priorValue }
+            member _.Dispose() = correlationIdLocal.Value <- priorValue
+        }

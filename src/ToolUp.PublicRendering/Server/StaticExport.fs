@@ -145,9 +145,7 @@ module StaticExport =
                         File.WriteAllText(full, html)
                         rendered <- rendered + 1
                     | None ->
-                        logger.Warn(
-                            sprintf "StaticExport: no layout registered for page '%s'" (Slug.value page.Slug)
-                        )
+                        logger.Warn(sprintf "StaticExport: no layout registered for page '%s'" (Slug.value page.Slug))
 
                         skipped <- skipped + 1
 

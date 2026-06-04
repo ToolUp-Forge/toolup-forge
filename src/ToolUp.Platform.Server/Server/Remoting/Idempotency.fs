@@ -86,30 +86,28 @@ type InMemoryIdempotencyStore(?maxEntries: int) =
                     entries.Clear()
 
     interface IIdempotencyStore with
-        member _.TryGet(key, scope) =
-            async {
-                let now = DateTimeOffset.UtcNow
-                let composite = compositeKey scope key
+        member _.TryGet(key, scope) = async {
+            let now = DateTimeOffset.UtcNow
+            let composite = compositeKey scope key
 
-                match entries.TryGetValue composite with
-                | true, struct (expiry, response) ->
-                    if now < expiry then
-                        return Some response
-                    else
-                        // Lazy eviction.
-                        entries.TryRemove composite |> ignore
-                        return None
-                | false, _ -> return None
-            }
+            match entries.TryGetValue composite with
+            | true, struct (expiry, response) ->
+                if now < expiry then
+                    return Some response
+                else
+                    // Lazy eviction.
+                    entries.TryRemove composite |> ignore
+                    return None
+            | false, _ -> return None
+        }
 
-        member _.Store(key, scope, response, ttl) =
-            async {
-                evictOldestIfFull ()
-                let expiry = DateTimeOffset.UtcNow + ttl
-                let composite = compositeKey scope key
-                entries[composite] <- struct (expiry, response)
-                order.Enqueue composite
-            }
+        member _.Store(key, scope, response, ttl) = async {
+            evictOldestIfFull ()
+            let expiry = DateTimeOffset.UtcNow + ttl
+            let composite = compositeKey scope key
+            entries[composite] <- struct (expiry, response)
+            order.Enqueue composite
+        }
 
     /// Diagnostics: current entry count, for telemetry / health checks.
     member _.Count = entries.Count

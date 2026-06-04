@@ -34,7 +34,9 @@ open System.Threading.Tasks
 /// `IGeneratedDispatchTable<'TImpl>` implementation per attributed record.
 /// Without the attribute, no table is emitted and the runtime falls back
 /// to reflection.
-[<AttributeUsage(AttributeTargets.Interface ||| AttributeTargets.Class ||| AttributeTargets.Struct)>]
+[<AttributeUsage(AttributeTargets.Interface
+                 ||| AttributeTargets.Class
+                 ||| AttributeTargets.Struct)>]
 type DispatcherTargetAttribute() =
     inherit Attribute()
 
@@ -55,9 +57,8 @@ type DispatcherTargetAttribute() =
 /// HTTP-agnostic shape and lets adapters compose without dragging
 /// ASP.NET Core into `ToolUp.Remoting.Server`.
 type IGeneratedDispatchTable<'TContext, 'TImpl> =
-    abstract ApiType : Type
-    abstract RouteHandlers :
-        unit -> (string * ('TContext -> 'TImpl -> Task)) list
+    abstract ApiType: Type
+    abstract RouteHandlers: unit -> (string * ('TContext -> 'TImpl -> Task)) list
 
 /// Phase 69k — process-wide registry of generated dispatch tables.
 /// Consumers (or the generator's emitted `[<ModuleInitializer>]`) call
@@ -70,8 +71,7 @@ type IGeneratedDispatchTable<'TContext, 'TImpl> =
 /// scenarios).
 module GeneratedDispatchRegistry =
 
-    let private tables =
-        System.Collections.Concurrent.ConcurrentDictionary<Type, obj>()
+    let private tables = System.Collections.Concurrent.ConcurrentDictionary<Type, obj>()
 
     /// Register a generated dispatch table for `'TImpl`. The runtime
     /// looks up by `typeof<'TImpl>` so the generator emits one
@@ -79,8 +79,7 @@ module GeneratedDispatchRegistry =
     /// Register a generated dispatch table for `'TImpl`. The runtime
     /// stores the boxed table; callers casting via `tryGet<'TContext, 'TImpl>`
     /// recover the typed form.
-    let register<'TImpl> (table: obj) : unit =
-        tables[typeof<'TImpl>] <- table
+    let register<'TImpl> (table: obj) : unit = tables[typeof<'TImpl>] <- table
 
     /// Try to resolve the generated dispatch table for `'TImpl`. Returns
     /// the boxed table — callers cast to their adapter's context type.
@@ -92,8 +91,7 @@ module GeneratedDispatchRegistry =
 
     /// True if a generated table is registered for `'TImpl`. The Giraffe
     /// adapter uses this at `buildHttpHandler` to log / branch.
-    let isRegistered<'TImpl> () : bool =
-        tables.ContainsKey(typeof<'TImpl>)
+    let isRegistered<'TImpl> () : bool = tables.ContainsKey(typeof<'TImpl>)
 
     /// Test-only: clear all registrations. Production code never calls
     /// this — registrations are once-per-process at startup.

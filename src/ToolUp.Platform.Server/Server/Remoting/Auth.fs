@@ -28,7 +28,7 @@ type RequiresRoleAttribute(role: string) =
 type RequiresClaimAttribute(claim: string) =
     inherit Attribute()
     member _.Claim = claim
-    member val Value : string = null with get, set
+    member val Value: string = null with get, set
 
 /// Caller must have a tenant context resolved. Use this to gate a method
 /// against tenant-bound subjects (Phase 66's `Subject.Tenant`).
@@ -82,11 +82,15 @@ module internal AuthClassifier =
             Map.empty
         else
             let fields = FSharpType.GetRecordFields apiType
+
             fields
             |> Array.map (fun pi ->
-                let attrs = pi.GetCustomAttributes(true) |> Array.choose (fun a -> a :?> Attribute |> Some)
+                let attrs =
+                    pi.GetCustomAttributes(true) |> Array.choose (fun a -> a :?> Attribute |> Some)
+
                 let hasPublic = attrs |> Array.exists (fun a -> a :? PublicEndpointAttribute)
                 let hasAnon = attrs |> Array.exists (fun a -> a :? AllowAnonymousAttribute)
+
                 let authAttrs =
                     attrs
                     |> Array.filter (fun a ->
@@ -94,11 +98,17 @@ module internal AuthClassifier =
                         || a :? RequiresClaimAttribute
                         || a :? TenantScopedAttribute)
                     |> Array.toList
+
                 let cls =
-                    if hasPublic then Public
-                    elif hasAnon then Anonymous
-                    elif not (List.isEmpty authAttrs) then RequiresAuth authAttrs
-                    else Unclassified
+                    if hasPublic then
+                        Public
+                    elif hasAnon then
+                        Anonymous
+                    elif not (List.isEmpty authAttrs) then
+                        RequiresAuth authAttrs
+                    else
+                        Unclassified
+
                 pi.Name, cls)
             |> Map.ofArray
 
@@ -119,14 +129,12 @@ module internal AuthClassifier =
                 apiTypeName
                 methods.Length
                 (String.concat "; " methods)
+
         invalidOp msg
 
     /// Evaluate a method's classification against an auth context. The
     /// dispatcher calls this on every successful endpoint lookup.
-    let evaluate
-        (classification: MethodClassification)
-        (context: IAuthContext option)
-        : AuthDecision =
+    let evaluate (classification: MethodClassification) (context: IAuthContext option) : AuthDecision =
         match classification with
         | Public -> Allow
         | Anonymous ->
@@ -144,7 +152,7 @@ module internal AuthClassifier =
                 // requires one. Fail-closed.
                 Deny "no-auth-context-resolver"
             | Some ctx ->
-                if ctx.IsAnonymous () then
+                if ctx.IsAnonymous() then
                     Deny "anonymous-not-permitted"
                 else
                     let denials =
@@ -152,15 +160,21 @@ module internal AuthClassifier =
                         |> List.choose (fun a ->
                             match a with
                             | :? RequiresRoleAttribute as r ->
-                                if ctx.HasRole r.Role then None
-                                else Some (sprintf "missing-role: %s" r.Role)
+                                if ctx.HasRole r.Role then
+                                    None
+                                else
+                                    Some(sprintf "missing-role: %s" r.Role)
                             | :? RequiresClaimAttribute as c ->
                                 let v = if isNull c.Value then None else Some c.Value
-                                if ctx.HasClaim (c.Claim, v) then None
-                                else Some (sprintf "missing-claim: %s" c.Claim)
-                            | :? TenantScopedAttribute ->
-                                if ctx.HasTenant () then None
-                                else Some "missing-tenant"
+
+                                if ctx.HasClaim(c.Claim, v) then
+                                    None
+                                else
+                                    Some(sprintf "missing-claim: %s" c.Claim)
+                            | :? TenantScopedAttribute -> if ctx.HasTenant() then None else Some "missing-tenant"
                             | _ -> None)
-                    if List.isEmpty denials then Allow
-                    else Deny (String.concat "; " denials)
+
+                    if List.isEmpty denials then
+                        Allow
+                    else
+                        Deny(String.concat "; " denials)

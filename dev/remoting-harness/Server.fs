@@ -51,6 +51,7 @@ let private errorHandler (ex: exn) (routeInfo: RouteInfo<HttpContext>) : ErrorRe
 type RecordingTelemetry() =
     let events = System.Collections.Concurrent.ConcurrentBag<MethodTelemetry>()
     member _.Events = events |> Seq.toList
+
     interface IRemotingTelemetry with
         member _.OnMethodCompleted t = events.Add t
 
@@ -68,6 +69,7 @@ let private buildHarnessApi (telemetry: IRemotingTelemetry option) (api: HttpCon
         match telemetry with
         | Some sink -> Remoting.withTelemetry sink options
         | None -> options
+
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromContext api
@@ -81,15 +83,15 @@ let private buildHarnessApi (telemetry: IRemotingTelemetry option) (api: HttpCon
 // (not snapshotted at composition time), so per-request inputs feed into
 // the API impl without each handler having to re-read them.
 
-let private resolveSubject (ctx: HttpContext) : Async<string> =
-    async {
-        let mutable values : Microsoft.Extensions.Primitives.StringValues =
-            Microsoft.Extensions.Primitives.StringValues.Empty
-        if ctx.Request.Headers.TryGetValue("X-Subject", &values) then
-            return values.ToString()
-        else
-            return "anonymous"
-    }
+let private resolveSubject (ctx: HttpContext) : Async<string> = async {
+    let mutable values: Microsoft.Extensions.Primitives.StringValues =
+        Microsoft.Extensions.Primitives.StringValues.Empty
+
+    if ctx.Request.Headers.TryGetValue("X-Subject", &values) then
+        return values.ToString()
+    else
+        return "anonymous"
+}
 
 // ---- Phase 69d — IAuthContext implementation + secure API composition ------
 
@@ -101,30 +103,38 @@ type private HarnessAuthContext(subjectId: string, roles: Set<string>, anonymous
         member _.IsAnonymous() = anonymous
         member _.SubjectId = subjectId
 
-let private resolveAuthFromHeaders (ctx: HttpContext) : Async<IAuthContext> =
-    async {
-        let mutable values : Microsoft.Extensions.Primitives.StringValues =
+let private resolveAuthFromHeaders (ctx: HttpContext) : Async<IAuthContext> = async {
+    let mutable values: Microsoft.Extensions.Primitives.StringValues =
+        Microsoft.Extensions.Primitives.StringValues.Empty
+    // Subject id derives from X-Subject if present; else uses the
+    // X-Roles bag for stable identification of test callers; else
+    // "anonymous". Real consumers derive from a verified token.
+    let subjectId =
+        let mutable sub: Microsoft.Extensions.Primitives.StringValues =
             Microsoft.Extensions.Primitives.StringValues.Empty
-        // Subject id derives from X-Subject if present; else uses the
-        // X-Roles bag for stable identification of test callers; else
-        // "anonymous". Real consumers derive from a verified token.
-        let subjectId =
-            let mutable sub : Microsoft.Extensions.Primitives.StringValues =
-                Microsoft.Extensions.Primitives.StringValues.Empty
-            if ctx.Request.Headers.TryGetValue("X-Subject", &sub) && not (System.String.IsNullOrWhiteSpace(sub.ToString())) then
-                sub.ToString()
-            else
-                "anonymous"
-        if ctx.Request.Headers.TryGetValue("X-Roles", &values) then
-            let raw = values.ToString()
-            let roles =
-                if System.String.IsNullOrWhiteSpace raw then Set.empty
-                else raw.Split(',') |> Array.map _.Trim() |> Set.ofArray
-            let anonymous = roles.IsEmpty
-            return HarnessAuthContext(subjectId, roles, anonymous) :> IAuthContext
+
+        if
+            ctx.Request.Headers.TryGetValue("X-Subject", &sub)
+            && not (System.String.IsNullOrWhiteSpace(sub.ToString()))
+        then
+            sub.ToString()
         else
-            return HarnessAuthContext(subjectId, Set.empty, true) :> IAuthContext
-    }
+            "anonymous"
+
+    if ctx.Request.Headers.TryGetValue("X-Roles", &values) then
+        let raw = values.ToString()
+
+        let roles =
+            if System.String.IsNullOrWhiteSpace raw then
+                Set.empty
+            else
+                raw.Split(',') |> Array.map _.Trim() |> Set.ofArray
+
+        let anonymous = roles.IsEmpty
+        return HarnessAuthContext(subjectId, roles, anonymous) :> IAuthContext
+    else
+        return HarnessAuthContext(subjectId, Set.empty, true) :> IAuthContext
+}
 
 let private secureHandlers = {
     AdminOnly = fun () -> async { return "admin-secret" }
@@ -132,7 +142,7 @@ let private secureHandlers = {
     PublicOnly = fun () -> async { return "public-info" }
 }
 
-let private buildSecureApi : HttpHandler =
+let private buildSecureApi: HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromValue secureHandlers
@@ -145,6 +155,7 @@ let private buildSecureApi : HttpHandler =
 type RecordingAuditEmitter() =
     let events = System.Collections.Concurrent.ConcurrentBag<AuditEvent>()
     member _.Events = events |> Seq.toList
+
     interface IAuditEmitter with
         member _.Emit evt = async { events.Add evt }
 
@@ -174,26 +185,30 @@ type private SimpleAsyncEnumerable<'T>(items: 'T seq) =
     interface System.Collections.Generic.IAsyncEnumerable<'T> with
         member _.GetAsyncEnumerator(_: System.Threading.CancellationToken) =
             let inner = items.GetEnumerator()
+
             { new System.Collections.Generic.IAsyncEnumerator<'T> with
                 member _.Current = inner.Current
-                member _.MoveNextAsync() = System.Threading.Tasks.ValueTask<bool>(inner.MoveNext())
-                member _.DisposeAsync() = System.Threading.Tasks.ValueTask() }
 
-let private streamingHandlers : IStreamingApi = {
+                member _.MoveNextAsync() =
+                    System.Threading.Tasks.ValueTask<bool>(inner.MoveNext())
+
+                member _.DisposeAsync() = System.Threading.Tasks.ValueTask()
+            }
+
+let private streamingHandlers: IStreamingApi = {
     Tokens =
         fun (prompt: string) ->
-            let parts =
-                seq {
-                    yield "Hello"
-                    yield ", "
-                    yield prompt
-                    yield "!"
-                }
-            SimpleAsyncEnumerable<string>(parts)
-            :> System.Collections.Generic.IAsyncEnumerable<string>
+            let parts = seq {
+                yield "Hello"
+                yield ", "
+                yield prompt
+                yield "!"
+            }
+
+            SimpleAsyncEnumerable<string>(parts) :> System.Collections.Generic.IAsyncEnumerable<string>
 }
 
-let private buildStreamingApi : HttpHandler =
+let private buildStreamingApi: HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromValue streamingHandlers
@@ -202,21 +217,23 @@ let private buildStreamingApi : HttpHandler =
 
 // ---- Phase 69i — job-handle API --------------------------------------------
 
-let private jobDispatcher : IJobDispatcher = InMemoryJobDispatcher() :> _
+let private jobDispatcher: IJobDispatcher = InMemoryJobDispatcher() :> _
 
 let private jobReportHandlers = {
-    StartReport = fun reportSize -> async {
-        // Background work simulates a delayed report build.
-        let work = async {
-            do! Async.Sleep(50)
-            return sprintf "report-of-size-%d" reportSize
+    StartReport =
+        fun reportSize -> async {
+            // Background work simulates a delayed report build.
+            let work = async {
+                do! Async.Sleep(50)
+                return sprintf "report-of-size-%d" reportSize
+            }
+
+            return! jobDispatcher.Enqueue work
         }
-        return! jobDispatcher.Enqueue work
-    }
     GetReportStatus = fun handle -> jobDispatcher.GetStatus handle
 }
 
-let private buildJobReportApi : HttpHandler =
+let private buildJobReportApi: HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromValue jobReportHandlers
@@ -227,12 +244,10 @@ let private buildJobReportApi : HttpHandler =
 // ---- Phase 69e — validated input API ---------------------------------------
 
 let private validatedHandlers = {
-    CreateUser = fun req -> async {
-        return sprintf "created:%s/%d/%s" req.Name req.Age req.Email
-    }
+    CreateUser = fun req -> async { return sprintf "created:%s/%d/%s" req.Name req.Age req.Email }
 }
 
-let private buildValidatedApi : HttpHandler =
+let private buildValidatedApi: HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromValue validatedHandlers
@@ -248,16 +263,17 @@ let private buildValidatedApi : HttpHandler =
 let private chargeInvocationCount = ref 0
 
 let private idempotentHandlers = {
-    Charge = fun amount -> async {
-        System.Threading.Interlocked.Increment chargeInvocationCount |> ignore
-        return sprintf "charged-%d-call-%d" amount chargeInvocationCount.Value
-    }
+    Charge =
+        fun amount -> async {
+            System.Threading.Interlocked.Increment chargeInvocationCount |> ignore
+            return sprintf "charged-%d-call-%d" amount chargeInvocationCount.Value
+        }
     NoKey = fun amount -> async { return sprintf "no-key-handler-%d" amount }
 }
 
-let private idempotencyStore : IIdempotencyStore = InMemoryIdempotencyStore() :> _
+let private idempotencyStore: IIdempotencyStore = InMemoryIdempotencyStore() :> _
 
-let private buildIdempotentApi : HttpHandler =
+let private buildIdempotentApi: HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromValue idempotentHandlers
@@ -267,10 +283,9 @@ let private buildIdempotentApi : HttpHandler =
     |> Remoting.buildHttpHandler
 
 /// Test helper: resets counter + store fresh per test invocation.
-let resetIdempotencyHarness () =
-    chargeInvocationCount.Value <- 0
-    // The in-memory store doesn't expose a Clear; the per-test
-    // composite key uniqueness gives us isolation in practice.
+let resetIdempotencyHarness () = chargeInvocationCount.Value <- 0
+// The in-memory store doesn't expose a Clear; the per-test
+// composite key uniqueness gives us isolation in practice.
 
 let currentChargeCount () = chargeInvocationCount.Value
 
@@ -285,9 +300,9 @@ let private rateLimitedHandlers = {
 /// Module-level singleton so all per-test hosts share the rate-limit
 /// state. The InMemoryRateLimitStore is process-local; sharing it lets
 /// the sequential test calls accumulate against the same budget bucket.
-let private rateLimitStore : IRateLimitStore = InMemoryRateLimitStore() :> _
+let private rateLimitStore: IRateLimitStore = InMemoryRateLimitStore() :> _
 
-let private buildRateLimitedApi : HttpHandler =
+let private buildRateLimitedApi: HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromValue rateLimitedHandlers
@@ -296,19 +311,22 @@ let private buildRateLimitedApi : HttpHandler =
     |> Remoting.withRateLimitStore rateLimitStore
     |> Remoting.buildHttpHandler
 
-let private buildContextApi : HttpHandler =
+let private buildContextApi: HttpHandler =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.fromContextAsync (fun ctx -> async {
         let! subject = resolveSubject ctx
-        return
-            { WhoAmI = fun () -> async { return subject }
-              WhereAreWe = fun () -> async {
-                  // Phase 69b.D — read ambient correlation id without
-                  // threading. AsyncLocal flows through Async naturally.
-                  return CallContext.correlationId () |> Option.defaultValue "<absent>"
-              } }
-       })
+
+        return {
+            WhoAmI = fun () -> async { return subject }
+            WhereAreWe =
+                fun () -> async {
+                    // Phase 69b.D — read ambient correlation id without
+                    // threading. AsyncLocal flows through Async naturally.
+                    return CallContext.correlationId () |> Option.defaultValue "<absent>"
+                }
+        }
+    })
     |> Remoting.withErrorHandler errorHandler
     |> Remoting.buildHttpHandler
 
@@ -330,22 +348,26 @@ let buildHost (telemetry: IRemotingTelemetry option) (auditEmitter: IAuditEmitte
                     // Phase 69b.A — body normalisation is now built into the
                     // ToolUp.Remoting.Giraffe adapter; no separate middleware
                     // registration required.
-                    let api : HttpHandler =
+                    let api: HttpHandler =
                         let audited =
                             match auditEmitter with
                             | Some em -> [ buildAuditedApi em ]
                             | None -> []
+
                         choose (
-                            [ buildHarnessApi telemetry (fun _ -> handlers)
-                              buildContextApi
-                              buildSecureApi
-                              buildRateLimitedApi
-                              buildIdempotentApi
-                              buildValidatedApi
-                              buildJobReportApi
-                              buildStreamingApi ]
+                            [
+                                buildHarnessApi telemetry (fun _ -> handlers)
+                                buildContextApi
+                                buildSecureApi
+                                buildRateLimitedApi
+                                buildIdempotentApi
+                                buildValidatedApi
+                                buildJobReportApi
+                                buildStreamingApi
+                            ]
                             @ audited
                         )
+
                     app.UseGiraffe api)
             |> ignore)
         .Build()

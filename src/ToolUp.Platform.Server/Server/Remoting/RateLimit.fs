@@ -93,61 +93,60 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
                 buckets.Clear()
 
     interface IRateLimitStore with
-        member _.TryAcquire(key, count, window) =
-            async {
-                let now = DateTimeOffset.UtcNow
-                let cutoff = now - window
-                let mutable createdNew = false
+        member _.TryAcquire(key, count, window) = async {
+            let now = DateTimeOffset.UtcNow
+            let cutoff = now - window
+            let mutable createdNew = false
 
-                let queue =
-                    buckets.GetOrAdd(
-                        key,
-                        fun _ ->
-                            createdNew <- true
-                            ConcurrentQueue<DateTimeOffset>()
-                    )
+            let queue =
+                buckets.GetOrAdd(
+                    key,
+                    fun _ ->
+                        createdNew <- true
+                        ConcurrentQueue<DateTimeOffset>()
+                )
 
-                if createdNew then
-                    evictOldestIfFull ()
-                    order.Enqueue key
+            if createdNew then
+                evictOldestIfFull ()
+                order.Enqueue key
 
-                // Evict expired timestamps from the front. The queue is
-                // approximately ordered by enqueue time so we can stop at
-                // the first non-expired entry.
-                let mutable peeked = DateTimeOffset.MinValue
-                let mutable evicting = true
+            // Evict expired timestamps from the front. The queue is
+            // approximately ordered by enqueue time so we can stop at
+            // the first non-expired entry.
+            let mutable peeked = DateTimeOffset.MinValue
+            let mutable evicting = true
 
-                while evicting && queue.TryPeek(&peeked) do
-                    if peeked < cutoff then
-                        let mutable dequeued = DateTimeOffset.MinValue
-                        queue.TryDequeue(&dequeued) |> ignore
-                    else
-                        evicting <- false
+            while evicting && queue.TryPeek(&peeked) do
+                if peeked < cutoff then
+                    let mutable dequeued = DateTimeOffset.MinValue
+                    queue.TryDequeue(&dequeued) |> ignore
+                else
+                    evicting <- false
 
-                if queue.Count < count then
+            if queue.Count < count then
+                queue.Enqueue now
+                return RateLimitAllowed
+            else
+                // Budget exhausted. RetryAfter is the time until the
+                // oldest in-window entry expires (the earliest moment
+                // a new acquisition becomes possible).
+                let mutable oldest = DateTimeOffset.MinValue
+
+                if queue.TryPeek(&oldest) then
+                    let retryAfter = (oldest + window) - now
+
+                    let safe =
+                        if retryAfter < TimeSpan.Zero then
+                            TimeSpan.FromMilliseconds 1.0
+                        else
+                            retryAfter
+
+                    return RateLimitDenied safe
+                else
+                    // Lost a race; treat as allowed and re-enqueue.
                     queue.Enqueue now
                     return RateLimitAllowed
-                else
-                    // Budget exhausted. RetryAfter is the time until the
-                    // oldest in-window entry expires (the earliest moment
-                    // a new acquisition becomes possible).
-                    let mutable oldest = DateTimeOffset.MinValue
-
-                    if queue.TryPeek(&oldest) then
-                        let retryAfter = (oldest + window) - now
-
-                        let safe =
-                            if retryAfter < TimeSpan.Zero then
-                                TimeSpan.FromMilliseconds 1.0
-                            else
-                                retryAfter
-
-                        return RateLimitDenied safe
-                    else
-                        // Lost a race; treat as allowed and re-enqueue.
-                        queue.Enqueue now
-                        return RateLimitAllowed
-            }
+        }
 
     /// Diagnostics: bucket count for telemetry / health checks.
     member _.BucketCount = buckets.Count
