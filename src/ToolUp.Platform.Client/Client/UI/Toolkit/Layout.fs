@@ -64,15 +64,29 @@ module Layout =
 
     /// Resolve the Tailwind class string that wraps the inputs (left)
     /// child of a `SplitPanel` render. `Narrow` / `Wide` give the inputs
-    /// pane an enforced width regardless of consumer content so the
-    /// "narrow sidebar + wide results" design intent holds for
-    /// presentation-only modules; `Auto` returns the empty string to
-    /// preserve today's natural-content-width behaviour byte-for-byte.
+    /// pane an enforced width regardless of consumer content; `Auto`
+    /// lets the natural content width drive sizing but still pins
+    /// `shrink-0` so the input pane doesn't collapse when the sibling
+    /// (right pane / `flex-1`) takes more space than the parent has —
+    /// the symptom that motivated the change was combo-box content
+    /// overflowing the left column on Price Elasticity / Category
+    /// Analysis when the right pane's table widened.
+    ///
+    /// `Narrow` / `Wide` additionally carry `min-w-0 overflow-hidden` to
+    /// defeat the default flex `min-width: auto` that would otherwise let
+    /// intrinsically-wide inner content (long button labels, AG Grid
+    /// summaries, wide form rows) push the wrapper past its declared
+    /// width and bleed into the results pane. With the pair, `w-96` /
+    /// `w-[32rem]` becomes a hard cap; content that genuinely exceeds it
+    /// gets clipped at the boundary rather than escape across the row.
+    /// `Auto` deliberately omits both — its contract is "let natural
+    /// content width drive sizing", so a hard cap there would contradict
+    /// the only reason a consumer would pick it.
     let private inputsPaneClass (width: InputsPaneWidth) : string =
         match width with
-        | Narrow -> "w-96 shrink-0"
-        | Wide -> "w-[32rem] shrink-0"
-        | Auto -> ""
+        | Narrow -> "w-96 shrink-0 min-w-0 overflow-hidden"
+        | Wide -> "w-[32rem] shrink-0 min-w-0 overflow-hidden"
+        | Auto -> "shrink-0"
 
     /// Render the active page's `PageContent` to a single `ReactElement`,
     /// applying the per-case content-area gutters / layout classes. Extracted
@@ -91,7 +105,12 @@ module Layout =
                 prop.className "flex gap-6 p-6 min-h-full"
                 prop.children [
                     leftWrapped
-                    Html.div [ prop.className "flex-1"; prop.children [ rightPane ] ]
+                    // `min-w-0` on the results pane mirrors the inputs-pane
+                    // containment: without it, an intrinsically-wide right
+                    // child (auto-sized AG Grid, long-form chart legend)
+                    // could push the row past the viewport and bleed past
+                    // the AppShell's `overflow-auto` boundary.
+                    Html.div [ prop.className "flex-1 min-w-0"; prop.children [ rightPane ] ]
                 ]
             ]
         | Stacked sections -> Html.div [ prop.className "flex flex-col gap-6 p-6 min-h-full"; prop.children sections ]
@@ -212,9 +231,15 @@ module Layout =
     /// Panel component - container with background
     module Panel =
 
+        /// `w-full` makes the panel respect its parent's allotted width
+        /// rather than expand to its intrinsic content width. Paired with
+        /// the `min-w-0 overflow-hidden` cap on the SplitPanel inputs
+        /// wrapper, this gives the consumer's InputPanel a hard 24rem /
+        /// 32rem ceiling and lets inner form rows / dividers shrink
+        /// against the panel's `w-full` parent rather than push it wider.
         let panel (heading: string) (children: ReactElement list) =
             Html.div [
-                prop.className $"{Tokens.Bg.panel} {Tokens.Border.panel} p-6"
+                prop.className $"w-full {Tokens.Bg.panel} {Tokens.Border.panel} p-6"
                 prop.children [ Typography.heading heading; yield! children ]
             ]
 
