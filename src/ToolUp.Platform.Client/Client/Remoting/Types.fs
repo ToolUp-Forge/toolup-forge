@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) Zaid Ajaj and Fable.Remoting contributors
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
 namespace ToolUp.Remoting.Client 
 
 open System

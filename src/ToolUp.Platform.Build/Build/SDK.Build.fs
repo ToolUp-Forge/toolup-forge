@@ -615,25 +615,61 @@ let registerTargets (config: BuildConfig) =
         Trace.tracefn "Wrote THIRD_PARTY_NOTICES.md (%d packages)." packages.Length)
 
     Target.create "AddHeaders" (fun _ ->
-        // Apache-2.0 SPDX header for Client-tier source that the Fable
-        // packaging step copies verbatim into consumer apps (Phase 11.A).
-        // The repo-root LICENSE does not travel with the copied source
-        // tree, so each redistributed .fs needs its own attribution
-        // notice — Apache-2.0 §4(c) requires attribution notices to
-        // survive redistribution. The authoritative file set is derived
-        // from the fsprojs that pack source under `fable/` (the same
+        // SPDX header for Client-tier source that the Fable packaging step
+        // copies verbatim into consumer apps (Phase 11.A). The repo-root
+        // LICENSE does not travel with the copied source tree, so each
+        // redistributed .fs needs its own attribution notice — Apache-2.0
+        // §4(c) and MIT each require attribution notices to survive
+        // redistribution. The authoritative file set is derived from the
+        // fsprojs that pack source under `fable/` (the same
         // `PackagePath="fable"` content-include the nupkgs use), never
         // hand-listed, so a newly-added packed-source project is covered
         // automatically and cannot drift.
         //
+        // Per-directory license map. Default = forge-native Apache-2.0.
+        // Forked-in subtrees get their upstream license: stamping
+        // Apache-2.0 on an MIT-origin file would silently relicense it.
+        // See NOTICE.md for the upstream attribution narrative.
+        //
+        //   Client/Elmish/                    Fable.Elmish fork (Apache-2.0)
+        //   Client/Remoting/                  Fable.Remoting fork (MIT)
+        //   Shared/Remoting/MsgPack/          Fable.Remoting MsgPack fork (MIT)
+        //
         //   dotnet run -- AddHeaders           stamp missing headers in place
         //   dotnet run -- AddHeaders --check   report drift, exit 1, mutate nothing
-        let headerLines = [
+        let forgeNativeHeader = [
             "// SPDX-License-Identifier: Apache-2.0"
             "// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)"
         ]
 
-        let spdxMarker = List.head headerLines
+        let elmishForkHeader = [
+            "// SPDX-License-Identifier: Apache-2.0"
+            "// Copyright (c) Eugene Tolmachev and Fable.Elmish contributors"
+            "// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)"
+        ]
+
+        let remotingForkHeader = [
+            "// SPDX-License-Identifier: MIT"
+            "// Copyright (c) Zaid Ajaj and Fable.Remoting contributors"
+            "// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)"
+        ]
+
+        // Forward-slash path prefixes; first match wins. Project-relative
+        // (callers normalize backslashes before matching).
+        let licenseMap = [
+            "Client/Elmish/", elmishForkHeader
+            "Client/Remoting/", remotingForkHeader
+            "Shared/Remoting/MsgPack/", remotingForkHeader
+        ]
+
+        let chooseHeader (path: string) =
+            let normalized = path.Replace('\\', '/')
+
+            licenseMap
+            |> List.tryFind (fun (prefix, _) -> normalized.Contains(prefix))
+            |> Option.map snd
+            |> Option.defaultValue forgeNativeHeader
+
         let checkOnly = Environment.GetCommandLineArgs() |> Array.contains "--check"
 
         let packsFableSource (proj: string) =
@@ -655,23 +691,28 @@ let registerTargets (config: BuildConfig) =
         let hasHeader (path: string) =
             // StreamReader strips a UTF-8 BOM (detectEncodingFromByteOrderMarks);
             // the extra TrimStart is belt-and-braces for an in-line BOM.
+            // Marker is the SPDX line expected for this file's path — a
+            // mismatched-SPDX file (e.g. Apache-2.0 stamp on an MIT-origin
+            // file from a pre-license-map run) is reported as missing.
+            let expectedMarker = chooseHeader path |> List.head
             use sr = new System.IO.StreamReader(path)
             let first = sr.ReadLine()
-            not (isNull first) && first.TrimStart('﻿') = spdxMarker
+            not (isNull first) && first.TrimStart('﻿') = expectedMarker
 
         let missing = sourceFiles |> List.filter (hasHeader >> not)
 
         if checkOnly then
             if List.isEmpty missing then
                 Trace.tracefn
-                    "AddHeaders --check: all %d packed-source files carry the SPDX header."
+                    "AddHeaders --check: all %d packed-source files carry the expected SPDX header."
                     sourceFiles.Length
             else
                 for f in missing do
-                    Trace.traceErrorfn "  missing SPDX header: %s" f
+                    let expected = chooseHeader f |> List.head
+                    Trace.traceErrorfn "  missing/wrong SPDX header (expected '%s'): %s" expected f
 
                 failwithf
-                    "AddHeaders --check: %d of %d packed-source files lack the Apache-2.0 SPDX header. Run `dotnet run -- AddHeaders`."
+                    "AddHeaders --check: %d of %d packed-source files lack the expected SPDX header. Run `dotnet run -- AddHeaders`."
                     missing.Length
                     sourceFiles.Length
         else
@@ -679,6 +720,7 @@ let registerTargets (config: BuildConfig) =
                 // Prepend header bytes only; the original body is left
                 // byte-for-byte intact so existing line endings / encoding
                 // are preserved and the diff is exactly the inserted lines.
+                let headerLines = chooseHeader f
                 let bytes = System.IO.File.ReadAllBytes f
 
                 let hasBom =

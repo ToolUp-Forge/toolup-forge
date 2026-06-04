@@ -1,4 +1,8 @@
-﻿#if TYPESHAPE_EXPOSE
+﻿// SPDX-License-Identifier: MIT
+// Copyright (c) Zaid Ajaj and Fable.Remoting contributors
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
+#if TYPESHAPE_EXPOSE
 module TypeShape.Core.Utils
 #else
 // NB we don't want to leak the `TypeShape` namespace

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Eugene Tolmachev and Fable.Elmish contributors
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
 namespace ToolUp.Elmish.React
 
 open Fable.Core
