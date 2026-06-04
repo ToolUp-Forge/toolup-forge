@@ -38,6 +38,7 @@ open ToolUp.Platform
 
 type Tab =
     | AdminsTab
+    | TeamsTab
     | SettingsTab
 
 type LoadState<'T> =
@@ -61,9 +62,29 @@ type Model = {
     /// no attempt yet, or after a successful one. Cleared on input
     /// edit so the banner doesn't linger after the user retypes.
     AssignError: string option
+    /// Pending Assign confirmation. `Some userId` = the "are you sure?"
+    /// modal is open for that user id; the modal's Confirm button
+    /// dispatches the actual `AssignPlatformAdmin` call. `None` = no
+    /// pending confirmation. Granting `PlatformAdmin` is irreversible
+    /// from the recipient's perspective (they immediately gain
+    /// deployment-wide configuration rights), so the confirm step is
+    /// a deliberate UX brake on accidental clicks.
+    AssignConfirm: string option
     /// Inline error from a Revoke attempt, keyed by user id so the
     /// banner can render next to the right row.
     RevokeError: Map<string, string>
+    /// Create-team form: name input.
+    NewTeamName: string
+    /// Create-team form: initial-owner user id. Empty string = no
+    /// selection yet; the operator can populate via the directory
+    /// typeahead OR by clicking "Self" (which writes their own user
+    /// id into this field).
+    NewTeamOwnerUserId: string
+    /// Inline error from the most recent CreateTeamWithOwner attempt.
+    CreateTeamError: string option
+    /// Tracks whether a CreateTeamWithOwner call is in flight, so
+    /// the submit button can disable to prevent double-fire.
+    CreateTeamInFlight: bool
     /// Phase 4b deferred follow-up — current runtime PlatformKnowledgeBase
     /// state. Loaded on shell init via `GetPlatformKnowledgeBase`;
     /// updated optimistically after a successful `Set`.
@@ -77,10 +98,17 @@ type Msg =
     | RefreshAdmins
     | AdminsLoaded of Result<string list, string>
     | UpdateAssignInput of string
-    | SubmitAssign
+    | RequestAssignConfirm
+    | CancelAssignConfirm
+    | ConfirmAssign
     | AssignResolved of targetUserId: string * Result<unit, string>
     | RequestRevoke of targetUserId: string
     | RevokeResolved of targetUserId: string * Result<unit, string>
+    | SetNewTeamName of string
+    | SetNewTeamOwnerUserId of string
+    | UseSelfAsTeamOwner
+    | SubmitCreateTeam
+    | CreateTeamResolved of Result<TeamInfo, string>
     | PlatformKnowledgeBaseLoaded of Result<PlatformKnowledgeBaseMode, string>
     | TogglePlatformKnowledgeBase of PlatformKnowledgeBaseMode
     | TogglePlatformKnowledgeBaseResolved of requested: PlatformKnowledgeBaseMode * Result<unit, string>
@@ -90,6 +118,9 @@ type Msg =
 // Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + SDK.Client.fs installRequestGuard.
 let private platformAdminApi: PlatformAdminApi =
     Api.makeProxy<PlatformAdminApi> (customOptions = UserSession.withRequestHeaders)
+
+let private teamApi: TeamApi =
+    Api.makeProxy<TeamApi> (customOptions = UserSession.withRequestHeaders)
 
 // ─── Init / commands ─────────────────────────────────────────────────
 
@@ -125,13 +156,22 @@ let private setPlatformKnowledgeBaseCmd (mode: PlatformKnowledgeBaseMode) =
         (fun result -> TogglePlatformKnowledgeBaseResolved(mode, result))
         (fun ex -> TogglePlatformKnowledgeBaseResolved(mode, Error ex.Message))
 
+let private createTeamCmd (request: CreateTeamRequest) =
+    Cmd.OfRemoting.call teamApi.CreateTeamWithOwner request CreateTeamResolved (fun ex ->
+        CreateTeamResolved(Error ex.Message))
+
 let init () =
     let model = {
         ActiveTab = AdminsTab
         Admins = Loading
         AssignInput = ""
         AssignError = None
+        AssignConfirm = None
         RevokeError = Map.empty
+        NewTeamName = ""
+        NewTeamOwnerUserId = ""
+        CreateTeamError = None
+        CreateTeamInFlight = false
         PlatformKnowledgeBase = Loading
         SettingsError = None
     }
@@ -163,7 +203,7 @@ let update (msg: Msg) (model: Model) =
         },
         Cmd.none
 
-    | SubmitAssign ->
+    | RequestAssignConfirm ->
         let trimmed = model.AssignInput.Trim()
 
         if String.length trimmed = 0 then
@@ -173,13 +213,32 @@ let update (msg: Msg) (model: Model) =
             },
             Cmd.none
         else
-            { model with AssignError = None }, assignCmd trimmed
+            {
+                model with
+                    AssignError = None
+                    AssignConfirm = Some trimmed
+            },
+            Cmd.none
+
+    | CancelAssignConfirm -> { model with AssignConfirm = None }, Cmd.none
+
+    | ConfirmAssign ->
+        match model.AssignConfirm with
+        | None -> model, Cmd.none
+        | Some targetUserId ->
+            {
+                model with
+                    AssignConfirm = None
+                    AssignError = None
+            },
+            assignCmd targetUserId
 
     | AssignResolved(_, Ok()) ->
         {
             model with
                 AssignInput = ""
                 AssignError = None
+                AssignConfirm = None
                 Admins = Loading
         },
         loadAdminsCmd ()
@@ -199,6 +258,77 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 RevokeError = model.RevokeError |> Map.add targetUserId msg
+        },
+        Cmd.none
+
+    | SetNewTeamName name ->
+        {
+            model with
+                NewTeamName = name
+                CreateTeamError = None
+        },
+        Cmd.none
+
+    | SetNewTeamOwnerUserId userId ->
+        {
+            model with
+                NewTeamOwnerUserId = userId
+                CreateTeamError = None
+        },
+        Cmd.none
+
+    | UseSelfAsTeamOwner ->
+        let selfId = UserSession.getUserId ()
+
+        {
+            model with
+                NewTeamOwnerUserId = selfId
+                CreateTeamError = None
+        },
+        Cmd.none
+
+    | SubmitCreateTeam ->
+        let name = model.NewTeamName.Trim()
+        let ownerId = model.NewTeamOwnerUserId.Trim()
+
+        if String.length name = 0 then
+            {
+                model with
+                    CreateTeamError = Some "Team name can't be empty."
+            },
+            Cmd.none
+        elif String.length ownerId = 0 then
+            {
+                model with
+                    CreateTeamError = Some "Pick an initial owner (or use \"Self\")."
+            },
+            Cmd.none
+        else
+            {
+                model with
+                    CreateTeamError = None
+                    CreateTeamInFlight = true
+            },
+            createTeamCmd {
+                Name = name
+                InitialOwnerUserId = ownerId
+            }
+
+    | CreateTeamResolved(Ok _) ->
+        {
+            model with
+                NewTeamName = ""
+                NewTeamOwnerUserId = ""
+                CreateTeamError = None
+                CreateTeamInFlight = false
+        },
+        Cmd.none
+
+    | CreateTeamResolved(Error msg) ->
+        {
+            model with
+                CreateTeamError = Some msg
+                CreateTeamInFlight = false
         },
         Cmd.none
 
@@ -277,25 +407,26 @@ let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
                     Html.p [
                         prop.className "text-xs text-text-secondary"
                         prop.text
-                            "Grant the user the deployment-wide PlatformAdmin role. They retain any team-level roles they already hold."
+                            "Start typing a name or email — directory matches appear as you type. Pick one to capture their stable identity-provider user id. Advanced: paste a raw user id (e.g. an Entra `oid`) to assign directly."
                     ]
                     Html.div [
-                        prop.className "flex gap-2"
+                        prop.className "flex gap-2 items-start"
                         prop.children [
-                            Html.input [
-                                prop.className "flex-1 px-2 py-1 text-sm border border-border rounded"
-                                prop.placeholder "user id"
-                                prop.value model.AssignInput
-                                prop.onChange (fun (v: string) -> dispatch (UpdateAssignInput v))
-                                prop.onKeyDown (fun e ->
-                                    if e.key = "Enter" then
-                                        dispatch SubmitAssign)
+                            Html.div [
+                                prop.className "flex-1"
+                                prop.children [
+                                    UserDirectoryTypeahead.userTypeahead
+                                        model.AssignInput
+                                        (fun v -> dispatch (UpdateAssignInput v))
+                                        "Name, email, or user id"
+                                        UserDirectoryTypeahead.pickUserId
+                                ]
                             ]
                             Html.button [
                                 prop.className
                                     "px-3 py-1 text-sm font-medium rounded bg-brand text-white hover:bg-brand-dark"
                                 prop.text "Assign"
-                                prop.onClick (fun _ -> dispatch SubmitAssign)
+                                prop.onClick (fun _ -> dispatch RequestAssignConfirm)
                             ]
                         ]
                     ]
@@ -337,6 +468,163 @@ let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
                             prop.className "divide-y divide-border"
                             prop.children (admins |> List.map (adminRow model dispatch))
                         ]
+                ]
+            ]
+        ]
+    ]
+
+/// "Are you sure?" overlay for `AssignPlatformAdmin`. Grants are
+/// effectively irreversible once observed (the recipient may have
+/// already used the new role to mutate deployment configuration),
+/// so the confirm step is a deliberate brake on accidental fires —
+/// e.g. an operator typing-Enter on the wrong autocomplete row.
+let private assignConfirmModalView (targetUserId: string) (dispatch: Msg -> unit) =
+    Html.div [
+        prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        prop.children [
+            Html.div [
+                prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
+                prop.children [
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text "Grant Platform Admin?" ]
+                    Html.p [
+                        prop.className "text-sm text-text-secondary"
+                        prop.text
+                            "Platform Admins can change deployment-wide configuration, manage every team, and assign / revoke other Platform Admins. The grant takes effect immediately and the recipient retains any team-level roles they already hold."
+                    ]
+                    Html.div [
+                        prop.className "rounded border border-border bg-gray-50 px-3 py-2"
+                        prop.children [
+                            Html.span [ prop.className "text-xs text-text-secondary"; prop.text "User id: " ]
+                            Html.span [ prop.className "text-sm font-mono text-text-primary"; prop.text targetUserId ]
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "flex justify-end gap-3 pt-2"
+                        prop.children [
+                            Html.button [
+                                prop.className
+                                    "px-4 py-2 rounded text-sm font-medium border border-border text-text-primary hover:bg-gray-50"
+                                prop.text "Cancel"
+                                prop.onClick (fun _ -> dispatch CancelAssignConfirm)
+                            ]
+                            Html.button [
+                                prop.className
+                                    "px-4 py-2 rounded text-sm font-medium bg-brand text-white hover:bg-brand-dark"
+                                prop.text "Grant Platform Admin"
+                                prop.onClick (fun _ -> dispatch ConfirmAssign)
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
+let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
+    let selfId = UserSession.getUserId ()
+    let selfDisplay = UserSession.getDisplayName () |> Option.defaultValue selfId
+    let ownerIsSelf = model.NewTeamOwnerUserId.Trim() = selfId
+
+    Html.div [
+        prop.className "p-4 flex flex-col gap-4"
+        prop.children [
+            Html.div [
+                prop.className "flex flex-col gap-3 p-3 rounded border border-border bg-white"
+                prop.children [
+                    Html.h3 [
+                        prop.className "text-sm font-medium text-text-primary"
+                        prop.text "Create a team"
+                    ]
+                    Html.p [
+                        prop.className "text-xs text-text-secondary"
+                        prop.text
+                            "Spin up a new team and name its initial Owner. The Owner is the only role that can add or remove Team Admins; everything else (Members, Admins, ownership transfer) is managed within the team or by another Platform Admin."
+                    ]
+
+                    Html.div [
+                        prop.className "flex flex-col gap-1"
+                        prop.children [
+                            Html.label [
+                                prop.className "text-xs font-medium text-text-secondary"
+                                prop.text "Team name"
+                            ]
+                            Html.input [
+                                prop.className "px-2 py-1 text-sm border border-border rounded"
+                                prop.placeholder "e.g. Marketing Analytics"
+                                prop.value model.NewTeamName
+                                prop.onChange (fun (v: string) -> dispatch (SetNewTeamName v))
+                            ]
+                        ]
+                    ]
+
+                    Html.div [
+                        prop.className "flex flex-col gap-1"
+                        prop.children [
+                            Html.label [
+                                prop.className "text-xs font-medium text-text-secondary"
+                                prop.text "Initial owner"
+                            ]
+                            Html.div [
+                                prop.className "flex gap-2 items-start"
+                                prop.children [
+                                    Html.div [
+                                        prop.className "flex-1"
+                                        prop.children [
+                                            UserDirectoryTypeahead.userTypeahead
+                                                model.NewTeamOwnerUserId
+                                                (fun v -> dispatch (SetNewTeamOwnerUserId v))
+                                                "Name, email, or user id"
+                                                UserDirectoryTypeahead.pickUserId
+                                        ]
+                                    ]
+                                    Html.button [
+                                        prop.className [
+                                            "px-3 py-1 text-sm font-medium rounded border transition-colors"
+                                            if ownerIsSelf then
+                                                "bg-brand/10 text-brand border-brand"
+                                            else
+                                                "bg-white text-text-primary border-border hover:bg-gray-50"
+                                        ]
+                                        prop.title (sprintf "Make yourself (%s) the owner" selfDisplay)
+                                        prop.text (if ownerIsSelf then "Self ✓" else "Self")
+                                        prop.onClick (fun _ -> dispatch UseSelfAsTeamOwner)
+                                    ]
+                                ]
+                            ]
+                            if ownerIsSelf then
+                                Html.span [
+                                    prop.className "text-xs text-text-secondary"
+                                    prop.text (sprintf "You (%s) will become the team's initial Owner." selfDisplay)
+                                ]
+                        ]
+                    ]
+
+                    Html.div [
+                        prop.className "flex justify-end gap-2"
+                        prop.children [
+                            Html.button [
+                                prop.disabled model.CreateTeamInFlight
+                                prop.className [
+                                    "px-3 py-1 text-sm font-medium rounded"
+                                    if model.CreateTeamInFlight then
+                                        "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                    else
+                                        "bg-brand text-white hover:bg-brand-dark"
+                                ]
+                                prop.text (
+                                    if model.CreateTeamInFlight then
+                                        "Creating…"
+                                    else
+                                        "Create team"
+                                )
+                                prop.onClick (fun _ -> dispatch SubmitCreateTeam)
+                            ]
+                        ]
+                    ]
+
+                    match model.CreateTeamError with
+                    | Some msg -> errorBanner msg
+                    | None -> Html.none
                 ]
             ]
         ]
@@ -457,6 +745,7 @@ let private tabBar (model: Model) (dispatch: Msg -> unit) =
         prop.className "flex gap-1 border-b border-border bg-white px-4"
         prop.children [
             tabButton "Admins" (model.ActiveTab = AdminsTab) (fun () -> dispatch (SwitchTab AdminsTab))
+            tabButton "Teams" (model.ActiveTab = TeamsTab) (fun () -> dispatch (SwitchTab TeamsTab))
             tabButton "Settings" (model.ActiveTab = SettingsTab) (fun () -> dispatch (SwitchTab SettingsTab))
         ]
     ]
@@ -470,6 +759,7 @@ let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> uni
     let content =
         match model.ActiveTab with
         | AdminsTab -> adminsTabView model dispatch
+        | TeamsTab -> teamsTabView model dispatch
         | SettingsTab -> settingsTabView model dispatch
 
     let publicUtilitySection =
@@ -478,22 +768,36 @@ let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> uni
     let body =
         Html.div [
             prop.className "flex flex-col h-full"
-            prop.children [ tabBar model dispatch; content; publicUtilitySection ]
+            prop.children [
+                tabBar model dispatch
+                content
+                publicUtilitySection
+                match model.AssignConfirm with
+                | Some targetUserId -> assignConfirmModalView targetUserId dispatch
+                | None -> Html.none
+            ]
         ]
 
     body, Html.none
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Create the Platform Admin module as an `ErasedModule`. Auto-injected
-/// by `SDK.Client.run` in any non-Anonymous mode unless
-/// `PlatformAdmin = NoPlatformAdmin`. The shell's sidebar filter (4f.2)
-/// hides the "Platform Admin" group from non-admin callers; the module
-/// itself does no client-side gating beyond the standard API-error
-/// surface (server-side `canModifyPlatformConfig` is the actual
-/// enforcement).
+/// Create the Platform Management module as an `ErasedModule`.
+/// Auto-injected by `SDK.Client.run` in any non-Anonymous mode unless
+/// `PlatformAdmin = NoPlatformAdmin` (config field name retained for
+/// backwards compatibility; the display name + sidebar group both
+/// surface as "Platform Management"). The shell's sidebar filter
+/// (4f.2) hides the "Platform Management" group from non-admin
+/// callers; the module itself does no client-side gating beyond the
+/// standard API-error surface (server-side `canModifyPlatformConfig`
+/// is the actual enforcement).
+///
+/// Module Id (`_sdk.PlatformAdmin`) is preserved so the server-side
+/// `ServerConfig.ModuleNames` keys (RBAC permission entries) keyed
+/// to it don't have to migrate. The display name and group label
+/// are presentation only.
 let create (config: PlatformAdminConfig option) (clientConfig: ClientConfig) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Platform Admin"
+    let name = config |> Option.map _.Name |> Option.defaultValue "Platform Management"
 
     let icon =
         config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
@@ -506,6 +810,6 @@ let create (config: PlatformAdminConfig option) (clientConfig: ClientConfig) : E
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformAdmin"
     |> ToolUp.Platform.ClientModule.withView (viewWith clientConfig)
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Admin"
+    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

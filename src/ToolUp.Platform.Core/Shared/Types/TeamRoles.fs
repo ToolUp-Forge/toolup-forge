@@ -35,6 +35,33 @@ module TeamRoles =
         | Admin -> true
         | Member -> false
 
+    /// Fine-grained predicate: can `callerRole` add / remove / change-role
+    /// targeting `targetRole`?
+    ///
+    /// Rules:
+    ///   * Owner can manage Members and Admins (assign or unassign
+    ///     either; the Owner role itself is set once at team-creation
+    ///     time via `CreateTeamWithOwner` and is not transferable via
+    ///     the team-admin surface — that's a separate ownership-transfer
+    ///     concern).
+    ///   * Admin can manage Members only — promoting a Member to Admin
+    ///     or demoting an Admin to Member requires Owner.
+    ///   * Member cannot manage anyone.
+    ///
+    /// Server-side, both `Add` and `Remove` gate on
+    /// `canManageRole callerRole targetRole`. `ChangeMemberRole` gates
+    /// on `canManageRole` against BOTH the old role (you must be
+    /// authorised to demote that role) AND the new role (you must be
+    /// authorised to assign that role). Platform Admins bypass these
+    /// gates entirely server-side via the `IPlatformAdminStore`
+    /// short-circuit.
+    let canManageRole (callerRole: TeamRole) (targetRole: TeamRole) =
+        match callerRole, targetRole with
+        | Owner, _ -> true
+        | Admin, Member -> true
+        | Admin, _
+        | Member, _ -> false
+
     /// Whether the role is specifically Owner — for operations that
     /// are irreversible from the team's perspective (deleting the
     /// team, transferring ownership). Admins cannot perform these.

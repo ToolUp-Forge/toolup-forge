@@ -477,6 +477,6 @@ let create () : ErasedModule =
     }
     |> ToolUp.Platform.ClientModule.withId "_ai.PlatformAIKeys"
     |> ToolUp.Platform.ClientModule.withView view
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Admin"
+    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

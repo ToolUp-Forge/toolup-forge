@@ -833,6 +833,6 @@ let create (config: WebhookAdminConfig option) : ErasedModule =
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.WebhookAdmin"
     |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Admin"
+    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

@@ -55,17 +55,24 @@ let private summaryLabel (s: UserSummary) =
         | Some e when not (System.String.IsNullOrWhiteSpace e) -> e
         | _ -> s.UserId
 
-/// Resolved string to feed back into the parent input when a
-/// suggestion is picked. Prefers email (the invite-by-email path
-/// expects one) and falls back to the user id so the existing
-/// AddTeamMember path still has a stable identifier.
-let private summaryPickValue (s: UserSummary) =
+/// Email-preferred picker for invite-by-email flows. Returns the
+/// directory entry's email when present, otherwise the user id —
+/// either is a valid input to the team-invite handler (which detects
+/// email format and routes through `IssuePendingInviteByEmail`).
+let pickEmailPreferred (s: UserSummary) =
     match s.Email with
     | Some e when not (System.String.IsNullOrWhiteSpace e) -> e
     | _ -> s.UserId
 
+/// User-id picker for flows that need the IdP's stable identifier
+/// directly — e.g. `PlatformAdminApi.AssignPlatformAdmin`, which
+/// stores the role keyed by user id. Picking the email here would
+/// silently fail because the assign endpoint cannot resolve an email
+/// back to its `oid`.
+let pickUserId (s: UserSummary) = s.UserId
+
 [<ReactComponent>]
-let userTypeahead (value: string) (onChange: string -> unit) (placeholder: string) =
+let userTypeahead (value: string) (onChange: string -> unit) (placeholder: string) (pickValue: UserSummary -> string) =
     let displayValue, setDisplayValue = React.useState value
     let suggestions, setSuggestions = React.useState ([]: UserSummary list)
     let isOpen, setIsOpen = React.useState false
@@ -153,7 +160,7 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
         scheduleSearch s
 
     let handleSelect (summary: UserSummary) =
-        let resolved = summaryPickValue summary
+        let resolved = pickValue summary
         setDisplayValue resolved
         onChange resolved
         setIsOpen false

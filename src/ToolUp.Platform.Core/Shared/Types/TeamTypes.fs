@@ -94,21 +94,59 @@ type PlatformInfoApi = {
     GetPlatformInfo: unit -> Async<PlatformInfo>
 }
 
+/// Input to `TeamApi.CreateTeamWithOwner`. The Platform-Management
+/// "create team" flow names an initial Owner explicitly (rather than
+/// the caller defaulting to Owner the way the legacy `CreateTeam`
+/// path does). Self-as-owner is the typical case for a Platform
+/// Admin spinning up a team they intend to run; specifying another
+/// user is the typical case for a Platform Admin provisioning a
+/// team on behalf of someone else, e.g. before the named owner has
+/// even signed in.
+type CreateTeamRequest = {
+    /// Display name for the new team.
+    Name: string
+    /// Initial Owner's user id. The named user is added as the
+    /// team's `Owner` immediately after the team row is minted; if
+    /// they haven't signed in yet, the membership is still attached
+    /// to the user id (server-side substrate has no precondition on
+    /// the IdP having seen them — the pending-invite substrate is
+    /// the recommended path when the recipient is identified by
+    /// email only).
+    InitialOwnerUserId: string
+}
+
 /// Team CRUD + membership management. Owner/Admin gating enforced
 /// server-side inside the handler. Auto-injected by
 /// `SDK.Server.compose`.
 type TeamApi = {
     /// Create a new team (caller becomes Owner). Returns the new team.
+    /// Legacy path retained so callers can self-Owner without a
+    /// directory lookup; the Platform-Management UI uses
+    /// `CreateTeamWithOwner` so a Platform Admin can spin up a team
+    /// for someone else.
     CreateTeam: string -> Async<Result<TeamInfo, string>>
+    /// Phase 0.5.x — create a team naming an initial Owner explicitly.
+    /// Same `TeamCreationPolicy` gate as `CreateTeam` (default
+    /// `PlatformAdminOnly`). The caller is NOT auto-promoted to
+    /// Owner; only `request.InitialOwnerUserId` is — pass the
+    /// caller's own user id when "self" is the intended owner.
+    CreateTeamWithOwner: CreateTeamRequest -> Async<Result<TeamInfo, string>>
     /// Get all teams the current user belongs to.
     GetMyTeams: unit -> Async<TeamInfo list>
-    /// Add a member to a team. Requires Owner or Admin role.
+    /// Add a member to a team. Requires Owner or Admin role, plus
+    /// `TeamRoles.canManageRole callerRole targetRole` — Admins
+    /// cannot add other Admins (only Owners can).
     AddTeamMember: string * string * TeamRole -> Async<Result<unit, string>>
-    /// Remove a member from a team. Requires Owner or Admin role.
+    /// Remove a member from a team. Requires Owner or Admin role,
+    /// plus `TeamRoles.canManageRole callerRole targetRole` —
+    /// Admins cannot remove other Admins (only Owners can).
     RemoveTeamMember: string * string -> Async<Result<unit, string>>
     /// Change an existing member's role on a team. Requires Owner or
     /// Admin. Idempotent — no-op when the member already holds the
     /// requested role. Cannot demote the last remaining Owner.
+    /// `TeamRoles.canManageRole` gates the caller against BOTH the
+    /// old and new roles — Admins cannot promote a Member to Admin
+    /// or demote an Admin to Member.
     ChangeMemberRole: string * string * TeamRole -> Async<Result<unit, string>>
     /// List all members of a team.
     GetTeamMembers: string -> Async<TeamMembership list>

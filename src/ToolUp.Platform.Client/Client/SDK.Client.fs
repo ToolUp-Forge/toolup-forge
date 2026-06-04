@@ -1731,16 +1731,29 @@ module Client =
             | _, ConfiguredDataSubjectRequestAdmin cfg -> [ DataSubjectRequestAdminUI.create (Some cfg) ]
             | _, ExternalDataSubjectRequestAdmin custom -> [ custom ]
 
+        // Trailing order is load-bearing: the sidebar renders groups
+        // in first-occurrence order across the full module list, so
+        // whichever group is named first in `trailing` lands earlier in
+        // the sidebar. We list every "Team Management" module first
+        // (so the group appears under the workApp area), then every
+        // "Platform Management" module (so the group sits at the
+        // bottom of the sidebar). Within each group the per-module
+        // order is the listing order here; the sidebar's per-user
+        // `SidebarPreferences.ModuleOrder` overlay still applies on
+        // top for operators who reorder.
         let trailing =
+            // Team Management group — appears first in trailing.
             teamManager
             @ teamConfig
             @ webhookAdmin
             @ permissionsAdmin
+            @ usageDashboard
+            @ dataIngestionAdmin
+            // Platform Management group — appears last in trailing,
+            // so its first-occurrence lands at the bottom of the sidebar.
             @ platformAdmin
             @ healthMonitor
             @ serviceStatusBoard
-            @ usageDashboard
-            @ dataIngestionAdmin
             @ dataSubjectRequestAdmin
 
         leading @ workApp @ trailing @ debugApp

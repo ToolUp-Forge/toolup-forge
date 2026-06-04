@@ -60,8 +60,6 @@ type Model = {
     /// whole page dismisses on action — simpler than per-form error
     /// state for an admin UI.
     Error: string option
-    /// New-team-name input for the create form.
-    NewTeamName: string
     /// Add-member form state for a given teamId.
     AddMemberUserId: string
     AddMemberRole: TeamRole
@@ -73,14 +71,12 @@ type Model = {
     /// (re-fetch configs / flags / RBAC, re-init the active module)
     /// so the rest of the UI swaps to the new team's data.
     OnTeamSwitched: (string -> unit) option
-    /// Phase 5f — the deployment's team-creation policy. `None`
-    /// while loading; `Some _` once the server has responded. Drives
-    /// whether the Create form renders for non-admin callers.
-    Policy: TeamCreationPolicy option
-    /// Phase 5f — whether the signed-in caller holds
+    /// Whether the signed-in caller holds
     /// `PlatformRole.PlatformAdmin`. `None` while loading; `Some _`
-    /// once the server has responded. Pairs with `Policy` to decide
-    /// the form gate — `PlatformAdminOnly` + non-admin hides Create.
+    /// once the server has responded. Drives the client-side
+    /// "Platform Admin has full rights across all teams" bypass on
+    /// member-management controls — the server gate is the real
+    /// enforcement; this just keeps the controls visible.
     IsPlatformAdmin: bool option
     /// Phase 3d.A — pending-by-email entries per team, populated on
     /// entry to the `PendingInvites` view. Keyed by teamId; the value
@@ -107,9 +103,6 @@ type Msg =
     | BackToMyTeams
     | SwitchActiveTeam of teamId: string
     | ActiveTeamSwitched of teamId: string * Result<unit, string>
-    | CreateTeam
-    | SetNewTeamName of string
-    | TeamCreated of Result<TeamInfo, string>
     | SetAddMemberUserId of string
     | SetAddMemberRole of TeamRole
     | AddMember of teamId: string
@@ -118,7 +111,6 @@ type Msg =
     | MemberRemoved of Result<unit, string>
     | ChangeMemberRole of teamId: string * userId: string * newRole: TeamRole
     | MemberRoleChanged of Result<unit, string>
-    | PolicyLoaded of TeamCreationPolicy
     | IsPlatformAdminLoaded of bool
     // ─── Phase 3d.A — pending-invite admin surface ────────────────
     | NavigatePendingInvites of teamId: string
@@ -167,11 +159,9 @@ let init (ctx: ClientModuleContext) =
         Members = Map.empty
         RoleInTeam = Map.empty
         Error = None
-        NewTeamName = ""
         AddMemberUserId = ""
         AddMemberRole = Member
         OnTeamSwitched = ctx.OnTeamSwitched
-        Policy = None
         IsPlatformAdmin = None
         PendingByEmail = Map.empty
         IssueByEmailModal = None
@@ -184,19 +174,15 @@ let init (ctx: ClientModuleContext) =
     let loadActive =
         Cmd.OfRemoting.call teamApi.GetActiveTeam () ActiveTeamLoaded (fun e -> ApiError e.Message)
 
-    // Phase 5f — fetch the deployment policy + the caller's admin
-    // status in parallel so the Create form can decide whether to
-    // render. Both are pure reads; failures fall through to
-    // `ApiError` and leave the gate closed (Policy / IsPlatformAdmin
-    // = None → form hidden — fail-closed UX, matching the server
-    // gate's fail-closed posture).
-    let loadPolicy =
-        Cmd.OfRemoting.call teamApi.GetTeamCreationPolicy () PolicyLoaded (fun e -> ApiError e.Message)
-
+    // Fetch the caller's platform-admin status so the management
+    // controls can apply the "Platform Admin has full rights across
+    // all teams" bypass. Failure falls through to `ApiError` and
+    // leaves the bypass disabled (`IsPlatformAdmin = None`) — server
+    // gates remain the real enforcement.
     let loadAdminStatus =
         Cmd.OfRemoting.call platformAdminApi.IsPlatformAdmin () IsPlatformAdminLoaded (fun e -> ApiError e.Message)
 
-    model, Cmd.batch [ loadTeams; loadActive; loadPolicy; loadAdminStatus ]
+    model, Cmd.batch [ loadTeams; loadActive; loadAdminStatus ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -279,36 +265,6 @@ let update (msg: Msg) (model: Model) =
         Cmd.none
 
     | ActiveTeamSwitched(_, Error e) -> { model with Error = Some e }, Cmd.none
-
-    | CreateTeam ->
-        if model.NewTeamName.Trim() = "" then
-            {
-                model with
-                    Error = Some "Team name can't be empty"
-            },
-            Cmd.none
-        else
-            model,
-            Cmd.OfRemoting.call teamApi.CreateTeam (model.NewTeamName.Trim()) TeamCreated (fun e -> ApiError e.Message)
-
-    | SetNewTeamName name -> { model with NewTeamName = name }, Cmd.none
-
-    | TeamCreated(Ok team) ->
-        // Creator is automatically Owner and SetActiveTeam'd to this team
-        // (server-side `CreateTeam` handles both). Notify the shell so
-        // every module re-inits against the new team's (empty) data —
-        // matching the `ActiveTeamSwitched` path.
-        model.OnTeamSwitched |> Option.iter (fun f -> f team.TeamId)
-
-        {
-            model with
-                NewTeamName = ""
-                ActiveTeamId = Some team.TeamId
-                Error = None
-        },
-        Cmd.ofMsg LoadTeams
-
-    | TeamCreated(Error e) -> { model with Error = Some e }, Cmd.none
 
     | SetAddMemberUserId id -> { model with AddMemberUserId = id }, Cmd.none
 
@@ -406,8 +362,6 @@ let update (msg: Msg) (model: Model) =
         { model with Error = None }, refresh
 
     | MemberRoleChanged(Error e) -> { model with Error = Some e }, Cmd.none
-
-    | PolicyLoaded policy -> { model with Policy = Some policy }, Cmd.none
 
     | IsPlatformAdminLoaded isAdmin ->
         {
@@ -627,38 +581,11 @@ let private teamRow (team: TeamInfo) (isActive: bool) (onSelect: unit -> unit) (
         ]
     ]
 
-let private createTeamForm (model: Model) (dispatch: Msg -> unit) =
-    Layout.Panel.panel "Create a new team" [
-        Html.div [
-            prop.className "flex items-end gap-3"
-            prop.children [
-                Html.div [
-                    prop.className "flex-1"
-                    prop.children [
-                        Forms.Input.text model.NewTeamName (fun name -> dispatch (SetNewTeamName name)) "Team name"
-                    ]
-                ]
-                Forms.Button.primary "Create" (fun () -> dispatch CreateTeam)
-            ]
-        ]
-    ]
-
-/// Phase 5f — should the Create-team affordance render? Hidden when
-/// `Policy = PlatformAdminOnly` and the caller is known to not be a
-/// Platform Admin. Also hidden while either probe is still loading,
-/// so a non-admin doesn't briefly see a form that's about to vanish.
-/// Server-side `CreateTeam` is the real enforcement; this is UX-only.
-let private canShowCreateForm (model: Model) : bool =
-    match model.Policy, model.IsPlatformAdmin with
-    | Some AnyAuthenticatedUser, _ -> true
-    | Some PlatformAdminOnly, Some true -> true
-    | _ -> false
-
-let private noTeamsEmptyText (model: Model) =
-    match model.Policy, model.IsPlatformAdmin with
-    | Some PlatformAdminOnly, Some false ->
-        "You're not a member of any team yet. Ask a Platform Admin to add you to one — this deployment doesn't allow non-admin team creation."
-    | _ -> "You're not a member of any team yet. Create one below to get started."
+/// Team creation moved to the Platform Management module — this
+/// surface only manages existing teams. Empty-state text points
+/// the operator at the right person to ask.
+let private noTeamsEmptyText =
+    "You're not a member of any team yet. Ask a Platform Admin to add you to one."
 
 let private myTeamsView (model: Model) (dispatch: Msg -> unit) =
     Html.div [
@@ -666,7 +593,7 @@ let private myTeamsView (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Layout.Panel.panel "My teams" [
                 if model.Teams.IsEmpty then
-                    Html.p [ prop.className "text-sm text-muted py-4"; prop.text (noTeamsEmptyText model) ]
+                    Html.p [ prop.className "text-sm text-muted py-4"; prop.text noTeamsEmptyText ]
                 else
                     Html.div [
                         for team in model.Teams do
@@ -677,8 +604,6 @@ let private myTeamsView (model: Model) (dispatch: Msg -> unit) =
                                 (fun () -> dispatch (SwitchActiveTeam team.TeamId))
                     ]
             ]
-            if canShowCreateForm model then
-                createTeamForm model dispatch
         ]
     ]
 
@@ -688,14 +613,48 @@ let private roleOfString =
     | "Admin" -> Admin
     | _ -> Member
 
+/// Effective team role for the caller on the supplied team. Returns
+/// `Some Owner` when the caller is a Platform Admin — the
+/// "Platform Admins have complete rights across all teams" rule —
+/// regardless of whether they actually hold a membership row. Falls
+/// back to the team store's view otherwise. Server-side gates apply
+/// the same bypass; this is the client-side mirror that keeps the
+/// management controls visible for PAs.
+let private effectiveCallerRole (model: Model) (teamId: string) : TeamRole option =
+    if model.IsPlatformAdmin = Some true then
+        Some Owner
+    else
+        model.RoleInTeam |> Map.tryFind teamId
+
+/// Roles the caller may ASSIGN via the add-member form or
+/// change-role dropdown. Owner is never assignable here — initial
+/// Owner is set once at team-creation time via Platform
+/// Management; transferring ownership is a deliberately separate
+/// concern. Members cannot assign anything (the management UI is
+/// hidden for them anyway, but the predicate keeps the helper
+/// total).
+let private assignableRoles (callerRole: TeamRole) : TeamRole list =
+    match callerRole with
+    | Owner -> [ Member; Admin ]
+    | Admin -> [ Member ]
+    | Member -> []
+
 let private memberRow
     (teamId: string)
     (selfId: string)
-    (canManage: bool)
+    (callerRole: TeamRole option)
     (membership: TeamMembership)
     (dispatch: Msg -> unit)
     =
     let isSelf = membership.UserId = selfId
+
+    // Caller may act on this membership when they hold a role whose
+    // `canManageRole` covers the membership's current role. Owner →
+    // any non-Owner; Admin → Member only; everyone else → no.
+    let canManageTarget =
+        match callerRole with
+        | Some r -> TeamRoles.canManageRole r membership.Role
+        | None -> false
 
     let roleBadge =
         Html.span [
@@ -704,6 +663,11 @@ let private memberRow
         ]
 
     let roleDropdown =
+        let optionRoles =
+            match callerRole with
+            | Some r -> assignableRoles r
+            | None -> []
+
         Html.select [
             prop.className [
                 "text-xs border border-border rounded px-2 py-1"
@@ -716,7 +680,7 @@ let private memberRow
                 if newRole <> membership.Role then
                     dispatch (ChangeMemberRole(teamId, membership.UserId, newRole)))
             prop.children [
-                for role in [ Member; Admin; Owner ] do
+                for role in optionRoles do
                     Html.option [
                         prop.value (TeamRoles.displayName role)
                         prop.text (TeamRoles.displayName role)
@@ -754,17 +718,25 @@ let private memberRow
                             | None -> ()
                         ]
                     ]
-                    if canManage && not isSelf then roleDropdown else roleBadge
+                    if canManageTarget && not isSelf then
+                        roleDropdown
+                    else
+                        roleBadge
                     if isSelf then
                         Html.span [ prop.className "text-xs text-brand font-medium"; prop.text "(you)" ]
                 ]
             ]
-            if canManage && not isSelf then
+            if canManageTarget && not isSelf then
                 Forms.Button.secondary "Remove" (fun () -> dispatch (RemoveMember(teamId, membership.UserId)))
         ]
     ]
 
-let private addMemberForm (teamId: string) (model: Model) (dispatch: Msg -> unit) =
+let private addMemberForm (teamId: string) (callerRole: TeamRole option) (model: Model) (dispatch: Msg -> unit) =
+    let allowedRoles =
+        match callerRole with
+        | Some r -> assignableRoles r
+        | None -> []
+
     Layout.Panel.panel "Invite a member" [
         Html.div [
             prop.className "flex flex-col gap-3"
@@ -779,19 +751,22 @@ let private addMemberForm (teamId: string) (model: Model) (dispatch: Msg -> unit
                     model.AddMemberUserId
                     (fun v -> dispatch (SetAddMemberUserId v))
                     "person@example.com"
+                    UserDirectoryTypeahead.pickEmailPreferred
 
                 Html.div [
-                    prop.className "flex items-center gap-3"
+                    prop.className "flex items-center gap-3 flex-wrap"
                     prop.children [
                         Html.span [ prop.className "text-sm text-muted"; prop.text "Role:" ]
-                        for role in [ Member; Admin; Owner ] do
+                        for role in allowedRoles do
+                            let isSelected = model.AddMemberRole = role
+
                             Html.button [
                                 prop.className [
-                                    "px-3 py-1 rounded text-sm transition-colors"
-                                    if model.AddMemberRole = role then
-                                        "bg-brand text-brand-text"
+                                    "px-3 py-1 rounded text-sm transition-colors border"
+                                    if isSelected then
+                                        "bg-brand/10 text-brand border-brand"
                                     else
-                                        "bg-gray-100 text-text hover:bg-gray-200"
+                                        "bg-white text-text border-border hover:bg-gray-50"
                                 ]
                                 prop.text (TeamRoles.displayName role)
                                 prop.onClick (fun _ -> dispatch (SetAddMemberRole role))
@@ -807,12 +782,10 @@ let private addMemberForm (teamId: string) (model: Model) (dispatch: Msg -> unit
 let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> unit) =
     let teamOpt = model.Teams |> List.tryFind (fun t -> t.TeamId = teamId)
     let members = model.Members |> Map.tryFind teamId |> Option.defaultValue []
+    let callerRole = effectiveCallerRole model teamId
 
     let canManage =
-        model.RoleInTeam
-        |> Map.tryFind teamId
-        |> Option.map TeamRoles.canManageMembers
-        |> Option.defaultValue false
+        callerRole |> Option.map TeamRoles.canManageMembers |> Option.defaultValue false
 
     let selfId = selfUserId ()
 
@@ -852,12 +825,12 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
                 else
                     Html.div [
                         for m in members do
-                            memberRow teamId selfId canManage m dispatch
+                            memberRow teamId selfId callerRole m dispatch
                     ]
             ]
 
             if canManage then
-                addMemberForm teamId model dispatch
+                addMemberForm teamId callerRole model dispatch
         ]
     ]
 
@@ -898,15 +871,26 @@ let private emptyPendingEmailState =
             "No pending email invitations. Use 'Invite by email' to add one — the recipient will auto-join the team on their first sign-in matching the email."
     ]
 
-let private issueByEmailModalView (state: IssueByEmailModalState) (dispatch: Msg -> unit) =
+let private issueByEmailModalView
+    (callerRole: TeamRole option)
+    (state: IssueByEmailModalState)
+    (dispatch: Msg -> unit)
+    =
+    let allowedRoles =
+        match callerRole with
+        | Some r -> assignableRoles r
+        | None -> []
+
     let roleOption (role: TeamRole) =
+        let isSelected = state.Role = role
+
         Html.button [
             prop.className [
-                "px-3 py-1 rounded text-sm transition-colors"
-                if state.Role = role then
-                    "bg-brand text-brand-text"
+                "px-3 py-1 rounded text-sm transition-colors border"
+                if isSelected then
+                    "bg-brand/10 text-brand border-brand"
                 else
-                    "bg-gray-100 text-text hover:bg-gray-200"
+                    "bg-white text-text border-border hover:bg-gray-50"
             ]
             prop.text (TeamRoles.displayName role)
             prop.onClick (fun _ -> dispatch (SetIssueByEmailRole role))
@@ -950,14 +934,17 @@ let private issueByEmailModalView (state: IssueByEmailModalState) (dispatch: Msg
                         ]
                     ]
                     Html.div [
-                        prop.className "flex items-center gap-3"
+                        prop.className "flex items-center gap-3 flex-wrap"
                         prop.children [
                             Html.span [ prop.className "text-sm text-muted"; prop.text "Role:" ]
-                            // `Owner` is explicitly excluded — the substrate
-                            // refuses Owner on the no-link path (mirrors
-                            // the link-based flow). UI doesn't offer it.
-                            roleOption Member
-                            roleOption Admin
+                            // `Owner` is excluded everywhere — initial
+                            // ownership is set via Platform Management at
+                            // team-create time. `Admin` is offered only
+                            // to callers who can assign Admin (Owners +
+                            // Platform Admins); Admin callers see only
+                            // `Member`.
+                            for role in allowedRoles do
+                                roleOption role
                         ]
                     ]
                     Html.div [
@@ -1044,6 +1031,7 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
         |> Option.defaultValue teamId
 
     let entries = model.PendingByEmail |> Map.tryFind teamId
+    let callerRole = effectiveCallerRole model teamId
 
     let subTab = EmailInvites
 
@@ -1089,7 +1077,7 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
             ]
 
             match model.IssueByEmailModal with
-            | Some state when state.TeamId = teamId -> issueByEmailModalView state dispatch
+            | Some state when state.TeamId = teamId -> issueByEmailModalView callerRole state dispatch
             | _ -> Html.none
 
             match model.RevokeByEmailConfirm with
@@ -1156,6 +1144,6 @@ let create (config: TeamManagerConfig option) : ErasedModule =
     |> ToolUp.Platform.ClientModule.withId "_sdk.TeamManager"
     |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Admin"
+    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

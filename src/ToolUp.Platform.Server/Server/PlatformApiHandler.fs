@@ -15,7 +15,7 @@ open ToolUp.Platform.RemotingHelpers
 // own route prefix and per-concern test surface:
 //
 //   * `platformInfoApiHandler`   → `PlatformInfoApi`   (1 method)
-//   * `teamApiHandler`           → `TeamApi`            (8 methods)
+//   * `teamApiHandler`           → `TeamApi`            (9 methods)
 //   * `permissionApiHandler`     → `PermissionApi`      (3 methods)
 //   * `accessibilityApiHandler`  → `AccessibilityApi`   (1 method)
 //   * `dataCatalogApiHandler`    → `DataCatalogApi`     (1 method)
@@ -164,54 +164,119 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                 return false
     }
 
-    {
-        CreateTeam =
-            fun name -> async {
-                match teamStore with
-                | Some ts ->
-                    let! allowed = isAdminAllowed ()
+    // 2026-06 — Platform-Admin bypass for every team-membership gate
+    // (Add / Remove / ChangeRole). Platform Admins hold "complete
+    // rights across all teams" by contract; the team-role gate is
+    // skipped when this returns `true`. Resolves the store at request
+    // time (same pattern as `isAdminAllowed`); missing-store fails
+    // closed (returns `false`) so a misconfigured fixture doesn't
+    // silently elevate every caller.
+    let isPlatformAdmin () = async {
+        match resolvePlatformAdminStore ctx with
+        | Some store -> return! store.IsPlatformAdmin userId
+        | None -> return false
+    }
 
-                    if not allowed then
+    /// Caller's "effective" team role for the supplied team, accounting
+    /// for the Platform-Admin bypass. Returns `Owner` when the caller
+    /// holds `PlatformRole.PlatformAdmin` even if they have no team
+    /// membership at all — that matches the "complete rights across
+    /// all teams" contract. Otherwise returns whatever the team store
+    /// says (or `None` for non-members of a non-admin).
+    let effectiveCallerRole (ts: ITeamStore) (teamId: string) = async {
+        let! isAdmin = isPlatformAdmin ()
+
+        if isAdmin then
+            return Some Owner
+        else
+            return! ts.GetMemberRole(teamId, userId)
+    }
+
+    /// Helper for the Add / Remove paths. Reads the caller's effective
+    /// role + checks `TeamRoles.canManageRole` against the target role.
+    /// Returns `Ok ()` when permitted, `Error "Insufficient permissions"`
+    /// otherwise. Centralised so the three handlers share the same
+    /// error string.
+    let authoriseManageRole (ts: ITeamStore) (teamId: string) (targetRole: TeamRole) = async {
+        let! callerRole = effectiveCallerRole ts teamId
+
+        match callerRole with
+        | Some r when TeamRoles.canManageRole r targetRole -> return Ok()
+        | _ -> return Error "Insufficient permissions"
+    }
+
+    // The team-create flow is shared by both `CreateTeam` (legacy —
+    // caller becomes Owner) and `CreateTeamWithOwner` (Platform
+    // Management UI — names an Owner explicitly). Both honour the
+    // `TeamCreationPolicy` gate + emit the same audit shape; the only
+    // difference is whose user id ends up on the membership row +
+    // the active-team pointer.
+    let createTeamCore (name: string) (ownerUserId: string) = async {
+        match teamStore with
+        | Some ts ->
+            let! allowed = isAdminAllowed ()
+
+            if not allowed then
+                audit
+                    "_platform"
+                    (TeamCreationDenied {
+                        UserId = userId
+                        AttemptedName = name
+                    })
+
+                return Error "Team creation requires Platform Admin"
+            else
+                let teamId = Guid.NewGuid().ToString("N")[..7]
+                let! result = ts.CreateTeam(teamId, name)
+
+                match result with
+                | Ok team ->
+                    audit
+                        teamId
+                        (TeamCreated {
+                            UserId = userId
+                            TeamId = teamId
+                            TeamName = name
+                        })
+
+                    let! addResult = ts.AddMember(teamId, ownerUserId, Owner)
+
+                    match addResult with
+                    | Ok() ->
                         audit
-                            "_platform"
-                            (TeamCreationDenied {
+                            teamId
+                            (MemberAdded {
                                 UserId = userId
-                                AttemptedName = name
+                                TeamId = teamId
+                                AffectedUserId = ownerUserId
+                                Role = TeamRoles.displayName Owner
                             })
+                    | Error _ -> ()
 
-                        return Error "Team creation requires Platform Admin"
-                    else
-                        let teamId = Guid.NewGuid().ToString("N")[..7]
-                        let! result = ts.CreateTeam(teamId, name)
+                    // Only set the caller's active team when they are
+                    // the new Owner. Spinning up a team for someone
+                    // else (Platform Admin provisioning) shouldn't
+                    // re-point the operator's active team at it.
+                    if ownerUserId = userId then
+                        let! _ = ts.SetActiveTeam(userId, teamId)
+                        ()
 
-                        match result with
-                        | Ok team ->
-                            audit
-                                teamId
-                                (TeamCreated {
-                                    UserId = userId
-                                    TeamId = teamId
-                                    TeamName = name
-                                })
+                    return Ok team
+                | Error e -> return Error e
+        | None -> return Error "Team management not available in this mode"
+    }
 
-                            let! addResult = ts.AddMember(teamId, userId, Owner)
+    {
+        CreateTeam = fun name -> createTeamCore name userId
+        CreateTeamWithOwner =
+            fun request -> async {
+                let trimmedName = request.Name
+                let ownerId = request.InitialOwnerUserId
 
-                            match addResult with
-                            | Ok() ->
-                                audit
-                                    teamId
-                                    (MemberAdded {
-                                        UserId = userId
-                                        TeamId = teamId
-                                        AffectedUserId = userId
-                                        Role = TeamRoles.displayName Owner
-                                    })
-                            | Error _ -> ()
-
-                            let! _ = ts.SetActiveTeam(userId, teamId)
-                            return Ok team
-                        | Error e -> return Error e
-                | None -> return Error "Team management not available in this mode"
+                if System.String.IsNullOrWhiteSpace ownerId then
+                    return Error "Initial owner user id can't be empty"
+                else
+                    return! createTeamCore trimmedName ownerId
             }
         GetMyTeams =
             fun () -> async {
@@ -223,10 +288,13 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             fun (teamId, memberId, role) -> async {
                 match teamStore with
                 | Some ts ->
-                    let! callerRole = ts.GetMemberRole(teamId, userId)
+                    // Gate against the role being assigned: Admin
+                    // callers cannot assign Admin or Owner; only
+                    // Owners (or Platform Admins via the bypass) can.
+                    let! authorised = authoriseManageRole ts teamId role
 
-                    match callerRole with
-                    | Some r when TeamRoles.canManageMembers r ->
+                    match authorised with
+                    | Ok() ->
                         let! result = ts.AddMember(teamId, memberId, role)
 
                         match result with
@@ -242,23 +310,33 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         | Error _ -> ()
 
                         return result
-                    | _ -> return Error "Insufficient permissions"
+                    | Error e -> return Error e
                 | None -> return Error "Team management not available in this mode"
             }
         ChangeMemberRole =
             fun (teamId, memberId, newRole) -> async {
                 match teamStore with
                 | Some ts ->
-                    let! callerRole = ts.GetMemberRole(teamId, userId)
+                    // Read the affected user's prior role before
+                    // anything else so we can gate against BOTH the
+                    // old and new roles — promoting Member → Admin
+                    // and demoting Admin → Member are both Owner-only
+                    // operations.
+                    let! oldRoleOpt = ts.GetMemberRole(teamId, memberId)
+                    let! authorisedNew = authoriseManageRole ts teamId newRole
 
-                    match callerRole with
-                    | Some r when TeamRoles.canManageMembers r ->
-                        // Read the affected user's prior role before
-                        // mutating so the audit event can record
-                        // OldRole → NewRole. The store is idempotent
-                        // on no-op, so we suppress the audit when the
-                        // role didn't actually change.
-                        let! oldRoleOpt = ts.GetMemberRole(teamId, memberId)
+                    let! authorisedOld =
+                        match oldRoleOpt with
+                        | Some oldRole -> authoriseManageRole ts teamId oldRole
+                        // Missing prior membership: the underlying
+                        // `ChangeMemberRole` will return its own error;
+                        // pre-authorise as `Ok` so we don't surface
+                        // "Insufficient permissions" for what is really
+                        // a "no such member" condition.
+                        | None -> async { return Ok() }
+
+                    match authorisedNew, authorisedOld with
+                    | Ok(), Ok() ->
                         let! result = ts.ChangeMemberRole(teamId, memberId, newRole)
 
                         match result, oldRoleOpt with
@@ -275,17 +353,29 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         | _ -> ()
 
                         return result
-                    | _ -> return Error "Insufficient permissions"
+                    | Error e, _
+                    | _, Error e -> return Error e
                 | None -> return Error "Team management not available in this mode"
             }
         RemoveTeamMember =
             fun (teamId, memberId) -> async {
                 match teamStore with
                 | Some ts ->
-                    let! callerRole = ts.GetMemberRole(teamId, userId)
+                    // Gate against the target's CURRENT role: Admin
+                    // callers cannot remove other Admins or Owners;
+                    // only Owners (or Platform Admins) can.
+                    let! targetRoleOpt = ts.GetMemberRole(teamId, memberId)
 
-                    match callerRole with
-                    | Some r when TeamRoles.canManageMembers r ->
+                    let! authorised =
+                        match targetRoleOpt with
+                        | Some targetRole -> authoriseManageRole ts teamId targetRole
+                        // No such membership — fall through to the
+                        // store's own error rather than misreporting
+                        // as a permissions issue.
+                        | None -> async { return Ok() }
+
+                    match authorised with
+                    | Ok() ->
                         // Cache invalidation is event-driven:
                         // `TeamStore.RemoveMember` publishes
                         // `MembershipChanged` on the reserved
@@ -306,7 +396,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         | Error _ -> ()
 
                         return result
-                    | _ -> return Error "Insufficient permissions"
+                    | Error e -> return Error e
                 | None -> return Error "Team management not available in this mode"
             }
         GetTeamMembers =
