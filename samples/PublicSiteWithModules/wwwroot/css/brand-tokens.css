@@ -1,0 +1,160 @@
+/* Phase 82 — CSS variable set for the BrandKit primitives. A
+   sample-distinctive palette (cool blue + warm grey) — NOT
+   Ella-MAe's Bluebell, NOT ScaleMastery's brass — so the sample
+   doesn't co-brand inadvertently. Consumers of BrandKit define
+   equivalent token sets per their brand; see
+   `docs/brandkit-tokens.md` for the full variable reference. */
+
+:root {
+    --bk-font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+    --bk-font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+    --bk-font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --bk-ink: #1F2937;
+    --bk-ink-mute: #6B7280;
+    --bk-paper: #F8FAFC;
+    --bk-panel: #FFFFFF;
+    --bk-rule: #E5E7EB;
+    --bk-accent: #2563EB;
+    --bk-on-dark-text: #F8FAFC;
+
+    --bk-positive: #16A34A;
+    --bk-priority: #DC2626;
+    --bk-info: #2563EB;
+
+    --bk-radius-md: 8px;
+    --bk-radius-lg: 12px;
+    --bk-shadow-card: 0 4px 16px -8px rgba(31, 41, 55, 0.15);
+}
+
+* { box-sizing: border-box; }
+
+.bk-display { font-family: var(--bk-font-display); font-style: italic; line-height: 1.1; margin: 0; }
+.bk-display-lg { font-size: 46px; font-weight: 500; letter-spacing: -0.02em; }
+.bk-display-md { font-size: 30px; font-weight: 500; }
+.bk-display-sm { font-size: 21px; font-weight: 500; }
+
+.bk-eyebrow {
+    font-family: var(--bk-font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.20em;
+    color: var(--bk-accent);
+    display: inline-block;
+}
+.bk-eyebrow-mute { color: var(--bk-ink-mute); }
+
+.bk-mono {
+    font-family: var(--bk-font-mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+}
+.bk-mono-body {
+    font-family: var(--bk-font-mono);
+    font-size: 13px;
+    padding: 2px 6px;
+    background: var(--bk-panel);
+    border: 1px solid var(--bk-rule);
+    border-radius: 4px;
+}
+
+.bk-rule { height: 1px; background: var(--bk-rule); margin: 24px 0; }
+.bk-rule-soft { opacity: 0.5; }
+.bk-divider-v {
+    display: inline-block;
+    width: 1px;
+    height: 16px;
+    background: var(--bk-rule);
+    vertical-align: middle;
+    margin: 0 8px;
+}
+
+.bk-card {
+    background: var(--bk-panel);
+    border-radius: var(--bk-radius-lg);
+    padding: 26px;
+    box-shadow: var(--bk-shadow-card);
+    display: block;
+}
+.bk-card-tight { padding: 18px; }
+.bk-card-deep { background: #F1F5F9; }
+.bk-card-outlined {
+    background: transparent;
+    border: 1px solid var(--bk-rule);
+    box-shadow: none;
+}
+
+.bk-tag {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-family: var(--bk-font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    background: transparent;
+    color: var(--bk-ink-mute);
+    border: 1px solid var(--bk-rule);
+}
+.bk-tag-on { color: var(--bk-accent); border-color: var(--bk-accent); }
+.bk-tag-dotted .bk-tag-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bk-accent);
+    margin-right: 6px;
+    vertical-align: middle;
+}
+.bk-tag-info { color: var(--bk-info); border-color: var(--bk-info); }
+.bk-tag-positive { color: var(--bk-positive); border-color: var(--bk-positive); }
+.bk-tag-priority { color: var(--bk-priority); border-color: var(--bk-priority); }
+.bk-tag-critical { color: var(--bk-priority); border-color: var(--bk-priority); font-weight: 600; }
+
+.bk-persona { display: block; }
+.bk-persona-circle { border-radius: 50%; }
+.bk-persona-rounded { border-radius: 12px; }
+.bk-persona-square { border-radius: 3px; }
+.bk-persona-signature { display: inline-flex; align-items: center; gap: 8px; }
+.bk-persona-signature-name { color: var(--bk-ink); font-weight: 500; margin-left: 4px; }
+
+.bk-wordmark {
+    font-family: var(--bk-font-display);
+    font-style: italic;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    font-size: 22px;
+    color: var(--bk-ink);
+}
+.bk-wordmark-emphasis { font-style: normal; font-weight: 600; }
+
+.bk-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--bk-rule);
+    background: var(--bk-panel);
+}
+.bk-header-nav { display: flex; gap: 24px; }
+.bk-header-nav-link {
+    color: var(--bk-ink-mute);
+    text-decoration: none;
+    font-size: 13px;
+}
+.bk-header-nav-link:hover { color: var(--bk-accent); }
+
+.bk-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px;
+    border-top: 1px solid var(--bk-rule);
+    color: var(--bk-ink-mute);
+    font-size: 13px;
+    margin-top: 64px;
+}
+.bk-footer-links { display: flex; gap: 16px; }
+.bk-footer-link { color: inherit; text-decoration: none; }
+.bk-footer-link:hover { color: var(--bk-accent); }

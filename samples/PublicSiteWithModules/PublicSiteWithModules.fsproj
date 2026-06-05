@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+        <Description>Phase 82 worked example — hybrid SDK ServerApp + ToolUp.PublicRendering composition on one pipeline. Demonstrates `PublicRenderingCompose.withPublicRendering` (Phase 80c) layered over a base ServerApp carrying a domain module (`Notes`) that mounts its own SSR detail routes alongside PublicRendering's markdown-driven landing page. Brand-styled with ToolUp.BrandKit (Phase 81) primitives.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\..\src\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
+        <ProjectReference Include="..\..\src\ToolUp.BrandKit\ToolUp.BrandKit.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Notes.fs" />
+        <Compile Include="Layouts.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Markdown content for the PublicRendering side of the
+             hybrid surface. PreserveNewest so iteration on content
+             doesn't require a full build. Web SDK already auto-
+             includes wwwroot/** so no explicit entry needed for it. -->
+        <Content Include="content\**\*.md" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>
