@@ -99,6 +99,26 @@ module PublicRenderingServerApp =
         Feeds = []
     }
 
+    /// Phase 80c composition seam — lift an existing `ServerApp` into a
+    /// `PublicRenderingServerApp` so the additive
+    /// `PublicRenderingCompose.withPublicRendering` extension can stack
+    /// public-rendering contributions onto whatever the input
+    /// `ServerApp` already carries. The input `ServerApp` becomes the
+    /// `Base` field; all public-rendering-specific fields initialise
+    /// empty (the configurator passed to `withPublicRendering`
+    /// populates them via `withLayout` / `withRedirects` / etc.).
+    let createFrom (baseApp: ServerApp) : PublicRenderingServerApp = {
+        Base = baseApp
+        Layouts = Map.empty
+        Redirects = []
+        StructuredDataBuilders = Map.empty
+        HotReload = true
+        ContentApiOverride = None
+        AIPublishEnabled = false
+        AIPublishAuthoriser = None
+        Feeds = []
+    }
+
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
 
     let withConfig (c: ServerConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
@@ -287,22 +307,50 @@ module PublicRenderingServerApp =
             HotReload = enabled
     }
 
-    /// Drive the final composition. When `ServerConfig.PublicRendering`
-    /// is `NoPublicRendering`, short-circuits to `ServerApp.run` —
-    /// byte-for-byte the same shape as the pre-Phase-38 base path.
-    /// When `EnabledPublicRendering root`, constructs the loader,
-    /// builds the API impl (using `ContentApiOverride` when supplied),
-    /// appends the sitemap / redirect / page handlers to the route
-    /// chain, registers DI singletons, and delegates to
-    /// `ServerApp.run`.
-    let run (app: PublicRenderingServerApp) : int =
+    /// Phase 80c composition seam — apply every public-rendering-specific
+    /// contribution (DI registrations, sitemap + redirect + export +
+    /// feed + page handlers, `PublicPageEntity` registration, optional
+    /// `INarrativePagePublisher` / `AIPublishAuthoriser` /
+    /// `ILayoutCatalog` registrations) onto the inner `ServerApp`,
+    /// returning the composed result without driving it.
+    /// `PublicRenderingServerApp.run` calls this and then
+    /// `ServerApp.run`; the `PublicRenderingCompose.withPublicRendering`
+    /// builder calls it without invoking `ServerApp.run`, so the same
+    /// PublicRendering contributions can stack with Forms / AI / RAG
+    /// contributions onto one composition root (Phase 1h pattern
+    /// extended to PublicRendering — see migration doc 80c).
+    ///
+    /// When `ServerConfig.PublicRendering = NoPublicRendering`, returns
+    /// `app.Base` unchanged — zero contribution, byte-for-byte
+    /// equivalent to a base `ServerApp` of the same `Base`. The
+    /// companion marker is NOT appended in the strip-imports case so a
+    /// later `withPublicRendering` on the same pipeline still composes
+    /// freely.
+    ///
+    /// **Advanced.** Consumers should use `PublicRenderingServerApp.run`
+    /// (or `PublicRenderingCompose.withPublicRendering` for hybrid
+    /// composition) unless they are wrapping the composed `ServerApp`
+    /// for further transformation. Hidden from IntelliSense via
+    /// `[<EditorBrowsable>]`.
+    [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
+    let composePublicRendering (app: PublicRenderingServerApp) : ServerApp =
         match app.Base.Config.PublicRendering with
         | NoPublicRendering ->
-            // Strip-imports path: zero contribution to the base
-            // `ServerApp.run`. Same shape as if the consumer never
-            // imported the companion.
-            ServerApp.run app.Base
+            // Strip-imports path: zero contribution. Same shape as if
+            // the consumer never imported the companion. No companion
+            // marker — a later `withPublicRendering` on the same
+            // pipeline composes freely.
+            app.Base
         | EnabledPublicRendering root ->
+            // Phase 80c conflict validator — fail fast if PublicRendering
+            // has already been composed onto this pipeline (e.g.
+            // `withPublicRendering ... |> withPublicRendering ...`).
+            // Pre-empts the cascading duplicate-route-mount /
+            // duplicate-entity-registration failures that the second
+            // composition would otherwise surface deep inside
+            // `compose` or at first request.
+            ServerApp.ensureCompanionNotAlreadyComposed "ToolUp.PublicRendering" app.Base
+
             let layouts = app.Layouts
             let composeRedirects = app.Redirects
             let hotReload = app.HotReload
@@ -462,7 +510,24 @@ module PublicRenderingServerApp =
                     Extensions = mergedExt
             }
 
-            ServerApp.run final
+            // Phase 80c — append the PublicRendering marker so a
+            // second `withPublicRendering` on the same pipeline trips
+            // the entry-guard above.
+            final |> ServerApp.withCompanionMarker "ToolUp.PublicRendering"
+
+    /// Drive the final composition. Registers the sitemap / redirect /
+    /// export / feed / page handlers, wires the `IPublicContentApi` +
+    /// `MarkdownContentLoader` + optional `INarrativePagePublisher`
+    /// into DI, and delegates to `ServerApp.run`. When
+    /// `ServerConfig.PublicRendering = NoPublicRendering`, short-
+    /// circuits to `ServerApp.run app.Base` — byte-for-byte the same
+    /// shape as the pre-Phase-38 base path. Phase 80c — implementation
+    /// is now `composePublicRendering >> ServerApp.run`; consumers
+    /// needing to stack PublicRendering with Forms / AI / RAG
+    /// companions on one composition root call
+    /// `PublicRenderingCompose.withPublicRendering` directly instead.
+    let run (app: PublicRenderingServerApp) : int =
+        composePublicRendering app |> ServerApp.run
 
     /// Build-time terminus. Mirrors `run` but writes the rendered
     /// site to disk under `outputDir` instead of starting Kestrel,
@@ -474,3 +539,57 @@ module PublicRenderingServerApp =
     /// and at least one registered layout — same invariants as `run`.
     let exportStatic (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
         StaticExport.run app.Base.Config app.Layouts app.ContentApiOverride app.Base.Logger outputDir
+
+// ─── Additive companion-set extension `withPublicRendering` (Phase 80c) ──
+//
+// Stack PublicRendering contributions onto an existing `ServerApp` pipeline
+// alongside Forms / AI / RAG / future companions, without forcing the
+// deployment to commit to `PublicRenderingServerApp.run` as the terminal
+// call. Mirrors Phase 1h's `FormsCompose.withForms` / `AICompose.withAI`
+// shape exactly; see the Phase 1h migration doc + the Phase 80c migration
+// doc for the hybrid-composition pattern.
+
+/// Phase 80c — stack PublicRendering contributions onto an existing
+/// `ServerApp` pipeline. The `configure` function builds
+/// public-rendering-specific state (layouts, redirects, JSON-LD builders,
+/// hot-reload toggle, content-API override, AI-publish gating, Atom feeds)
+/// on a fresh `PublicRenderingServerApp` whose `Base` is the input
+/// `ServerApp`. The configurator should call only PublicRendering-specific
+/// helpers (`PublicRenderingServerApp.withLayout` / `withRedirects` /
+/// `withFeed` / etc.); the delegating helpers (`withConfig` / `withAuth` /
+/// …) exist on `PublicRenderingServerApp` for backcompat but calling them
+/// inside the configurator overwrites the base `ServerApp`'s existing
+/// configuration. Set base configuration on the outer pipeline before
+/// calling `withPublicRendering`.
+///
+/// Calling `withPublicRendering` twice on the same pipeline composes
+/// PublicRendering twice — the Phase 80c conflict validator (mirroring the
+/// Phase 1h convention via `ServerApp.ensureCompanionNotAlreadyComposed`)
+/// surfaces this at compose time with a clear single-line diagnostic
+/// naming the companion + resolution paths, instead of cascading into
+/// double-mounted-route / duplicate-entity-registration failures.
+///
+/// When `ServerConfig.PublicRendering = NoPublicRendering`, the call is
+/// a no-op pass-through — same strip-imports guarantee as
+/// `PublicRenderingServerApp.run`. The companion marker is NOT appended
+/// in that case, so a later `withPublicRendering` on the same pipeline
+/// composes freely (a deployment can opt into PublicRendering by flipping
+/// the `ServerConfig` field at startup without changing its composition
+/// root).
+///
+/// Example — PublicRendering + a domain module on one pipeline:
+///
+///     ServerApp.empty
+///     |> ServerApp.withConfig config
+///     |> ServerApp.withStorage storage
+///     |> ServerApp.addModule myAdminModule
+///     |> PublicRenderingCompose.withPublicRendering (fun pr ->
+///         pr
+///         |> PublicRenderingServerApp.withLayout "page" pageLayout
+///         |> PublicRenderingServerApp.withLayout "article" articleLayout
+///         |> PublicRenderingServerApp.withFeed myAtomFeed)
+///     |> ServerApp.run
+let withPublicRendering (configure: PublicRenderingServerApp -> PublicRenderingServerApp) (app: ServerApp) : ServerApp =
+    PublicRenderingServerApp.createFrom app
+    |> configure
+    |> PublicRenderingServerApp.composePublicRendering

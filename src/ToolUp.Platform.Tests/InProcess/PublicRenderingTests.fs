@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.PublicRenderingTests
 open System
 open System.IO
 open Expecto
+open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.PublicRendering
 open ToolUp.Platform.Tests.Contracts
@@ -317,4 +318,129 @@ let private implTests =
             Expect.stringContains xml "<lastmod>2026-05-22</lastmod>" "lastmod surfaces"
     ]
 
-let tests = testList "PublicRendering" [ contractTests; implTests ]
+// ─── Phase 80c — hybrid SDK + PublicRendering composition tests ────
+//
+// `withPublicRendering` ports `ToolUp.PublicRendering` into the
+// Phase 1h additive-composition shape Forms + AI already use. These
+// tests pin the four behaviours the migration doc promises:
+//
+//   1. `createFrom` lifts a base `ServerApp` into a fresh
+//      `PublicRenderingServerApp` whose `Base` is the input.
+//   2. `composePublicRendering` with `NoPublicRendering` is a true
+//      strip-imports pass-through — no marker appended, so a later
+//      compose on the same pipeline composes freely.
+//   3. `composePublicRendering` with `EnabledPublicRendering` appends
+//      the `"ToolUp.PublicRendering"` companion marker.
+//   4. A second `withPublicRendering` on the same pipeline trips
+//      `ensureCompanionNotAlreadyComposed` with a clear diagnostic.
+
+let private mkContentRoot () : ContentRoot =
+    let dir = mkFixtureDir ()
+    seedCanonicalFixture dir
+    ContentRoot dir
+
+let private dummyLayout (_p: PublicPage) : XmlNode = html [] [ body [] [] ]
+
+let private composeTests =
+    testList "PublicRendering — Phase 80c composition (hybrid SDK + PublicRendering)" [
+
+        testCase "createFrom lifts the base ServerApp into a PublicRenderingServerApp"
+        <| fun _ ->
+            let baseApp = ServerApp.empty |> ServerApp.withConfig ServerConfig.defaults
+            let lifted = PublicRenderingCompose.PublicRenderingServerApp.createFrom baseApp
+
+            Expect.equal
+                lifted.Base.Config.PublicRendering
+                ServerConfig.defaults.PublicRendering
+                "lifted.Base preserves the input ServerApp's config"
+
+            Expect.isEmpty lifted.Layouts "fresh createFrom has empty layouts"
+            Expect.isEmpty lifted.Redirects "fresh createFrom has empty redirects"
+            Expect.isEmpty lifted.Feeds "fresh createFrom has empty feeds"
+            Expect.isFalse lifted.AIPublishEnabled "fresh createFrom has AIPublishEnabled=false"
+
+        testCase
+            "composePublicRendering with NoPublicRendering is a strip-imports pass-through (no marker, double-compose safe)"
+        <| fun _ ->
+            let baseApp =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = NoPublicRendering
+                }
+
+            let composed =
+                baseApp
+                |> PublicRenderingCompose.withPublicRendering id
+                |> PublicRenderingCompose.withPublicRendering id
+
+            Expect.isFalse
+                (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                "NoPublicRendering branch must NOT append the companion marker — a later compose must remain free to fire"
+
+        testCase
+            "composePublicRendering with EnabledPublicRendering appends the ToolUp.PublicRendering companion marker"
+        <| fun _ ->
+            let root = mkContentRoot ()
+
+            let baseApp =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering root
+                }
+
+            let composed =
+                baseApp
+                |> PublicRenderingCompose.withPublicRendering (
+                    PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
+                )
+
+            Expect.isTrue
+                (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                "EnabledPublicRendering branch must append the 'ToolUp.PublicRendering' companion marker so a second compose trips the guard"
+
+        testCase
+            "second withPublicRendering on the same pipeline trips ensureCompanionNotAlreadyComposed with a clear diagnostic"
+        <| fun _ ->
+            let root = mkContentRoot ()
+
+            let baseApp =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering root
+                }
+
+            let firstComposed =
+                baseApp
+                |> PublicRenderingCompose.withPublicRendering (
+                    PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
+                )
+
+            let raised =
+                try
+                    firstComposed
+                    |> PublicRenderingCompose.withPublicRendering (
+                        PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
+                    )
+                    |> ignore
+
+                    None
+                with ex ->
+                    Some ex
+
+            Expect.isSome
+                raised
+                "second withPublicRendering on the same pipeline must raise (entry-guard fires before the second compose runs)"
+
+            match raised with
+            | Some ex ->
+                Expect.stringContains
+                    ex.Message
+                    "PublicRendering"
+                    "the diagnostic must name the companion ('PublicRendering' or 'ToolUp.PublicRendering') so the operator can locate the duplicate withPublicRendering call"
+            | None -> ()
+    ]
+
+let tests = testList "PublicRendering" [ contractTests; implTests; composeTests ]
