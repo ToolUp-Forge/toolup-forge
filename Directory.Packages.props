@@ -214,7 +214,7 @@
     The PackageVersion entries here are unchanged at split time.
   -->
   <PropertyGroup>
-    <ToolUpSdkVersion>0.5.7</ToolUpSdkVersion>
+    <ToolUpSdkVersion>0.5.16</ToolUpSdkVersion>
   </PropertyGroup>
   <ItemGroup>
     <!-- ToolUp.Platform — the SDK floor -->
