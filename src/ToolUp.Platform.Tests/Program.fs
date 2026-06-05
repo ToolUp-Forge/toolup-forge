@@ -131,6 +131,7 @@ let allTests =
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
         PublicRenderingTests.tests
+        BrandKitTests.tests
         AssetStoreTests.tests
         InMemoryRateLimitStoreTests.tests
         // Phase 56 — full contract pack bound to InMemoryRateLimitStore.

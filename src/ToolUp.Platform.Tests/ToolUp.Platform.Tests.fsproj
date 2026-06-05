@@ -257,6 +257,7 @@
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <Compile Include="InProcess\PublicRenderingTests.fs" />
+        <Compile Include="InProcess\BrandKitTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
         <Compile Include="InProcess\InMemoryRateLimitStoreTests.fs" />
         <Compile Include="InProcess\TeamCreationPolicyTests.fs" />
@@ -399,6 +400,11 @@
         <!-- SDK substrate. ToolUp.Platform.Server transitively pulls Core. -->
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <!-- Phase 81 — BrandKit primitives test coverage lands in
+             Platform.Tests rather than a dedicated test project (the
+             primitive shape is small enough that splitting adds more
+             ceremony than value). -->
+        <ProjectReference Include="..\ToolUp.BrandKit\ToolUp.BrandKit.fsproj" />
         <!-- Cloud storage companions. -->
         <ProjectReference Include="..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
         <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />

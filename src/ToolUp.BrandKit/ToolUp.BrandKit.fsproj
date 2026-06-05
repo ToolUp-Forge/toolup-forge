@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.BrandKit — app-neutral Giraffe.ViewEngine brand primitives for SSR public surfaces. Wordmark / eyebrow / card / pill / persona avatar / icon set / page chrome, parameterised by CSS custom properties consumers define per-brand. Pairs with ToolUp.PublicRendering for the hybrid SSR-front + SDK-admin app shape. Phase 81.</Description>
+        <PackageTags>fsharp;sdk;server;ssr;giraffe;brand;design-system;primitives</PackageTags>
+        <!-- Phase 81 — single-tier server-side companion. Helpers emit
+             Giraffe.ViewEngine XmlNode trees with semantic markup +
+             CSS-variable-based styling hooks; the package ships ZERO
+             opinionated styling — brand colour / font / spacing all
+             come from the consumer's :root declaration. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Giraffe.ViewEngine" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Order matters: Tokens defines CSS-var name constants used
+             by every other module. Wordmark / Card / Pill / Persona /
+             Icon are independent of each other. PageChrome composes
+             Wordmark + Icon. -->
+        <Compile Include="Server\Tokens.fs" />
+        <Compile Include="Server\Text.fs" />
+        <Compile Include="Server\Wordmark.fs" />
+        <Compile Include="Server\Card.fs" />
+        <Compile Include="Server\Pill.fs" />
+        <Compile Include="Server\Persona.fs" />
+        <Compile Include="Server\Icon.fs" />
+        <Compile Include="Server\PageChrome.fs" />
+    </ItemGroup>
+</Project>
