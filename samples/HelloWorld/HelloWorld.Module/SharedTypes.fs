@@ -1,4 +1,4 @@
-module Template.SharedTypes
+module HelloWorld.Module.SharedTypes
 
 // ─── Cross-cut module types ─────────────────────────────────────
 //
@@ -13,11 +13,11 @@ type EchoRequest = { Text: string }
 /// Echo response — what the server returns.
 type EchoResponse = { Echoed: string }
 
-/// Fable.Remoting API surface for this module. The client constructs
-/// a typed proxy via `Api.makeProxy<TemplateApi>`; the server
+/// ToolUp.Remoting API surface for this module. The client constructs
+/// a typed proxy via `Api.makeProxy<HelloWorldApi>`; the server
 /// implements the record in `Server.fs`. The convention is one record
 /// per module with `unit -> Async<...>` or `<Request> -> Async<...>`
 /// methods.
-type TemplateApi = {
+type HelloWorldApi = {
     Echo: EchoRequest -> Async<EchoResponse>
 }

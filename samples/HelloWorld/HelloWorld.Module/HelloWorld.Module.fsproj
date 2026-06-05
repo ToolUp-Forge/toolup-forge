@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HelloWorld.Module — the absolute minimum a new module needs.
+
+    The four-file convention:
+    - SharedTypes.fs : cross-cut types (API contract, DTOs) — visible
+      to both server and client tiers.
+    - Server.fs      : pure server-side routine. Compiled into the
+      module DLL.
+    - ClientModel.fs : Elmish Model / Msg / init / update. Source-
+      injected into the consuming client project via the
+      `HelloWorld.Module.Client.props` import.
+    - ClientView.fs  : Feliz view + `register()` returning
+      `ErasedModule`. Also injected via the .Client.props.
+    - Icons.fs       : per-page / module icons. Injected via .Client.props.
+
+    To use this shape in your own deployment:
+    1. Copy the folder, rename `HelloWorld.Module` to your module name.
+    2. Update each `.fs` file with your domain logic.
+    3. Reference the renamed fsproj from your server project
+       (`<ProjectReference>`).
+    4. Import the renamed `.Client.props` into your client project
+       (`<Import Project="...\YourModule.Client.props" />`).
+    5. Add your module's `ServerModule.create + with*` chain to the
+       server's module list, and its `register ()` call to the
+       client's module list.
+
+    See the sibling `HelloWorld.Server` project for the canonical
+    server-side wiring shape, and `docs/platform/modules.md` for the
+    full module-spec surface.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <!-- Modules are app-tier domain code, not SDK companions; not NuGet-packaged. -->
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="SharedTypes.fs" />
+        <Compile Include="Server.fs" />
+        <None Include="ClientModel.fs" />
+        <None Include="Icons.fs" />
+        <None Include="ClientView.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

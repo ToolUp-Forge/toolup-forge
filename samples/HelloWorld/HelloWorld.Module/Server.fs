@@ -1,14 +1,13 @@
-module Template.Server
+module HelloWorld.Module.Server
 
-open Template.SharedTypes
+open HelloWorld.Module.SharedTypes
 
 // ─── Pure routine ────────────────────────────────────────────────
 //
 // The module's domain logic. Pure functions; no HttpContext, no DI,
 // no ToolUp.Remoting. The composition root in the consuming server
-// project wraps this routine in an HTTP API factory (with permission
-// guards, scope-aware file access, etc.) — see `ToolUpApp-Server/Server.fs`
-// for the canonical pattern.
+// project wraps this routine in an HTTP API factory — see the sibling
+// HelloWorld.Server project for the canonical wiring pattern.
 
 let echoRoutine (request: EchoRequest) : EchoResponse = {
     Echoed = sprintf "Echo: %s" request.Text

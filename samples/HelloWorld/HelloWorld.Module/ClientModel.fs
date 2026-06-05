@@ -1,8 +1,8 @@
-module Template.ClientModel
+module HelloWorld.Module.ClientModel
 
 open ToolUp.Elmish
 open ToolUp.Platform
-open Template.SharedTypes
+open HelloWorld.Module.SharedTypes
 
 // ─── Elmish MVU ──────────────────────────────────────────────────
 
@@ -37,17 +37,17 @@ let init () : Model * Cmd<Msg> =
     },
     Cmd.none
 
-/// Fable.Remoting proxy. `UserSession.withRequestHeaders` attaches the
+/// ToolUp.Remoting proxy. `UserSession.withRequestHeaders` attaches the
 /// auth header (Bearer token in authenticated modes; X-User-Id in
 /// Anonymous mode) so the server's per-request scope resolution works.
-let private templateApi: TemplateApi =
-    Api.makeProxy<TemplateApi> (customOptions = UserSession.withRequestHeaders)
+let private helloWorldApi: HelloWorldApi =
+    Api.makeProxy<HelloWorldApi> (customOptions = UserSession.withRequestHeaders)
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | SubmitEcho text ->
         let cmd =
-            Cmd.OfRemoting.call templateApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
+            Cmd.OfRemoting.call helloWorldApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
 
         { model with Input = text }, cmd
     | EchoSucceeded response ->

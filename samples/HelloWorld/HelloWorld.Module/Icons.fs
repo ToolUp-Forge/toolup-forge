@@ -1,4 +1,4 @@
-module Toolup.Template.Icons
+module Toolup.HelloWorld.Module.Icons
 
 open Fable.Core.JsInterop
 open Fable.React

@@ -1,17 +1,17 @@
-module Template.ClientView
+module HelloWorld.Module.ClientView
 
 open Feliz
 open ToolUp.Platform
 open ToolUp.Platform.SvgProp
 open ToolUp.Platform.DataProp
-open Template.ClientModel
+open HelloWorld.Module.ClientModel
 
 // ─── View ────────────────────────────────────────────────────────
 //
 // Single-page module: the view returns a tuple `(left, right)` and
 // the shell wraps it as `SplitPanel(left, right)`. Multi-page
-// modules call `withPages` instead — see `SalesAnalysis/ClientRegister.fs`
-// for the canonical multi-page pattern.
+// modules call `withPages` instead — see `docs/platform/modules.md`
+// for the multi-page pattern and the full module-spec surface.
 
 let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
 #if DEBUG
@@ -56,7 +56,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
                         ]
                     ]
                 ]
-                Html.h2 [ prop.text "Template" ]
+                Html.h2 [ prop.text "Hello World" ]
                 Html.input [
                     prop.value model.Input
                     prop.onChange (fun (v: string) -> dispatch (SubmitEcho v))
@@ -90,14 +90,15 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
 // supplies the single-page view function; `register` erases the
 // typed module into an `ErasedModule` for the heterogeneous module
 // list. Add `withDataTypes`, `withConfig`, `withNeedsData`, etc. for
-// richer modules — see SOVSM / ChannelAnalysis for examples.
+// richer modules — see `docs/platform/modules.md` for the full
+// module-spec surface.
 
 let register () : ErasedModule =
     ClientModule.create {
         Init = init
         Update = update
-        Name = "Template"
-        Icon = Toolup.Template.Icons.chart
+        Name = "Hello World"
+        Icon = Toolup.HelloWorld.Module.Icons.chart
     }
     |> ClientModule.withView view
     |> ClientModule.withAvailability DebugOnly

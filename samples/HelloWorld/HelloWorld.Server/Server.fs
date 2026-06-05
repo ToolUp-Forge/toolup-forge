@@ -9,8 +9,10 @@ open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Server
 open ToolUp.Remoting.Server
+open HelloWorld.Module.SharedTypes
+open HelloWorld.Module.Server
 
-// Phase 66 Stream F.5 — HelloWorld composition root.
+// HelloWorld composition root.
 // Authenticated single-user deployment using the canonical
 // `Surfaces.individual` shape. `ServerConfigOverrides.referenceApp`
 // declares `Some Surfaces.individual` so `fromEnv` pins this app to
@@ -21,11 +23,16 @@ open ToolUp.Remoting.Server
 // `ServerConfigOverrides.empty`, which falls through to
 // `ServerConfig.defaults.Surfaces = Surfaces.anonymous`.
 //
-// ─── Phase 69b.tail worked example ────────────────────────────────
+// ─── Module wiring + Phase 69b.tail worked example ────────────────
 //
-// The `Api.make` wrapper auto-composes the Phase 69b platform seams
-// by default; this sample mounts one tiny `IHelloApi` to show the
-// per-call output. Two patterns are demonstrated:
+// The sibling `HelloWorld.Module` project defines the four-file
+// minimum-module shape: SharedTypes (the `HelloWorldApi` record),
+// Server.fs (the pure `echoRoutine`), plus client-tier files
+// (ClientModel / ClientView / Icons) source-injected into a future
+// Client project via `HelloWorld.Module.Client.props`.
+//
+// This Server demonstrates the consumer-side wiring of that Module
+// AND the Phase 69b.tail platform seams in one place:
 //
 //   1. A console-printing `IRemotingTelemetry` sink — passed via the
 //      `?telemetry` argument to override the IMetricsSink-bridging
@@ -46,12 +53,7 @@ open ToolUp.Remoting.Server
 // Either path is correct; the worked example surfaces both seams
 // explicitly so the migration doc has something to point at.
 
-/// Minimal Fable.Remoting API record exercised by the Phase 69b.tail
-/// worked example. One method, no auth attributes — keeps the wire
-/// surface tiny so curl reproduction is one line.
-type IHelloApi = { SayHello: string -> Async<string> }
-
-module HelloApi =
+module HelloWorldRoutes =
     let routeBuilder (typeName: string) (methodName: string) : string =
         sprintf "/api/hello/%s/%s" typeName methodName
 
@@ -110,9 +112,12 @@ module HelloApi =
             }
     }
 
-    /// Server-side implementation of the demo method.
-    let helloImpl (_: HttpContext) : IHelloApi = {
-        SayHello = fun name -> async { return sprintf "Hello, %s!" name }
+    /// Server-side implementation of `HelloWorldApi`. The single Echo
+    /// method delegates to the Module's pure `echoRoutine` — the
+    /// Module owns the domain logic; this composition root owns the
+    /// HTTP wiring.
+    let helloWorldImpl (_: HttpContext) : HelloWorldApi = {
+        Echo = fun request -> async { return echoRoutine request }
     }
 
     /// Mount the worked-example handler via `Api.make`. Both seams
@@ -122,7 +127,7 @@ module HelloApi =
     /// reader) per the Phase 69b.tail wrapper composition.
     let routes =
         Api.make (
-            helloImpl,
+            helloWorldImpl,
             routeBuilder = routeBuilder,
             telemetry = consoleTelemetry,
             authContext = requestStartedAtResolver
@@ -148,12 +153,13 @@ let main _ =
     let logger = ConsoleLogger.fromEnv ()
     let config = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
 
-    let helloModule =
-        ServerModule.create "Hello" |> ServerModule.withHandlers [ HelloApi.routes ]
+    let helloWorldModule =
+        ServerModule.create "Hello World"
+        |> ServerModule.withHandlers [ HelloWorldRoutes.routes ]
 
     ServerApp.empty
     |> ServerApp.withConfig config
     |> ServerApp.withLogger logger
     |> ServerApp.withMetricsSink (ConsoleMetricsSink())
-    |> ServerApp.addModule helloModule
+    |> ServerApp.addModule helloWorldModule
     |> ServerApp.run
