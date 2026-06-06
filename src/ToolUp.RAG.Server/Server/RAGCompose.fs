@@ -579,6 +579,16 @@ let composeWithRAG
         makeApi (fun ctx ->
             ToolUp.AI.AIAssistantHandler.aiAssistantApi resolvedAiConfig moduleAIContextMap (resolveManager ctx) ctx)
         makeApi (ToolUp.AI.AISettingsHandler.aiSettingsApi aiProviderFactory providerProfile)
+        // Phase 70 — Platform Admin AI keys API. Every method is
+        // gated server-side on canModifyPlatformConfig; the client-
+        // side module is hidden from non-admin sidebars by
+        // ClientModule.Visibility.platformAdminOnly. Forked in to
+        // match AICompose.fs — the route was previously only
+        // mounted for AIServerApp.run, so any RAG-using deployment
+        // (RAGServerApp.run is the canonical commercial-app shape)
+        // 404'd on /api/PlatformAIKeysApi/* even though the SDK
+        // shipped the handler.
+        makeApi (ToolUp.AI.PlatformAIKeysHandler.platformAIKeysApi aiProviderFactory)
         route "/api/ai/events"
         >=> fun next ctx -> ToolUp.AI.SSEHandler.sseHandler (resolveManager ctx) config.SseAuthMode next ctx
         // Phase 6g.A: client-resident tool result POST endpoint.
@@ -646,6 +656,22 @@ let composeWithRAG
                     ToolUp.AI.AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
                 )
                 .AddSingleton<IProviderProfile>(providerProfile)
+                // Phase 70 — auto-promote IPlatformAIKeyStore from
+                // the registered ISecretStore at request time.
+                // Mirrors AICompose.fs's registration (sans the
+                // app.PlatformKeyStore override, which RAGCompose
+                // doesn't yet thread through composeWithRAG). The
+                // PlatformAIKeysHandler resolves this from DI;
+                // without the registration the handler 500s the
+                // moment a Platform Admin opens the AI Keys tab.
+                .AddSingleton<IPlatformAIKeyStore>(
+                    System.Func<System.IServiceProvider, IPlatformAIKeyStore>(fun sp ->
+                        let secretStore =
+                            sp.GetService(typeof<ToolUp.Platform.Secrets.ISecretStore>)
+                            :?> ToolUp.Platform.Secrets.ISecretStore
+
+                        ToolUp.AI.BlobPlatformAIKeyStore.create secretStore)
+                )
                 .AddSingleton<AIToolRegistry>(registry)
                 .AddSingleton<ToolUp.AI.ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)
                 .AddSingleton<ToolUp.AI.AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
