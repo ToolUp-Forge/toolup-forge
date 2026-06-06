@@ -415,7 +415,34 @@ let composeWithRAG
     (moduleSurfaceDefaults: (string * SurfaceRequirement) list)
     (routeSurfaceOverrides: ((string * string) * SurfaceRequirement) list)
     (scheduledJobDeclarations: ScheduledJobDeclaration list)
+    // Phase 70 — Platform AI keys substrate. `platformKeyStoreOverride`
+    // mirrors AIServerApp.PlatformKeyStore (None → auto-promote
+    // BlobPlatformAIKeyStore from the registered ISecretStore).
+    // `platformProviders` mirrors AIServerApp.PlatformProviders and
+    // drives the A.5 declaration-vs-factory validator below; an empty
+    // list disables the validator (back-compat for consumers that
+    // haven't adopted withPlatformProvider).
+    (platformKeyStoreOverride: IPlatformAIKeyStore option)
+    (platformProviders: DefaultAIProviderFactory.AIPlatformProvider list)
     =
+
+    // Phase 70 A.5 — verify the consumer-declared platform-provider
+    // accumulator matches the factory's PlatformDescriptors. A
+    // divergence means the consumer wired providers via
+    // AIServerApp.withPlatformProvider but passed a different list
+    // (or none) to DefaultAIProviderFactory.create — caught here,
+    // before any request runs, rather than as a mysterious
+    // NoProviderConfigured at first request. Mirrors AICompose.fs.
+    if not platformProviders.IsEmpty then
+        let declaredIds = platformProviders |> List.map (fun p -> p.Descriptor.Id)
+
+        let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map (fun d -> d.Id)
+
+        if Set.ofList declaredIds <> Set.ofList factoryIds then
+            failwithf
+                "AI platform-provider declaration mismatch. AIServerApp.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
+                (System.String.Join(", ", declaredIds))
+                (System.String.Join(", ", factoryIds))
 
     let queue = IngestionQueue(ingestionQueueCapacity)
 
@@ -598,7 +625,35 @@ let composeWithRAG
         // Phase 6h: cancel-mid-stream endpoint.
         POST
         >=> routef "/api/ai/cancel/%O" ToolUp.AI.AICancellationRegistry.cancelHandler
+        // Phase 6j.A: fast-path audit beacon.
+        POST
+        >=> route "/api/ai/fastpath/beacon"
+        >=> ToolUp.AI.FastPathBeaconHandler.beaconHandler
+        // Phase 6j.G: sequenced fast-path beacons.
+        POST
+        >=> route "/api/ai/fastpath/sequenced-clause-beacon"
+        >=> ToolUp.AI.FastPathBeaconHandler.sequencedClauseBeaconHandler
+        POST
+        >=> route "/api/ai/fastpath/sequence-outcome-beacon"
+        >=> ToolUp.AI.FastPathBeaconHandler.sequenceOutcomeBeaconHandler
+        // Phase 6h.A: conversation-export audit beacon.
+        POST
+        >=> route "/api/ai/conversation/export-audit"
+        >=> ToolUp.AI.ConversationExportAuditHandler.exportAuditHandler
+        // Phase 6g.E: client UI decoder-error sink.
+        POST
+        >=> route "/api/ai/ui-decode-error"
+        >=> ToolUp.AI.UIDecodeErrorHandler.uiDecodeErrorHandler
         ToolUp.RAG.RagHealthHandler.route
+        // Phase 6j.A + 6i.A: dev-only AI telemetry endpoints. Runtime-
+        // gated via `ServerConfig.EnableDevEndpoints` (default `false`)
+        // — mirrors AICompose.fs's `fastPathDevHandlers` block. Two
+        // endpoints share the gate:
+        //   * `/dev/ai-fastpath` — Phase 6j.A Tier-1 hit-rate stats
+        //   * `/dev/ai-latency`  — Phase 6i.A per-turn latency rollup
+        if config.EnableDevEndpoints then
+            yield! ToolUp.AI.FastPathTelemetryHandler.routes
+            yield! ToolUp.AI.AILatencyHandler.routes
         // Phase 6q follow-up C — /dev/rag-citation rolling-window stats.
         // Master gate is `ServerConfig.EnableDevEndpoints` (same activation
         // as `/dev/ai-latency` / `/dev/ai-fastpath`); per-endpoint override
@@ -656,26 +711,54 @@ let composeWithRAG
                     ToolUp.AI.AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
                 )
                 .AddSingleton<IProviderProfile>(providerProfile)
-                // Phase 70 — auto-promote IPlatformAIKeyStore from
-                // the registered ISecretStore at request time.
-                // Mirrors AICompose.fs's registration (sans the
-                // app.PlatformKeyStore override, which RAGCompose
-                // doesn't yet thread through composeWithRAG). The
-                // PlatformAIKeysHandler resolves this from DI;
-                // without the registration the handler 500s the
-                // moment a Platform Admin opens the AI Keys tab.
+                // Phase 70 — register the Platform-Admin-managed AI key
+                // store. When the consumer passed `withPlatformAIKeyStore`
+                // explicitly, register that instance directly. When
+                // omitted, register a Func-resolver that lazily builds
+                // `BlobPlatformAIKeyStore.create secretStore` from
+                // whichever `ISecretStore` is in DI at request time.
+                // Mirrors AICompose.fs.
                 .AddSingleton<IPlatformAIKeyStore>(
                     System.Func<System.IServiceProvider, IPlatformAIKeyStore>(fun sp ->
-                        let secretStore =
-                            sp.GetService(typeof<ToolUp.Platform.Secrets.ISecretStore>)
-                            :?> ToolUp.Platform.Secrets.ISecretStore
+                        match platformKeyStoreOverride with
+                        | Some store -> store
+                        | None ->
+                            let secretStore =
+                                sp.GetService(typeof<ToolUp.Platform.Secrets.ISecretStore>)
+                                :?> ToolUp.Platform.Secrets.ISecretStore
 
-                        ToolUp.AI.BlobPlatformAIKeyStore.create secretStore)
+                            ToolUp.AI.BlobPlatformAIKeyStore.create secretStore)
                 )
                 .AddSingleton<AIToolRegistry>(registry)
                 .AddSingleton<ToolUp.AI.ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)
                 .AddSingleton<ToolUp.AI.AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
+                // Warn at startup when AI runs multi-instance with the
+                // in-process cancel / client-tool-dispatch registries
+                // (no cross-instance routing yet). Mirrors AICompose.fs.
+                .AddSingleton<ConfigValidation.IConfigValidator>(
+                    ToolUp.AI.AICancellationDispatchInstanceValidator.AICancellationDispatchInstanceValidator(config)
+                    :> ConfigValidation.IConfigValidator
+                )
+                // Phase 9m.A — catch operator-typo'd TOOLUP_AI_PROVIDER /
+                // TOOLUP_AI_MODEL env vars at startup. Both validators
+                // self-skip with Ok when the corresponding env var is
+                // unset (GP 13 — zero cost when not opted into).
+                .AddSingleton<ConfigValidation.IConfigValidator>(
+                    ToolUp.AI.AIProviderEnvValidator.create aiProviderFactory
+                )
+                .AddSingleton<ConfigValidation.IConfigValidator>(ToolUp.AI.AIModelEnvValidator.create aiProviderFactory)
                 .AddSingleton<ICitationCounters>(citationCounters)
+
+        // Phase 9m.A — opt-in startup probe (default OFF). Registered
+        // only when TOOLUP_AI_PROBE_ON_STARTUP=1 — pays nothing for
+        // deployments that haven't opted in (GP 13). When enabled,
+        // probes the resolved provider's models endpoint with the
+        // API key from the provider's documented env var
+        // (ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY).
+        let s =
+            match ToolUp.AI.AIProviderProbeValidator.tryFromEnv aiProviderFactory with
+            | None -> s
+            | Some probe -> s.AddSingleton<ConfigValidation.IConfigValidator>(probe)
 
         // Phase 6q follow-up — citation normaliser. Registered only
         // when the policy isn't Off; non-RAG callers (composeWithAI)
@@ -1647,5 +1730,7 @@ module RAGServerApp =
                 b.ModuleSurfaceDefaults
                 b.RouteSurfaceOverrides
                 b.ScheduledJobs
+                ai.PlatformKeyStore
+                ai.PlatformProviders
 
         host.RunBlocking()
