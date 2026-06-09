@@ -211,10 +211,29 @@ let private userFromPayload (preferOid: bool) (payload: JwtPayload) : Authentica
         | true, Some rawOid -> sanitise rawOid
         | _ -> payload.Subject |> Option.defaultValue "anonymous" |> sanitise
 
+    // Microsoft Entra Workforce ID v2 omits `email` by default and
+    // surfaces the user's address on `preferred_username` instead.
+    // Without the fallback, the SDK's pending-invite-by-email path
+    // (`tryConsumePendingForUser`) short-circuits on `Email = None`
+    // for every Entra-signed-in invitee — they authenticate but the
+    // team-membership add never fires, leaving them on their
+    // per-user scope with no team data, no module permissions, and
+    // only the platform-admin surfaces that don't require a team.
+    // Restrict to `@`-bearing values so non-Entra IdPs that use
+    // `preferred_username` for a non-email handle don't get a bogus
+    // `Email = Some "alice"`. Mirrors client-side `UserSession.fs`.
+    let resolvedEmail =
+        match payload.Email with
+        | Some _ as e -> e
+        | None ->
+            match payload.PreferredUsername with
+            | Some pu when pu.Contains '@' -> Some pu
+            | _ -> None
+
     {
         UserId = resolvedId
         DisplayName = payload.Name |> Option.defaultValue resolvedId
-        Email = payload.Email
+        Email = resolvedEmail
         TenantId = None
         Roles = []
     }

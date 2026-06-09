@@ -104,6 +104,15 @@ type JwtPayload = {
     Oid: string option
     Name: string option
     Email: string option
+    /// `preferred_username` claim. Microsoft Entra Workforce ID v2
+    /// (`login.microsoftonline.com`) omits the `email` claim by default
+    /// and surfaces the user's address on `preferred_username` instead
+    /// — the SDK's `userFromPayload` falls back from `email` to this
+    /// claim when the latter is email-shaped, so an Entra-signed-in
+    /// user populates `AuthenticatedUser.Email` without operator-side
+    /// Entra app-registration changes. Mirrors the client-side
+    /// `UserSession.fs` fallback chain.
+    PreferredUsername: string option
     ExpiresAt: int64 option
     NotBefore: int64 option
     /// Well-known role/group claim names present on the token that the
@@ -184,6 +193,7 @@ let parseJwt (raw: string) : Result<ParsedJwt, JwtValidationError> =
                     Oid = tryGetString "oid" root
                     Name = tryGetString "name" root
                     Email = tryGetString "email" root
+                    PreferredUsername = tryGetString "preferred_username" root
                     ExpiresAt = tryGetInt64 "exp" root
                     NotBefore = tryGetInt64 "nbf" root
                     UnmappedRoleClaims = unmappedRoleClaims
