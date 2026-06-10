@@ -58,6 +58,12 @@ type PeerServerApp = {
     /// and its long-running `JobHandlers` on the scheduler. The fusion is
     /// threaded in so `LongRunning` methods can schedule background jobs.
     Contracts: (PeerJobFusion option -> PeerContractHost) list
+    /// Phase 18a — when `true`, the SDK-shipped audit-transparency
+    /// contract (`PeerAudit.contractId`) is registered alongside the
+    /// author contracts, letting calling peers read back the receiver's
+    /// audit rows for their *own* calls (scoped to the validated caller).
+    /// Off by default — opt in with `withPeerAuditTransparency` (GP 13).
+    AuditTransparency: bool
 }
 
 module PeerServerApp =
@@ -66,6 +72,7 @@ module PeerServerApp =
         Base = ServerApp.empty
         LocalPeer = None
         Contracts = []
+        AuditTransparency = false
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -163,6 +170,17 @@ module PeerServerApp =
             Contracts = app.Contracts @ [ builder ]
     }
 
+    /// Phase 18a — register the SDK-shipped cross-deployment audit-
+    /// transparency contract. Once composed, a calling peer can build a
+    /// `JsonRpcPeerClient.create<IPeerAuditApi>` proxy against this
+    /// deployment and read back the rows this deployment logged for the
+    /// *caller's own* calls (scoped to the validated caller id — a peer
+    /// can never see another peer's rows). The contract reads the
+    /// resolved `IAuditLog`; a deployment with `AuditLog = NoAuditLog`
+    /// still registers it but answers with an empty trail. Off by default
+    /// (GP 13).
+    let withPeerAuditTransparency (app: PeerServerApp) : PeerServerApp = { app with AuditTransparency = true }
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
@@ -177,6 +195,7 @@ module PeerServerApp =
             ServerApp.run app.Base
         | EnabledPeerSubstrate ->
             let contracts = app.Contracts
+            let auditTransparency = app.AuditTransparency
             let schedulerEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
 
             let localIdentity =
@@ -265,6 +284,16 @@ module PeerServerApp =
                                     host.JobHandlers
                                     |> List.iter (fun (name, handler) -> s.RegisterHandler(name, handler))
                                 | None -> ()
+
+                            // Phase 18a — register the audit-transparency
+                            // contract when opted in. Reads the resolved
+                            // `IAuditLog`; absent in a partial host (no
+                            // `IAuditLog` registered) the contract is
+                            // skipped rather than failing closed at compose.
+                            if auditTransparency then
+                                match sp.GetService(typeof<IAuditLog>) with
+                                | null -> ()
+                                | svc -> peer.RegisterContract(PeerAuditContractHost.registration (svc :?> IAuditLog))
 
                             peer)
                     )

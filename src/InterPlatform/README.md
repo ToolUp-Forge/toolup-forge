@@ -141,6 +141,38 @@ let! report = PeerJobHandle.resolve handle
 
 A peer-side `PeerError` surfaces on the caller as a raised `PeerInvocationException` — the typed API presents `Async<'T>`, not `Async<Result<_, _>>`.
 
+## Audit transparency (Phase 18a)
+
+The substrate records one `PeerCallCompleted` audit row per inbound call, keyed by the *validated* caller. Audit transparency lets a calling peer read back the receiver's record of **its own** calls — to reconcile what it asked for against what the counterpart logged ("I asked for k≥50 and got 47 rows — confirm the gate suppressed three").
+
+**Receiver side** — opt in when composing:
+
+```fsharp
+PeerServerApp.create ()
+|> PeerServerApp.withConfig config            // PeerSubstrate = EnabledPeerSubstrate
+|> PeerServerApp.withContract directoryHost
+|> PeerServerApp.withPeerAuditTransparency    // registers _platform.peer.audit
+|> PeerServerApp.run
+```
+
+**Caller side** — build a typed `IPeerAuditApi` proxy and query:
+
+```fsharp
+let audit = JsonRpcPeerClient.create<IPeerAuditApi> {
+    Client = httpPeerClient
+    Target = { Peer = sellerId; BaseUrl = "https://seller.example" }
+    Caller = buyerId
+    User = Anonymous
+    Version = PeerAudit.v1
+    ContractId = PeerAudit.contractId
+    HopBudget = 8
+}
+
+let! mine = audit.QueryCalls { ContractId = None; MethodName = None; SinceUtc = None; FailuresOnly = true; Limit = 100 }
+```
+
+**Scoping is the load-bearing guarantee:** the receiver answers only with rows where the *authenticated* caller made the call. `PeerAuditQuery` carries no caller-id field, so a peer cannot widen its scope, and `PeerAuditEntry` omits `CallerPeerId` (always the querying peer) — cross-peer leakage is impossible by construction. A deployment with `AuditLog = NoAuditLog` still registers the contract but answers with an empty trail.
+
 ## Routes
 
 Three routes, all auth-gated (fail-closed — a missing / invalid / expired bearer token is rejected *before* dispatch):

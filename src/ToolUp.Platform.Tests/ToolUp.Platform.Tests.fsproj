@@ -84,6 +84,10 @@
         <!-- Phase 18 — IPlatformPeer contract pack (inter-platform peer
              substrate: registration, dispatch, guard paths, job fusion). -->
         <Compile Include="Contracts\IPlatformPeerContract.fs" />
+        <!-- Phase 18a — cross-deployment audit transparency contract pack
+             (caller-scoped audit projection + bespoke context-aware
+             dispatch + typed proxy round-trip). -->
+        <Compile Include="Contracts\IPeerAuditTransparencyContract.fs" />
         <!-- Phase 11a.A — module-level mutable cache reset registry.
              Tests touching a (b)-class cache call CacheReset.invalidateAll
              at setup. See docs/platform/testing-conventions.md. -->

@@ -14,6 +14,7 @@
     <Compile Include="Shared\PeerTypes.fs" />
     <Compile Include="Shared\PeerJobHandle.fs" />
     <Compile Include="Shared\JsonRpcEnvelope.fs" />
+    <Compile Include="Shared\PeerAuditTransparency.fs" />
     <Compile Include="Server\IPlatformPeer.fs" />
     <Compile Include="Server\IPeerClient.fs" />
     <Compile Include="Server\IPeerAuthProvider.fs" />
@@ -28,6 +29,7 @@
     <Compile Include="Server\HttpPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerHost.fs" />
+    <Compile Include="Server\PeerAuditContractHost.fs" />
     <Compile Include="Server\PeerCompose.fs" />
   </ItemGroup>
   <ItemGroup>

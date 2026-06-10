@@ -216,6 +216,11 @@ let allTests =
         // RootRequestId across the HTTP boundary).
         PlatformPeerTests.inProcessTests
         PlatformPeerTests.workedExampleTests
+        // Phase 18a — cross-deployment audit transparency: caller-scoped
+        // audit projection + bespoke context-aware dispatch + typed proxy
+        // round-trip. The scoping (a peer reads only its own rows) is the
+        // security-critical property under test.
+        IPeerAuditTransparencyContract.tests
     ]
 
 [<EntryPoint>]
