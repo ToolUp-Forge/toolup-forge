@@ -292,7 +292,7 @@ Full-sln verification is for end-of-task / pre-commit, not per-edit.
 ## Build verification
 
 After every step: `dotnet build` (fast).
-At phase boundaries: full Fable JS verification — `cd samples/HelloWorld/HelloWorld.Client && dotnet fable -o output`. Spot-check the emitted JS.
+At phase boundaries: full Fable JS verification — `cd samples/MinimalClient && dotnet fable -o output`. Spot-check the emitted JS. (`MinimalClient.fsproj` ProjectReferences `ToolUp.Platform.Client`, so this drives the full Client-tier source tree through the Fable compiler; `samples/MixedMode/src/Client/` is the multi-module alternative when the change touches module wiring.)
 
 **When this applies:**
 - Any edit to a `Client/` source file or a file consumed by Fable.
