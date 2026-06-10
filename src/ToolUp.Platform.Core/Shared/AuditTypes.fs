@@ -1595,6 +1595,61 @@ type PeerCallCompletedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+// ─── Phase 40 — artefact-signing substrate audit payloads ──────────────
+//
+// Emitted by the `ToolUp.ArtefactSigning` companion's
+// `DefaultArtefactSigner` for the general-purpose detached-JWS signing
+// path. Reserved `SourceModule = "_platform.signing"`. Distinct from the
+// Phase 30a `_platform.artefacts` family (`ArtifactSigned` /
+// `ArtifactVerified` / `ArtifactRejected`, with the "Artifact" spelling),
+// which signs module-distribution artefacts against an `ArtifactManifest`
+// — this family signs arbitrary byte payloads for compliance non-
+// repudiation. Payloads carry the key id + a SHA-256 of the artefact,
+// NEVER the artefact bytes or the private-key material.
+
+module SigningSourceModule =
+    /// Reserved `SourceModule` for `ToolUp.ArtefactSigning` audit events.
+    /// Filter `IEventStore.ReadBySource` on this constant for the
+    /// artefact-signing audit trail.
+    [<Literal>]
+    let value = "_platform.signing"
+
+/// `IArtefactSigner.Sign` succeeded. Reserved `SourceModule =
+/// "_platform.signing"`. PII-free + secret-free: only the key id,
+/// algorithm name, and a SHA-256 digest of the signed artefact travel —
+/// never the artefact bytes nor any key material.
+type ArtefactSignedPayload = {
+    /// Actor who invoked the signer. `"system"` for automated signing
+    /// pipelines; the authenticated user's id for operator-initiated
+    /// signs.
+    Actor: string
+    /// Active signing-key id the artefact was signed under.
+    KeyId: string
+    /// `SigningAlgorithm.name` — `"EcdsaP256"` or `"Ed25519"`.
+    Algorithm: string
+    /// Lowercase-hex SHA-256 of the signed artefact bytes. Lets a
+    /// compliance audit prove "this exact artefact was signed under this
+    /// key" without the bytes entering the audit trail.
+    ArtefactSha256: string
+}
+
+/// A new signing key became active for `IArtefactSigner.Sign`, rotating
+/// out a prior key (whose public component remains discoverable for
+/// archival verification). Reserved `SourceModule = "_platform.signing"`.
+/// Emitted by the rotation helper; the in-process default does not
+/// auto-rotate, so this fires only on an explicit operator rotation.
+type SigningKeyRotatedPayload = {
+    /// Actor who triggered the rotation.
+    Actor: string
+    /// Key id rotated out of active signing. `None` for the very first
+    /// key activation (no predecessor).
+    OldKeyId: string option
+    /// Key id now active for signing.
+    NewKeyId: string
+    /// `SigningAlgorithm.name` of the new active key.
+    Algorithm: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -1933,6 +1988,16 @@ type AuditEvent =
     /// contract handler after dispatch reaches a terminal outcome.
     /// Reserved `SourceModule = "_platform.peer"`.
     | PeerCallCompleted of PeerCallCompletedPayload
+    /// Phase 40 — `IArtefactSigner.Sign` produced a detached-JWS
+    /// signature over an arbitrary artefact. Reserved `SourceModule =
+    /// "_platform.signing"`. Payload carries the key id + artefact
+    /// SHA-256, never the bytes. Spelled "Artefact" to disambiguate from
+    /// the Phase 30a module-distribution `ArtifactSigned` ("Artifact").
+    | ArtefactSigned of ArtefactSignedPayload
+    /// Phase 40 — a new artefact-signing key became active, rotating out
+    /// a predecessor whose public key remains discoverable for archival
+    /// verification. Reserved `SourceModule = "_platform.signing"`.
+    | SigningKeyRotated of SigningKeyRotatedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2022,6 +2087,8 @@ module AuditEvent =
         | SyntheticSampleGenerated _ -> "SyntheticSampleGenerated"
         | SchemaOnlyAccessAttempted _ -> "SchemaOnlyAccessAttempted"
         | PeerCallCompleted _ -> "PeerCallCompleted"
+        | ArtefactSigned _ -> "ArtefactSigned"
+        | SigningKeyRotated _ -> "SigningKeyRotated"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.ArtefactSigning</PackageId>
+    <AssemblyName>ToolUp.ArtefactSigning</AssemblyName>
+    <Description>Cryptographic artefact-signing substrate for ToolUp.Platform — per-deployment ECDSA P-256 / Ed25519 detached-JWS signing of arbitrary artefacts (audit packs, exported reports), with a public verification-key endpoint. Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;signing;jws;ecdsa;ed25519;compliance;non-repudiation</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 40 artefact-signing substrate. Server-only companion: no
+       Fable client surface. The detached-JWS signature + public-key
+       endpoint are server-to-verifier concerns. -->
+  <ItemGroup>
+    <Compile Include="Shared\SigningTypes.fs" />
+    <Compile Include="Server\IArtefactSigner.fs" />
+    <Compile Include="Server\IArtefactVerifier.fs" />
+    <Compile Include="Server\SigningInternals.fs" />
+    <Compile Include="Server\DefaultArtefactSigner.fs" />
+    <Compile Include="Server\DefaultArtefactVerifier.fs" />
+    <Compile Include="Server\SigningKeyHandler.fs" />
+    <Compile Include="Server\Helpers.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <!-- Ed25519 sign/verify (BCL has no native Ed25519); ECDSA P-256
+         uses System.Security.Cryptography. Same crypto provider the
+         Phase 30a artefact substrate uses. -->
+    <PackageReference Include="BouncyCastle.Cryptography" />
+  </ItemGroup>
+  <!-- Giraffe + ASP.NET Core + System.Text.Json flow transitively via
+       ToolUp.Platform.Server. -->
+</Project>
