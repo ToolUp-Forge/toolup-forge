@@ -64,6 +64,7 @@ module NarrativePrerender =
                     Frontmatter = Map.empty
                     PublishedAt = doc.Provenance |> Option.map _.GeneratedAt
                     Collection = None
+                    Status = Published
                 }
 
                 StructuredDataHelpers.articleFromNarrative synthetic doc

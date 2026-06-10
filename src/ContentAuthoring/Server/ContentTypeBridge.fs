@@ -74,6 +74,23 @@ module ContentTypeMapping =
     let withBodyFields (fields: string list) (m: ContentTypeMapping) = { m with BodyFields = fields }
     let withCollection (collection: string) (m: ContentTypeMapping) = { m with Collection = Some collection }
 
+/// Map a submission's workflow `State` to a page `PublishStatus` — the
+/// lifecycle equivalence (Phase 89). An in-progress `Draft` submission
+/// projects to a `Draft` page; a plain `Submitted` one to `Published`; a
+/// workflow `Custom` state maps by name (`"published"` / `"archived"` /
+/// review-ish states → draft). Scheduled-at timing is not carried on the
+/// submission, so a `"scheduled"` workflow state projects to `Draft`
+/// until the lifecycle layer stamps the publish time.
+let private statusOf (state: SubmissionState) : PublishStatus =
+    match state with
+    | SubmissionState.Draft -> PublishStatus.Draft
+    | SubmissionState.Submitted -> Published
+    | SubmissionState.Custom s ->
+        match s.Trim().ToLowerInvariant() with
+        | "published" -> Published
+        | "archived" -> Archived
+        | _ -> PublishStatus.Draft
+
 /// Render a `FieldValue` to its plain-text projection (used for title /
 /// slug / description and scalar body fields). Deterministic — invariant
 /// formatting, no culture-sensitive ops.
@@ -202,4 +219,5 @@ let project
                     Frontmatter = Map.empty
                     PublishedAt = Some submission.SubmittedAt
                     Collection = mapping.Collection
+                    Status = statusOf submission.State
                 }

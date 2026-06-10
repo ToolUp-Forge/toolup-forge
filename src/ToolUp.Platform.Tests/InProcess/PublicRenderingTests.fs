@@ -329,6 +329,7 @@ let private implTests =
                 Frontmatter = Map.empty
                 PublishedAt = None
                 Collection = None
+                Status = Published
             }
 
             let excluded = {
@@ -353,6 +354,7 @@ let private implTests =
                 Frontmatter = Map.empty
                 PublishedAt = Some(DateTimeOffset.Parse "2026-05-22")
                 Collection = Some "news"
+                Status = Published
             }
 
             let xml = SitemapGenerator.generate "https://example.com" [ page ]

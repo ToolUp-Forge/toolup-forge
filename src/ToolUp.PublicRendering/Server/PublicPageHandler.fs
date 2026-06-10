@@ -49,7 +49,18 @@ module PublicPageHandler =
 
             let! pageOpt = api.GetPageInContext(slugOrIndex, accessContext)
 
-            match pageOpt with
+            // Phase 89 — publish-lifecycle filter. A Draft / Archived /
+            // not-yet-due Scheduled page is not served on the public
+            // surface; the request falls through to 404 exactly as if the
+            // page did not exist. Authorised preview paths (the signed
+            // preview-token route) serve unpublished pages via their own
+            // handler and so bypass this check. `Published` (the default
+            // for every pre-89 page) always passes (GP 11).
+            let visiblePage =
+                pageOpt
+                |> Option.filter (PublicPage.isPubliclyVisible System.DateTimeOffset.UtcNow)
+
+            match visiblePage with
             | Some page ->
                 match resolveLayout layouts page with
                 | Some layout ->

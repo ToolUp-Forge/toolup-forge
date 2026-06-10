@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Compile Include="Server\ContentTypeBridge.fs" />
+    <Compile Include="Server\ContentLifecycle.fs" />
   </ItemGroup>
 
 </Project>

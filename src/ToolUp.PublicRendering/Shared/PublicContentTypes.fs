@@ -28,6 +28,28 @@ type LayoutName = LayoutName of string
 module LayoutName =
     let value (LayoutName n) = n
 
+/// Editorial publish state of a page (Phase 89). `Published` is the
+/// default for every page that predates the lifecycle (GP 11 — a page
+/// constructed without an explicit status is served exactly as before).
+/// `Draft` and `Archived` are not served to the public; `Scheduled at`
+/// is served once the wall clock passes `at`. The public-serving filter
+/// (`PublicPage.isPubliclyVisible`) enforces this; authorised preview
+/// paths (admin surface, signed preview token) bypass it.
+type PublishStatus =
+    | Draft
+    | Scheduled of at: DateTimeOffset
+    | Published
+    | Archived
+
+module PublishStatus =
+    /// Wire-stable token (admin filters, frontmatter round-trip).
+    let token =
+        function
+        | Draft -> "draft"
+        | Scheduled _ -> "scheduled"
+        | Published -> "published"
+        | Archived -> "archived"
+
 /// Rendered body of a page. The three variants cover the three main
 /// authoring paths a publishable site uses:
 ///
@@ -67,7 +89,24 @@ type PublicPage = {
     /// Collection this page belongs to (`"news"`, `"events"`, `"team"`…).
     /// `None` for standalone top-level pages. Used by `GetCollection`.
     Collection: string option
+    /// Phase 89 — editorial publish state. Defaults to `Published` for
+    /// every existing page-construction site (GP 11); the CMS authoring
+    /// layer sets `Draft` / `Scheduled` / `Archived` and the public
+    /// serving path filters non-visible pages out.
+    Status: PublishStatus
 }
+
+module PublicPage =
+    /// Whether a page should be served to an unauthenticated public
+    /// request at `now`. `Published` always; `Scheduled` once its time
+    /// arrives; `Draft` / `Archived` never. Authorised preview paths
+    /// (admin, signed token) bypass this check.
+    let isPubliclyVisible (now: DateTimeOffset) (page: PublicPage) : bool =
+        match page.Status with
+        | Published -> true
+        | Scheduled at -> now >= at
+        | Draft
+        | Archived -> false
 
 /// `redirects.csv` row — legacy URL → new URL + HTTP status code.
 /// Query strings on the incoming URL are preserved across the

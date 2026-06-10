@@ -131,6 +131,20 @@ type MarkdownContentLoader(root: ContentRoot, logger: ILogger, hotReload: bool) 
 
         let html = Markdown.ToHtml(body, pipeline)
 
+        // Phase 89 — optional `status` frontmatter key gates file-backed
+        // pages through the publish lifecycle. Absent / unrecognised →
+        // `Published`, preserving the pre-89 always-published behaviour
+        // (GP 11).
+        let status =
+            match
+                frontmatter
+                |> Map.tryFind "status"
+                |> Option.map (fun s -> s.Trim().ToLowerInvariant())
+            with
+            | Some "draft" -> Draft
+            | Some "archived" -> Archived
+            | _ -> Published
+
         {
             Slug = slug
             Title = title
@@ -140,6 +154,7 @@ type MarkdownContentLoader(root: ContentRoot, logger: ILogger, hotReload: bool) 
             Frontmatter = frontmatter
             PublishedAt = publishedAt
             Collection = collection
+            Status = status
         }
 
     let loadRedirects () =

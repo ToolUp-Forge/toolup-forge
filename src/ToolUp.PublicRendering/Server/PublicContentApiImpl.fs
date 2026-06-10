@@ -73,6 +73,7 @@ type PublicContentApiImpl
             Frontmatter = Map.empty
             PublishedAt = doc.Provenance |> Option.map _.GeneratedAt
             Collection = None
+            Status = Published
           }
         | Markdown _
         | Html _ -> {
@@ -84,6 +85,7 @@ type PublicContentApiImpl
             Frontmatter = Map.empty
             PublishedAt = None
             Collection = None
+            Status = Published
           }
 
     interface IPublicContentApi with

@@ -4,7 +4,14 @@
 module ToolUp.Platform.Tests.InProcess.ContentAuthoringTests
 
 open System
+open System.IO
 open Expecto
+open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.EntityTypes
+open ToolUp.Platform.EntityStore
+open ToolUp.Platform.IEntityStore
 open ToolUp.Platform.Narrative
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
@@ -64,6 +71,33 @@ let private mapping =
     |> ContentTypeMapping.withDescriptionField "summary"
     |> ContentTypeMapping.withBodyFields [ "challenge"; "outcome" ]
     |> ContentTypeMapping.withCollection "case-studies"
+
+// ─── Lifecycle helpers ────────────────────────────────────────────────
+
+let private now = DateTimeOffset(2026, 6, 10, 12, 0, 0, TimeSpan.Zero)
+
+let private pageWith (status: PublishStatus) (slug: string) : PublicPage = {
+    Slug = Slug slug
+    Title = slug
+    Description = ""
+    Body = Html ""
+    Layout = LayoutName "page"
+    Frontmatter = Map.empty
+    PublishedAt = None
+    Collection = None
+    Status = status
+}
+
+let private mkPageStore () : IEntityStore =
+    let dir =
+        Path.Combine(Path.GetTempPath(), "toolup-cms-test-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory dir |> ignore
+    let blob = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+    let dos = DataObjectStore(blob) :> IDataObjectStore
+    let registry = EntityRegistry()
+    registry.Register<PublicPageEntity>(PublicPageEntity.registration)
+    BlobEntityStore(dos, blob, registry, None) :> IEntityStore
 
 [<Tests>]
 let tests =
@@ -179,5 +213,78 @@ let tests =
                     | other -> failtestf "expected a single BulletList, got %A" other
                 | other -> failtestf "expected Narrative body, got %A" other
             | Error e -> failtestf "expected Ok, got %A" e
+        }
+
+        // ─── Lifecycle (Phase 89) ─────────────────────────────────────
+        test "isPubliclyVisible gates serving by publish status" {
+            Expect.isTrue (PublicPage.isPubliclyVisible now (pageWith Published "p")) "published is visible"
+            Expect.isFalse (PublicPage.isPubliclyVisible now (pageWith PublishStatus.Draft "p")) "draft is hidden"
+            Expect.isFalse (PublicPage.isPubliclyVisible now (pageWith Archived "p")) "archived is hidden"
+
+            Expect.isFalse
+                (PublicPage.isPubliclyVisible now (pageWith (Scheduled(now.AddHours 1.0)) "p"))
+                "future-scheduled is hidden"
+
+            Expect.isTrue
+                (PublicPage.isPubliclyVisible now (pageWith (Scheduled(now.AddHours(-1.0))) "p"))
+                "past-scheduled is visible"
+        }
+
+        test "promoteIfDue publishes a due scheduled page and stamps PublishedAt" {
+            let promoted =
+                ContentLifecycle.promoteIfDue now (pageWith (Scheduled(now.AddMinutes(-1.0))) "p")
+
+            Expect.equal promoted.Status Published "due page promoted to Published"
+            Expect.equal promoted.PublishedAt (Some now) "PublishedAt stamped to now"
+
+            let future = pageWith (Scheduled(now.AddHours 1.0)) "f"
+
+            Expect.equal
+                (ContentLifecycle.promoteIfDue now future).Status
+                (Scheduled(now.AddHours 1.0))
+                "future page unchanged"
+        }
+
+        test "statusForState maps workflow states to publish status" {
+            Expect.equal (ContentLifecycle.statusForState "published") Published "published"
+            Expect.equal (ContentLifecycle.statusForState "archived") Archived "archived"
+            Expect.equal (ContentLifecycle.statusForState "in-review") PublishStatus.Draft "in-review → draft"
+            Expect.equal (ContentLifecycle.statusForState "draft") PublishStatus.Draft "draft"
+        }
+
+        test "editorialWorkflow runs draft → in-review → published with a guarded approval" {
+            let wf = ContentLifecycle.editorialWorkflow
+            Expect.equal wf.InitialState "draft" "starts in draft"
+
+            Expect.isTrue
+                (wf.Transitions |> List.exists (fun t -> t.From = "draft" && t.To = "in-review"))
+                "draft → in-review"
+
+            Expect.isTrue
+                (wf.Transitions
+                 |> List.exists (fun t ->
+                     t.From = "in-review"
+                     && t.To = "published"
+                     && t.Guard = Some ContentLifecycle.approveGuard))
+                "in-review → published, guarded by the approval predicate"
+        }
+
+        testCaseAsync "runScheduledPublishSweep promotes only due scheduled pages"
+        <| async {
+            let store = mkPageStore ()
+            let scope = PublicPageEntity.PublicScope
+
+            let! _ = store.Save(scope, PublicPageEntity.fromPage (pageWith (Scheduled(now.AddMinutes(-5.0))) "due"))
+            let! _ = store.Save(scope, PublicPageEntity.fromPage (pageWith (Scheduled(now.AddHours 5.0)) "future"))
+            let! _ = store.Save(scope, PublicPageEntity.fromPage (pageWith PublishStatus.Draft "draftpage"))
+
+            let! promoted = ContentLifecycle.runScheduledPublishSweep store now
+            Expect.equal promoted [ "due" ] "only the due scheduled page is promoted"
+
+            let! due = store.Get<PublicPageEntity>(scope, PublicPageEntity.EntityTypeName, "due")
+
+            match due with
+            | Ok e -> Expect.equal e.Page.Status Published "the due page is now Published in the store"
+            | Error err -> failtestf "due page missing: %A" err
         }
     ]

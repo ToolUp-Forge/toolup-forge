@@ -141,6 +141,7 @@ type PublicRenderingNarrativePagePublisher(entityStore: IEntityStore, registered
                         Frontmatter = Map.empty
                         PublishedAt = Some DateTimeOffset.UtcNow
                         Collection = None
+                        Status = Published
                     }
 
                     let envelope = PublicPageEntity.fromPage page
