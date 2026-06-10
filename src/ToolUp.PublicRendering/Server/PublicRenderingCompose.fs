@@ -517,10 +517,21 @@ module PublicRenderingServerApp =
 
                         NarrativeFeedHandler.handler feedConfig api next ctx)
 
+            // Phase 89 — token-gated preview route. Mounted at the fixed
+            // `/preview` path so it short-circuits before the catch-all
+            // page handler; serves an unpublished page only with a valid
+            // share token (declines otherwise).
+            let previewHandler: HttpHandler =
+                fun next ctx ->
+                    let api =
+                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                    ContentPreview.previewHandler api layouts next ctx
+
             let publicRenderingHandlers =
                 [ sitemapHandler; redirectHandler; exportHandler ]
                 @ feedHandlers
-                @ [ pageHandler ]
+                @ [ previewHandler; pageHandler ]
 
             let baseExt = appWithEntity.Extensions
 

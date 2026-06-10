@@ -12,6 +12,9 @@ open ToolUp.Platform.DataObjectStore
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityStore
 open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Secrets
+open ToolUp.Platform.ShareTokenStore
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Narrative
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
@@ -87,6 +90,36 @@ let private pageWith (status: PublishStatus) (slug: string) : PublicPage = {
     Collection = None
     Status = status
 }
+
+type private NullLogger() =
+    interface ILogger with
+        member _.Debug(_) = ()
+        member _.Info(_) = ()
+        member _.Warn(_) = ()
+        member _.Error(_, _) = ()
+
+type private InMemorySecretStore() =
+    let d =
+        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
+
+    interface ISecretStore with
+        member _.GetSecret(c, n) = async {
+            match d.TryGetValue((c, n)) with
+            | true, v -> return Some v
+            | _ -> return None
+        }
+
+        member _.SetSecret(c, n, v) = async {
+            d[(c, n)] <- v
+            return Ok()
+        }
+
+        member _.DeleteSecret(c, n) = async {
+            d.TryRemove((c, n)) |> ignore
+            return Ok()
+        }
+
+        member _.ListKeys(_) = async { return [] }
 
 let private mkPageStore () : IEntityStore =
     let dir =
@@ -331,5 +364,27 @@ let tests =
             match currentPage with
             | Ok page -> Expect.equal page.Title "About v1" "current is now the restored v1 content"
             | Error e -> failtestf "current failed: %A" e
+        }
+
+        // ─── Shareable preview links (Phase 89) ───────────────────────
+        testCaseAsync "a preview token grants PublicPage access for its slug"
+        <| async {
+            let blob = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let secrets = InMemorySecretStore() :> ISecretStore
+
+            let store =
+                BlobShareTokenStore(blob, secrets, None, NullLogger()) :> IShareTokenStore
+
+            match! ContentPreview.issuePreviewToken store "team-x" "about" "u1" (TimeSpan.FromHours 1.0) with
+            | Error e -> failtestf "issue failed: %A" e
+            | Ok url ->
+                Expect.stringContains url "/preview?token=" "preview url shape"
+                let token = Uri.UnescapeDataString(url.Substring(url.IndexOf "token=" + 6))
+
+                match! store.Validate token with
+                | Ok claim ->
+                    Expect.equal claim.ResourceKind "PublicPage" "token grants PublicPage access"
+                    Expect.equal claim.ResourceId "about" "for the 'about' slug"
+                | Error e -> failtestf "validate failed: %A" e
         }
     ]

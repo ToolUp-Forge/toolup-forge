@@ -39,6 +39,7 @@
         <Compile Include="Server\NarrativeExportHandler.fs" />
         <Compile Include="Server\NarrativeFeedHandler.fs" />
         <Compile Include="Server\PublicPageHandler.fs" />
+        <Compile Include="Server\ContentPreview.fs" />
         <Compile Include="Server\StaticExport.fs" />
         <Compile Include="Server\PublicRenderingCompose.fs" />
     </ItemGroup>
