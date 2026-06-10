@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Media.CloudTranscode</PackageId>
+    <AssemblyName>ToolUp.Media.CloudTranscode</AssemblyName>
+    <Description>Cloud-managed transcode adapter for ToolUp.MediaLibrary (Phase 88). Provides the IMediaTranscoder seam for AWS MediaConvert / Mux / Coconut etc.; the deployment supplies the provider call via a submit callback, keeping the cloud-vendor SDK and credentials out of the SDK (GP 1 / GP 2).</Description>
+    <PackageTags>fsharp;sdk;media;transcode;hls;cloud;mediaconvert;provider</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MediaLibrary\ToolUp.MediaLibrary.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="CloudTranscodeProvider.fs" />
+  </ItemGroup>
+
+</Project>
