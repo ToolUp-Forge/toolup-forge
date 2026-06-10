@@ -91,27 +91,68 @@ invalid entry is rejected with exactly the field-level errors a form
 submission would produce — required-field, type, and rule violations all
 surface per field.
 
-## Roadmap (Phase 89 follow-on)
+## Publish lifecycle
 
-The bridge is the foundation. The remaining authoring-lifecycle pieces
-are follow-on work on this companion:
+`PublicPage.Status` is a `PublishStatus` — `Draft` / `Scheduled of at` /
+`Published` / `Archived` — defaulting to `Published` at every existing
+construction site (GP 11: a page built without an explicit status serves
+exactly as before). The markdown loader reads an optional `status:`
+frontmatter key. The public page handler filters non-visible pages to a
+404 via `PublicPage.isPubliclyVisible now page` (`Draft` / `Archived` /
+not-yet-due `Scheduled` are hidden); a signed preview link bypasses it.
 
-- **Publish lifecycle** — `PublicPage.Status` (`Draft` / `Scheduled` /
-  `Published` / `Archived`, defaulting to `Published` for back-compat,
-  GP 11); a Draft is not publicly served until its workflow reaches
-  Published; scheduled publish fires via `IJobScheduler`. The editorial
-  review/approval is a Forms `WorkflowDefinition` with role-gated
-  transitions (GP 4).
-- **Versioning** — append-only revisions on the `IEntityStore<PublicPage>`
-  overlay (which already version-bumps on every `Save`), with
-  restore-to-revision.
-- **Authoring admin module** — an optional Fable SDK module ("Content" /
-  "Pages" sidebar): list/edit entries, a block editor emitting the Phase
-  87 `NarrativeElement` trees + Phase 88 media-library pickers, status
-  transitions, preview.
-- **Shareable preview links** — reuse `IShareTokenStore` (the Forms
-  publishable-survey substrate) for token-gated draft/preview URLs
-  without full auth.
+`ContentLifecycle` (in `ToolUp.ContentAuthoring`) supplies the editorial
+side:
+
+- `editorialWorkflow` — the Forms `WorkflowDefinition`
+  `draft → in-review → published` (+ unpublish / archive / restore), with
+  the approval transitions guarded by the registered `approveGuard`
+  predicate (role-gating, GP 4). Register with
+  `FormsServerApp.withWorkflow` / `withGuard`.
+- Pure transitions — `publishAt` / `schedule` / `archive` / `toDraft`,
+  and `statusForState` mapping a workflow state to a `PublishStatus`.
+- `runScheduledPublishSweep store now` — promotes every `Scheduled`-and-due
+  page to `Published`. A deployment registers it as a recurring
+  `IJobScheduler` job so scheduled content goes live without a redeploy.
+
+## Versioning
+
+The `IEntityStore` overlay keeps an append-only version per `Save`.
+`PublicPageRevisions` (in `ToolUp.PublicRendering`) is the convenience
+layer: `list` (newest first), `get version`, `current`, and `restore`.
+`restore` is itself append-only — it writes the chosen revision's content
+as a new current version, so history (including the restore) is preserved.
+
+## Shareable preview links
+
+`ContentPreview` reuses the `IShareTokenStore` substrate (the same
+HMAC-signed tokens behind publishable Forms surveys) to share an
+unpublished page without full auth:
+
+```fsharp
+let! url = ContentPreview.issuePreviewToken shareTokenStore scopeId "case-studies/acme" "editor-1" (TimeSpan.FromDays 3.0)
+//  /preview?token=… — renders the Draft for 3 days, gated by the signature
+```
+
+The `/preview` route (mounted automatically by the PublicRendering
+companion, before the catch-all page handler) validates the token and
+renders the referenced page **bypassing the visibility filter** — so an
+editor previews a Draft — with `noindex` / `no-store` headers. No token,
+an invalid/expired token, or no `IShareTokenStore` → the route declines
+(404). The page is never reachable without a valid signature (GP 4).
+
+## Authoring admin API
+
+`IContentAdminApi` (Fable.Remoting, `/api/content-admin/*`) is the
+server surface a "Content" / "Pages" admin module drives —
+`ListPages` / `GetPage` / `SavePage` / `SetStatus` / `ListRevisions` /
+`RestoreRevision` over the page overlay, reusing the lifecycle +
+versioning substrate above. Mount it with
+`ContentAdminCompose.withContentAdmin`. The Fable sidebar **client**
+module (a rich block editor emitting Phase 87 `NarrativeElement` trees +
+Phase 88 media pickers) binds this contract and is the one remaining
+iterative piece — the backend, render path, lifecycle, versioning, and
+preview it needs are all in place.
 
 ## See also
 
