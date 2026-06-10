@@ -1024,6 +1024,35 @@ type AssetStoreMode =
     | NoAssetStore
     | EnabledAssetStore
 
+/// Phase 88 — `IMediaLibrary` substrate opt-in (time-based media:
+/// video / audio hosting).
+///
+///   * `NoMediaLibrary` (default, GP 13) — no `/api/media/*` or
+///     `/media/*` handlers mount, no `IMediaLibrary` DI singleton,
+///     no URL-signing key resolution, no range endpoint. Strip-
+///     imports byte-for-byte to the pre-Phase-88 behaviour;
+///     deployments that don't opt in pay zero runtime cost.
+///   * `EnabledMediaLibrary` — the `ToolUp.MediaLibrary` companion
+///     registers `DefaultMediaLibrary` (over the SDK's configured
+///     `IBlobStorage`), mounts the HTTP-range-serving endpoint
+///     (`206 Partial Content` for `<video>` seeking), the
+///     scope-signed expiring-URL minting + verification, and the
+///     Fable.Remoting `IMediaApi` handler. Transcode / HLS
+///     rendition production is delivered by opt-in sub-companions
+///     (`ToolUp.Media.FFmpeg`, `ToolUp.Media.CloudTranscode`);
+///     the default impl range-serves over blob storage with no
+///     transcode dependency (GP 1 / GP 2).
+///
+/// The detailed shape (`MediaLibraryOptions`, `MediaRecord`,
+/// `ByteRange`) lives in the companion namespace
+/// `ToolUp.MediaLibrary` rather than `Platform.Core` — the opt-in
+/// mode here is a bool-shaped gate; the substrate configuration is
+/// a companion-owned record. Same shape as the `AssetStore` gate
+/// above.
+type MediaLibraryMode =
+    | NoMediaLibrary
+    | EnabledMediaLibrary
+
 /// Phase 26 — deploy-plane substrate opt-in. Default `NoDeployPlane`
 /// (GP 13) registers nothing: no `IBuildOrchestrator`, no
 /// `IDeployPipeline`, no `ITenantFleet`, no `Tenant` entity
@@ -2187,6 +2216,18 @@ type ServerConfig = {
     /// `AssetStoreMode` for the strip-imports contract.
     AssetStore: AssetStoreMode
 
+    /// Phase 88 — `IMediaLibrary` substrate opt-in (video / audio
+    /// hosting). Default `NoMediaLibrary` (GP 13) strips the entire
+    /// media surface (no `/api/media/*` or `/media/*` handlers, no
+    /// `IMediaLibrary` DI singleton, no URL-signing key, no range
+    /// endpoint). `EnabledMediaLibrary` brings up the
+    /// `ToolUp.MediaLibrary` companion's `DefaultMediaLibrary` (over
+    /// the configured `IBlobStorage`), the `206`-range-serving
+    /// endpoint, scope-signed expiring URLs, and the Fable.Remoting
+    /// `IMediaApi` handler. See `MediaLibraryMode` for the strip-
+    /// imports contract.
+    MediaLibrary: MediaLibraryMode
+
     /// Phase 26 — Layer 3 deploy-plane substrate opt-in. Default
     /// `NoDeployPlane` (GP 13) registers nothing. `SingleNodeDeployPlane`
     /// brings up `IBuildOrchestrator` / `IDeployPipeline` /
@@ -2508,6 +2549,7 @@ module ServerConfig =
         ConversationStore = NoConversationStore
         PublicRendering = NoPublicRendering
         AssetStore = NoAssetStore
+        MediaLibrary = NoMediaLibrary
         DeployPlane = NoDeployPlane
         ServerlessHost = KestrelHost
         ProcessProfile = AllInOne

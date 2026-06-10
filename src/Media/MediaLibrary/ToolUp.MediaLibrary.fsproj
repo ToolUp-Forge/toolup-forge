@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.MediaLibrary</PackageId>
+    <AssemblyName>ToolUp.MediaLibrary</AssemblyName>
+    <Description>Time-based-media companion for ToolUp.Platform (Phase 88): HTTP range-streamed video/audio (206 Partial Content), scope-signed expiring URLs, poster/transcode hooks. Default impl range-serves over IBlobStorage with no transcode dependency; FFmpeg / cloud-transcode are opt-in sub-companions.</Description>
+    <PackageTags>fsharp;sdk;media;video;audio;streaming;range-requests;hls;provider</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Shared\MediaTypes.fs" />
+    <Compile Include="Server\IMediaDerivation.fs" />
+    <Compile Include="Server\IMediaLibrary.fs" />
+    <Compile Include="Server\SignedUrl.fs" />
+    <Compile Include="Server\DefaultMediaLibrary.fs" />
+  </ItemGroup>
+
+</Project>
