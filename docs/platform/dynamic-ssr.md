@@ -79,6 +79,84 @@ Multiple `withContentSource` calls compose; resolution is in registration order,
 
 > **`withContentApi` overrides ignore sources.** When you supply a complete `IPublicContentApi` via `withContentApi`, that impl owns its own resolution and registered sources are not consulted — the override is the resolution chain.
 
+## Analytics → page body — `NarrativeFromData` (Phase 85)
+
+A content source returns a `ContentBody`; the interesting work is turning backend data into the `Narrative` body without hand-rolling HTML. `NarrativeFromData` is the projector library for exactly that: pure functions from `ProcessedData` / `FileListSnapshot` / rows + KPIs into `NarrativeElement` trees that render to HTML/Markdown/plaintext/Atom through the existing Phase 80 renderers.
+
+Every projector is pure (GP 5) and formats with `InvariantCulture`, so a prerender pass and a request-time render produce byte-identical output regardless of server locale (the [prerender determinism](prerender.md) rule).
+
+### A client-reporting page, end to end
+
+```fsharp
+open ToolUp.PublicRendering
+open ToolUp.Platform.Narrative
+
+let clientReport =
+    ContentSource.ofRoute "reports/{client}" (fun captures ctx -> async {
+        let client = captures.TryFind "client" |> Option.defaultValue ""
+        match! loadCampaign ctx client with          // ctx scopes the query (GP 4)
+        | None -> return None                         // unknown {client} → fall through
+        | Some c ->
+            let body =
+                [ NarrativeFromData.metricGrid
+                    [ "Spend",       c.SpendDisplay,  Some c.SpendDelta      // ▲ +23.0%
+                      "Conversions", c.ConvDisplay,   Some c.ConvDelta ]     // ▼ -4.0%
+                  NarrativeFromData.thresholdCallout
+                    NarrativeFromData.spendThresholds c.SpendDelta
+                    (sprintf "Spend is %s vs target." c.SpendVsTargetLabel)   // severity by ladder
+                  NarrativeFromData.table
+                    [ "Channel", TableAlignment.Left; "Spend", TableAlignment.Right; "CPA", TableAlignment.Right ]
+                    (c.Channels |> List.map (fun ch ->
+                        [ CellText ch.Name; CellMoney(ch.Spend, "£"); CellMoney(ch.Cpa, "£") ])) ]
+
+            let doc =
+                Narrative.create (sprintf "%s — campaign report" c.Name)
+                |> Narrative.section "Performance" "performance" body
+
+            return Some (Narrative doc)
+    })
+```
+
+`CellMoney` / `CellPercent` / `CellDate` format locale-stably; `metricGrid` emits up/down arrow styling hooks per delta; `thresholdCallout` maps a value through a `Threshold` ladder (`spendThresholds` is a shipped default) to a `Severity`.
+
+### Projecting a module's `ProcessedData` by type
+
+When the body comes from a module's processed-data payload, register one projector per `TypeName` and route through `fromProcessed`. An unknown type degrades to a graceful callout (never an exception); a throwing projector is contained as a `Critical` callout, so one bad payload can't 500 the page.
+
+```fsharp
+let registry =
+    NarrativeFromDataProjectors.empty
+    |> NarrativeFromDataProjectors.registerTyped<SalesSummary> "SalesData" (fun s ->
+        [ NarrativeFromData.table
+            [ "Region", TableAlignment.Left; "Spend", TableAlignment.Right ]
+            (s.Regions |> List.map (fun r -> [ CellText r.Name; CellMoney(r.Spend, "£") ])) ])
+
+let opts = NarrativeFromDataProjectors.options registry
+
+let dataPage =
+    ContentSource.create (fun (Slug slug) ctx -> async {
+        match! loadProcessed ctx slug with
+        | Some processed ->
+            let doc =
+                Narrative.create "Data report"
+                |> Narrative.section "Body" "body" (NarrativeFromData.fromProcessed processed opts)
+            return Some (Narrative doc)
+        | None -> return None
+    })
+```
+
+`registerTyped<'T>` folds the `System.Text.Json` decode (the SDK's F#-aware converter set) into registration, so the projector body works with a typed value. `NarrativeFromData.fromFileSnapshot` covers the data-room shape (a processed-file status table) the same way.
+
+### Optional AI executive summary
+
+A projector's pure-data output can be prefaced by an AI-generated summary when a deployment composes one. The SDK ships no implementation and takes no dependency on the AI substrate — the hook is a plain function; absent one the pure-data path is used unchanged (GP 13):
+
+```fsharp
+let body =
+    NarrativeFromData.fromProcessed processed opts
+    |> NarrativeFromData.withSynthesis NarrativeFromData.withoutSynthesis   // or your hook
+```
+
 ## Page metadata from data (SEO without a frontmatter file)
 
 A source returns only a `ContentBody`; the page's presentation metadata is derived from it. For a `Narrative` body:

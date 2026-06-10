@@ -269,6 +269,9 @@
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <Compile Include="InProcess\PublicRenderingTests.fs" />
+        <!-- Phase 85 — NarrativeFromData projector output-shape +
+             determinism + graceful-degradation tests. -->
+        <Compile Include="InProcess\NarrativeFromDataTests.fs" />
         <!-- Phase 84 — render-cache contract bindings + policy/hash unit
              tests + PublicPageHandler cache-integration tests. -->
         <Compile Include="InProcess\RenderCacheTests.fs" />

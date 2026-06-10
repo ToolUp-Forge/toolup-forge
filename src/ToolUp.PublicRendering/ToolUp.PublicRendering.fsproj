@@ -23,6 +23,11 @@
     <ItemGroup>
         <Compile Include="Shared\PublicContentTypes.fs" />
         <Compile Include="Server\IPublicContentApi.fs" />
+        <!-- Phase 85 — analytics → Narrative projection helpers. Depend
+             only on Core (Narrative element set + ProcessedData / file-
+             snapshot types), so they sit early in the compile order. -->
+        <Compile Include="Server\NarrativeFromData.fs" />
+        <Compile Include="Server\NarrativeFromDataProjectors.fs" />
         <Compile Include="Server\FrontmatterParser.fs" />
         <Compile Include="Server\MarkdownContentLoader.fs" />
         <Compile Include="Server\EntityRegistrations.fs" />
