@@ -387,4 +387,43 @@ let tests =
                     Expect.equal claim.ResourceId "about" "for the 'about' slug"
                 | Error e -> failtestf "validate failed: %A" e
         }
+
+        // ─── Authoring admin API (Phase 89) ───────────────────────────
+        testCaseAsync "content admin API saves, lists, and transitions pages"
+        <| async {
+            let store = mkPageStore ()
+            let api = ContentAdminApiImpl.create store
+
+            let! _ = api.SavePage(pageWith PublishStatus.Draft "intro")
+            let! _ = api.SavePage(pageWith Published "home")
+
+            let! pages = api.ListPages()
+            Expect.equal (List.length pages) 2 "two pages listed"
+
+            Expect.isTrue
+                (pages |> List.exists (fun p -> p.Slug = "intro" && p.Status = "draft"))
+                "intro listed as draft"
+
+            // Transition intro: draft → published.
+            let! transition = api.SetStatus("intro", Published)
+            Expect.isOk transition "set-status ok"
+
+            let! reread = api.GetPage "intro"
+
+            match reread with
+            | Some p -> Expect.equal p.Status Published "intro is now Published"
+            | None -> failtest "intro page missing after transition"
+
+            // Editing intro again creates a second revision.
+            let! _ =
+                api.SavePage(
+                    {
+                        pageWith Published "intro" with
+                            Title = "Intro v2"
+                    }
+                )
+
+            let! revisions = api.ListRevisions "intro"
+            Expect.isGreaterThanOrEqual (List.length revisions) 2 "intro has at least two revisions"
+        }
     ]

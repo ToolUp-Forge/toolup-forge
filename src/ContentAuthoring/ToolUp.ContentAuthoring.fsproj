@@ -23,6 +23,8 @@
   <ItemGroup>
     <Compile Include="Server\ContentTypeBridge.fs" />
     <Compile Include="Server\ContentLifecycle.fs" />
+    <Compile Include="Server\ContentAdminApi.fs" />
+    <Compile Include="Server\ContentAdminCompose.fs" />
   </ItemGroup>
 
 </Project>
