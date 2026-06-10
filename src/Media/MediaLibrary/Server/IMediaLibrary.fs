@@ -58,3 +58,11 @@ type IMediaLibrary =
     /// downloading the body (drives the range handler's `Content-Range`
     /// total and the `Satisfiable` / `Unsatisfiable` decision).
     abstract ContentLength: scopeContainer: string * id: MediaId -> Async<Result<int64, MediaRangeError>>
+
+    /// Read a derived blob (poster, HLS master / variant manifest or
+    /// segment) by its path relative to the item's derived directory.
+    /// Returns the bytes plus the content type inferred from the file
+    /// extension. Backs the HLS-serving route; `NotFound` when absent or
+    /// when `relativePath` attempts directory traversal.
+    abstract OpenDerived:
+        scopeContainer: string * id: MediaId * relativePath: string -> Async<Result<byte[] * string, MediaRangeError>>

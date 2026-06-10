@@ -1,0 +1,232 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
+module ToolUp.MediaLibrary.MediaCompose
+
+open System
+open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
+open ToolUp.Remoting.Server
+open ToolUp.Remoting.Giraffe
+open ToolUp.Platform
+open ToolUp.Platform.Auth
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Secrets
+open ToolUp.Platform.Server
+
+// ─── Phase 88 — MediaLibraryServerApp composition root ────────────────
+//
+// Mirrors `AssetStoreServerApp` / `PublicRenderingServerApp`: wraps a
+// base `ServerApp` and adds media-specific `with*` helpers.
+//
+// **Strip-imports guarantee (GP 13)**: when
+// `ServerConfig.MediaLibrary = NoMediaLibrary`, `run` short-circuits to
+// `ServerApp.run app.Base` — no DI registrations, no range handlers, no
+// URL-signing key, no health probe. Byte-for-byte equivalent to a base
+// `ServerApp.run` of the same `Base`.
+
+type MediaLibraryServerApp = {
+    Base: ServerApp
+    Options: MediaLibraryOptions
+    /// Override for the poster / probe hook. `None` → `NoopMediaDerivation`
+    /// (no transcode dependency). Install `ToolUp.Media.FFmpeg` here.
+    DerivationOverride: IMediaDerivation option
+    /// Override for the HLS transcode hook. `None` → `NoopMediaTranscoder`
+    /// (single-file progressive download).
+    TranscoderOverride: IMediaTranscoder option
+    /// Override for the `IMediaLibrary` impl. `None` → `DefaultMediaLibrary`
+    /// over the configured `IBlobStorage`.
+    StoreOverride: IMediaLibrary option
+}
+
+module MediaLibraryServerApp =
+
+    let create () : MediaLibraryServerApp = {
+        Base = ServerApp.empty
+        Options = MediaLibraryOptions.defaults
+        DerivationOverride = None
+        TranscoderOverride = None
+        StoreOverride = None
+    }
+
+    // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
+
+    let withConfig (c: ServerConfig) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Base = ServerApp.withConfig c app.Base
+    }
+
+    let withAuth (a: IAuthProvider) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Base = ServerApp.withAuth a app.Base
+    }
+
+    let withLogger (l: ILogger) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Base = ServerApp.withLogger l app.Base
+    }
+
+    let withStorage (s: IBlobStorage) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Base = ServerApp.withStorage s app.Base
+    }
+
+    let withNotifications (n: INotificationChannel) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Base = ServerApp.withNotifications n app.Base
+    }
+
+    let addModule (m: ServerModule) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Base = ServerApp.addModule m app.Base
+    }
+
+    let addModules (modules: ServerModule list) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Base = ServerApp.addModules modules app.Base
+    }
+
+    // ─── MediaLibrary-specific helpers ───────────────────────────
+
+    let withOptions (options: MediaLibraryOptions) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            Options = options
+    }
+
+    /// Supply a poster / probe provider (the FFmpeg sub-companion).
+    let withDerivation (derivation: IMediaDerivation) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            DerivationOverride = Some derivation
+    }
+
+    /// Supply an HLS transcode provider (the FFmpeg / cloud sub-companion).
+    let withTranscoder (transcoder: IMediaTranscoder) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            TranscoderOverride = Some transcoder
+    }
+
+    /// Supply an explicit `IMediaLibrary` impl (a CDN-direct or
+    /// cloud-native store). Default constructs `DefaultMediaLibrary`.
+    let withMediaLibrary (store: IMediaLibrary) (app: MediaLibraryServerApp) : MediaLibraryServerApp = {
+        app with
+            StoreOverride = Some store
+    }
+
+    /// Build the `IMediaApi` Fable.Remoting contract from request context.
+    let private mediaApi (ctx: HttpContext) : IMediaApi =
+        let lib = ctx.RequestServices.GetService(typeof<IMediaLibrary>) :?> IMediaLibrary
+
+        let scope () =
+            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+            | true, (:? StorageScope as s) -> s
+            | _ -> failwith "No active scope — IMediaApi requires authentication"
+
+        {
+            GetMedia =
+                fun raw -> async {
+                    let s = scope ()
+                    return! lib.Get(s.Container, MediaId raw)
+                }
+            ListMedia =
+                fun (prefix, page) -> async {
+                    let s = scope ()
+                    return! lib.List(s.Container, prefix, page)
+                }
+            DeleteMedia =
+                fun raw -> async {
+                    let s = scope ()
+                    return! lib.Delete(s.Container, MediaId raw)
+                }
+            GetSignedUrl =
+                fun (raw, ttlSeconds) -> async {
+                    let s = scope ()
+                    return! lib.SignedUrl(MediaId raw, s, TimeSpan.FromSeconds(float ttlSeconds))
+                }
+        }
+
+    /// Drive the final composition. `NoMediaLibrary` short-circuits to
+    /// `ServerApp.run`; `EnabledMediaLibrary` registers the signer +
+    /// `IMediaLibrary` DI singletons, mounts the range-serving handlers
+    /// and the Fable.Remoting `IMediaApi`, adds the readiness probe +
+    /// options validator, and delegates to `ServerApp.run`.
+    let run (app: MediaLibraryServerApp) : int =
+        match app.Base.Config.MediaLibrary with
+        | NoMediaLibrary -> ServerApp.run app.Base
+        | EnabledMediaLibrary ->
+            let options = app.Options
+            let notifications = app.Base.Notifications
+
+            let asLogger =
+                app.Base.Logger
+                |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+            let derivationOverride = app.DerivationOverride
+            let transcoderOverride = app.TranscoderOverride
+            let storeOverride = app.StoreOverride
+
+            // ─── DI registrations ────────────────────────────────
+            let mediaServiceConfig (services: IServiceCollection) =
+                services
+                    .AddSingleton<SignedUrl.MediaUrlSigner>(
+                        System.Func<System.IServiceProvider, SignedUrl.MediaUrlSigner>(fun sp ->
+                            let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
+                            SignedUrl.MediaUrlSigner(secrets))
+                    )
+                    .AddSingleton<IMediaLibrary>(
+                        System.Func<System.IServiceProvider, IMediaLibrary>(fun sp ->
+                            match storeOverride with
+                            | Some s -> s
+                            | None ->
+                                let blob = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+
+                                let signer =
+                                    sp.GetService(typeof<SignedUrl.MediaUrlSigner>) :?> SignedUrl.MediaUrlSigner
+
+                                let derivation =
+                                    derivationOverride
+                                    |> Option.defaultWith (fun () -> NoopMediaDerivation.create ())
+
+                                let transcoder =
+                                    transcoderOverride
+                                    |> Option.defaultWith (fun () -> NoopMediaTranscoder.create ())
+
+                                DefaultMediaLibrary(
+                                    blob,
+                                    signer,
+                                    derivation,
+                                    transcoder,
+                                    notifications,
+                                    options,
+                                    asLogger
+                                )
+                                :> IMediaLibrary)
+                    )
+
+            let mediaApiHandler =
+                Remoting.createApi ()
+                |> Remoting.withRouteBuilder MediaApi.routeBuilder
+                |> Remoting.fromContext mediaApi
+                |> Remoting.buildHttpHandler
+
+            let baseExt = app.Base.Extensions
+
+            let mergedExt: ComposeExtensions = {
+                baseExt with
+                    Handlers = baseExt.Handlers @ RangeHandler.handlers @ [ mediaApiHandler ]
+                    ServiceConfig =
+                        match baseExt.ServiceConfig with
+                        | None -> Some mediaServiceConfig
+                        | Some baseFn -> Some(fun s -> mediaServiceConfig (baseFn s))
+            }
+
+            let withExtensions = { app.Base with Extensions = mergedExt }
+
+            let withValidator =
+                ServerApp.withConfigValidator (MediaConfigValidator.create options) withExtensions
+
+            let final =
+                match app.Base.Storage with
+                | Some blob -> ServerApp.withHealthCheck (MediaHealthCheck.create blob) withValidator
+                | None -> withValidator
+
+            ServerApp.run final

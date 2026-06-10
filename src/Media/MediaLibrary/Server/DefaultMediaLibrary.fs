@@ -86,6 +86,28 @@ module private MediaPaths =
         | "image/webp" -> "webp"
         | _ -> "jpg"
 
+    /// Content type for a derived file by extension — HLS manifests /
+    /// segments + poster images. Falls back to a generic octet-stream.
+    let contentTypeFor (path: string) =
+        let lower = path.ToLowerInvariant()
+
+        if lower.EndsWith ".m3u8" then
+            "application/vnd.apple.mpegurl"
+        elif lower.EndsWith ".ts" then
+            "video/mp2t"
+        elif lower.EndsWith ".m4s" then
+            "video/iso.segment"
+        elif lower.EndsWith ".mp4" then
+            "video/mp4"
+        elif lower.EndsWith ".png" then
+            "image/png"
+        elif lower.EndsWith ".webp" then
+            "image/webp"
+        elif lower.EndsWith ".jpg" || lower.EndsWith ".jpeg" then
+            "image/jpeg"
+        else
+            "application/octet-stream"
+
 /// Default `IMediaLibrary`. `derivation` / `transcoder` default to the
 /// `Noop*` providers (no transcode dependency); `notifications` is
 /// `None` when the deployment runs without an `INotificationChannel`.
@@ -322,6 +344,19 @@ type DefaultMediaLibrary
             match! blobStorage.GetMetadata(scopeContainer, MediaPaths.original id) with
             | Ok meta -> return Ok meta.Size
             | Error _ -> return Error MediaRangeError.NotFound
+        }
+
+        member _.OpenDerived(scopeContainer, id, relativePath) = async {
+            // Reject directory traversal — derived paths are always flat
+            // under the item's derived directory.
+            if relativePath.Contains ".." || relativePath.StartsWith "/" then
+                return Error MediaRangeError.NotFound
+            else
+                let path = MediaPaths.derivedDir id + relativePath
+
+                match! blobStorage.Download(scopeContainer, path) with
+                | Ok bytes -> return Ok(bytes, MediaPaths.contentTypeFor relativePath)
+                | Error _ -> return Error MediaRangeError.NotFound
         }
 
         member _.OpenRange(scopeContainer, id, range) = async {
