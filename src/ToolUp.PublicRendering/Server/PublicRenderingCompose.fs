@@ -90,6 +90,26 @@ type PublicRenderingServerApp = {
     /// file+overlay chain (GP 11). Ignored when `ContentApiOverride` is
     /// set — a supplied `IPublicContentApi` owns its own resolution.
     ContentSources: IContentSource list
+    /// Phase 84 — opt-in SSR render cache (ISR tier). `None` (default) →
+    /// the page handler runs the pre-84 pure-per-request path with no
+    /// cache lookup and no HTTP cache headers (GP 11 / GP 13). `Some
+    /// cache` registers the cache in DI, activating the cached path +
+    /// `ETag` / `Last-Modified` / `Cache-Control` / `304` handling. Use
+    /// `InMemoryRenderCache.create ()` for single-instance or
+    /// `BlobRenderCache.create storage` for multi-instance.
+    RenderCache: IRenderCache option
+    /// Phase 84 — default cache policy applied to a resolved page that
+    /// declares no explicit `cache:` frontmatter key. The lever for
+    /// caching (frontmatter-less) dynamic content-source pages without
+    /// annotating each one. Defaults to `NoCache`; ignored unless
+    /// `RenderCache` is `Some`.
+    RenderCacheDefaultPolicy: CachePolicy
+    /// Phase 84 — optional explicit slug-purge surface for the publish /
+    /// CMS invalidation hook. When `None` and `RenderCache` is a default
+    /// impl (which implements `IRenderCacheInvalidation`), the cache
+    /// itself is used as the invalidator. Supply this only when the
+    /// deployment's `IRenderCache` doesn't carry its own slug-purge.
+    RenderCacheInvalidation: IRenderCacheInvalidation option
 }
 
 module PublicRenderingServerApp =
@@ -105,6 +125,9 @@ module PublicRenderingServerApp =
         AIPublishAuthoriser = None
         Feeds = []
         ContentSources = []
+        RenderCache = None
+        RenderCacheDefaultPolicy = CachePolicy.NoCache
+        RenderCacheInvalidation = None
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -126,6 +149,9 @@ module PublicRenderingServerApp =
         AIPublishAuthoriser = None
         Feeds = []
         ContentSources = []
+        RenderCache = None
+        RenderCacheDefaultPolicy = CachePolicy.NoCache
+        RenderCacheInvalidation = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -325,6 +351,57 @@ module PublicRenderingServerApp =
             ContentSources = app.ContentSources @ [ source ]
     }
 
+    /// Phase 84 — opt into the SSR render cache (ISR tier). Registers the
+    /// supplied `IRenderCache` in DI; the page handler then serves cached
+    /// renders within their TTL window (serving stale + refreshing in the
+    /// background under stale-while-revalidate) and emits `ETag` /
+    /// `Last-Modified` / `Cache-Control` headers, honouring `If-None-Match`
+    /// with a `304`.
+    ///
+    /// Off by default (GP 11 / GP 13): a pipeline that never calls this is
+    /// byte-for-byte the pre-84 page handler — no lookup, no headers, no
+    /// allocation. Per-route opt-in is via a page's `cache:` frontmatter
+    /// (`cache: 300`; `cache: off` default); `withRenderCacheDefaultPolicy`
+    /// sets the policy for pages that declare none (e.g. dynamic
+    /// content-source pages with no frontmatter).
+    ///
+    ///     // single-instance:
+    ///     |> PublicRenderingServerApp.withRenderCache (InMemoryRenderCache.create ())
+    ///     // multi-instance (shared blob container):
+    ///     |> PublicRenderingServerApp.withRenderCache (BlobRenderCache.create storage)
+    let withRenderCache (cache: IRenderCache) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            RenderCache = Some cache
+    }
+
+    /// Phase 84 — set the default cache policy applied to a resolved page
+    /// that declares no explicit `cache:` frontmatter key. Use this to
+    /// cache (frontmatter-less) dynamic content-source pages — e.g.
+    /// `withRenderCacheDefaultPolicy (Cache(300, true))` caches every
+    /// uncached-by-frontmatter page for 5 minutes with
+    /// stale-while-revalidate. No effect unless `withRenderCache` is also
+    /// composed. Defaults to `NoCache` (pure per-request).
+    let withRenderCacheDefaultPolicy (policy: CachePolicy) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            RenderCacheDefaultPolicy = policy
+    }
+
+    /// Phase 84 — supply an explicit slug-purge surface for the publish /
+    /// CMS invalidation hook. The default cache impls
+    /// (`InMemoryRenderCache` / `BlobRenderCache`) already implement
+    /// `IRenderCacheInvalidation`, so `withRenderCache` alone wires the
+    /// publish-purge path. Use this only when the deployment's custom
+    /// `IRenderCache` doesn't carry its own slug-purge and a separate
+    /// invalidator object owns it.
+    let withRenderCacheInvalidation
+        (invalidator: IRenderCacheInvalidation)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        {
+            app with
+                RenderCacheInvalidation = Some invalidator
+        }
+
     /// Toggle the dev-mode hot-reload watcher. Defaults to `true`.
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
@@ -386,6 +463,25 @@ module PublicRenderingServerApp =
             let aiPublishAuthoriser = app.AIPublishAuthoriser
             let feeds = app.Feeds
             let contentSources = app.ContentSources
+            let renderCache = app.RenderCache
+            let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
+
+            // Resolve the slug-purge surface for the publish / CMS
+            // invalidation hook (Phase 84). Prefer an explicit
+            // `withRenderCacheInvalidation`; otherwise fall back to the
+            // cache itself when it implements `IRenderCacheInvalidation`
+            // (both default impls do). `None` → publishing doesn't purge
+            // (no cache composed, or a custom cache with no slug-purge).
+            let renderCacheInvalidator: IRenderCacheInvalidation option =
+                match app.RenderCacheInvalidation with
+                | Some inv -> Some inv
+                | None ->
+                    match renderCache with
+                    | Some cache ->
+                        match box cache with
+                        | :? IRenderCacheInvalidation as inv -> Some inv
+                        | _ -> None
+                    | None -> None
 
             // Auto-register `PublicPageEntity` against the base
             // `ServerApp` so the default impl's entity-store fallthrough
@@ -454,7 +550,10 @@ module PublicRenderingServerApp =
                                 // audit-logged store, etc.) participates.
                                 let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
 
-                                PublicRenderingNarrativePagePublisher.create entityStore registeredLayoutNames)
+                                PublicRenderingNarrativePagePublisher.create
+                                    entityStore
+                                    registeredLayoutNames
+                                    renderCacheInvalidator)
                         )
                     else
                         s
@@ -466,6 +565,31 @@ module PublicRenderingServerApp =
                     match aiPublishAuthoriser with
                     | Some a -> s.AddSingleton<AIPublishAuthoriser>(a)
                     | None -> s
+                |> fun s ->
+                    // Phase 84 — render-cache registrations. When a cache
+                    // is composed, register `IRenderCache` (the page
+                    // handler activates its cached path on seeing it in
+                    // DI), the `RenderCacheSettings` carrying the default
+                    // policy, and the `IRenderCacheInvalidation` slug-purge
+                    // surface (so Phase 91 / CMS code can resolve it). When
+                    // no cache is composed, none of these are registered →
+                    // the page handler runs the pre-84 path (GP 11 / 13).
+                    match renderCache with
+                    | None -> s
+                    | Some cache ->
+                        let s = s.AddSingleton<IRenderCache>(cache)
+
+                        let s =
+                            s.AddSingleton<RenderCacheSettings>(
+                                {
+                                    RenderCacheSettings.defaults with
+                                        DefaultPolicy = renderCacheDefaultPolicy
+                                }
+                            )
+
+                        match renderCacheInvalidator with
+                        | Some inv -> s.AddSingleton<IRenderCacheInvalidation>(inv)
+                        | None -> s
 
             // ─── Handler chain ───────────────────────────────────
             // Order: sitemap (specific route) → redirect (path-match

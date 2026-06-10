@@ -132,6 +132,11 @@ let allTests =
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
         PublicRenderingTests.tests
+        // Phase 84 — SSR render cache: IRenderCache contract bindings
+        // (in-memory + blob), CachePolicy.parse / hash unit tests, and
+        // PublicPageHandler cache-integration (miss→hit, 304, headers,
+        // off-route, pre-84 path, stale-while-revalidate).
+        RenderCacheTests.tests
         BrandKitTests.tests
         AssetStoreTests.tests
         MediaLibraryTests.tests

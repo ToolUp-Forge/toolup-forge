@@ -75,6 +75,8 @@
         <Compile Include="Contracts\IConversationStoreContract.fs" />
         <Compile Include="Contracts\IPublicContentApiContract.fs" />
         <Compile Include="Contracts\IContentSourceContract.fs" />
+        <!-- Phase 84 — IRenderCache contract pack (SSR render cache). -->
+        <Compile Include="Contracts\IRenderCacheContract.fs" />
         <Compile Include="Contracts\IAssetStoreContract.fs" />
         <Compile Include="Contracts\IMediaLibraryContract.fs" />
         <Compile Include="Contracts\IConsentProviderContract.fs" />
@@ -267,6 +269,9 @@
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <Compile Include="InProcess\PublicRenderingTests.fs" />
+        <!-- Phase 84 — render-cache contract bindings + policy/hash unit
+             tests + PublicPageHandler cache-integration tests. -->
+        <Compile Include="InProcess\RenderCacheTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
         <Compile Include="InProcess\MediaLibraryTests.fs" />

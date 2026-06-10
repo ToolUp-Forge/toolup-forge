@@ -30,7 +30,12 @@ open ToolUp.Platform.Narrative
 /// surface "no layout registered" at render time).
 type internal LayoutHint = LayoutHint of LayoutName list
 
-type PublicRenderingNarrativePagePublisher(entityStore: IEntityStore, registeredLayouts: LayoutName list) =
+type PublicRenderingNarrativePagePublisher
+    (
+        entityStore: IEntityStore,
+        registeredLayouts: LayoutName list,
+        renderCacheInvalidator: IRenderCacheInvalidation option
+    ) =
 
     let resolveLayout (hint: string option) : LayoutName =
         match hint with
@@ -149,7 +154,16 @@ type PublicRenderingNarrativePagePublisher(entityStore: IEntityStore, registered
                     let! result = entityStore.Save<PublicPageEntity>(PublicPageEntity.PublicScope, envelope)
 
                     match result with
-                    | Ok _ -> return PublishSucceeded canonicalSlug
+                    | Ok _ ->
+                        // Phase 84 — purge any cached render of this slug so
+                        // the republished content is served immediately
+                        // rather than waiting out the prior entry's TTL. A
+                        // no-op when no render cache is composed.
+                        match renderCacheInvalidator with
+                        | Some inv -> do! inv.PurgeSlug canonicalSlug
+                        | None -> ()
+
+                        return PublishSucceeded canonicalSlug
                     | Error err -> return PublishFailed(sprintf "entity store rejected the save: %A" err)
         }
 
@@ -157,8 +171,16 @@ module PublicRenderingNarrativePagePublisher =
     /// Factory invoked from `PublicRenderingCompose.run` once the
     /// registered layout map is known. Returns the interface-typed
     /// value so the DI registration carries the abstraction.
-    let create (entityStore: IEntityStore) (layoutNames: LayoutName list) : INarrativePagePublisher =
-        PublicRenderingNarrativePagePublisher(entityStore, layoutNames) :> INarrativePagePublisher
+    /// `renderCacheInvalidator` (Phase 84) purges a slug's cached render
+    /// on a successful publish; pass `None` when no render cache is
+    /// composed.
+    let create
+        (entityStore: IEntityStore)
+        (layoutNames: LayoutName list)
+        (renderCacheInvalidator: IRenderCacheInvalidation option)
+        : INarrativePagePublisher =
+        PublicRenderingNarrativePagePublisher(entityStore, layoutNames, renderCacheInvalidator)
+        :> INarrativePagePublisher
 
 // ─── Phase 80b — Layout catalog ────────────────────────────────
 
