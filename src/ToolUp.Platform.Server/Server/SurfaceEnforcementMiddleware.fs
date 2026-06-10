@@ -98,16 +98,32 @@ module SurfaceRequirementRegistry =
     /// design §3.3 — the `PlatformApi` row's "Per-endpoint overrides:
     /// team-CRUD endpoints require `teamScoped`" caveat:
     ///
-    /// * `AddTeamMember`, `RemoveTeamMember`, `ChangeMemberRole`,
-    ///   `GetTeamMembers`, `SetActiveTeam` — operations that require
-    ///   the caller to already be in a team scope. A `UserKind`
-    ///   subject (signed-in but no active team) hitting one of these
-    ///   today reaches the handler and gets an internal `"Not in
-    ///   team scope"` `Error` string; with the override they fail
-    ///   fast at the middleware with a clean `403 team_required` +
+    /// * `AddTeamMember`, `RemoveTeamMember`, `ChangeMemberRole` —
+    ///   operations performed *on* a team by a caller already
+    ///   operating in that team's scope. A `UserKind` subject
+    ///   (signed-in but no active team) hitting one of these today
+    ///   reaches the handler and gets an internal `"Not in team
+    ///   scope"` `Error` string; with the override they fail fast at
+    ///   the middleware with a clean `403 team_required` +
     ///   `select_team` hint, which the client shell can render as an
     ///   actionable "Select a team to continue" panel without
     ///   parsing handler-specific error strings.
+    ///
+    /// * `SetActiveTeam`, `GetTeamMembers` — `userOrTeam`, NOT
+    ///   `teamScoped`. `SetActiveTeam` is precisely the transition
+    ///   *into* team scope: a member whose active-team pointer is
+    ///   unset (added by an admin, invite acceptance, or pending-
+    ///   invite consumption — none of which used to set the pointer)
+    ///   resolves as `UserKind`, and gating the route on
+    ///   `TeamMemberKind` deadlocks the onboarding path — the caller
+    ///   can never become a `TeamMember` because becoming one
+    ///   requires already being one. The handler validates
+    ///   membership server-side (`GetMemberRole` before the write),
+    ///   so admitting `UserKind` reopens no cross-team access.
+    ///   `GetTeamMembers` follows for the same onboarding window: a
+    ///   no-active-team member viewing their team's roster in the
+    ///   Team Manager UI; the handler already returns `[]` for
+    ///   non-members rather than leaking membership.
     ///
     /// Excluded from this list (kept at the strict global default
     /// `userOrTeam`):
@@ -127,8 +143,8 @@ module SurfaceRequirementRegistry =
         ("POST", "/api/TeamApi/AddTeamMember"), SurfaceRequirement.teamScoped
         ("POST", "/api/TeamApi/RemoveTeamMember"), SurfaceRequirement.teamScoped
         ("POST", "/api/TeamApi/ChangeMemberRole"), SurfaceRequirement.teamScoped
-        ("POST", "/api/TeamApi/GetTeamMembers"), SurfaceRequirement.teamScoped
-        ("POST", "/api/TeamApi/SetActiveTeam"), SurfaceRequirement.teamScoped
+        ("POST", "/api/TeamApi/GetTeamMembers"), SurfaceRequirement.userOrTeam
+        ("POST", "/api/TeamApi/SetActiveTeam"), SurfaceRequirement.userOrTeam
     ]
 
     /// Phase 66 Stream B.4 — exact-match overrides the SDK contributes

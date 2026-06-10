@@ -454,3 +454,49 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
         member this.GetMemberRole(teamId, userId) = this.GetMemberRole(teamId, userId)
         member this.GetActiveTeam(userId) = this.GetActiveTeam(userId)
         member this.SetActiveTeam(userId, teamId) = this.SetActiveTeam(userId, teamId)
+
+// ─── First-team-becomes-active policy ────────────────────────────
+
+/// Onboarding policy applied after every successful membership write:
+/// a user whose active-team pointer is unset gets it pointed at the
+/// team they were just confirmed into. Without this, a member added
+/// by an admin / invite link / pending-invite consumption resolves as
+/// `AuthenticatedUser` (personal scope) on every request — they see
+/// none of the team's data, and `GetAccessibleModules` returns an
+/// empty module list for the no-active-team state. The team *creator*
+/// never hit this because `CreateTeam` chains `SetActiveTeam` for the
+/// caller; this module extends the same courtesy to everyone else.
+///
+/// Policy, not store primitive — `ITeamStore.AddMember` stays a pure
+/// membership write so alternative store implementations don't have
+/// to replicate onboarding behaviour; the SDK's add paths
+/// (`TeamApi.AddTeamMember`, invite acceptance, pending-invite
+/// consumption) call this after the membership is confirmed.
+module ActiveTeamPolicy =
+
+    /// Point `userId`'s active team at `teamId` iff no active team is
+    /// currently set. Never re-points an existing selection — a user
+    /// who deliberately switched teams keeps their choice when they
+    /// are later added to another team.
+    ///
+    /// Best-effort: the membership write this follows has already
+    /// succeeded and is the durable fact; a pointer-write failure must
+    /// not fail the add. On success `SetActiveTeam` publishes
+    /// `MembershipChanged.ActiveTeamSet`, which both evicts the
+    /// resolver-side active-team caches and live-switches any
+    /// connected client via the `MembershipActiveTeamSet` push.
+    let ensureActiveTeam (store: ITeamStore) (userId: string) (teamId: string) : Async<unit> = async {
+        try
+            let! current = store.GetActiveTeam userId
+
+            match current with
+            | Some _ -> ()
+            | None ->
+                let! _ = store.SetActiveTeam(userId, teamId)
+                ()
+        with _ ->
+            // Swallowed deliberately: the user lands in the legacy
+            // no-active-team state, which is recoverable via the
+            // (userOrTeam-gated) SetActiveTeam route from the client.
+            ()
+    }

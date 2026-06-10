@@ -253,13 +253,22 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                             })
                     | Error _ -> ()
 
-                    // Only set the caller's active team when they are
-                    // the new Owner. Spinning up a team for someone
+                    // Only re-point the caller's active team when they
+                    // are the new Owner. Spinning up a team for someone
                     // else (Platform Admin provisioning) shouldn't
-                    // re-point the operator's active team at it.
+                    // re-point the operator's active team at it — but
+                    // the provisioned Owner gets the first-team-becomes-
+                    // active courtesy (`ensureActiveTeam` only writes
+                    // when their pointer is unset) so they don't land
+                    // in the no-active-team personal scope on first
+                    // sign-in.
                     if ownerUserId = userId then
                         let! _ = ts.SetActiveTeam(userId, teamId)
                         ()
+                    else
+                        match addResult with
+                        | Ok() -> do! ActiveTeamPolicy.ensureActiveTeam ts ownerUserId teamId
+                        | Error _ -> ()
 
                     return Ok team
                 | Error e -> return Error e
@@ -307,6 +316,15 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                                     AffectedUserId = memberId
                                     Role = TeamRoles.displayName role
                                 })
+
+                            // First-team-becomes-active: a member with
+                            // no active-team pointer would otherwise
+                            // resolve as `AuthenticatedUser` (personal
+                            // scope) on every request — empty data,
+                            // empty module list — with no affordance
+                            // to transition. Never re-points an
+                            // existing selection.
+                            do! ActiveTeamPolicy.ensureActiveTeam ts memberId teamId
                         | Error _ -> ()
 
                         return result

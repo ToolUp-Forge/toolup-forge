@@ -624,3 +624,105 @@ let tests =
             Expect.isSome consumedFresh "re-issued (non-expired) entry auto-joins on next sign-in"
         }
     ]
+
+// ─── First-team-becomes-active policy (onboarding fix) ─────────────────
+//
+// Every membership-confirming path (admin AddTeamMember, invite-link
+// acceptance, pending-invite consumption) applies
+// `ActiveTeamPolicy.ensureActiveTeam` so a new member's active-team
+// pointer is set on join. Without it, the member resolved as
+// `AuthenticatedUser` (personal scope) on every request — no team
+// data, empty `Accessible` module list — and the `teamScoped` gate on
+// `SetActiveTeam` (also fixed; see `BuiltInModuleSurfaceTests`)
+// deadlocked the recovery path.
+
+[<Tests>]
+let activeTeamPolicyTests =
+    testList "ActiveTeamPolicy" [
+        testCaseAsync "ensureActiveTeam sets the pointer when the user has none"
+        <| async {
+            let ts = freshTeamStore ()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+
+            let! before = ts.GetActiveTeam "bob@example.com"
+            Expect.isNone before "AddMember alone does not set the pointer"
+
+            do! ActiveTeamPolicy.ensureActiveTeam ts "bob@example.com" teamId
+
+            let! after = ts.GetActiveTeam "bob@example.com"
+            Expect.equal after (Some teamId) "pointer set to the joined team"
+        }
+
+        testCaseAsync "ensureActiveTeam never re-points an existing selection"
+        <| async {
+            let ts = freshTeamStore ()
+            let! firstTeam = provisionTeam ts "alice@example.com" "bob@example.com"
+            let! secondTeam = provisionTeam ts "alice@example.com" "bob@example.com"
+
+            let! _ = ts.SetActiveTeam("bob@example.com", firstTeam)
+            do! ActiveTeamPolicy.ensureActiveTeam ts "bob@example.com" secondTeam
+
+            let! active = ts.GetActiveTeam "bob@example.com"
+            Expect.equal active (Some firstTeam) "deliberate selection preserved"
+        }
+
+        testCaseAsync "invite acceptance sets the invitee's active team when they had none"
+        <| async {
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = CapturingAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let issuerApi = mkApi ts sts (audit :> IAuditLog) "alice@example.com"
+
+            let! issued =
+                issuerApi.IssueInvite {
+                    TeamId = teamId
+                    Role = Member
+                    ExpiresIn = Some(TimeSpan.FromDays 1.0)
+                    EmailHint = None
+                    MaxUses = Some 1
+                }
+
+            match issued with
+            | Error msg -> failtestf "issue failed: %s" msg
+            | Ok r ->
+                let token = r.InviteUrl.Substring(r.InviteUrl.LastIndexOf('/') + 1)
+                let recipientApi = mkApi ts sts (audit :> IAuditLog) "carol@example.com"
+                let! accepted = recipientApi.AcceptInvite token
+
+                match accepted with
+                | Error msg -> failtestf "accept failed: %s" msg
+                | Ok _ ->
+                    let! active = ts.GetActiveTeam "carol@example.com"
+                    Expect.equal active (Some teamId) "invitee's active team set on acceptance"
+        }
+
+        testCaseAsync "pending-invite consumption sets the active team on auto-join"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
+            let ts = TeamStore(storage, notifications) :> ITeamStore
+            let audit = CapturingAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "carol@example.com" {
+                    TeamId = teamId
+                    Role = Member
+                    ExpiresAt = DateTime.UtcNow.AddDays(7.0)
+                    InviterUserId = "alice@example.com"
+                }
+
+            let carol = {
+                AuthenticatedUser.anonymous with
+                    UserId = "carol@example.com"
+                    Email = Some "carol@example.com"
+            }
+
+            let! consumed = tryConsumePendingForUser (pendingStore storage) ts (audit :> IAuditLog) carol
+            Expect.isSome consumed "pending entry consumed"
+
+            let! active = ts.GetActiveTeam "carol@example.com"
+            Expect.equal active (Some teamId) "auto-joined member's active team set"
+        }
+    ]

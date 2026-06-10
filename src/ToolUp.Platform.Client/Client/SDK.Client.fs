@@ -131,6 +131,15 @@ module Client =
         /// internal state. `None` = not loaded yet, no active team
         /// selected, or non-team-scoped mode.
         ActiveTeamId: string option
+        /// Whether the boot-time `GetActiveTeam` fetch has resolved at
+        /// least once. Distinguishes "not yet loaded" (the initial
+        /// `ActiveTeamId = None`) from "loaded, and the user genuinely
+        /// has no active team" — only the latter may trigger the
+        /// sole-team auto-select (see `maybeAutoSelectSoleTeam`).
+        /// Without the gate, a `MyTeamsLoaded` arriving before
+        /// `ActiveTeamLoaded` would auto-select over a server-side
+        /// pointer that simply hadn't loaded yet.
+        ActiveTeamLoadCompleted: bool
         /// Phase 4b — caller's resolved `PlatformRole`. `None` until
         /// the boot-time `IsPlatformAdmin` fetch resolves, OR after a
         /// fetch that returned false. `Some PlatformAdmin` unlocks the
@@ -397,6 +406,41 @@ module Client =
         with _ ->
             return None
     }
+
+    /// Sole-team auto-select: persist `teamId` as the caller's active
+    /// team, then run the standard `TeamSwitched` reset so every
+    /// boot loader re-fetches against the now-team-scoped subject.
+    /// Failure (older server still gating `SetActiveTeam` on
+    /// `teamScoped`, network glitch) is swallowed — the user stays in
+    /// the no-active-team state and the header switcher / Team
+    /// Manager remain the manual affordances.
+    let private autoSelectSoleTeamCmd (teamId: string) : Cmd<Msg> =
+        Cmd.ofEffect (fun dispatch ->
+            async {
+                try
+                    match! withCsrf (teamApi.SetActiveTeam teamId) with
+                    | Ok() -> dispatch (TeamSwitched(Some teamId))
+                    | Error _ -> ()
+                with _ ->
+                    ()
+            }
+            |> Async.StartImmediate)
+
+    /// Fire the sole-team auto-select when (and only when) all three
+    /// hold: the boot-time active-team fetch has resolved, it resolved
+    /// to "no active team", and the user belongs to exactly one team.
+    /// Covers the onboarding gap where a member is added to a team
+    /// (admin add / invite / pending invite) without their active-team
+    /// pointer being set — without this they sit in personal
+    /// `user-{id}` scope with no data, no modules, and (single-team
+    /// case) no switcher to escape through. Multi-team users with no
+    /// active selection are NOT auto-selected — choosing among N teams
+    /// is theirs to make via the header switcher, which renders in the
+    /// no-active-team state for exactly that purpose.
+    let private maybeAutoSelectSoleTeam (model: Model) : Cmd<Msg> =
+        match model.ActiveTeamLoadCompleted, model.ActiveTeamId, model.MyTeams with
+        | true, None, [ soleTeam ] -> autoSelectSoleTeamCmd soleTeam.TeamId
+        | _ -> Cmd.none
 
     /// Phase 4b — fetch whether the caller holds
     /// `PlatformRole.PlatformAdmin`. Failure (Anonymous mode, network
@@ -773,6 +817,7 @@ module Client =
             ProcessedData = processed
             MyTeams = []
             ActiveTeamId = None
+            ActiveTeamLoadCompleted = false
             PlatformRole = None
             ConfigsPrefetch = Prefetch.none
             FlagsPrefetch = Prefetch.none
@@ -1038,13 +1083,26 @@ module Client =
                 else
                     model, Cmd.none
 
-            | MyTeamsLoaded teams -> { model with MyTeams = teams }, Cmd.none
+            | MyTeamsLoaded teams ->
+                // Sole-team auto-select may fire here (teams arriving
+                // after the active-team fetch) or in `ActiveTeamLoaded`
+                // (the reverse order) — the guard inside
+                // `maybeAutoSelectSoleTeam` makes the double-check safe.
+                let updated = { model with MyTeams = teams }
+                updated, maybeAutoSelectSoleTeam updated
 
             | PlatformRoleLoaded isAdmin ->
                 let role = if isAdmin then Some PlatformRole.PlatformAdmin else None
                 { model with PlatformRole = role }, Cmd.none
 
-            | ActiveTeamLoaded teamId -> { model with ActiveTeamId = teamId }, Cmd.none
+            | ActiveTeamLoaded teamId ->
+                let updated = {
+                    model with
+                        ActiveTeamId = teamId
+                        ActiveTeamLoadCompleted = true
+                }
+
+                updated, maybeAutoSelectSoleTeam updated
 
             | AuthTokenAcquired ->
                 // 0.5.5 — `UserSession.localStorage.toolup-auth-token`
@@ -1523,11 +1581,20 @@ module Client =
         // (the retiring `MultiTeam` UX intent). Single-team deployments
         // (`Switching = NoSwitcher`) don't surface a switcher. Hidden
         // until `MyTeams` has loaded so we don't render an empty
-        // dropdown during the initial round-trip. Two-or-more
-        // memberships is the threshold; if the user is in only one
-        // team there's nothing useful to switch to.
+        // dropdown during the initial round-trip. Rendered when the
+        // user has two-or-more memberships to switch between, OR has
+        // any membership but no active team — switching from *no team*
+        // to a team is the onboarding transition, and hiding the
+        // switcher there left single-team members stranded in personal
+        // scope with no affordance (the sole-team auto-select usually
+        // beats this render, but the switcher is the visible fallback
+        // if that call fails).
         let teamSwitcher =
-            if ClientConfig.hasMultiTeamSwitcher config && model.MyTeams.Length >= 2 then
+            let switcherUseful =
+                model.MyTeams.Length >= 2
+                || (not model.MyTeams.IsEmpty && model.ActiveTeamId.IsNone)
+
+            if ClientConfig.hasMultiTeamSwitcher config && switcherUseful then
                 let activeName =
                     model.ActiveTeamId
                     |> Option.bind (fun id -> model.MyTeams |> List.tryFind (fun t -> t.TeamId = id))

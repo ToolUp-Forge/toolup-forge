@@ -14,13 +14,18 @@ open ToolUp.Platform.SurfaceEnforcement
 //
 // The five tested method names match the mutating endpoints on the
 // `TeamApi` record:
-//   * AddTeamMember, RemoveTeamMember, ChangeMemberRole — Owner/Admin
-//     gated inside the handler; the surface override fails-fast at the
-//     middleware for `UserKind` callers with no active team.
-//   * GetTeamMembers — read-shape but requires team context to mean
-//     anything.
-//   * SetActiveTeam — switching the active team requires being in
-//     SOME team.
+//   * AddTeamMember, RemoveTeamMember, ChangeMemberRole — `teamScoped`.
+//     Owner/Admin gated inside the handler; the surface override
+//     fails-fast at the middleware for `UserKind` callers with no
+//     active team.
+//   * SetActiveTeam, GetTeamMembers — `userOrTeam`. SetActiveTeam is
+//     the transition INTO team scope: a member whose active-team
+//     pointer is unset resolves as `UserKind`, so gating the route on
+//     `TeamMemberKind` deadlocked onboarding (you couldn't become a
+//     TeamMember without already being one). The handler validates
+//     membership server-side. GetTeamMembers follows for the same
+//     onboarding window (no-active-team member viewing their roster);
+//     its handler returns `[]` for non-members.
 //
 // Excluded from the override list (assertions below confirm they
 // fall through to the strict global default `userOrTeam`):
@@ -78,12 +83,24 @@ let tests =
                 "the five TeamApi mutating endpoints"
         }
 
-        test "every TeamApi CRUD override resolves to teamScoped" {
-            for ((httpMethod, path), expected) in SurfaceRequirementRegistry.sdkBuiltInRouteOverrides do
-                Expect.equal
-                    expected
-                    SurfaceRequirement.teamScoped
-                    (sprintf "%s %s declared teamScoped" httpMethod path)
+        test "TeamApi CRUD overrides — mutating ops teamScoped, transition ops userOrTeam" {
+            let expectedByPath =
+                Map.ofList [
+                    "/api/TeamApi/AddTeamMember", SurfaceRequirement.teamScoped
+                    "/api/TeamApi/RemoveTeamMember", SurfaceRequirement.teamScoped
+                    "/api/TeamApi/ChangeMemberRole", SurfaceRequirement.teamScoped
+                    // The two onboarding-window routes: a `UserKind`
+                    // caller (signed in, no active team) must be able
+                    // to set their active team and view their roster,
+                    // or they can never transition into team scope.
+                    "/api/TeamApi/GetTeamMembers", SurfaceRequirement.userOrTeam
+                    "/api/TeamApi/SetActiveTeam", SurfaceRequirement.userOrTeam
+                ]
+
+            for ((httpMethod, path), actual) in SurfaceRequirementRegistry.sdkBuiltInRouteOverrides do
+                match expectedByPath.TryFind path with
+                | Some expected -> Expect.equal actual expected (sprintf "%s %s declared requirement" httpMethod path)
+                | None -> failtestf "unexpected override path %s — update expectedByPath" path
         }
 
         test "Individual-mode bridge resolves TeamApi CRUD endpoints to teamScoped" {
@@ -129,7 +146,44 @@ let tests =
             let resolved =
                 SurfaceRequirementRegistry.resolve registry "POST" "/api/TeamApi/SetActiveTeam"
 
-            Expect.equal resolved SurfaceRequirement.teamScoped "exact overrides win over prefix catch-all"
+            Expect.equal resolved SurfaceRequirement.userOrTeam "exact overrides win over prefix catch-all"
+        }
+
+        test "SetActiveTeam admits UserKind — the onboarding-deadlock regression pin" {
+            // The active-team pointer is what upgrades a subject from
+            // `UserKind` to `TeamMemberKind`. When this route was gated
+            // `teamScoped`, a member added by an admin / invite (whose
+            // pointer no add path used to set) could NEVER transition:
+            // they were `UserKind` until the pointer was set, and
+            // setting the pointer required `TeamMemberKind`. Pin both
+            // halves: the bridge resolves `userOrTeam` for the route,
+            // and the matrix passes a `UserKind` subject through it.
+            let registry = bridgeForTeam ()
+
+            let requirement =
+                SurfaceRequirementRegistry.resolve registry "POST" "/api/TeamApi/SetActiveTeam"
+
+            Expect.equal requirement SurfaceRequirement.userOrTeam "SetActiveTeam resolves userOrTeam"
+
+            let user = Subject.AuthenticatedUser "freshly-added-member"
+
+            Expect.equal
+                (SurfaceEnforcement.evaluate user requirement)
+                Pass
+                "UserKind passes SetActiveTeam — the transition into team scope is reachable"
+
+            // Membership listing for the onboarding window rides the
+            // same requirement.
+            let rosterRequirement =
+                SurfaceRequirementRegistry.resolve registry "POST" "/api/TeamApi/GetTeamMembers"
+
+            Expect.equal (SurfaceEnforcement.evaluate user rosterRequirement) Pass "UserKind passes GetTeamMembers"
+
+            // Anonymous callers stay rejected — loosening to
+            // `userOrTeam` must not open the route to AnonymousKind.
+            match SurfaceEnforcement.evaluate (AnonymousSession "anon") requirement with
+            | Reject(401, "authentication_required", None) -> ()
+            | other -> failtestf "expected 401 authentication_required for anonymous, got %A" other
         }
 
         test "Non-CRUD TeamApi endpoints fall through to the strict global default" {

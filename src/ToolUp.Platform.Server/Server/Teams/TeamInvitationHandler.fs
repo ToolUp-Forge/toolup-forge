@@ -263,6 +263,16 @@ let teamInvitationApi
                             match! addResult with
                             | Error msg -> return Error(sprintf "Could not add you to the team: %s" msg)
                             | Ok() ->
+                                // First-team-becomes-active: without
+                                // this the invitee resolves as
+                                // `AuthenticatedUser` (personal scope)
+                                // on every request after accepting —
+                                // empty data, empty module list. Only
+                                // writes when their pointer is unset;
+                                // also heals already-member re-redeems
+                                // left stranded by pre-fix adds.
+                                do! ActiveTeamPolicy.ensureActiveTeam teamStore access.UserId teamId
+
                                 // Best-effort use-count bump. A failure
                                 // here does not roll back the add —
                                 // the membership is durable and the
@@ -724,7 +734,13 @@ let tryConsumePendingForUser
                 let! existing = teamStore.GetMemberRole(entry.TeamId, user.UserId)
 
                 match existing with
-                | Some _ -> return Some entry
+                | Some _ ->
+                    // Already a member but possibly stranded with no
+                    // active-team pointer (pre-fix add paths never set
+                    // it). Heal on the sign-in resolve — only writes
+                    // when the pointer is unset.
+                    do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
+                    return Some entry
                 | None ->
                     match! teamStore.AddMember(entry.TeamId, user.UserId, entry.Role) with
                     | Error reason ->
@@ -743,6 +759,10 @@ let tryConsumePendingForUser
 
                         return Some entry
                     | Ok() ->
+                        // First-team-becomes-active — same policy as
+                        // the interactive accept path above.
+                        do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
+
                         do!
                             auditLog.Record(
                                 teamScopeId entry.TeamId,
