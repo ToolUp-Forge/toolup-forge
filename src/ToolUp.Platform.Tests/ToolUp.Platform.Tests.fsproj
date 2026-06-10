@@ -76,6 +76,7 @@
         <Compile Include="Contracts\IPublicContentApiContract.fs" />
         <Compile Include="Contracts\IContentSourceContract.fs" />
         <Compile Include="Contracts\IAssetStoreContract.fs" />
+        <Compile Include="Contracts\IMediaLibraryContract.fs" />
         <Compile Include="Contracts\IConsentProviderContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
@@ -268,6 +269,7 @@
         <Compile Include="InProcess\PublicRenderingTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
+        <Compile Include="InProcess\MediaLibraryTests.fs" />
         <Compile Include="InProcess\InMemoryRateLimitStoreTests.fs" />
         <Compile Include="InProcess\TeamCreationPolicyTests.fs" />
         <Compile Include="InProcess\WithRequestHeadersPassthroughTests.fs" />
@@ -473,6 +475,7 @@
         <ProjectReference Include="..\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
         <!-- Phase 39 — asset-store contract pack + InProcess binding. -->
         <ProjectReference Include="..\ToolUp.AssetStore\ToolUp.AssetStore.fsproj" />
+        <ProjectReference Include="..\Media\MediaLibrary\ToolUp.MediaLibrary.fsproj" />
         <!-- Phase 59 — IConsentProvider lives in ToolUp.Platform.Client
              (consent decisions are browser-local). The contract pack
              tests the portable .NET-reachable surface against the
