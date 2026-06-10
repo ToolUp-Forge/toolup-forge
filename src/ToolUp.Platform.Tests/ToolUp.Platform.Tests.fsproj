@@ -272,6 +272,10 @@
         <!-- Phase 85 — NarrativeFromData projector output-shape +
              determinism + graceful-degradation tests. -->
         <Compile Include="InProcess\NarrativeFromDataTests.fs" />
+        <!-- Phase 90 — site structure: nav-tree audience filtering,
+             breadcrumb derivation, nav.yaml parse, tag-index resolution,
+             related-by-tag + facets, render helpers. -->
+        <Compile Include="InProcess\SiteStructureTests.fs" />
         <!-- Phase 84 — render-cache contract bindings + policy/hash unit
              tests + PublicPageHandler cache-integration tests. -->
         <Compile Include="InProcess\RenderCacheTests.fs" />

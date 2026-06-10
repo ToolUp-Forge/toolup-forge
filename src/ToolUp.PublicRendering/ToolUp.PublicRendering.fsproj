@@ -43,6 +43,12 @@
         <Compile Include="Server\StructuredDataHelpers.fs" />
         <Compile Include="Server\NarrativePrerender.fs" />
         <Compile Include="Server\NarrativeLayout.fs" />
+        <!-- Phase 90 — site structure: nav tree model + menu/breadcrumb
+             render helpers + taxonomy (tag-index content source). NavTree
+             → NavLayout (renders it) → TaxonomyHandler (tag pages). -->
+        <Compile Include="Server\NavTree.fs" />
+        <Compile Include="Server\NavLayout.fs" />
+        <Compile Include="Server\TaxonomyHandler.fs" />
         <Compile Include="Server\Attribution.fs" />
         <Compile Include="Server\SitemapGenerator.fs" />
         <Compile Include="Server\NarrativePagePublisher.fs" />

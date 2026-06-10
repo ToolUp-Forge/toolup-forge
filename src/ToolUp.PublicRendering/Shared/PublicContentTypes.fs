@@ -108,6 +108,36 @@ module PublicPage =
         | Draft
         | Archived -> false
 
+    // ─── Phase 90 — taxonomy (tags / categories) ─────────────────────
+    //
+    // Tags generalise the single-valued `Collection` into a multi-valued
+    // taxonomy for tag pages, related-content, and faceted browse. They
+    // are derived from the open `Frontmatter` `"tags"` key (a
+    // comma-separated list) rather than carried as a dedicated record
+    // field, so EVERY existing `PublicPage`-construction site is
+    // unaffected (GP 11) — a page with no `tags:` frontmatter simply has
+    // no tags. A markdown author writes `tags: news, product, launch` in
+    // frontmatter; a programmatic page sets the same key in its
+    // `Frontmatter` map. `TaxonomyHandler` + `NavTree` consume these
+    // helpers; nothing here changes how an existing page renders.
+
+    /// The page's tags, parsed from the `"tags"` frontmatter key
+    /// (comma-separated, trimmed, empties dropped). `[]` when the key is
+    /// absent. Order follows the authored list.
+    let tags (page: PublicPage) : string list =
+        match page.Frontmatter.TryFind "tags" with
+        | Some raw ->
+            raw.Split(',')
+            |> Array.map (fun s -> s.Trim())
+            |> Array.filter (fun s -> s <> "")
+            |> Array.toList
+        | None -> []
+
+    /// Whether the page carries `tag` (case-insensitive).
+    let hasTag (tag: string) (page: PublicPage) : bool =
+        tags page
+        |> List.exists (fun t -> String.Equals(t, tag, StringComparison.OrdinalIgnoreCase))
+
 /// `redirects.csv` row — legacy URL → new URL + HTTP status code.
 /// Query strings on the incoming URL are preserved across the
 /// redirect (critical for SEO continuity when porting WordPress /
