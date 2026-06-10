@@ -26,6 +26,7 @@
         <Compile Include="Server\FrontmatterParser.fs" />
         <Compile Include="Server\MarkdownContentLoader.fs" />
         <Compile Include="Server\EntityRegistrations.fs" />
+        <Compile Include="Server\PublicPageRevisions.fs" />
         <Compile Include="Server\IContentSource.fs" />
         <Compile Include="Server\PublicContentApiImpl.fs" />
         <Compile Include="Server\RedirectMap.fs" />

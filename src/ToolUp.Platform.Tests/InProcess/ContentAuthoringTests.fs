@@ -287,4 +287,49 @@ let tests =
             | Ok e -> Expect.equal e.Page.Status Published "the due page is now Published in the store"
             | Error err -> failtestf "due page missing: %A" err
         }
+
+        // ─── Versioning (Phase 89) ────────────────────────────────────
+        testCaseAsync "page revisions list, read, and restore append-only"
+        <| async {
+            let store = mkPageStore ()
+            let scope = PublicPageEntity.PublicScope
+
+            // Two edits of the same slug → two versions.
+            let v1 = {
+                pageWith Published "about" with
+                    Title = "About v1"
+            }
+
+            let v2 = {
+                pageWith Published "about" with
+                    Title = "About v2"
+            }
+
+            let! _ = store.Save(scope, PublicPageEntity.fromPage v1)
+            let! _ = store.Save(scope, PublicPageEntity.fromPage v2)
+
+            let! revisions = PublicPageRevisions.list store "about"
+            Expect.equal (List.length revisions) 2 "two revisions listed"
+            Expect.equal revisions.[0].Version 2 "newest version first"
+
+            // Read the prior revision.
+            let! rev1 = PublicPageRevisions.get store "about" 1
+
+            match rev1 with
+            | Ok page -> Expect.equal page.Title "About v1" "revision 1 has the original title"
+            | Error e -> failtestf "get rev1 failed: %A" e
+
+            // Restore v1 → appends a new current version with v1 content.
+            let! restored = PublicPageRevisions.restore store "about" 1
+            Expect.isOk restored "restore ok"
+
+            let! revisionsAfter = PublicPageRevisions.list store "about"
+            Expect.equal (List.length revisionsAfter) 3 "restore appended a third version (history preserved)"
+
+            let! currentPage = PublicPageRevisions.current store "about"
+
+            match currentPage with
+            | Ok page -> Expect.equal page.Title "About v1" "current is now the restored v1 content"
+            | Error e -> failtestf "current failed: %A" e
+        }
     ]
