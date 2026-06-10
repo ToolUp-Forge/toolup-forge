@@ -5,6 +5,7 @@ open System.IO
 open Expecto
 open Giraffe.ViewEngine
 open ToolUp.Platform
+open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.Platform.Tests.Contracts
 
@@ -55,12 +56,53 @@ let private mkFixtureApi () : IPublicContentApi =
     seedCanonicalFixture dir
     let logger = ConsoleLogger.ConsoleLogger() :> ILogger
     let loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
-    PublicContentApiImpl.create loader None
+    PublicContentApiImpl.create loader None []
+
+/// Build a default impl over the canonical fixture with the supplied
+/// request-time content sources wired in (Phase 83). Used by the
+/// `GetPageInContext` chain-ordering tests.
+let private mkFixtureApiWith (sources: IContentSource list) : IPublicContentApi =
+    let dir = mkFixtureDir ()
+    seedCanonicalFixture dir
+    let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+    let loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
+    PublicContentApiImpl.create loader None sources
 
 // ─── Contract pack binding ──────────────────────────────────────────
 
 let private contractTests =
     IPublicContentApiContract.tests "MarkdownContentLoader" mkFixtureApi
+
+// ─── Phase 83 — IContentSource contract bindings ────────────────────
+//
+// Two bindings prove the contract holds for the SDK-provided
+// `ContentSource.ofRoute` constructor ("the default") and a hand-rolled
+// object-expression resolver ("one consumer impl"). Both arrange the
+// canonical fixture: claim "claimed/widget" → Narrative "Widget",
+// decline everything else.
+
+let private widgetDoc = Narrative.create "Widget"
+
+let private ofRouteContentSource () : IContentSource =
+    ContentSource.ofRoute "claimed/{name}" (fun captures _ctx -> async {
+        match captures.TryFind "name" with
+        | Some "widget" -> return Some(Narrative widgetDoc)
+        | _ -> return None
+    })
+
+let private customContentSource () : IContentSource =
+    ContentSource.create (fun (Slug s) _ctx -> async {
+        if s = "claimed/widget" then
+            return Some(Narrative widgetDoc)
+        else
+            return None
+    })
+
+let private contentSourceContractTests =
+    testList "IContentSource — contract bindings" [
+        IContentSourceContract.tests "ContentSource.ofRoute (default)" ofRouteContentSource
+        IContentSourceContract.tests "object-expression (consumer impl)" customContentSource
+    ]
 
 // ─── Impl-specific tests ────────────────────────────────────────────
 
@@ -443,4 +485,166 @@ let private composeTests =
             | None -> ()
     ]
 
-let tests = testList "PublicRendering" [ contractTests; implTests; composeTests ]
+// ─── Phase 83 — content-source chain (GetPageInContext) tests ───────
+
+let private csAnon = AccessContext.unrestricted (AnonymousSession "test-anon")
+
+let private contentSourceImplTests =
+    testList "PublicRendering — Phase 83 content-source chain" [
+
+        testCaseAsync "GetPageInContext with no sources is identical to GetPage (GP 11)"
+        <| async {
+            let api = mkFixtureApiWith []
+            let! viaGetPage = api.GetPage "about"
+            let! viaContext = api.GetPageInContext("about", csAnon)
+
+            Expect.equal
+                (viaContext |> Option.map (fun p -> Slug.value p.Slug))
+                (viaGetPage |> Option.map (fun p -> Slug.value p.Slug))
+                "known slug resolves identically through both methods"
+
+            let! missCtx = api.GetPageInContext("does-not-exist", csAnon)
+            let! missPage = api.GetPage "does-not-exist"
+            Expect.isNone missCtx "unknown slug → None via context path"
+            Expect.isNone missPage "unknown slug → None via GetPage"
+        }
+
+        testCaseAsync "file tier wins over a content source claiming the same slug"
+        <| async {
+            // A source that would claim "about", but the file fixture has
+            // an "about" page — the file tier is consulted first.
+            let shadow =
+                ContentSource.create (fun (Slug s) _ -> async {
+                    if s = "about" then
+                        return Some(Narrative(Narrative.create "Shadowed"))
+                    else
+                        return None
+                })
+
+            let api = mkFixtureApiWith [ shadow ]
+            let! pageOpt = api.GetPageInContext("about", csAnon)
+
+            match pageOpt with
+            | Some page -> Expect.equal page.Title "About Us" "file frontmatter title wins, not the source body"
+            | None -> failtest "Expected the file-backed about page"
+        }
+
+        testCaseAsync "content source resolves a dynamic slug after file + overlay miss"
+        <| async {
+            let source =
+                ContentSource.ofRoute "dashboard/{quarter}" (fun captures _ -> async {
+                    let q = captures.TryFind "quarter" |> Option.defaultValue "?"
+                    return Some(Narrative(Narrative.create $"{q} Dashboard"))
+                })
+
+            let api = mkFixtureApiWith [ source ]
+            let! pageOpt = api.GetPageInContext("dashboard/q1", csAnon)
+
+            match pageOpt with
+            | Some page ->
+                Expect.equal (Slug.value page.Slug) "dashboard/q1" "synthesised page carries the request slug"
+                Expect.equal page.Title "q1 Dashboard" "page Title derives from the Narrative document title"
+
+                match page.Body with
+                | Narrative doc -> Expect.equal doc.Title "q1 Dashboard" "body is the resolver's Narrative document"
+                | other -> failtestf "Expected a Narrative body; got %A" other
+            | None -> failtest "Expected the dynamic dashboard page"
+        }
+
+        testCaseAsync "registration order — first source returning Some wins"
+        <| async {
+            let first =
+                ContentSource.create (fun (Slug s) _ -> async {
+                    if s = "x" then
+                        return Some(Narrative(Narrative.create "First"))
+                    else
+                        return None
+                })
+
+            let second =
+                ContentSource.create (fun (Slug s) _ -> async {
+                    if s = "x" then
+                        return Some(Narrative(Narrative.create "Second"))
+                    else
+                        return None
+                })
+
+            let api = mkFixtureApiWith [ first; second ]
+            let! pageOpt = api.GetPageInContext("x", csAnon)
+
+            match pageOpt with
+            | Some page -> Expect.equal page.Title "First" "first source in registration order wins"
+            | None -> failtest "Expected the first source to claim the slug"
+        }
+
+        testCaseAsync "all sources decline → None (fall-through)"
+        <| async {
+            let decliner = ContentSource.create (fun _ _ -> async { return None })
+            let api = mkFixtureApiWith [ decliner; decliner ]
+            let! pageOpt = api.GetPageInContext("nothing/here", csAnon)
+            Expect.isNone pageOpt "every source declined and there is no file/overlay match"
+        }
+
+        testCaseAsync "page metadata from data — PublishedAt derives from Narrative provenance"
+        <| async {
+            let withProv =
+                Narrative.create "Report"
+                |> Narrative.withProvenance "analytics" (Some "/report") "settings-key" []
+
+            let source =
+                ContentSource.create (fun (Slug s) _ -> async {
+                    if s = "report" then
+                        return Some(Narrative withProv)
+                    else
+                        return None
+                })
+
+            let api = mkFixtureApiWith [ source ]
+            let! pageOpt = api.GetPageInContext("report", csAnon)
+
+            match pageOpt with
+            | Some page -> Expect.isSome page.PublishedAt "PublishedAt is populated from provenance GeneratedAt"
+            | None -> failtest "Expected the report page"
+        }
+
+        // ─── RouteShape.tryMatch ───────────────────────────────────
+
+        testCase "RouteShape.tryMatch captures a single segment"
+        <| fun _ ->
+            match RouteShape.tryMatch "services/{client}" "services/acme" with
+            | Some caps -> Expect.equal (caps.TryFind "client") (Some "acme") "captures {client}=acme"
+            | None -> failtest "Expected a match"
+
+        testCase "RouteShape.tryMatch captures multiple segments"
+        <| fun _ ->
+            match RouteShape.tryMatch "{a}/{b}/{c}" "x/y/z" with
+            | Some caps ->
+                Expect.equal (caps.TryFind "a") (Some "x") "a=x"
+                Expect.equal (caps.TryFind "b") (Some "y") "b=y"
+                Expect.equal (caps.TryFind "c") (Some "z") "c=z"
+            | None -> failtest "Expected a match"
+
+        testCase "RouteShape.tryMatch returns None on literal mismatch"
+        <| fun _ -> Expect.isNone (RouteShape.tryMatch "services/{client}" "products/acme") "literal segment must match"
+
+        testCase "RouteShape.tryMatch returns None on segment-count mismatch"
+        <| fun _ ->
+            Expect.isNone
+                (RouteShape.tryMatch "services/{client}" "services/acme/extra")
+                "arity must match (captures do not span segments)"
+
+        testCase "RouteShape.tryMatch matches a fully-literal pattern with an empty capture map"
+        <| fun _ ->
+            match RouteShape.tryMatch "about/team" "about/team" with
+            | Some caps -> Expect.isTrue (Map.isEmpty caps) "no captures for a fully-literal pattern"
+            | None -> failtest "Expected a literal match"
+    ]
+
+let tests =
+    testList "PublicRendering" [
+        contractTests
+        contentSourceContractTests
+        implTests
+        composeTests
+        contentSourceImplTests
+    ]

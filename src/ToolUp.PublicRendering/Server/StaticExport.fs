@@ -113,10 +113,14 @@ module StaticExport =
                 // watching files for a one-shot build pass.
                 let loader = new MarkdownContentLoader(root, logger, hotReload = false)
 
+                // Static export is a context-free, build-time pass — it
+                // enumerates pages via `ListPages` / `GetPage`, never
+                // `GetPageInContext`, so request-time content sources
+                // (which need an `AccessContext`) are intentionally absent.
                 let api: IPublicContentApi =
                     match contentApiOverride with
                     | Some explicit -> explicit
-                    | None -> PublicContentApiImpl.create loader None
+                    | None -> PublicContentApiImpl.create loader None []
 
                 let! pages = api.ListPages ""
 

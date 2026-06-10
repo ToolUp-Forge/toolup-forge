@@ -83,6 +83,13 @@ type PublicRenderingServerApp = {
     /// → no feeds emitted; the renderer registry's per-page
     /// `?format=atom` still works.
     Feeds: NarrativeFeedConfig list
+    /// Phase 83 — ordered request-time `IContentSource` resolvers. The
+    /// default impl consults these after the file + entity-overlay tiers
+    /// (registration order, first `Some` wins) on `GetPageInContext`.
+    /// Empty (default) → byte-for-byte identical to the pre-83
+    /// file+overlay chain (GP 11). Ignored when `ContentApiOverride` is
+    /// set — a supplied `IPublicContentApi` owns its own resolution.
+    ContentSources: IContentSource list
 }
 
 module PublicRenderingServerApp =
@@ -97,6 +104,7 @@ module PublicRenderingServerApp =
         AIPublishEnabled = false
         AIPublishAuthoriser = None
         Feeds = []
+        ContentSources = []
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -117,6 +125,7 @@ module PublicRenderingServerApp =
         AIPublishEnabled = false
         AIPublishAuthoriser = None
         Feeds = []
+        ContentSources = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -298,6 +307,24 @@ module PublicRenderingServerApp =
             Feeds = app.Feeds @ [ config ]
     }
 
+    /// Phase 83 — register a request-time `IContentSource`. The default
+    /// impl consults registered sources after the file + entity-overlay
+    /// tiers (registration order; first `Some` wins) on a per-request
+    /// resolve. Multiple sources compose; call this once per source.
+    ///
+    /// Use `ContentSource.create` for a resolver that claims slugs by its
+    /// own logic, or `ContentSource.ofRoute "services/{client}" resolver`
+    /// for a source that claims a family of dynamic paths by pattern.
+    ///
+    /// Composes additively (GP 11): a pipeline with no `withContentSource`
+    /// calls is byte-for-byte identical to the pre-83 file+overlay chain.
+    /// Ignored when `withContentApi` supplies an explicit
+    /// `IPublicContentApi` — a custom content API owns its own resolution.
+    let withContentSource (source: IContentSource) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            ContentSources = app.ContentSources @ [ source ]
+    }
+
     /// Toggle the dev-mode hot-reload watcher. Defaults to `true`.
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
@@ -358,6 +385,7 @@ module PublicRenderingServerApp =
             let aiPublishEnabled = app.AIPublishEnabled
             let aiPublishAuthoriser = app.AIPublishAuthoriser
             let feeds = app.Feeds
+            let contentSources = app.ContentSources
 
             // Auto-register `PublicPageEntity` against the base
             // `ServerApp` so the default impl's entity-store fallthrough
@@ -401,7 +429,7 @@ module PublicRenderingServerApp =
                                     |> Option.ofObj
                                     |> Option.map (fun x -> x :?> IEntityStore)
 
-                                PublicContentApiImpl.create loader entityStore)
+                                PublicContentApiImpl.create loader entityStore contentSources)
                     )
                     .AddSingleton<ILayoutCatalog>(
                         // Phase 80b — always exposed when public

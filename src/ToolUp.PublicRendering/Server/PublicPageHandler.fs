@@ -3,10 +3,15 @@ namespace ToolUp.PublicRendering
 open Giraffe
 open Giraffe.ViewEngine
 open Microsoft.AspNetCore.Http
+open ToolUp.Platform
 
 /// Catch-all `GET /{slug}` handler. The slug derives from the
 /// request path with leading `/` stripped; root path `/` resolves
-/// against the page slug `"index"`. When `IPublicContentApi.GetPage`
+/// against the page slug `"index"`. Resolution goes through
+/// `IPublicContentApi.GetPageInContext` (Phase 83) so request-time
+/// `IContentSource` resolvers are consulted after the file + entity-
+/// overlay tiers — the per-request `AccessContext` is resolved from
+/// `ctx.RequestServices` and handed to each source. When resolution
 /// returns `None`, the handler falls through to `next` — the
 /// `RedirectMap` handler is expected to own the 301 fall-through
 /// before a 404 lands.
@@ -31,7 +36,18 @@ module PublicPageHandler =
             let rawPath = ctx.Request.Path.Value
             let slug = rawPath.TrimStart('/')
             let slugOrIndex = if slug = "" then "index" else slug
-            let! pageOpt = api.GetPage slugOrIndex
+
+            // Phase 83 — resolve the per-request `AccessContext` from DI
+            // (registered scoped by the SDK middleware). Fall back to an
+            // unrestricted anonymous context when absent, matching the
+            // convention in `BuildRouteHandlers` — a public content site
+            // running without auth resolves every request as anonymous.
+            let accessContext =
+                match ctx.RequestServices.GetService(typeof<AccessContext>) with
+                | :? AccessContext as ac -> ac
+                | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+
+            let! pageOpt = api.GetPageInContext(slugOrIndex, accessContext)
 
             match pageOpt with
             | Some page ->

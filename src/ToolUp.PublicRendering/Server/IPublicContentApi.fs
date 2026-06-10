@@ -1,5 +1,7 @@
 namespace ToolUp.PublicRendering
 
+open ToolUp.Platform
+
 /// Server-side substrate for retrieving publishable content by slug
 /// or collection. The default implementation (`PublicContentApiImpl`)
 /// composes a file-backed `MarkdownContentLoader` with an optional
@@ -46,3 +48,23 @@ type IPublicContentApi =
     /// canonical use case is news / events / team listings. Order:
     /// `PublishedAt` descending (newest first), `None` last.
     abstract GetCollection: collectionId: string -> Async<PublicPage list>
+
+    /// Phase 83 — context-aware resolution. Runs the same file +
+    /// entity-overlay tiers as `GetPage`, then consults any registered
+    /// `IContentSource` resolvers with the caller's `AccessContext`
+    /// (registration order; first `Some` wins). The `AccessContext`
+    /// lets a resolver scope its backing query to the requesting
+    /// principal (GP 4 — tenant isolation rides the context, not a
+    /// "remember to filter" convention).
+    ///
+    /// **Backward compatibility (GP 11).** When no content sources are
+    /// registered, this returns *exactly* what `GetPage slug` returns —
+    /// the default impl delegates to its own `GetPage` and then walks an
+    /// empty source list. Context-free callers (sitemap generation,
+    /// static export) keep calling `GetPage`; only the per-request page
+    /// handler — which has an `AccessContext` in hand — calls this.
+    ///
+    /// `AccessContext` is identity-by-value (a record of `string` /
+    /// `Guid` / DU primitives), so this method preserves the six
+    /// portability rules documented above.
+    abstract GetPageInContext: slug: string * ctx: AccessContext -> Async<PublicPage option>

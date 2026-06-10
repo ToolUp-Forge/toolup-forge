@@ -74,6 +74,7 @@
         <Compile Include="Contracts\IClientToolDispatchContract.fs" />
         <Compile Include="Contracts\IConversationStoreContract.fs" />
         <Compile Include="Contracts\IPublicContentApiContract.fs" />
+        <Compile Include="Contracts\IContentSourceContract.fs" />
         <Compile Include="Contracts\IAssetStoreContract.fs" />
         <Compile Include="Contracts\IConsentProviderContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
