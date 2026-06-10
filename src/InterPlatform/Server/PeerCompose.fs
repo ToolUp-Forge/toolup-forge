@@ -64,6 +64,13 @@ type PeerServerApp = {
     /// audit rows for their *own* calls (scoped to the validated caller).
     /// Off by default — opt in with `withPeerAuditTransparency` (GP 13).
     AuditTransparency: bool
+    /// Phase 18d — author-declared per-method capability profiles, keyed
+    /// by contract id. Aggregated over the live contract table by the
+    /// `IPeerProfileProvider` and served at
+    /// `GET /peer/v1/capabilities/profile`. A contract without a declared
+    /// profile is still advertised (versions only, no per-method
+    /// lifecycle). Build entries with `PeerCapabilityNegotiation.profileFor`.
+    ContractProfiles: ContractProfile list
 }
 
 module PeerServerApp =
@@ -73,6 +80,7 @@ module PeerServerApp =
         LocalPeer = None
         Contracts = []
         AuditTransparency = false
+        ContractProfiles = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -181,6 +189,19 @@ module PeerServerApp =
     /// (GP 13).
     let withPeerAuditTransparency (app: PeerServerApp) : PeerServerApp = { app with AuditTransparency = true }
 
+    /// Phase 18d — declare a contract's per-method capability profile so
+    /// callers can negotiate individual methods (deprecation windows,
+    /// breaking-change announcements) at handshake time. Build the profile
+    /// with `PeerCapabilityNegotiation.profileFor<'TApi>` (reflection
+    /// auto-populates the method list as `Active`; an overlay marks
+    /// specific `(method, version)` pairs `Deprecated` / `Removed`).
+    /// Multiple calls accumulate; the profile is served at
+    /// `GET /peer/v1/capabilities/profile` and read by `NegotiateMethod`.
+    let withContractProfile (profile: ContractProfile) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            ContractProfiles = app.ContractProfiles @ [ profile ]
+    }
+
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
     /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
     /// byte the same shape as a base `ServerApp.run`. When
@@ -196,6 +217,7 @@ module PeerServerApp =
         | EnabledPeerSubstrate ->
             let contracts = app.Contracts
             let auditTransparency = app.AuditTransparency
+            let contractProfiles = app.ContractProfiles
             let schedulerEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
 
             let localIdentity =
@@ -235,6 +257,42 @@ module PeerServerApp =
                                 return Ok(JsonRpc.deserialize<CapabilityList> body)
                             else
                                 return Error(HandshakeRejected body)
+                        with ex ->
+                            return Error(HandshakeUnreachable ex.Message)
+                }
+
+            // Phase 18d — the handshake's outbound *profile* fetch. Reads
+            // `GET /peer/v1/capabilities/profile` (a bare `PeerProfile`).
+            // A peer that predates 18d 404s that route, so a non-2xx
+            // degrades to the bare `/peer/v1/capabilities` mapped through
+            // `fromCapabilityList` (every method `Active`) — a 18d-aware
+            // caller still negotiates against a foundation-only peer. A
+            // transport failure is `HandshakeUnreachable`.
+            let fetchRemoteProfile
+                (auth: IPeerAuthProvider)
+                (target: TargetPeer)
+                : Async<Result<PeerProfile, PeerHandshakeError>> =
+                async {
+                    let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
+
+                    match tokenResult with
+                    | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
+                    | Ok token ->
+                        try
+                            use request =
+                                new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities/profile")
+
+                            request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+                            let! response = sharedHttpClient.SendAsync request |> Async.AwaitTask
+                            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                            if response.IsSuccessStatusCode then
+                                return Ok(JsonRpc.deserialize<PeerProfile> body)
+                            else
+                                // Pre-18d peer (no profile endpoint): fall
+                                // back to the bare capability list.
+                                let! caps = fetchRemote auth target
+                                return caps |> Result.map PeerCapabilityNegotiation.fromCapabilityList
                         with ex ->
                             return Error(HandshakeUnreachable ex.Message)
                 }
@@ -302,11 +360,28 @@ module PeerServerApp =
                             let auth = sp.GetService(typeof<IPeerAuthProvider>) :?> IPeerAuthProvider
                             HttpPeerClient(sharedHttpClient, auth, localIdentity) :> IPeerClient)
                     )
+                    .AddSingleton<IPeerProfileProvider>(
+                        // Phase 18d — aggregates the author-declared
+                        // contract profiles over the live capability table.
+                        System.Func<System.IServiceProvider, IPeerProfileProvider>(fun sp ->
+                            let peer = sp.GetService(typeof<IPlatformPeer>) :?> IPlatformPeer
+                            DefaultPeerProfileProvider(peer, contractProfiles) :> IPeerProfileProvider)
+                    )
                     .AddSingleton<IPeerHandshake>(
                         System.Func<System.IServiceProvider, IPeerHandshake>(fun sp ->
                             let peer = sp.GetService(typeof<IPlatformPeer>) :?> IPlatformPeer
                             let auth = sp.GetService(typeof<IPeerAuthProvider>) :?> IPeerAuthProvider
-                            InMemoryPeerHandshake(peer, fetchRemote auth) :> IPeerHandshake)
+
+                            let profileProvider =
+                                sp.GetService(typeof<IPeerProfileProvider>) :?> IPeerProfileProvider
+
+                            InMemoryPeerHandshake(
+                                peer,
+                                fetchRemote auth,
+                                profileProvider.LocalProfile,
+                                fetchRemoteProfile auth
+                            )
+                            :> IPeerHandshake)
                     )
                 |> fun s ->
                     // Long-running fusion is registered only when the job

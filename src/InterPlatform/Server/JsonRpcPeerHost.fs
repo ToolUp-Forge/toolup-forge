@@ -364,6 +364,34 @@ module JsonRpcPeerHost =
                     return! ctx.WriteStringAsync(JsonRpc.serialize capabilities)
         }
 
+    /// `GET /peer/v1/capabilities/profile` — authenticate, then answer
+    /// the Phase 18d capability *profile* handshake with this deployment's
+    /// aggregated `PeerProfile` (per-version, per-method lifecycle).
+    /// Auth-gated identically to `/peer/v1/capabilities` (fail-closed). A
+    /// deployment without an `IPeerProfileProvider` registered (a partial
+    /// test host) answers an empty profile rather than failing.
+    let private capabilitiesProfileHandler: HttpHandler =
+        fun (next: HttpFunc) (ctx: HttpContext) -> task {
+            let auth = getService<IPeerAuthProvider> ctx
+
+            match bearerToken ctx with
+            | None -> return! writeJson 401 (JsonRpc.failure "" (PeerUnauthorized "missing bearer token")) next ctx
+            | Some token ->
+                let! validation = auth.ValidatePeerToken token |> Async.StartAsTask
+
+                match validation with
+                | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
+                | Ok _ ->
+                    let! profile =
+                        match tryGetService<IPeerProfileProvider> ctx with
+                        | Some provider -> provider.LocalProfile() |> Async.StartAsTask
+                        | None -> System.Threading.Tasks.Task.FromResult<PeerProfile>([])
+
+                    ctx.SetStatusCode 200
+                    ctx.SetContentType "application/json"
+                    return! ctx.WriteStringAsync(JsonRpc.serialize profile)
+        }
+
     /// `GET /peer/v1/{contractId}/jobs/{jobId}` — authenticate, then
     /// return the long-running call's current status from the result
     /// store. `None` (the job has not finished) is reported as `Pending`;
@@ -416,6 +444,7 @@ module JsonRpcPeerHost =
     /// registered.
     let routes: HttpHandler =
         choose [
+            GET >=> route "/peer/v1/capabilities/profile" >=> capabilitiesProfileHandler
             GET >=> route "/peer/v1/capabilities" >=> capabilitiesHandler
             GET
             >=> routef "/peer/v1/%s/jobs/%O" (fun (contractId, jobId) -> jobStatusHandler contractId jobId)

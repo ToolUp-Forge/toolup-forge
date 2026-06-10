@@ -173,14 +173,53 @@ let! mine = audit.QueryCalls { ContractId = None; MethodName = None; SinceUtc = 
 
 **Scoping is the load-bearing guarantee:** the receiver answers only with rows where the *authenticated* caller made the call. `PeerAuditQuery` carries no caller-id field, so a peer cannot widen its scope, and `PeerAuditEntry` omits `CallerPeerId` (always the querying peer) — cross-peer leakage is impossible by construction. A deployment with `AuditLog = NoAuditLog` still registers the contract but answers with an empty trail.
 
+## Capability negotiation (Phase 18d)
+
+The foundation handshake (`IPeerHandshake.Negotiate`) resolves the single highest *contract* version both sides support. 18d adds **per-method** negotiation with **deprecation windows** — so a caller learns at connect time that a method it depends on is `Deprecated` (with a sunset version) or `Removed`, instead of hitting a runtime `PeerMethodNotFound`.
+
+**Receiver side** — declare a method lifecycle profile and compose it:
+
+```fsharp
+let v1, v2, v3 = { Major = 1; Minor = 0 }, { Major = 2; Minor = 0 }, { Major = 3; Minor = 0 }
+
+// Reflection auto-populates every method as Active at every version;
+// the overlay marks specific (method, version) pairs Deprecated / Removed.
+let directoryProfile =
+    PeerCapabilityNegotiation.profileFor<DirectoryContract> "directory" [ v1; v2 ] [
+        "GetCapabilities", v2, Deprecated { DeprecatedSince = v2; RemovedIn = Some v3; Note = "use ListContracts" }
+    ]
+
+PeerServerApp.create ()
+|> PeerServerApp.withConfig config
+|> PeerServerApp.withContract directoryHost
+|> PeerServerApp.withContractProfile directoryProfile   // served at /peer/v1/capabilities/profile
+|> PeerServerApp.run
+```
+
+**Caller side** — negotiate a method through the handshake:
+
+```fsharp
+match! handshake.NegotiateMethod(target, "directory", "GetCapabilities") with
+| Ok res ->
+    match res.Status with
+    | Active -> ()                                   // safe to call at res.Version
+    | Deprecated notice -> log $"deprecated, removed in {notice.RemovedIn}: {notice.Note}"
+    | Removed notice -> failwith $"gone: {notice.Note}"
+| Error (RemoteProfileUnavailable e) -> ()          // remote unreachable
+| Error e -> ()                                      // ContractNotAdvertised / MethodNotAdvertised / NoMutual
+```
+
+A peer that predates 18d (no `/capabilities/profile` route) degrades cleanly: its bare `CapabilityList` is read as an all-`Active` profile, so a 18d-aware caller still negotiates. The new endpoint is purely additive — `GET /peer/v1/capabilities` is byte-for-byte unchanged, and a deployment that never calls `withContractProfile` advertises versions-only profiles (no per-method lifecycle).
+
 ## Routes
 
-Three routes, all auth-gated (fail-closed — a missing / invalid / expired bearer token is rejected *before* dispatch):
+Four routes, all auth-gated (fail-closed — a missing / invalid / expired bearer token is rejected *before* dispatch):
 
 | Route | Purpose |
 |---|---|
 | `POST /peer/v1/{contractId}` | Dispatch an immediate call, or schedule a long-running one (returns a `JobId`). |
 | `GET  /peer/v1/capabilities` | Version handshake — answers with a bare `CapabilityList`. |
+| `GET  /peer/v1/capabilities/profile` | Phase 18d — per-method capability profile (lifecycle / deprecation windows). |
 | `GET  /peer/v1/{contractId}/jobs/{jobId}` | Poll a long-running call to a terminal `PeerJobStatus`. |
 
 ## See also

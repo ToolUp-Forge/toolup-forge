@@ -21,8 +21,21 @@ namespace ToolUp.InterPlatform
 /// contract table; `Negotiate` intersects local and remote version sets
 /// and returns the highest mutual `ContractVersion` (the structural
 /// `Major`-dominates-`Minor` order, GP 12 rule 6).
+///
+/// Phase 18d adds per-method negotiation: `localProfile` supplies this
+/// deployment's aggregated `PeerProfile` (the `IPeerProfileProvider` in
+/// production); `fetchRemoteProfile` fetches the target's profile (the
+/// `/peer/v1/capabilities/profile` GET, degrading to the bare
+/// `CapabilityList` for a pre-18d peer). Both are injected as closures so
+/// the handshake stays transport-agnostic (GP 12 rule 2) — the same reason
+/// `fetchRemote` is injected.
 type InMemoryPeerHandshake
-    (local: IPlatformPeer, fetchRemote: TargetPeer -> Async<Result<CapabilityList, PeerHandshakeError>>) =
+    (
+        local: IPlatformPeer,
+        fetchRemote: TargetPeer -> Async<Result<CapabilityList, PeerHandshakeError>>,
+        localProfile: unit -> Async<PeerProfile>,
+        fetchRemoteProfile: TargetPeer -> Async<Result<PeerProfile, PeerHandshakeError>>
+    ) =
 
     let versionsFor (contractId: string) (capabilities: CapabilityList) =
         capabilities
@@ -50,4 +63,16 @@ type InMemoryPeerHandshake
                     match mutual with
                     | [] -> Error(NoMutualVersion(contractId, localVersions, remoteVersions))
                     | _ -> Ok(List.max mutual)
+        }
+
+        member _.LocalProfile() = localProfile ()
+
+        member _.NegotiateMethod(target: TargetPeer, contractId: string, methodName: string) = async {
+            let! localProf = localProfile ()
+            let! remoteResult = fetchRemoteProfile target
+
+            return
+                match remoteResult with
+                | Error e -> Error(RemoteProfileUnavailable e)
+                | Ok remoteProf -> PeerCapabilityNegotiation.negotiate localProf remoteProf contractId methodName
         }

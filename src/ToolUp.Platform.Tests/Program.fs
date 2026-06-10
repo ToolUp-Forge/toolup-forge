@@ -221,6 +221,11 @@ let allTests =
         // round-trip. The scoping (a peer reads only its own rows) is the
         // security-critical property under test.
         IPeerAuditTransparencyContract.tests
+        // Phase 18d — sophisticated capability negotiation: per-method
+        // profile resolution (Active / Deprecated / Removed at the highest
+        // mutual version), profileFor reflection + overlay, fromCapability-
+        // List degradation, and the handshake NegotiateMethod wrapper.
+        IPeerCapabilityNegotiationContract.tests
     ]
 
 [<EntryPoint>]

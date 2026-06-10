@@ -88,6 +88,9 @@
              (caller-scoped audit projection + bespoke context-aware
              dispatch + typed proxy round-trip). -->
         <Compile Include="Contracts\IPeerAuditTransparencyContract.fs" />
+        <!-- Phase 18d — sophisticated capability negotiation (per-method
+             profile + deprecation windows + handshake NegotiateMethod). -->
+        <Compile Include="Contracts\IPeerCapabilityNegotiationContract.fs" />
         <!-- Phase 11a.A — module-level mutable cache reset registry.
              Tests touching a (b)-class cache call CacheReset.invalidateAll
              at setup. See docs/platform/testing-conventions.md. -->

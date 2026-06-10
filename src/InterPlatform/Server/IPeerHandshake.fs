@@ -40,3 +40,20 @@ type IPeerHandshake =
     /// advertises to an inbound handshake — the receiving side of a
     /// peer's `Negotiate`.
     abstract LocalCapabilities: unit -> Async<CapabilityList>
+
+    /// Phase 18d — negotiate a single contract *method* against `target`:
+    /// resolve the highest mutual contract version, then report the
+    /// method's lifecycle status (`Active` / `Deprecated` / `Removed`) on
+    /// the receiver at that version. Surfaces deprecation + removal at
+    /// connect time rather than as a runtime `PeerMethodNotFound`.
+    /// `RemoteProfileUnavailable` wraps a fetch failure; a remote that
+    /// predates 18d (no profile endpoint) degrades via its bare
+    /// `CapabilityList` (all methods `Active`).
+    abstract NegotiateMethod:
+        target: TargetPeer * contractId: string * methodName: string ->
+            Async<Result<MethodResolution, MethodNegotiationError>>
+
+    /// Phase 18d — this deployment's aggregated capability profile (the
+    /// richer analogue of `LocalCapabilities`), answering an inbound
+    /// `GET /peer/v1/capabilities/profile`.
+    abstract LocalProfile: unit -> Async<PeerProfile>
