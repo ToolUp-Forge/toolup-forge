@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.ContentAuthoring</PackageId>
+    <AssemblyName>ToolUp.ContentAuthoring</AssemblyName>
+    <Description>CMS authoring bridge for ToolUp (Phase 89): a content type is a ToolUp.Forms FormSchema, a content entry is a Submission, and publishing projects a validated submission to a ToolUp.PublicRendering PublicPage with a Narrative body. Forms is consumed unforked — validation comes straight from the Forms engine. Opt-in companion so PublicRendering / Forms consumers that don't author content pay nothing.</Description>
+    <PackageTags>fsharp;sdk;cms;content;forms;authoring;publicrendering;provider</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\ToolUp.Forms.Core\ToolUp.Forms.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Forms.Server\ToolUp.Forms.Server.fsproj" />
+    <ProjectReference Include="..\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Server\ContentTypeBridge.fs" />
+  </ItemGroup>
+
+</Project>
