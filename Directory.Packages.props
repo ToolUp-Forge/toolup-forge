@@ -17,6 +17,10 @@
     <PackageVersion Include="AWSSDK.Core" Version="4.0.7.1" />
     <PackageVersion Include="AWSSDK.S3" Version="4.0.23.4" />
     <PackageVersion Include="AWSSDK.SecretsManager" Version="4.0.4.24" />
+    <!-- Phase 22a — AWS KMS-backed IBlobEncryptionKeyResolver (envelope
+         encryption via GenerateDataKey / Decrypt). 4.0.x line tracks the
+         pinned AWSSDK.Core 4.0.7.1. -->
+    <PackageVersion Include="AWSSDK.KeyManagementService" Version="4.0.4.4" />
     <!-- Phase 16 — AWS Lambda host adapter companion (src/Hosts/AwsLambda).
          APIGatewayEvents carries the three trigger payload types
          (APIGatewayHttpApiV2ProxyRequest/Response, APIGatewayProxyRequest/
