@@ -44,7 +44,7 @@ let private clampHeadingLevel (level: int) : int =
     elif level > 6 then 6
     else level
 
-let private renderElement (sb: StringBuilder) (el: NarrativeElement) : unit =
+let rec private renderElement (sb: StringBuilder) (el: NarrativeElement) : unit =
     match el with
     | Paragraph spans -> sb.AppendLine(renderSpans spans) |> ignore
     | Heading(level, spans) ->
@@ -125,6 +125,45 @@ let private renderElement (sb: StringBuilder) (el: NarrativeElement) : unit =
         | Some c -> sb.AppendFormat("      — {0}", c).AppendLine() |> ignore
         | None -> ()
     | Divider -> sb.AppendLine("---") |> ignore
+    // ─── Phase 87 — media + layout blocks (caption / alt-text only) ──
+    | Video spec ->
+        match spec.Caption with
+        | Some c -> sb.AppendFormat("[Video: {0}]", c).AppendLine() |> ignore
+        | None -> sb.AppendLine("[Video]") |> ignore
+    | Audio spec ->
+        match spec.Caption with
+        | Some c -> sb.AppendFormat("[Audio: {0}]", c).AppendLine() |> ignore
+        | None -> sb.AppendLine("[Audio]") |> ignore
+    | ImageGallery images ->
+        for img in images do
+            match img.Caption with
+            | Some c -> sb.AppendFormat("  [{0}] — {1}", img.Alt, c).AppendLine() |> ignore
+            | None -> sb.AppendFormat("  [{0}]", img.Alt).AppendLine() |> ignore
+    | Embed spec ->
+        // Surface the URL after the title so terminal / email / RSS
+        // readers can copy-paste it (same convention as `Link`).
+        sb.AppendFormat("[Embed: {0}] ({1})", spec.Title, spec.Url).AppendLine()
+        |> ignore
+    | Card spec ->
+        match spec.Heading with
+        | Some h -> sb.AppendLine(h) |> ignore
+        | None -> ()
+
+        for child in spec.Body do
+            renderElement sb child
+    | Accordion panels ->
+        for (heading, body) in panels do
+            sb.AppendLine(heading) |> ignore
+
+            for child in body do
+                renderElement sb child
+    | Tabs panels ->
+        for (label, body) in panels do
+            sb.AppendLine(label) |> ignore
+
+            for child in body do
+                renderElement sb child
+    | Component(name, _) -> sb.AppendFormat("[component: {0}]", name).AppendLine() |> ignore
 
 let private renderSection (sb: StringBuilder) (section: NarrativeSection) : unit =
     sb.AppendLine(section.Heading.ToUpperInvariant()) |> ignore

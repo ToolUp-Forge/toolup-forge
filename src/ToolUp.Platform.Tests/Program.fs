@@ -37,6 +37,7 @@ let allTests =
         HashiCorpVaultSecretStoreTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
+        NarrativeElementTests.tests
         DataSubjectRequestTests.tests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests

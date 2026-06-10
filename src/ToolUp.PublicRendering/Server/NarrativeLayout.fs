@@ -115,3 +115,78 @@ module NarrativeLayout =
 
             canonical @ jsonLd @ openGraph @ twitter
         | _ -> []
+
+    // ─── Phase 87 — rich-content rendering policy ────────────────────
+    //
+    // The `Embed` and `Component` narrative blocks (Phase 87) need a
+    // deployment-level rendering policy that the document itself must
+    // not carry: an allowlist of embed origins (CSP discipline) and a
+    // registry of custom component renderers. Both live here, at the
+    // rendering layer, so the same `NarrativeDocument` renders safely
+    // under any deployment's policy.
+    //
+    // Component renderers are authored as pure `props -> XmlNode`
+    // functions — the natural Giraffe.ViewEngine shape — and bridged
+    // into the SDK's string-producing `NarrativeHtml.RenderOptions`
+    // seam by `componentResolver`. This is the one sanctioned narrative
+    // type-erasure boundary (see toolup-forge/CLAUDE.md "Type erasure
+    // boundaries"): a deployment ships new block kinds without forking
+    // the `NarrativeElement` DU.
+
+    /// A custom component renderer: a pure map of `props` to a
+    /// Giraffe.ViewEngine node. Registered by block name in a
+    /// `ComponentRegistry`. Must be deterministic (same props → same
+    /// node) so prerendered and hydrated output agree.
+    type ComponentRenderer = Map<string, string> -> XmlNode
+
+    /// Name-keyed registry of `ComponentRenderer`s. A `Component(name,
+    /// props)` block resolves its renderer by `name`; an unregistered
+    /// name degrades to the SDK's safe placeholder.
+    type ComponentRegistry = Map<string, ComponentRenderer>
+
+    /// The empty component registry — no custom blocks. The default for
+    /// a deployment that authors no `Component` blocks.
+    let noComponents: ComponentRegistry = Map.empty
+
+    /// Bridge a `props -> XmlNode` `ComponentRegistry` into the SDK's
+    /// `NarrativeHtml.RenderOptions.ComponentRenderer` seam (a
+    /// `string -> Map -> string option` resolver). A registered name
+    /// renders its node to an HTML string; an unregistered name returns
+    /// `None`, so the SDK falls through to the safe placeholder.
+    let componentResolver (registry: ComponentRegistry) : string -> Map<string, string> -> string option =
+        fun name props ->
+            match registry.TryFind name with
+            | Some render -> Some(RenderView.AsString.htmlNode (render props))
+            | None -> None
+
+    /// Build `NarrativeHtml.RenderOptions` carrying a deployment's
+    /// embed-origin allowlist and component registry. Every other
+    /// option keeps its `RenderOptions.Default` value, so existing
+    /// (non-rich) narratives render byte-for-byte unchanged (GP 11).
+    ///
+    /// `allowedEmbedOrigins` entries are `scheme://host[:port]`,
+    /// lowercased — e.g. `"https://www.youtube.com"`,
+    /// `"https://player.vimeo.com"`. An `Embed` whose URL origin is not
+    /// in the set degrades to a safe placeholder link.
+    let richRenderOptions
+        (allowedEmbedOrigins: Set<string>)
+        (registry: ComponentRegistry)
+        : NarrativeHtml.RenderOptions =
+        {
+            NarrativeHtml.RenderOptions.Default with
+                AllowedEmbedOrigins = allowedEmbedOrigins
+                ComponentRenderer = componentResolver registry
+        }
+
+    /// Render a `PublicPage`'s body with a rich-content rendering
+    /// policy (embed allowlist + component registry). Identical to
+    /// `renderBody` for Markdown / Html bodies; `Narrative` bodies run
+    /// through `NarrativeHtml.renderWith` so `Embed` / `Component`
+    /// blocks honour the supplied policy. Use this in place of
+    /// `renderBody` when a layout serves pages that carry Phase 87
+    /// media / layout blocks.
+    let renderBodyWith (allowedEmbedOrigins: Set<string>) (registry: ComponentRegistry) (page: PublicPage) : XmlNode =
+        match page.Body with
+        | Markdown source -> pre [] [ encodedText source ]
+        | Html fragment -> rawText fragment
+        | Narrative doc -> rawText (NarrativeHtml.renderWith (richRenderOptions allowedEmbedOrigins registry) doc)

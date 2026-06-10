@@ -98,6 +98,88 @@ let blockquote (citation: string option) (spans: InlineSpan list) : NarrativeEle
 
 let divider: NarrativeElement = Divider
 
+// ─── Phase 87 — media + layout block constructors ───────────────
+
+/// A media `<source>` with an optional MIME type hint.
+let mediaSource (src: string) (mimeType: string option) : MediaSource = { Src = src; Type = mimeType }
+
+/// A timed-text track. `kind` is `"captions"` / `"subtitles"` /
+/// `"descriptions"` / `"chapters"`; `label` is the player-menu name.
+let mediaTrack (kind: string) (src: string) (label: string) : MediaTrack = {
+    Src = src
+    Kind = kind
+    Label = label
+    SrcLang = None
+    IsDefault = false
+}
+
+/// A `Video` block from an explicit spec.
+let video (spec: VideoSpec) : NarrativeElement = Video spec
+
+/// Convenience: a single-source `Video` with no poster / tracks. The
+/// caption doubles as the accessible description + plaintext fallback.
+let videoOf (src: string) (mimeType: string option) (caption: string option) : NarrativeElement =
+    Video {
+        Sources = [ { Src = src; Type = mimeType } ]
+        Poster = None
+        Tracks = []
+        Caption = caption
+    }
+
+/// An `Audio` block from an explicit spec.
+let audio (spec: AudioSpec) : NarrativeElement = Audio spec
+
+/// Convenience: a single-source `Audio` with no tracks.
+let audioOf (src: string) (mimeType: string option) (caption: string option) : NarrativeElement =
+    Audio {
+        Sources = [ { Src = src; Type = mimeType } ]
+        Tracks = []
+        Caption = caption
+    }
+
+/// A gallery image. `alt` is mandatory accessibility text; caption and
+/// lightbox href are optional.
+let galleryImage (src: string) (alt: string) : ImageSpec = {
+    Src = src
+    Alt = alt
+    Caption = None
+    Href = None
+}
+
+/// An `ImageGallery` block from a list of image specs.
+let imageGallery (images: ImageSpec list) : NarrativeElement = ImageGallery images
+
+/// An `Embed` block. `title` is mandatory (iframe `title=` +
+/// placeholder link text); aspect ratio is an optional `"16:9"` hint.
+let embed (url: string) (title: string) (aspectRatio: string option) : NarrativeElement =
+    Embed {
+        Url = url
+        Title = title
+        AspectRatio = aspectRatio
+    }
+
+/// A `Card` block from an explicit spec.
+let card (spec: CardSpec) : NarrativeElement = Card spec
+
+/// Convenience: a `Card` with an optional heading and a body, no image.
+let cardOf (heading: string option) (body: NarrativeElement list) : NarrativeElement =
+    Card {
+        Heading = heading
+        Image = None
+        Body = body
+    }
+
+/// An `Accordion` block — ordered `(heading, body)` panels.
+let accordion (panels: (string * NarrativeElement list) list) : NarrativeElement = Accordion panels
+
+/// A `Tabs` block — ordered `(label, body)` panels.
+let tabs (panels: (string * NarrativeElement list) list) : NarrativeElement = Tabs panels
+
+/// A generic `Component` block resolved by name through the rendering
+/// layer's registered component-renderer map. `props` is a flat string
+/// map; an unregistered name degrades to a safe placeholder.
+let component' (name: string) (props: Map<string, string>) : NarrativeElement = Component(name, props)
+
 // ─── Document constructors ──────────────────────────────────────
 
 /// Create an empty document with the given title. Sections are added via

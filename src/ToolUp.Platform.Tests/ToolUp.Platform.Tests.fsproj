@@ -138,6 +138,7 @@
         <Compile Include="InProcess\GcpSecretManagerSecretStoreTests.fs" />
         <Compile Include="InProcess\MarkdownRendererTests.fs" />
         <Compile Include="InProcess\HtmlRendererTests.fs" />
+        <Compile Include="InProcess\NarrativeElementTests.fs" />
         <Compile Include="InProcess\DataSubjectRequestTests.fs" />
         <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelTests.fs" />

@@ -44,6 +44,27 @@ type RenderOptions = {
     /// (e.g. a single-section embed inside a layout that handles the
     /// wrapper).
     EmitSectionAnchors: bool
+    /// Origins allowed for `Embed` blocks (Phase 87). An embed whose
+    /// URL origin (`scheme://host[:port]`, lowercased) is in this set
+    /// renders as a sandboxed `<iframe>`; any other origin degrades to
+    /// a safe placeholder link. Defaults to the EMPTY set — i.e.
+    /// deny-all, the secure-by-default posture (GP 11: an existing
+    /// document with no `Embed` block is unaffected; a document that
+    /// gains an `Embed` renders the safe placeholder until a
+    /// deployment opts specific origins in). The PublicRendering
+    /// `NarrativeLayout` builds this from its embed-origin allowlist.
+    AllowedEmbedOrigins: Set<string>
+    /// Resolver for `Component` blocks (Phase 87). Given the component
+    /// `name` and its `props`, returns the rendered HTML string (raw —
+    /// the renderer is deployment-provided and trusted), or `None` to
+    /// fall through to the safe `narrative-component--unresolved`
+    /// placeholder. Defaults to a resolver that returns `None` for
+    /// every name (no components registered), so an unregistered
+    /// component degrades gracefully (GP 11). The PublicRendering
+    /// `NarrativeLayout` builds this from its `props -> XmlNode`
+    /// component registry. This is the one sanctioned narrative
+    /// type-erasure boundary.
+    ComponentRenderer: string -> Map<string, string> -> string option
 } with
 
     static member Default = {
@@ -51,6 +72,8 @@ type RenderOptions = {
         ExternalLinkRel = None
         HeadingLevelOffset = 0
         EmitSectionAnchors = true
+        AllowedEmbedOrigins = Set.empty
+        ComponentRenderer = (fun _ _ -> None)
     }
 
 let private escape (s: string) : string =
@@ -117,7 +140,98 @@ let private alignAttr (a: TableAlignment) =
     | Right -> " style=\"text-align:right\""
     | Center -> " style=\"text-align:center\""
 
-let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: NarrativeElement) : unit =
+// ─── Phase 87 — helpers for media + layout blocks ────────────────────
+
+/// Lowercase + collapse runs of non-alphanumeric to a single `-` + trim
+/// edge dashes. Deterministic (no culture-sensitive ops) and Fable-safe
+/// (no `Regex`). Used for class-hook suffixes (`16:9` → `16-9`) and tab
+/// anchor ids (`Overview` → `overview`).
+let private slugify (s: string) : string =
+    let lower = s.ToLowerInvariant()
+    let mutable lastDash = false
+    let buf = StringBuilder()
+
+    for c in lower do
+        if System.Char.IsLetterOrDigit c then
+            buf.Append(c) |> ignore
+            lastDash <- false
+        elif not lastDash && buf.Length > 0 then
+            buf.Append('-') |> ignore
+            lastDash <- true
+
+    let s2 = buf.ToString()
+
+    if s2.EndsWith("-") then
+        s2.Substring(0, s2.Length - 1)
+    else
+        s2
+
+/// Extract `scheme://host[:port]` (lowercased) from a URL without
+/// `System.Uri` (which is a Fable hazard). Returns `None` for a
+/// relative or malformed URL. The result is compared against
+/// `RenderOptions.AllowedEmbedOrigins` to decide whether an `Embed`
+/// renders as an iframe or degrades to the safe placeholder.
+let private embedOrigin (url: string) : string option =
+    let schemeSep = url.IndexOf("://")
+
+    if schemeSep <= 0 then
+        None
+    else
+        let scheme = url.Substring(0, schemeSep).ToLowerInvariant()
+        let rest = url.Substring(schemeSep + 3)
+
+        if rest.Length = 0 then
+            None
+        else
+            let authorityEnd =
+                [ rest.IndexOf('/'); rest.IndexOf('?'); rest.IndexOf('#') ]
+                |> List.filter (fun i -> i >= 0)
+                |> function
+                    | [] -> rest.Length
+                    | xs -> List.min xs
+
+            let authority = rest.Substring(0, authorityEnd).ToLowerInvariant()
+
+            if authority.Length = 0 then
+                None
+            else
+                Some(sprintf "%s://%s" scheme authority)
+
+let private loadingAttr (options: RenderOptions) =
+    match options.ImageLoading with
+    | Lazy -> " loading=\"lazy\""
+    | Eager -> ""
+
+let private renderMediaSource (sb: StringBuilder) (source: MediaSource) : unit =
+    match source.Type with
+    | Some t ->
+        sb.AppendFormat("    <source src=\"{0}\" type=\"{1}\" />", escape source.Src, escape t).AppendLine()
+        |> ignore
+    | None ->
+        sb.AppendFormat("    <source src=\"{0}\" />", escape source.Src).AppendLine()
+        |> ignore
+
+let private renderMediaTrack (sb: StringBuilder) (track: MediaTrack) : unit =
+    let srcLangAttr =
+        match track.SrcLang with
+        | Some lang -> sprintf " srclang=\"%s\"" (escape lang)
+        | None -> ""
+
+    let defaultAttr = if track.IsDefault then " default" else ""
+
+    sb
+        .AppendFormat(
+            "    <track kind=\"{0}\" src=\"{1}\" label=\"{2}\"{3}{4} />",
+            escape track.Kind,
+            escape track.Src,
+            escape track.Label,
+            srcLangAttr,
+            defaultAttr
+        )
+        .AppendLine()
+    |> ignore
+
+let rec private renderElement (options: RenderOptions) (sb: StringBuilder) (el: NarrativeElement) : unit =
     let renderSpans' = renderSpans options
 
     match el with
@@ -202,6 +316,238 @@ let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: Narr
 
         sb.AppendLine("</blockquote>") |> ignore
     | Divider -> sb.AppendLine("<hr />") |> ignore
+    // ─── Phase 87 — media + layout blocks ────────────────────────────
+    | Video spec ->
+        sb.AppendLine("<figure class=\"narrative-video\">") |> ignore
+
+        let posterAttr =
+            match spec.Poster with
+            | Some p -> sprintf " poster=\"%s\"" (escape p)
+            | None -> ""
+
+        sb.AppendFormat("  <video class=\"narrative-video__player\" controls{0}>", posterAttr).AppendLine()
+        |> ignore
+
+        for source in spec.Sources do
+            renderMediaSource sb source
+
+        for track in spec.Tracks do
+            renderMediaTrack sb track
+
+        // Inline fallback for browsers without <video>; the caption (if
+        // any) doubles as the accessible description.
+        match spec.Caption with
+        | Some c -> sb.AppendFormat("    {0}", escape c).AppendLine() |> ignore
+        | None -> sb.AppendLine("    Your browser does not support embedded video.") |> ignore
+
+        sb.AppendLine("  </video>") |> ignore
+
+        match spec.Caption with
+        | Some c ->
+            sb.AppendFormat("  <figcaption>{0}</figcaption>", escape c).AppendLine()
+            |> ignore
+        | None -> ()
+
+        sb.AppendLine("</figure>") |> ignore
+    | Audio spec ->
+        sb.AppendLine("<figure class=\"narrative-audio\">") |> ignore
+        sb.AppendLine("  <audio class=\"narrative-audio__player\" controls>") |> ignore
+
+        for source in spec.Sources do
+            renderMediaSource sb source
+
+        for track in spec.Tracks do
+            renderMediaTrack sb track
+
+        match spec.Caption with
+        | Some c -> sb.AppendFormat("    {0}", escape c).AppendLine() |> ignore
+        | None -> sb.AppendLine("    Your browser does not support embedded audio.") |> ignore
+
+        sb.AppendLine("  </audio>") |> ignore
+
+        match spec.Caption with
+        | Some c ->
+            sb.AppendFormat("  <figcaption>{0}</figcaption>", escape c).AppendLine()
+            |> ignore
+        | None -> ()
+
+        sb.AppendLine("</figure>") |> ignore
+    | ImageGallery images ->
+        sb.AppendLine("<div class=\"narrative-gallery\">") |> ignore
+
+        for img in images do
+            sb.AppendLine("  <figure class=\"narrative-gallery__item\">") |> ignore
+            // Lightbox hook — the layout's CSS / JS activates it; the
+            // href defaults to the display image when no full-res
+            // target is supplied. Always a real link so a no-JS reader
+            // can still open the image.
+            let lightboxHref = img.Href |> Option.defaultValue img.Src
+
+            sb.AppendFormat("    <a class=\"narrative-gallery__lightbox\" href=\"{0}\">", escape lightboxHref)
+            |> ignore
+
+            sb.AppendFormat(
+                "<img src=\"{0}\" alt=\"{1}\"{2} /></a>",
+                escape img.Src,
+                escape img.Alt,
+                loadingAttr options
+            )
+            |> ignore
+
+            sb.AppendLine() |> ignore
+
+            match img.Caption with
+            | Some c ->
+                sb.AppendFormat("    <figcaption>{0}</figcaption>", escape c).AppendLine()
+                |> ignore
+            | None -> ()
+
+            sb.AppendLine("  </figure>") |> ignore
+
+        sb.AppendLine("</div>") |> ignore
+    | Embed spec ->
+        let allowed =
+            match embedOrigin spec.Url with
+            | Some origin -> options.AllowedEmbedOrigins.Contains origin
+            | None -> false
+
+        if allowed then
+            let aspectClass =
+                match spec.AspectRatio with
+                | Some ratio -> sprintf " narrative-embed--%s" (slugify ratio)
+                | None -> ""
+
+            sb.AppendFormat("<div class=\"narrative-embed{0}\">", aspectClass).AppendLine()
+            |> ignore
+
+            sb
+                .AppendFormat(
+                    "  <iframe class=\"narrative-embed__frame\" src=\"{0}\" title=\"{1}\" loading=\"lazy\" referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen sandbox=\"allow-scripts allow-same-origin allow-popups allow-presentation\"></iframe>",
+                    escape spec.Url,
+                    escape spec.Title
+                )
+                .AppendLine()
+            |> ignore
+
+            sb.AppendLine("</div>") |> ignore
+        else
+            // Safe placeholder — origin not on the allowlist (or a
+            // malformed URL). Degrade to a plain external link rather
+            // than emit an iframe the CSP would block anyway.
+            sb
+                .AppendFormat(
+                    "<p class=\"narrative-embed narrative-embed--blocked\"><a href=\"{0}\" rel=\"noopener nofollow\">{1}</a></p>",
+                    escape spec.Url,
+                    escape spec.Title
+                )
+                .AppendLine()
+            |> ignore
+    | Card spec ->
+        sb.AppendLine("<article class=\"narrative-card\">") |> ignore
+
+        match spec.Image with
+        | Some img ->
+            sb.AppendFormat(
+                "  <img class=\"narrative-card__image\" src=\"{0}\" alt=\"{1}\"{2} />",
+                escape img.Src,
+                escape img.Alt,
+                loadingAttr options
+            )
+            |> ignore
+
+            sb.AppendLine() |> ignore
+        | None -> ()
+
+        match spec.Heading with
+        | Some h ->
+            sb.AppendFormat("  <h3 class=\"narrative-card__heading\">{0}</h3>", escape h).AppendLine()
+            |> ignore
+        | None -> ()
+
+        sb.AppendLine("  <div class=\"narrative-card__body\">") |> ignore
+
+        for child in spec.Body do
+            renderElement options sb child
+
+        sb.AppendLine("  </div>") |> ignore
+        sb.AppendLine("</article>") |> ignore
+    | Accordion panels ->
+        sb.AppendLine("<div class=\"narrative-accordion\">") |> ignore
+
+        for (heading, body) in panels do
+            sb.AppendLine("  <details class=\"narrative-accordion__panel\">") |> ignore
+
+            sb
+                .AppendFormat("    <summary class=\"narrative-accordion__heading\">{0}</summary>", escape heading)
+                .AppendLine()
+            |> ignore
+
+            sb.AppendLine("    <div class=\"narrative-accordion__body\">") |> ignore
+
+            for child in body do
+                renderElement options sb child
+
+            sb.AppendLine("    </div>") |> ignore
+            sb.AppendLine("  </details>") |> ignore
+
+        sb.AppendLine("</div>") |> ignore
+    | Tabs panels ->
+        // ARIA tablist. Every panel is rendered (no `hidden`) so a
+        // no-JS / prerendered reader sees all content; the layout's
+        // progressive-enhancement JS hides inactive panels. Anchor ids
+        // derive from the label slug — deterministic (prerender-safe),
+        // unique when labels are unique within the set.
+        sb.AppendLine("<div class=\"narrative-tabs\" data-narrative-tabs>") |> ignore
+
+        sb.AppendLine("  <div class=\"narrative-tabs__list\" role=\"tablist\">")
+        |> ignore
+
+        panels
+        |> List.iteri (fun i (label, _) ->
+            let id = slugify label
+            let selected = if i = 0 then "true" else "false"
+
+            sb
+                .AppendFormat(
+                    "    <button class=\"narrative-tabs__tab\" role=\"tab\" id=\"tab-{0}\" aria-controls=\"panel-{0}\" aria-selected=\"{1}\">{2}</button>",
+                    id,
+                    selected,
+                    escape label
+                )
+                .AppendLine()
+            |> ignore)
+
+        sb.AppendLine("  </div>") |> ignore
+
+        for (label, body) in panels do
+            let id = slugify label
+
+            sb
+                .AppendFormat(
+                    "  <div class=\"narrative-tabs__panel\" role=\"tabpanel\" id=\"panel-{0}\" aria-labelledby=\"tab-{0}\">",
+                    id
+                )
+                .AppendLine()
+            |> ignore
+
+            for child in body do
+                renderElement options sb child
+
+            sb.AppendLine("  </div>") |> ignore
+
+        sb.AppendLine("</div>") |> ignore
+    | Component(name, props) ->
+        match options.ComponentRenderer name props with
+        | Some html -> sb.AppendLine(html) |> ignore
+        | None ->
+            // Unregistered / unknown component — safe placeholder.
+            sb
+                .AppendFormat(
+                    "<div class=\"narrative-component narrative-component--unresolved\" data-component=\"{0}\"></div>",
+                    escape name
+                )
+                .AppendLine()
+            |> ignore
 
 let private renderSection (options: RenderOptions) (sb: StringBuilder) (section: NarrativeSection) : unit =
     if options.EmitSectionAnchors then

@@ -77,7 +77,7 @@ let private clampHeadingLevel (level: int) : int =
     elif level > 6 then 6
     else level
 
-let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: NarrativeElement) : unit =
+let rec private renderElement (options: RenderOptions) (sb: StringBuilder) (el: NarrativeElement) : unit =
     match el with
     | Paragraph spans ->
         sb.AppendLine(renderSpans spans) |> ignore
@@ -151,6 +151,86 @@ let private renderElement (options: RenderOptions) (sb: StringBuilder) (el: Narr
         sb.AppendLine() |> ignore
     | Divider ->
         sb.AppendLine("---") |> ignore
+        sb.AppendLine() |> ignore
+    // ─── Phase 87 — media + layout blocks (graceful degradation) ─────
+    | Video spec ->
+        // Markdown has no <video>; degrade to the poster image (if any)
+        // plus a link to the first source. The caption is the link text.
+        let label = spec.Caption |> Option.defaultValue "Video"
+
+        match spec.Poster with
+        | Some poster ->
+            sb.AppendFormat("![{0}]({1})", escape label, escapeUrl poster).AppendLine()
+            |> ignore
+        | None -> ()
+
+        match spec.Sources |> List.tryHead with
+        | Some source ->
+            sb.AppendFormat("[▶ {0}]({1})", escape label, escapeUrl source.Src).AppendLine()
+            |> ignore
+        | None -> sb.AppendLine(escape label) |> ignore
+
+        sb.AppendLine() |> ignore
+    | Audio spec ->
+        let label = spec.Caption |> Option.defaultValue "Audio"
+
+        match spec.Sources |> List.tryHead with
+        | Some source ->
+            sb.AppendFormat("[♪ {0}]({1})", escape label, escapeUrl source.Src).AppendLine()
+            |> ignore
+        | None -> sb.AppendLine(escape label) |> ignore
+
+        sb.AppendLine() |> ignore
+    | ImageGallery images ->
+        for img in images do
+            sb.AppendFormat("![{0}]({1})", escape img.Alt, escapeUrl img.Src).AppendLine()
+            |> ignore
+
+            match img.Caption with
+            | Some c -> sb.AppendFormat("_{0}_", escape c).AppendLine() |> ignore
+            | None -> ()
+
+            sb.AppendLine() |> ignore
+    | Embed spec ->
+        sb.AppendFormat("[{0}]({1})", escape spec.Title, escapeUrl spec.Url).AppendLine().AppendLine()
+        |> ignore
+    | Card spec ->
+        match spec.Heading with
+        | Some h ->
+            sb.AppendFormat("### {0}", escape h).AppendLine() |> ignore
+            sb.AppendLine() |> ignore
+        | None -> ()
+
+        match spec.Image with
+        | Some img ->
+            sb.AppendFormat("![{0}]({1})", escape img.Alt, escapeUrl img.Src).AppendLine()
+            |> ignore
+
+            sb.AppendLine() |> ignore
+        | None -> ()
+
+        for child in spec.Body do
+            renderElement options sb child
+    | Accordion panels ->
+        for (heading, body) in panels do
+            sb.AppendFormat("**{0}**", escape heading).AppendLine() |> ignore
+            sb.AppendLine() |> ignore
+
+            for child in body do
+                renderElement options sb child
+    | Tabs panels ->
+        for (label, body) in panels do
+            sb.AppendFormat("**{0}**", escape label).AppendLine() |> ignore
+            sb.AppendLine() |> ignore
+
+            for child in body do
+                renderElement options sb child
+    | Component(name, _) ->
+        // No Markdown analogue; leave a deterministic, harmless marker
+        // so a round-tripping CMS editor can locate the block.
+        sb.AppendFormat("<!-- narrative-component: {0} -->", name).AppendLine()
+        |> ignore
+
         sb.AppendLine() |> ignore
 
 let private renderSection (options: RenderOptions) (sb: StringBuilder) (section: NarrativeSection) : unit =

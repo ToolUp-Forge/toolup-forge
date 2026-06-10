@@ -227,9 +227,10 @@ This rule retires when the upstream packages ship nullness annotations.
 
 ## Type erasure boundaries
 
-Type erasure (`box`/`unbox`) is contained in two sanctioned boundaries inside forge:
+Type erasure (`box`/`unbox`) is contained in three sanctioned boundaries inside forge:
 1. **`ClientModule.register`** — erases per-module `'Model`/`'Msg` for the heterogeneous module list.
 2. **`DataTypeDisplay.RenderSummary`** — every data-producing module boxes its summary record in its server-side `DataType.Process` and unboxes in the client-side `RenderSummary` callback. Symmetric same-module-known-type cast on both ends.
+3. **Narrative `Component` block renderers** (Phase 87) — the `NarrativeElement.Component of name * props` case carries a stringly-typed `Map<string,string>` rather than a typed payload, so a deployment can register custom block renderers (`props -> XmlNode` in `NarrativeLayout`, bridged to the SDK's `string -> Map -> string option` resolver in `NarrativeHtml.RenderOptions`) without forking the `NarrativeElement` DU. The "erasure" is the stringly-typed prop bag at the registry seam; renderers are pure and resolve by name, with an unregistered name degrading to a safe placeholder.
 
 Module code outside these boundaries never sees type erasure.
 

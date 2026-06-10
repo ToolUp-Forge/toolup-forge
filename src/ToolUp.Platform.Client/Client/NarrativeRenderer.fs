@@ -7,6 +7,7 @@ open Fable.Core.JsInterop
 open Browser
 open Feliz
 open ToolUp.Platform
+open ToolUp.Platform.DataProp
 open ToolUp.Platform.Narrative
 open Toolup.UIToolkit
 
@@ -62,7 +63,7 @@ let private calloutClasses (severity: Severity) : string =
     | Warning -> "bg-amber-50 border-amber-300 text-amber-900"
     | Critical -> "bg-red-50 border-red-300 text-red-900"
 
-let private renderElement (el: NarrativeElement) : ReactElement =
+let rec private renderElement (el: NarrativeElement) : ReactElement =
     match el with
     | Paragraph spans ->
         Html.p [
@@ -200,6 +201,192 @@ let private renderElement (el: NarrativeElement) : ReactElement =
             ]
         ]
     | Divider -> Misc.divider
+    // ─── Phase 87 — media + layout blocks ────────────────────────────
+    | Video spec ->
+        Html.figure [
+            prop.className "narrative-video flex flex-col gap-2"
+            prop.children [
+                Html.video [
+                    prop.className "narrative-video__player w-full rounded"
+                    prop.controls true
+                    match spec.Poster with
+                    | Some p -> prop.custom ("poster", p)
+                    | None -> ()
+                    prop.children [
+                        for source in spec.Sources do
+                            Html.source [
+                                prop.src source.Src
+                                match source.Type with
+                                | Some t -> prop.type' t
+                                | None -> ()
+                            ]
+                        for track in spec.Tracks do
+                            Html.track [
+                                prop.custom ("kind", track.Kind)
+                                prop.src track.Src
+                                prop.custom ("label", track.Label)
+                                match track.SrcLang with
+                                | Some lang -> prop.custom ("srclang", lang)
+                                | None -> ()
+                                if track.IsDefault then
+                                    prop.custom ("default", true)
+                            ]
+                    ]
+                ]
+                match spec.Caption with
+                | Some c -> Html.figcaption [ prop.className "text-sm text-gray-500"; prop.text c ]
+                | None -> ()
+            ]
+        ]
+    | Audio spec ->
+        Html.figure [
+            prop.className "narrative-audio flex flex-col gap-2"
+            prop.children [
+                Html.audio [
+                    prop.className "narrative-audio__player w-full"
+                    prop.controls true
+                    prop.children [
+                        for source in spec.Sources do
+                            Html.source [
+                                prop.src source.Src
+                                match source.Type with
+                                | Some t -> prop.type' t
+                                | None -> ()
+                            ]
+                        for track in spec.Tracks do
+                            Html.track [
+                                prop.custom ("kind", track.Kind)
+                                prop.src track.Src
+                                prop.custom ("label", track.Label)
+                                match track.SrcLang with
+                                | Some lang -> prop.custom ("srclang", lang)
+                                | None -> ()
+                                if track.IsDefault then
+                                    prop.custom ("default", true)
+                            ]
+                    ]
+                ]
+                match spec.Caption with
+                | Some c -> Html.figcaption [ prop.className "text-sm text-gray-500"; prop.text c ]
+                | None -> ()
+            ]
+        ]
+    | ImageGallery images ->
+        Html.div [
+            prop.className "narrative-gallery grid grid-cols-2 sm:grid-cols-3 gap-3"
+            prop.children [
+                for img in images do
+                    Html.figure [
+                        prop.className "narrative-gallery__item flex flex-col gap-1"
+                        prop.children [
+                            Html.a [
+                                prop.className "narrative-gallery__lightbox block"
+                                prop.href (img.Href |> Option.defaultValue img.Src)
+                                prop.children [
+                                    Html.img [
+                                        prop.src img.Src
+                                        prop.alt img.Alt
+                                        prop.className "w-full h-auto rounded"
+                                    ]
+                                ]
+                            ]
+                            match img.Caption with
+                            | Some c -> Html.figcaption [ prop.className "text-xs text-gray-500"; prop.text c ]
+                            | None -> ()
+                        ]
+                    ]
+            ]
+        ]
+    | Embed spec ->
+        // In-app narratives degrade an embed to a safe external link —
+        // the CSP-aware iframe path is the server-side SSR renderer's
+        // responsibility (it carries the origin allowlist). A link is
+        // deterministic and needs no client-side policy.
+        Html.a [
+            prop.className
+                "narrative-embed inline-flex items-center gap-1 text-brand underline underline-offset-2 hover:text-brand/80"
+            prop.href spec.Url
+            prop.rel "noopener nofollow"
+            prop.target "_blank"
+            prop.text spec.Title
+        ]
+    | Card spec ->
+        Html.article [
+            prop.className "narrative-card border border-gray-200 rounded-lg overflow-hidden flex flex-col"
+            prop.children [
+                match spec.Image with
+                | Some img ->
+                    Html.img [
+                        prop.src img.Src
+                        prop.alt img.Alt
+                        prop.className "narrative-card__image w-full h-auto"
+                    ]
+                | None -> ()
+                Html.div [
+                    prop.className "narrative-card__body flex flex-col gap-2 p-4"
+                    prop.children [
+                        match spec.Heading with
+                        | Some h ->
+                            Html.h3 [
+                                prop.className "narrative-card__heading text-lg font-semibold text-gray-900"
+                                prop.text h
+                            ]
+                        | None -> ()
+                        yield! spec.Body |> List.map renderElement
+                    ]
+                ]
+            ]
+        ]
+    | Accordion panels ->
+        Html.div [
+            prop.className "narrative-accordion flex flex-col gap-2"
+            prop.children [
+                for (heading, body) in panels do
+                    Html.details [
+                        prop.className "narrative-accordion__panel border border-gray-200 rounded"
+                        prop.children [
+                            Html.summary [
+                                prop.className
+                                    "narrative-accordion__heading cursor-pointer px-3 py-2 font-medium text-gray-900"
+                                prop.text heading
+                            ]
+                            Html.div [
+                                prop.className "narrative-accordion__body flex flex-col gap-2 px-3 pb-3"
+                                prop.children (body |> List.map renderElement)
+                            ]
+                        ]
+                    ]
+            ]
+        ]
+    | Tabs panels ->
+        // Non-interactive stacked rendering: every panel is shown with
+        // its label as a heading. Deterministic + accessible without
+        // client state; the SSR renderer emits the ARIA tablist hooks
+        // for progressive enhancement.
+        Html.div [
+            prop.className "narrative-tabs flex flex-col gap-3"
+            prop.children [
+                for (label, body) in panels do
+                    Html.div [
+                        prop.className "narrative-tabs__panel flex flex-col gap-2"
+                        prop.children [
+                            Html.div [
+                                prop.className
+                                    "narrative-tabs__label text-sm font-semibold text-gray-700 border-b border-gray-200 pb-1"
+                                prop.text label
+                            ]
+                            yield! body |> List.map renderElement
+                        ]
+                    ]
+            ]
+        ]
+    | Component(name, _) ->
+        // No client-side component registry; render a deterministic
+        // placeholder so the block is locatable but inert.
+        Html.div [
+            prop.className "narrative-component narrative-component--unresolved"
+            dataProp.custom "data-component" name
+        ]
 
 let private renderSection (section: NarrativeSection) : ReactElement =
     Html.section [

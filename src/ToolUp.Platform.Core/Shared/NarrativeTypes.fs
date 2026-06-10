@@ -49,6 +49,107 @@ type TableAlignment =
     | Right
     | Center
 
+// ─── Phase 87 — media + layout block specs ───────────────────────────
+//
+// The records below back the rich-content `NarrativeElement` cases
+// (`Video`, `Audio`, `ImageGallery`, `Embed`, `Card`) added in Phase 87.
+// They sit above `NarrativeElement` because the DU references them; the
+// one record that must reference `NarrativeElement` back (`CardSpec`,
+// whose body is itself a list of elements) is defined in the `and`
+// chain with the DU below.
+//
+// Every record is an immutable value (GP 5), carries accessibility
+// metadata (alt text / captions / track labels) first-class — mirroring
+// the `IAssetStore` alt-text discipline (Phase 39) — and holds no
+// server-only or framework type, so the whole set Fable-compiles into
+// the client bundle.
+
+/// One `<source>` for an adaptive-bitrate / format-fallback `Video` or
+/// `Audio` element. `Src` is the media URL; `Type` is the MIME hint
+/// emitted as `type="..."` (e.g. `"video/mp4"`, `"video/webm"`,
+/// `"application/x-mpegURL"` for an HLS manifest) so the browser can
+/// skip a source it can't decode. Sources render in declared order —
+/// list the most-preferred / highest-fidelity encoding first.
+type MediaSource = { Src: string; Type: string option }
+
+/// A timed-text track (captions / subtitles / descriptions / chapters)
+/// for a `Video` or `Audio` element. Maps directly to the HTML
+/// `<track>` element. `Src` is the WebVTT URL; `Kind` is the
+/// `kind="..."` attribute (`"captions"`, `"subtitles"`,
+/// `"descriptions"`, `"chapters"`); `Label` is the human-readable name
+/// shown in the player's track menu; `SrcLang` is the BCP-47 language
+/// tag; `IsDefault` marks the track shown without explicit user action.
+///
+/// Captions are not optional polish: a media block with no caption
+/// track is inaccessible, so the renderers surface every track they're
+/// given and the plaintext renderer falls back to track labels when a
+/// block carries no visible caption.
+type MediaTrack = {
+    Src: string
+    Kind: string
+    Label: string
+    SrcLang: string option
+    IsDefault: bool
+}
+
+/// Specification for a `Video` block. `Sources` is the ordered
+/// adaptive-bitrate / fallback set (a single MP4 is the common case);
+/// `Poster` is the still frame shown before playback; `Tracks` carries
+/// captions / subtitles; `Caption` is the visible `<figcaption>` shown
+/// beneath the player. `Caption` doubles as the plaintext / Markdown
+/// degradation text, so author it as a meaningful description rather
+/// than decorative chrome.
+type VideoSpec = {
+    Sources: MediaSource list
+    Poster: string option
+    Tracks: MediaTrack list
+    Caption: string option
+}
+
+/// Specification for an `Audio` block. Same shape as `VideoSpec`
+/// without a poster — `Sources` is the ordered fallback set, `Tracks`
+/// carries transcripts / descriptions, `Caption` is the visible label
+/// and the plaintext / Markdown degradation text.
+type AudioSpec = {
+    Sources: MediaSource list
+    Tracks: MediaTrack list
+    Caption: string option
+}
+
+/// One image inside an `ImageGallery`. `Src` is the display image;
+/// `Alt` is mandatory accessibility text (the universally-portable
+/// plaintext / RSS fallback); `Caption` is an optional visible
+/// `<figcaption>`; `Href` is an optional full-resolution / lightbox
+/// target (`None` means the lightbox, if the layout wires one, uses
+/// `Src`). The HTML renderer emits lightbox class hooks; the layout's
+/// own CSS / JS decides whether to activate them.
+type ImageSpec = {
+    Src: string
+    Alt: string
+    Caption: string option
+    Href: string option
+}
+
+/// Specification for an `Embed` block — a third-party oEmbed provider
+/// or sandboxed iframe (YouTube, Vimeo, a map, a CodePen). `Url` is the
+/// iframe `src`; `Title` is the mandatory `title="..."` (accessibility)
+/// and the visible link text of the safe placeholder shown when the
+/// URL's origin is not on the renderer's allowlist; `AspectRatio` is an
+/// optional `"16:9"` / `"4:3"`-style hint mapped to a CSS class hook
+/// (`None` leaves sizing to the layout's CSS).
+///
+/// Embeds are CSP-sensitive: a renderer only emits the `<iframe>` when
+/// the embed origin is on its configured allowlist, otherwise it
+/// degrades to a plain link. The allowlist itself lives with the
+/// rendering layer (the SDK's `NarrativeHtml.RenderOptions` /
+/// `NarrativeLayout` component registry), not on the document — the
+/// same document must render safely under any deployment's policy.
+type EmbedSpec = {
+    Url: string
+    Title: string
+    AspectRatio: string option
+}
+
 /// A single block-level element inside a section. `BulletList` and
 /// `OrderedList` take `InlineSpan list list` — each inner list is the spans
 /// of one bullet. `KeyValueGrid` is for labelled pairs; a Feliz renderer
@@ -86,6 +187,61 @@ type NarrativeElement =
     /// quote can themselves use `Link` / `Emphasis` / `Metric` etc.
     | Blockquote of citation: string option * spans: InlineSpan list
     | Divider
+    // ─── Phase 87 — media + layout blocks (additive; GP 11) ──────────
+    // Every case below is appended, never an edit to an existing case,
+    // so a renderer that predates Phase 87 leaves an older narrative
+    // byte-for-byte unchanged. The blocks lift Narrative from
+    // "analytical prose" to "CMS page body".
+    /// Block-level video player. See `VideoSpec`. Renders `<figure>` +
+    /// `<video>` with sources / poster / caption tracks in HTML;
+    /// degrades to a poster image + source link in Markdown; degrades
+    /// to caption / track-label text in plaintext.
+    | Video of VideoSpec
+    /// Block-level audio player. See `AudioSpec`.
+    | Audio of AudioSpec
+    /// A gallery of images with lightbox class hooks. Each `ImageSpec`
+    /// carries mandatory alt text and an optional caption + lightbox
+    /// href. Renders a `<figure>`-per-image grid in HTML, a list of
+    /// `![alt](src)` images in Markdown, bracketed alt text in plaintext.
+    | ImageGallery of ImageSpec list
+    /// A third-party oEmbed / sandboxed iframe. See `EmbedSpec`. The
+    /// renderer only emits the iframe when the embed origin is on its
+    /// configured allowlist; an unknown origin degrades to a safe
+    /// placeholder link (CSP discipline).
+    | Embed of EmbedSpec
+    /// A self-contained card — optional heading, optional lead image,
+    /// and a recursively-nested body of elements. See `CardSpec`.
+    | Card of CardSpec
+    /// A vertical accordion: an ordered list of `(heading, body)`
+    /// panels, each body a recursively-nested element list. Renders
+    /// `<details>` / `<summary>` in HTML (no JS needed), heading +
+    /// indented body in Markdown / plaintext.
+    | Accordion of (string * NarrativeElement list) list
+    /// A tab set: an ordered list of `(label, body)` panels, each body
+    /// a recursively-nested element list. Renders an ARIA tablist in
+    /// HTML; degrades to labelled sections in Markdown / plaintext
+    /// (every panel visible — plaintext / Markdown have no interactive
+    /// affordance, so hiding panels would drop content).
+    | Tabs of (string * NarrativeElement list) list
+    /// A deployment-defined custom block, resolved by `name` through a
+    /// registered component-renderer map (`NarrativeHtml.RenderOptions`
+    /// / `NarrativeLayout`). `props` is a flat string map — the wire is
+    /// deliberately stringly-typed so the case stays Fable-safe and
+    /// serialisable, and so a deployment can ship new blocks without
+    /// forking this DU. An unregistered `name` degrades to a safe
+    /// placeholder. This is the one sanctioned narrative type-erasure
+    /// boundary (see toolup-forge/CLAUDE.md "Type erasure boundaries").
+    | Component of name: string * props: Map<string, string>
+
+/// Body of a `Card` block — an optional heading, an optional lead
+/// image, and a recursively-nested list of elements. Defined in the
+/// `and` chain because its `Body` field refers back to
+/// `NarrativeElement`. Immutable (GP 5).
+and CardSpec = {
+    Heading: string option
+    Image: ImageSpec option
+    Body: NarrativeElement list
+}
 
 /// A document section with a stable Id (used as an anchor by renderers
 /// that support linking), a Heading, and an optional Subheading.
