@@ -84,6 +84,9 @@
         <Compile Include="Shared\Types\Subject.fs" />
         <Compile Include="Shared\Types\SurfaceRequirement.fs" />
         <Compile Include="Shared\Types\AccessContext.fs" />
+        <!-- Phase 41 — data-classification shared types (ClassificationLevel
+             / FieldClassification / FieldHit). Standalone; no deps. -->
+        <Compile Include="Shared\Types\ClassificationTypes.fs" />
         <Compile Include="Shared\Types\TeamTypes.fs" />
         <Compile Include="Shared\Types\TeamRoles.fs" />
         <Compile Include="Shared\Types\ModuleAITypes.fs" />

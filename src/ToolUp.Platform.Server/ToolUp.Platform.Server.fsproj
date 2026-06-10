@@ -212,6 +212,12 @@
         <Compile Include="Server\Ed25519ArtifactSigner.fs" />
         <Compile Include="Server\Ed25519ArtifactVerifier.fs" />
         <Compile Include="Server\BlobBackedPublisherKeyStore.fs" />
+        <!-- Phase 41 — data-classification substrate (server tier). After
+             AuditLog (gate emits ClassifiedField* audit) + Core's
+             ClassificationTypes / AccessContext. -->
+        <Compile Include="Server\Classification\IFieldClassifier.fs" />
+        <Compile Include="Server\Classification\DefaultFieldClassifier.fs" />
+        <Compile Include="Server\Classification\ClassificationGate.fs" />
         <Compile Include="Server\NoOpRateLimiter.fs" />
         <Compile Include="Server\InProcessRateLimiter.fs" />
         <Compile Include="Server\IDataExporter.fs" />

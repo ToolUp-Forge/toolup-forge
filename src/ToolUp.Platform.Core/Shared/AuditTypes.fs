@@ -1650,6 +1650,46 @@ type SigningKeyRotatedPayload = {
     Algorithm: string
 }
 
+// ─── Phase 41 — data-classification audit payloads ─────────────────────
+//
+// Emitted by `ClassificationGate` when a classified field is read
+// (`AuditOnRead = true`) or written. Reserved `SourceModule =
+// "_platform.classification"`. Payload carries entity + field-path +
+// classification level + caller, NEVER the field value — the audit trail
+// proves "this caller touched this classified field" without itself
+// becoming a sink for the sensitive data it guards.
+
+module ClassificationSourceModule =
+    /// Reserved `SourceModule` for `IFieldClassifier` / `ClassificationGate`
+    /// audit events.
+    [<Literal>]
+    let value = "_platform.classification"
+
+/// A classified field was read by a caller (emitted when the field's
+/// `AuditOnRead` is set). Value-free by design.
+type ClassifiedFieldReadPayload = {
+    /// Acting `AccessContext.UserId`.
+    UserId: string
+    /// Entity type the field belongs to.
+    EntityName: string
+    /// Dotted field path that was read.
+    FieldPath: string
+    /// `ClassificationLevel.name` of the field.
+    Level: string
+    /// `true` when the gate's policy redacted the value for this caller;
+    /// `false` when the caller was allowed to read it. Lets a reviewer
+    /// distinguish "saw the data" from "was denied the data".
+    Redacted: bool
+}
+
+/// A classified field was written by a caller. Value-free by design.
+type ClassifiedFieldWrittenPayload = {
+    UserId: string
+    EntityName: string
+    FieldPath: string
+    Level: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -1998,6 +2038,14 @@ type AuditEvent =
     /// a predecessor whose public key remains discoverable for archival
     /// verification. Reserved `SourceModule = "_platform.signing"`.
     | SigningKeyRotated of SigningKeyRotatedPayload
+    /// Phase 41 — a classified field was read by a caller (field's
+    /// `AuditOnRead` set). Reserved `SourceModule =
+    /// "_platform.classification"`. Value-free; carries entity +
+    /// field-path + level + caller + whether the value was redacted.
+    | ClassifiedFieldRead of ClassifiedFieldReadPayload
+    /// Phase 41 — a classified field was written by a caller. Reserved
+    /// `SourceModule = "_platform.classification"`. Value-free.
+    | ClassifiedFieldWritten of ClassifiedFieldWrittenPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2089,6 +2137,8 @@ module AuditEvent =
         | PeerCallCompleted _ -> "PeerCallCompleted"
         | ArtefactSigned _ -> "ArtefactSigned"
         | SigningKeyRotated _ -> "SigningKeyRotated"
+        | ClassifiedFieldRead _ -> "ClassifiedFieldRead"
+        | ClassifiedFieldWritten _ -> "ClassifiedFieldWritten"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
