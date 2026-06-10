@@ -29,6 +29,9 @@
     <Compile Include="Server\PeerReflection.fs" />
     <Compile Include="Server\PeerJobHandler.fs" />
     <Compile Include="Server\PeerProfileProvider.fs" />
+    <Compile Include="Server\PeerSchema.fs" />
+    <Compile Include="Server\TypeScriptClientGen.fs" />
+    <Compile Include="Server\PythonClientGen.fs" />
     <Compile Include="Server\HttpPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerHost.fs" />
