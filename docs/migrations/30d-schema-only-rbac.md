@@ -110,4 +110,13 @@ Phase 30d is additive — no existing API surface changes. To roll back:
 
 ## Persistence + Phase 22 encryption-at-rest
 
-`SyntheticSampleGenerator` does not write to `IBlobStorage`. Sample bytes are generated on-demand and returned to the caller. The phase-body task line "Synthetic-sample generation respects Phase 22 encryption-at-rest if persisted" is deferred — no substrate persists samples today. If a consumer chooses to persist samples through their own `IDataObjectStore.Save` call (e.g. for partner-side caching), the existing Phase 22 envelope-encryption decorator applies automatically because `Save` is the encryption seam. No Phase 30d work required for that case.
+`SyntheticSampleGenerator` does not write to `IBlobStorage`. Sample bytes are generated on-demand and returned to the caller. The phase-body task line "Synthetic-sample generation respects Phase 22 encryption-at-rest if persisted" needs no substrate work — no Phase 30d code path persists samples today. If a consumer chooses to persist samples through their own `IDataObjectStore.Save` call (e.g. for partner-side caching), the existing Phase 22 envelope-encryption decorator applies automatically because `Save` is the encryption seam.
+
+**Confirming test (closes the residual item).** `src/ToolUp.Platform.Tests/InProcess/EncryptedBlobStorageTests.fs` carries the test _"Phase 30d — synthetic sample persisted via IDataObjectStore.Save is encrypted at rest"_. It proves the seam end-to-end:
+
+1. Generate a deterministic sample via `SyntheticSampleGenerator.generate "Sales" schema 25 42 DefaultMaxSampleRows`.
+2. Persist it through a `DataObjectStore` constructed over `EncryptedBlobStorage(inner, SingleKeyResolver.create secrets)`.
+3. Read the content blob (`objects/_content/{hash}.data`) directly from the **inner, undecorated** store and assert it begins with the Phase 22 envelope magic (`EncryptionEnvelope.Magic`, "TOBL") and is **not** the plaintext synthetic CSV.
+4. Assert a decorated `IDataObjectStore.Get` round-trips back to the original synthetic bytes (the seam is transparent).
+
+The encryption seam lives at `IBlobStorage.Upload`, which `DataObjectStore.Save` routes every content write through — synthetic bytes are not special-cased, so they inherit at-rest encryption exactly as any other persisted content does. No Phase 30d substrate change was required to make this true; the test documents and guards the property.

@@ -11,6 +11,7 @@ open ToolUp.Platform.EncryptionTypes
 open ToolUp.Platform.BlobEncryption
 open ToolUp.Platform.EncryptedBlobStorage
 open ToolUp.Platform.Secrets
+open DataManagementTypes
 
 // ─── Phase 22 EncryptedBlobStorage tests ────────────────────────────
 //
@@ -242,5 +243,94 @@ let tests =
                 | Result.Error msg ->
                     Expect.stringContains (msg.ToLowerInvariant()) "decrypt" "error message mentions decryption failure"
             | Result.Error e -> failwithf "raw fetch failed: %s" e
+        }
+
+        // ─── Phase 30d residual — synthetic samples flow through the
+        //     Phase 22 encryption-at-rest seam when persisted ──────────
+        //
+        // Phase 30d generates synthetic samples on-demand and does NOT
+        // persist them by default (the substrate path never writes to
+        // IBlobStorage). The residual task line — "Synthetic-sample
+        // generation respects Phase 22 encryption-at-rest if persisted"
+        // — closes by confirming that IF a deployment chooses to persist
+        // a sample through `IDataObjectStore.Save`, the existing Phase 22
+        // envelope-encryption decorator applies automatically, because
+        // `Save` routes content writes through `IBlobStorage.Upload` —
+        // the encryption seam. This test proves the seam end-to-end: the
+        // synthesised CSV is ciphertext in the inner (undecorated) store,
+        // and a decorated `Get` round-trips back to the original bytes.
+        // No Phase 30d substrate work is required for this property —
+        // only this confirming test, per the migration doc.
+        testCaseAsync "Phase 30d — synthetic sample persisted via IDataObjectStore.Save is encrypted at rest"
+        <| async {
+            let inner = newInnerStorage ()
+            let secrets = newSecretStore ()
+            let resolver = SingleKeyResolver.create secrets
+            let encrypted = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
+            let store = DataObjectStore.DataObjectStore(encrypted) :> IDataObjectStore
+
+            // Deterministic Phase 30d synthetic sample.
+            let schema =
+                Some {
+                    Description = "Synthetic test schema"
+                    Columns = [
+                        {
+                            Name = "Region"
+                            Type = StringColumn
+                            Required = true
+                            Description = None
+                        }
+                        {
+                            Name = "Revenue"
+                            Type = NumberColumn
+                            Required = true
+                            Description = None
+                        }
+                    ]
+                }
+
+            let synthObj, synthBytes =
+                SyntheticSampleGenerator.generate "Sales" schema 25 42 SyntheticSampleGenerator.DefaultMaxSampleRows
+
+            // A deployment persists the sample (e.g. partner-side cache).
+            let scopeId = "team-30d-synth"
+
+            let! saved =
+                store.Save(
+                    scopeId,
+                    "synthetic-cache",
+                    synthBytes,
+                    "Sales",
+                    "partner-alice",
+                    synthObj.Metadata,
+                    Unversioned
+                )
+
+            match saved with
+            | Result.Error e -> failwithf "synthetic sample failed to persist: %A" e
+            | Result.Ok obj ->
+                // At rest: read the content blob directly from the INNER
+                // (undecorated) store. It must be the Phase 22 envelope
+                // (magic prefix), never the plaintext synthetic CSV.
+                let contentBlob = sprintf "objects/_content/%s.data" obj.ContentHash
+                let! rawResult = inner.Download(scopeId, contentBlob)
+
+                match rawResult with
+                | Result.Ok envelope ->
+                    Expect.notEqual envelope synthBytes "content at rest is ciphertext, not plaintext synthetic CSV"
+                    Expect.isGreaterThan envelope.Length synthBytes.Length "envelope adds magic+nonce+tag overhead"
+                    Expect.equal envelope[0] EncryptionEnvelope.Magic[0] "envelope starts with magic byte 0"
+                    Expect.equal envelope[1] EncryptionEnvelope.Magic[1] "envelope starts with magic byte 1"
+                    Expect.equal envelope[2] EncryptionEnvelope.Magic[2] "envelope starts with magic byte 2"
+                    Expect.equal envelope[3] EncryptionEnvelope.Magic[3] "envelope starts with magic byte 3"
+                | Result.Error e -> failwithf "raw content fetch failed: %s" e
+
+                // Decorated round-trip: Get decrypts back to the original
+                // synthetic bytes, so the seam is transparent end-to-end.
+                let! got = store.Get(scopeId, "synthetic-cache")
+
+                match got with
+                | Result.Ok(_, bytes) -> Expect.equal bytes synthBytes "Get decrypts back to original synthetic bytes"
+                | Result.Error e -> failwithf "decorated Get failed: %A" e
         }
     ]
