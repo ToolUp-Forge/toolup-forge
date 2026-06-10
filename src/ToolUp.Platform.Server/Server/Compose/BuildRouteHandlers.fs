@@ -468,6 +468,21 @@ let buildRouteHandlers
                 DataSubjectRequestApiHandler.create exporters handlers defaultPolicy scopeId accessContext.UserId audit)
           ]
 
+    // Phase 54 — IPlatformTenantApi mount. Gated on
+    // `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`; the
+    // default `NoTenantLifecycle` skips the route entirely so the proxy
+    // surface 404s and no `ITenantLifecycle` hooks are resolved (they're
+    // also absent from DI — `ComposeTenantLifecycle` gates on the same
+    // field). Owner / Platform-Admin gating is enforced inside the
+    // handler (`canModifyPlatformConfig`). Route shape:
+    // `/api/_platform/tenants/*` via `PlatformTenantApi.routeBuilder`.
+    let platformTenantApiHandler: HttpHandler list =
+        match config.TenantLifecycle with
+        | NoTenantLifecycle -> []
+        | EnabledTenantLifecycle -> [
+            Api.make (PlatformTenantApiHandler.platformTenantApi, routeBuilder = PlatformTenantApi.routeBuilder)
+          ]
+
     let router (devRoutes: HttpHandler list) =
         choose (
             [
@@ -504,6 +519,7 @@ let buildRouteHandlers
             @ rateLimitEventApiRoutes
             @ premiumUserApiRoutes
             @ dataSubjectRequestApiHandler
+            @ platformTenantApiHandler
             @ devRoutes
             @ extensions.Handlers
             @ handlers

@@ -161,6 +161,15 @@
              server-only because IContainerScheduler.StreamLogs returns
              IAsyncEnumerable. -->
         <Compile Include="Shared\Types\DeployPlaneTypes.fs" />
+        <!-- Phase 54 — tenant-lifecycle substrate shared types
+             (TenantLifecyclePhase / LifecycleHookResult / LifecycleSummary
+             / TenantLifecycleEvent). Async-free + Fable-compatible; the
+             ITenantLifecycle interface + aggregator are server-tier. -->
+        <Compile Include="Shared\Types\TenantLifecycleTypes.fs" />
+        <!-- Phase 54 — IPlatformTenantApi Fable.Remoting contract. After
+             TenantLifecycleTypes (returns LifecycleSummary) + DeployPlaneTypes
+             (ProvisionTenant carries ProvisioningRequest). -->
+        <Compile Include="Shared\PlatformTenantApi.fs" />
         <Compile Include="Shared\DataIngestionTypes.fs" />
         <Compile Include="Shared\DataIngestionApi.fs" />
         <Compile Include="Shared\MaintenanceApi.fs" />

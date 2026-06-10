@@ -406,6 +406,22 @@
         <Compile Include="Server\ConfigValidatorsFromEnv.fs" />
         <Compile Include="Server\Compose\ComposeExtensions.fs" />
         <Compile Include="Server\Compose\ConfigurePipeline.fs" />
+        <!-- Phase 54 — tenant-lifecycle substrate (server tier). The
+             ITenantLifecycle interface, the parallel-with-timeout
+             aggregator, the four first-party hooks (wrapping shipped
+             surfaces: PerScopeKeyResolver.DestroyKey, TeamScopeResolver
+             membership eviction, IJobScheduler ListJobs+Cancel,
+             IErasureHandler erasure), and the IPlatformTenantApi handler.
+             After the substrate they wrap (PerScopeKeyResolver,
+             StorageScopeResolver, TeamManagement, IJobScheduler,
+             IDataExporter); before BuildRouteHandlers (mounts the API). -->
+        <Compile Include="Server\ITenantLifecycle.fs" />
+        <Compile Include="Server\TenantLifecycleAggregator.fs" />
+        <Compile Include="Server\Lifecycle\EncryptionKeyLifecycle.fs" />
+        <Compile Include="Server\Lifecycle\MembershipCacheLifecycle.fs" />
+        <Compile Include="Server\Lifecycle\JobSchedulerLifecycle.fs" />
+        <Compile Include="Server\Lifecycle\DataSubjectRequestLifecycle.fs" />
+        <Compile Include="Server\PlatformTenantApiHandler.fs" />
         <Compile Include="Server\Compose\BuildRouteHandlers.fs" />
         <!-- Phase 15e follow-up — per-concern compose-body subdivision.
              Pure structural helpers consumed by `compose`; each takes
@@ -448,6 +464,11 @@
              after `IServerHost.fs` because `buildAndRunHost` returns
              the interface defined there. -->
         <Compile Include="Server\Compose\ComposeBootstrap.fs" />
+        <!-- Phase 54 — registers the four first-party ITenantLifecycle
+             hooks + snapshot when TenantLifecycle = EnabledTenantLifecycle.
+             After the hooks + handler it references; before SDK.Server
+             (which calls registerTenantLifecycle). -->
+        <Compile Include="Server\Compose\ComposeTenantLifecycle.fs" />
         <Compile Include="Server\SDK.Server.fs" />
         <Compile Include="Server\ServerApp.fs" />
     </ItemGroup>

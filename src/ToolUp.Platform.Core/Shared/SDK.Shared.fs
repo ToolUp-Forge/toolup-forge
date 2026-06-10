@@ -446,6 +446,32 @@ type PeerSubstrateMode =
     /// `PeerCompose.compose`.
     | EnabledPeerSubstrate
 
+/// Phase 54 — selects whether `compose` registers the tenant-lifecycle
+/// substrate: the four first-party `ITenantLifecycle` hooks
+/// (encryption-key destroy, membership-cache invalidate, scheduled-job
+/// cancel, subject-data erasure) + the `/api/_platform/tenants/*` admin
+/// API that drives the aggregator. Default `NoTenantLifecycle` — no
+/// hooks resolved, no route mounted, no `ITenantLifecycle` in DI; an
+/// existing deployment that upgrades stays byte-for-byte identical until
+/// it opts in (GP 11 + GP 13). Mirrors `PeerSubstrateMode` /
+/// `EntityStoreMode` (binary, opt-in).
+type TenantLifecycleMode =
+    /// No tenant-lifecycle infrastructure registered. The
+    /// `/api/_platform/tenants/*` route is not mounted; the four
+    /// first-party hooks are absent from DI; no tenant-lifecycle audit
+    /// events are emitted. Default — keeps the SDK lean and the
+    /// destructive offboard surface closed for deployments that manage
+    /// tenant teardown out-of-band.
+    | NoTenantLifecycle
+    /// `IPlatformTenantApi` mounted at `/api/_platform/tenants/*`
+    /// (Owner / Platform-Admin gated); the four first-party
+    /// `ITenantLifecycle` hooks registered (each self-`Skipped` when its
+    /// substrate is inactive); companion hooks register additively via
+    /// `services.AddSingleton<ITenantLifecycle>`. One `DeprovisionTenant`
+    /// call runs every hook with audit + per-hook isolation under
+    /// `SourceModule = "_platform.tenant"`.
+    | EnabledTenantLifecycle
+
 /// Sink-level cardinality cap configuration. The
 /// `MetricDefinition.Tags` allowlist is the structural defence
 /// against caller-side cardinality explosions; this knob is the
@@ -2317,6 +2343,14 @@ type ServerConfig = {
     /// over JSON-RPC 2.0 with identity propagation, version handshake,
     /// and job-substrate fusion. Zero cost when not enabled (GP 13).
     PeerSubstrate: PeerSubstrateMode
+    /// Phase 54 — tenant-lifecycle substrate selection. Default
+    /// `NoTenantLifecycle` — no `/api/_platform/tenants/*` route, no
+    /// first-party `ITenantLifecycle` hooks in DI, no tenant-lifecycle
+    /// audit emission. Enable with `EnabledTenantLifecycle` to drive
+    /// tenant provision / offboard choreography through one operator
+    /// call with per-hook isolation + audit. Zero cost when not enabled
+    /// (GP 13).
+    TenantLifecycle: TenantLifecycleMode
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -2560,6 +2594,7 @@ module ServerConfig =
         TeamCreationPolicy = PlatformAdminOnly
         NarrativeRetention = NarrativeRetentionPolicy.defaults
         PeerSubstrate = NoPeerSubstrate
+        TenantLifecycle = NoTenantLifecycle
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

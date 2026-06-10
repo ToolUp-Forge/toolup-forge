@@ -65,6 +65,7 @@
         <Compile Include="Contracts\IReportRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
+        <Compile Include="Contracts\ITenantLifecycleContract.fs" />
         <Compile Include="Contracts\IPeerBearerAuthContract.fs" />
         <Compile Include="Contracts\IAuthProviderContract.fs" />
         <Compile Include="Contracts\IAIProviderContract.fs" />
@@ -185,6 +186,7 @@
         <Compile Include="InProcess\OidcSignInContractTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
+        <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />

@@ -741,6 +741,14 @@ let compose
         resolvedLogger
         resolvedActivitySink
 
+    // Phase 54 — opt-in tenant-lifecycle hooks + snapshot (extracted to
+    // `ComposeTenantLifecycle.registerTenantLifecycle`). Gated on
+    // `config.TenantLifecycle = EnabledTenantLifecycle`; the default
+    // `NoTenantLifecycle` is a no-op. Hooks resolve their substrate
+    // lazily from the built provider at request time, so this runs
+    // before companion registrations without ordering coupling.
+    ComposeTenantLifecycle.registerTenantLifecycle services config
+
     // Companion DI registrations (AI, future distributed task
     // companions, etc.) run before scope resolution so they can
     // depend on SDK services being present.

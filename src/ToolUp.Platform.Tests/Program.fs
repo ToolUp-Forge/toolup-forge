@@ -72,6 +72,8 @@ let allTests =
         OidcSignInContractTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
+        TenantLifecycleAggregatorTests.tests
+        ITenantLifecycleContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
         EntityQueryTests.tests

@@ -1690,6 +1690,77 @@ type ClassifiedFieldWrittenPayload = {
     Level: string
 }
 
+// ─── Phase 54 — tenant-lifecycle substrate audit payloads ──────────────
+//
+// Emitted by `TenantLifecycleAggregator` for the
+// provision / deprovision choreography. Reserved
+// `SourceModule = "_platform.tenant"`. Metadata-only by design: scope
+// id, actor, per-phase hook counts + elapsed — never tenant data, never
+// the bytes any hook erased. `TenantDeprovisioned` is the single
+// end-of-offboard marker the phase exists to provide; per-hook failures
+// surface as `TenantLifecycleHookFailed` rows without aborting the run.
+
+module TenantLifecycleSourceModule =
+    /// Reserved `SourceModule` for `ITenantLifecycle` audit events.
+    /// Filter `IEventStore.ReadBySource` on this constant for the
+    /// tenant-lifecycle audit trail.
+    [<Literal>]
+    let value = "_platform.tenant"
+
+/// A tenant scope finished provisioning: every registered
+/// `ITenantLifecycle.OnProvisioned` hook ran. Counts only — the per-hook
+/// disposition lives on the returned `LifecycleSummary`; this row is the
+/// durable "provisioning completed" marker.
+type TenantProvisionedPayload = {
+    /// Tenant scope provisioned.
+    ScopeId: string
+    /// Operator (Owner / Platform-Admin) who triggered provisioning.
+    Actor: string
+    /// Total hooks dispatched.
+    HooksRun: int
+    /// Hooks that returned `Completed`.
+    HooksCompleted: int
+    /// Hooks that returned `Skipped` (substrate inactive).
+    HooksSkipped: int
+    /// Hooks that returned `Failed` (run continued regardless).
+    HooksFailed: int
+    /// Wall-clock for the aggregated run, in milliseconds.
+    ElapsedMs: int64
+}
+
+/// A tenant scope finished deprovisioning (offboard): every registered
+/// `ITenantLifecycle.OnDeprovisioned` hook ran. The single end-of-
+/// offboard marker — an operator querying the audit trail for this case
+/// gets exactly one row per completed offboard, with the hook counts
+/// proving how much cleanup ran.
+type TenantDeprovisionedPayload = {
+    ScopeId: string
+    Actor: string
+    HooksRun: int
+    HooksCompleted: int
+    HooksSkipped: int
+    HooksFailed: int
+    ElapsedMs: int64
+}
+
+/// One lifecycle hook failed during a provision / deprovision run.
+/// Per-hook failure does NOT abort the run (the offboard continues so a
+/// single misbehaving companion hook can't block crypto-shred / erasure
+/// of the rest); the summary records the partial state and one of these
+/// rows fires per failed hook for operator triage.
+type TenantLifecycleHookFailedPayload = {
+    ScopeId: string
+    Actor: string
+    /// `"Provisioning"` / `"Deprovisioning"` — which phase was running.
+    Phase: string
+    /// `ITenantLifecycle.Name` of the hook that failed.
+    HookName: string
+    /// Hook-supplied error text (or the timeout message when the hook
+    /// exceeded its per-hook budget). Verbatim — operators read the
+    /// hook's own diagnostic.
+    Error: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2046,6 +2117,18 @@ type AuditEvent =
     /// Phase 41 — a classified field was written by a caller. Reserved
     /// `SourceModule = "_platform.classification"`. Value-free.
     | ClassifiedFieldWritten of ClassifiedFieldWrittenPayload
+    /// Phase 54 — a tenant scope finished provisioning; every registered
+    /// `ITenantLifecycle.OnProvisioned` hook ran. Reserved
+    /// `SourceModule = "_platform.tenant"`. Counts-only payload.
+    | TenantProvisioned of TenantProvisionedPayload
+    /// Phase 54 — a tenant scope finished deprovisioning (offboard).
+    /// The single end-of-offboard marker. Reserved
+    /// `SourceModule = "_platform.tenant"`.
+    | TenantDeprovisioned of TenantDeprovisionedPayload
+    /// Phase 54 — one lifecycle hook failed during a provision /
+    /// deprovision run. Non-aborting; one row per failed hook. Reserved
+    /// `SourceModule = "_platform.tenant"`.
+    | TenantLifecycleHookFailed of TenantLifecycleHookFailedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2139,6 +2222,9 @@ module AuditEvent =
         | SigningKeyRotated _ -> "SigningKeyRotated"
         | ClassifiedFieldRead _ -> "ClassifiedFieldRead"
         | ClassifiedFieldWritten _ -> "ClassifiedFieldWritten"
+        | TenantProvisioned _ -> "TenantProvisioned"
+        | TenantDeprovisioned _ -> "TenantDeprovisioned"
+        | TenantLifecycleHookFailed _ -> "TenantLifecycleHookFailed"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
