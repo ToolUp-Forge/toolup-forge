@@ -38,6 +38,11 @@
         <Compile Include="Server\PublicPageRevisions.fs" />
         <Compile Include="Server\IContentSource.fs" />
         <Compile Include="Server\PublicContentApiImpl.fs" />
+        <!-- Phase 114 — multi-host site registry: PublicSiteDef + per-site
+             loader/API runtimes + host→site dispatch + startup validator.
+             Needs the loader + content-api impl; precedes the handlers and
+             compose that consume it. -->
+        <Compile Include="Server\MultiSite.fs" />
         <!-- Phase 84 — SSR render cache (ISR tier) + HTTP cache headers.
              Interface + policy + impls precede the page handler (cache
              integration) and compose (registration). -->

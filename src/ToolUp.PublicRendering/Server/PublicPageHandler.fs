@@ -207,13 +207,17 @@ module PublicPageHandler =
         (cache: IRenderCache)
         (settings: RenderCacheSettings)
         (metrics: IMetricsSink)
+        (cacheKeySlug: string)
         (slug: string)
         (accessContext: AccessContext)
         (ctx: HttpContext)
         : System.Threading.Tasks.Task<HttpContext option> =
         task {
+            // Phase 114 — `cacheKeySlug` may carry a per-site prefix so two
+            // sites sharing a slug (e.g. "index") never share a cache
+            // entry; single-site pipelines pass the slug through unchanged.
             let key: RenderKey = {
-                Slug = slug
+                Slug = cacheKeySlug
                 ScopeId = scopeIdOf accessContext
                 ContentVersion = ""
             }
@@ -307,11 +311,24 @@ module PublicPageHandler =
                 | PageNotFound -> return None
         }
 
-    let handler (api: IPublicContentApi) (layouts: Map<LayoutName, PublicPage -> XmlNode>) : HttpHandler =
+    /// Phase 114 — handler variant whose render-cache entries are
+    /// namespaced by `cacheKeyPrefix` (the multi-site compose passes the
+    /// site name). `None` reproduces the pre-114 key exactly, so
+    /// single-site deployments' cache entries are untouched (GP 11).
+    let handlerKeyed
+        (cacheKeyPrefix: string option)
+        (api: IPublicContentApi)
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        : HttpHandler =
         fun _next (ctx: HttpContext) ->
             let rawPath = ctx.Request.Path.Value
             let slug = rawPath.TrimStart('/')
             let slugOrIndex = if slug = "" then "index" else slug
+
+            let cacheKeySlug =
+                match cacheKeyPrefix with
+                | Some prefix -> prefix + "::" + slugOrIndex
+                | None -> slugOrIndex
 
             // Phase 83 — resolve the per-request `AccessContext` from DI
             // (registered scoped by the SDK middleware). Fall back to an
@@ -347,10 +364,13 @@ module PublicPageHandler =
                             | :? RenderCacheSettings as s -> s
                             | _ -> RenderCacheSettings.defaults
 
-                        serveCached api layouts cache settings metrics slugOrIndex accessContext ctx
+                        serveCached api layouts cache settings metrics cacheKeySlug slugOrIndex accessContext ctx
                     | _ -> serveUncached api layouts slugOrIndex accessContext ctx
 
                 sw.Stop()
                 RenderMetrics.emitRender metrics (RenderMetrics.classifyOutcome ctx result) sw.Elapsed.TotalMilliseconds
                 return result
             }
+
+    let handler (api: IPublicContentApi) (layouts: Map<LayoutName, PublicPage -> XmlNode>) : HttpHandler =
+        handlerKeyed None api layouts

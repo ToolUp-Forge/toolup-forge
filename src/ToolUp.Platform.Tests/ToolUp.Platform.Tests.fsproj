@@ -336,6 +336,11 @@
              resume scenario), file state store, /{key}.txt endpoint
              match/fall-through, publish-hook ping, compose gate (GP 11/13). -->
         <Compile Include="InProcess\IndexNowTests.fs" />
+        <!-- Phase 114 — multi-host site registry: host resolution
+             (case-insensitive, port-ignoring, fallback), shared-layout
+             inheritance, per-site page/sitemap serving, render-cache key
+             namespacing, startup validator matrix. -->
+        <Compile Include="InProcess\MultiSiteTests.fs" />
         <!-- Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
              AudienceGate matrix + handler 401/403 + sitemap exclusion +
              cross-tenant isolation. -->

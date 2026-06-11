@@ -192,6 +192,10 @@ let allTests =
         // submission state machine (postmortem resume), /{key}.txt endpoint
         // match/fall-through, publish ping, compose gate (GP 11/13).
         IndexNowTests.tests
+        // Phase 114 — multi-host site registry: host → site resolution,
+        // per-site serving + sitemap origins, render-cache namespacing,
+        // startup validator matrix.
+        MultiSiteTests.tests
         // Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
         // AudienceGate evaluate matrix + handler authorization pre-check
         // (401/403/200) + sitemap exclusion + cross-tenant isolation.

@@ -141,6 +141,16 @@ type PublicRenderingServerApp = {
     /// Seznam / Naver) when content is published or the deploy changes the
     /// URL universe.
     IndexNow: IndexNowOptions
+    /// Phase 114 — satellite websites served by this instance, matched by
+    /// request host. Empty (default) → the pre-114 single-site behaviour,
+    /// byte-for-byte (GP 11 / GP 13). Each registered `PublicSiteDef`
+    /// claims a set of host names and brings its own content root,
+    /// layouts (falling back to the shared ones), redirects, and base
+    /// URL; every unmatched host serves the default (`ServerConfig`-level)
+    /// site. Set via `withSite`. v1 scope: satellites are markdown-file-
+    /// backed only — entity overlay, content sources, feeds, search,
+    /// taxonomy, and AI publish remain default-site surfaces.
+    Sites: PublicSiteDef list
 }
 
 module PublicRenderingServerApp =
@@ -164,6 +174,7 @@ module PublicRenderingServerApp =
         SemanticSearch = None
         AIPublishGuardrails = NarrativePublishGuardrails.defaults
         IndexNow = IndexNowOptions.defaults
+        Sites = []
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -193,6 +204,7 @@ module PublicRenderingServerApp =
         SemanticSearch = None
         AIPublishGuardrails = NarrativePublishGuardrails.defaults
         IndexNow = IndexNowOptions.defaults
+        Sites = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -581,6 +593,26 @@ module PublicRenderingServerApp =
             IndexNow = options
     }
 
+    /// Phase 114 — register a satellite website served by this instance.
+    /// The site claims its `Hosts` (case-insensitive, port ignored) and
+    /// brings its own content root, base URL, layouts (empty → inherit
+    /// the shared `withLayout` registrations), and redirects; requests on
+    /// any other host — including every request in a zero-`withSite`
+    /// composition — serve the default (`ServerConfig`-level) site
+    /// unchanged (GP 11). Call once per site:
+    ///
+    ///     |> PublicRenderingServerApp.withSite
+    ///         (PublicSite.create "docs" [ "docs.example.com" ]
+    ///             "https://docs.example.com" (ContentRoot docsContent))
+    ///
+    /// v1 scope: satellites are markdown-file-backed (`content/**/*.md`
+    /// + `redirects.csv`); entity overlay, content sources, feeds,
+    /// search, taxonomy, and AI publish remain default-site surfaces.
+    let withSite (site: PublicSiteDef) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            Sites = app.Sites @ [ site ]
+    }
+
     /// Toggle the dev-mode hot-reload watcher. Defaults to `true`.
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
@@ -649,6 +681,7 @@ module PublicRenderingServerApp =
             let renderCache = app.RenderCache
             let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
             let indexNowOptions = app.IndexNow // Phase 109
+            let satelliteDefs = app.Sites // Phase 114
 
             // Resolve the slug-purge surface for the publish / CMS
             // invalidation hook (Phase 84). Prefer an explicit
@@ -687,6 +720,24 @@ module PublicRenderingServerApp =
             let prLogger =
                 appWithEntity.Logger
                 |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+            // Phase 114 — build the satellite-site registry once at compose
+            // time (per-site loader + file-tier content API; layouts fall
+            // back to the shared map) and register the startup validator.
+            // `None` when no sites are composed — the handler chain below
+            // then uses the pre-114 single-site construction byte-for-byte
+            // (GP 11) and nothing here allocates (GP 13).
+            let siteRegistry =
+                if List.isEmpty satelliteDefs then
+                    None
+                else
+                    Some(SiteRegistry.build satelliteDefs layouts prLogger hotReload)
+
+            let appWithEntity =
+                if List.isEmpty satelliteDefs then
+                    appWithEntity
+                else
+                    ServerApp.withConfigValidator (MultiSiteConfigValidator(satelliteDefs, layouts)) appWithEntity
 
             // Phase 109 — resolve the IndexNow host + ownership key once at
             // compose time. Host falls back to the sitemap's public base URL;
@@ -894,6 +945,13 @@ module PublicRenderingServerApp =
                             )
                         else
                             s
+                |> fun s ->
+                    // Phase 114 — expose the satellite-site registry to
+                    // consumer-supplied custom handlers. Not registered when
+                    // no sites are composed (GP 13).
+                    match siteRegistry with
+                    | Some registry -> s.AddSingleton<SiteRegistry>(registry)
+                    | None -> s
 
             // ─── Handler chain ───────────────────────────────────
             // Order: sitemap (specific route) → redirect (path-match
@@ -990,6 +1048,52 @@ module PublicRenderingServerApp =
                     [ IndexNowKeyHandler.routes indexNowKey ]
                 else
                     []
+
+            // Phase 114 — host-aware dispatch. When a satellite-site
+            // registry exists, the per-request content surfaces (sitemap /
+            // redirects / narrative export / preview / page) resolve the
+            // site claiming the request's host and serve from its content
+            // API + layouts + redirects + base URL; unmatched hosts fall
+            // through to the default handlers built above. With no sites
+            // registered, every handler below IS the default handler —
+            // byte-for-byte the pre-114 chain (GP 11). Feeds, semantic
+            // search, taxonomy, and IndexNow remain default-site surfaces
+            // in v1 (Phase 115 lifts the SEO/export set per-site).
+            let siteAware (forSite: SiteRuntime -> HttpHandler) (defaultHandler: HttpHandler) : HttpHandler =
+                match siteRegistry with
+                | None -> defaultHandler
+                | Some registry ->
+                    fun next ctx ->
+                        match SiteRegistry.tryResolve ctx registry with
+                        | Some site -> forSite site next ctx
+                        | None -> defaultHandler next ctx
+
+            let sitemapHandler =
+                siteAware
+                    (fun site ->
+                        route "/sitemap.xml"
+                        >=> SitemapGenerator.handler site.Def.BaseUrl site.Api (fun () -> async.Return []))
+                    sitemapHandler
+
+            let redirectHandler =
+                siteAware
+                    (fun site ->
+                        fun next ctx ->
+                            // Per-request read so hot-reloaded redirects.csv
+                            // edits flow through, matching the default path.
+                            RedirectMap.handler (site.Loader.Redirects @ site.Def.Redirects) next ctx)
+                    redirectHandler
+
+            let exportHandler =
+                siteAware (fun site -> NarrativeExportHandler.handler site.Api) exportHandler
+
+            let previewHandler =
+                siteAware (fun site -> ContentPreview.previewHandler site.Api site.Layouts) previewHandler
+
+            let pageHandler =
+                siteAware
+                    (fun site -> PublicPageHandler.handlerKeyed (Some site.Def.Name) site.Api site.Layouts)
+                    pageHandler
 
             let publicRenderingHandlers =
                 [ sitemapHandler ]
