@@ -179,6 +179,10 @@ let private decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
         | "AuthScopeResolutionFailed" ->
             Some(AuthScopeResolutionFailed(fromAuditJson<ScopeResolutionFailedPayload> evt.Payload))
         | "PeerCallCompleted" -> Some(PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> evt.Payload))
+        | "KnowledgeOriginalRetrieved" ->
+            Some(KnowledgeOriginalRetrieved(fromAuditJson<KnowledgeOriginalRetrievedPayload> evt.Payload))
+        | "KnowledgeOriginalRetrievalDenied" ->
+            Some(KnowledgeOriginalRetrievalDenied(fromAuditJson<KnowledgeOriginalRetrievalDeniedPayload> evt.Payload))
         | _ -> None
     with _ ->
         None
@@ -305,6 +309,12 @@ type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger) =
         | SurfaceDenied p -> toAuditJson p
         | AuthScopeResolutionFailed p -> toAuditJson p
         | PeerCallCompleted p -> toAuditJson p
+        // Phase 107 — KB original-document sensitive-read audit. Added to
+        // `serialise` in the same commit as the DU cases: this match is
+        // partial, and an unlisted case throws at emission time (caught
+        // + logged as a write failure, silently losing the audit row).
+        | KnowledgeOriginalRetrieved p -> toAuditJson p
+        | KnowledgeOriginalRetrievalDenied p -> toAuditJson p
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {

@@ -853,6 +853,48 @@ type PlatformDocumentDeletedPayload = {
     FileName: string
 }
 
+/// Knowledge Base *original* document retrieved (Phase 107). Emitted by
+/// the KB `GetOriginalDocument` handler on every successful fetch of an
+/// original ingested document — a state-observing access to potentially
+/// sensitive content, audited distinctly from the upload event so the
+/// trail answers "who pulled which source when" (GP 6 extended to
+/// sensitive reads). Identifiers + source kind only — no document
+/// content, no bytes (same PII envelope as the KB upload events).
+type KnowledgeOriginalRetrievedPayload = {
+    /// User who fetched the original.
+    UserId: string
+    /// Id of the `KnowledgeDocument` whose original was fetched.
+    DocumentId: string
+    /// Scope the document lives in (the caller's resolved scope —
+    /// the structural gate guarantees they match, GP 4).
+    ScopeId: string
+    /// Source-kind case name ("UploadedFile" / "Note" /
+    /// "FromNarrative") so the trail distinguishes binary originals
+    /// from note-markdown fetches without payload introspection.
+    SourceKind: string
+    /// Original file name. Audit-readability — operators reading the
+    /// trail recognise file names faster than UUIDs.
+    FileName: string
+}
+
+/// Knowledge Base original-document fetch refused (Phase 107). Emitted
+/// by the KB `GetOriginalDocument` handler when a fetch is denied —
+/// out-of-scope document id, or a source kind with no retrievable
+/// original. The refusal is itself audit-worthy: denials on the team
+/// boundary are material security signals (GP 4 + GP 6).
+type KnowledgeOriginalRetrievalDeniedPayload = {
+    /// User whose fetch was refused.
+    UserId: string
+    /// Document id the caller asked for. May not exist anywhere —
+    /// recorded verbatim so enumeration attempts are visible.
+    DocumentId: string
+    /// Scope the caller was acting within.
+    ScopeId: string
+    /// Refusal reason — the `KnowledgeBaseError` case name
+    /// ("NotInScope" / "NoOriginalAvailable").
+    Reason: string
+}
+
 // ─── Share-token audit payloads ───────────────────────────────────────
 
 /// `IShareTokenStore.Issue` succeeded. `UserId` is the issuer (the
@@ -2129,6 +2171,14 @@ type AuditEvent =
     /// deprovision run. Non-aborting; one row per failed hook. Reserved
     /// `SourceModule = "_platform.tenant"`.
     | TenantLifecycleHookFailed of TenantLifecycleHookFailedPayload
+    /// Phase 107 — an original ingested document was fetched from the
+    /// Knowledge Base via `GetOriginalDocument`. Sensitive-read audit,
+    /// distinct from the upload event (GP 6).
+    | KnowledgeOriginalRetrieved of KnowledgeOriginalRetrievedPayload
+    /// Phase 107 — a `GetOriginalDocument` fetch was refused
+    /// (out-of-scope id or no retrievable original). Denials on the
+    /// team boundary are audited (GP 4 + GP 6).
+    | KnowledgeOriginalRetrievalDenied of KnowledgeOriginalRetrievalDeniedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2225,6 +2275,8 @@ module AuditEvent =
         | TenantProvisioned _ -> "TenantProvisioned"
         | TenantDeprovisioned _ -> "TenantDeprovisioned"
         | TenantLifecycleHookFailed _ -> "TenantLifecycleHookFailed"
+        | KnowledgeOriginalRetrieved _ -> "KnowledgeOriginalRetrieved"
+        | KnowledgeOriginalRetrievalDenied _ -> "KnowledgeOriginalRetrievalDenied"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

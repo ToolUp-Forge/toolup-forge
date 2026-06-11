@@ -27,6 +27,7 @@ let private threeSources: RetrievedSource list = [
         Score = 0.92
         Origin = ChunkOrigin.Document
         LocationHint = None
+        OriginalRef = None
     }
     {
         DocumentId = "doc-2"
@@ -35,6 +36,7 @@ let private threeSources: RetrievedSource list = [
         Score = 0.85
         Origin = ChunkOrigin.Document
         LocationHint = None
+        OriginalRef = None
     }
     {
         DocumentId = "doc-3"
@@ -43,6 +45,7 @@ let private threeSources: RetrievedSource list = [
         Score = 0.80
         Origin = ChunkOrigin.Document
         LocationHint = None
+        OriginalRef = None
     }
 ]
 

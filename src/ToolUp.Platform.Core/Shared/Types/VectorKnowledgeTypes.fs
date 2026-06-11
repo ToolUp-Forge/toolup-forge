@@ -85,6 +85,17 @@ module ChunkMetadata =
     [<Literal>]
     let IsSummaryKey = "_isSummary"
 
+    /// Structured original-document reference (Phase 103) — JSON-serialised
+    /// `OriginalDocumentRef` stamped by the chunk producer at ingestion
+    /// when the chunk's source has a fetchable binary original. Retrieval
+    /// reads the ref instead of rebuilding the producer's blob-name
+    /// convention. Absent for chunks whose source has no original
+    /// (notes, narratives, AI-context) and for chunks ingested before
+    /// the producer stamped refs — absence surfaces as
+    /// `RetrievedSource.OriginalRef = None` (GP 9: never guessed).
+    [<Literal>]
+    let OriginalRefKey = "_originalRef"
+
 /// Coarse classification of where a chunk came from. Stamped onto chunk
 /// metadata at ingestion time under `ChunkMetadata.OriginKey`. RAG stays
 /// agnostic to the producer's domain types — KB / narrative / AI-context
@@ -142,6 +153,54 @@ type VectorMatch = {
     Metadata: Map<string, string>
 }
 
+/// Neutral within-document locator for the cited location (Phase 106).
+/// A deliberately small mirror of the producer-side provenance cases
+/// (page / slide / sheet / section / row-group) so a Sources panel can
+/// construct a deep link / scroll target into the original document —
+/// without `ToolUp.Platform` referencing any producer's domain types
+/// (GP 1: the KnowledgeBase `SourceLocation` DU maps onto this at the
+/// producer boundary, never the reverse). `RequireQualifiedAccess`
+/// because the case names (`Page`, `Section`, …) collide with
+/// producer-side DUs that files commonly open alongside this module.
+[<RequireQualifiedAccess>]
+type SourceLocator =
+    /// Page number within a paginated document (PDF). 1-based.
+    | Page of number: int
+    /// Slide number within a presentation (PPTX). 1-based.
+    | Slide of number: int
+    /// Sheet name within a workbook (XLSX).
+    | Sheet of name: string
+    /// Section heading within a structured document (DOCX, plain text).
+    | Section of heading: string
+    /// Inclusive 1-based source-row range within tabular data (CSV).
+    | RowGroup of startRow: int * endRow: int
+
+/// Structured reference to the *original* ingested document behind a
+/// retrieved chunk (Phase 103). Value-typed and producer-neutral — no
+/// server handles, no KB-layer types — so it can live in
+/// `ToolUp.Platform` and cross the AI/RAG/KB tri-package boundary the
+/// same way `RetrievedSource` does. The ref carries no bytes and is
+/// not a fetch capability: retrieving the original goes through the
+/// producer's scope-gated retrieval surface (e.g. the KnowledgeBase
+/// `GetOriginalDocument` API), which enforces team isolation (GP 4).
+type OriginalDocumentRef = {
+    /// Source-document id (matches `KnowledgeDocument.Id` for KB-sourced
+    /// chunks). The handle a client passes to the retrieval surface.
+    DocumentId: string
+    /// Original file name (e.g. "Q3 brand audit.pdf").
+    FileName: string
+    /// File-type extension as stamped by the producer ("pdf", "pptx",
+    /// "docx", "xlsx", "csv", "txt").
+    FileType: string
+    /// Size of the original blob in bytes. Lets the UI show a download
+    /// size before fetching.
+    SizeBytes: int64
+    /// Within-document locator for the cited location (Phase 106).
+    /// `None` when the chunk has no precise anchor (plain-text bodies,
+    /// producers that don't stamp locations) — never fabricated (GP 9).
+    Location: SourceLocator option
+}
+
 /// Wire-format record for a retrieved chunk surfaced to the AI client. A
 /// projection of `VectorMatch` that strips the embedding-pipeline internals
 /// (chunk id, full content, scope) and adds caller-friendly fields the UI
@@ -174,6 +233,15 @@ type RetrievedSource = {
     /// `None` when no `_source` metadata is present or the source kind
     /// doesn't have a meaningful location.
     LocationHint: string option
+    /// Structured reference to the fetchable original document (Phase
+    /// 103), read from the `ChunkMetadata.OriginalRefKey` metadata the
+    /// producer stamped at ingestion. `Some` only when the chunk's
+    /// source has a binary original (uploaded files); `None` for note /
+    /// narrative / AI-context chunks and for chunks ingested before the
+    /// producer stamped refs. Additive and backward-compatible (GP 11):
+    /// pre-existing wire payloads without the field deserialise to
+    /// `None`.
+    OriginalRef: OriginalDocumentRef option
 }
 
 /// Controls how results from multiple scopes are combined.

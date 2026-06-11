@@ -96,8 +96,14 @@ let private snippet (charLimit: int) (content: string) =
 /// client renders in its Sources panel. `_source` carries provenance; the
 /// `_origin` and `_locationHint` metadata flags are stamped by the chunk
 /// producer so retrieval doesn't have to parse the structured `_source`
-/// JSON for either field.
-let private toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
+/// JSON for either field. `_originalRef` (Phase 103) carries the
+/// producer-stamped `OriginalDocumentRef` — a `ToolUp.Platform` type, so
+/// it deserialises here directly with no producer compile-time edge;
+/// chunks without the key (notes, narratives, pre-Phase-103 ingests)
+/// surface `OriginalRef = None`, never a rebuilt blob-name guess.
+/// Public so contract tests can pin the projection; not otherwise part
+/// of the consumer-facing surface.
+let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
     let src = trySource m
 
     let origin =
@@ -106,6 +112,10 @@ let private toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSourc
         |> Option.defaultValue (Other "unknown")
 
     let locationHint = m.Metadata.TryFind ChunkMetadata.LocationHintKey
+
+    let originalRef =
+        m.Metadata.TryFind ChunkMetadata.OriginalRefKey
+        |> Option.bind tryDeserialise<OriginalDocumentRef>
 
     {
         DocumentId = src |> Option.map _.DocumentId |> Option.defaultValue ""
@@ -121,6 +131,7 @@ let private toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSourc
         Score = m.Score
         Origin = origin
         LocationHint = locationHint
+        OriginalRef = originalRef
     }
 
 // ─── Retrieval builder ────────────────────────────────────────────
