@@ -39,6 +39,13 @@ open Fable.Core.JsInterop
 [<Import("test", from = "node:test")>]
 let private nodeTestFn (name: string) (body: unit -> unit) : unit = jsNative
 
+/// Callback-style `test(name, (t, done) => …)` binding for cases whose
+/// assertions run after a timer hop (e.g. the Elmish `AsyncHelpers.start`
+/// 1ms-delayed dispatch). The delegate shape compiles to a two-arg JS
+/// function so node:test recognises the done-callback arity.
+[<Import("test", from = "node:test")>]
+let private nodeTestDoneFn (name: string) (body: System.Action<obj, System.Action<obj>>) : unit = jsNative
+
 [<Import("describe", from = "node:test")>]
 let private nodeDescribeFn (name: string) (body: unit -> unit) : unit = jsNative
 
@@ -50,15 +57,42 @@ let private nodeAssert: obj = import "*" "node:assert/strict"
 
 type TestItem =
     | Case of name: string * body: (unit -> unit)
+    /// Deferred case: `setup` runs synchronously and returns the
+    /// assertion thunk, which runs after `delayMs` (one or more timer
+    /// hops later). Assertion failures route through the node:test
+    /// done-callback as test failures, not uncaught exceptions.
+    | DeferredCase of name: string * delayMs: int * setup: (unit -> (unit -> unit))
     | List of name: string * items: TestItem list
 
 let testCase (name: string) (body: unit -> unit) : TestItem = Case(name, body)
+
+/// A case whose assertions must run after pending timer callbacks
+/// (e.g. an Elmish effect's delayed dispatch). `setup` performs the
+/// action under test and returns the assertions to run `delayMs`
+/// later.
+let testCaseDeferred (name: string) (delayMs: int) (setup: unit -> (unit -> unit)) : TestItem =
+    DeferredCase(name, delayMs, setup)
 
 let testList (name: string) (items: TestItem list) : TestItem = List(name, items)
 
 let rec private runItem (item: TestItem) : unit =
     match item with
     | Case(name, body) -> nodeTestFn name body
+    | DeferredCase(name, delayMs, setup) ->
+        nodeTestDoneFn
+            name
+            (System.Action<obj, System.Action<obj>>(fun _t done' ->
+                let assertions = setup ()
+
+                JS.setTimeout
+                    (fun () ->
+                        try
+                            assertions ()
+                            done'.Invoke(null)
+                        with ex ->
+                            done'.Invoke(box ex))
+                    delayMs
+                |> ignore))
     | List(name, items) ->
         nodeDescribeFn name (fun () ->
             for i in items do

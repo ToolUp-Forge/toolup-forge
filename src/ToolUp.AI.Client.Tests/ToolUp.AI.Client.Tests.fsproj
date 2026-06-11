@@ -44,6 +44,10 @@
     <ItemGroup>
         <Compile Include="NodeTest.fs" />
         <Compile Include="PlatformAIKeysAdminUITests.fs" />
+        <!-- Phase 110 — ClientHostCapabilities routing tests (the bridge
+             lives in Platform.Client, reached transitively; this is the
+             established Fable-tier client harness). -->
+        <Compile Include="ClientHostBridgeTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
