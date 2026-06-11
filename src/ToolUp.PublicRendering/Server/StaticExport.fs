@@ -88,6 +88,7 @@ module StaticExport =
         (config: ServerConfig)
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)
         (contentApiOverride: IPublicContentApi option)
+        (contentSources: IContentSource list)
         (loggerOpt: ILogger option)
         (outputDir: string)
         : Async<int> =
@@ -120,7 +121,10 @@ module StaticExport =
                 let api: IPublicContentApi =
                     match contentApiOverride with
                     | Some explicit -> explicit
-                    | None -> PublicContentApiImpl.create loader None []
+                    // Phase 95 — pass the registered sources so the
+                    // export can resolve their enumerated dynamic routes
+                    // (via `GetPageInContext` with an anonymous context).
+                    | None -> PublicContentApiImpl.create loader None contentSources
 
                 let! allPages = api.ListPages ""
 
@@ -160,8 +164,37 @@ module StaticExport =
 
                         skipped <- skipped + 1
 
+                // Phase 95 — render content-source-enumerated dynamic
+                // routes (e.g. `/tag/{x}`) with an anonymous build-time
+                // context. A source that gates some pages simply doesn't
+                // enumerate them, so nothing private reaches disk.
+                let! dynamicSlugs = ContentSource.enumerateAll contentSources
+                let anonCtx = AccessContext.unrestricted (AnonymousSession "static-export")
+
+                for Slug s in dynamicSlugs do
+                    let! pageOpt = api.GetPageInContext(s, anonCtx)
+
+                    match pageOpt with
+                    | Some page ->
+                        match resolveLayout layouts page with
+                        | Some layout ->
+                            let html = RenderView.AsString.htmlDocument (layout page)
+                            let relative = slugToRelativePath s
+                            let full = Path.Combine(outputDir, relative)
+                            let dir = Path.GetDirectoryName full
+
+                            if not (Directory.Exists dir) then
+                                Directory.CreateDirectory dir |> ignore
+
+                            File.WriteAllText(full, html)
+                            rendered <- rendered + 1
+                        | None ->
+                            logger.Warn(sprintf "StaticExport: no layout registered for dynamic route '%s'" s)
+                            skipped <- skipped + 1
+                    | None -> ()
+
                 let publicBaseUrl = config.PublicBaseUrl |> Option.defaultValue ""
-                let sitemapXml = SitemapGenerator.generate publicBaseUrl pages
+                let sitemapXml = SitemapGenerator.generateWith publicBaseUrl pages dynamicSlugs
                 File.WriteAllText(Path.Combine(outputDir, "sitemap.xml"), sitemapXml)
 
                 logger.Info(

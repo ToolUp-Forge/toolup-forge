@@ -98,6 +98,19 @@ module RouteShape =
             go 0 Map.empty
 
 
+/// Phase 95 — optional capability a content source MAY also implement:
+/// enumerate the concrete slugs it can produce, so `sitemap.xml`, the
+/// static-export build, and prerender discover its dynamic pages. A
+/// source implements this IN ADDITION to `IContentSource`; sources that
+/// don't are unaffected — their dynamic pages stay request-only, exactly
+/// as pre-95 (GP 11). `EnumerateRoutes` should return only PUBLICLY
+/// discoverable slugs (a source that gates some of its pages omits them),
+/// returns by value (`Slug list`), and is async + stateless — the six
+/// portability rules hold.
+type IEnumerableContentSource =
+    abstract EnumerateRoutes: unit -> Async<Slug list>
+
+
 /// Constructors for `IContentSource`. Use `create` for a resolver that
 /// claims slugs by its own logic; use `ofRoute` for the common case of a
 /// single source claiming a family of dynamic paths by pattern.
@@ -128,3 +141,42 @@ module ContentSource =
                 | Some captures -> resolve captures ctx
                 | None -> async { return None }
         }
+
+    /// Phase 95 — like `ofRoute`, but the returned source also implements
+    /// `IEnumerableContentSource`: `enumerate` returns the concrete slugs
+    /// this route-family currently produces, so sitemap / static export /
+    /// prerender include them. The resolver and the enumerator share the
+    /// same backing data (e.g. the page set), so they agree on what
+    /// exists.
+    let ofRouteEnumerable
+        (pattern: string)
+        (resolve: Map<string, string> -> AccessContext -> Async<ContentBody option>)
+        (enumerate: unit -> Async<Slug list>)
+        : IContentSource =
+        { new IContentSource with
+            member _.Resolve (Slug s) ctx =
+                match RouteShape.tryMatch pattern s with
+                | Some captures -> resolve captures ctx
+                | None -> async { return None }
+
+          interface IEnumerableContentSource with
+              member _.EnumerateRoutes() = enumerate ()
+        }
+
+    /// Collect the public routes every `IEnumerableContentSource` in the
+    /// list advertises, deduped, preserving registration order. Sources
+    /// that don't implement `IEnumerableContentSource` contribute nothing.
+    /// Used by the sitemap generator + static export to discover dynamic
+    /// pages.
+    let enumerateAll (sources: IContentSource list) : Async<Slug list> = async {
+        let acc = System.Collections.Generic.List<Slug>()
+
+        for s in sources do
+            match s with
+            | :? IEnumerableContentSource as e ->
+                let! routes = e.EnumerateRoutes()
+                acc.AddRange routes
+            | _ -> ()
+
+        return acc |> List.ofSeq |> List.distinct
+    }

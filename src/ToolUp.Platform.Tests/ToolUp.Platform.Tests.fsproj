@@ -275,6 +275,7 @@
              determinism + graceful-degradation tests. -->
         <Compile Include="InProcess\NarrativeFromDataTests.fs" />
         <Compile Include="InProcess\NarrativeChartsTests.fs" />
+        <Compile Include="InProcess\EnumerableRoutesTests.fs" />
         <!-- Phase 90 — site structure: nav-tree audience filtering,
              breadcrumb derivation, nav.yaml parse, tag-index resolution,
              related-by-tag + facets, render helpers. -->

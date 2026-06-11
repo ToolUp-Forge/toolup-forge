@@ -603,7 +603,12 @@ module PublicRenderingServerApp =
                     let api =
                         ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
 
-                    SitemapGenerator.handler publicBaseUrl api next ctx
+                    // Phase 95 — include content-source-enumerated dynamic
+                    // routes (e.g. `/tag/{x}`) so crawlers discover them.
+                    let enumerate () =
+                        ContentSource.enumerateAll contentSources
+
+                    SitemapGenerator.handler publicBaseUrl api enumerate next ctx
 
             let redirectHandler: HttpHandler =
                 fun next ctx ->
@@ -701,7 +706,7 @@ module PublicRenderingServerApp =
     /// Requires `ServerConfig.PublicRendering = EnabledPublicRendering`
     /// and at least one registered layout — same invariants as `run`.
     let exportStatic (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
-        StaticExport.run app.Base.Config app.Layouts app.ContentApiOverride app.Base.Logger outputDir
+        StaticExport.run app.Base.Config app.Layouts app.ContentApiOverride app.ContentSources app.Base.Logger outputDir
 
 // ─── Additive companion-set extension `withPublicRendering` (Phase 80c) ──
 //

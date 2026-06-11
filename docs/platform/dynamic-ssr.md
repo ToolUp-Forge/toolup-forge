@@ -173,6 +173,19 @@ let body =
     |> NarrativeFromData.withSynthesis NarrativeFromData.withoutSynthesis   // or your hook
 ```
 
+## Making dynamic pages discoverable (Phase 95)
+
+Request-time source pages (and the `/tag/{x}` taxonomy pages) are computed per request, so the context-free `ListPages` never enumerates them — which means by default they're invisible to `sitemap.xml`, the static-export build, and prerender. A source opts into discovery by also implementing `IEnumerableContentSource`:
+
+```fsharp
+let dynamic =
+    ContentSource.ofRouteEnumerable "report/{client}"
+        (fun captures ctx -> async { (* … resolve … *) })
+        (fun () -> async { return knownClients |> List.map (fun c -> Slug ("report/" + c)) })  // enumerate
+```
+
+The shipped `TaxonomyHandler.tagIndexSource` already does this (it enumerates one `/tag/{slug}` per distinct tag). `sitemap.xml` and `StaticExport` call `ContentSource.enumerateAll` over the registered sources and fold the enumerated slugs in (deduped against the file/overlay pages). A source that doesn't implement `IEnumerableContentSource` is unaffected — its pages stay request-only (GP 11). Enumerate **only public** slugs; a source that gates some pages omits them, so nothing private reaches a crawler or the static build.
+
 ## Page metadata from data (SEO without a frontmatter file)
 
 A source returns only a `ContentBody`; the page's presentation metadata is derived from it. For a `Narrative` body:

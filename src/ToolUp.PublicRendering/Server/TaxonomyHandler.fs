@@ -52,12 +52,26 @@ module TaxonomyHandler =
     /// scoped subset. The source claims only `tag/...` slugs; any other
     /// slug falls through (`None`) without invoking the provider.
     let tagIndexSource (listPages: unit -> Async<PublicPage list>) : IContentSource =
-        ContentSource.ofRoute "tag/{slug}" (fun captures _ctx -> async {
-            let tag = captures.TryFind "slug" |> Option.defaultValue ""
-            let! pages = listPages ()
-            let matching = pages |> List.filter (PublicPage.hasTag tag)
-            return Some(Narrative(buildTagDoc tag matching))
-        })
+        ContentSource.ofRouteEnumerable
+            "tag/{slug}"
+            (fun captures _ctx -> async {
+                let tag = captures.TryFind "slug" |> Option.defaultValue ""
+                let! pages = listPages ()
+                let matching = pages |> List.filter (PublicPage.hasTag tag)
+                return Some(Narrative(buildTagDoc tag matching))
+            })
+            // Phase 95 — enumerate one `/tag/{slug}` route per distinct
+            // tag (lower-cased, deduped), so sitemap.xml / static export /
+            // prerender discover the tag-index pages this source produces.
+            (fun () -> async {
+                let! pages = listPages ()
+
+                return
+                    pages
+                    |> List.collect (fun p -> PublicPage.tags p |> List.map (fun t -> t.ToLowerInvariant()))
+                    |> List.distinct
+                    |> List.map (fun t -> Slug("tag/" + t))
+            })
 
     /// Convenience: `tagIndexSource` enumerating via an
     /// `IPublicContentApi`'s `ListPages ""` (the file + entity-overlay
