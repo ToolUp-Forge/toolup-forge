@@ -109,7 +109,7 @@ module FieldClassification =
     /// the type name as the entity name. `fields` is a list of
     /// `(fieldPath, level)` pairs. Flows into the runtime classifier
     /// registry at compose time.
-    let attach<'Entity> (fields: (string * ClassificationLevel) list) : FieldClassification list =
+    let inline attach<'Entity> (fields: (string * ClassificationLevel) list) : FieldClassification list =
         fields |> List.map (fun (path, level) -> create typeof<'Entity>.Name path level)
 
 /// A classified-field match for a DSAR subject lookup. Powers Phase 9h
