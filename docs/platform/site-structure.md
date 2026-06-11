@@ -125,6 +125,19 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `relatedByTag` is the pure-data path; a deployment that composes RAG can layer semantic-related on top. `tagCounts` drives a faceted-browse sidebar (case-insensitive grouping, deterministic order).
 
+## Per-tag Atom feeds (Phase 97)
+
+A reader can subscribe to a topic: `withTagFeed` registers a feed filtered to one tag (the taxonomy-axis extension of the Phase 80b `withFeed`), reusing the same Atom renderer:
+
+```fsharp
+|> PublicRenderingServerApp.withTagFeed "news"
+     { NarrativeFeedConfig.defaults with Title = "News"; SelfUrl = "/tag/news/feed.atom" }
+// or fan out one feed per tag:
+|> PublicRenderingServerApp.withTagFeeds "Topics" NarrativeFeedConfig.defaults [ "news"; "events"; "product" ]
+```
+
+A tag feed surfaces the Narrative-bodied pages carrying that tag, newest-first, capped at `MaxEntries`; gated pages never appear. A deployment that registers no tag feed emits nothing (GP 11). The `Tag` filter composes with `Collection` (both apply).
+
 ## Structured data (JSON-LD) — Phase 96
 
 `NavLayout.headStructuredData baseUrl ctx currentSlug nav` derives schema.org `BreadcrumbList` (from the page's nested slug) and `SiteNavigationElement` (from the **audience-filtered** nav tree) JSON-LD, absolutised against the base URL, as `<script type="application/ld+json">` blocks a layout splices into `<head>`:

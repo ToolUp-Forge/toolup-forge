@@ -333,6 +333,40 @@ module PublicRenderingServerApp =
             Feeds = app.Feeds @ [ config ]
     }
 
+    /// Phase 97 — register a per-tag Atom feed: the taxonomy-axis
+    /// extension of `withFeed`. Sets `config.Tag = Some tag` so the feed
+    /// surfaces only pages carrying `tag`, then registers it like any
+    /// other feed. Typically `withTagFeed "news" { NarrativeFeedConfig.defaults with Title = "News"; SelfUrl = "/tag/news/feed.atom" }`.
+    let withTagFeed
+        (tag: string)
+        (config: NarrativeFeedConfig)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        withFeed { config with Tag = Some tag } app
+
+    /// Phase 97 — register one per-tag feed for each tag in `tags` (the
+    /// whole-taxonomy fan-out). Each feed is served at
+    /// `/tag/{tag}/feed.atom` with the title `"{baseTitle}: {tag}"`,
+    /// inheriting `MaxEntries` etc. from `template`.
+    let withTagFeeds
+        (baseTitle: string)
+        (template: NarrativeFeedConfig)
+        (tags: string list)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        tags
+        |> List.fold
+            (fun acc tag ->
+                withTagFeed
+                    tag
+                    {
+                        template with
+                            Title = sprintf "%s: %s" baseTitle tag
+                            SelfUrl = sprintf "/tag/%s/feed.atom" tag
+                    }
+                    acc)
+            app
+
     /// Phase 83 — register a request-time `IContentSource`. The default
     /// impl consults registered sources after the file + entity-overlay
     /// tiers (registration order; first `Some` wins) on a per-request

@@ -48,6 +48,12 @@ type NarrativeFeedConfig = {
     AlternateUrl: string
     Collection: string option
     MaxEntries: int
+    /// Phase 97 — when `Some tag`, the feed surfaces only pages carrying
+    /// that tag (the taxonomy-axis feed, `/tag/{x}/feed.atom`). `None`
+    /// (default) = no tag filter, so an existing whole-site / per-
+    /// collection feed is unaffected (GP 11). Composes with `Collection`
+    /// (both filters apply).
+    Tag: string option
 }
 
 module NarrativeFeedConfig =
@@ -60,6 +66,7 @@ module NarrativeFeedConfig =
         AlternateUrl = "/"
         Collection = None
         MaxEntries = 20
+        Tag = None
     }
 
 module NarrativeFeedHandler =
@@ -73,6 +80,27 @@ module NarrativeFeedHandler =
         | None, _ -> true
         | Some f, Some c -> f = c
         | Some _, None -> false
+
+    /// The pure feed-entry selection: public, collection-matched,
+    /// tag-matched (Phase 97), Narrative-bodied pages, newest-first,
+    /// capped at `MaxEntries`. Extracted so the filter is unit-testable
+    /// without an HTTP context.
+    let selectEntries (config: NarrativeFeedConfig) (pages: PublicPage list) : NarrativeDocument list =
+        pages
+        // Phase 86 — gated (non-`Public`) pages never surface in a feed.
+        |> List.filter PublicPage.isPublic
+        |> List.filter (collectionMatches config.Collection)
+        // Phase 97 — taxonomy-axis filter.
+        |> List.filter (fun p ->
+            match config.Tag with
+            | Some tag -> PublicPage.hasTag tag p
+            | None -> true)
+        |> List.choose extractNarrative
+        |> List.sortByDescending (fun (page, _) ->
+            page.PublishedAt
+            |> Option.defaultValue (System.DateTimeOffset(System.DateTime.MinValue, System.TimeSpan.Zero)))
+        |> List.truncate config.MaxEntries
+        |> List.map snd
 
     let private gatherEntityStorePages (entityStore: IEntityStore) : Async<PublicPage list> = async {
         // ListAll returns refs; for v1 we fetch the head version of
@@ -115,19 +143,7 @@ module NarrativeFeedHandler =
                 | None -> async { return [] }
 
             let allPages = filePages @ storePages
-
-            let narrativePages =
-                allPages
-                // Phase 86 — gated (non-`Public`) pages never surface in a
-                // public Atom feed.
-                |> List.filter PublicPage.isPublic
-                |> List.filter (collectionMatches config.Collection)
-                |> List.choose extractNarrative
-                |> List.sortByDescending (fun (page, _) ->
-                    page.PublishedAt
-                    |> Option.defaultValue (System.DateTimeOffset(System.DateTime.MinValue, System.TimeSpan.Zero)))
-                |> List.truncate config.MaxEntries
-                |> List.map snd
+            let narrativePages = selectEntries config allPages
 
             let xml =
                 NarrativeAtom.renderFeed config.Title config.SelfUrl config.AlternateUrl narrativePages
