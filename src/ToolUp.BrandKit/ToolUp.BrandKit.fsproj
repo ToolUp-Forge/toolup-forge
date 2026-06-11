@@ -26,5 +26,10 @@
         <Compile Include="Server\Persona.fs" />
         <Compile Include="Server\Icon.fs" />
         <Compile Include="Server\PageChrome.fs" />
+        <!-- Phase 92 — layout library. LayoutShell (chrome spec + page
+             scaffold with the a11y baseline) precedes Layouts (the
+             seven ready layouts composing it + the primitives). -->
+        <Compile Include="Server\Layouts\LayoutShell.fs" />
+        <Compile Include="Server\Layouts\Layouts.fs" />
     </ItemGroup>
 </Project>

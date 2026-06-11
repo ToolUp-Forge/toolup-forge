@@ -303,6 +303,21 @@ module PublicRenderingServerApp =
                 Layouts = Map.add name layout app.Layouts
         }
 
+    /// Phase 92 — register a layout authored in the Feliz DSL
+    /// (`Feliz.ViewEngine`). Slots into the same registry as Giraffe
+    /// layouts via `FelizLayout.toGiraffe` — same naming, same
+    /// fallback semantics, same render path (the adapter's output is
+    /// raw pre-rendered HTML; the handler still adds the doctype and
+    /// runs head injection). Giraffe.ViewEngine remains the default
+    /// layout DSL; this helper is the opt-in for deployments sharing
+    /// Feliz component code with a Fable SPA.
+    let withFelizLayout
+        (name: LayoutName)
+        (layout: PublicPage -> Feliz.ViewEngine.ReactElement)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        withLayout name (FelizLayout.toGiraffe layout) app
+
     /// Register additional redirects (in addition to whatever is
     /// loaded from `<contentRoot>/redirects.csv` at startup).
     /// File-loaded entries take precedence on duplicate `From`.

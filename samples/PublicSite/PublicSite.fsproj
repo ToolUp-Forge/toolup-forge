@@ -17,16 +17,25 @@
         <Compile Include="Layouts\BaseLayout.fs" />
         <Compile Include="Layouts\PageLayout.fs" />
         <Compile Include="Layouts\ArticleLayout.fs" />
+        <!-- Phase 92 — BrandKit layout-library composition (the ~20-line
+             brand-correct page) + Feliz.ViewEngine layout with the
+             shared-component conditional-open pattern. -->
+        <Compile Include="Layouts\BrandKitArticleLayout.fs" />
+        <Compile Include="Layouts\FelizPageLayout.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <ProjectReference Include="..\..\src\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
+        <!-- Phase 92 — BrandKit layout library exercised by the sample. -->
+        <ProjectReference Include="..\..\src\ToolUp.BrandKit\ToolUp.BrandKit.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Giraffe.ViewEngine" />
+        <!-- Phase 92 — Feliz-DSL layout (FelizPageLayout.fs). -->
+        <PackageReference Include="Feliz.ViewEngine" />
     </ItemGroup>
     <!-- Copy markdown content + redirects.csv to the output folder so
          the runtime's `ContentRoot "content"` resolves against a path

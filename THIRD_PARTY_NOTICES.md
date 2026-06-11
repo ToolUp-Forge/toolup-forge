@@ -5,7 +5,7 @@ NuGet dependency the ToolUp SDK consumes (direct and transitive) along with
 its declared licence as published on nuget.org. The curated headline list
 of major direct dependencies lives in [`NOTICE.md`](NOTICE.md).
 
-Last regenerated: 2026-06-02 20:57:00 UTC.
+Last regenerated: 2026-06-11 22:04:29 UTC.
 
 Entries showing `(licence not declared)` are upstream packages whose NuGet
 metadata omits a licence — check the package's repository or README directly.
@@ -18,10 +18,13 @@ metadata omits a licence — check the package's repository or README directly.
 | `Amazon.Lambda.ApplicationLoadBalancerEvents` | `3.0.0` | `Apache-2.0` | [link](https://github.com/aws/aws-lambda-dotnet) |
 | `Amazon.Lambda.Core` | `2.5.1` | `Apache-2.0` | [link](https://github.com/aws/aws-lambda-dotnet) |
 | `AWSSDK.Core` | `4.0.7.3` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
+| `AWSSDK.Core` | `4.0.0.29` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
+| `AWSSDK.KeyManagementService` | `4.0.4.4` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
 | `AWSSDK.S3` | `4.0.23.4` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
 | `AWSSDK.SecretsManager` | `4.0.4.24` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
 | `Azure.Core` | `1.54.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.54.0/sdk/core/Azure.Core/README.md) |
 | `Azure.Core` | `1.51.1` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.51.1/sdk/core/Azure.Core/README.md) |
+| `Azure.Core` | `1.53.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.53.0/sdk/core/Azure.Core/README.md) |
 | `Azure.Core` | `1.44.1` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.44.1/sdk/core/Azure.Core/README.md) |
 | `Azure.Data.Tables` | `12.10.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Data.Tables_12.10.0/sdk/tables/Azure.Data.Tables/README.md) |
 | `Azure.Identity` | `1.21.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Identity_1.21.0/sdk/identity/Azure.Identity/README.md) |
@@ -60,9 +63,11 @@ metadata omits a licence — check the package's repository or README directly.
 | `Fake.IO.FileSystem` | `6.1.4` | `Apache-2.0 OR MS-PL` | [link](https://fake.build/) |
 | `Feliz` | `3.3.3` | `MIT` | [link](https://fable-hub.github.io/Feliz/) |
 | `Feliz.CompilerPlugins` | `3.2.0` | `MIT` | [link](https://fable-hub.github.io/Feliz/) |
+| `Feliz.ViewEngine` | `1.0.3` | Embedded file: `LICENSE` | [link](https://www.nuget.org/packages/Feliz.ViewEngine/1.0.3) |
 | `FParsec` | `1.1.1` | [link](http://www.quanttec.com/fparsec/license.html) | [link](http://www.quanttec.com/fparsec/) |
 | `FSharp.Control.Reactive` | `5.0.2` | Embedded file: `LICENSE.txt` | [link](https://github.com/fsprojects/FSharp.Control.Reactive) |
 | `FSharp.Core` | `10.1.300` | `MIT` | [link](https://github.com/dotnet/fsharp) |
+| `FSharp.Core` | `5.0.0` | `MIT` | [link](https://github.com/dotnet/fsharp) |
 | `FSharp.SystemTextJson` | `1.3.13` | `MIT` | [link](https://github.com/tarmil/FSharp.SystemTextJson) |
 | `Giraffe` | `8.2.0` | Embedded file: `LICENSE` | [link](https://github.com/giraffe-fsharp/giraffe) |
 | `Giraffe.ViewEngine` | `1.4.0` | `Apache-2.0` | [link](https://github.com/giraffe-fsharp/Giraffe.ViewEngine) |
@@ -86,6 +91,7 @@ metadata omits a licence — check the package's repository or README directly.
 | `MessagePack` | `3.1.0` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
 | `MessagePack.Annotations` | `3.1.0` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
 | `MessagePackAnalyzer` | `3.1.0` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
+| `Microsoft.AspNetCore.TestHost` | `10.0.8` | `MIT` | [link](https://asp.net/) |
 | `Microsoft.Azure.Functions.Worker` | `2.0.0` | `MIT` | [link](https://github.com/Azure/azure-functions-dotnet-worker) |
 | `Microsoft.Azure.Functions.Worker.Core` | `2.0.0` | `MIT` | [link](https://github.com/Azure/azure-functions-dotnet-worker) |
 | `Microsoft.Azure.Functions.Worker.Extensions.Abstractions` | `1.3.0` | `MIT` | [link](https://github.com/Azure/azure-functions-dotnet-worker) |
@@ -198,4 +204,4 @@ metadata omits a licence — check the package's repository or README directly.
 | `System.Security.Cryptography.ProtectedData` | `4.5.0` | [link](https://github.com/dotnet/corefx/blob/master/LICENSE.TXT) | [link](https://dot.net/) |
 | `WebPush` | `1.0.13` | [link](https://github.com/web-push-libs/web-push-csharp/blob/master/LICENSE) | [link](https://github.com/web-push-libs/web-push-csharp/) |
 
-Total: 183 packages.
+Total: 189 packages.

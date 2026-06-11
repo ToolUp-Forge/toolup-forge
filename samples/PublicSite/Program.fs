@@ -33,4 +33,12 @@ let main _ =
     |> PublicRenderingCompose.PublicRenderingServerApp.withLogger logger
     |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") Layouts.PageLayout.render
     |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "article") Layouts.ArticleLayout.render
+    // Phase 92 — BrandKit layout library (the ~20-line brand-correct
+    // page) + a Feliz-DSL layout via the dual-registration helper.
+    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout
+        (LayoutName "bk-article")
+        Layouts.BrandKitArticleLayout.render
+    |> PublicRenderingCompose.PublicRenderingServerApp.withFelizLayout
+        (LayoutName "feliz")
+        Layouts.FelizPageLayout.render
     |> PublicRenderingCompose.PublicRenderingServerApp.run

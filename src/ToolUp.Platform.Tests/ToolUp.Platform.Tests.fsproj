@@ -332,6 +332,12 @@
              OriginalRef projection + SourceLocator + wire compat. -->
         <Compile Include="InProcess\KnowledgeOriginalRetrievalTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
+        <!-- Phase 92 — BrandKit layout library render-shape tests (a11y
+             baseline + class hooks + optional-slot rule) and the
+             Feliz.ViewEngine layout adapter (single doctype, registry
+             round-trip). -->
+        <Compile Include="InProcess\BrandKitLayoutTests.fs" />
+        <Compile Include="InProcess\FelizLayoutAdapterTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
         <Compile Include="InProcess\MediaLibraryTests.fs" />
         <Compile Include="InProcess\ContentAuthoringTests.fs" />

@@ -180,6 +180,11 @@ let allTests =
         // projection + neutral SourceLocator mapping + wire backward-compat.
         KnowledgeOriginalRetrievalTests.tests
         BrandKitTests.tests
+        // Phase 92 — BrandKit layout library (seven layouts: a11y
+        // baseline, class hooks, optional-slot rule) + Feliz.ViewEngine
+        // layout adapter (single doctype, registry round-trip).
+        BrandKitLayoutTests.tests
+        FelizLayoutAdapterTests.tests
         AssetStoreTests.tests
         MediaLibraryTests.tests
         ContentAuthoringTests.tests

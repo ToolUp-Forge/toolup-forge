@@ -18,6 +18,10 @@
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Giraffe.ViewEngine" />
+        <!-- Phase 92 — opt-in Feliz-DSL server layouts (FelizLayout
+             adapter + withFelizLayout). MIT, FSharp.Core-only dep; see
+             docs/design/feliz-viewengine-evaluation.md. -->
+        <PackageReference Include="Feliz.ViewEngine" />
         <PackageReference Include="Markdig" />
     </ItemGroup>
     <ItemGroup>
@@ -59,6 +63,10 @@
         <Compile Include="Server\PageHeadInjection.fs" />
         <Compile Include="Server\NarrativePrerender.fs" />
         <Compile Include="Server\NarrativeLayout.fs" />
+        <!-- Phase 92 — Feliz.ViewEngine layout adapter (Feliz-DSL
+             layouts into the XmlNode layout registry). Precedes
+             PublicRenderingCompose (withFelizLayout). -->
+        <Compile Include="Server\FelizLayoutAdapter.fs" />
         <!-- Phase 94 — deterministic inline-SVG chart renderer for the
              NarrativeFromData chart projector (Component seam). -->
         <Compile Include="Server\NarrativeCharts.fs" />

@@ -94,6 +94,10 @@
     <PackageVersion Include="Farmer" Version="1.9.27" />
     <PackageVersion Include="Feliz" Version="3.3.3" />
     <PackageVersion Include="Feliz.CompilerPlugins" Version="3.1" />
+    <!-- Phase 92 — opt-in server-side Feliz DSL for SSR layouts
+         (ToolUp.PublicRendering FelizLayout adapter). MIT; depends on
+         FSharp.Core only. See docs/design/feliz-viewengine-evaluation.md. -->
+    <PackageVersion Include="Feliz.ViewEngine" Version="1.0.3" />
     <PackageVersion Include="FParsec" Version="1.1.1" />
     <PackageVersion Include="FSharp.Control.Reactive" Version="5.0.5" />
     <PackageVersion Include="FSharp.Core" Version="10.1.300" />
