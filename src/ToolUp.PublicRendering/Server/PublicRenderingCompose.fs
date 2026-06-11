@@ -121,6 +121,13 @@ type PublicRenderingServerApp = {
     /// sources / custom handlers to resolve. Empty (default) = no nav
     /// registered.
     Nav: NavNode list
+    /// Phase 91 — opt-in semantic-search SSR endpoint config. `Some cfg`
+    /// mounts a `/search?q=` handler that runs `IRetrievalPipeline.Retrieve`
+    /// (resolved from DI) under the request scope and renders a ranked
+    /// result list. `None` (default) → no `/search` route (GP 11 / GP 13).
+    /// Even when `Some`, the route declines when no `IRetrievalPipeline`
+    /// is composed.
+    SemanticSearch: SemanticSearchConfig option
 }
 
 module PublicRenderingServerApp =
@@ -141,6 +148,7 @@ module PublicRenderingServerApp =
         RenderCacheInvalidation = None
         TaxonomyEnabled = false
         Nav = []
+        SemanticSearch = None
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -167,6 +175,7 @@ module PublicRenderingServerApp =
         RenderCacheInvalidation = None
         TaxonomyEnabled = false
         Nav = []
+        SemanticSearch = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -429,6 +438,22 @@ module PublicRenderingServerApp =
             Nav = nav
     }
 
+    /// Phase 91 — mount a semantic-search SSR endpoint at `/search?q=`.
+    /// The handler runs `IRetrievalPipeline.Retrieve` (resolved from DI —
+    /// the RAG companion registers it) under the request's `AccessContext`
+    /// and renders a ranked, indexable result list through the registered
+    /// layouts. The query-size cap (`SemanticSearchConfig.MaxQueryChars`)
+    /// refuses over-long queries; the route otherwise rides the
+    /// deployment's general rate-limit partition (Phase 14y posture).
+    ///
+    /// Off by default (GP 11 / GP 13): a pipeline that never calls this has
+    /// no `/search` route. Even when composed, the route declines (falls
+    /// through to 404) when no `IRetrievalPipeline` is registered.
+    let withSemanticSearch (config: SemanticSearchConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            SemanticSearch = Some config
+    }
+
     /// Phase 84 — opt into the SSR render cache (ISR tier). Registers the
     /// supplied `IRenderCache` in DI; the page handler then serves cached
     /// renders within their TTL window (serving stale + refreshing in the
@@ -543,6 +568,7 @@ module PublicRenderingServerApp =
             let contentSources = app.ContentSources
             let taxonomyEnabled = app.TaxonomyEnabled // Phase 100
             let navTree = app.Nav // Phase 100
+            let semanticSearch = app.SemanticSearch // Phase 91
             let renderCache = app.RenderCache
             let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
 
@@ -756,9 +782,27 @@ module PublicRenderingServerApp =
 
                     ContentPreview.previewHandler api layouts next ctx
 
+            // Phase 91 — semantic-search SSR endpoint. Mounted before the
+            // catch-all page handler so `/search` short-circuits. The
+            // pipeline is resolved per-request from DI (the RAG companion
+            // registers `IRetrievalPipeline`); when absent the handler
+            // declines and `/search` falls through to the 404 path.
+            let searchHandlers: HttpHandler list =
+                match semanticSearch with
+                | None -> []
+                | Some cfg -> [
+                    route "/search"
+                    >=> fun next ctx ->
+                        match ctx.RequestServices.GetService(typeof<IRetrievalPipeline.IRetrievalPipeline>) with
+                        | :? IRetrievalPipeline.IRetrievalPipeline as pipeline ->
+                            SemanticSearchHandler.handle cfg pipeline layouts next ctx
+                        | _ -> next ctx
+                  ]
+
             let publicRenderingHandlers =
                 [ sitemapHandler; redirectHandler; exportHandler ]
                 @ feedHandlers
+                @ searchHandlers
                 @ [ previewHandler; pageHandler ]
 
             let baseExt = appWithEntity.Extensions

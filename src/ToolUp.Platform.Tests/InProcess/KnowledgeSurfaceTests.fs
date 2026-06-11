@@ -322,4 +322,81 @@ let tests =
 
             let indexDoc = resolve source "docs" |> narrativeOf
             Expect.stringContains (sectionText indexDoc "documents") "No documents" "empty-state callout is shown"
+
+        // ─── Semantic-search SSR (SemanticSearchHandler / SemanticSearch) ─
+
+        testCase "classify enforces empty / too-long / search decisions"
+        <| fun _ ->
+            let cfg =
+                SemanticSearchConfig.create [ VectorScope.Team "kb" ]
+                |> SemanticSearchConfig.withMaxQueryChars 8
+
+            Expect.equal (SemanticSearch.classify cfg "   ") SemanticSearch.EmptyQuery "blank query → EmptyQuery"
+
+            Expect.equal
+                (SemanticSearch.classify cfg "this is way too long")
+                (SemanticSearch.QueryTooLong 8)
+                "over-cap query → QueryTooLong with the cap"
+
+            Expect.equal
+                (SemanticSearch.classify cfg " hi ")
+                (SemanticSearch.Search "hi")
+                "in-bounds query is trimmed + searched"
+
+        testCase "buildResultsDoc renders a ranked cited list"
+        <| fun _ ->
+            let cfg = SemanticSearchConfig.create [ VectorScope.Team "kb" ]
+
+            let doc =
+                SemanticSearch.buildResultsDoc cfg "deploy" [ mkMatch "Run run.ps1." 0.9; mkMatch "Set the band." 0.7 ]
+
+            Expect.equal doc.Title "Search: deploy" "title carries the query"
+            Expect.isTrue (hasSection doc "results") "a Results section is present"
+            Expect.stringContains (sectionText doc "results") "Run run.ps1." "first result content is shown"
+            Expect.stringContains (sectionText doc "results") "Set the band." "second result content is shown"
+
+        testCase "buildResultsDoc with no matches renders a no-results callout"
+        <| fun _ ->
+            let cfg = SemanticSearchConfig.create [ VectorScope.Team "kb" ]
+            let doc = SemanticSearch.buildResultsDoc cfg "nothing" []
+            Expect.stringContains (sectionText doc "results") "No content" "no-results callout is shown"
+
+        testCase "result links deep-link into KB-as-docs when a link builder is supplied"
+        <| fun _ ->
+            let cfg =
+                SemanticSearchConfig.create [ VectorScope.Team "kb" ]
+                |> SemanticSearchConfig.withResultLink (SemanticSearch.docsLinkByChunkId "docs")
+
+            // A chunk id following the KB `{docId}:chunk:{i}` convention.
+            let m = {
+                mkMatch "content" 0.9 with
+                    ChunkId = "doc-abc:chunk:3"
+            }
+
+            let doc = SemanticSearch.buildResultsDoc cfg "q" [ m ]
+
+            let linked =
+                doc.Sections
+                |> List.collect _.Elements
+                |> List.collect (fun e ->
+                    match e with
+                    | BulletList items -> items |> List.collect id
+                    | _ -> [])
+                |> List.choose (fun sp ->
+                    match sp with
+                    | Link(href, _) -> Some href
+                    | _ -> None)
+
+            Expect.contains linked "/docs/doc-abc" "result deep-links into the KB-as-docs landing"
+
+        testCase "docsLinkByChunkId returns None for a non-conventional chunk id"
+        <| fun _ ->
+            let link = SemanticSearch.docsLinkByChunkId "docs"
+
+            let m = {
+                mkMatch "c" 0.9 with
+                    ChunkId = "no-marker-here"
+            }
+
+            Expect.isNone (link m) "a chunk id without ':chunk:' yields no link"
     ]
