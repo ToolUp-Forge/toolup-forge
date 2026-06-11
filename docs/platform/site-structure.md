@@ -125,6 +125,19 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `relatedByTag` is the pure-data path; a deployment that composes RAG can layer semantic-related on top. `tagCounts` drives a faceted-browse sidebar (case-insensitive grouping, deterministic order).
 
+## Structured data (JSON-LD) — Phase 96
+
+`NavLayout.headStructuredData baseUrl ctx currentSlug nav` derives schema.org `BreadcrumbList` (from the page's nested slug) and `SiteNavigationElement` (from the **audience-filtered** nav tree) JSON-LD, absolutised against the base URL, as `<script type="application/ld+json">` blocks a layout splices into `<head>`:
+
+```fsharp
+head [] [
+    // …
+    yield! NavLayout.headStructuredData config.PublicBaseUrl ctx (Some page.Slug) nav
+]
+```
+
+The site-nav structured data omits the same gated items the rendered menu omits (GP 4 — no leak), and returns `[]` when there's nothing to describe, so a layout `yield!`s it unconditionally.
+
 ## See also
 
 - [`docs/platform/dynamic-ssr.md`](dynamic-ssr.md) — the `IContentSource` seam the tag-index serves through, and `NarrativeFromData` (the same "data → Narrative body" pattern the tag-index uses).

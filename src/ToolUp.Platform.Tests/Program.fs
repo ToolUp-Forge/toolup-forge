@@ -138,6 +138,7 @@ let allTests =
         NarrativeFromDataTests.tests
         NarrativeChartsTests.tests
         EnumerableRoutesTests.tests
+        NavStructuredDataTests.tests
         // Phase 90 — site structure: nav tree + taxonomy.
         SiteStructureTests.tests
         // Phase 84 — SSR render cache: IRenderCache contract bindings

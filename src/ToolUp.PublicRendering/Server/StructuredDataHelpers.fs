@@ -233,3 +233,28 @@ module StructuredDataHelpers =
                 "itemListElement", box itemListElement
             ]
         )
+
+    /// Phase 96 — `SiteNavigationElement` schema (as an `ItemList`) from a
+    /// flattened `(name, url)` navigation list. Lets a search engine
+    /// understand the site's navigation hierarchy. Emitted from the layout
+    /// off the (audience-filtered) nav tree — see
+    /// `NavLayout.headStructuredData`.
+    let siteNavigation (items: (string * string) list) : string =
+        let itemListElement =
+            items
+            |> List.mapi (fun i (name, url) ->
+                dict [
+                    "@type", box "SiteNavigationElement"
+                    "position", box (i + 1)
+                    "name", box name
+                    "url", box url
+                ]
+                :> obj)
+
+        serialise (
+            dict [
+                "@context", box "https://schema.org"
+                "@type", box "ItemList"
+                "itemListElement", box itemListElement
+            ]
+        )

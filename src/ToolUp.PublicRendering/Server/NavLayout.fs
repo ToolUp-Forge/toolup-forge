@@ -89,3 +89,62 @@ module NavLayout =
         nav [ _class "tu-breadcrumb"; KeyValue("aria-label", "Breadcrumb") ] [
             ol [ _class "tu-breadcrumb__list" ] (crumbs |> List.mapi item)
         ]
+
+    // ─── Phase 96 — structured data (JSON-LD) ────────────────────────
+
+    /// Make an internal href absolute against `baseUrl`; external
+    /// (absolute) URLs pass through verbatim.
+    let private absolutise (baseUrl: string) (href: string) : string =
+        if href.StartsWith "http://" || href.StartsWith "https://" then
+            href
+        else
+            baseUrl.TrimEnd('/') + href
+
+    /// Flatten a nav tree into a depth-first `(label, href)` list.
+    let rec private flattenNav (nodes: NavNode list) : (string * string) list =
+        nodes
+        |> List.collect (fun n -> (n.Label, NavTree.targetHref n.Target) :: flattenNav n.Children)
+
+    /// Build the `<head>` JSON-LD blocks for a page from the Phase 90
+    /// nav / breadcrumb model: a `BreadcrumbList` derived from the
+    /// current page's nested slug (when `currentSlug` is `Some`), and a
+    /// `SiteNavigationElement` `ItemList` from the AUDIENCE-FILTERED nav
+    /// tree — so the structured data omits the same gated items the
+    /// rendered menu omits (GP 4, no leak). URLs are absolutised against
+    /// `baseUrl`. Returns the `<script type="application/ld+json">` nodes
+    /// a layout splices into `<head>`; `[]` when there's nothing to emit,
+    /// so a layout can `yield!` it unconditionally.
+    let headStructuredData
+        (baseUrl: string)
+        (ctx: AccessContext)
+        (currentSlug: Slug option)
+        (nav: NavNode list)
+        : XmlNode list =
+        let ld (json: string) =
+            script [ _type "application/ld+json" ] [ rawText json ]
+
+        let breadcrumbLd =
+            match currentSlug with
+            | Some slug ->
+                let crumbs =
+                    NavTree.breadcrumbFromSlug slug
+                    |> List.map (fun (label, href) -> label, absolutise baseUrl href)
+
+                if List.isEmpty crumbs then
+                    []
+                else
+                    [ ld (StructuredDataHelpers.breadcrumb crumbs) ]
+            | None -> []
+
+        let navLd =
+            let items =
+                NavTree.filter ctx nav
+                |> flattenNav
+                |> List.map (fun (label, href) -> label, absolutise baseUrl href)
+
+            if List.isEmpty items then
+                []
+            else
+                [ ld (StructuredDataHelpers.siteNavigation items) ]
+
+        breadcrumbLd @ navLd
