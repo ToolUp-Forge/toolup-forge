@@ -762,6 +762,160 @@ let private renderMetricsTests =
             Expect.isEmpty plainRoutes "wrapped non-enumerable source contributes no routes"
     ]
 
+// ─── Phase 93 — static-export extensions (StaticExport / StaticHostConfig) ─
+
+let private staticExportTests =
+    testList "PublicRendering — Phase 93 static export" [
+
+        testCase "azureStaticWebApps emits routes + globalHeaders from redirects + policy"
+        <| fun _ ->
+            let json =
+                StaticHostConfig.azureStaticWebApps
+                    [
+                        {
+                            From = "/old"
+                            To = "/new"
+                            StatusCode = 301
+                        }
+                    ]
+                    (CachePolicy.Cache(300, false))
+
+            Expect.stringContains json "\"route\": \"/old\"" "redirect from → route"
+            Expect.stringContains json "\"redirect\": \"/new\"" "redirect to → redirect"
+            Expect.stringContains json "301" "status code present"
+            Expect.stringContains json "max-age=300" "cache policy → globalHeaders Cache-Control"
+
+        testCase "redirectsFile / headersFile emit Netlify shapes; NoCache → no headers"
+        <| fun _ ->
+            let redirects =
+                StaticHostConfig.redirectsFile [
+                    {
+                        From = "/a"
+                        To = "/b"
+                        StatusCode = 302
+                    }
+                ]
+
+            Expect.equal redirects "/a /b 302" "one redirect line"
+
+            Expect.equal (StaticHostConfig.headersFile CachePolicy.NoCache) "" "NoCache → empty _headers"
+
+            Expect.stringContains
+                (StaticHostConfig.headersFile (CachePolicy.Cache(60, false)))
+                "Cache-Control: public, max-age=60"
+                "Cache policy → _headers block"
+
+        testCase "internalRefs extracts same-origin href/src and skips external / mailto / #"
+        <| fun _ ->
+            let html =
+                """<a href="/about">x</a><img src="/img/logo.png"><a href="https://x.test/y">e</a><a href="#top">t</a><a href="mailto:a@b.c">m</a>"""
+
+            let refs = StaticExport.internalRefs html
+            Expect.contains refs "/about" "internal href captured"
+            Expect.contains refs "/img/logo.png" "internal src captured"
+            Expect.isFalse (List.contains "https://x.test/y" refs) "external skipped"
+            Expect.isFalse (refs |> List.exists (fun r -> r.StartsWith "#")) "fragment skipped"
+            Expect.isFalse (refs |> List.exists (fun r -> r.StartsWith "mailto:")) "mailto skipped"
+
+        testCase "checkLinks flags a dead internal reference and passes a resolving one"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            writeFile (Path.Combine(dir, "index.html")) """<a href="/about">ok</a><a href="/missing">dead</a>"""
+            writeFile (Path.Combine(dir, "about", "index.html")) "<p>about</p>"
+
+            let dead = StaticExport.checkLinks dir
+            Expect.contains dead "/missing" "dead reference is flagged"
+            Expect.isFalse (List.contains "/about" dead) "a reference resolving to about/index.html passes"
+
+        testCase "runWith writes per-locale trees, excludes gated pages, and emits host-config"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            writeFile (Path.Combine(dir, "pages/about.md")) "---\ntitle: About\nlayout: page\n---\n\nBody."
+
+            writeFile
+                (Path.Combine(dir, "pages/secret.md"))
+                "---\ntitle: Secret\nlayout: page\naudience: authenticated\n---\n\nSecret."
+
+            let layouts: Map<LayoutName, PublicPage -> XmlNode> =
+                Map[(LayoutName "page",
+                     (fun (p: PublicPage) ->
+                         html [] [ head [] [ title [] [ str p.Title ] ]; body [] [ str p.Description ] ]))]
+
+            let config = {
+                ServerConfig.defaults with
+                    PublicRendering = EnabledPublicRendering(ContentRoot dir)
+                    PublicBaseUrl = Some "https://x.test"
+            }
+
+            let outDir = mkFixtureDir ()
+
+            let options =
+                StaticExportOptions.defaults
+                |> StaticExportOptions.withLocales [ "en"; "fr" ]
+                |> StaticExportOptions.withHostConfigs [ AzureStaticWebApps; Netlify ]
+                |> StaticExportOptions.withCachePolicy (CachePolicy.Cache(300, true))
+
+            let count =
+                StaticExport.runWith
+                    options
+                    [
+                        {
+                            From = "/old"
+                            To = "/about"
+                            StatusCode = 301
+                        }
+                    ]
+                    config
+                    layouts
+                    None
+                    []
+                    None
+                    outDir
+                |> Async.RunSynchronously
+
+            Expect.equal count 2 "one public page rendered into each of two locale trees (gated page excluded)"
+            Expect.isTrue (File.Exists(Path.Combine(outDir, "en", "about", "index.html"))) "en tree written"
+            Expect.isTrue (File.Exists(Path.Combine(outDir, "fr", "about", "index.html"))) "fr tree written"
+
+            Expect.isFalse
+                (File.Exists(Path.Combine(outDir, "en", "secret", "index.html")))
+                "gated page is never written to disk"
+
+            Expect.isTrue
+                (File.Exists(Path.Combine(outDir, "staticwebapp.config.json")))
+                "Azure host-config emitted at root"
+
+            Expect.isTrue (File.Exists(Path.Combine(outDir, "_redirects"))) "Netlify _redirects emitted at root"
+
+            Expect.stringContains
+                (File.ReadAllText(Path.Combine(outDir, "_redirects")))
+                "/old /about 301"
+                "redirect line present"
+
+        testCase "runWith default options reproduce the single-tree export (GP 11)"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            writeFile (Path.Combine(dir, "pages/home.md")) "---\ntitle: Home\nlayout: page\n---\n\nBody."
+
+            let layouts: Map<LayoutName, PublicPage -> XmlNode> =
+                Map[(LayoutName "page", (fun (p: PublicPage) -> html [] [ body [] [ str p.Title ] ]))]
+
+            let config = {
+                ServerConfig.defaults with
+                    PublicRendering = EnabledPublicRendering(ContentRoot dir)
+            }
+
+            let outDir = mkFixtureDir ()
+
+            let count =
+                StaticExport.run config layouts None [] None outDir |> Async.RunSynchronously
+
+            Expect.equal count 1 "single page written"
+            Expect.isTrue (File.Exists(Path.Combine(outDir, "home", "index.html"))) "single-tree path: page at root"
+            Expect.isTrue (File.Exists(Path.Combine(outDir, "sitemap.xml"))) "sitemap at root"
+            Expect.isFalse (File.Exists(Path.Combine(outDir, "staticwebapp.config.json"))) "no host-config by default"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -770,4 +924,5 @@ let tests =
         composeTests
         contentSourceImplTests
         renderMetricsTests
+        staticExportTests
     ]

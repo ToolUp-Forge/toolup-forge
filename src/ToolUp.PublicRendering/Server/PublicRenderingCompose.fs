@@ -878,6 +878,27 @@ module PublicRenderingServerApp =
     let exportStatic (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
         StaticExport.run app.Base.Config app.Layouts app.ContentApiOverride app.ContentSources app.Base.Logger outputDir
 
+    /// Phase 93 — static export with operational extensions: per-locale
+    /// trees, host-config emission (`staticwebapp.config.json` / `_redirects`
+    /// / `_headers`), and a build-time internal-link / asset check. Passes
+    /// the compose-registered redirects (`app.Redirects`) through to the
+    /// host-config emitter. `StaticExportOptions.defaults` reproduces the
+    /// `exportStatic` single-tree behaviour.
+    let exportStaticWith
+        (options: StaticExportOptions)
+        (outputDir: string)
+        (app: PublicRenderingServerApp)
+        : Async<int> =
+        StaticExport.runWith
+            options
+            app.Redirects
+            app.Base.Config
+            app.Layouts
+            app.ContentApiOverride
+            app.ContentSources
+            app.Base.Logger
+            outputDir
+
 // ─── Additive companion-set extension `withPublicRendering` (Phase 80c) ──
 //
 // Stack PublicRendering contributions onto an existing `ServerApp` pipeline

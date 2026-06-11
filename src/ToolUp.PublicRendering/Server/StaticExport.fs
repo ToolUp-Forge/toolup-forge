@@ -1,6 +1,8 @@
 namespace ToolUp.PublicRendering
 
 open System.IO
+open System.Text.Json.Nodes
+open System.Text.RegularExpressions
 open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Server
@@ -25,12 +27,128 @@ open ToolUp.Platform.Server
 //   is mirrored verbatim into `<outputDir>` so favicons, compiled
 //   CSS, images, robots.txt, etc. all come along.
 //
-// Redirects (loaded from `<contentRoot>/redirects.csv`) are not
-// translated into a static-host route file in v1 — different hosts
-// use incompatible config formats. Consumers author their host-
-// specific config (e.g. `staticwebapp.config.json`) by hand. The
-// redirects are still loaded into the live SSR server for the same
-// consumer in development.
+// ─── Phase 93 — operational extensions (opt-in via StaticExportOptions) ─
+//
+// - **Per-locale export** — `Locales` with ≥2 entries renders each page
+//   into its own `<outputDir>/<locale>/…` subtree (with a per-locale
+//   `<html lang>` on Narrative bodies + per-locale sitemap); a single /
+//   empty locale list is byte-for-byte the pre-93 single-tree export
+//   (GP 11).
+// - **Host-config emission** — `HostConfigs` writes `staticwebapp.config.json`
+//   (Azure SWA) and/or `_redirects` + `_headers` (Netlify / Cloudflare)
+//   from the redirect map + the export's default cache policy, so a
+//   static-hosted export carries its redirects + cache headers.
+// - **Build-time link/asset check** — `CheckLinks` validates that every
+//   internal `href` / `src` in the emitted HTML resolves to a file on
+//   disk, logging dead links before deploy.
+//
+// Gated pages (Phase 86 — `Audience <> Public`) are excluded from every
+// tree, the sitemap, and the host-config — `pages` is filtered through
+// `PublicPage.isPublic` exactly as in the pre-93 path.
+
+/// Static-host targets for host-config emission.
+type HostConfigTarget =
+    /// `staticwebapp.config.json` — Azure Static Web Apps.
+    | AzureStaticWebApps
+    /// `_redirects` + `_headers` — Netlify.
+    | Netlify
+    /// `_redirects` + `_headers` — Cloudflare Pages (same file shapes).
+    | Cloudflare
+
+/// Opt-in extensions to the static export. `defaults` reproduces the
+/// pre-93 single-tree, no-host-config, no-link-check behaviour (GP 11).
+type StaticExportOptions = {
+    /// Locales to emit. `[]` or a single entry → one tree at `outputDir`
+    /// (unchanged). Two or more → one `<outputDir>/<locale>/…` subtree per
+    /// locale, each with a per-locale `<html lang>` (on Narrative bodies)
+    /// and sitemap.
+    Locales: string list
+    /// Host-config files to emit (from the redirect map + `CachePolicy`).
+    /// `[]` → none emitted (unchanged).
+    HostConfigs: HostConfigTarget list
+    /// Default cache policy written into the emitted host-config cache
+    /// headers. Defaults to `NoCache` (no `Cache-Control` emitted).
+    CachePolicy: CachePolicy
+    /// When `true`, validate internal links + asset refs after writing and
+    /// log every dead one. Default `false`.
+    CheckLinks: bool
+}
+
+module StaticExportOptions =
+    let defaults: StaticExportOptions = {
+        Locales = []
+        HostConfigs = []
+        CachePolicy = CachePolicy.NoCache
+        CheckLinks = false
+    }
+
+    let withLocales (locales: string list) (o: StaticExportOptions) : StaticExportOptions = { o with Locales = locales }
+
+    let withHostConfigs (targets: HostConfigTarget list) (o: StaticExportOptions) : StaticExportOptions = {
+        o with
+            HostConfigs = targets
+    }
+
+    let withCachePolicy (policy: CachePolicy) (o: StaticExportOptions) : StaticExportOptions = {
+        o with
+            CachePolicy = policy
+    }
+
+    let withLinkCheck (o: StaticExportOptions) : StaticExportOptions = { o with CheckLinks = true }
+
+/// Pure generators for static-host config files. Each takes the public
+/// redirect map (gated slugs already excluded by the caller) + the
+/// export's default cache policy and produces the file contents.
+module StaticHostConfig =
+
+    /// The `Cache-Control` string a policy maps to, or `None` for
+    /// `NoCache` (no header emitted).
+    let cacheControl (policy: CachePolicy) : string option =
+        match policy with
+        | CachePolicy.NoCache -> None
+        | CachePolicy.Cache(ttl, swr) ->
+            if swr then
+                Some(sprintf "public, max-age=%d, stale-while-revalidate=%d" ttl ttl)
+            else
+                Some(sprintf "public, max-age=%d" ttl)
+
+    /// Azure Static Web Apps `staticwebapp.config.json` — a `routes`
+    /// array (one redirect each) plus optional `globalHeaders`.
+    let azureStaticWebApps (redirects: Redirect list) (policy: CachePolicy) : string =
+        let routes = JsonArray()
+
+        for r in redirects do
+            let route = JsonObject()
+            route["route"] <- JsonValue.Create r.From
+            route["redirect"] <- JsonValue.Create r.To
+            route["statusCode"] <- JsonValue.Create r.StatusCode
+            routes.Add route
+
+        let root = JsonObject()
+        root["routes"] <- routes
+
+        match cacheControl policy with
+        | Some cc ->
+            let headers = JsonObject()
+            headers["Cache-Control"] <- JsonValue.Create cc
+            root["globalHeaders"] <- headers
+        | None -> ()
+
+        root.ToJsonString(System.Text.Json.JsonSerializerOptions(WriteIndented = true))
+
+    /// Netlify / Cloudflare `_redirects` — one `from to statusCode` line
+    /// per redirect.
+    let redirectsFile (redirects: Redirect list) : string =
+        redirects
+        |> List.map (fun r -> sprintf "%s %s %d" r.From r.To r.StatusCode)
+        |> String.concat "\n"
+
+    /// Netlify / Cloudflare `_headers` — a single `/*` block carrying the
+    /// cache policy. Empty string when the policy is `NoCache`.
+    let headersFile (policy: CachePolicy) : string =
+        match cacheControl policy with
+        | Some cc -> sprintf "/*\n  Cache-Control: %s\n" cc
+        | None -> ""
 
 module StaticExport =
     /// Layout resolution mirrors `PublicPageHandler.resolveLayout`:
@@ -45,8 +163,8 @@ module StaticExport =
         | None -> layouts |> Map.toSeq |> Seq.tryHead |> Option.map snd
 
     /// Slug → relative output path. The root `index` slug writes to
-    /// `<outputDir>/index.html`; every other slug writes to
-    /// `<outputDir>/<slug>/index.html`. Directory-index shape works
+    /// `<root>/index.html`; every other slug writes to
+    /// `<root>/<slug>/index.html`. Directory-index shape works
     /// across every static host without per-host rewrite rules.
     let private slugToRelativePath (slug: string) : string =
         if slug = "" || slug = "index" then
@@ -70,21 +188,153 @@ module StaticExport =
 
                 File.Copy(src, dst, overwrite = true)
 
-    /// Render every page exposed by the content api through the
-    /// supplied layout map and write the resulting site under
-    /// `outputDir`. Pre-existing contents of `outputDir` are removed
-    /// before writing so successive runs don't accumulate stale files.
-    ///
-    /// Parameters are explicit rather than wrapped in
-    /// `PublicRenderingServerApp` so this module sits below
-    /// `PublicRenderingCompose` in the build graph. The thin record-
-    /// shaped wrapper lives in `PublicRenderingServerApp.exportStatic`.
-    ///
-    /// Returns the count of pages successfully written. Pages whose
-    /// `Layout` doesn't match any registered layout AND for which no
-    /// fallback exists (i.e. no layouts registered at all) are logged
-    /// as warnings and skipped.
-    let run
+    /// Apply a locale to a page for per-locale export: stamps the
+    /// `<html lang>` on a Narrative body so each locale tree differs
+    /// observably. Non-Narrative bodies (Markdown / Html) are unchanged —
+    /// per-locale content translation is the deployment's concern (wire a
+    /// locale-specific content API); this stamps the language only.
+    let private withLocale (locale: string) (page: PublicPage) : PublicPage =
+        if locale = "" then
+            page
+        else
+            match page.Body with
+            | Narrative doc -> {
+                page with
+                    Body = Narrative { doc with Lang = Some locale }
+              }
+            | _ -> page
+
+    /// Render every public page + every enumerated dynamic route into the
+    /// tree rooted at `troot`, plus a `sitemap.xml`. Returns the count of
+    /// pages written. Shared by the single-tree and per-locale paths.
+    let private renderTree
+        (publicBaseUrl: string)
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        (api: IPublicContentApi)
+        (pages: PublicPage list)
+        (dynamicSlugs: Slug list)
+        (locale: string)
+        (troot: string)
+        (logger: ILogger)
+        : Async<int> =
+        async {
+            Directory.CreateDirectory troot |> ignore
+            let mutable rendered = 0
+            let mutable skipped = 0
+
+            let writePage (page: PublicPage) (slug: string) =
+                match resolveLayout layouts (withLocale locale page) with
+                | Some layout ->
+                    let html = RenderView.AsString.htmlDocument (layout (withLocale locale page))
+                    let full = Path.Combine(troot, slugToRelativePath slug)
+                    let dir = Path.GetDirectoryName full
+
+                    if not (Directory.Exists dir) then
+                        Directory.CreateDirectory dir |> ignore
+
+                    File.WriteAllText(full, html)
+                    rendered <- rendered + 1
+                | None ->
+                    logger.Warn(sprintf "StaticExport: no layout registered for '%s'" slug)
+                    skipped <- skipped + 1
+
+            for page in pages do
+                writePage page (Slug.value page.Slug)
+
+            // Phase 95 — render content-source-enumerated dynamic routes
+            // with an anonymous build-time context (a source that gates
+            // some pages doesn't enumerate them, so nothing private leaks).
+            let anonCtx = AccessContext.unrestricted (AnonymousSession "static-export")
+
+            for Slug s in dynamicSlugs do
+                let! pageOpt = api.GetPageInContext(s, anonCtx)
+
+                match pageOpt with
+                | Some page -> writePage page s
+                | None -> ()
+
+            let sitemapXml = SitemapGenerator.generateWith publicBaseUrl pages dynamicSlugs
+            File.WriteAllText(Path.Combine(troot, "sitemap.xml"), sitemapXml)
+
+            if skipped > 0 then
+                logger.Warn(sprintf "StaticExport: skipped %d page(s) with no registered layout in '%s'" skipped troot)
+
+            return rendered
+        }
+
+    /// Internal-link / asset targets in an HTML string: `href` / `src`
+    /// values that are same-origin (rooted `/…` or relative), skipping
+    /// external (`http`, `//`), `#`, `mailto:` / `tel:`, and `data:`.
+    let internalRefs (html: string) : string list =
+        Regex.Matches(html, "(?:href|src)\\s*=\\s*[\"']([^\"']+)[\"']")
+        |> Seq.cast<Match>
+        |> Seq.map (fun m -> m.Groups[1].Value.Trim())
+        |> Seq.map (fun r ->
+            // strip query + fragment
+            let noHash = r.Split('#')[0]
+            noHash.Split('?')[0])
+        |> Seq.filter (fun r ->
+            r <> ""
+            && not (r.StartsWith "http://")
+            && not (r.StartsWith "https://")
+            && not (r.StartsWith "//")
+            && not (r.StartsWith "mailto:")
+            && not (r.StartsWith "tel:")
+            && not (r.StartsWith "data:"))
+        |> Seq.distinct
+        |> List.ofSeq
+
+    /// True when a rooted (`/…`) ref resolves to a file under `outputDir`,
+    /// trying the directory-index shapes a static host serves: `/x` →
+    /// `x`, `x/index.html`, or `x.html`.
+    let private refResolves (outputDir: string) (ref: string) : bool =
+        if not (ref.StartsWith "/") then
+            // Relative refs are unusual in the absolute-URL layouts the
+            // SDK emits; treat them as resolvable (not flagged) to avoid
+            // false positives.
+            true
+        else
+            let rel = ref.TrimStart('/')
+
+            let candidates = [
+                Path.Combine(outputDir, rel)
+                Path.Combine(outputDir, rel, "index.html")
+                Path.Combine(outputDir, rel + ".html")
+            ]
+
+            candidates |> List.exists File.Exists
+
+    /// Scan every emitted `.html` file under `outputDir` and return the
+    /// distinct internal refs that don't resolve to a file on disk.
+    let checkLinks (outputDir: string) : string list =
+        Directory.EnumerateFiles(outputDir, "*.html", SearchOption.AllDirectories)
+        |> Seq.collect (fun f -> internalRefs (File.ReadAllText f))
+        |> Seq.distinct
+        |> Seq.filter (fun r -> not (refResolves outputDir r))
+        |> List.ofSeq
+
+    let private writeHostConfigs (outputDir: string) (options: StaticExportOptions) (redirects: Redirect list) =
+        for target in options.HostConfigs |> List.distinct do
+            match target with
+            | AzureStaticWebApps ->
+                File.WriteAllText(
+                    Path.Combine(outputDir, "staticwebapp.config.json"),
+                    StaticHostConfig.azureStaticWebApps redirects options.CachePolicy
+                )
+            | Netlify
+            | Cloudflare ->
+                File.WriteAllText(Path.Combine(outputDir, "_redirects"), StaticHostConfig.redirectsFile redirects)
+                let headers = StaticHostConfig.headersFile options.CachePolicy
+
+                if headers <> "" then
+                    File.WriteAllText(Path.Combine(outputDir, "_headers"), headers)
+
+    /// Phase 93 — the full export with operational extensions. `run` is
+    /// the back-compat wrapper (default options, no compose-registered
+    /// redirects).
+    let runWith
+        (options: StaticExportOptions)
+        (composeRedirects: Redirect list)
         (config: ServerConfig)
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)
         (contentApiOverride: IPublicContentApi option)
@@ -114,98 +364,79 @@ module StaticExport =
                 // watching files for a one-shot build pass.
                 let loader = new MarkdownContentLoader(root, logger, hotReload = false)
 
-                // Static export is a context-free, build-time pass — it
-                // enumerates pages via `ListPages` / `GetPage`, never
-                // `GetPageInContext`, so request-time content sources
-                // (which need an `AccessContext`) are intentionally absent.
                 let api: IPublicContentApi =
                     match contentApiOverride with
                     | Some explicit -> explicit
-                    // Phase 95 — pass the registered sources so the
-                    // export can resolve their enumerated dynamic routes
-                    // (via `GetPageInContext` with an anonymous context).
                     | None -> PublicContentApiImpl.create loader None contentSources
 
                 let! allPages = api.ListPages ""
 
-                // Phase 86 — static export emits only `Public` pages; a
-                // gated (authenticated / tenant / client) slug is never
-                // written to disk, and is excluded from the sitemap below.
-                // A build-time export has no per-request principal, so a
-                // gated page could never be authorised here anyway.
+                // Phase 86 — emit only `Public` pages; a gated slug is
+                // never written to disk and is excluded from the sitemap +
+                // host-config below.
                 let pages = allPages |> List.filter PublicPage.isPublic
 
-                // Mirror PublicPath (typically wwwroot/) into the
-                // export root before writing pages so a page-with-same-
-                // slug-as-static-asset would still overwrite (pages
-                // win — they're the canonical content).
+                let! dynamicSlugs = ContentSource.enumerateAll contentSources
+
+                // Static assets + host-config sit at the export root (one
+                // copy, shared across locale subtrees).
                 copyDirRecursive config.PublicPath outputDir
 
-                let mutable rendered = 0
-                let mutable skipped = 0
-
-                for page in pages do
-                    match resolveLayout layouts page with
-                    | Some layout ->
-                        let node = layout page
-                        let html = RenderView.AsString.htmlDocument node
-                        let slug = Slug.value page.Slug
-                        let relative = slugToRelativePath slug
-                        let full = Path.Combine(outputDir, relative)
-                        let dir = Path.GetDirectoryName full
-
-                        if not (Directory.Exists dir) then
-                            Directory.CreateDirectory dir |> ignore
-
-                        File.WriteAllText(full, html)
-                        rendered <- rendered + 1
-                    | None ->
-                        logger.Warn(sprintf "StaticExport: no layout registered for page '%s'" (Slug.value page.Slug))
-
-                        skipped <- skipped + 1
-
-                // Phase 95 — render content-source-enumerated dynamic
-                // routes (e.g. `/tag/{x}`) with an anonymous build-time
-                // context. A source that gates some pages simply doesn't
-                // enumerate them, so nothing private reaches disk.
-                let! dynamicSlugs = ContentSource.enumerateAll contentSources
-                let anonCtx = AccessContext.unrestricted (AnonymousSession "static-export")
-
-                for Slug s in dynamicSlugs do
-                    let! pageOpt = api.GetPageInContext(s, anonCtx)
-
-                    match pageOpt with
-                    | Some page ->
-                        match resolveLayout layouts page with
-                        | Some layout ->
-                            let html = RenderView.AsString.htmlDocument (layout page)
-                            let relative = slugToRelativePath s
-                            let full = Path.Combine(outputDir, relative)
-                            let dir = Path.GetDirectoryName full
-
-                            if not (Directory.Exists dir) then
-                                Directory.CreateDirectory dir |> ignore
-
-                            File.WriteAllText(full, html)
-                            rendered <- rendered + 1
-                        | None ->
-                            logger.Warn(sprintf "StaticExport: no layout registered for dynamic route '%s'" s)
-                            skipped <- skipped + 1
-                    | None -> ()
+                // Host-config from the public redirect map (file-loaded +
+                // compose-registered). No gated slugs appear in redirects.
+                let redirects = loader.Redirects @ composeRedirects
+                writeHostConfigs outputDir options redirects
 
                 let publicBaseUrl = config.PublicBaseUrl |> Option.defaultValue ""
-                let sitemapXml = SitemapGenerator.generateWith publicBaseUrl pages dynamicSlugs
-                File.WriteAllText(Path.Combine(outputDir, "sitemap.xml"), sitemapXml)
+
+                // Single-tree (default) when 0/1 locales; per-locale
+                // subtrees when ≥2 (GP 11 — single-locale is unchanged).
+                let targets =
+                    match options.Locales with
+                    | []
+                    | [ _ ] -> [ "", outputDir ]
+                    | locales -> locales |> List.map (fun l -> l, Path.Combine(outputDir, l))
+
+                let mutable total = 0
+
+                for locale, troot in targets do
+                    let! n = renderTree publicBaseUrl layouts api pages dynamicSlugs locale troot logger
+                    total <- total + n
+
+                if options.CheckLinks then
+                    let dead = checkLinks outputDir
+
+                    for d in dead do
+                        logger.Warn(sprintf "StaticExport: dead internal link / asset reference: %s" d)
+
+                    if not (List.isEmpty dead) then
+                        logger.Warn(sprintf "StaticExport: %d dead internal reference(s) found" (List.length dead))
 
                 logger.Info(
                     sprintf
-                        "StaticExport: wrote %d pages (%d skipped, %d static assets) + sitemap.xml to %s"
-                        rendered
-                        skipped
-                        (Directory.EnumerateFiles(outputDir, "*", SearchOption.AllDirectories)
-                         |> Seq.length)
+                        "StaticExport: wrote %d page(s) across %d tree(s) + sitemap to %s"
+                        total
+                        (List.length targets)
                         outputDir
                 )
 
-                return rendered
+                return total
         }
+
+    /// Render every page exposed by the content api through the
+    /// supplied layout map and write the resulting site under
+    /// `outputDir`. Pre-existing contents of `outputDir` are removed
+    /// before writing so successive runs don't accumulate stale files.
+    /// Back-compat single-tree export — `runWith` adds per-locale trees,
+    /// host-config emission, and the link check.
+    ///
+    /// Returns the count of pages successfully written.
+    let run
+        (config: ServerConfig)
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        (contentApiOverride: IPublicContentApi option)
+        (contentSources: IContentSource list)
+        (loggerOpt: ILogger option)
+        (outputDir: string)
+        : Async<int> =
+        runWith StaticExportOptions.defaults [] config layouts contentApiOverride contentSources loggerOpt outputDir
