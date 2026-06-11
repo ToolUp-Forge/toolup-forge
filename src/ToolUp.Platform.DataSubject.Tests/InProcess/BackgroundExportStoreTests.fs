@@ -25,11 +25,11 @@ let private implTests =
             let! ticket = store.BeginExport("team-1", sampleRequest "u1")
             do! store.Complete(ticket, Text.Encoding.UTF8.GetBytes "x")
             let! status = store.GetStatus ticket
-            Expect.equal status Expired "past-TTL ticket reports Expired"
+            Expect.equal status ExportStatus.Expired "past-TTL ticket reports Expired"
             let! dl = store.Download ticket
 
             match dl with
-            | Error Expired -> ()
+            | Error ExportStatus.Expired -> ()
             | other -> failtestf "Download of an expired ticket must Error Expired; got %A" other
         }
 
@@ -54,7 +54,7 @@ let private implTests =
             let! status = store.GetStatus ticket
 
             match status with
-            | Ready _ -> ()
+            | ExportStatus.Ready _ -> ()
             | other -> failtestf "ticket should be Ready; got %A" other
 
             // The async envelope must byte-match what the synchronous
@@ -112,7 +112,7 @@ let private implTests =
             let! status = store.GetStatus ticket
 
             match status with
-            | Failed _ -> ()
+            | ExportStatus.Failed _ -> ()
             | other -> failtestf "ticket should be Failed; got %A" other
         }
 

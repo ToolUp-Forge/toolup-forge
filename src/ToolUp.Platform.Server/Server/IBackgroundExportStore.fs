@@ -24,6 +24,15 @@ namespace ToolUp.Platform
 type ExportTicket = string
 
 /// Lifecycle status of a background export ticket.
+///
+/// `[<RequireQualifiedAccess>]` because the case names (`Failed`,
+/// `Cancelled`, `Expired`, `Ready`, `Unknown`, `Preparing`) are generic
+/// enough to collide with other DUs in the widely-opened `ToolUp.Platform`
+/// namespace (`SignedUrlError.Expired`, `JobStatus<'T>.Failed`/`.Cancelled`,
+/// …). Qualified access keeps the cases out of unqualified scope so an
+/// `open ToolUp.Platform` elsewhere can't have its own `Expired`/`Failed`
+/// silently shadowed.
+[<RequireQualifiedAccess>]
 type ExportStatus =
     /// The envelope is being assembled by the background job.
     | Preparing
@@ -44,12 +53,12 @@ module ExportStatus =
     /// Stable case-name string for status sidecar persistence + audit.
     let name =
         function
-        | Preparing -> "Preparing"
-        | Ready _ -> "Ready"
-        | Failed _ -> "Failed"
-        | Cancelled -> "Cancelled"
-        | Expired -> "Expired"
-        | Unknown -> "Unknown"
+        | ExportStatus.Preparing -> "Preparing"
+        | ExportStatus.Ready _ -> "Ready"
+        | ExportStatus.Failed _ -> "Failed"
+        | ExportStatus.Cancelled -> "Cancelled"
+        | ExportStatus.Expired -> "Expired"
+        | ExportStatus.Unknown -> "Unknown"
 
 /// Blob-backed store for background DSR export envelopes. The default
 /// implementation is `BlobBackedBackgroundExportStore`; a distributed

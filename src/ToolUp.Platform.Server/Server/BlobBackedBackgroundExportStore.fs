@@ -88,8 +88,8 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
             o["status"] <- JsonValue.Create(ExportStatus.name status)
 
             match status with
-            | Ready bytes -> o["sizeBytes"] <- JsonValue.Create bytes
-            | Failed reason -> o["reason"] <- JsonValue.Create reason
+            | ExportStatus.Ready bytes -> o["sizeBytes"] <- JsonValue.Create bytes
+            | ExportStatus.Failed reason -> o["reason"] <- JsonValue.Create reason
             | _ -> ()
 
             o["subjectUserId"] <- JsonValue.Create subjectUserId
@@ -104,7 +104,7 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
     /// Read the persisted status, mapping a lapsed TTL to `Expired`.
     let readStatus (scopeId: string) (guid: string) : Async<ExportStatus * string * string * DateTimeOffset> = async {
         match! blobs.Download(Container, statusBlob scopeId guid) with
-        | Error _ -> return Unknown, "", "", DateTimeOffset.MinValue
+        | Error _ -> return ExportStatus.Unknown, "", "", DateTimeOffset.MinValue
         | Ok bytes ->
             try
                 let node = JsonNode.Parse(Encoding.UTF8.GetString bytes)
@@ -115,18 +115,22 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
 
                 let raw =
                     match node["status"].GetValue<string>() with
-                    | "Preparing" -> Preparing
-                    | "Ready" -> Ready(node["sizeBytes"].GetValue<int64>())
-                    | "Failed" -> Failed(node["reason"].GetValue<string>())
-                    | "Cancelled" -> Cancelled
-                    | "Expired" -> Expired
-                    | _ -> Unknown
+                    | "Preparing" -> ExportStatus.Preparing
+                    | "Ready" -> ExportStatus.Ready(node["sizeBytes"].GetValue<int64>())
+                    | "Failed" -> ExportStatus.Failed(node["reason"].GetValue<string>())
+                    | "Cancelled" -> ExportStatus.Cancelled
+                    | "Expired" -> ExportStatus.Expired
+                    | _ -> ExportStatus.Unknown
 
-                let effective = if DateTimeOffset.UtcNow > expiresAt then Expired else raw
+                let effective =
+                    if DateTimeOffset.UtcNow > expiresAt then
+                        ExportStatus.Expired
+                    else
+                        raw
 
                 return effective, subject, requestId, createdAt
             with _ ->
-                return Unknown, "", "", DateTimeOffset.MinValue
+                return ExportStatus.Unknown, "", "", DateTimeOffset.MinValue
     }
 
     /// Re-persist a status transition, preserving the original subject /
@@ -147,7 +151,15 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
 
             match parseTicket ticket with
             | Some(_, guid) ->
-                do! writeStatus scopeId guid Preparing request.SubjectUserId request.Id DateTimeOffset.UtcNow
+                do!
+                    writeStatus
+                        scopeId
+                        guid
+                        ExportStatus.Preparing
+                        request.SubjectUserId
+                        request.Id
+                        DateTimeOffset.UtcNow
+
                 return ticket
             | None ->
                 // Mint always produces a parseable ticket; defensive only.
@@ -156,7 +168,7 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
 
         member _.GetStatus(ticket: ExportTicket) : Async<ExportStatus> = async {
             match parseTicket ticket with
-            | None -> return Unknown
+            | None -> return ExportStatus.Unknown
             | Some(scopeId, guid) ->
                 let! status, _, _, _ = readStatus scopeId guid
                 return status
@@ -167,33 +179,33 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
             | None -> return ()
             | Some(scopeId, guid) ->
                 let! _ = blobs.Upload(Container, envelopeBlob scopeId guid, envelope)
-                do! transition scopeId guid (Ready(int64 envelope.Length))
+                do! transition scopeId guid (ExportStatus.Ready(int64 envelope.Length))
         }
 
         member _.Fail(ticket: ExportTicket, reason: string) : Async<unit> = async {
             match parseTicket ticket with
             | None -> return ()
-            | Some(scopeId, guid) -> do! transition scopeId guid (Failed reason)
+            | Some(scopeId, guid) -> do! transition scopeId guid (ExportStatus.Failed reason)
         }
 
         member _.Cancel(ticket: ExportTicket) : Async<unit> = async {
             match parseTicket ticket with
             | None -> return ()
-            | Some(scopeId, guid) -> do! transition scopeId guid Cancelled
+            | Some(scopeId, guid) -> do! transition scopeId guid ExportStatus.Cancelled
         }
 
         member _.Download(ticket: ExportTicket) : Async<Result<byte[], ExportStatus>> = async {
             match parseTicket ticket with
-            | None -> return Error Unknown
+            | None -> return Error ExportStatus.Unknown
             | Some(scopeId, guid) ->
                 let! status, _, _, _ = readStatus scopeId guid
 
                 match status with
-                | Ready _ ->
+                | ExportStatus.Ready _ ->
                     match! blobs.Download(Container, envelopeBlob scopeId guid) with
                     | Ok bytes -> return Ok bytes
                     // Envelope GC'd but status not yet swept → treat as Expired.
-                    | Error _ -> return Error Expired
+                    | Error _ -> return Error ExportStatus.Expired
                 | other -> return Error other
         }
 
