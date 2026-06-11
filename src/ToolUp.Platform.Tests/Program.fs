@@ -136,6 +136,7 @@ let allTests =
         PublicRenderingTests.tests
         // Phase 85 — NarrativeFromData analytics → Narrative projectors.
         NarrativeFromDataTests.tests
+        NarrativeChartsTests.tests
         // Phase 90 — site structure: nav tree + taxonomy.
         SiteStructureTests.tests
         // Phase 84 — SSR render cache: IRenderCache contract bindings

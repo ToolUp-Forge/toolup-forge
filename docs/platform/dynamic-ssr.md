@@ -119,6 +119,22 @@ let clientReport =
 
 `CellMoney` / `CellPercent` / `CellDate` format locale-stably; `metricGrid` emits up/down arrow styling hooks per delta; `thresholdCallout` maps a value through a `Threshold` ladder (`spendThresholds` is a shipped default) to a `Severity`.
 
+### Charts (Phase 94)
+
+`NarrativeFromData.chart` / `sparkline` project a labelled series into a `Component("chart", …)` block (the sanctioned Phase 87 type-erasure seam — no `NarrativeElement` DU fork). The HTML render is a **deterministic inline SVG** (no JavaScript → prerender-safe, byte-identical across runs) supplied by `NarrativeCharts`; a deployment opts in by including `NarrativeCharts.registry` in its component registry:
+
+```fsharp
+let body =
+    [ NarrativeFromData.chart NarrativeFromData.Line (Some "Revenue trend")
+        [ "Jan", 12_500.0; "Feb", 13_900.0; "Mar", 15_200.0 ]
+      NarrativeFromData.metricGrid [ "MoM", "+9.4%", Some 0.094 ] ]
+
+// render the page body with the chart renderer registered:
+let html = NarrativeLayout.renderBodyWith Set.empty NarrativeCharts.registry page
+```
+
+Charts carry `tu-chart__*` BrandKit class hooks (style with your own CSS); no charting-vendor dependency ships in core (GP 2). Markdown / plaintext degrade to the standard `[component: chart]` placeholder — pair with `NarrativeFromData.chartTable "Month" "Revenue" series` for a real `Table` fallback in feeds / exports / print.
+
 ### Projecting a module's `ProcessedData` by type
 
 When the body comes from a module's processed-data payload, register one projector per `TypeName` and route through `fromProcessed`. An unknown type degrades to a graceful callout (never an exception); a throwing projector is contained as a `Critical` callout, so one bad payload can't 500 the page.

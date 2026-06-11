@@ -425,3 +425,64 @@ module NarrativeFromData =
                 [ Text(sprintf "No projector registered for data type '%s'." data.TypeName) ]
             )
           ]
+
+    // ─── Chart projector (Phase 94) ──────────────────────────────────
+    //
+    // Project a labelled series into a `Component("chart", …)` block — the
+    // sanctioned Narrative type-erasure seam (Phase 87), so no
+    // `NarrativeElement` DU fork. The HTML render is supplied by
+    // `NarrativeCharts` (a deterministic inline-SVG renderer registered
+    // into the layout's component registry); Markdown / plaintext degrade
+    // to the standard `[component: chart]` placeholder, so `chartTable`
+    // gives a data-fidelity `Table` fallback for feeds / exports / print.
+    //
+    // The prop wire format mirrors `NarrativeCharts` exactly:
+    //   "chart.kind" / "chart.title" / "chart.points" ("label=value;…").
+
+    /// Chart kind. `Line` (default) / `Bar` / `Area`.
+    type ChartKind =
+        | Line
+        | Bar
+        | Area
+
+    let private chartKindToken =
+        function
+        | Line -> "line"
+        | Bar -> "bar"
+        | Area -> "area"
+
+    let private encodePoints (points: (string * float) list) : string =
+        points
+        |> List.map (fun (label, v) ->
+            // Labels must not carry the `;` / `=` separators; sanitise.
+            let safe = label.Replace(';', ' ').Replace('=', ' ')
+            sprintf "%s=%s" safe (v.ToString(inv)))
+        |> String.concat ";"
+
+    /// Project a labelled numeric series into a chart `Component` block.
+    /// `kind` selects line / bar / area; `title` is an optional caption.
+    /// Renders to inline SVG in HTML (via `NarrativeCharts.registry`),
+    /// degrades to a placeholder in Markdown / plaintext (pair with
+    /// `chartTable` for a data fallback).
+    let chart (kind: ChartKind) (title: string option) (points: (string * float) list) : NarrativeElement =
+        let props =
+            [ "chart.kind", chartKindToken kind; "chart.points", encodePoints points ]
+            @ (match title with
+               | Some t -> [ "chart.title", t ]
+               | None -> [])
+            |> Map.ofList
+
+        Component("chart", props)
+
+    /// A compact inline `Line` chart with no caption — the metric-row
+    /// sparkline shape.
+    let sparkline (points: (string * float) list) : NarrativeElement = chart Line None points
+
+    /// The same series as a `Table` (label column + value column) — the
+    /// data-fidelity fallback for Markdown / plaintext / Atom / CSV where
+    /// an SVG isn't meaningful. Pair with `chart` (a chart for HTML, a
+    /// table everywhere else) when full-fidelity degradation matters.
+    let chartTable (labelHeader: string) (valueHeader: string) (points: (string * float) list) : NarrativeElement =
+        let columns = [ labelHeader, TableAlignment.Left; valueHeader, TableAlignment.Right ]
+        let rows = points |> List.map (fun (l, v) -> [ CellText l; CellNumber v ])
+        tableWith FormatOptions.Default columns rows

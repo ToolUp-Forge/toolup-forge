@@ -45,6 +45,9 @@
         <Compile Include="Server\StructuredDataHelpers.fs" />
         <Compile Include="Server\NarrativePrerender.fs" />
         <Compile Include="Server\NarrativeLayout.fs" />
+        <!-- Phase 94 — deterministic inline-SVG chart renderer for the
+             NarrativeFromData chart projector (Component seam). -->
+        <Compile Include="Server\NarrativeCharts.fs" />
         <!-- Phase 90 — site structure: nav tree model + menu/breadcrumb
              render helpers + taxonomy (tag-index content source). NavTree
              → NavLayout (renders it) → TaxonomyHandler (tag pages). -->
