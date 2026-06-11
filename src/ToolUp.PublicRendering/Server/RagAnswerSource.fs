@@ -216,3 +216,104 @@ module RagAnswerSource =
 
                     return Some(ContentBody.Narrative(answerDoc query grounded synth))
         })
+
+// ─── Phase 91 — suggested-questions FAQ surface ──────────────────────
+//
+// A public FAQ index that seeds the `RagAnswerSource` answer pages: each
+// suggested question is rendered as a link to `/<answersPrefix>/<slug>`,
+// where the slug round-trips through `RagAnswerSource.queryFromSlug` back
+// to the question text, so a click lands on the grounded answer page.
+//
+// **Dependency isolation (GP 1).** The questions arrive through an
+// injected provider the deployment fills from its KB's
+// `KnowledgeApi.GetSuggestedQuestions` — PublicRendering never references
+// the KnowledgeBase companion. **Scope isolation (GP 4):** the provider
+// receives the request `AccessContext`, so suggestions are scoped to the
+// caller.
+
+/// Read-port for suggested questions — the deployment wires its KB's
+/// `GetSuggestedQuestions` (scoped by `AccessContext`, GP 4). Returns the
+/// question strings to seed the FAQ over.
+type SuggestedQuestionsProvider = AccessContext -> Async<string list>
+
+/// Compose-time configuration for a `SuggestedQuestionsSource`.
+type SuggestedQuestionsConfig = {
+    /// Slug prefix the FAQ index claims (`"faq"` serves `/faq` and
+    /// `/faq/index`).
+    SlugPrefix: string
+    /// The `RagAnswerSource` prefix to link each question into, so a click
+    /// lands on the grounded answer page (`"answers"` →
+    /// `/answers/<question-slug>`).
+    AnswersPrefix: string
+    /// Title rendered on the FAQ index page.
+    Title: string
+}
+
+module SuggestedQuestionsConfig =
+    let create (slugPrefix: string) (answersPrefix: string) : SuggestedQuestionsConfig = {
+        SlugPrefix = slugPrefix
+        AnswersPrefix = answersPrefix
+        Title = "Frequently asked questions"
+    }
+
+    let withTitle (title: string) (c: SuggestedQuestionsConfig) : SuggestedQuestionsConfig = { c with Title = title }
+
+module SuggestedQuestionsSource =
+
+    /// Slugify a question into an answer-page tail. Lowercases, maps every
+    /// non-alphanumeric run to a single `-`, and trims — the inverse of
+    /// `RagAnswerSource.queryFromSlug`'s de-slugify (hyphens → spaces), so
+    /// `"How do I deploy?"` → `"how-do-i-deploy"` round-trips back to the
+    /// query `"how do i deploy"`.
+    let questionSlug (question: string) : string =
+        let lowered = question.Trim().ToLowerInvariant()
+
+        let cleaned =
+            lowered
+            |> String.map (fun c -> if System.Char.IsLetterOrDigit c then c else '-')
+
+        cleaned.Split([| '-' |], System.StringSplitOptions.RemoveEmptyEntries)
+        |> String.concat "-"
+
+    /// The FAQ index document — each question a link into its answer page.
+    let private faqDoc (config: SuggestedQuestionsConfig) (questions: string list) : NarrativeDocument =
+        let answersPrefix = config.AnswersPrefix.Trim('/')
+
+        let baseDoc = Narrative.create config.Title
+
+        if List.isEmpty questions then
+            baseDoc
+            |> Narrative.section "Questions" "questions" [
+                Narrative.callout Severity.Info [ Narrative.text "No suggested questions are available yet." ]
+            ]
+            |> Narrative.withProvenance "rag" None "faq" []
+        else
+            let items =
+                questions
+                |> List.choose (fun q ->
+                    let slug = questionSlug q
+                    // A question that slugs to empty (punctuation-only) is
+                    // dropped rather than linked to a bare prefix.
+                    if slug = "" then
+                        None
+                    else
+                        Some [ Narrative.link ("/" + answersPrefix + "/" + slug) [ Narrative.text q ] ])
+
+            baseDoc
+            |> Narrative.section "Questions" "questions" [ Narrative.bullets items ]
+            |> Narrative.withProvenance "rag" None "faq" []
+
+    /// Construct a suggested-questions FAQ content source over a provider.
+    /// Register it with `PublicRenderingServerApp.withContentSource`
+    /// alongside the `RagAnswerSource` whose `answersPrefix` it links into.
+    let create (provider: SuggestedQuestionsProvider) (config: SuggestedQuestionsConfig) : IContentSource =
+        ContentSource.create (fun (Slug s) ctx -> async {
+            let p = config.SlugPrefix.Trim('/')
+            let slug = s.Trim('/')
+
+            if p <> "" && (slug = p || slug = p + "/index") then
+                let! questions = provider ctx
+                return Some(ContentBody.Narrative(faqDoc config questions))
+            else
+                return None
+        })

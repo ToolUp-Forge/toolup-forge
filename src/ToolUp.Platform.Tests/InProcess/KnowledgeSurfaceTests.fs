@@ -507,4 +507,61 @@ let tests =
             match publish publisher "p5" (simpleDoc 5) with
             | PublishFailed reason -> Expect.stringContains reason "exceeding" "an over-long document is refused"
             | other -> failtestf "expected refusal; got %A" other
+
+        // ─── Suggested-questions FAQ surface ─────────────────────────
+
+        testCase "questionSlug round-trips through RagAnswerSource.queryFromSlug"
+        <| fun _ ->
+            let slug = SuggestedQuestionsSource.questionSlug "How do I deploy?"
+            Expect.equal slug "how-do-i-deploy" "punctuation dropped, spaces hyphenated, lowercased"
+
+            Expect.equal
+                (RagAnswerSource.queryFromSlug "answers" ("answers/" + slug))
+                (Some "how do i deploy")
+                "queryFromSlug inverts questionSlug"
+
+        testCase "FAQ index lists each question as a link into the answers prefix"
+        <| fun _ ->
+            let provider: SuggestedQuestionsProvider =
+                fun _ctx -> async { return [ "How do I deploy?"; "What ports are used?" ] }
+
+            let source =
+                SuggestedQuestionsSource.create provider (SuggestedQuestionsConfig.create "faq" "answers")
+
+            let doc = resolve source "faq" |> narrativeOf
+            Expect.isTrue (hasSection doc "questions") "a Questions section is present"
+
+            let hrefs =
+                doc.Sections
+                |> List.collect _.Elements
+                |> List.collect (fun e ->
+                    match e with
+                    | BulletList items -> items |> List.collect id
+                    | _ -> [])
+                |> List.choose (fun sp ->
+                    match sp with
+                    | Link(href, _) -> Some href
+                    | _ -> None)
+
+            Expect.contains hrefs "/answers/how-do-i-deploy" "first question links into the answer page"
+            Expect.contains hrefs "/answers/what-ports-are-used" "second question links into the answer page"
+
+        testCase "FAQ source claims only its own prefix"
+        <| fun _ ->
+            let provider: SuggestedQuestionsProvider = fun _ctx -> async { return [ "Q?" ] }
+
+            let source =
+                SuggestedQuestionsSource.create provider (SuggestedQuestionsConfig.create "faq" "answers")
+
+            Expect.isNone (resolve source "answers/x") "a non-FAQ slug is not claimed"
+
+        testCase "empty suggested-questions set renders a graceful FAQ index"
+        <| fun _ ->
+            let provider: SuggestedQuestionsProvider = fun _ctx -> async { return [] }
+
+            let source =
+                SuggestedQuestionsSource.create provider (SuggestedQuestionsConfig.create "faq" "answers")
+
+            let doc = resolve source "faq" |> narrativeOf
+            Expect.stringContains (sectionText doc "questions") "No suggested questions" "empty-state callout is shown"
     ]
