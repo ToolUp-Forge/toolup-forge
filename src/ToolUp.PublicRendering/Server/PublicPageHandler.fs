@@ -85,7 +85,20 @@ module PublicPageHandler =
                 | AudienceDecision.Allow ->
                     match resolveLayout layouts page with
                     | Some layout ->
-                        let html = layout page |> RenderView.AsString.htmlDocument
+                        // Phase 111 — inject any per-request head metadata
+                        // (the `head:*` frontmatter envelope a resolved-
+                        // content source attached) into the rendered
+                        // document. Pages without the envelope pass
+                        // through untouched (GP 11), and because this
+                        // runs inside `resolveAndRender` the cached /
+                        // stale-while-revalidate copies store the
+                        // injected document — forge's render cache owns
+                        // the fragment path end to end.
+                        let html =
+                            layout page
+                            |> RenderView.AsString.htmlDocument
+                            |> PageHeadInjection.injectFromPage page
+
                         return Rendered(html, page)
                     | None -> return NoLayoutRegistered
             | None -> return PageNotFound

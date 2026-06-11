@@ -51,6 +51,12 @@
         <Compile Include="Server\KnowledgeDocsSource.fs" />
         <Compile Include="Server\RedirectMap.fs" />
         <Compile Include="Server\StructuredDataHelpers.fs" />
+        <!-- Phase 111 — per-request head-metadata injection for
+             resolved-content pages (reads the `head:*` frontmatter
+             envelope; emits canonical / og / meta / JSON-LD before
+             `</head>`). Precedes the page handler + static export that
+             call it. -->
+        <Compile Include="Server\PageHeadInjection.fs" />
         <Compile Include="Server\NarrativePrerender.fs" />
         <Compile Include="Server\NarrativeLayout.fs" />
         <!-- Phase 94 — deterministic inline-SVG chart renderer for the

@@ -111,6 +111,22 @@ type IEnumerableContentSource =
     abstract EnumerateRoutes: unit -> Async<Slug list>
 
 
+/// Phase 111 — optional capability a content source MAY also implement:
+/// resolve to a `ResolvedContent` (body + per-request `<head>` metadata
+/// + provenance) instead of a bare `ContentBody`, so a data-bound page
+/// is SEO-complete (canonical / `og:image` / extra meta / JSON-LD)
+/// without a frontmatter file. `PublicContentApiImpl` prefers this
+/// interface when present; plain `IContentSource` impls are consulted
+/// exactly as pre-111 (GP 11). The same six portability rules hold —
+/// `ResolvedContent` is a value (records / strings / DUs), the method
+/// is async and stateless.
+type IResolvedContentSource =
+    /// Resolve a slug to a `ResolvedContent`, scoped to the requesting
+    /// principal's `AccessContext`. Return `None` to fall through —
+    /// identical fall-through semantics to `IContentSource.Resolve`.
+    abstract ResolveContent: slug: Slug -> ctx: AccessContext -> Async<ResolvedContent option>
+
+
 /// Constructors for `IContentSource`. Use `create` for a resolver that
 /// claims slugs by its own logic; use `ofRoute` for the common case of a
 /// single source claiming a family of dynamic paths by pattern.
@@ -158,6 +174,72 @@ module ContentSource =
                 match RouteShape.tryMatch pattern s with
                 | Some captures -> resolve captures ctx
                 | None -> async { return None }
+
+          interface IEnumerableContentSource with
+              member _.EnumerateRoutes() = enumerate ()
+        }
+
+    // ─── Phase 111 — resolved-content constructors ───────────────────
+
+    /// Build a head-metadata-aware content source from a plain resolver.
+    /// The returned source implements BOTH `IContentSource` (the bare
+    /// body, so any pre-111 consumer of the source still works) and
+    /// `IResolvedContentSource` (the full `ResolvedContent`, which
+    /// `PublicContentApiImpl` prefers).
+    let ofResolved (resolve: Slug -> AccessContext -> Async<ResolvedContent option>) : IContentSource =
+        { new IContentSource with
+            member _.Resolve slug ctx = async {
+                let! rc = resolve slug ctx
+                return rc |> Option.map _.Body
+            }
+
+          interface IResolvedContentSource with
+              member _.ResolveContent slug ctx = resolve slug ctx
+        }
+
+    /// Phase 111 — like `ofRoute`, but the resolver returns a
+    /// `ResolvedContent` (body + per-request head metadata + provenance).
+    let ofRouteResolved
+        (pattern: string)
+        (resolve: Map<string, string> -> AccessContext -> Async<ResolvedContent option>)
+        : IContentSource =
+        let resolveContent (Slug s) ctx =
+            match RouteShape.tryMatch pattern s with
+            | Some captures -> resolve captures ctx
+            | None -> async { return None }
+
+        { new IContentSource with
+            member _.Resolve slug ctx = async {
+                let! rc = resolveContent slug ctx
+                return rc |> Option.map _.Body
+            }
+
+          interface IResolvedContentSource with
+              member _.ResolveContent slug ctx = resolveContent slug ctx
+        }
+
+    /// Phase 111 — like `ofRouteResolved`, additionally implementing
+    /// `IEnumerableContentSource` so the route-family's dynamic slugs
+    /// reach `sitemap.xml`, static export, prerender, and IndexNow
+    /// (Phase 95 / Phase 109 reach for resolved-content pages).
+    let ofRouteResolvedEnumerable
+        (pattern: string)
+        (resolve: Map<string, string> -> AccessContext -> Async<ResolvedContent option>)
+        (enumerate: unit -> Async<Slug list>)
+        : IContentSource =
+        let resolveContent (Slug s) ctx =
+            match RouteShape.tryMatch pattern s with
+            | Some captures -> resolve captures ctx
+            | None -> async { return None }
+
+        { new IContentSource with
+            member _.Resolve slug ctx = async {
+                let! rc = resolveContent slug ctx
+                return rc |> Option.map _.Body
+            }
+
+          interface IResolvedContentSource with
+              member _.ResolveContent slug ctx = resolveContent slug ctx
 
           interface IEnumerableContentSource with
               member _.EnumerateRoutes() = enumerate ()

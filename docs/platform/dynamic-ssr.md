@@ -229,6 +229,56 @@ let pageLayout (page: PublicPage) : XmlNode =
 
 The synthesised page leaves `Layout` unset, so `PublicPageHandler` falls back to the first-registered layout. Layout selection stays a compose-time concern — a source picks the body, not the chrome.
 
+## Per-request head metadata — `ResolvedContent` (Phase 111)
+
+The `Narrative` path above derives head metadata from the document. A source serving a **server-rendered HTML fragment** (`ContentBody.Html` — produced by any external renderer) has no document to derive from, so pre-111 it was SEO-incomplete: no canonical, no `og:image`, no JSON-LD. The `ofResolved` constructor family closes the gap — the resolver returns a `ResolvedContent` carrying the body **plus** typed per-request head metadata:
+
+```fsharp
+let reports =
+    ContentSource.ofRouteResolvedEnumerable "reports/{q}"
+        (fun captures ctx -> async {
+            let q = captures["q"]
+            let! fragment = renderReportFragment q ctx       // any server renderer → body-only HTML
+            return Some {
+                Body = Html fragment
+                Head = Some {
+                    PageHeadMetadata.empty with
+                        Title = Some $"Report — {q}"
+                        Description = Some $"Quarterly figures for {q}"
+                        Canonical = Some $"https://example.com/reports/{q}"
+                        OgImage = Some "https://example.com/img/report-card.png"
+                        JsonLd = [ reportJsonLd q ]
+                }
+                Provenance = None
+            }
+        })
+        (fun () -> async { return knownQuarters |> List.map (fun q -> Slug ("reports/" + q)) })
+```
+
+How the metadata reaches the wire:
+
+- `Head.Title` / `Head.Description` fold into the synthesised page's own `Title` / `Description` fields, so the layout's `<title>` emission works exactly as for a static page.
+- The rest (canonical / `og:image` / extra `Meta` pairs / `JsonLd` payloads) rides the page's open `Frontmatter` map under reserved `head:*` keys (the same record-shape-preserving pattern as Phase 90 tags — no `PublicPage` field change, GP 11), and `PublicPageHandler` injects the corresponding tags immediately before the rendered document's `</head>`. `StaticExport` applies the same injection, so the exported tree matches the live render byte-for-byte.
+- `Head.OgImage` is also mirrored to the conventional `og:image` frontmatter key, so the shipped `StructuredDataHelpers` read it unchanged.
+
+A source returning a bare `ContentBody` (the `create` / `ofRoute` family) is untouched — no envelope, no injection, byte-for-byte the pre-111 render (GP 11). The reserved `head:*` frontmatter prefix is owned by this codec; author frontmatter must not use it.
+
+### Cache ownership — forge's render cache owns the fragment path
+
+When a server-rendered fragment is hosted under PublicRendering, the **Phase 84 `IRenderCache` / ISR tier owns caching end to end**: the injected document is what gets cached, the entry's content hash drives the `ETag`, `Cache-Control` derives from the page policy, and the publish-purge hook (`PurgeSlug`) invalidates it. An upstream renderer's **own** ETag / render-cache seam must be bypassed for fragments served through PublicRendering — two caches over one response double-cache and disagree on invalidation. Rule of thumb: the renderer produces the fragment, forge owns the HTTP caching of the page it lands in. (Per-request-varying gated fragments should keep the default `NoCache` policy; the cache key is `(slug, scope, version)`, so within one scope a cached fragment is shared across that scope's requests.)
+
+### Whole page vs embedded block — picking the right seam
+
+`ResolvedContent` is the **whole-page** integration point: the external renderer owns the page body, PublicRendering owns the shell, head, sitemap, cache, and redirects. To embed a server-rendered **block** inside an otherwise-Narrative document, use the Phase 87 `Component` registry instead — the document carries `NarrativeElement.Component(name, props)` and the deployment registers a `ComponentRenderer` (`props -> XmlNode`) that calls the external block renderer:
+
+```fsharp
+// Narrative body: …; Component("price-widget", Map ["sku", "X-1"]); …
+NarrativeHtml.RenderOptions.withComponentRenderer "price-widget" (fun props ->
+    renderPriceWidget (props.TryFind "sku"))
+```
+
+Whole page → `IContentSource` + `ResolvedContent`; embedded block → `Component`. The block seam stays stringly-typed by design (forge `CLAUDE.md` type-erasure boundary #3) and degrades to a safe placeholder for unregistered names.
+
 ## Scoping by principal (GP 4)
 
 Every source receives the resolved `AccessContext`. The page handler resolves it from `ctx.RequestServices` (falling back to an unrestricted anonymous context when no auth is wired — the normal case for a public content site). Use it to scope a query structurally:

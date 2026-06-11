@@ -223,9 +223,17 @@ module StaticExport =
             let mutable skipped = 0
 
             let writePage (page: PublicPage) (slug: string) =
-                match resolveLayout layouts (withLocale locale page) with
+                let localised = withLocale locale page
+
+                match resolveLayout layouts localised with
                 | Some layout ->
-                    let html = RenderView.AsString.htmlDocument (layout (withLocale locale page))
+                    // Phase 111 — inject any per-request head metadata so
+                    // the exported document matches what the live handler
+                    // serves byte-for-byte.
+                    let html =
+                        RenderView.AsString.htmlDocument (layout localised)
+                        |> PageHeadInjection.injectFromPage localised
+
                     let full = Path.Combine(troot, slugToRelativePath slug)
                     let dir = Path.GetDirectoryName full
 

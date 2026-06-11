@@ -95,6 +95,50 @@ type PublicContentApiImpl
             Audience = PageAudience.Public
           }
 
+    /// Phase 111 — synthesise a `PublicPage` from a `ResolvedContent`.
+    /// Starts from `pageFromBody`'s synthesis, then:
+    ///
+    /// - `Head.Title` / `Head.Description` fold into the page's own
+    ///   fields (so the layout's `<title>` / description emission works
+    ///   exactly as for a static page).
+    /// - The remaining head metadata (canonical / `og:image` / extra
+    ///   meta / JSON-LD) is serialised into reserved `head:*`
+    ///   frontmatter keys (the Phase 90 tags precedent — no new
+    ///   `PublicPage` field, GP 11); `PageHeadInjection` emits the tags
+    ///   into the rendered document.
+    /// - `Head.OgImage` is mirrored to the conventional `og:image`
+    ///   frontmatter key so the shipped `StructuredDataHelpers` read it
+    ///   unchanged.
+    /// - `Provenance.GeneratedAt` fills `PublishedAt` when the body
+    ///   itself didn't (a `Narrative` body's own provenance wins).
+    static member private pageFromResolved(slug: string, rc: ResolvedContent) : PublicPage =
+        let baseline = PublicContentApiImpl.pageFromBody (slug, rc.Body)
+
+        let publishedAt =
+            baseline.PublishedAt
+            |> Option.orElse (rc.Provenance |> Option.map _.GeneratedAt)
+
+        match rc.Head with
+        | None -> {
+            baseline with
+                PublishedAt = publishedAt
+          }
+        | Some head ->
+            let frontmatter = PageHeadMetadata.toFrontmatter head baseline.Frontmatter
+
+            let frontmatter =
+                match head.OgImage with
+                | Some img -> frontmatter |> Map.add "og:image" img
+                | None -> frontmatter
+
+            {
+                baseline with
+                    Title = head.Title |> Option.defaultValue baseline.Title
+                    Description = head.Description |> Option.defaultValue baseline.Description
+                    PublishedAt = publishedAt
+                    Frontmatter = frontmatter
+            }
+
     interface IPublicContentApi with
 
         member _.GetPage(slug: string) : Async<PublicPage option> = async {
@@ -159,11 +203,23 @@ type PublicContentApiImpl
                         match sources with
                         | [] -> return None
                         | source :: rest ->
-                            let! body = source.Resolve (Slug slug) ctx
+                            // Phase 111 — prefer the resolved-content
+                            // capability when the source implements it;
+                            // plain sources run the pre-111 path
+                            // byte-for-byte (GP 11).
+                            match source with
+                            | :? IResolvedContentSource as rcs ->
+                                let! rc = rcs.ResolveContent (Slug slug) ctx
 
-                            match body with
-                            | Some b -> return Some(PublicContentApiImpl.pageFromBody (slug, b))
-                            | None -> return! tryNext rest
+                                match rc with
+                                | Some r -> return Some(PublicContentApiImpl.pageFromResolved (slug, r))
+                                | None -> return! tryNext rest
+                            | _ ->
+                                let! body = source.Resolve (Slug slug) ctx
+
+                                match body with
+                                | Some b -> return Some(PublicContentApiImpl.pageFromBody (slug, b))
+                                | None -> return! tryNext rest
                     }
 
                     return! tryNext contentSources

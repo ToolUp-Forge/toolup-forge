@@ -140,10 +140,152 @@ type ContentBody =
     | Html of fragment: string
     | Narrative of document: NarrativeDocument
 
+// ─── Phase 111 — per-request `<head>` metadata for dynamic pages ─────
+//
+// A request-time `IContentSource` resolving a `ContentBody.Html`
+// fragment (or any body) has no frontmatter file to drive `<head>`
+// SEO metadata from, so a data-bound page was SEO-incomplete: no
+// canonical, no `og:image`, no JSON-LD. `PageHeadMetadata` is the
+// typed per-request carrier; `ResolvedContent` pairs it with the body
+// so a source supplies both in one result.
+//
+// Following the Phase 90 tags precedent, the metadata rides the
+// synthesised page's open `Frontmatter` map under reserved `head:*`
+// keys rather than a new `PublicPage` field, so EVERY existing
+// `PublicPage`-construction site is unaffected (GP 11). The
+// `PageHeadMetadata` module owns the codec; `PageHeadInjection`
+// (server-side) emits the tags into the rendered document.
+
+/// Per-request `<head>` metadata a request-time content source can
+/// attach to its resolved page (Phase 111). All fields optional — a
+/// source supplies what it knows; everything else falls back to
+/// today's static `PublicPage` / frontmatter behaviour (GP 11).
+type PageHeadMetadata = {
+    /// Overrides the synthesised page's `Title` (drives `<title>` via
+    /// the layout exactly as a static page's title does).
+    Title: string option
+    /// Overrides the synthesised page's `Description`.
+    Description: string option
+    /// Absolute canonical URL — emitted as `<link rel="canonical">`.
+    Canonical: string option
+    /// Social-card image URL — emitted as `<meta property="og:image">`
+    /// and mirrored to the conventional `og:image` frontmatter key so
+    /// the shipped `StructuredDataHelpers` read it unchanged.
+    OgImage: string option
+    /// Extra `(name, content)` meta pairs. Names starting `og:` /
+    /// `article:` / `twitter:` emit with a `property=` attribute;
+    /// everything else with `name=`.
+    Meta: (string * string) list
+    /// Pre-serialised JSON-LD payloads, each emitted as its own
+    /// `<script type="application/ld+json">` block. Trusted
+    /// server-produced content — not HTML-escaped.
+    JsonLd: string list
+}
+
+module PageHeadMetadata =
+    let empty: PageHeadMetadata = {
+        Title = None
+        Description = None
+        Canonical = None
+        OgImage = None
+        Meta = []
+        JsonLd = []
+    }
+
+    /// Reserved frontmatter prefix the codec writes under. Author
+    /// frontmatter must not use `head:*` keys — they are owned by the
+    /// Phase 111 resolved-content path.
+    [<Literal>]
+    let FrontmatterPrefix = "head:"
+
+    /// Serialise the head metadata into reserved `head:*` frontmatter
+    /// keys, merged over `frontmatter`. `Title` / `Description` are NOT
+    /// written — they fold into the synthesised page's own fields.
+    let toFrontmatter (head: PageHeadMetadata) (frontmatter: Map<string, string>) : Map<string, string> =
+        let fm = frontmatter
+
+        let fm =
+            match head.Canonical with
+            | Some url -> fm |> Map.add "head:canonical" url
+            | None -> fm
+
+        let fm =
+            match head.OgImage with
+            | Some img -> fm |> Map.add "head:og:image" img
+            | None -> fm
+
+        let fm =
+            (fm, head.Meta)
+            ||> List.fold (fun acc (name, content) -> acc |> Map.add ("head:meta:" + name) content)
+
+        let fm =
+            (fm, List.indexed head.JsonLd)
+            ||> List.fold (fun acc (i, payload) -> acc |> Map.add $"head:jsonld:%03d{i}" payload)
+
+        fm
+
+    /// Read the reserved `head:*` keys back into a `PageHeadMetadata`.
+    /// Returns `None` when the map carries no `head:*` key at all, so a
+    /// pre-111 page costs one map scan and nothing else (GP 13).
+    /// `Title` / `Description` come back `None` (they live on the page
+    /// fields, not the envelope); `Meta` pair order is the map's key
+    /// order (alphabetical) — meta-tag emission order is not semantic.
+    let ofFrontmatter (frontmatter: Map<string, string>) : PageHeadMetadata option =
+        let hasAny = frontmatter |> Map.exists (fun k _ -> k.StartsWith FrontmatterPrefix)
+
+        if not hasAny then
+            None
+        else
+            let meta =
+                frontmatter
+                |> Map.toList
+                |> List.choose (fun (k, v) ->
+                    if k.StartsWith "head:meta:" then
+                        Some(k.Substring("head:meta:".Length), v)
+                    else
+                        None)
+
+            let jsonLd =
+                frontmatter
+                |> Map.toList
+                |> List.filter (fun (k, _) -> k.StartsWith "head:jsonld:")
+                |> List.sortBy fst
+                |> List.map snd
+
+            Some {
+                Title = None
+                Description = None
+                Canonical = frontmatter.TryFind "head:canonical"
+                OgImage = frontmatter.TryFind "head:og:image"
+                Meta = meta
+                JsonLd = jsonLd
+            }
+
+/// Phase 111 — the result shape a head-metadata-aware content source
+/// returns: the body plus optional per-request `<head>` metadata and
+/// optional provenance (drives `PublishedAt` + downstream JSON-LD for
+/// non-`Narrative` bodies, mirroring what a `Narrative` body carries
+/// inline). Sources returning a bare `ContentBody` are untouched
+/// (GP 11); `ResolvedContent` is the additive richer channel.
+type ResolvedContent = {
+    Body: ContentBody
+    Head: PageHeadMetadata option
+    Provenance: NarrativeProvenance option
+}
+
+module ResolvedContent =
+    /// Wrap a bare body with no head metadata / provenance.
+    let ofBody (body: ContentBody) : ResolvedContent = {
+        Body = body
+        Head = None
+        Provenance = None
+    }
+
 /// Static page / news article / event / etc. Frontmatter is open by
 /// design: well-known keys (`og:image`, `author`, `date`, `sitemap`,
 /// …) are documented; arbitrary keys flow through to layouts
-/// unchanged.
+/// unchanged. Keys under the reserved `head:*` prefix are owned by the
+/// Phase 111 per-request head-metadata codec (`PageHeadMetadata`).
 type PublicPage = {
     Slug: Slug
     Title: string
