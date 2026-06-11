@@ -71,11 +71,32 @@ Directory-index shape (`/<slug>/index.html`) works across every static host with
 4. Serve `dist/` locally (`npx serve dist` or `python -m http.server`) and navigate every section page — output should be visually identical to the live SSR server.
 5. Static hosts: deploy `dist/` to Azure Static Web Apps (or chosen host) — every page renders, navigation works, sitemap is reachable.
 
-## What v1 does NOT include
+## Phase 93 — operational extensions (`exportStaticWith` / `runWith`)
 
-- **Redirects translation.** `<contentRoot>/redirects.csv` entries are loaded into the live SSR server but NOT translated into a static-host route config (`staticwebapp.config.json`, `_redirects`, etc.) — different hosts use incompatible formats. Consumers author their host-specific config by hand. Translation may be added in a follow-up.
-- **Per-locale prerender.** Out of v1 scope; composes with Phase 12a (i18n) when both ship.
-- **AdPanel / dynamic island injection.** `AdPanel` substrate is Phase 60; static export emits whatever the layout function produces, which is layout-author choice.
+`exportStatic` stays the byte-compatible single-tree default. `PublicRenderingServerApp.exportStaticWith options outputDir` (and the lower-level `StaticExport.runWith`) add opt-in operational capabilities via a `StaticExportOptions` record — `StaticExportOptions.defaults` reproduces the single-tree behaviour exactly (GP 11):
+
+- **Per-locale export** — `withLocales [ "en"; "fr" ]` renders each page into its own `<outputDir>/<locale>/…` subtree (per-locale `<html lang>` on Narrative bodies + per-locale `sitemap.xml`). A single / empty locale list is the unchanged single tree. Content *translation* is the deployment's concern (wire a locale-specific content API); this stamps the language and lays out the trees — closing the "per-locale prerender" gap below.
+- **Host-config emission** — `withHostConfigs [ AzureStaticWebApps; Netlify ]` writes `staticwebapp.config.json` (Azure SWA) and/or `_redirects` + `_headers` (Netlify / Cloudflare) at the export root, derived from the redirect map (file-loaded `redirects.csv` + compose-registered redirects) and the export's default `withCachePolicy`. So a static-hosted export carries its redirects + cache headers — closing the "redirects not translated" gap below.
+- **Build-time link / asset check** — `withLinkCheck` scans the emitted HTML for internal `href` / `src` references that don't resolve to a file on disk and logs each dead one (catches broken links before deploy).
+- **Gated-page exclusion** — unchanged from [Phase 86](86-gated-ssr.md): only `Audience = Public` pages are written, to every tree, the sitemap, and the host-config.
+
+```fsharp
+let options =
+    StaticExportOptions.defaults
+    |> StaticExportOptions.withLocales [ "en"; "fr" ]
+    |> StaticExportOptions.withHostConfigs [ AzureStaticWebApps ]
+    |> StaticExportOptions.withCachePolicy (Cache(300, true))
+    |> StaticExportOptions.withLinkCheck
+
+app |> PublicRenderingServerApp.exportStaticWith options "dist"
+```
+
+Verify: `dotnet run --project Build.fsproj -- VerifyAll` — the `PublicRendering — Phase 93 static export` suite covers the host-config generators, internal-ref extraction, dead-link detection, the end-to-end per-locale + gated-exclusion + host-config run, and the default single-tree (GP 11) path.
+
+## What this still does NOT include
+
+- **Per-locale content translation.** The per-locale export lays out the trees + stamps `<html lang>`; translating the *content* is the deployment's responsibility (supply a locale-specific `IPublicContentApi`).
+- **Dynamic island injection.** Static export emits whatever the layout function produces, which is layout-author choice.
 
 ## Rollback
 
