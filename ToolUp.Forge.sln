@@ -255,6 +255,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AwsKms", "AwsKms", "{8650ED
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "AwsKmsEncryption", "src\Encryption\AwsKms\AwsKmsEncryption.fsproj", "{A871395D-EBDC-450B-8E56-17EFC5282E7E}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.DataSubject.Tests", "src\ToolUp.Platform.DataSubject.Tests\ToolUp.Platform.DataSubject.Tests.fsproj", "{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1333,6 +1335,18 @@ Global
 		{A871395D-EBDC-450B-8E56-17EFC5282E7E}.Release|x64.Build.0 = Release|Any CPU
 		{A871395D-EBDC-450B-8E56-17EFC5282E7E}.Release|x86.ActiveCfg = Release|Any CPU
 		{A871395D-EBDC-450B-8E56-17EFC5282E7E}.Release|x86.Build.0 = Release|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Debug|x64.Build.0 = Debug|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Debug|x86.Build.0 = Debug|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Release|x64.ActiveCfg = Release|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Release|x64.Build.0 = Release|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Release|x86.ActiveCfg = Release|Any CPU
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1458,5 +1472,6 @@ Global
 		{4FF79EC8-63DC-EC11-F852-C8134D7E0D22} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{8650ED35-B114-2595-180B-B6FF291B6A17} = {4FF79EC8-63DC-EC11-F852-C8134D7E0D22}
 		{A871395D-EBDC-450B-8E56-17EFC5282E7E} = {8650ED35-B114-2595-180B-B6FF291B6A17}
+		{6D66FF24-B32C-4FF9-9754-C0D960DA62DE} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 	EndGlobalSection
 EndGlobal

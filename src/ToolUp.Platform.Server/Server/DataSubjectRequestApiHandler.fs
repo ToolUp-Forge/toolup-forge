@@ -57,6 +57,27 @@ let private newRequestId () =
 
 let private now () = DateTimeOffset.UtcNow
 
+/// Canonical export-envelope serialisation — a JSON document:
+///   `{ "segments": [{ "name", "mimeType", "bytes": "<base64>" }, ...] }`
+///
+/// Module-level + public (Phase 9h.A) so the synchronous `RequestExport`
+/// path and the background `DSRExportJobHandler` produce byte-identical
+/// envelopes (the acceptance contract: a downloaded async ticket matches
+/// the synchronous `RequestExport` shape).
+let serialiseSegments (segments: ExportSegment list) : byte[] =
+    let payload = {|
+        segments =
+            segments
+            |> List.map (fun s -> {|
+                name = s.Name
+                mimeType = s.MimeType
+                bytes = Convert.ToBase64String s.Body
+            |})
+    |}
+
+    let json = JsonSerializer.Serialize payload
+    Encoding.UTF8.GetBytes json
+
 /// Build a scoped `IDataSubjectRequestApi`. Caller supplies the
 /// registered exporter / erasure-handler lists, the deployment
 /// policy default, the scope id resolved upstream, the admin actor
@@ -104,23 +125,6 @@ let create
             Reason = request.Reason
             Properties = props
         }
-
-    let serialiseSegments (segments: ExportSegment list) =
-        // JSON envelope shape:
-        //   { "segments": [{ "name": "...", "mimeType": "...",
-        //                    "bytes": "<base64>" }, ...] }
-        let payload = {|
-            segments =
-                segments
-                |> List.map (fun s -> {|
-                    name = s.Name
-                    mimeType = s.MimeType
-                    bytes = Convert.ToBase64String s.Body
-                |})
-        |}
-
-        let json = JsonSerializer.Serialize payload
-        Encoding.UTF8.GetBytes json
 
     {
         RequestExport =

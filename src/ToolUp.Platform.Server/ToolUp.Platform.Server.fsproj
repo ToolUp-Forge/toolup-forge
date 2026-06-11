@@ -223,6 +223,13 @@
         <Compile Include="Server\IDataExporter.fs" />
         <Compile Include="Server\ErasurePipeline.fs" />
         <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
+        <!-- Phase 9h.A — IJobScheduler-backed DSR export/erasure substrate.
+             After DataSubjectRequestApiHandler (reuses serialiseSegments +
+             the AuditOnDsr seam) + ErasurePipeline + IDataExporter. -->
+        <Compile Include="Server\IBackgroundExportStore.fs" />
+        <Compile Include="Server\BlobBackedBackgroundExportStore.fs" />
+        <Compile Include="Server\DSRExportJobHandler.fs" />
+        <Compile Include="Server\DSRErasureJobHandler.fs" />
         <Compile Include="Server\EventStoreErasureHandler.fs" />
         <Compile Include="Server\DataObjectStoreErasureHandler.fs" />
         <Compile Include="Server\LineageStoreErasureHandler.fs" />

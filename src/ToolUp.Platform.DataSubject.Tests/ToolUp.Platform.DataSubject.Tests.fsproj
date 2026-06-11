@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 9h.A — IBackgroundExportStore + DSR job-handler tests. A
+         dedicated pack (rather than entries in the contended
+         ToolUp.Platform.Tests.fsproj) referencing Core + Server. -->
+    <ItemGroup>
+        <Compile Include="Support\Doubles.fs" />
+        <Compile Include="Contracts\IBackgroundExportStoreContract.fs" />
+        <Compile Include="InProcess\BackgroundExportStoreTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>
