@@ -21,6 +21,88 @@ open ToolUp.Platform.Narrative
 // by the caller. The publisher's job is just to construct the page
 // envelope, encode the slug, and write it through `IEntityStore.Save`.
 
+// ─── Phase 91 — AI authoring hardening (guardrails + draft gate) ───
+//
+// `publish_narrative` lets an AI tool write a page to the public surface.
+// Phase 80a shipped that as an immediate `Published` / `Public` write.
+// These guardrails let a deployment constrain the AI authoring path:
+//   * **forced Draft landing** — land every AI publish as `Draft`
+//     (Phase 89 `PublishStatus.Draft`), so it is NOT publicly served
+//     until a human moves it through the review workflow. AI drafts
+//     never go live unattended.
+//   * **layout allow-list** — reject a `layoutHint` outside an approved
+//     set (an AI can't publish under an arbitrary layout).
+//   * **forced audience** — pin the published page's `PageAudience`
+//     (Phase 86), so AI can never publish a wider-audience page than
+//     policy allows.
+//   * **template shape cap** — reject documents with more than
+//     `MaxSections` sections (a crude but effective "constrain the
+//     shape" guard against runaway AI output).
+//
+// GP 11 — the defaults (`NarrativePublishGuardrails.defaults`) reproduce
+// the Phase 80a behaviour exactly (Published, Public, any registered
+// layout, no section cap), so an existing deployment is unchanged until
+// it opts into hardening. `aiHardened` is the recommended opt-in for
+// multi-tenant / untrusted-AI deployments.
+
+/// Compose-time guardrails applied to the AI publishing path. Defaults
+/// reproduce the pre-91 behaviour (GP 11).
+type NarrativePublishGuardrails = {
+    /// When `true`, every AI publish lands as `Draft` regardless of the
+    /// caller's collision policy, so it is not publicly served until a
+    /// human reviews it (Phase 89 workflow). Default `false` (Phase 80a
+    /// behaviour — immediate publish).
+    ForceDraft: bool
+    /// When `Some names`, an explicit `layoutHint` must be one of `names`
+    /// or the publish is refused. `None` (default) → any registered layout
+    /// is accepted (Phase 80a behaviour). A `None` hint always falls back
+    /// to the first-registered layout and is not allow-list-checked.
+    AllowedLayouts: Set<string> option
+    /// The audience every AI-published page is pinned to. Default
+    /// `PageAudience.Public` (Phase 80a behaviour).
+    Audience: PageAudience
+    /// When `Some n`, a document with more than `n` sections is refused
+    /// (template shape constraint). `None` (default) → no cap.
+    MaxSections: int option
+}
+
+module NarrativePublishGuardrails =
+    /// Pre-91 behaviour: immediate `Published`, `Public`, any registered
+    /// layout, no section cap (GP 11).
+    let defaults: NarrativePublishGuardrails = {
+        ForceDraft = false
+        AllowedLayouts = None
+        Audience = PageAudience.Public
+        MaxSections = None
+    }
+
+    /// Recommended opt-in for deployments that let an untrusted / shared
+    /// AI publish: force a `Draft` landing so nothing goes live without a
+    /// human review pass. Audience stays `Public` (a reviewed draft is
+    /// promoted deliberately); add `withAudience` / `withAllowedLayouts`
+    /// to tighten further.
+    let aiHardened: NarrativePublishGuardrails = { defaults with ForceDraft = true }
+
+    let withForceDraft (v: bool) (g: NarrativePublishGuardrails) : NarrativePublishGuardrails = {
+        g with
+            ForceDraft = v
+    }
+
+    let withAllowedLayouts (names: string list) (g: NarrativePublishGuardrails) : NarrativePublishGuardrails = {
+        g with
+            AllowedLayouts = Some(Set.ofList names)
+    }
+
+    let withAudience (a: PageAudience) (g: NarrativePublishGuardrails) : NarrativePublishGuardrails = {
+        g with
+            Audience = a
+    }
+
+    let withMaxSections (n: int) (g: NarrativePublishGuardrails) : NarrativePublishGuardrails = {
+        g with
+            MaxSections = Some n
+    }
+
 /// Optional layouts hint passed by `PublicRenderingCompose.run` so the
 /// publisher can fall back to the first-registered layout when the
 /// caller's `layoutHint` is `None` or doesn't match. Empty when the
@@ -34,7 +116,8 @@ type PublicRenderingNarrativePagePublisher
     (
         entityStore: IEntityStore,
         registeredLayouts: LayoutName list,
-        renderCacheInvalidator: IRenderCacheInvalidation option
+        renderCacheInvalidator: IRenderCacheInvalidation option,
+        guardrails: NarrativePublishGuardrails
     ) =
 
     let resolveLayout (hint: string option) : LayoutName =
@@ -91,8 +174,29 @@ type PublicRenderingNarrativePagePublisher
         member _.PublishAsync(slug, titleOverride, descriptionOverride, layoutHint, collisionPolicy, document) = async {
             let requestedSlug = sanitiseSlug slug
 
+            // Phase 91 — guardrail rejections first (cheapest, no store
+            // access). An explicit layout hint outside the allow-list, or a
+            // document exceeding the section cap, is refused before any
+            // slug-collision work.
+            let guardrailViolation =
+                match guardrails.AllowedLayouts, layoutHint with
+                | Some allowed, Some h when not (Set.contains h allowed) ->
+                    Some(sprintf "layout '%s' is not permitted for AI publishing (guardrail allow-list)" h)
+                | _ ->
+                    match guardrails.MaxSections with
+                    | Some n when List.length document.Sections > n ->
+                        Some(
+                            sprintf
+                                "document has %d sections, exceeding the %d-section guardrail for AI publishing"
+                                (List.length document.Sections)
+                                n
+                        )
+                    | _ -> None
+
             if System.String.IsNullOrWhiteSpace requestedSlug then
                 return PublishFailed "slug is required (received an empty / whitespace-only value)"
+            elif guardrailViolation.IsSome then
+                return PublishFailed guardrailViolation.Value
             else
                 // Resolve the target slug per collision policy. Reject
                 // and AutoSuffix both consult the entity store first;
@@ -146,10 +250,16 @@ type PublicRenderingNarrativePagePublisher
                         Frontmatter = Map.empty
                         PublishedAt = Some DateTimeOffset.UtcNow
                         Collection = None
-                        Status = Published
-                        // Phase 86 — AI-published pages land Public; gated
-                        // authoring is a Phase 91 hardening concern.
-                        Audience = PageAudience.Public
+                        // Phase 91 — forced-draft guardrail: when enabled,
+                        // the page lands as Draft and is not publicly served
+                        // until a human moves it through the Phase 89 review
+                        // workflow. Default (off) preserves the Phase 80a
+                        // immediate-publish behaviour (GP 11).
+                        Status = (if guardrails.ForceDraft then Draft else Published)
+                        // Phase 91 — audience guardrail. Default Public
+                        // (Phase 80a / 86 behaviour); a deployment can pin a
+                        // narrower audience so AI never widens reach.
+                        Audience = guardrails.Audience
                     }
 
                     let envelope = PublicPageEntity.fromPage page
@@ -176,13 +286,17 @@ module PublicRenderingNarrativePagePublisher =
     /// value so the DI registration carries the abstraction.
     /// `renderCacheInvalidator` (Phase 84) purges a slug's cached render
     /// on a successful publish; pass `None` when no render cache is
-    /// composed.
+    /// composed. `guardrails` (Phase 91) constrain the AI authoring path
+    /// (forced-draft landing, layout allow-list, forced audience, section
+    /// cap); pass `NarrativePublishGuardrails.defaults` to preserve the
+    /// pre-91 immediate-publish behaviour.
     let create
         (entityStore: IEntityStore)
         (layoutNames: LayoutName list)
         (renderCacheInvalidator: IRenderCacheInvalidation option)
+        (guardrails: NarrativePublishGuardrails)
         : INarrativePagePublisher =
-        PublicRenderingNarrativePagePublisher(entityStore, layoutNames, renderCacheInvalidator)
+        PublicRenderingNarrativePagePublisher(entityStore, layoutNames, renderCacheInvalidator, guardrails)
         :> INarrativePagePublisher
 
 // ─── Phase 80b — Layout catalog ────────────────────────────────

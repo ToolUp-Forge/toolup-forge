@@ -128,6 +128,12 @@ type PublicRenderingServerApp = {
     /// Even when `Some`, the route declines when no `IRetrievalPipeline`
     /// is composed.
     SemanticSearch: SemanticSearchConfig option
+    /// Phase 91 — guardrails for the AI publishing path (`publish_narrative`).
+    /// Defaults to `NarrativePublishGuardrails.defaults` (the Phase 80a
+    /// immediate-publish behaviour, GP 11); set via `withAIPublishGuardrails`
+    /// to force a Draft landing, constrain layouts / audience, or cap the
+    /// document shape. Only consulted when `AIPublishEnabled = true`.
+    AIPublishGuardrails: NarrativePublishGuardrails
 }
 
 module PublicRenderingServerApp =
@@ -149,6 +155,7 @@ module PublicRenderingServerApp =
         TaxonomyEnabled = false
         Nav = []
         SemanticSearch = None
+        AIPublishGuardrails = NarrativePublishGuardrails.defaults
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -176,6 +183,7 @@ module PublicRenderingServerApp =
         TaxonomyEnabled = false
         Nav = []
         SemanticSearch = None
+        AIPublishGuardrails = NarrativePublishGuardrails.defaults
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -344,6 +352,23 @@ module PublicRenderingServerApp =
         {
             app with
                 AIPublishAuthoriser = Some(AIPublishAuthoriser authoriser)
+        }
+
+    /// Phase 91 — constrain the AI publishing path (`publish_narrative`).
+    /// Composes with `withAIPublishEnabled true`. Use
+    /// `NarrativePublishGuardrails.aiHardened` to force every AI publish to
+    /// land as a Draft (not publicly served until a human reviews it via
+    /// the Phase 89 workflow), and the `NarrativePublishGuardrails.with*`
+    /// helpers to add a layout allow-list, pin the audience, or cap the
+    /// document shape. Defaults to the pre-91 immediate-publish behaviour
+    /// (GP 11) when not set.
+    let withAIPublishGuardrails
+        (guardrails: NarrativePublishGuardrails)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        {
+            app with
+                AIPublishGuardrails = guardrails
         }
 
     /// Phase 80b — register an Atom feed at the supplied
@@ -564,6 +589,7 @@ module PublicRenderingServerApp =
             let explicitApi = app.ContentApiOverride
             let aiPublishEnabled = app.AIPublishEnabled
             let aiPublishAuthoriser = app.AIPublishAuthoriser
+            let aiPublishGuardrails = app.AIPublishGuardrails // Phase 91
             let feeds = app.Feeds
             let contentSources = app.ContentSources
             let taxonomyEnabled = app.TaxonomyEnabled // Phase 100
@@ -678,7 +704,8 @@ module PublicRenderingServerApp =
                                 PublicRenderingNarrativePagePublisher.create
                                     entityStore
                                     registeredLayoutNames
-                                    renderCacheInvalidator)
+                                    renderCacheInvalidator
+                                    aiPublishGuardrails)
                         )
                     else
                         s

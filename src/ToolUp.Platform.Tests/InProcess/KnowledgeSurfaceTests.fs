@@ -5,6 +5,11 @@ open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.EntityStore
+open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.PublicRendering
 
 // ─── Phase 91 — RAG-backed answer pages (RagAnswerSource) ───────────
@@ -100,6 +105,43 @@ let private mkDoc (id: string) (title: string) (sections: KnowledgeDocSection li
     Collection = Some "guides"
     Sections = sections
 }
+
+// ─── Phase 91 — AI authoring hardening (publisher guardrails) ────────
+
+/// A fresh in-memory `IEntityStore` registered for `PublicPageEntity`,
+/// plus a guardrail-configured publisher over it. Returned together so a
+/// test can publish then read the stored page back to assert Status /
+/// Audience.
+let private mkPublisher (guardrails: NarrativePublishGuardrails) : INarrativePagePublisher * IEntityStore =
+    let blob = InMemoryBlobStorage() :> IBlobStorage
+    let dos = DataObjectStore(blob) :> IDataObjectStore
+    let registry = EntityRegistry()
+    registry.Register<PublicPageEntity>(PublicPageEntity.registration)
+    let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+
+    let publisher =
+        PublicRenderingNarrativePagePublisher.create store [ LayoutName "page" ] None guardrails
+
+    publisher, store
+
+let private publish (publisher: INarrativePagePublisher) (slug: string) (doc: NarrativeDocument) =
+    publisher.PublishAsync(slug, None, None, Some "page", OverwriteExisting, doc)
+    |> Async.RunSynchronously
+
+let private readBack (store: IEntityStore) (slug: string) : PublicPage =
+    store.Get<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, slug)
+    |> Async.RunSynchronously
+    |> function
+        | Ok e -> e.Page
+        | Error err -> failtestf "expected the page to be stored; got %A" err
+
+let private simpleDoc (sections: int) : NarrativeDocument =
+    [ 1..sections ]
+    |> List.fold
+        (fun acc i ->
+            acc
+            |> Narrative.section (sprintf "S%d" i) (sprintf "s%d" i) [ Narrative.paragraph [ Narrative.text "x" ] ])
+        (Narrative.create "Doc")
 
 let tests =
     testList "KnowledgeSurface (Phase 91)" [
@@ -399,4 +441,70 @@ let tests =
             }
 
             Expect.isNone (link m) "a chunk id without ':chunk:' yields no link"
+
+        // ─── AI authoring hardening (NarrativePublishGuardrails) ─────
+
+        testCase "default guardrails preserve immediate Published / Public (GP 11)"
+        <| fun _ ->
+            let publisher, store = mkPublisher NarrativePublishGuardrails.defaults
+
+            match publish publisher "p1" (simpleDoc 1) with
+            | PublishSucceeded slug ->
+                let page = readBack store slug
+                Expect.equal page.Status Published "default lands Published"
+                Expect.equal page.Audience PageAudience.Public "default lands Public"
+            | other -> failtestf "expected success; got %A" other
+
+        testCase "forced-draft guardrail lands the AI page as Draft (not publicly served)"
+        <| fun _ ->
+            let publisher, store = mkPublisher NarrativePublishGuardrails.aiHardened
+
+            match publish publisher "p2" (simpleDoc 1) with
+            | PublishSucceeded slug ->
+                let page = readBack store slug
+                Expect.equal page.Status Draft "aiHardened forces a Draft landing"
+
+                Expect.isFalse
+                    (PublicPage.isPubliclyVisible System.DateTimeOffset.UtcNow page)
+                    "a forced-draft page is not publicly visible until reviewed"
+            | other -> failtestf "expected success; got %A" other
+
+        testCase "audience guardrail pins the published page's audience"
+        <| fun _ ->
+            let guardrails =
+                NarrativePublishGuardrails.defaults
+                |> NarrativePublishGuardrails.withAudience PageAudience.Authenticated
+
+            let publisher, store = mkPublisher guardrails
+
+            match publish publisher "p3" (simpleDoc 1) with
+            | PublishSucceeded slug ->
+                Expect.equal (readBack store slug).Audience PageAudience.Authenticated "audience is pinned"
+            | other -> failtestf "expected success; got %A" other
+
+        testCase "layout allow-list refuses a disallowed layout hint"
+        <| fun _ ->
+            let guardrails =
+                NarrativePublishGuardrails.defaults
+                |> NarrativePublishGuardrails.withAllowedLayouts [ "article" ]
+
+            let publisher, _ = mkPublisher guardrails
+
+            // The helper publishes with layoutHint = Some "page", which is
+            // outside the allow-list of ["article"].
+            match publish publisher "p4" (simpleDoc 1) with
+            | PublishFailed reason -> Expect.stringContains reason "not permitted" "a disallowed layout is refused"
+            | other -> failtestf "expected refusal; got %A" other
+
+        testCase "section cap refuses an over-long document"
+        <| fun _ ->
+            let guardrails =
+                NarrativePublishGuardrails.defaults
+                |> NarrativePublishGuardrails.withMaxSections 2
+
+            let publisher, _ = mkPublisher guardrails
+
+            match publish publisher "p5" (simpleDoc 5) with
+            | PublishFailed reason -> Expect.stringContains reason "exceeding" "an over-long document is refused"
+            | other -> failtestf "expected refusal; got %A" other
     ]
