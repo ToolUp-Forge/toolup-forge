@@ -158,6 +158,13 @@ module NavTree =
             Audience = NavPublic
         })
 
+    /// Phase 98 — `ofCollection` paginated: page `page` of size
+    /// `pageSize` of the collection's nodes, plus the `PageSlice`
+    /// pagination contract (so a layout can render a pager). `pageSize
+    /// <= 0` = the whole collection as page 1 of 1 (unchanged).
+    let ofCollectionPaged (pageSize: int) (page: int) (pages: PublicPage list) : PageSlice<NavNode> =
+        Pagination.paginate pageSize page (ofCollection pages)
+
     // ─── nav.yaml loader ─────────────────────────────────────────────
     //
     // A deliberately small indentation-based parser for the nav.yaml

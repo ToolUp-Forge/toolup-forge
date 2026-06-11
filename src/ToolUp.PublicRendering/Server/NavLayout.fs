@@ -90,6 +90,47 @@ module NavLayout =
             ol [ _class "tu-breadcrumb__list" ] (crumbs |> List.mapi item)
         ]
 
+    // ─── Phase 98 — pagination control ───────────────────────────────
+
+    /// Render a pager (`Previous` / page-number / `Next`) for a
+    /// `PageSlice`. `pageHref n` builds the URL for page `n` — the caller
+    /// chooses the scheme (path `/tag/news/2`, query `?page=2`, …). The
+    /// current page renders as plain text; disabled prev/next render as
+    /// non-link spans. A single-page slice renders an empty `<nav>` so a
+    /// layout can splice it unconditionally. `tu-pager__*` class hooks.
+    let pager (pageHref: int -> string) (slice: PageSlice<'a>) : XmlNode =
+        if slice.PageCount <= 1 then
+            nav [ _class "tu-pager" ] []
+        else
+            let prev =
+                if slice.HasPrev then
+                    a [ _href (pageHref (slice.Page - 1)); _class "tu-pager__prev" ] [ encodedText "Previous" ]
+                else
+                    span [ _class "tu-pager__prev tu-pager__prev--disabled" ] [ encodedText "Previous" ]
+
+            let next =
+                if slice.HasNext then
+                    a [ _href (pageHref (slice.Page + 1)); _class "tu-pager__next" ] [ encodedText "Next" ]
+                else
+                    span [ _class "tu-pager__next tu-pager__next--disabled" ] [ encodedText "Next" ]
+
+            let pageItem n =
+                if n = slice.Page then
+                    li [
+                        _class "tu-pager__page tu-pager__page--current"
+                        KeyValue("aria-current", "page")
+                    ] [ encodedText (string n) ]
+                else
+                    li [ _class "tu-pager__page" ] [
+                        a [ _href (pageHref n); _class "tu-pager__link" ] [ encodedText (string n) ]
+                    ]
+
+            nav [ _class "tu-pager"; KeyValue("aria-label", "Pagination") ] [
+                prev
+                ol [ _class "tu-pager__pages" ] [ for n in 1 .. slice.PageCount -> pageItem n ]
+                next
+            ]
+
     // ─── Phase 96 — structured data (JSON-LD) ────────────────────────
 
     /// Make an internal href absolute against `baseUrl`; external

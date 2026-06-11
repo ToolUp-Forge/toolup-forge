@@ -141,6 +141,7 @@ let allTests =
         NavStructuredDataTests.tests
         TagFeedTests.tests
         NarrativeDataExportTests.tests
+        PaginationTests.tests
         // Phase 90 — site structure: nav tree + taxonomy.
         SiteStructureTests.tests
         // Phase 84 — SSR render cache: IRenderCache contract bindings

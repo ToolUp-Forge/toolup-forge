@@ -125,6 +125,16 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `relatedByTag` is the pure-data path; a deployment that composes RAG can layer semantic-related on top. `tagCounts` drives a faceted-browse sidebar (case-insensitive grouping, deterministic order).
 
+## Pagination (Phase 98)
+
+`Pagination.paginate pageSize page items` is a pure helper returning the page's slice plus a stable `{ Page; PageCount; HasPrev; HasNext }` contract (`pageSize <= 0` = the whole list, unchanged). `NavTree.ofCollectionPaged` paginates a collection menu; `NavLayout.pager pageHref slice` renders a `Previous` / numbered / `Next` control with `tu-pager__*` class hooks — `pageHref n` lets the layout choose the URL scheme (path `/tag/news/2` or query `?page=2`):
+
+```fsharp
+let slice = NavTree.ofCollectionPaged 20 page chapters
+NavLayout.menu None slice.Items
+NavLayout.pager (sprintf "/docs?page=%d") slice
+```
+
 ## Per-tag Atom feeds (Phase 97)
 
 A reader can subscribe to a topic: `withTagFeed` registers a feed filtered to one tag (the taxonomy-axis extension of the Phase 80b `withFeed`), reusing the same Atom renderer:

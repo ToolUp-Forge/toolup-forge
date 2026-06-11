@@ -49,6 +49,9 @@
              NarrativeFromData chart projector (Component seam). -->
         <Compile Include="Server\NarrativeCharts.fs" />
         <!-- Phase 90 — site structure: nav tree model + menu/breadcrumb
+        <!-- Phase 98 — pure listing-pagination helper (used by NavTree
+             ofCollectionPaged + NavLayout pager). -->
+        <Compile Include="Server\Pagination.fs" />
              render helpers + taxonomy (tag-index content source). NavTree
              → NavLayout (renders it) → TaxonomyHandler (tag pages). -->
         <Compile Include="Server\NavTree.fs" />
