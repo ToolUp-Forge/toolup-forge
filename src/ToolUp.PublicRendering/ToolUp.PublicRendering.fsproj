@@ -45,6 +45,10 @@
              IRetrievalPipeline; extractive + grounded, StrictlyGrounded
              refusal, optional synthesis hook). -->
         <Compile Include="Server\RagAnswerSource.fs" />
+        <!-- Phase 91 — KB-as-docs SSR surface (content source over a
+             deployment-supplied read-port; collection index + per-doc
+             landing, enumerable for sitemap / static export). -->
+        <Compile Include="Server\KnowledgeDocsSource.fs" />
         <Compile Include="Server\RedirectMap.fs" />
         <Compile Include="Server\StructuredDataHelpers.fs" />
         <Compile Include="Server\NarrativePrerender.fs" />

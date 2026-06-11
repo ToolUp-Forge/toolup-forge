@@ -36,8 +36,17 @@ let private mkMatch (content: string) (score: float) : VectorMatch = {
 let private resolve (source: IContentSource) (slug: string) =
     source.Resolve (Slug slug) ctx |> Async.RunSynchronously
 
-/// The text of a narrative section by id (concatenated inline `Text` spans
-/// from paragraphs / callouts / blockquotes).
+/// All visible text inside an inline span, recursing into `Link` content
+/// (a link wraps inner spans). Other inline kinds contribute nothing.
+let rec private spanText (sp: InlineSpan) : string list =
+    match sp with
+    | Text t -> [ t ]
+    | Link(_, inner) -> inner |> List.collect spanText
+    | _ -> []
+
+/// The text of a narrative section by id (concatenated visible text from
+/// paragraphs / callouts / blockquotes AND bullet / ordered list items,
+/// following links into their visible content).
 let private sectionText (doc: NarrativeDocument) (sectionId: string) : string =
     doc.Sections
     |> List.tryFind (fun s -> s.Id = sectionId)
@@ -48,11 +57,10 @@ let private sectionText (doc: NarrativeDocument) (sectionId: string) : string =
             | Paragraph spans -> spans
             | Callout(_, spans) -> spans
             | Blockquote(_, spans) -> spans
+            | BulletList items
+            | OrderedList items -> items |> List.collect id
             | _ -> [])
-        |> List.choose (fun sp ->
-            match sp with
-            | Text t -> Some t
-            | _ -> None)
+        |> List.collect spanText
         |> String.concat " ")
     |> Option.defaultValue ""
 
@@ -63,6 +71,35 @@ let private narrativeOf (body: ContentBody option) : NarrativeDocument =
     match body with
     | Some(ContentBody.Narrative doc) -> doc
     | other -> failtestf "Expected a Narrative body; got %A" other
+
+// ─── Phase 91 — KB-as-docs (KnowledgeDocsSource) test scaffolding ────
+
+/// A knowledge-docs provider stub backed by a fixed document map. The
+/// list view returns summaries; the per-doc view returns content for a
+/// known id, `None` otherwise (unknown / unauthorised doc).
+let private fakeDocsProvider (docs: KnowledgeDocContent list) : IKnowledgeDocsProvider =
+    { new IKnowledgeDocsProvider with
+        member _.ListDocuments _ctx = async {
+            return
+                docs
+                |> List.map (fun d -> {
+                    Id = d.Id
+                    Title = d.Title
+                    Description = d.Description
+                    Collection = d.Collection
+                })
+        }
+
+        member _.GetDocument docId _ctx = async { return docs |> List.tryFind (fun d -> d.Id = docId) }
+    }
+
+let private mkDoc (id: string) (title: string) (sections: KnowledgeDocSection list) : KnowledgeDocContent = {
+    Id = id
+    Title = title
+    Description = Some(sprintf "About %s" title)
+    Collection = Some "guides"
+    Sections = sections
+}
 
 let tests =
     testList "KnowledgeSurface (Phase 91)" [
@@ -183,4 +220,106 @@ let tests =
                     (RagAnswerConfig.create "answers" [ VectorScope.Team "kb" ])
 
             Expect.isNone (resolve source "blog/hello") "non-prefix slug is not claimed"
+
+        // ─── KB-as-docs (KnowledgeDocsSource) ────────────────────────
+
+        testCase "docs index lists every document as a link into its landing"
+        <| fun _ ->
+            let source =
+                KnowledgeDocsSource.create
+                    (fakeDocsProvider [
+                        mkDoc "a1" "Deploy guide" [
+                            {
+                                Heading = "Intro"
+                                LocationHint = Some "Page 1"
+                                Body = "x"
+                            }
+                        ]
+                        mkDoc "b2" "Ports guide" [
+                            {
+                                Heading = "Bands"
+                                LocationHint = Some "Page 2"
+                                Body = "y"
+                            }
+                        ]
+                    ])
+                    (KnowledgeDocsConfig.create "docs")
+
+            let indexDoc = resolve source "docs" |> narrativeOf
+            Expect.isTrue (hasSection indexDoc "documents") "index has a Documents section"
+            Expect.stringContains (sectionText indexDoc "documents") "Deploy guide" "first doc title is listed"
+            Expect.stringContains (sectionText indexDoc "documents") "Ports guide" "second doc title is listed"
+
+            // `docs/index` resolves to the same index page.
+            let viaIndexSlug = resolve source "docs/index" |> narrativeOf
+            Expect.isTrue (hasSection viaIndexSlug "documents") "docs/index also resolves the index"
+
+        testCase "docs landing renders one section per extraction block with a location-hint anchor"
+        <| fun _ ->
+            let source =
+                KnowledgeDocsSource.create
+                    (fakeDocsProvider [
+                        mkDoc "a1" "Deploy guide" [
+                            {
+                                Heading = "Overview"
+                                LocationHint = Some "Page 4"
+                                Body = "Run run.ps1 to deploy."
+                            }
+                            {
+                                Heading = "Ports"
+                                LocationHint = Some "Slide 12"
+                                Body = "Use the 5000 band."
+                            }
+                        ]
+                    ])
+                    (KnowledgeDocsConfig.create "docs")
+
+            let landing = resolve source "docs/a1" |> narrativeOf
+            Expect.equal landing.Title "Deploy guide" "landing title is the document title"
+            // Anchor derives from the location hint: "Page 4" → "page-4".
+            Expect.isTrue (hasSection landing "page-4") "first section anchors on its location hint"
+            Expect.isTrue (hasSection landing "slide-12") "second section anchors on its location hint"
+            Expect.stringContains (sectionText landing "page-4") "Run run.ps1 to deploy." "section body is rendered"
+
+        testCase "docs landing for an unknown id falls through (None)"
+        <| fun _ ->
+            let source =
+                KnowledgeDocsSource.create (fakeDocsProvider []) (KnowledgeDocsConfig.create "docs")
+
+            Expect.isNone (resolve source "docs/missing") "unknown doc id is not claimed"
+
+        testCase "docs source enumerates the index + every doc route (sitemap / static export)"
+        <| fun _ ->
+            let source =
+                KnowledgeDocsSource.create
+                    (fakeDocsProvider [
+                        mkDoc "a1" "One" [
+                            {
+                                Heading = "H"
+                                LocationHint = None
+                                Body = "b"
+                            }
+                        ]
+                        mkDoc "b2" "Two" [
+                            {
+                                Heading = "H"
+                                LocationHint = None
+                                Body = "b"
+                            }
+                        ]
+                    ])
+                    (KnowledgeDocsConfig.create "docs")
+
+            let routes = ContentSource.enumerateAll [ source ] |> Async.RunSynchronously
+            Expect.contains routes (Slug "docs") "the index route is enumerated"
+            Expect.contains routes (Slug "docs/a1") "the first doc route is enumerated"
+            Expect.contains routes (Slug "docs/b2") "the second doc route is enumerated"
+
+        testCase "empty docs collection renders a graceful index, not a bare page"
+        <| fun _ ->
+            let source =
+                KnowledgeDocsSource.create (fakeDocsProvider []) (KnowledgeDocsConfig.create "docs")
+
+            let indexDoc = resolve source "docs" |> narrativeOf
+            Expect.stringContains (sectionText indexDoc "documents") "No documents" "empty-state callout is shown"
     ]
