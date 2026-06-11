@@ -96,6 +96,9 @@
         <!-- Phase 18d — sophisticated capability negotiation (per-method
              profile + deprecation windows + handshake NegotiateMethod). -->
         <Compile Include="Contracts\IPeerCapabilityNegotiationContract.fs" />
+        <!-- Phase 18e — non-F# peer SDK: schema export + TypeScript /
+             Python generator emit-correctness. -->
+        <Compile Include="Contracts\IPeerNonFSharpSdkContract.fs" />
         <!-- Phase 11a.A — module-level mutable cache reset registry.
              Tests touching a (b)-class cache call CacheReset.invalidateAll
              at setup. See docs/platform/testing-conventions.md. -->
@@ -289,6 +292,12 @@
         <!-- Phase 84 — render-cache contract bindings + policy/hash unit
              tests + PublicPageHandler cache-integration tests. -->
         <Compile Include="InProcess\RenderCacheTests.fs" />
+        <!-- Phase 109 — IndexNow push-indexing: key derivation/resolution,
+             host derivation, deploy signature, SubmissionState round-trip,
+             the resumable batched-submission state machine (postmortem
+             resume scenario), file state store, /{key}.txt endpoint
+             match/fall-through, publish-hook ping, compose gate (GP 11/13). -->
+        <Compile Include="InProcess\IndexNowTests.fs" />
         <!-- Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
              AudienceGate matrix + handler 401/403 + sitemap exclusion +
              cross-tenant isolation. -->

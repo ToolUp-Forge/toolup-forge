@@ -19,6 +19,40 @@ module SitemapGenerator =
     let private xmlEscape (s: string) =
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&apos;")
 
+    /// The public URL universe as a deduped `(Slug * lastmod)` list — the
+    /// single source of truth shared by `sitemap.xml` and the Phase 109
+    /// IndexNow push channel, so the two can never disagree about what
+    /// exists. Pages whose frontmatter sets `sitemap = "exclude"` and
+    /// non-`Public` (gated) pages are dropped (Phase 86 — a crawler must
+    /// not discover an authenticated / tenant-private slug); the surviving
+    /// pages carry their `PublishedAt` (formatted `yyyy-MM-dd`) as the
+    /// lastmod. Phase 95 `dynamicSlugs` (content-source-enumerated routes —
+    /// e.g. `/tag/{x}`) are appended with no lastmod, deduped against the
+    /// page slugs. Order: pages first (input order), then dynamic routes.
+    let entries (pages: PublicPage list) (dynamicSlugs: Slug list) : (Slug * string option) list =
+        let pageEntries =
+            pages
+            |> List.choose (fun page ->
+                let excluded =
+                    not (PublicPage.isPublic page)
+                    || page.Frontmatter
+                       |> Map.tryFind "sitemap"
+                       |> Option.exists (fun v -> v.Equals("exclude", StringComparison.OrdinalIgnoreCase))
+
+                if excluded then
+                    None
+                else
+                    Some(page.Slug, page.PublishedAt |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))))
+
+        let pageSlugs = pageEntries |> List.map (fun (Slug s, _) -> s) |> Set.ofList
+
+        let dynamicEntries =
+            dynamicSlugs
+            |> List.choose (fun (Slug s) -> if pageSlugs.Contains s then None else Some(Slug s, None))
+            |> List.distinct
+
+        pageEntries @ dynamicEntries
+
     /// Build the sitemap XML body for a page list + base URL, plus any
     /// Phase 95 dynamic routes (content-source-enumerated slugs — e.g.
     /// `/tag/{x}` taxonomy pages). Pages whose frontmatter sets
@@ -46,26 +80,11 @@ module SitemapGenerator =
         sb.AppendLine("""<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">""")
         |> ignore
 
-        for page in pages do
-            let excluded =
-                // Phase 86 — gated (non-`Public`) pages never appear in the
-                // sitemap, so a crawler can't discover an authenticated /
-                // tenant-private slug.
-                not (PublicPage.isPublic page)
-                || page.Frontmatter
-                   |> Map.tryFind "sitemap"
-                   |> Option.exists (fun v -> v.Equals("exclude", StringComparison.OrdinalIgnoreCase))
-
-            if not excluded then
-                emit (Slug.value page.Slug) (page.PublishedAt |> Option.map (fun d -> d.ToString("yyyy-MM-dd")))
-
-        // Phase 95 — content-source-enumerated dynamic routes (deduped
-        // against the file/overlay pages already emitted).
-        let pageSlugs = pages |> List.map (fun p -> Slug.value p.Slug) |> Set.ofList
-
-        for Slug s in dynamicSlugs do
-            if not (pageSlugs.Contains s) then
-                emit s None
+        // Phase 109 — both the sitemap and the IndexNow push channel walk
+        // the same deduped universe (`entries`), so a slug can never appear
+        // in one and not the other.
+        for Slug s, lastmod in entries pages dynamicSlugs do
+            emit s lastmod
 
         sb.AppendLine("</urlset>") |> ignore
         sb.ToString()

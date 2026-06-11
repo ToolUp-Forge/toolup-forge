@@ -117,7 +117,12 @@ type PublicRenderingNarrativePagePublisher
         entityStore: IEntityStore,
         registeredLayouts: LayoutName list,
         renderCacheInvalidator: IRenderCacheInvalidation option,
-        guardrails: NarrativePublishGuardrails
+        guardrails: NarrativePublishGuardrails,
+        // Phase 109 — optional IndexNow push: when composed, a successful
+        // publish pings the just-written slug to IndexNow immediately (the
+        // same publish hook the render-cache purge rides). `None` when no
+        // IndexNow is composed (or `PingOnPublish = false`).
+        indexNowService: IIndexNowService option
     ) =
 
     let resolveLayout (hint: string option) : LayoutName =
@@ -276,6 +281,18 @@ type PublicRenderingNarrativePagePublisher
                         | Some inv -> do! inv.PurgeSlug canonicalSlug
                         | None -> ()
 
+                        // Phase 109 — push the just-published URL to IndexNow
+                        // so participating engines re-crawl it immediately
+                        // rather than waiting out the passive-crawl window. A
+                        // no-op when no IndexNow is composed (or its
+                        // `PingOnPublish` toggle is off — the service itself
+                        // gates that). Best-effort: PingSlug swallows its own
+                        // transport failures, so a push outage never fails a
+                        // publish.
+                        match indexNowService with
+                        | Some svc -> do! svc.PingSlug canonicalSlug
+                        | None -> ()
+
                         return PublishSucceeded canonicalSlug
                     | Error err -> return PublishFailed(sprintf "entity store rejected the save: %A" err)
         }
@@ -289,14 +306,23 @@ module PublicRenderingNarrativePagePublisher =
     /// composed. `guardrails` (Phase 91) constrain the AI authoring path
     /// (forced-draft landing, layout allow-list, forced audience, section
     /// cap); pass `NarrativePublishGuardrails.defaults` to preserve the
-    /// pre-91 immediate-publish behaviour.
+    /// pre-91 immediate-publish behaviour. `indexNowService` (Phase 109)
+    /// pings the just-published slug to IndexNow on success; pass `None`
+    /// when no IndexNow is composed.
     let create
         (entityStore: IEntityStore)
         (layoutNames: LayoutName list)
         (renderCacheInvalidator: IRenderCacheInvalidation option)
         (guardrails: NarrativePublishGuardrails)
+        (indexNowService: IIndexNowService option)
         : INarrativePagePublisher =
-        PublicRenderingNarrativePagePublisher(entityStore, layoutNames, renderCacheInvalidator, guardrails)
+        PublicRenderingNarrativePagePublisher(
+            entityStore,
+            layoutNames,
+            renderCacheInvalidator,
+            guardrails,
+            indexNowService
+        )
         :> INarrativePagePublisher
 
 // ─── Phase 80b — Layout catalog ────────────────────────────────

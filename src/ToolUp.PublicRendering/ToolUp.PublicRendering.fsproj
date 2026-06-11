@@ -67,6 +67,12 @@
         <Compile Include="Server\TaxonomyHandler.fs" />
         <Compile Include="Server\Attribution.fs" />
         <Compile Include="Server\SitemapGenerator.fs" />
+        <!-- Phase 109 — IndexNow push-indexing: ownership-key endpoint +
+             resumable batched submission (per-batch success persistence) +
+             state-store seam (file/blob) + per-slug publish ping + startup
+             hosted service. Precedes NarrativePagePublisher (publish ping)
+             and PublicRenderingCompose (registration). -->
+        <Compile Include="Server\IndexNow.fs" />
         <Compile Include="Server\NarrativePagePublisher.fs" />
         <!-- Phase 101 — tabular data extraction + CSV / JSON serialisers
              (consumed by the export handler's ?format=csv/json). -->

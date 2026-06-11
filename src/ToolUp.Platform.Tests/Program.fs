@@ -151,6 +151,10 @@ let allTests =
         // PublicPageHandler cache-integration (miss→hit, 304, headers,
         // off-route, pre-84 path, stale-while-revalidate).
         RenderCacheTests.tests
+        // Phase 109 — IndexNow push-indexing: key derivation, resumable
+        // submission state machine (postmortem resume), /{key}.txt endpoint
+        // match/fall-through, publish ping, compose gate (GP 11/13).
+        IndexNowTests.tests
         // Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
         // AudienceGate evaluate matrix + handler authorization pre-check
         // (401/403/200) + sitemap exclusion + cross-tenant isolation.
@@ -255,6 +259,11 @@ let allTests =
         // mutual version), profileFor reflection + overlay, fromCapability-
         // List degradation, and the handshake NegotiateMethod wrapper.
         IPeerCapabilityNegotiationContract.tests
+        // Phase 18e — non-F# peer SDK: language-neutral schema export +
+        // TypeScript / Python generator emit-correctness (type vocabulary,
+        // record flattening, schema JSON round-trip, generated source
+        // declarations + JSON-RPC POST skeleton).
+        IPeerNonFSharpSdkContract.tests
     ]
 
 [<EntryPoint>]

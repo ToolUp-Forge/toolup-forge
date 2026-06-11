@@ -134,6 +134,13 @@ type PublicRenderingServerApp = {
     /// to force a Draft landing, constrain layouts / audience, or cap the
     /// document shape. Only consulted when `AIPublishEnabled = true`.
     AIPublishGuardrails: NarrativePublishGuardrails
+    /// Phase 109 — opt-in IndexNow push-indexing. Defaults to the disabled
+    /// shape (`IndexNowOptions.defaults`) — no `/{key}.txt` route, no
+    /// startup submission, no publish ping (GP 11 / GP 13). Set via
+    /// `withIndexNow` to actively notify search engines (Bing / Yandex /
+    /// Seznam / Naver) when content is published or the deploy changes the
+    /// URL universe.
+    IndexNow: IndexNowOptions
 }
 
 module PublicRenderingServerApp =
@@ -156,6 +163,7 @@ module PublicRenderingServerApp =
         Nav = []
         SemanticSearch = None
         AIPublishGuardrails = NarrativePublishGuardrails.defaults
+        IndexNow = IndexNowOptions.defaults
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -184,6 +192,7 @@ module PublicRenderingServerApp =
         Nav = []
         SemanticSearch = None
         AIPublishGuardrails = NarrativePublishGuardrails.defaults
+        IndexNow = IndexNowOptions.defaults
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -530,6 +539,33 @@ module PublicRenderingServerApp =
                 RenderCacheInvalidation = Some invalidator
         }
 
+    /// Phase 109 — opt into IndexNow push-indexing. Registers an
+    /// ownership-key endpoint at `/{key}.txt`, an `IIndexNowService` in DI
+    /// (the manual / ops resubmit entry point + the per-slug publish ping),
+    /// and — when `SubmitOnStartup` — an `IHostedService` that fires a
+    /// resumable bulk submission of the whole public URL universe at
+    /// startup (fire-and-forget; never blocks startup). On a successful
+    /// publish through `publish_narrative` / the CMS publisher, the
+    /// just-written slug is pushed immediately.
+    ///
+    /// Off by default (GP 11 / GP 13): a pipeline that never calls this is
+    /// byte-for-byte the pre-109 shape — no route, no hosted service, no
+    /// allocation. The submission rides the SAME URL universe the sitemap
+    /// emits (`SitemapGenerator.entries`), so the push channel and the
+    /// sitemap can never disagree.
+    ///
+    ///     // single-instance, host + key derived automatically:
+    ///     |> PublicRenderingServerApp.withIndexNow
+    ///         { IndexNowOptions.enabled with Host = Some "example.com" }
+    ///     // multi-instance (shared blob-backed resume state):
+    ///     |> PublicRenderingServerApp.withIndexNow
+    ///         { IndexNowOptions.enabled with
+    ///             StateStore = Some(BlobIndexNowStateStore.create storage) }
+    let withIndexNow (options: IndexNowOptions) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            IndexNow = options
+    }
+
     /// Toggle the dev-mode hot-reload watcher. Defaults to `true`.
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
@@ -597,6 +633,7 @@ module PublicRenderingServerApp =
             let semanticSearch = app.SemanticSearch // Phase 91
             let renderCache = app.RenderCache
             let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
+            let indexNowOptions = app.IndexNow // Phase 109
 
             // Resolve the slug-purge surface for the publish / CMS
             // invalidation hook (Phase 84). Prefer an explicit
@@ -635,6 +672,26 @@ module PublicRenderingServerApp =
             let prLogger =
                 appWithEntity.Logger
                 |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+            // Phase 109 — resolve the IndexNow host + ownership key once at
+            // compose time. Host falls back to the sitemap's public base URL;
+            // the key is derived from a STABLE seed (the host) so the
+            // `/{key}.txt` endpoint and every submission's keyLocation agree
+            // and the key never churns on a content edit.
+            let indexNowHost = IndexNow.resolveHost indexNowOptions publicBaseUrl
+            let indexNowKey = IndexNow.resolveKey indexNowOptions indexNowHost
+
+            // IndexNow needs a resolvable host (an explicit `Host` or a
+            // `PublicBaseUrl` to derive one from) to produce the absolute
+            // URLs + `keyLocation` the spec requires. Enabled-but-no-host is
+            // a misconfiguration: warn once and treat as inactive rather than
+            // emit relative URLs every engine would reject.
+            let indexNowActive =
+                indexNowOptions.Enabled && not (System.String.IsNullOrWhiteSpace indexNowHost)
+
+            if indexNowOptions.Enabled && not indexNowActive then
+                prLogger.Warn
+                    "IndexNow: enabled but no host could be resolved (set IndexNowOptions.Host or ServerConfig.PublicBaseUrl); IndexNow is inactive."
 
             // ─── DI registrations ────────────────────────────────
             let registeredLayoutNames = layouts |> Map.toList |> List.map fst
@@ -701,11 +758,20 @@ module PublicRenderingServerApp =
                                 // audit-logged store, etc.) participates.
                                 let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
 
+                                // Phase 109 — resolve the IndexNow service (if
+                                // composed) so a successful publish pings the
+                                // slug. `None` when no IndexNow is wired.
+                                let indexNowSvc =
+                                    sp.GetService(typeof<IIndexNowService>)
+                                    |> Option.ofObj
+                                    |> Option.map (fun x -> x :?> IIndexNowService)
+
                                 PublicRenderingNarrativePagePublisher.create
                                     entityStore
                                     registeredLayoutNames
                                     renderCacheInvalidator
-                                    aiPublishGuardrails)
+                                    aiPublishGuardrails
+                                    indexNowSvc)
                         )
                     else
                         s
@@ -742,6 +808,77 @@ module PublicRenderingServerApp =
                         match renderCacheInvalidator with
                         | Some inv -> s.AddSingleton<IRenderCacheInvalidation>(inv)
                         | None -> s
+                |> fun s ->
+                    // Phase 109 — IndexNow registrations. When active,
+                    // register the `IIndexNowService` (the publish-ping +
+                    // manual / ops resubmit surface) and — when
+                    // `SubmitOnStartup` — an `IHostedService` that fires the
+                    // resumable bulk submission once at startup. When inactive
+                    // (not composed / disabled / no host), nothing is
+                    // registered → no service, no hosted service (GP 11 / 13).
+                    if not indexNowActive then
+                        s
+                    else
+                        // One shared `HttpClient` for the whole submission
+                        // surface (avoids socket exhaustion). Captured by the
+                        // singleton service factory below.
+                        let httpClient =
+                            new System.Net.Http.HttpClient(Timeout = System.TimeSpan.FromSeconds 30.0)
+
+                        let stateStore =
+                            indexNowOptions.StateStore
+                            |> Option.defaultWith (fun () -> FileIndexNowStateStore.create ())
+
+                        let s =
+                            s.AddSingleton<IIndexNowService>(
+                                System.Func<System.IServiceProvider, IIndexNowService>(fun sp ->
+                                    let metrics =
+                                        match sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>) with
+                                        | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
+                                        | _ ->
+                                            ToolUp.Platform.Metrics.NoOpMetricsSink()
+                                            :> ToolUp.Platform.Metrics.IMetricsSink
+
+                                    let postFn body =
+                                        IndexNow.postWith httpClient indexNowOptions.Endpoint body
+
+                                    // Resolve the content API + sources at call
+                                    // time so any decorator participates and a
+                                    // republish since startup is reflected in
+                                    // the submitted universe.
+                                    let universe () = async {
+                                        let api = sp.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                                        let! pages = api.ListPages ""
+                                        let! dyn = ContentSource.enumerateAll contentSources
+                                        return SitemapGenerator.entries pages dyn
+                                    }
+
+                                    IndexNowService(
+                                        indexNowOptions,
+                                        indexNowHost,
+                                        indexNowKey,
+                                        publicBaseUrl,
+                                        stateStore,
+                                        postFn,
+                                        metrics,
+                                        prLogger,
+                                        universe
+                                    )
+                                    :> IIndexNowService)
+                            )
+
+                        if indexNowOptions.SubmitOnStartup then
+                            s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                                System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
+                                    (fun sp ->
+                                        let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
+
+                                        IndexNowStartupService(svc, prLogger)
+                                        :> Microsoft.Extensions.Hosting.IHostedService)
+                            )
+                        else
+                            s
 
             // ─── Handler chain ───────────────────────────────────
             // Order: sitemap (specific route) → redirect (path-match
@@ -826,8 +963,20 @@ module PublicRenderingServerApp =
                         | _ -> next ctx
                   ]
 
+            // Phase 109 — IndexNow ownership-key endpoint `/{key}.txt`.
+            // Mounted before the catch-all page handler; it claims only the
+            // exact key slug and declines (falls through) for any other
+            // `/*.txt`. Empty when IndexNow is inactive (GP 11 / 13).
+            let indexNowHandlers: HttpHandler list =
+                if indexNowActive then
+                    [ IndexNowKeyHandler.routes indexNowKey ]
+                else
+                    []
+
             let publicRenderingHandlers =
-                [ sitemapHandler; redirectHandler; exportHandler ]
+                [ sitemapHandler ]
+                @ indexNowHandlers
+                @ [ redirectHandler; exportHandler ]
                 @ feedHandlers
                 @ searchHandlers
                 @ [ previewHandler; pageHandler ]
