@@ -129,6 +129,7 @@ let allTests =
         I18nInfrastructureTests.tests
         MultimodalAIProviderTests.tests
         CitationNormaliserTests.tests
+        InMemoryBM25IndexTests.tests
         SyntheticClientToolAuthorizerTests.tests
         AIAgentEngineClientResidentAuthorizationTests.tests
         ClientToolDispatchContractBindings.tests

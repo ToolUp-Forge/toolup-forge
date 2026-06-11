@@ -663,8 +663,23 @@ type FSharpRecordConverterFactory() =
 type FSharpCliMutableRecordConverter<'T>() =
     inherit JsonConverter<'T>()
 
+    // A non-public record (`private` / `internal`, or any record inside a
+    // non-public module) compiles its field getters AND its constructors
+    // at assembly accessibility, so the Public-only property scan returns
+    // nothing — the record would serialise as `{}` and deserialisation
+    // would fail with `MissingMethodException: Constructor on type … not
+    // found`. Fall back to the record-field view (declaration order, which
+    // matches the primary constructor's parameter order) when the public
+    // scan comes back empty; public records keep the Type.GetProperties
+    // enumeration byte-for-byte (Newtonsoft-order compat, see above).
     let properties =
-        typeof<'T>.GetProperties(BindingFlags.Instance ||| BindingFlags.Public)
+        let publicProperties =
+            typeof<'T>.GetProperties(BindingFlags.Instance ||| BindingFlags.Public)
+
+        if publicProperties.Length > 0 then
+            publicProperties
+        else
+            FSharpType.GetRecordFields(typeof<'T>, UnionReflection.bindingFlags)
 
     override _.Write(writer: Utf8JsonWriter, value: 'T, options: JsonSerializerOptions) =
         writer.WriteStartObject()
@@ -700,7 +715,19 @@ type FSharpCliMutableRecordConverter<'T>() =
                         else
                             null)
 
-            Activator.CreateInstance(typeof<'T>, args) :?> 'T
+            // NonPublic binding so non-public records (assembly-level
+            // constructor) construct as well as public ones.
+            Activator.CreateInstance(
+                typeof<'T>,
+                BindingFlags.Instance
+                ||| BindingFlags.Public
+                ||| BindingFlags.NonPublic
+                ||| BindingFlags.CreateInstance,
+                null,
+                args,
+                null
+            )
+            :?> 'T
         | other -> failwithf "Unexpected token %A when reading CLIMutable record %s" other typeof<'T>.FullName
 
 type FSharpCliMutableRecordConverterFactory() =
