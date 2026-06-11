@@ -975,7 +975,10 @@ module PublicRenderingServerApp =
                         match ctx.RequestServices.GetService(typeof<IRetrievalPipeline.IRetrievalPipeline>) with
                         | :? IRetrievalPipeline.IRetrievalPipeline as pipeline ->
                             SemanticSearchHandler.handle cfg pipeline layouts next ctx
-                        | _ -> next ctx
+                        // Decline via `skipPipeline` (None) so the
+                        // surrounding `choose` advances; `next ctx`
+                        // would end the chain as an unwritten 200.
+                        | _ -> skipPipeline
                   ]
 
             // Phase 109 — IndexNow ownership-key endpoint `/{key}.txt`.

@@ -688,5 +688,7 @@ module IndexNowKeyHandler =
                     next
                     ctx
             else
-                // Decline — fall through to the next handler in the chain.
-                next ctx)
+                // Decline via `skipPipeline` (None) so the surrounding
+                // `choose` advances to the next handler; `next ctx` would
+                // end the chain as an unwritten 200.
+                skipPipeline)

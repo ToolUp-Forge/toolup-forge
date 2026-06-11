@@ -70,7 +70,7 @@ module NarrativeExportHandler =
         if cleaned = "" then "export" else cleaned
 
     let handler (api: IPublicContentApi) : HttpHandler =
-        fun next (ctx: HttpContext) -> task {
+        fun _next (ctx: HttpContext) -> task {
             let format =
                 match ctx.Request.Query.TryGetValue "format" with
                 | true, values when values.Count > 0 -> Some(values.[0])
@@ -81,8 +81,11 @@ module NarrativeExportHandler =
                 // No format parameter — fall through to the standard
                 // page handler. Returning `None` from a Giraffe handler
                 // signals "I don't handle this", and the surrounding
-                // `choose` advances to the next branch.
-                return! next ctx
+                // `choose` advances to the next branch. Calling
+                // `next ctx` here would halt the choose with an empty
+                // 200 (the no-op finisher path), shadowing the page
+                // handler for every format-less GET.
+                return None
             | Some fmt ->
                 let rawPath = ctx.Request.Path.Value
                 let slug = rawPath.TrimStart('/')

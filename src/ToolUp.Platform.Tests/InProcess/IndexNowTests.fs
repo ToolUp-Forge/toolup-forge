@@ -408,7 +408,8 @@ let private fileStoreTests =
 type private KeyResult = {
     Status: int
     Body: string
-    FellThrough: bool
+    ContinuationInvoked: bool
+    Declined: bool
 }
 
 let private runKeyHandler (key: string) (path: string) : KeyResult =
@@ -418,15 +419,18 @@ let private runKeyHandler (key: string) (path: string) : KeyResult =
     let respBody = new MemoryStream()
     ctx.Response.Body <- respBody
 
-    // The continuation records "fell through" so we can distinguish a
-    // declined request from a claimed one.
+    // The continuation records whether it was invoked. A decline must
+    // return `None` WITHOUT invoking it — in the composed chain `next`
+    // is the choose's downstream finisher, so `next ctx` would end the
+    // whole pipeline as an unwritten 200 instead of advancing to the
+    // page handler.
     let finalFunc: HttpFunc =
         fun c ->
-            c.Items["fellThrough"] <- box true
+            c.Items["continuationInvoked"] <- box true
             Task.FromResult(Some c)
 
     let h = IndexNowKeyHandler.routes key
-    (h finalFunc ctx).GetAwaiter().GetResult() |> ignore
+    let result = (h finalFunc ctx).GetAwaiter().GetResult()
 
     respBody.Position <- 0L
     let text = (new StreamReader(respBody)).ReadToEnd()
@@ -434,21 +438,27 @@ let private runKeyHandler (key: string) (path: string) : KeyResult =
     {
         Status = ctx.Response.StatusCode
         Body = text
-        FellThrough = ctx.Items.ContainsKey "fellThrough"
+        ContinuationInvoked = ctx.Items.ContainsKey "continuationInvoked"
+        Declined = result.IsNone
     }
 
 let private keyEndpointTests =
     testList "ownership-key endpoint" [
 
-        test "GET /{key}.txt serves the key body and does not fall through" {
+        test "GET /{key}.txt serves the key body and does not decline" {
             let r = runKeyHandler "abc123" "/abc123.txt"
             Expect.equal r.Body "abc123" "body equals the key"
-            Expect.isFalse r.FellThrough "the key request is claimed, not passed on"
+            Expect.isFalse r.Declined "the key request is claimed, not declined"
         }
 
-        test "GET /{other}.txt falls through to the next handler (no 404)" {
+        test "GET /{other}.txt declines (returns None) so the surrounding choose advances" {
             let r = runKeyHandler "abc123" "/something-else.txt"
-            Expect.isTrue r.FellThrough "a non-key .txt request falls through"
+            Expect.isTrue r.Declined "a non-key .txt request declines with None"
+
+            Expect.isFalse
+                r.ContinuationInvoked
+                "the continuation must not be invoked — `next ctx` would end the chain as an unwritten 200"
+
             Expect.equal r.Body "" "nothing written for a non-key request"
         }
     ]
