@@ -993,11 +993,15 @@ and [<Sealed>] ShapeTuple<'Tuple> private () =
         if isStructTuple then
             Unchecked.defaultof<'Tuple>
         else
-            let obj = FormatterServices.GetUninitializedObject typeof<'Tuple>
+            let obj =
+                System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject typeof<'Tuple>
+
             let mutable this = obj
 
             for f in fieldStack do
-                let x = FormatterServices.GetUninitializedObject f.FieldType
+                let x =
+                    System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject f.FieldType
+
                 f.SetValue(this, x)
                 this <- x
 
@@ -1315,12 +1319,12 @@ and [<Sealed>] ShapePoco<'Poco> private () =
 
     /// Creates an uninitialized instance for POCO
     member inline _.CreateUninitialized() : 'Poco =
-        FormatterServices.GetUninitializedObject(typeof<'Poco>) :?> 'Poco
+        System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof<'Poco>) :?> 'Poco
 
 #if TYPESHAPE_EXPR
     /// Creates an uninitialized instance for POCO
     member inline _.CreateUninitializedExpr() : Expr<'Poco> =
-        <@ FormatterServices.GetUninitializedObject(typeof<'Poco>) :?> 'Poco @>
+        <@ System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof<'Poco>) :?> 'Poco @>
 #endif
 
     interface IShapePoco with

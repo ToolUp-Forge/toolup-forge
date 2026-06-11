@@ -18,7 +18,6 @@ open System.Threading
 open System.Collections.Generic
 open System.Collections.Concurrent
 open System.Reflection
-open System.Runtime.Serialization
 
 type private ICell =
     abstract Type: Type
@@ -409,15 +408,35 @@ type private ShallowObjectCopier<'T> private () =
 type RecursiveValueHelper =
     /// Creates an uninitialized value for given type
     static member CreateUninitializedValue<'T>() : 'T =
-        System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof<'T>) :?> 'T
+        System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof<'T>) :?> 'T
 
     /// performs a shallow copy of field contents from one object to another
     static member ShallowCopy<'T when 'T: not struct> (source: 'T) (target: 'T) = ShallowObjectCopier.Copy source target
 
+/// Assigns sequential int64 ids by reference identity. Replacement for the
+/// obsolete System.Runtime.Serialization.ObjectIDGenerator (SYSLIB0050):
+/// ids start at 1 and firstTime reports first-encounter, matching the
+/// original's semantics for the subset of behaviour ObjectStack relies on.
+[<Sealed>]
+type private ReferenceIdGenerator() =
+    let ids = Dictionary<obj, int64>(ReferenceEqualityComparer.Instance)
+    let mutable nextId = 0L
+
+    member _.GetId(value: obj, firstTime: byref<bool>) : int64 =
+        match ids.TryGetValue value with
+        | true, id ->
+            firstTime <- false
+            id
+        | false, _ ->
+            nextId <- nextId + 1L
+            ids.Add(value, nextId)
+            firstTime <- true
+            nextId
+
 /// Helper class for detecting cycles in a traversed object graph
 [<Sealed>]
 type ObjectStack() =
-    let mutable idGen = new ObjectIDGenerator()
+    let mutable idGen = new ReferenceIdGenerator()
     let objStack = new Stack<int64>()
 
     let mutable firstTime = true
@@ -426,7 +445,7 @@ type ObjectStack() =
 
     /// Resets state for given stack instance
     member __.Reset() =
-        idGen <- new ObjectIDGenerator()
+        idGen <- new ReferenceIdGenerator()
         objStack.Clear()
         firstTime <- true
         isCycle <- false
@@ -489,7 +508,7 @@ type ObjectCache() =
     /// specified concrete type and appends it to the cache.
     member __.CreateUninitializedInstance<'T when 'T: not struct>(id: int64, underlyingType: Type) : 'T =
         let t =
-            System.Runtime.Serialization.FormatterServices.GetUninitializedObject(underlyingType) :?> 'T
+            System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(underlyingType) :?> 'T
 
         dict.Add(id, t)
         cyclicValues.Add id |> ignore
