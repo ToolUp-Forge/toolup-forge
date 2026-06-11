@@ -72,7 +72,14 @@
         <Compile Include="Contracts\IRateLimiterContract.fs" />
         <Compile Include="Contracts\IRateLimitStoreContract.fs" />
         <Compile Include="Contracts\IClientToolAuthorizerContract.fs" />
+        <!-- Phase 113 — host-neutral action-authorizer conformance bar
+             (decision invariants over a fixture's allowed/denied calls). -->
+        <Compile Include="Contracts\IActionAuthorizerContract.fs" />
         <Compile Include="Contracts\IClientToolDispatchContract.fs" />
+        <!-- Phase 112 — scope-isolated live-session host conformance bar
+             (structural cross-scope denial, single-session ordering,
+             idempotent unsubscribe/close). -->
+        <Compile Include="Contracts\ILiveSessionHostContract.fs" />
         <Compile Include="Contracts\IConversationStoreContract.fs" />
         <Compile Include="Contracts\IPublicContentApiContract.fs" />
         <Compile Include="Contracts\IContentSourceContract.fs" />
@@ -273,6 +280,15 @@
         <Compile Include="InProcess\AIAgentEngineClientResidentAuthorizationTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
+        <!-- Phase 113 — action-authorizer: policy matching, the
+             PermissionStore/tier-backed default's semantics (default-deny,
+             grant→Allow, tier gate, cross-scope, fail-closed), contract
+             binding. -->
+        <Compile Include="InProcess\ActionAuthorizerTests.fs" />
+        <!-- Phase 112 — live-session host: contract binding, per-scope
+             cap refusal, endpoint integration (path gate, cross-scope
+             404, rate-limit 429, SSE frame delivery). -->
+        <Compile Include="InProcess\LiveSessionHostTests.fs" />
         <Compile Include="InProcess\PublicRenderingTests.fs" />
         <!-- Phase 85 — NarrativeFromData projector output-shape +
              determinism + graceful-degradation tests. -->
@@ -292,6 +308,11 @@
         <!-- Phase 84 — render-cache contract bindings + policy/hash unit
              tests + PublicPageHandler cache-integration tests. -->
         <Compile Include="InProcess\RenderCacheTests.fs" />
+        <!-- Phase 111 — resolved-content head metadata: PageHeadMetadata
+             codec round-trip, PublicContentApiImpl synthesis (GP 11
+             bare-body parity), PageHeadInjection emission + handler
+             integration (cache-ownership rule), enumerable reach. -->
+        <Compile Include="InProcess\ResolvedContentTests.fs" />
         <!-- Phase 109 — IndexNow push-indexing: key derivation/resolution,
              host derivation, deploy signature, SubmissionState round-trip,
              the resumable batched-submission state machine (postmortem

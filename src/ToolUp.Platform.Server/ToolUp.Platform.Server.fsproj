@@ -99,6 +99,12 @@
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />
         <Compile Include="Server\Notifications\NotificationHandler.fs" />
+        <!-- Phase 112 — scope-isolated server-driven live-session host:
+             ILiveChannel / ILiveSessionHost (six-rule, GP 4 structural
+             scope partition) + the in-process default. After the SSE
+             substrate it rides; the compose hook + endpoint live in
+             Server\Compose\LiveSessionsCompose.fs (after ServerApp). -->
+        <Compile Include="Server\Notifications\LiveSessionHost.fs" />
         <!-- Phase 11.C.5 Tier 3 — server-tier `RequestContext.ofHttpContext`
              constructor for the Core-tier `RequestContext` newtype. Must
              precede every `IAuthProvider` impl so they can compile against
@@ -342,6 +348,11 @@
         <Compile Include="Server\OAuthFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
+        <!-- Phase 113 — IPermissionStore/tier-backed default for the
+             host-neutral IActionAuthorizer seam (default-deny; policy as
+             data). After PermissionStore (the backing) + IUserClaims
+             (the tier provider). -->
+        <Compile Include="Server\Scope\PermissionStoreActionAuthorizer.fs" />
         <Compile Include="Server\Config\IConfigStore.fs" />
         <Compile Include="Server\Config\ConfigStore.fs" />
         <Compile Include="Server\ConfigStoreErasureHandler.fs" />
@@ -478,6 +489,11 @@
         <Compile Include="Server\Compose\ComposeTenantLifecycle.fs" />
         <Compile Include="Server\SDK.Server.fs" />
         <Compile Include="Server\ServerApp.fs" />
+        <!-- Phase 112 — live-session compose surface: options + SSE
+             subscribe endpoint (scope-isolated, rate-limited) +
+             LiveSessionsCompose.withLiveSessions. After ServerApp (the
+             record it extends via ComposeExtensions). -->
+        <Compile Include="Server\Compose\LiveSessionsCompose.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />

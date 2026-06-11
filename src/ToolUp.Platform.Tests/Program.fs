@@ -133,6 +133,13 @@ let allTests =
         AIAgentEngineClientResidentAuthorizationTests.tests
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
+        // Phase 113 — host-neutral default-deny action authorizer:
+        // policy matching + PermissionStoreActionAuthorizer semantics +
+        // contract binding.
+        ActionAuthorizerTests.tests
+        // Phase 112 — scope-isolated live-session host: contract pack,
+        // cap refusal, endpoint integration (404 / 429 / SSE frames).
+        LiveSessionHostTests.tests
         PublicRenderingTests.tests
         // Phase 85 — NarrativeFromData analytics → Narrative projectors.
         NarrativeFromDataTests.tests
@@ -151,6 +158,10 @@ let allTests =
         // PublicPageHandler cache-integration (miss→hit, 304, headers,
         // off-route, pre-84 path, stale-while-revalidate).
         RenderCacheTests.tests
+        // Phase 111 — resolved-content head metadata: codec round-trip,
+        // synthesis (GP 11 bare-body parity), head injection + handler
+        // integration (Phase 84 cache-ownership), enumerable reach.
+        ResolvedContentTests.tests
         // Phase 109 — IndexNow push-indexing: key derivation, resumable
         // submission state machine (postmortem resume), /{key}.txt endpoint
         // match/fall-through, publish ping, compose gate (GP 11/13).
