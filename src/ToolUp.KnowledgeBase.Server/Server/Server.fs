@@ -42,6 +42,7 @@ let knowledgeApi (ctx: HttpContext) : KnowledgeApi =
         SetAIContext = setAIContext deps
         GetSuggestedQuestions = getSuggestedQuestions deps
         RefreshAIContext = fun () -> refreshAIContext deps
+        GetOriginalDocument = getOriginalDocument deps
     }
 
 // ─── Public surface re-exports (helpers split into sibling modules) ─
@@ -77,6 +78,17 @@ let knowledgeBasePromptBuilders =
 /// `Server/PlatformAdmin.fs`; re-exported here so deployments can wire
 /// it as a sibling `ServerModule` alongside the team-side `knowledgeApi`.
 let platformKnowledgeApi = KnowledgeBase.ServerPlatformAdmin.platformKnowledgeApi
+
+/// Phase 104 — register a custom `IOriginalSourceResolver` so a
+/// deployment can extend original-document resolution to a custom
+/// source kind (or rewire the built-in per-`KnowledgeSource` branches).
+/// Defined in `Server/OriginalSourceResolver.fs`; re-exported here so
+/// the public name `KnowledgeBase.Server.withOriginalSourceResolver`
+/// sits alongside the other compose-time hooks. Apps that never call
+/// this get the default resolver (UploadedFile → raw blob, Note →
+/// note.md markdown, narrative → `NoOriginalAvailable`).
+let withOriginalSourceResolver =
+    KnowledgeBase.ServerOriginalSourceResolver.withOriginalSourceResolver
 
 /// Wave 1 Gap #2 — explicit operator-callable recovery hook for the KB
 /// ingestion pipeline. The in-process `IngestionQueue` (in

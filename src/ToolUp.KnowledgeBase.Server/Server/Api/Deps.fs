@@ -47,6 +47,18 @@ type KnowledgeApiDeps = {
     /// KB and `list_narratives` still returns prior entries.
     NarrativeStore: INarrativeStore option
     AccessContext: AccessContext
+    /// Per-`KnowledgeSource` original-document resolution (Phase 104).
+    /// Resolved from DI when a deployment registered a custom resolver
+    /// via `withOriginalSourceResolver`; falls back to the default
+    /// (UploadedFile → raw blob, Note → note.md, narrative → `None`).
+    OriginalResolver: KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver
+    /// Optional `IAuditLog` for the Phase 107 original-document access
+    /// audit (`KnowledgeOriginalRetrieved` + denial events). `None`
+    /// when the audit-log substrate isn't registered (test bypass,
+    /// `NoAuditLog` deployment) — emission is best-effort and silent
+    /// when the substrate is absent, same posture as the Platform KB
+    /// admin surface.
+    AuditLog: IAuditLog option
     /// Records ingestion-queue enqueue outcomes against the
     /// per-deployment `IRagTelemetry` snapshot. No-op when no queue
     /// or no telemetry sink is registered.
@@ -161,6 +173,24 @@ module KnowledgeApiDeps =
             | :? INarrativeStore as n -> Some n
             | _ -> None
 
+        // Original-source resolver (Phase 104). Same probe-with-default
+        // shape as the OCR / table-extractor providers above: a custom
+        // resolver registered before compose wins; otherwise the
+        // per-`KnowledgeSource` default applies.
+        let originalResolver =
+            match
+                ctx.RequestServices.GetService(
+                    typeof<KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver>
+                )
+            with
+            | :? KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver as r -> r
+            | _ -> KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
+
+        let auditLog =
+            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+            | :? IAuditLog as a -> Some a
+            | _ -> None
+
         let accessContext =
             match ctx.RequestServices.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
@@ -234,6 +264,8 @@ module KnowledgeApiDeps =
             EventStore = eventStore
             NarrativeStore = narrativeStore
             AccessContext = accessContext
+            OriginalResolver = originalResolver
+            AuditLog = auditLog
             RecordEnqueue = recordEnqueue
             PublishInventory = publishInventory
             MarkIngestionFailed = markIngestionFailed

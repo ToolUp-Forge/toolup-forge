@@ -162,6 +162,12 @@ let allTests =
         // Phase 91 — RAG-backed answer pages: RagAnswerSource grounding,
         // extractive + synthesis-hook answers, and StrictlyGrounded refusal.
         KnowledgeSurfaceTests.tests
+        // Wave 15 (Phases 102/103/104/106/107) — KB original-document
+        // retrieval: IOriginalSourceResolver per-KnowledgeSource contract,
+        // getOriginalDocument scope gate + typed refusals, access/denial
+        // audit, _originalRef chunk stamp + RetrievedSource.OriginalRef
+        // projection + neutral SourceLocator mapping + wire backward-compat.
+        KnowledgeOriginalRetrievalTests.tests
         BrandKitTests.tests
         AssetStoreTests.tests
         MediaLibraryTests.tests

@@ -551,6 +551,40 @@ let private extractTxt (docId: string) (fileName: string) (bytes: byte[]) : (Tex
 
         results |> Seq.toList
 
+/// Phase 103 — stamp the structured original-document reference into
+/// each chunk's metadata at ingestion, replacing reliance on the
+/// implicit `knowledge/{docId}/{filename}` blob-name convention:
+/// retrieval reads the ref (`ChunkMetadata.OriginalRefKey`) instead of
+/// rebuilding the path. Applied by the upload path only — uploaded
+/// files are the one source kind with a fetchable binary original;
+/// note / narrative chunks carry no ref, so their citations surface
+/// `RetrievedSource.OriginalRef = None`. The per-chunk `Location`
+/// (Phase 106) is the neutral projection of the chunk's provenance, so
+/// a Sources panel can open the original at the cited page / slide /
+/// sheet / section.
+let stampOriginalRefs
+    (docId: string)
+    (fileName: string)
+    (fileType: string)
+    (sizeBytes: int64)
+    (pairs: (TextChunk * SourceReference) list)
+    : (TextChunk * SourceReference) list =
+    pairs
+    |> List.map (fun (chunk, src) ->
+        let originalRef: OriginalDocumentRef = {
+            DocumentId = docId
+            FileName = fileName
+            FileType = fileType
+            SizeBytes = sizeBytes
+            Location = Some(SourceLocation.toLocator src.Location)
+        }
+
+        {
+            chunk with
+                Metadata = chunk.Metadata.Add(ChunkMetadata.OriginalRefKey, toJson originalRef)
+        },
+        src)
+
 /// Dispatch to the appropriate extractor based on file extension. The
 /// PDF path is async because it consults `IOcrProvider` /
 /// `ITableExtractor` (Phase 14i). Other extractors operate on already

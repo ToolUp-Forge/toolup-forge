@@ -64,7 +64,13 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
 
             do! updateIndexStatus deps.Storage deps.Scope.Container docId extractingStatus
 
-            let! chunks = extractChunks deps.OcrProvider deps.TableExtractor docId fileName bytes
+            let! extracted = extractChunks deps.OcrProvider deps.TableExtractor docId fileName bytes
+
+            // Phase 103 — stamp the structured original-document ref
+            // (+ Phase 106 neutral locator) into each chunk so retrieval
+            // surfaces `RetrievedSource.OriginalRef` without rebuilding
+            // the blob-name convention.
+            let chunks = stampOriginalRefs docId fileName ext (int64 bytes.Length) extracted
 
             if box deps.Queue <> null && not chunks.IsEmpty then
                 // Stamp ChunkCount BEFORE enqueue: the observer reads
@@ -166,6 +172,77 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
     KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
     do! deps.PublishInventory()
     return Ok()
+}
+
+// ─── Original-document retrieval (Phase 102) ─────────────────────
+
+/// `KnowledgeSource` case name for the Phase 107 audit payload.
+let private sourceKindName (source: KnowledgeSource) =
+    match source with
+    | UploadedFile -> "UploadedFile"
+    | FromNarrative _ -> "FromNarrative"
+    | Note _ -> "Note"
+
+/// Best-effort audit emission for the original-access trail
+/// (Phase 107). Awaited on the request path (GP 7) — `IAuditLog.Record`
+/// is contractually best-effort and swallows its own failures, so audit
+/// gaps never fail the fetch.
+let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEvent) : Async<unit> =
+    match deps.AuditLog with
+    | Some a -> a.Record(deps.Scope.ScopeId, event)
+    | None -> async.Return()
+
+/// Fetch the *original* ingested document for a `docId` (Phase 102).
+/// The lookup runs against the caller's resolved scope's index only —
+/// scope isolation is structural (GP 4): the container comes from the
+/// server-side scope resolver, never from the caller, so a document in
+/// another team's scope is simply not findable and returns the same
+/// `NotInScope` as a nonexistent id (no existence oracle). Resolution
+/// of the bytes is per-`KnowledgeSource` via the Phase 104 resolver;
+/// `None` becomes the typed `NoOriginalAvailable` rather than a
+/// 404-shaped guess. Successful fetches and refusals both emit the
+/// Phase 107 audit events.
+let getOriginalDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<OriginalDocument, KnowledgeBaseError>> = async {
+    let denied (reason: string) =
+        recordOriginalAccessAudit
+            deps
+            (KnowledgeOriginalRetrievalDenied {
+                UserId = deps.UserId
+                DocumentId = docId
+                ScopeId = deps.Scope.ScopeId
+                Reason = reason
+            })
+
+    try
+        let! index = loadIndex deps.Storage deps.Scope.Container
+
+        match index |> List.tryFind (fun d -> d.Id = docId) with
+        | None ->
+            do! denied "NotInScope"
+            return Error NotInScope
+        | Some doc ->
+            let! resolved = deps.OriginalResolver.Resolve(deps.Storage, deps.Scope.Container, doc)
+
+            match resolved with
+            | Some original ->
+                do!
+                    recordOriginalAccessAudit
+                        deps
+                        (KnowledgeOriginalRetrieved {
+                            UserId = deps.UserId
+                            DocumentId = doc.Id
+                            ScopeId = deps.Scope.ScopeId
+                            SourceKind = sourceKindName doc.Source
+                            FileName = doc.FileName
+                        })
+
+                return Ok original
+            | None ->
+                do! denied "NoOriginalAvailable"
+                return Error NoOriginalAvailable
+    with ex ->
+        deps.Logger.Error(sprintf "[KnowledgeBase] GetOriginalDocument failed for %s" docId, Some ex)
+        return Error(OriginalRetrievalFailed ex.Message)
 }
 
 let getStatus (deps: KnowledgeApiDeps) (docId: string) : Async<IngestionStatus> = async {

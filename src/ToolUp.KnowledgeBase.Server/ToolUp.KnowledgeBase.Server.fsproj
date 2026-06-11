@@ -36,6 +36,7 @@
         <Compile Include="Server\Notes.fs" />
         <Compile Include="Server\AIContext.fs" />
         <Compile Include="Server\Inventory.fs" />
+        <Compile Include="Server\OriginalSourceResolver.fs" />
         <Compile Include="Server\Api\Deps.fs" />
         <Compile Include="Server\Api\Documents.fs" />
         <Compile Include="Server\Api\Narrative.fs" />

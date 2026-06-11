@@ -305,6 +305,11 @@
         <!-- Phase 91 — RAG-backed answer pages: RagAnswerSource grounding +
              extractive/synthesis + StrictlyGrounded refusal. -->
         <Compile Include="InProcess\KnowledgeSurfaceTests.fs" />
+        <!-- Wave 15 (Phases 102/103/104/106/107) — KB original-document
+             retrieval: resolver contract pack, scope-gated handler +
+             typed refusals, access/denial audit, _originalRef stamp +
+             OriginalRef projection + SourceLocator + wire compat. -->
+        <Compile Include="InProcess\KnowledgeOriginalRetrievalTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
         <Compile Include="InProcess\MediaLibraryTests.fs" />
@@ -510,6 +515,11 @@
         <!-- Phase 6q — CitationNormaliser unit-tests need the RAG.Server
              reference for the normaliser module + RagCitationPolicy DU. -->
         <ProjectReference Include="..\ToolUp.RAG.Server\ToolUp.RAG.Server.fsproj" />
+        <!-- Wave 15 (Phases 102/104/107) — KB original-document retrieval
+             tests drive the KnowledgeBase server handler + resolver
+             directly (transitively pulls KnowledgeBase.Core for the
+             shared wire types). -->
+        <ProjectReference Include="..\ToolUp.KnowledgeBase.Server\ToolUp.KnowledgeBase.Server.fsproj" />
         <!-- Phase 38 — public-rendering contract pack + InProcess binding. -->
         <ProjectReference Include="..\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
         <!-- Phase 39 — asset-store contract pack + InProcess binding. -->

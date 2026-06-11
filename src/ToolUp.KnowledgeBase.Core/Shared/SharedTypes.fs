@@ -37,6 +37,21 @@ type SourceReference = {
     IndexedAt: DateTimeOffset
 }
 
+module SourceLocation =
+    /// Map the KB-side provenance location onto the neutral
+    /// `ToolUp.Platform` `SourceLocator` (Phase 106). The neutral DU is
+    /// deliberately smaller — slide titles and sheet row-ranges are
+    /// dropped — so `ToolUp.Platform` never grows toward the KB's
+    /// domain shape (GP 1). The mapping happens here, at the producer
+    /// boundary; Platform/RAG code never sees `SourceLocation`.
+    let toLocator (location: SourceLocation) : ToolUp.Platform.VectorKnowledgeTypes.SourceLocator =
+        match location with
+        | Page number -> ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Page number
+        | Slide(number, _) -> ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Slide number
+        | Sheet(name, _) -> ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Sheet name
+        | Section heading -> ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.Section heading
+        | RowGroup(startRow, endRow) -> ToolUp.Platform.VectorKnowledgeTypes.SourceLocator.RowGroup(startRow, endRow)
+
 // ─── Source distinction ──────────────────────────────────────────
 
 /// Identifies where a stored narrative came from — the analytical module
@@ -188,6 +203,44 @@ type InventorySummary = {
     SuggestedQuestions: string list
 }
 
+// ─── Original-document retrieval (Phase 102) ─────────────────────
+
+/// Wire record returned by `KnowledgeApi.GetOriginalDocument` — the
+/// *original* ingested bytes behind a `KnowledgeDocument`, plus the
+/// metadata a client needs to save or render them. Raw originals
+/// persist at upload (`knowledge/{docId}/{filename}`) and survive
+/// ingestion; this record is the first-class retrieval shape so
+/// callers never rebuild the blob-name convention by hand.
+type OriginalDocument = {
+    /// Original file name (e.g. "Q3 brand audit.pdf"; "note.md" bodies
+    /// surface under the note's display file name).
+    FileName: string
+    /// MIME content type ("application/pdf", "text/markdown", …) so a
+    /// client can set the download / render disposition directly.
+    ContentType: string
+    /// Size of `Content` in bytes.
+    SizeBytes: int64
+    /// The original document bytes.
+    Content: byte[]
+}
+
+/// Typed refusals for `KnowledgeApi.GetOriginalDocument`. Absence and
+/// denial are results, never exceptions (GP 9).
+type KnowledgeBaseError =
+    /// The document id is not visible in the caller's scope — it may
+    /// belong to another team or not exist at all. Deliberately
+    /// indistinguishable so out-of-scope callers cannot probe for
+    /// document existence (GP 4); a denial audit is emitted.
+    | NotInScope
+    /// The document exists in the caller's scope but its source kind
+    /// has no retrievable original (module-generated narratives,
+    /// AI-context entries), or the underlying blob is gone. Resolution
+    /// is per-`KnowledgeSource` via `IOriginalSourceResolver` (Phase 104).
+    | NoOriginalAvailable
+    /// The fetch failed for an operational reason (storage error).
+    /// Carries the underlying message for diagnostics.
+    | OriginalRetrievalFailed of reason: string
+
 // ─── Note authoring ──────────────────────────────────────────────
 
 /// Parameters for creating a free-form note.
@@ -275,4 +328,16 @@ type KnowledgeApi = {
     /// who want a manual "push current state to AI" affordance.
     /// Idempotent — safe to call repeatedly.
     RefreshAIContext: unit -> Async<unit>
+    /// Fetch the *original* ingested document for a `KnowledgeDocument`
+    /// id (Phase 102) — the handle a citation's
+    /// `RetrievedSource.OriginalRef.DocumentId` carries. Scope-gated:
+    /// the lookup runs against the caller's resolved scope only, so an
+    /// out-of-scope id returns `Error NotInScope` (no bytes, no
+    /// existence signal) and emits a denial audit. Source-kind-aware
+    /// via `IOriginalSourceResolver` (Phase 104): uploaded files return
+    /// their raw bytes + content type, notes return their markdown,
+    /// synthetic sources (narratives, AI-context) return
+    /// `Error NoOriginalAvailable`. Every successful fetch emits a
+    /// `KnowledgeOriginalRetrieved` audit event (Phase 107).
+    GetOriginalDocument: string -> Async<Result<OriginalDocument, KnowledgeBaseError>>
 }
