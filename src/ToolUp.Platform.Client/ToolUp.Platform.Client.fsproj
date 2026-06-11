@@ -114,6 +114,12 @@
         <Compile Include="Client\ModuleQueryClient.fs" />
         <Compile Include="Client\ModuleStateObserver.fs" />
         <Compile Include="Client\NavigationRequest.fs" />
+        <!-- Cross-module client event bus. Publish/subscribe seam letting
+             one module broadcast a named event that sibling modules react
+             to without importing each other. Same sanctioned-mutable-global
+             shape as NavigationRequest / ModuleStateObserver; consumed by
+             the shell's boot subscription + ModuleEventPublished fan-out. -->
+        <Compile Include="Client\ModuleEvents.fs" />
         <Compile Include="Client\RegisteredModules.fs" />
         <Compile Include="Client\AuthUIProvider.fs" />
         <Compile Include="Client\FeatureFlags.fs" />

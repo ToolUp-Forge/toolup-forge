@@ -210,6 +210,17 @@ module Client =
         /// authorisation boundary (the server-side tool guard is the
         /// authorisation boundary). Phase 6c.
         | ModuleActionReceived of moduleId: string * actionKey: string * payloadJson: string
+        /// Cross-module client event published by some module's `update`
+        /// via `ModuleEvents.publish`. The shell fans the publication out
+        /// to every registered module whose `EventSubscriptions` map
+        /// carries a mapper for `topic`, decodes the `payload` into each
+        /// subscriber's `Msg`, and applies it against that module's state
+        /// in `ModuleStates` (init-on-demand for never-navigated modules).
+        /// Identity-free: a module receives its own publication only when
+        /// it also subscribes to the same topic. Dispatched by the
+        /// boot-time `ModuleEvents.subscribe` lifetime effect. Topics with
+        /// no subscribers are a no-op.
+        | ModuleEventPublished of topic: string * payload: string
         /// User switched to a different team in `MultiTeam` mode (or any
         /// other path that calls `PlatformApi.SetActiveTeam`). Carries
         /// the new active team id, or `None` if the user was revoked
@@ -1315,6 +1326,73 @@ module Client =
                             NotificationClient.publishLocal envelope
 
                         updatedModel, routedCmd
+
+            | ModuleEventPublished(topic, payload) ->
+                // Fan a cross-module event out to every registered module
+                // that declared a subscription for this topic. Each
+                // subscriber maps the payload into one of its own `Msg`
+                // values and runs it through its normal `update`, with
+                // init-on-demand for modules never navigated to this
+                // session. Mirrors the `ModuleActionReceived` routing but
+                // multi-target and identity-free — delivery is purely by
+                // topic, so a publisher self-receives only when it also
+                // subscribes. No RBAC gate here (unlike the server-driven
+                // action path): the publisher already runs in this user's
+                // client, so every subscriber is code the same client
+                // loaded — there is no cross-tenant trust boundary to
+                // enforce.
+                let subscribers =
+                    modules
+                    |> List.choose (fun m ->
+                        m.EventSubscriptions
+                        |> Map.tryFind topic
+                        |> Option.map (fun mapMsg -> m, mapMsg))
+
+                if List.isEmpty subscribers then
+                    model, Cmd.none
+                else
+                    let folder (accModel, accCmds) (moduleImpl: ErasedModule, mapMsg) =
+                        let moduleId = moduleImpl.Definition.Id
+                        let decodedMsg = mapMsg payload
+
+                        // Init the target module if it has no state yet.
+                        // Its init Cmd is only honoured when the module is
+                        // active (it routes through `ModuleMsg`, which
+                        // targets `ActiveModuleId`); inactive targets
+                        // discard it — same trade-off the
+                        // `ModuleActionReceived` branch documents.
+                        let state, preCmd =
+                            match accModel.ModuleStates |> Map.tryFind moduleId with
+                            | Some s -> s, Cmd.none
+                            | None ->
+                                let ctx = buildContext _config queryBus accModel moduleId
+                                let s, c = moduleImpl.Init ctx
+
+                                if moduleId = accModel.ActiveModuleId then
+                                    s, Cmd.map ModuleMsg c
+                                else
+                                    s, Cmd.none
+
+                        let newState, updateCmd = moduleImpl.Update decodedMsg state
+
+                        // Phase 6g.A observer publish — same as the other
+                        // state-changing branches.
+                        ModuleStateObserver.publish moduleId newState
+
+                        let routedCmd =
+                            if moduleId = accModel.ActiveModuleId then
+                                Cmd.batch [ preCmd; Cmd.map ModuleMsg updateCmd ]
+                            else
+                                preCmd
+
+                        {
+                            accModel with
+                                ModuleStates = accModel.ModuleStates |> Map.add moduleId newState
+                        },
+                        routedCmd :: accCmds
+
+                    let finalModel, cmds = subscribers |> List.fold folder (model, [])
+                    finalModel, Cmd.batch cmds
 
         let finalModel = {
             newModel with
@@ -2485,6 +2563,20 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        // Cross-module client event bus subscription. Translates every
+        // `ModuleEvents.publish` into a `ModuleEventPublished` dispatch the
+        // shell update fans out to subscribing modules. Same
+        // lifetime-aware shape as the navigation subscription above —
+        // disposed on `IDispatcher.Terminate()` / HMR.
+        let moduleEventsEffect =
+            EffectHandle.programLifetime "module-events" (fun dispatch ->
+                let unsubscribe =
+                    ModuleEvents.subscribe (fun topic payload -> dispatch (ModuleEventPublished(topic, payload)))
+
+                { new System.IDisposable with
+                    member _.Dispose() = unsubscribe ()
+                })
+
         let notificationsEffect =
             EffectHandle.programLifetime "notifications-stream" (fun dispatch ->
                 let onEnvelope (envelope: NotificationEnvelope) =
@@ -2591,6 +2683,7 @@ module Client =
         prog
         |> Program.withErrorReporter elmishReporter
         |> Program.withEffect navigationEffect
+        |> Program.withEffect moduleEventsEffect
         |> Program.withEffect notificationsEffect
         |> Program.withEffect authTokenAcquiredEffect
 

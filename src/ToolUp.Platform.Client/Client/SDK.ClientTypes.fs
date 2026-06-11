@@ -213,6 +213,18 @@ type ErasedModule = {
     /// or a custom predicate. See `Visibility` module for smart
     /// constructors.
     Visibility: SubjectKind -> bool
+    /// Cross-module client event subscriptions, keyed by topic. The
+    /// shell subscribes to the `ModuleEvents` bus once at boot; for
+    /// every publication it looks up each registered module's map by
+    /// topic and, when present, applies the mapper's `(payload -> Msg)`
+    /// result against that module's state (init-on-demand if the module
+    /// has never been navigated to) — exactly the `ModuleAction` routing
+    /// shape, but client-internal and identity-free. The mapper is
+    /// erased to `string -> obj` here; `register` boxes the typed
+    /// `string -> 'Msg`. Default empty — modules that don't react to
+    /// sibling events declare nothing. Construct via
+    /// `ClientModule.withEventSubscription`.
+    EventSubscriptions: Map<string, string -> obj>
 }
 
 /// Phase 66 Stream B.3 — smart constructors for the per-module
@@ -317,6 +329,12 @@ type ClientModule<'Model, 'Msg> = {
     /// visible to every subject kind, preserving the historical
     /// sidebar shape.
     Visibility: SubjectKind -> bool
+    /// Cross-module client event subscriptions, keyed by topic. See
+    /// `ErasedModule.EventSubscriptions`. The typed form is
+    /// `topic -> (payload -> 'Msg)`; `register` boxes each mapper's
+    /// result into `obj`. Construct via `withEventSubscription`.
+    /// Default `Map.empty`.
+    EventSubscriptions: Map<string, string -> 'Msg>
 }
 
 // ─── Client configuration ─────────────────────────────────────────
@@ -1346,6 +1364,9 @@ module ClientModule =
                 m.ActionDecoder
                 |> Option.map (fun f -> fun (key, payload) -> f (key, payload) |> Option.map box)
             Visibility = m.Visibility
+            EventSubscriptions =
+                m.EventSubscriptions
+                |> Map.map (fun _ mapMsg -> fun payload -> box (mapMsg payload))
         }
 
     /// Adapter for modules that do not need a `ClientModuleContext`.
@@ -1400,6 +1421,7 @@ module ClientModule =
         ClientQueryHandlers = []
         ActionDecoder = None
         Visibility = Visibility.visibleToAll
+        EventSubscriptions = Map.empty
     }
 
     /// Set the single-page view function on a `ClientModule` built by
@@ -1528,6 +1550,35 @@ module ClientModule =
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         { m with ActionDecoder = Some decoder }
+
+    /// Subscribe this module to a cross-module client event topic. When
+    /// any module publishes `topic` via `ModuleEvents.publish`, the shell
+    /// calls `mapMsg` with the event payload and dispatches the resulting
+    /// `'Msg` against this module's state through its normal `update`
+    /// loop — the module reacts exactly as if the user had triggered the
+    /// message from its UI. The target module is initialised on demand if
+    /// it has never been navigated to this session.
+    ///
+    /// Topics are plain strings namespaced by convention (`"<app>/<event>"`
+    /// or bare); the publisher and subscriber never reference each other.
+    /// Chain multiple calls to subscribe to several topics; a repeated
+    /// topic replaces the prior mapper. A module receives its own
+    /// publications only when it also subscribes to that topic.
+    ///
+    /// ```fsharp
+    /// ClientModule.create { ... }
+    /// |> ClientModule.withEventSubscription "myapp/batch-done" (fun _ -> Refresh)
+    /// |> ClientModule.register
+    /// ```
+    let withEventSubscription
+        (topic: string)
+        (mapMsg: string -> 'Msg)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        {
+            m with
+                EventSubscriptions = m.EventSubscriptions |> Map.add topic mapMsg
+        }
 
     /// Gate this module to DEBUG builds only (or re-affirm `Always`). The
     /// decision lives at the application composition root so debug-vs-release
