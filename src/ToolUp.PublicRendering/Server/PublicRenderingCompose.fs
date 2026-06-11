@@ -148,8 +148,9 @@ type PublicRenderingServerApp = {
     /// layouts (falling back to the shared ones), redirects, and base
     /// URL; every unmatched host serves the default (`ServerConfig`-level)
     /// site. Set via `withSite`. v1 scope: satellites are markdown-file-
-    /// backed only — entity overlay, content sources, feeds, search,
-    /// taxonomy, and AI publish remain default-site surfaces.
+    /// backed only — entity overlay, content sources, search, taxonomy,
+    /// and AI publish remain default-site surfaces (Atom feeds went
+    /// per-site in Phase 115 via `PublicSiteDef.Feeds`).
     Sites: PublicSiteDef list
 }
 
@@ -606,8 +607,9 @@ module PublicRenderingServerApp =
     ///             "https://docs.example.com" (ContentRoot docsContent))
     ///
     /// v1 scope: satellites are markdown-file-backed (`content/**/*.md`
-    /// + `redirects.csv`); entity overlay, content sources, feeds,
-    /// search, taxonomy, and AI publish remain default-site surfaces.
+    /// + `redirects.csv`); entity overlay, content sources, search,
+    /// taxonomy, and AI publish remain default-site surfaces (Atom
+    /// feeds went per-site in Phase 115 via `PublicSiteDef.Feeds`).
     let withSite (site: PublicSiteDef) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
         app with
             Sites = app.Sites @ [ site ]

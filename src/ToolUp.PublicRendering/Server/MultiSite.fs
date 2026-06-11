@@ -22,8 +22,9 @@ open ToolUp.Platform.ConfigValidation
 // **v1 scope (deliberate):** satellite sites are markdown-file-backed
 // only (`content/**/*.md` + `redirects.csv`). The entity-store
 // overlay (runtime-edited pages), request-time `IContentSource`s,
-// Atom feeds, `/search`, `/tag/{x}` taxonomy, and the AI publish path
-// remain default-site-only. Lifting the CMS tier per-site is future
+// `/search`, `/tag/{x}` taxonomy, and the AI publish path remain
+// default-site-only. (Atom feeds went per-site in Phase 115 — see
+// `PublicSiteDef.Feeds`.) Lifting the CMS tier per-site is future
 // work; the home-page / marketing-site shape this targets doesn't
 // need it.
 
@@ -155,18 +156,24 @@ module SiteGate =
 
     /// Run `handler` only when the request's host resolves to the named
     /// satellite site; any other host falls through to the next handler.
+    /// Fall-through is `skipPipeline` (a `None` result), NOT `next ctx`:
+    /// these gates are mounted as branches of the router's `choose`, where
+    /// `next` is the no-op finisher — invoking it would commit an empty
+    /// 200 and shadow every handler mounted after the gate (the hazard
+    /// documented in `RedirectMap.handler`).
     let forSite (registry: SiteRegistry) (siteName: string) (handler: HttpHandler) : HttpHandler =
         fun next ctx ->
             match SiteRegistry.tryResolve ctx registry with
             | Some active when active.Def.Name = siteName -> handler next ctx
-            | _ -> next ctx
+            | _ -> skipPipeline
 
     /// Run `handler` only when the request's host resolves to NO satellite
-    /// site (i.e. the default site); satellite hosts fall through.
+    /// site (i.e. the default site); satellite hosts fall through (same
+    /// `skipPipeline` semantics as `forSite`).
     let forDefaultSite (registry: SiteRegistry) (handler: HttpHandler) : HttpHandler =
         fun next ctx ->
             match SiteRegistry.tryResolve ctx registry with
-            | Some _ -> next ctx
+            | Some _ -> skipPipeline
             | None -> handler next ctx
 
 // ─── Phase 114 — startup preflight ───────────────────────────────────

@@ -303,12 +303,19 @@ let private siteGateTests =
 
             let run (host: string) =
                 let ctx = mkContext host "/feed.atom" None
-                (gated finalFunc ctx).GetAwaiter().GetResult() |> ignore
-                responseBody ctx
+                let result = (gated finalFunc ctx).GetAwaiter().GetResult()
+                result, responseBody ctx
 
-            Expect.stringContains (run "a.example") "gated-content" "site a serves the gated handler"
-            Expect.equal (run "b.example") "" "site b falls through"
-            Expect.equal (run "other.example") "" "default-site host falls through"
+            let servedResult, servedBody = run "a.example"
+            Expect.isSome servedResult "site a result is Some (handled)"
+            Expect.stringContains servedBody "gated-content" "site a serves the gated handler"
+
+            // Fall-through must be a `None` (skipPipeline) result so the
+            // surrounding `choose` advances — a `next ctx` fall-through
+            // would return Some with an empty body (a committed empty
+            // 200) and shadow every handler mounted after the gate.
+            Expect.isNone (fst (run "b.example")) "site b falls through with None, not an empty 200"
+            Expect.isNone (fst (run "other.example")) "default-site host falls through with None"
 
         testCase "forDefaultSite runs the handler only on unclaimed hosts"
         <| fun _ ->
@@ -321,11 +328,32 @@ let private siteGateTests =
 
             let run (host: string) =
                 let ctx = mkContext host "/" None
-                (gated finalFunc ctx).GetAwaiter().GetResult() |> ignore
-                responseBody ctx
+                let result = (gated finalFunc ctx).GetAwaiter().GetResult()
+                result, responseBody ctx
 
-            Expect.stringContains (run "other.example") "default-content" "unclaimed host serves the default"
-            Expect.equal (run "a.example") "" "satellite host falls through"
+            let servedResult, servedBody = run "other.example"
+            Expect.isSome servedResult "unclaimed host result is Some (handled)"
+            Expect.stringContains servedBody "default-content" "unclaimed host serves the default"
+            Expect.isNone (fst (run "a.example")) "satellite host falls through with None, not an empty 200"
+
+        testCase "NarrativeExportHandler declines with None when no format parameter is present"
+        <| fun _ ->
+            // Regression guard for the empty-200 swallow the
+            // MultiSitePublic sample exposed: the export handler is
+            // mounted in the router's `choose` BEFORE the feed / preview /
+            // page handlers, so its no-format decline must be a `None`
+            // (skipPipeline) result. Returning `next ctx` instead commits
+            // an empty 200 (the no-op finisher) and shadows every page on
+            // the site.
+            let registry = mkRegistry [ mkSite "a" [ "a.example" ] "https://a.example" "A" ]
+            let rt = registry.ByHost["a.example"]
+            let ctx = mkContext "a.example" "/" None
+
+            let result =
+                (NarrativeExportHandler.handler rt.Api finalFunc ctx).GetAwaiter().GetResult()
+
+            Expect.isNone result "no ?format= → None so the page handler can serve the request"
+            Expect.equal (responseBody ctx) "" "nothing written on the decline path"
     ]
 
 let private indexNowKeyTests =
