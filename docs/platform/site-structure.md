@@ -125,6 +125,15 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `relatedByTag` is the pure-data path; a deployment that composes RAG can layer semantic-related on top. `tagCounts` drives a faceted-browse sidebar (case-insensitive grouping, deterministic order).
 
+## Compose ergonomics (Phase 100)
+
+`withTaxonomy` enables the `/tag/{slug}` surface with no hand-wired `listPages` thunk — compose registers `TaxonomyHandler.tagIndexSource` against the default content API automatically. `withNav` loads a `nav.yaml` file at startup and registers the parsed tree as a `NavCatalog` DI singleton (also stored on `app.Nav` for a layout to capture); `withNavTree` registers a code-built tree directly.
+
+```fsharp
+|> PublicRenderingServerApp.withTaxonomy
+|> PublicRenderingServerApp.withNav "content/nav.yaml"
+```
+
 ## Faceted browse (Phase 99)
 
 `TaxonomyHandler.facetedBrowseSource` serves `/browse/{tags}` where `{tags}` is a `+`-separated tag list (AND semantics) — the "filter by topic + type" interaction. It renders the matching pages plus a **facet sidebar** (each remaining tag + the count it would yield, narrowing as tags are added), excluding gated and non-published pages (GP 4). The pure `TaxonomyHandler.facetedBrowse matchAll tags pages` (AND when `matchAll`, OR otherwise) returns `(results, facets)` for custom wiring, and composes with the Phase 98 pager.

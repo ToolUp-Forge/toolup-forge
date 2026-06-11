@@ -110,6 +110,17 @@ type PublicRenderingServerApp = {
     /// itself is used as the invalidator. Supply this only when the
     /// deployment's `IRenderCache` doesn't carry its own slug-purge.
     RenderCacheInvalidation: IRenderCacheInvalidation option
+    /// Phase 100 — when `true`, `composePublicRendering` registers the
+    /// `TaxonomyHandler.tagIndexSource` (serving `/tag/{slug}`) wired to
+    /// the default content API automatically, so a deployment doesn't
+    /// hand-build the `listPages` thunk. `false` (default) = no tag-index
+    /// source (GP 11). Set via `withTaxonomy`.
+    TaxonomyEnabled: bool
+    /// Phase 100 — the navigation tree loaded from a `nav.yaml` file by
+    /// `withNav`, registered as a `NavCatalog` DI singleton for content
+    /// sources / custom handlers to resolve. Empty (default) = no nav
+    /// registered.
+    Nav: NavNode list
 }
 
 module PublicRenderingServerApp =
@@ -128,6 +139,8 @@ module PublicRenderingServerApp =
         RenderCache = None
         RenderCacheDefaultPolicy = CachePolicy.NoCache
         RenderCacheInvalidation = None
+        TaxonomyEnabled = false
+        Nav = []
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -152,6 +165,8 @@ module PublicRenderingServerApp =
         RenderCache = None
         RenderCacheDefaultPolicy = CachePolicy.NoCache
         RenderCacheInvalidation = None
+        TaxonomyEnabled = false
+        Nav = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -385,6 +400,35 @@ module PublicRenderingServerApp =
             ContentSources = app.ContentSources @ [ source ]
     }
 
+    /// Phase 100 — enable the `/tag/{slug}` taxonomy surface with no
+    /// hand-wired `listPages` thunk: `composePublicRendering` registers
+    /// `TaxonomyHandler.tagIndexSource` against the default content API
+    /// automatically (the wiring deferred in Phase 90). No-op when the
+    /// deployment supplies its own `IPublicContentApi` via `withContentApi`
+    /// (that impl owns its own resolution).
+    let withTaxonomy (app: PublicRenderingServerApp) : PublicRenderingServerApp = { app with TaxonomyEnabled = true }
+
+    /// Phase 100 — load a `nav.yaml` file at compose time and register the
+    /// parsed tree as a `NavCatalog` DI singleton (resolvable by content
+    /// sources / custom handlers). The tree is also stored on the record
+    /// (`app.Nav`) so a compose-time consumer can capture it for a layout.
+    /// A missing / empty file registers an empty nav (no error).
+    let withNav (navYamlPath: string) (app: PublicRenderingServerApp) : PublicRenderingServerApp =
+        let nav =
+            if System.IO.File.Exists navYamlPath then
+                NavTree.parseYaml (System.IO.File.ReadAllText navYamlPath)
+            else
+                []
+
+        { app with Nav = nav }
+
+    /// Phase 100 — register a pre-parsed nav tree directly (when the
+    /// consumer built it in code rather than from a `nav.yaml` file).
+    let withNavTree (nav: NavNode list) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            Nav = nav
+    }
+
     /// Phase 84 — opt into the SSR render cache (ISR tier). Registers the
     /// supplied `IRenderCache` in DI; the page handler then serves cached
     /// renders within their TTL window (serving stale + refreshing in the
@@ -497,6 +541,8 @@ module PublicRenderingServerApp =
             let aiPublishAuthoriser = app.AIPublishAuthoriser
             let feeds = app.Feeds
             let contentSources = app.ContentSources
+            let taxonomyEnabled = app.TaxonomyEnabled // Phase 100
+            let navTree = app.Nav // Phase 100
             let renderCache = app.RenderCache
             let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
 
@@ -559,7 +605,19 @@ module PublicRenderingServerApp =
                                     |> Option.ofObj
                                     |> Option.map (fun x -> x :?> IEntityStore)
 
-                                PublicContentApiImpl.create loader entityStore contentSources)
+                                // Phase 100 — `withTaxonomy` registers the
+                                // tag-index source over a base API (file +
+                                // overlay only, no source-tier recursion),
+                                // so no hand-wired `listPages` thunk is
+                                // needed.
+                                let taxonomySources =
+                                    if taxonomyEnabled then
+                                        let baseApi = PublicContentApiImpl.create loader entityStore []
+                                        [ TaxonomyHandler.tagIndexSourceFromApi baseApi ]
+                                    else
+                                        []
+
+                                PublicContentApiImpl.create loader entityStore (contentSources @ taxonomySources))
                     )
                     .AddSingleton<ILayoutCatalog>(
                         // Phase 80b — always exposed when public
@@ -567,6 +625,13 @@ module PublicRenderingServerApp =
                         // authorisation concern.
                         System.Func<System.IServiceProvider, ILayoutCatalog>(fun _sp ->
                             PublicRenderingLayoutCatalog.create registeredLayoutNames)
+                    )
+                    // Phase 100 — `withNav` registers the parsed nav tree
+                    // as a NavCatalog singleton (content sources / custom
+                    // handlers resolve it). Always registered when public
+                    // rendering is enabled; empty when `withNav` unused.
+                    .AddSingleton<NavCatalog>(
+                        System.Func<System.IServiceProvider, NavCatalog>(fun _sp -> { Nav = navTree })
                     )
                 |> fun s ->
                     // Phase 80b — INarrativePagePublisher registration

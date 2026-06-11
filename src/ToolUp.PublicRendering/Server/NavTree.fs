@@ -49,6 +49,11 @@ type NavNode = {
     Audience: NavAudience
 }
 
+/// Phase 100 — the parsed navigation tree, registered as a DI singleton
+/// by `withNav` so a content source or a custom handler can resolve the
+/// site's nav without re-parsing `nav.yaml` per request.
+type NavCatalog = { Nav: NavNode list }
+
 module NavTree =
 
     // ─── Constructors ────────────────────────────────────────────────

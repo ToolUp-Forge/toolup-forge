@@ -281,6 +281,7 @@
         <Compile Include="InProcess\NarrativeDataExportTests.fs" />
         <Compile Include="InProcess\PaginationTests.fs" />
         <Compile Include="InProcess\FacetedBrowseTests.fs" />
+        <Compile Include="InProcess\NavComposeTests.fs" />
         <!-- Phase 90 — site structure: nav-tree audience filtering,
              breadcrumb derivation, nav.yaml parse, tag-index resolution,
              related-by-tag + facets, render helpers. -->
