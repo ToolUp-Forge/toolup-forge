@@ -42,6 +42,8 @@ module NarrativeExportHandler =
         | "txt"
         | "plain" -> Some "text/plain; charset=utf-8"
         | "atom" -> Some "application/atom+xml; charset=utf-8"
+        | "csv" -> Some "text/csv; charset=utf-8"
+        | "json" -> Some "application/json; charset=utf-8"
         | _ -> None
 
     let private renderNarrative (format: string) (doc: NarrativeDocument) : string option =
@@ -56,9 +58,16 @@ module NarrativeExportHandler =
 
     let private supportedFor (body: ContentBody) : string list =
         match body with
-        | Narrative _ -> [ "html"; "md"; "txt"; "atom" ]
+        // Phase 101 — csv / json export of the Narrative's Table elements.
+        | Narrative _ -> [ "html"; "md"; "txt"; "atom"; "csv"; "json" ]
         | Markdown _ -> [ "md" ]
         | Html _ -> [ "html" ]
+
+    /// Phase 101 — a filesystem-safe download filename stem from a slug
+    /// (`services/q4` → `services-q4`; empty → `export`).
+    let private filenameStem (slug: string) : string =
+        let cleaned = slug.Replace('/', '-').Trim('-')
+        if cleaned = "" then "export" else cleaned
 
     let handler (api: IPublicContentApi) : HttpHandler =
         fun next (ctx: HttpContext) -> task {
@@ -110,6 +119,38 @@ module NarrativeExportHandler =
                             )
                     else
                         match page.Body, fmt.ToLowerInvariant() with
+                        | Narrative doc, (("csv" | "json") as tabular) ->
+                            // Phase 101 — export the document's Table
+                            // element(s) as data. `?table=N` selects which
+                            // (default 0); a page with no table degrades to
+                            // an empty export (200), not an error.
+                            let tables = NarrativeData.tables doc
+
+                            let idx =
+                                match ctx.Request.Query.TryGetValue "table" with
+                                | true, values when values.Count > 0 ->
+                                    match System.Int32.TryParse values.[0] with
+                                    | true, n -> n
+                                    | _ -> 0
+                                | _ -> 0
+
+                            let ext = tabular
+
+                            let payload =
+                                match List.tryItem idx tables with
+                                | Some t when tabular = "csv" -> NarrativeData.toCsv t
+                                | Some t -> NarrativeData.toJson t
+                                | None when tabular = "csv" -> ""
+                                | None -> "[]"
+
+                            ctx.Response.ContentType <- (contentType tabular |> Option.defaultValue "text/plain")
+
+                            ctx.Response.Headers["Content-Disposition"] <-
+                                Microsoft.Extensions.Primitives.StringValues(
+                                    sprintf "attachment; filename=\"%s.%s\"" (filenameStem slugOrIndex) ext
+                                )
+
+                            return! ctx.WriteStringAsync payload
                         | Narrative doc, _ ->
                             match renderNarrative fmt doc, contentType fmt with
                             | Some payload, Some ct ->

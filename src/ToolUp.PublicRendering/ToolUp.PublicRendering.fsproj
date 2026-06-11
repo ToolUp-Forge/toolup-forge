@@ -58,6 +58,9 @@
         <Compile Include="Server\SitemapGenerator.fs" />
         <Compile Include="Server\NarrativePagePublisher.fs" />
         <Compile Include="Server\NarrativeExportHandler.fs" />
+        <!-- Phase 101 — tabular data extraction + CSV / JSON serialisers
+             (consumed by the export handler's ?format=csv/json). -->
+        <Compile Include="Server\NarrativeData.fs" />
         <Compile Include="Server\NarrativeFeedHandler.fs" />
         <Compile Include="Server\PublicPageHandler.fs" />
         <Compile Include="Server\ContentPreview.fs" />

@@ -278,6 +278,7 @@
         <Compile Include="InProcess\EnumerableRoutesTests.fs" />
         <Compile Include="InProcess\NavStructuredDataTests.fs" />
         <Compile Include="InProcess\TagFeedTests.fs" />
+        <Compile Include="InProcess\NarrativeDataExportTests.fs" />
         <!-- Phase 90 — site structure: nav-tree audience filtering,
              breadcrumb derivation, nav.yaml parse, tag-index resolution,
              related-by-tag + facets, render helpers. -->

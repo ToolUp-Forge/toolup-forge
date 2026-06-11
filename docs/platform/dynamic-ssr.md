@@ -163,6 +163,10 @@ let dataPage =
 
 `registerTyped<'T>` folds the `System.Text.Json` decode (the SDK's F#-aware converter set) into registration, so the projector body works with a typed value. `NarrativeFromData.fromFileSnapshot` covers the data-room shape (a processed-file status table) the same way.
 
+### Tabular download (CSV / JSON) — Phase 101
+
+A data-bound page with a `Table` in its Narrative body exposes a clean download alongside its HTML/Markdown/Atom forms: `?format=csv` returns RFC 4180 CSV (with a `Content-Disposition` filename), `?format=json` returns structured rows. `?table=N` selects which table when a page has several (default the first); a page with no table degrades to an empty export, not an error. The pure extractor `NarrativeData.tables` / `toCsv` / `toJson` is also usable directly.
+
 ### Optional AI executive summary
 
 A projector's pure-data output can be prefaced by an AI-generated summary when a deployment composes one. The SDK ships no implementation and takes no dependency on the AI substrate — the hook is a plain function; absent one the pure-data path is used unchanged (GP 13):
