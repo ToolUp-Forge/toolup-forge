@@ -155,6 +155,9 @@ let allTests =
         // AudienceGate evaluate matrix + handler authorization pre-check
         // (401/403/200) + sitemap exclusion + cross-tenant isolation.
         GatedSsrTests.tests
+        // Phase 91 — RAG-backed answer pages: RagAnswerSource grounding,
+        // extractive + synthesis-hook answers, and StrictlyGrounded refusal.
+        KnowledgeSurfaceTests.tests
         BrandKitTests.tests
         AssetStoreTests.tests
         MediaLibraryTests.tests

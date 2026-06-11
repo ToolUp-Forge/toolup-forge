@@ -293,6 +293,9 @@
              AudienceGate matrix + handler 401/403 + sitemap exclusion +
              cross-tenant isolation. -->
         <Compile Include="InProcess\GatedSsrTests.fs" />
+        <!-- Phase 91 — RAG-backed answer pages: RagAnswerSource grounding +
+             extractive/synthesis + StrictlyGrounded refusal. -->
+        <Compile Include="InProcess\KnowledgeSurfaceTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
         <Compile Include="InProcess\MediaLibraryTests.fs" />
