@@ -1,6 +1,7 @@
 namespace ToolUp.PublicRendering
 
 open System
+open Giraffe
 open Giraffe.ViewEngine
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -55,6 +56,11 @@ type PublicSiteDef = {
     /// `redirects.csv` entries (file wins on duplicate `From`) —
     /// mirrors the default site's `withRedirects` semantics.
     Redirects: Redirect list
+    /// Phase 115 — Atom feeds served on this site's hosts only, each
+    /// mounted at its `SelfUrl` against the site's own content API.
+    /// Empty (the `PublicSite.create` default) → no per-site feeds.
+    /// Compose-level `withFeed` registrations remain default-site.
+    Feeds: NarrativeFeedConfig list
 }
 
 module PublicSite =
@@ -68,6 +74,7 @@ module PublicSite =
         ContentRoot = contentRoot
         Layouts = Map.empty
         Redirects = []
+        Feeds = []
     }
 
 /// Compose-built per-site runtime: the satellite's own loader +
@@ -140,6 +147,27 @@ module SiteRegistry =
             None
         else
             Map.tryFind (normaliseHost host) registry.ByHost
+
+/// Phase 115 — host-gating combinators over the registry, used by the
+/// compose to mount per-site routes (feeds, IndexNow ownership keys) and
+/// exposed so consumer-supplied custom handlers can do the same.
+module SiteGate =
+
+    /// Run `handler` only when the request's host resolves to the named
+    /// satellite site; any other host falls through to the next handler.
+    let forSite (registry: SiteRegistry) (siteName: string) (handler: HttpHandler) : HttpHandler =
+        fun next ctx ->
+            match SiteRegistry.tryResolve ctx registry with
+            | Some active when active.Def.Name = siteName -> handler next ctx
+            | _ -> next ctx
+
+    /// Run `handler` only when the request's host resolves to NO satellite
+    /// site (i.e. the default site); satellite hosts fall through.
+    let forDefaultSite (registry: SiteRegistry) (handler: HttpHandler) : HttpHandler =
+        fun next ctx ->
+            match SiteRegistry.tryResolve ctx registry with
+            | Some _ -> next ctx
+            | None -> handler next ctx
 
 // ─── Phase 114 — startup preflight ───────────────────────────────────
 

@@ -55,16 +55,42 @@ domain points at the same listener.
 | Narrative export (`?format=`) | Per-site |
 | Preview (`/preview`) | Per-site |
 | Render cache (when composed) | Shared `IRenderCache`, entries namespaced by site name — two sites sharing a slug never share an entry |
+| Atom feeds | `PublicSiteDef.Feeds` mount host-gated against the site's own content API; compose-level `withFeed` registrations serve the default site's hosts only |
+| IndexNow (when composed) | Per-site declared host + stable host-seeded ownership key (`/{key}.txt` answered only on that site's hosts) + per-site startup submission over that site's page universe |
+| Static export | `exportStaticAll` / `exportStaticAllWith` — default site at the output root, each satellite at `<out>/sites/<Name>/`, each tree with its own sitemap + host-config |
+
+## Per-site SEO + export surfaces
+
+```fsharp
+// Feeds per site:
+|> PublicRenderingServerApp.withSite
+    { PublicSite.create "blog" [ "blog.example.net" ]
+        "https://blog.example.net" (ContentRoot blogContent) with
+        Feeds = [ { NarrativeFeedConfig.defaults with Title = "Blog"; SelfUrl = "/feed.atom" } ] }
+
+// IndexNow — one `withIndexNow` activates the default site AND every satellite,
+// each with its own host, key, and resumable submission state:
+|> PublicRenderingServerApp.withIndexNow IndexNowOptions.enabled
+
+// Multi-site static export (build-time terminus):
+PublicRenderingServerApp.exportStaticAllWith options "dist" app
+```
+
+Per-site IndexNow notes: a satellite's host derives from its `BaseUrl`; its
+ownership key is host-seeded with the same stability contract as the default
+site's (an explicit `IndexNowOptions.Key` / `KeySeed` applies to every site).
+Satellite submission state rides per-site file stores; an operator-supplied
+`IndexNowOptions.StateStore` applies to the **default site only**. The
+publish ping targets the default site (the publisher writes to the
+default-site overlay).
 
 ## What stays on the default site (v1 scope)
 
 The entity-store overlay (runtime-edited pages), request-time
-`IContentSource`s, Atom feeds, `/search`, `/tag/{slug}` taxonomy, IndexNow,
-static export, and the AI publish path remain **default-site** surfaces.
-Satellite sites are markdown-file-backed — the website-class home-page /
-marketing-site shape. If a satellite needs the CMS tier, give it its own
-deployment (or wait for the per-site SEO/export extension, which lifts
-IndexNow / static export / feeds per-site).
+`IContentSource`s, `/search`, `/tag/{slug}` taxonomy, and the AI publish
+path remain **default-site** surfaces. Satellite sites are
+markdown-file-backed — the website-class home-page / marketing-site shape.
+If a satellite needs the CMS tier, give it its own deployment.
 
 ## Host matching
 

@@ -759,6 +759,25 @@ module PublicRenderingServerApp =
                 prLogger.Warn
                     "IndexNow: enabled but no host could be resolved (set IndexNowOptions.Host or ServerConfig.PublicBaseUrl); IndexNow is inactive."
 
+            // Phase 115 — per-site IndexNow: each satellite gets its own
+            // declared host (from its BaseUrl), its own stable ownership
+            // key (host-seeded, same derivation contract as the default
+            // site), and its own resumable submission over its own page
+            // universe. Satellites with no resolvable host are skipped
+            // (the multi-site validator already warns on a bad BaseUrl).
+            let satelliteIndexNow: (SiteRuntime * string * string) list =
+                match siteRegistry with
+                | Some registry when indexNowActive ->
+                    registry.Sites
+                    |> List.choose (fun site ->
+                        let siteHost = IndexNow.hostFromBaseUrl site.Def.BaseUrl
+
+                        if System.String.IsNullOrWhiteSpace siteHost then
+                            None
+                        else
+                            Some(site, siteHost, IndexNow.resolveKey indexNowOptions siteHost))
+                | _ -> []
+
             // ─── DI registrations ────────────────────────────────
             let registeredLayoutNames = layouts |> Map.toList |> List.map fst
 
@@ -934,17 +953,75 @@ module PublicRenderingServerApp =
                                     :> IIndexNowService)
                             )
 
-                        if indexNowOptions.SubmitOnStartup then
-                            s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                                System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
-                                    (fun sp ->
-                                        let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
+                        let s =
+                            if indexNowOptions.SubmitOnStartup then
+                                s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                                    System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
+                                        (fun sp ->
+                                            let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
 
-                                        IndexNowStartupService(svc, prLogger)
-                                        :> Microsoft.Extensions.Hosting.IHostedService)
-                            )
-                        else
+                                            IndexNowStartupService(svc, prLogger)
+                                            :> Microsoft.Extensions.Hosting.IHostedService)
+                                )
+                            else
+                                s
+
+                        // Phase 115 — one startup submission per satellite
+                        // site, each over its own host / key / universe.
+                        // Satellite state rides a per-site file store (an
+                        // operator-supplied `StateStore` applies to the
+                        // default site only — documented limitation).
+                        if not indexNowOptions.SubmitOnStartup then
                             s
+                        else
+                            (s, satelliteIndexNow)
+                            ||> List.fold (fun s (site, siteHost, siteKey) ->
+                                let safeName =
+                                    site.Def.Name
+                                    |> String.map (fun c ->
+                                        if System.Char.IsLetterOrDigit c || c = '-' then c else '-')
+
+                                let siteStatePath =
+                                    System.IO.Path.Combine(
+                                        System.IO.Path.GetTempPath(),
+                                        sprintf "toolup-indexnow-last-submission-%s.json" safeName
+                                    )
+
+                                s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                                    System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
+                                        (fun sp ->
+                                            let metrics =
+                                                match sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>) with
+                                                | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
+                                                | _ ->
+                                                    ToolUp.Platform.Metrics.NoOpMetricsSink()
+                                                    :> ToolUp.Platform.Metrics.IMetricsSink
+
+                                            let postFn body =
+                                                IndexNow.postWith httpClient indexNowOptions.Endpoint body
+
+                                            let universe () = async {
+                                                let! pages = site.Api.ListPages ""
+                                                return SitemapGenerator.entries pages []
+                                            }
+
+                                            let svc =
+                                                IndexNowService(
+                                                    indexNowOptions,
+                                                    siteHost,
+                                                    siteKey,
+                                                    site.Def.BaseUrl,
+                                                    FileIndexNowStateStore.createAt siteStatePath,
+                                                    postFn,
+                                                    metrics,
+                                                    prLogger,
+                                                    universe
+                                                )
+                                                :> IIndexNowService
+
+                                            IndexNowStartupService(svc, prLogger)
+                                            :> Microsoft.Extensions.Hosting.IHostedService)
+                                ))
                 |> fun s ->
                     // Phase 114 — expose the satellite-site registry to
                     // consumer-supplied custom handlers. Not registered when
@@ -1044,10 +1121,22 @@ module PublicRenderingServerApp =
             // exact key slug and declines (falls through) for any other
             // `/*.txt`. Empty when IndexNow is inactive (GP 11 / 13).
             let indexNowHandlers: HttpHandler list =
-                if indexNowActive then
-                    [ IndexNowKeyHandler.routes indexNowKey ]
-                else
+                if not indexNowActive then
                     []
+                else
+                    match siteRegistry with
+                    | None -> [ IndexNowKeyHandler.routes indexNowKey ]
+                    | Some registry ->
+                        // Phase 115 — each satellite host answers its own
+                        // ownership key (the keyLocation its submissions
+                        // declare); unmatched hosts serve the default key.
+                        let satelliteKeyHandlers =
+                            satelliteIndexNow
+                            |> List.map (fun (site, _, siteKey) ->
+                                SiteGate.forSite registry site.Def.Name (IndexNowKeyHandler.routes siteKey))
+
+                        satelliteKeyHandlers
+                        @ [ SiteGate.forDefaultSite registry (IndexNowKeyHandler.routes indexNowKey) ]
 
             // Phase 114 — host-aware dispatch. When a satellite-site
             // registry exists, the per-request content surfaces (sitemap /
@@ -1095,11 +1184,36 @@ module PublicRenderingServerApp =
                     (fun site -> PublicPageHandler.handlerKeyed (Some site.Def.Name) site.Api site.Layouts)
                     pageHandler
 
+            // Phase 115 — feeds become host-scoped when sites exist:
+            // compose-level `withFeed` registrations serve the default
+            // site's hosts only, and each site's `PublicSiteDef.Feeds`
+            // mount host-gated against that site's own content API. With
+            // no sites, feed handlers are untouched (GP 11).
+            let feedHandlers =
+                match siteRegistry with
+                | None -> feedHandlers
+                | Some registry -> feedHandlers |> List.map (SiteGate.forDefaultSite registry)
+
+            let satelliteFeedHandlers: HttpHandler list =
+                match siteRegistry with
+                | None -> []
+                | Some registry ->
+                    registry.Sites
+                    |> List.collect (fun site ->
+                        site.Def.Feeds
+                        |> List.map (fun feedConfig ->
+                            let feedRoute =
+                                route feedConfig.SelfUrl
+                                >=> fun next ctx -> NarrativeFeedHandler.handler feedConfig site.Api next ctx
+
+                            SiteGate.forSite registry site.Def.Name feedRoute))
+
             let publicRenderingHandlers =
                 [ sitemapHandler ]
                 @ indexNowHandlers
                 @ [ redirectHandler; exportHandler ]
                 @ feedHandlers
+                @ satelliteFeedHandlers
                 @ searchHandlers
                 @ [ previewHandler; pageHandler ]
 
@@ -1169,6 +1283,53 @@ module PublicRenderingServerApp =
             app.ContentSources
             app.Base.Logger
             outputDir
+
+    /// Phase 115 — multi-site static export. Writes the default site to
+    /// `outputDir` (byte-for-byte `exportStaticWith` — GP 11) and each
+    /// `withSite` satellite to `outputDir/sites/<Name>/`, every tree
+    /// rendered with that site's content root + layouts (shared fallback)
+    /// + redirects and a `sitemap.xml` on that site's `BaseUrl`. Host-
+    /// config emission (`options.HostConfigs`) applies per tree from that
+    /// tree's redirects. Satellites export file-tier content only (no
+    /// entity overlay / content sources — the Phase 114 scope cut).
+    /// Returns the total page count across every tree.
+    let exportStaticAllWith
+        (options: StaticExportOptions)
+        (outputDir: string)
+        (app: PublicRenderingServerApp)
+        : Async<int> =
+        async {
+            let! total = exportStaticWith options outputDir app
+
+            let mutable sum = total
+
+            for site in app.Sites do
+                let siteConfig = {
+                    app.Base.Config with
+                        PublicRendering = EnabledPublicRendering site.ContentRoot
+                        PublicBaseUrl = Some site.BaseUrl
+                }
+
+                let siteLayouts =
+                    if Map.isEmpty site.Layouts then
+                        app.Layouts
+                    else
+                        site.Layouts
+
+                let siteDir = System.IO.Path.Combine(outputDir, "sites", site.Name)
+
+                let! n =
+                    StaticExport.runWith options site.Redirects siteConfig siteLayouts None [] app.Base.Logger siteDir
+
+                sum <- sum + n
+
+            return sum
+        }
+
+    /// Phase 115 — `exportStaticAllWith` with default options. The
+    /// multi-site analogue of `exportStatic`.
+    let exportStaticAll (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
+        exportStaticAllWith StaticExportOptions.defaults outputDir app
 
 // ─── Additive companion-set extension `withPublicRendering` (Phase 80c) ──
 //

@@ -6,10 +6,12 @@ open System.Threading.Tasks
 open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
+open Giraffe
 open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.PublicRendering
+open ToolUp.PublicRendering.PublicRenderingCompose
 
 // ─── Phase 114 — multi-host site registry ────────────────────────────
 //
@@ -282,5 +284,166 @@ let private validatorTests =
             | other -> failtestf "expected Warning, got %A" other
     ]
 
+// ─── 4. Phase 115 — SiteGate + per-site SEO/export surfaces ──────────
+
+let private siteGateTests =
+    testList "SiteGate (Phase 115)" [
+        testCase "forSite runs the handler only on that site's hosts"
+        <| fun _ ->
+            let registry =
+                mkRegistry [
+                    mkSite "a" [ "a.example" ] "https://a.example" "A"
+                    mkSite "b" [ "b.example" ] "https://b.example" "B"
+                ]
+
+            let marker: Giraffe.Core.HttpHandler =
+                fun _next ctx -> ctx.WriteStringAsync "gated-content"
+
+            let gated = SiteGate.forSite registry "a" marker
+
+            let run (host: string) =
+                let ctx = mkContext host "/feed.atom" None
+                (gated finalFunc ctx).GetAwaiter().GetResult() |> ignore
+                responseBody ctx
+
+            Expect.stringContains (run "a.example") "gated-content" "site a serves the gated handler"
+            Expect.equal (run "b.example") "" "site b falls through"
+            Expect.equal (run "other.example") "" "default-site host falls through"
+
+        testCase "forDefaultSite runs the handler only on unclaimed hosts"
+        <| fun _ ->
+            let registry = mkRegistry [ mkSite "a" [ "a.example" ] "https://a.example" "A" ]
+
+            let marker: Giraffe.Core.HttpHandler =
+                fun _next ctx -> ctx.WriteStringAsync "default-content"
+
+            let gated = SiteGate.forDefaultSite registry marker
+
+            let run (host: string) =
+                let ctx = mkContext host "/" None
+                (gated finalFunc ctx).GetAwaiter().GetResult() |> ignore
+                responseBody ctx
+
+            Expect.stringContains (run "other.example") "default-content" "unclaimed host serves the default"
+            Expect.equal (run "a.example") "" "satellite host falls through"
+    ]
+
+let private indexNowKeyTests =
+    testList "per-site IndexNow keys (Phase 115)" [
+        testCase "host-seeded keys differ per site and stay stable per host"
+        <| fun _ ->
+            let options = IndexNowOptions.enabled
+
+            let keyA =
+                IndexNow.resolveKey options (IndexNow.hostFromBaseUrl "https://a.example")
+
+            let keyA2 =
+                IndexNow.resolveKey options (IndexNow.hostFromBaseUrl "https://a.example/")
+
+            let keyB =
+                IndexNow.resolveKey options (IndexNow.hostFromBaseUrl "https://b.example")
+
+            Expect.equal keyA keyA2 "key is stable for the same host (trailing slash irrelevant)"
+            Expect.notEqual keyA keyB "different hosts derive different keys"
+
+        testCase "per-site submission universes are disjoint"
+        <| fun _ ->
+            let registry =
+                mkRegistry [
+                    mkSite "a" [ "a.example" ] "https://a.example" "Site A Home"
+                    mkSite "b" [ "b.example" ] "https://b.example" "Site B Home"
+                ]
+
+            let urlsOf (host: string) =
+                let rt = registry.ByHost[host]
+                let pages = rt.Api.ListPages "" |> Async.RunSynchronously
+
+                IndexNow.urlsFor rt.Def.BaseUrl (SitemapGenerator.entries pages [])
+                |> Set.ofList
+
+            let a = urlsOf "a.example"
+            let b = urlsOf "b.example"
+            Expect.isNonEmpty (Set.toList a) "site a universe non-empty"
+            Expect.isTrue (Set.intersect a b |> Set.isEmpty) "universes share no URL"
+    ]
+
+let private exportTests =
+    testList "exportStaticAll (Phase 115)" [
+        testCase "default tree at root; one subtree per satellite, each with its own sitemap origin"
+        <| fun _ ->
+            let defaultRoot = mkSiteRoot "Default Home"
+
+            let config = {
+                ServerConfig.defaults with
+                    PublicBaseUrl = Some "https://main.example"
+                    PublicRendering = EnabledPublicRendering(ContentRoot defaultRoot)
+            }
+
+            let outDir =
+                Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
+
+            let app =
+                PublicRenderingServerApp.create ()
+                |> PublicRenderingServerApp.withConfig config
+                |> PublicRenderingServerApp.withLayout (LayoutName "page") (fun p ->
+                    html [] [ body [] [ str p.Title ] ])
+                |> PublicRenderingServerApp.withSite (mkSite "siteb" [ "b.example" ] "https://b.example" "B Home")
+
+            let total =
+                PublicRenderingServerApp.exportStaticAll outDir app |> Async.RunSynchronously
+
+            Expect.isGreaterThanOrEqual total 2 "both trees rendered pages"
+
+            let rootIndex = File.ReadAllText(Path.Combine(outDir, "index.html"))
+            Expect.stringContains rootIndex "Default Home" "default site at export root"
+
+            let siteIndex =
+                File.ReadAllText(Path.Combine(outDir, "sites", "siteb", "index.html"))
+
+            Expect.stringContains siteIndex "B Home" "satellite tree under sites/<name>"
+
+            let rootSitemap = File.ReadAllText(Path.Combine(outDir, "sitemap.xml"))
+            Expect.stringContains rootSitemap "https://main.example/" "default sitemap origin"
+
+            let siteSitemap =
+                File.ReadAllText(Path.Combine(outDir, "sites", "siteb", "sitemap.xml"))
+
+            Expect.stringContains siteSitemap "https://b.example/" "satellite sitemap origin"
+            Expect.isFalse (siteSitemap.Contains "main.example") "satellite sitemap carries no default-site URLs"
+
+        testCase "zero sites → exportStaticAll is the single-tree export (GP 11)"
+        <| fun _ ->
+            let defaultRoot = mkSiteRoot "Solo Home"
+
+            let config = {
+                ServerConfig.defaults with
+                    PublicBaseUrl = Some "https://solo.example"
+                    PublicRendering = EnabledPublicRendering(ContentRoot defaultRoot)
+            }
+
+            let outDir =
+                Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
+
+            let app =
+                PublicRenderingServerApp.create ()
+                |> PublicRenderingServerApp.withConfig config
+                |> PublicRenderingServerApp.withLayout (LayoutName "page") (fun p ->
+                    html [] [ body [] [ str p.Title ] ])
+
+            PublicRenderingServerApp.exportStaticAll outDir app
+            |> Async.RunSynchronously
+            |> ignore
+
+            Expect.isTrue (File.Exists(Path.Combine(outDir, "index.html"))) "single tree at root"
+            Expect.isFalse (Directory.Exists(Path.Combine(outDir, "sites"))) "no sites/ subtree emitted"
+    ]
+
 let tests =
-    testList "MultiSite (Phase 114)" [ resolutionTests; servingTests; validatorTests ]
+    testList "MultiSite (Phase 114)" [
+        resolutionTests
+        servingTests
+        validatorTests
+        siteGateTests
+        indexNowKeyTests
+        exportTests
+    ]
