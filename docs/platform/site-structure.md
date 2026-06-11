@@ -125,6 +125,15 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `relatedByTag` is the pure-data path; a deployment that composes RAG can layer semantic-related on top. `tagCounts` drives a faceted-browse sidebar (case-insensitive grouping, deterministic order).
 
+## Faceted browse (Phase 99)
+
+`TaxonomyHandler.facetedBrowseSource` serves `/browse/{tags}` where `{tags}` is a `+`-separated tag list (AND semantics) — the "filter by topic + type" interaction. It renders the matching pages plus a **facet sidebar** (each remaining tag + the count it would yield, narrowing as tags are added), excluding gated and non-published pages (GP 4). The pure `TaxonomyHandler.facetedBrowse matchAll tags pages` (AND when `matchAll`, OR otherwise) returns `(results, facets)` for custom wiring, and composes with the Phase 98 pager.
+
+```fsharp
+|> PublicRenderingServerApp.withContentSource (TaxonomyHandler.facetedBrowseSource (fun () -> api.ListPages ""))
+// GET /browse/news+product  → pages tagged both, + facet counts
+```
+
 ## Pagination (Phase 98)
 
 `Pagination.paginate pageSize page items` is a pure helper returning the page's slice plus a stable `{ Page; PageCount; HasPrev; HasNext }` contract (`pageSize <= 0` = the whole list, unchanged). `NavTree.ofCollectionPaged` paginates a collection menu; `NavLayout.pager pageHref slice` renders a `Previous` / numbered / `Next` control with `tu-pager__*` class hooks — `pageHref n` lets the layout choose the URL scheme (path `/tag/news/2` or query `?page=2`):

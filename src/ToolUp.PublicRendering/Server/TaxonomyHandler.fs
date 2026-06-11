@@ -116,3 +116,88 @@ module TaxonomyHandler =
         |> List.collect (fun p -> PublicPage.tags p |> List.map (fun t -> t.ToLowerInvariant()))
         |> List.countBy id
         |> List.sortBy (fun (tag, count) -> -count, tag)
+
+    // ─── Phase 99 — faceted multi-tag browse ─────────────────────────
+
+    /// Filter `pages` by multiple tags and compute the facet counts over
+    /// the filtered set. `matchAll = true` requires every tag (AND);
+    /// `false` requires any (OR). An empty `tags` list returns every page
+    /// (with facets over all). Case-insensitive. The facet counts narrow
+    /// as tags are added, so a sidebar can show how many pages each
+    /// further tag would leave. Pure / deterministic.
+    let facetedBrowse
+        (matchAll: bool)
+        (tags: string list)
+        (pages: PublicPage list)
+        : PublicPage list * (string * int) list =
+        let norm (t: string) = t.ToLowerInvariant()
+        let wanted = tags |> List.map norm |> Set.ofList
+
+        let matches (p: PublicPage) =
+            let pageTags = PublicPage.tags p |> List.map norm |> Set.ofList
+
+            if Set.isEmpty wanted then true
+            elif matchAll then Set.isSubset wanted pageTags
+            else not (Set.isEmpty (Set.intersect wanted pageTags))
+
+        let filtered = pages |> List.filter matches
+        filtered, tagCounts filtered
+
+    let private buildBrowseDoc
+        (tags: string list)
+        (results: PublicPage list)
+        (facets: (string * int) list)
+        : NarrativeDocument =
+        let title =
+            if List.isEmpty tags then
+                "Browse"
+            else
+                sprintf "Browse: %s" (String.concat ", " tags)
+
+        let resultsSection =
+            match results with
+            | [] -> [
+                Narrative.callout Info [ Narrative.text "No pages match this combination of tags." ]
+              ]
+            | _ -> [
+                Narrative.bullets (
+                    results
+                    |> List.map (fun p -> [ Narrative.linkText p.Title ("/" + Slug.value p.Slug) ])
+                )
+              ]
+
+        let facetSection =
+            facets
+            |> List.map (fun (tag, count) -> tag, [ Narrative.text (string count) ])
+            |> Narrative.keyValues
+
+        Narrative.create title
+        |> Narrative.section "Results" "results" resultsSection
+        |> Narrative.section "Filter by tag" "facets" [ facetSection ]
+
+    /// An `IContentSource` for faceted browse at `browse/{tags}`, where
+    /// `{tags}` is a `+`-separated tag list (e.g. `browse/news+product`,
+    /// AND semantics). Renders the matching pages plus a facet sidebar
+    /// (each remaining tag + the count it would yield). Scoped to the
+    /// requesting principal via the provider + a public filter (GP 4).
+    /// Composes with [Phase 98](Pagination.fs) — a layout paginates the
+    /// results list.
+    let facetedBrowseSource (listPages: unit -> Async<PublicPage list>) : IContentSource =
+        ContentSource.ofRoute "browse/{tags}" (fun captures _ctx -> async {
+            let raw = captures.TryFind "tags" |> Option.defaultValue ""
+
+            let tags = raw.Split('+') |> Array.toList |> List.filter (fun s -> s <> "")
+
+            let! pages = listPages ()
+            // Exclude gated (non-public audience) AND non-published
+            // (draft / scheduled-not-yet / archived) pages from the
+            // browse listing (GP 4 + publish lifecycle).
+            let now = System.DateTimeOffset.UtcNow
+
+            let scoped =
+                pages
+                |> List.filter (fun p -> PublicPage.isPublic p && PublicPage.isPubliclyVisible now p)
+
+            let results, facets = facetedBrowse true tags scoped
+            return Some(Narrative(buildBrowseDoc tags results facets))
+        })
