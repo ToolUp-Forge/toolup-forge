@@ -131,7 +131,7 @@ let verify (signingKey: byte[]) (token: string) (now: DateTimeOffset) : Result<M
                 match Json.tryDeserialize<MediaSignedPayload> payloadBytes with
                 | Some payload when payload.MediaId = mediaIdFromPrefix ->
                     if payload.ExpiresAtUnix <= now.ToUnixTimeSeconds() then
-                        Error Expired
+                        Error SignedUrlError.Expired
                     else
                         Ok payload
                 | Some _ -> Error InvalidSignature
