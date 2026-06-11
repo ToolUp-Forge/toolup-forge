@@ -147,6 +147,9 @@ type PublicRenderingNarrativePagePublisher
                         PublishedAt = Some DateTimeOffset.UtcNow
                         Collection = None
                         Status = Published
+                        // Phase 86 — AI-published pages land Public; gated
+                        // authoring is a Phase 91 hardening concern.
+                        Audience = PageAudience.Public
                     }
 
                     let envelope = PublicPageEntity.fromPage page

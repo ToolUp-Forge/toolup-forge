@@ -33,9 +33,13 @@ module SitemapGenerator =
 
         for page in pages do
             let excluded =
-                page.Frontmatter
-                |> Map.tryFind "sitemap"
-                |> Option.exists (fun v -> v.Equals("exclude", StringComparison.OrdinalIgnoreCase))
+                // Phase 86 — gated (non-`Public`) pages never appear in the
+                // sitemap, so a crawler can't discover an authenticated /
+                // tenant-private slug.
+                not (PublicPage.isPublic page)
+                || page.Frontmatter
+                   |> Map.tryFind "sitemap"
+                   |> Option.exists (fun v -> v.Equals("exclude", StringComparison.OrdinalIgnoreCase))
 
             if not excluded then
                 let slug = Slug.value page.Slug

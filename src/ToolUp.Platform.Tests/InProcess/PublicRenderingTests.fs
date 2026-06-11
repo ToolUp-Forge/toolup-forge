@@ -330,6 +330,7 @@ let private implTests =
                 PublishedAt = None
                 Collection = None
                 Status = Published
+                Audience = PageAudience.Public
             }
 
             let excluded = {
@@ -355,6 +356,7 @@ let private implTests =
                 PublishedAt = Some(DateTimeOffset.Parse "2026-05-22")
                 Collection = Some "news"
                 Status = Published
+                Audience = PageAudience.Public
             }
 
             let xml = SitemapGenerator.generate "https://example.com" [ page ]

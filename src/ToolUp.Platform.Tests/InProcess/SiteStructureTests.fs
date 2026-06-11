@@ -36,6 +36,7 @@ let private mkPage (slug: string) (title: string) (tagCsv: string) : PublicPage 
     PublishedAt = None
     Collection = None
     Status = Published
+    Audience = PageAudience.Public
 }
 
 let private navYaml =

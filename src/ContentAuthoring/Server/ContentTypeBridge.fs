@@ -220,4 +220,7 @@ let project
                     PublishedAt = Some submission.SubmittedAt
                     Collection = mapping.Collection
                     Status = statusOf submission.State
+                    // Phase 86 — CMS-projected pages default to Public;
+                    // audience-gated content types are a later concern.
+                    Audience = PageAudience.Public
                 }

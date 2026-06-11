@@ -74,6 +74,12 @@ type PublicContentApiImpl
             PublishedAt = doc.Provenance |> Option.map _.GeneratedAt
             Collection = None
             Status = Published
+            // Phase 86 — a content source's synthesised page defaults to
+            // Public; a source that produces gated content sets the
+            // audience by emitting a page through its own
+            // `IPublicContentApi` path (or via frontmatter when it writes
+            // through the overlay).
+            Audience = PageAudience.Public
           }
         | Markdown _
         | Html _ -> {
@@ -86,6 +92,7 @@ type PublicContentApiImpl
             PublishedAt = None
             Collection = None
             Status = Published
+            Audience = PageAudience.Public
           }
 
     interface IPublicContentApi with
@@ -113,29 +120,53 @@ type PublicContentApiImpl
         }
 
         member this.GetPageInContext(slug: string, ctx: AccessContext) : Async<PublicPage option> = async {
-            // Tiers 1 + 2 (file + entity overlay) — identical to GetPage.
+            // Tiers 1 + 2 (file + `_public` entity overlay) — identical to
+            // GetPage.
             let! existing = (this :> IPublicContentApi).GetPage slug
 
             match existing with
             | Some page -> return Some page
             | None ->
-                // Tier 3 — registered content sources, in registration
-                // order; first `Some` wins. When `contentSources` is
-                // empty this loop returns `None` immediately, so the
-                // overall result equals `GetPage slug` byte-for-byte
-                // (GP 11).
-                let rec tryNext (sources: IContentSource list) = async {
-                    match sources with
-                    | [] -> return None
-                    | source :: rest ->
-                        let! body = source.Resolve (Slug slug) ctx
+                // Tier 2b (Phase 86) — tenant-scoped overlay. An
+                // authenticated principal's own `StorageScope` is consulted
+                // so a team / user can serve private pages no other tenant
+                // can read (GP 4 — structural isolation: the scope id comes
+                // from the resolved `AccessContext`, never caller input).
+                // Anonymous requests have no config scope and skip this
+                // tier entirely, so the public path stays byte-for-byte
+                // pre-86 (GP 11).
+                let! scoped = async {
+                    match entityStore, AccessContext.configScope ctx with
+                    | Some store, Some scope ->
+                        let! result = store.Get<PublicPageEntity>(scope.ScopeId, PublicPageEntity.EntityTypeName, slug)
 
-                        match body with
-                        | Some b -> return Some(PublicContentApiImpl.pageFromBody (slug, b))
-                        | None -> return! tryNext rest
+                        return
+                            match result with
+                            | Ok envelope -> Some envelope.Page
+                            | Error _ -> None
+                    | _ -> return None
                 }
 
-                return! tryNext contentSources
+                match scoped with
+                | Some page -> return Some page
+                | None ->
+                    // Tier 3 — registered content sources, in registration
+                    // order; first `Some` wins. When `contentSources` is
+                    // empty this loop returns `None` immediately, so the
+                    // overall result equals `GetPage slug` byte-for-byte
+                    // (GP 11).
+                    let rec tryNext (sources: IContentSource list) = async {
+                        match sources with
+                        | [] -> return None
+                        | source :: rest ->
+                            let! body = source.Resolve (Slug slug) ctx
+
+                            match body with
+                            | Some b -> return Some(PublicContentApiImpl.pageFromBody (slug, b))
+                            | None -> return! tryNext rest
+                    }
+
+                    return! tryNext contentSources
         }
 
 module PublicContentApiImpl =

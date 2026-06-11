@@ -50,6 +50,72 @@ module PublishStatus =
         | Published -> "published"
         | Archived -> "archived"
 
+/// Phase 86 — visibility audience of a page: who may see it once it is
+/// `Published`. `Public` (the default, GP 11) is served to anonymous
+/// requests exactly as pre-86; the other cases gate the page behind the
+/// request's resolved `AccessContext` at serve time (the
+/// `PublicPageHandler` runs the authorization pre-check, and non-`Public`
+/// pages are excluded from `sitemap.xml` / Atom feeds / static export).
+/// Settable via the `audience:` frontmatter key or a content source's
+/// synthesised page.
+[<RequireQualifiedAccess>]
+type PageAudience =
+    /// Anonymous-visible. The default — a page that declares no
+    /// `audience:` is served to everyone, byte-for-byte pre-86.
+    | Public
+    /// Any resolved (non-anonymous) principal. Anonymous → 401.
+    | Authenticated
+    /// Gated to principals holding at least one of the named roles
+    /// (matched against the module-route RBAC surface —
+    /// `AccessContext.canAccessModule`). An empty list gates to "any
+    /// authenticated". A principal without a matching role → 403.
+    | ScopeGated of roles: string list
+    /// Gated to the principal whose own scope (user / team / claim scope)
+    /// matches `relationship` — the client-portal case (a page for client
+    /// X is visible only to X). A non-matching principal → 403.
+    | ClientGated of relationship: string
+
+module PageAudience =
+    /// Wire-stable token (admin filters, frontmatter round-trip).
+    let token =
+        function
+        | PageAudience.Public -> "public"
+        | PageAudience.Authenticated -> "authenticated"
+        | PageAudience.ScopeGated _ -> "scope"
+        | PageAudience.ClientGated _ -> "client"
+
+    /// Parse an `audience:` frontmatter value. Recognised forms
+    /// (case-insensitive on the prefix; values trimmed):
+    ///   - absent / `""` / `"public"`   → `Public`
+    ///   - `"authenticated"`            → `Authenticated`
+    ///   - `"scope:editor,admin"`       → `ScopeGated ["editor"; "admin"]`
+    ///   - `"client:acme"`              → `ClientGated "acme"`
+    /// Anything unrecognised → `Public` (fail-open to the pre-86 default
+    /// per GP 11 — a typo'd `audience:` never silently hides a page; an
+    /// operator hiding a page uses `status:` or an explicit recognised
+    /// value).
+    let parse (raw: string option) : PageAudience =
+        match raw |> Option.map (fun s -> s.Trim()) with
+        | None
+        | Some "" -> PageAudience.Public
+        | Some v ->
+            let lower = v.ToLowerInvariant()
+
+            if lower = "public" then
+                PageAudience.Public
+            elif lower = "authenticated" then
+                PageAudience.Authenticated
+            elif lower.StartsWith "scope:" then
+                v.Substring(6).Split(',')
+                |> Array.map (fun s -> s.Trim())
+                |> Array.filter (fun s -> s <> "")
+                |> Array.toList
+                |> PageAudience.ScopeGated
+            elif lower.StartsWith "client:" then
+                PageAudience.ClientGated(v.Substring(7).Trim())
+            else
+                PageAudience.Public
+
 /// Rendered body of a page. The three variants cover the three main
 /// authoring paths a publishable site uses:
 ///
@@ -94,6 +160,12 @@ type PublicPage = {
     /// layer sets `Draft` / `Scheduled` / `Archived` and the public
     /// serving path filters non-visible pages out.
     Status: PublishStatus
+    /// Phase 86 — visibility audience. Defaults to `Public` for every
+    /// existing page-construction site (GP 11), so a deployment with only
+    /// public pages is served exactly as pre-86. Non-`Public` pages are
+    /// gated by the handler's authorization pre-check and excluded from
+    /// `sitemap.xml` / feeds / static export.
+    Audience: PageAudience
 }
 
 module PublicPage =
@@ -107,6 +179,14 @@ module PublicPage =
         | Scheduled at -> now >= at
         | Draft
         | Archived -> false
+
+    /// Phase 86 — whether a page is anonymously visible (`Audience.Public`).
+    /// Non-`Public` (gated) pages are excluded from `sitemap.xml`, Atom
+    /// feeds, and static export so a gated slug never leaks to a crawler.
+    let isPublic (page: PublicPage) : bool =
+        match page.Audience with
+        | PageAudience.Public -> true
+        | _ -> false
 
     // ─── Phase 90 — taxonomy (tags / categories) ─────────────────────
     //

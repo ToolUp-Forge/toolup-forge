@@ -143,6 +143,10 @@ let allTests =
         // PublicPageHandler cache-integration (miss→hit, 304, headers,
         // off-route, pre-84 path, stale-while-revalidate).
         RenderCacheTests.tests
+        // Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
+        // AudienceGate evaluate matrix + handler authorization pre-check
+        // (401/403/200) + sitemap exclusion + cross-tenant isolation.
+        GatedSsrTests.tests
         BrandKitTests.tests
         AssetStoreTests.tests
         MediaLibraryTests.tests

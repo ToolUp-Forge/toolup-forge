@@ -281,6 +281,10 @@
         <!-- Phase 84 — render-cache contract bindings + policy/hash unit
              tests + PublicPageHandler cache-integration tests. -->
         <Compile Include="InProcess\RenderCacheTests.fs" />
+        <!-- Phase 86 — gated/tenant/audience SSR: PageAudience.parse +
+             AudienceGate matrix + handler 401/403 + sitemap exclusion +
+             cross-tenant isolation. -->
+        <Compile Include="InProcess\GatedSsrTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
         <Compile Include="InProcess\MediaLibraryTests.fs" />

@@ -118,6 +118,9 @@ module NarrativeFeedHandler =
 
             let narrativePages =
                 allPages
+                // Phase 86 — gated (non-`Public`) pages never surface in a
+                // public Atom feed.
+                |> List.filter PublicPage.isPublic
                 |> List.filter (collectionMatches config.Collection)
                 |> List.choose extractNarrative
                 |> List.sortByDescending (fun (page, _) ->

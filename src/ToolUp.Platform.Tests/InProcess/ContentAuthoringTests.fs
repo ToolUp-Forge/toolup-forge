@@ -89,6 +89,7 @@ let private pageWith (status: PublishStatus) (slug: string) : PublicPage = {
     PublishedAt = None
     Collection = None
     Status = status
+    Audience = PageAudience.Public
 }
 
 type private NullLogger() =

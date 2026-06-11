@@ -94,6 +94,7 @@ let private mkPage (slug: string) (cacheFm: string option) : PublicPage = {
     PublishedAt = None
     Collection = None
     Status = Published
+    Audience = PageAudience.Public
 }
 
 /// Content-API stub counting `GetPageInContext` calls so a test can

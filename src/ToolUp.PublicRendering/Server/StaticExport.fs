@@ -122,7 +122,14 @@ module StaticExport =
                     | Some explicit -> explicit
                     | None -> PublicContentApiImpl.create loader None []
 
-                let! pages = api.ListPages ""
+                let! allPages = api.ListPages ""
+
+                // Phase 86 — static export emits only `Public` pages; a
+                // gated (authenticated / tenant / client) slug is never
+                // written to disk, and is excluded from the sitemap below.
+                // A build-time export has no per-request principal, so a
+                // gated page could never be authorised here anyway.
+                let pages = allPages |> List.filter PublicPage.isPublic
 
                 // Mirror PublicPath (typically wwwroot/) into the
                 // export root before writing pages so a page-with-same-

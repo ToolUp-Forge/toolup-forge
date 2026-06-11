@@ -39,6 +39,8 @@
              integration) and compose (registration). -->
         <Compile Include="Server\IRenderCache.fs" />
         <Compile Include="Server\RenderCacheImpl.fs" />
+        <!-- Phase 86 — page-audience authorization decision (gated SSR). -->
+        <Compile Include="Server\AudienceGate.fs" />
         <Compile Include="Server\RedirectMap.fs" />
         <Compile Include="Server\StructuredDataHelpers.fs" />
         <Compile Include="Server\NarrativePrerender.fs" />

@@ -53,11 +53,18 @@ module PublicPageHandler =
         | Rendered of html: string * page: PublicPage
         | NoLayoutRegistered
         | PageNotFound
+        /// Phase 86 — audience requires a resolved principal (→ 401).
+        | Unauthorized
+        /// Phase 86 — principal failed the audience role / relationship
+        /// gate (→ 403).
+        | AccessForbidden
 
     /// Resolve a slug through the Phase 83 chain, apply the Phase 89
-    /// publish-visibility filter, and render the layout to an HTML
-    /// document. Pure with respect to the `HttpContext` (used both on the
-    /// request thread and on the SWR background path).
+    /// publish-visibility filter, run the Phase 86 audience authorization
+    /// gate, and render the layout to an HTML document. Pure with respect
+    /// to the `HttpContext` (used both on the request thread and on the SWR
+    /// background path). The audience gate runs *before* rendering so a
+    /// forbidden request never pays the render cost.
     let private resolveAndRender
         (api: IPublicContentApi)
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)
@@ -72,11 +79,15 @@ module PublicPageHandler =
 
             match visiblePage with
             | Some page ->
-                match resolveLayout layouts page with
-                | Some layout ->
-                    let html = layout page |> RenderView.AsString.htmlDocument
-                    return Rendered(html, page)
-                | None -> return NoLayoutRegistered
+                match AudienceGate.evaluate accessContext page.Audience with
+                | AudienceDecision.RequireAuthentication -> return Unauthorized
+                | AudienceDecision.Forbidden -> return AccessForbidden
+                | AudienceDecision.Allow ->
+                    match resolveLayout layouts page with
+                    | Some layout ->
+                        let html = layout page |> RenderView.AsString.htmlDocument
+                        return Rendered(html, page)
+                    | None -> return NoLayoutRegistered
             | None -> return PageNotFound
         }
 
@@ -137,6 +148,19 @@ module PublicPageHandler =
     let private emitCacheMetric (metrics: IMetricsSink) (outcome: string) =
         metrics.Increment("publicrendering.render_cache", Map["outcome", outcome])
 
+    /// Phase 86 — write a bare audience-denial response. Gated pages set
+    /// `X-Robots-Tag: noindex` and `Cache-Control: no-store` so a denied
+    /// response is never indexed or shared-cached.
+    let private writeDenied
+        (ctx: HttpContext)
+        (code: int)
+        (body: string)
+        : System.Threading.Tasks.Task<HttpContext option> =
+        ctx.Response.StatusCode <- code
+        ctx.Response.Headers["X-Robots-Tag"] <- StringValues "noindex"
+        ctx.Response.Headers["Cache-Control"] <- StringValues "no-store"
+        ctx.WriteStringAsync body
+
     /// The pre-84 path: resolve, filter, render, write — no cache lookup,
     /// no cache headers. Byte-for-byte identical to the handler before
     /// Phase 84, so a deployment that never composes `withRenderCache`
@@ -158,6 +182,8 @@ module PublicPageHandler =
             | NoLayoutRegistered ->
                 ctx.Response.StatusCode <- 500
                 return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+            | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
+            | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
             | PageNotFound -> return None
         }
 
@@ -184,36 +210,51 @@ module PublicPageHandler =
 
             match cached with
             | Some entry ->
-                let stale = DateTimeOffset.UtcNow >= entry.ExpiresAt
-                emitCacheMetric metrics (if stale then "stale" else "hit")
+                // Phase 86 — re-run the audience gate on the cache hit using
+                // the entry's stored audience. Entries are keyed by scope,
+                // so a gated page is cached per-scope; re-gating here still
+                // enforces role differentiation *within* a scope (two team
+                // members where only one holds the gating role) on every
+                // hit. `Public` entries always `Allow`, so a public cached
+                // page is unaffected.
+                match AudienceGate.evaluate accessContext entry.Audience with
+                | AudienceDecision.RequireAuthentication -> return! writeDenied ctx 401 "Unauthorized"
+                | AudienceDecision.Forbidden -> return! writeDenied ctx 403 "Forbidden"
+                | AudienceDecision.Allow ->
+                    let stale = DateTimeOffset.UtcNow >= entry.ExpiresAt
+                    emitCacheMetric metrics (if stale then "stale" else "hit")
 
-                // Stale-while-revalidate: serve the stale render now and
-                // refresh the entry on a detached background task. The
-                // refresh captures only values (api / layouts / key /
-                // settings / accessContext) so it is safe after the
-                // request's `HttpContext` is gone.
-                if stale && entry.StaleWhileRevalidate then
-                    Async.Start(
-                        async {
-                            try
-                                match! resolveAndRender api layouts slug accessContext with
-                                | Rendered(html, page) ->
-                                    let refreshed = RenderedPage.forStore html DateTimeOffset.UtcNow
-                                    do! cache.Set key refreshed (policyForPage settings page)
-                                | _ -> ()
-                            with _ ->
-                                ()
-                        }
-                    )
+                    // Stale-while-revalidate: serve the stale render now and
+                    // refresh the entry on a detached background task. The
+                    // refresh captures only values (api / layouts / key /
+                    // settings / accessContext) so it is safe after the
+                    // request's `HttpContext` is gone.
+                    if stale && entry.StaleWhileRevalidate then
+                        Async.Start(
+                            async {
+                                try
+                                    match! resolveAndRender api layouts slug accessContext with
+                                    | Rendered(html, page) ->
+                                        let refreshed = {
+                                            RenderedPage.forStore html DateTimeOffset.UtcNow with
+                                                Audience = page.Audience
+                                        }
 
-                if ifNoneMatchMatches ctx entry.ContentHash then
-                    setCacheHeaders ctx entry.ContentHash (cacheControlForEntry entry) entry.RenderedAt
-                    ctx.Response.StatusCode <- 304
-                    return Some ctx
-                else
-                    setCacheHeaders ctx entry.ContentHash (cacheControlForEntry entry) entry.RenderedAt
-                    ctx.Response.ContentType <- "text/html; charset=utf-8"
-                    return! ctx.WriteStringAsync entry.Html
+                                        do! cache.Set key refreshed (policyForPage settings page)
+                                    | _ -> ()
+                                with _ ->
+                                    ()
+                            }
+                        )
+
+                    if ifNoneMatchMatches ctx entry.ContentHash then
+                        setCacheHeaders ctx entry.ContentHash (cacheControlForEntry entry) entry.RenderedAt
+                        ctx.Response.StatusCode <- 304
+                        return Some ctx
+                    else
+                        setCacheHeaders ctx entry.ContentHash (cacheControlForEntry entry) entry.RenderedAt
+                        ctx.Response.ContentType <- "text/html; charset=utf-8"
+                        return! ctx.WriteStringAsync entry.Html
 
             | None ->
                 emitCacheMetric metrics "miss"
@@ -223,7 +264,13 @@ module PublicPageHandler =
                 | Rendered(html, page) ->
                     let renderedAt = DateTimeOffset.UtcNow
                     let policy = policyForPage settings page
-                    let rendered = RenderedPage.forStore html renderedAt
+
+                    // Phase 86 — carry the page's audience into the stored
+                    // entry so a cache hit can re-gate without re-resolving.
+                    let rendered = {
+                        RenderedPage.forStore html renderedAt with
+                            Audience = page.Audience
+                    }
 
                     // Store only when the policy opts in (Set is a no-op
                     // for NoCache, but skip the await to keep the off
@@ -243,6 +290,8 @@ module PublicPageHandler =
                 | NoLayoutRegistered ->
                     ctx.Response.StatusCode <- 500
                     return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+                | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
+                | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
                 | PageNotFound -> return None
         }
 

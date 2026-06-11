@@ -145,6 +145,12 @@ type MarkdownContentLoader(root: ContentRoot, logger: ILogger, hotReload: bool) 
             | Some "archived" -> Archived
             | _ -> Published
 
+        // Phase 86 — optional `audience:` frontmatter key gates the page
+        // behind the request's resolved AccessContext. Absent / `public`
+        // → `Public`, preserving the pre-86 anonymous-visible behaviour
+        // (GP 11).
+        let audience = frontmatter |> Map.tryFind "audience" |> PageAudience.parse
+
         {
             Slug = slug
             Title = title
@@ -155,6 +161,7 @@ type MarkdownContentLoader(root: ContentRoot, logger: ILogger, hotReload: bool) 
             PublishedAt = publishedAt
             Collection = collection
             Status = status
+            Audience = audience
         }
 
     let loadRedirects () =

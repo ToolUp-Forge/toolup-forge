@@ -65,6 +65,7 @@ module NarrativePrerender =
                     PublishedAt = doc.Provenance |> Option.map _.GeneratedAt
                     Collection = None
                     Status = Published
+                    Audience = PageAudience.Public
                 }
 
                 StructuredDataHelpers.articleFromNarrative synthetic doc

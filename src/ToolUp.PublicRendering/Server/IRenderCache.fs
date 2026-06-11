@@ -123,6 +123,13 @@ type RenderedPage = {
     /// Whether an expired entry may be served stale while a background
     /// render refreshes it. Derived by `Set` from the policy.
     StaleWhileRevalidate: bool
+    /// Phase 86 — the resolved page's audience, stored so the handler can
+    /// re-run the authorization gate on a cache *hit* without re-resolving
+    /// the page. Entries are keyed by scope, so a gated page is cached
+    /// per-scope; storing the audience lets the handler still enforce
+    /// role differentiation *within* a scope (e.g. two team members where
+    /// only one holds the gating role) on every hit. Defaults to `Public`.
+    Audience: PageAudience
 }
 
 module RenderedPage =
@@ -143,6 +150,7 @@ module RenderedPage =
         RenderedAt = renderedAt
         ExpiresAt = renderedAt
         StaleWhileRevalidate = false
+        Audience = PageAudience.Public
     }
 
 /// Opt-in render cache. Six portability rules (GP 12 — every substrate
