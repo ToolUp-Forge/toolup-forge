@@ -4,7 +4,9 @@ open System
 open System.IO
 open Expecto
 open Giraffe.ViewEngine
+open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Metrics
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.Platform.Tests.Contracts
@@ -644,6 +646,122 @@ let private contentSourceImplTests =
             | None -> failtest "Expected a literal match"
     ]
 
+// ─── Phase 93 — render observability (RenderMetrics) ────────────────
+
+/// An `IMetricsSink` that records every emission for assertion.
+type private RecordingSink() =
+    let counters = System.Collections.Generic.List<string * Map<string, string>>()
+
+    let records =
+        System.Collections.Generic.List<string * float * Map<string, string>>()
+
+    member _.Counters = List.ofSeq counters
+    member _.Records = List.ofSeq records
+
+    interface IMetricsSink with
+        member _.Increment(name, tags) = counters.Add(name, tags)
+        member _.Record(name, value, tags) = records.Add(name, value, tags)
+        member _.SetGauge(_, _, _) = ()
+
+let private renderMetricsTests =
+    testList "PublicRendering — Phase 93 render metrics" [
+
+        testCase "emitRender emits a render count + duration tagged by outcome"
+        <| fun _ ->
+            let sink = RecordingSink()
+            RenderMetrics.emitRender sink RenderMetrics.OutcomeRendered 12.5
+
+            Expect.contains
+                sink.Counters
+                (RenderMetrics.RenderCount, Map["outcome", RenderMetrics.OutcomeRendered])
+                "render counter is incremented with the outcome tag"
+
+            Expect.contains
+                sink.Records
+                (RenderMetrics.RenderMs, 12.5, Map["outcome", RenderMetrics.OutcomeRendered])
+                "render duration histogram records the elapsed ms"
+
+        testCase "classifyOutcome maps status codes (304 / 401 / 403 / 500 / 200) and fall-through"
+        <| fun _ ->
+            let withStatus (code: int) =
+                let ctx = DefaultHttpContext()
+                ctx.Response.StatusCode <- code
+                ctx :> HttpContext
+
+            Expect.equal
+                (RenderMetrics.classifyOutcome (withStatus 200) (Some(withStatus 200)))
+                RenderMetrics.OutcomeRendered
+                "200 → rendered"
+
+            Expect.equal
+                (RenderMetrics.classifyOutcome (withStatus 304) (Some(withStatus 304)))
+                RenderMetrics.OutcomeNotModified
+                "304 → not_modified"
+
+            Expect.equal
+                (RenderMetrics.classifyOutcome (withStatus 401) (Some(withStatus 401)))
+                RenderMetrics.OutcomeUnauthorized
+                "401 → unauthorized"
+
+            Expect.equal
+                (RenderMetrics.classifyOutcome (withStatus 403) (Some(withStatus 403)))
+                RenderMetrics.OutcomeForbidden
+                "403 → forbidden"
+
+            Expect.equal
+                (RenderMetrics.classifyOutcome (withStatus 200) None)
+                RenderMetrics.OutcomeNotFound
+                "fall-through (None) → not_found"
+
+        testCase "instrumentSource records per-source resolve latency and delegates the result"
+        <| fun _ ->
+            let sink = RecordingSink()
+            let ctx = AccessContext.unrestricted (AnonymousSession "s")
+
+            let inner =
+                ContentSource.create (fun _slug _ctx -> async { return Some(ContentBody.Html "<p>x</p>") })
+
+            let wrapped = RenderMetrics.instrumentSource sink "my-source" inner
+
+            let result = wrapped.Resolve (Slug "anything") ctx |> Async.RunSynchronously
+            Expect.isSome result "the wrapper delegates the inner result"
+
+            Expect.isTrue
+                (sink.Records
+                 |> List.exists (fun (name, _, tags) ->
+                     name = RenderMetrics.SourceResolveMs && tags = Map["source", "my-source"]))
+                "a source_resolve_ms record is emitted tagged with the source label"
+
+        testCase "instrumentSource preserves IEnumerableContentSource enumeration"
+        <| fun _ ->
+            let sink = RecordingSink()
+
+            // An enumerable source: its routes must still be discovered
+            // through the timing wrapper.
+            let enumerable =
+                ContentSource.ofRouteEnumerable "thing/{id}" (fun _caps _ctx -> async { return None }) (fun () -> async {
+                    return [ Slug "thing/a"; Slug "thing/b" ]
+                })
+
+            let wrappedEnumerable = RenderMetrics.instrumentSource sink "enum" enumerable
+
+            let routes =
+                ContentSource.enumerateAll [ wrappedEnumerable ] |> Async.RunSynchronously
+
+            Expect.contains routes (Slug "thing/a") "wrapped enumerable source still enumerates its routes"
+
+            // A non-enumerable source contributes nothing — unchanged by
+            // the wrapper.
+            let plain = ContentSource.create (fun _slug _ctx -> async { return None })
+
+            let wrappedPlain = RenderMetrics.instrumentSource sink "plain" plain
+
+            let plainRoutes =
+                ContentSource.enumerateAll [ wrappedPlain ] |> Async.RunSynchronously
+
+            Expect.isEmpty plainRoutes "wrapped non-enumerable source contributes no routes"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -651,4 +769,5 @@ let tests =
         implTests
         composeTests
         contentSourceImplTests
+        renderMetricsTests
     ]

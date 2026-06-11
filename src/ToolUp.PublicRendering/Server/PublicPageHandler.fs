@@ -145,8 +145,7 @@ module PublicPageHandler =
         ctx.Response.Headers["Last-Modified"] <- StringValues(renderedAt.UtcDateTime.ToString("R"))
         ctx.Response.Headers["Cache-Control"] <- StringValues cacheControl
 
-    let private emitCacheMetric (metrics: IMetricsSink) (outcome: string) =
-        metrics.Increment("publicrendering.render_cache", Map["outcome", outcome])
+    let private emitCacheMetric (metrics: IMetricsSink) (outcome: string) = RenderMetrics.emitCache metrics outcome
 
     /// Phase 86 — write a bare audience-denial response. Gated pages set
     /// `X-Robots-Tag: noindex` and `Cache-Control: no-store` so a denied
@@ -311,20 +310,34 @@ module PublicPageHandler =
                 | :? AccessContext as ac -> ac
                 | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
 
-            // Phase 84 — the render cache is active only when registered
-            // (the deployment called `withRenderCache`). Absent → the
-            // pre-84 path runs unchanged (GP 11 / GP 13).
-            match ctx.RequestServices.GetService(typeof<IRenderCache>) with
-            | :? IRenderCache as cache ->
-                let settings =
-                    match ctx.RequestServices.GetService(typeof<RenderCacheSettings>) with
-                    | :? RenderCacheSettings as s -> s
-                    | _ -> RenderCacheSettings.defaults
+            // Phase 93 — render observability. Resolve the sink once
+            // (NoOp when none composed → every emit is free, GP 13) and
+            // wrap the serve with a render-duration + outcome metric. The
+            // Stopwatch is the only always-on cost (negligible; the same
+            // trade-off as RequestTimingMiddleware).
+            let metrics =
+                match ctx.RequestServices.GetService(typeof<IMetricsSink>) with
+                | :? IMetricsSink as m -> m
+                | _ -> NoOpMetricsSink() :> IMetricsSink
 
-                let metrics =
-                    match ctx.RequestServices.GetService(typeof<IMetricsSink>) with
-                    | :? IMetricsSink as m -> m
-                    | _ -> NoOpMetricsSink() :> IMetricsSink
+            let sw = System.Diagnostics.Stopwatch.StartNew()
 
-                serveCached api layouts cache settings metrics slugOrIndex accessContext ctx
-            | _ -> serveUncached api layouts slugOrIndex accessContext ctx
+            task {
+                // Phase 84 — the render cache is active only when registered
+                // (the deployment called `withRenderCache`). Absent → the
+                // pre-84 path runs unchanged (GP 11 / GP 13).
+                let! result =
+                    match ctx.RequestServices.GetService(typeof<IRenderCache>) with
+                    | :? IRenderCache as cache ->
+                        let settings =
+                            match ctx.RequestServices.GetService(typeof<RenderCacheSettings>) with
+                            | :? RenderCacheSettings as s -> s
+                            | _ -> RenderCacheSettings.defaults
+
+                        serveCached api layouts cache settings metrics slugOrIndex accessContext ctx
+                    | _ -> serveUncached api layouts slugOrIndex accessContext ctx
+
+                sw.Stop()
+                RenderMetrics.emitRender metrics (RenderMetrics.classifyOutcome ctx result) sw.Elapsed.TotalMilliseconds
+                return result
+            }

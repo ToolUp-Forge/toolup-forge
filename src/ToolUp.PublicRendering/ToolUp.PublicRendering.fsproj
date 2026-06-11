@@ -73,6 +73,10 @@
         <Compile Include="Server\NarrativeData.fs" />
         <Compile Include="Server\NarrativeExportHandler.fs" />
         <Compile Include="Server\NarrativeFeedHandler.fs" />
+        <!-- Phase 93 — SSR render observability (IMetricsSink): per-request
+             render duration / outcome counters + per-source resolve
+             latency decorator. Precedes the page handler it instruments. -->
+        <Compile Include="Server\RenderMetrics.fs" />
         <Compile Include="Server\PublicPageHandler.fs" />
         <!-- Phase 91 — semantic-search SSR endpoint (/search?q= → retrieval
              → ranked Narrative result list; query-size cap, rides the
