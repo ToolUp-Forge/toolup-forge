@@ -84,6 +84,12 @@
         <Compile Include="Shared\Types\Subject.fs" />
         <Compile Include="Shared\Types\SurfaceRequirement.fs" />
         <Compile Include="Shared\Types\AccessContext.fs" />
+        <!-- Phase 113 — host-neutral default-deny action authorization:
+             ActionDescriptor / AuthorizationDecision / IActionAuthorizer +
+             policy-as-data (ActionRule / ActionPolicy). After AccessContext
+             (the Authorize parameter) + PermissionTypes (ModulePermission
+             in ActionRequirement). -->
+        <Compile Include="Shared\Types\ActionAuthorization.fs" />
         <!-- Phase 41 — data-classification shared types (ClassificationLevel
              / FieldClassification / FieldHit). Standalone; no deps. -->
         <Compile Include="Shared\Types\ClassificationTypes.fs" />
