@@ -166,8 +166,16 @@ module private Validate =
 /// the schema's declared defaults, then deserialise into `'T`. A
 /// decode failure on any individual field falls back to that field's
 /// `DefaultJson` — the store promises `GetEffective` never throws,
-/// which is what modules rely on at `Init`.
-let private projectToRecord<'T> (schema: ModuleConfigSchema) (persisted: Map<string, string>) : 'T =
+/// which is what modules rely on at `Init`. `warn` surfaces the
+/// all-defaults fallback (schema/'T drift after an upgrade) so the
+/// operator symptom "my config didn't stick" has a log line naming
+/// the discarded fields instead of empty logs.
+let private projectToRecord<'T>
+    (warn: string -> unit)
+    (context: string)
+    (schema: ModuleConfigSchema)
+    (persisted: Map<string, string>)
+    : 'T =
 
     let sb = StringBuilder()
     sb.Append("{") |> ignore
@@ -191,9 +199,20 @@ let private projectToRecord<'T> (schema: ModuleConfigSchema) (persisted: Map<str
 
     try
         Json.deserialize<'T> (sb.ToString())
-    with _ ->
+    with ex ->
         // Whole-object decode failed — the schema and `'T` disagree.
         // Fall back to all-defaults so module `Init` still returns.
+        let discarded = persisted |> Map.toList |> List.map fst |> String.concat ", "
+
+        warn (
+            sprintf
+                "[BlobConfigStore] %s: effective-config decode into %s failed (%s) — falling back to schema defaults. Persisted field(s) being ignored: [%s]. This usually means the module's config record and its declared schema drifted apart after an upgrade; admin-configured values will appear not to stick until the drift is fixed."
+                context
+                typeof<'T>.Name
+                ex.Message
+                discarded
+        )
+
         let defaultsOnly =
             let sb2 = StringBuilder()
             sb2.Append("{") |> ignore
@@ -238,13 +257,47 @@ let private blobName (scope: StorageScope) (moduleKey: string) =
 /// doesn't bind interface generic type parameters on object-expression
 /// method overrides — an object-expression `Set<'T>` infers a fresh
 /// `'a` instead of sharing the interface's `'T`.
-type BlobConfigStore(storage: IBlobStorage) =
+///
+/// `logger` is optional for back-compat with direct constructions, but
+/// every fallback path warns through it when present — the three
+/// silent degradations (corrupt blob → empty map; `Get<'T>` decode
+/// failure → `None`; effective-config decode failure → all-defaults)
+/// previously had no observability at all, so a schema drift after an
+/// upgrade discarded every admin-configured value with empty logs.
+type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
+    let warn (msg: string) =
+        match logger with
+        | Some l -> l.Warn msg
+        | None -> ()
+
+    let context (scope: StorageScope) (moduleKey: string) =
+        sprintf "scope=%s moduleKey=%s" scope.Container moduleKey
+
     let loadRaw (scope: StorageScope) (moduleKey: string) = async {
         let! result = storage.Download(platformContainer, blobName scope moduleKey)
 
         match result with
-        | Ok bytes -> return Json.tryDeserializeMap bytes |> Option.defaultValue Map.empty
-        | Error _ -> return Map.empty
+        | Ok bytes ->
+            match Json.tryDeserializeMap bytes with
+            | Some map -> return map
+            | None ->
+                // Blob exists but doesn't decode — corruption or a
+                // persistence-shape change. Distinct from the missing-
+                // blob case below: here admin-configured values exist
+                // on disk and are being discarded.
+                warn (
+                    sprintf
+                        "[BlobConfigStore] %s: config blob exists but failed to decode as Map<string,string> — treating as empty. Persisted admin-configured values are being ignored; inspect/restore the blob '%s/%s'."
+                        (context scope moduleKey)
+                        platformContainer
+                        (blobName scope moduleKey)
+                )
+
+                return Map.empty
+        | Error _ ->
+            // Missing blob is the normal "nothing configured yet" case
+            // — not warn-worthy.
+            return Map.empty
     }
 
     let saveRaw (scope: StorageScope) (moduleKey: string) (values: Map<string, string>) = async {
@@ -266,13 +319,23 @@ type BlobConfigStore(storage: IBlobStorage) =
                 try
                     let json = Json.serialize raw
                     return Some(Json.deserialize<'T> json)
-                with _ ->
+                with ex ->
+                    warn (
+                        sprintf
+                            "[BlobConfigStore] %s: persisted config failed to decode into %s (%s) — returning None. The caller will see 'nothing configured' even though %d field(s) are persisted: [%s]."
+                            (context scope moduleKey)
+                            typeof<'T>.Name
+                            ex.Message
+                            (Map.count raw)
+                            (raw |> Map.toList |> List.map fst |> String.concat ", ")
+                    )
+
                     return None
         }
 
         member _.GetEffective<'T>(scope, moduleKey, schema) : Async<'T> = async {
             let! raw = loadRaw scope moduleKey
-            return projectToRecord<'T> schema raw
+            return projectToRecord<'T> warn (context scope moduleKey) schema raw
         }
 
         member _.Set<'T>(scope, moduleKey, value: 'T, schema) = async {
@@ -387,6 +450,13 @@ type BlobConfigStore(storage: IBlobStorage) =
         }
 
 /// Convenience factory — construct and upcast. Mirrors the
-/// `create` pattern used by other stores in the SDK.
+/// `create` pattern used by other stores in the SDK. Prefer
+/// `createWithLogger` so the store's fallback paths (corrupt blob,
+/// decode failures) surface as Warn lines instead of silent defaults.
 let create (storage: IBlobStorage) : IConfigStore =
     BlobConfigStore(storage) :> IConfigStore
+
+/// Logger-threading factory — the composition root passes its resolved
+/// `ILogger` so the store's three fallback paths are observable.
+let createWithLogger (storage: IBlobStorage) (logger: ILogger) : IConfigStore =
+    BlobConfigStore(storage, logger) :> IConfigStore

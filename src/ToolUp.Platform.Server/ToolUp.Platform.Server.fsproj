@@ -290,11 +290,13 @@
         <Compile Include="Server\Premium\PremiumGate.fs" />
         <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
-        <Compile Include="Server\AdAnalyticsApiHandler.fs" />
         <!-- Phase 61 — PlatformAdmin public-utility admin endpoints
              (ad-unit CRUD + rate-limit decisions + premium-user list).
              Each handler gates server-side on Platform-Admin role. -->
         <Compile Include="Server\PlatformAdmin\AdUnitConfigApi.fs" />
+        <!-- After AdUnitConfigApi: the ad-analytics slot sanity check
+             reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
+        <Compile Include="Server\AdAnalyticsApiHandler.fs" />
         <Compile Include="Server\PlatformAdmin\RateLimitEventApi.fs" />
         <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
         <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />

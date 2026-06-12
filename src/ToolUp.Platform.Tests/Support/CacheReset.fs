@@ -32,4 +32,8 @@ let invalidateAll () : Async<unit> = async {
     // post-save hooks drained by `compose`. Tests that bypass `compose`
     // need an explicit reset to start clean.
     ToolUp.Platform.FileManagement.__internal_resetForTests ()
+
+    // (b) — AdAnalyticsApiHandler.slotSnapshot: 60s TTL snapshot of the
+    // configured ad-slot ids used by the slot sanity check.
+    ToolUp.Platform.AdAnalyticsApiHandler.__internal_resetForTests ()
 }

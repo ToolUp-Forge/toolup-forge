@@ -159,4 +159,52 @@ let tests =
             Expect.equal v.Name "rate-limit-mode" "stable identifier"
             Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"
         }
+
+        // ─── AdAnalyticsRateLimitValidator (Investigate gaps 2026-06-12,
+        //     Platform Gap 7) ─────────────────────────────────────────
+
+        testList "ad-analytics rate-limit validator" [
+
+            let validateAds (config: ServerConfig) : ValidationResult =
+                let v =
+                    RateLimitModeValidator.AdAnalyticsRateLimitValidator(config) :> IConfigValidator
+
+                v.Validate() |> Async.RunSynchronously
+
+            test "AdAnalytics enabled + NoRateLimitStore → Warning naming the exposed endpoints" {
+                let config = {
+                    ServerConfig.defaults with
+                        AdAnalytics = EnabledAdAnalytics
+                        RateLimitStore = NoRateLimitStore
+                }
+
+                match validateAds config with
+                | Warning msg ->
+                    Expect.stringContains msg "/api/_platform/ads/impression" "names the exposed surface"
+                    Expect.stringContains msg "InMemoryRateLimitStore" "names the fix"
+                | other -> failtestf "expected Warning, got %A" other
+            }
+
+            test "AdAnalytics enabled + InMemoryRateLimitStore → Ok" {
+                let config = {
+                    ServerConfig.defaults with
+                        AdAnalytics = EnabledAdAnalytics
+                        RateLimitStore = RateLimitStoreMode.InMemoryRateLimitStore
+                }
+
+                Expect.equal (validateAds config) Ok "per-IP gate is active"
+            }
+
+            test "AdAnalytics disabled + NoRateLimitStore → Ok (nothing exposed)" {
+                Expect.equal (validateAds ServerConfig.defaults) Ok "default-off deployment is quiet"
+            }
+
+            test "Validator metadata is well-formed" {
+                let v =
+                    RateLimitModeValidator.AdAnalyticsRateLimitValidator(ServerConfig.defaults) :> IConfigValidator
+
+                Expect.equal v.Name "ad-analytics-rate-limit" "stable identifier"
+                Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"
+            }
+        ]
     ]

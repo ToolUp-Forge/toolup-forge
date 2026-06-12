@@ -100,3 +100,35 @@ type RateLimitModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
             | [] -> return Ok
             | warnings -> return Warning(String.concat " " warnings)
         }
+
+/// Investigate gaps 2026-06-12 (Platform Gap 7) — warns when the
+/// anonymous ad-analytics ingest endpoints are enabled without a
+/// Phase 56 `IRateLimitStore`. `AdAnalyticsApiHandler`'s per-IP
+/// budget resolves the store from DI and silently skips the gate
+/// when none is registered — correct degradation, but the operator
+/// should know the unauthenticated `/api/_platform/ads/*` surface is
+/// running with body-cap + field-validation gates only. Warning, not
+/// Error: behind-proxy deployments may enforce per-client limits
+/// upstream (same posture as `RateLimitModeValidator` Rule 1).
+type AdAnalyticsRateLimitValidator(config: ServerConfig, ?timeout: TimeSpan) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "ad-analytics-rate-limit"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            match config.AdAnalytics, config.RateLimitStore with
+            | EnabledAdAnalytics, NoRateLimitStore ->
+                return
+                    Warning(
+                        "ServerConfig.AdAnalytics = EnabledAdAnalytics with RateLimitStore = NoRateLimitStore. "
+                        + "The anonymous /api/_platform/ads/impression and /click endpoints accept unauthenticated "
+                        + "posts into the _platform scope of the audit event store; without an IRateLimitStore their "
+                        + "per-IP budget is inactive, leaving only the body-size cap and field/slot validation between "
+                        + "a hostile client and unbounded event-store writes. Set ServerConfig.RateLimitStore = "
+                        + "InMemoryRateLimitStore (single instance) or wire an external store companion, or accept the "
+                        + "exposure if a rate-limiting proxy enforces per-client limits upstream."
+                    )
+            | _ -> return Ok
+        }

@@ -104,7 +104,10 @@ let buildNotificationStack
     // same instance that DI hands out. Registered into DI further down;
     // `services.AddSingleton(this)` on the same reference avoids
     // double-construction.
-    let configStoreInstance = ConfigStore.create resolvedBlobStorage
+    // Logger threaded so the store's fallback paths (corrupt blob /
+    // decode failure → silent defaults) surface as Warn lines.
+    let configStoreInstance =
+        ConfigStore.createWithLogger resolvedBlobStorage resolvedLogger
 
     // Phase 9 / Phase 1g SDK-wide audit log. `EventStoreAuditLog` wraps
     // the DI-registered `IEventStore` (which is itself the

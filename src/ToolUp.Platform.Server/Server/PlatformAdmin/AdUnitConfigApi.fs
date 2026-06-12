@@ -118,6 +118,27 @@ let private ensureRegistered (registry: EntityRegistry) : unit =
 
     registry.Register registration
 
+/// Read-side seam for other platform endpoints — today the Phase 60
+/// ad-analytics slot sanity check (Investigate gaps 2026-06-12,
+/// Platform Gap 7). Returns the set of configured slot ids, or `None`
+/// when the deployment has no `IEntityStore` / `EntityRegistry` wired
+/// (e.g. `NoEntityStore` deployments whose slot configs live in static
+/// client config) — callers treat `None` as "slot ids are not managed
+/// server-side" and skip their check. `Some Set.empty` means the
+/// substrate exists but no slots are configured yet.
+let tryListConfiguredSlotIds (ctx: HttpContext) : System.Threading.Tasks.Task<Set<string> option> = task {
+    match resolveEntityStore ctx, resolveRegistry ctx with
+    | Some store, Some registry ->
+        ensureRegistered registry
+
+        let! refs =
+            store.ListAll<AdSlotEntity>(PlatformAdsConfigScope, AdSlotEntityType, skip = 0, take = 1000)
+            |> Async.StartAsTask
+
+        return Some(refs |> List.map (fun (r: EntityRef<AdSlotEntity>) -> r.Id) |> Set.ofList)
+    | _ -> return None
+}
+
 let private writeJson (ctx: HttpContext) (statusCode: int) (payload: 'T) : HttpFuncResult = task {
     let json = JsonSerializer.Serialize(payload, jsonOptions)
     ctx.Response.StatusCode <- statusCode

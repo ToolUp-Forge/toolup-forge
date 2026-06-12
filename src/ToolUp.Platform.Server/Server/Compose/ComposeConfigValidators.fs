@@ -68,6 +68,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(config)) // refuse InProcessJobScheduler in multi-instance deployments
     addConfigValidator (NotificationChannelInstanceValidator.NotificationChannelInstanceValidator(config)) // warn in-memory notification channel under multi-instance
     addConfigValidator (RateLimitModeValidator.RateLimitModeValidator(config)) // warn internet-facing authenticated deployment with no rate-limiting
+    addConfigValidator (RateLimitModeValidator.AdAnalyticsRateLimitValidator(config)) // warn anonymous ad-analytics ingest enabled without an IRateLimitStore
     addConfigValidator (RateLimitConfigValidator.RateLimitConfigValidator(config)) // range-check ServerConfig.RateLimit (out-of-range = cannot serve)
     addConfigValidator (RateLimiterInstanceValidator.RateLimiterInstanceValidator(config)) // warn in-process/in-memory rate limiters under multi-instance (effective limit is N×)
     addConfigValidator (SseAuthModeValidator.SseAuthModeValidator(config)) // refuse SseAuthMode = QueryParamFallback in authenticated modes
