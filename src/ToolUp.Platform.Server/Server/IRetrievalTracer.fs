@@ -55,6 +55,17 @@ type RetrievalTrace = {
     /// less than `TopK` when retrieval returned a smaller pool or when
     /// `AdaptiveKHint` truncated below the cap.
     ResultCount: int
+    /// Per-stage wall-clock timings as `(stageName, elapsedMs)` pairs in
+    /// execution order. Stage names align with `Stages` entries, but only
+    /// the substantive stages are timed (`Dense`, `Sparse`, `RRF`,
+    /// `Rerank`, `MMR`, `Merge`) — bookkeeping stages (scope
+    /// authorisation, filters, boosts) appear in `Stages` without a
+    /// timing entry. `Dense` and `Sparse` run concurrently under hybrid
+    /// retrieval, so their entries can sum to more than `LatencyMs`;
+    /// `LatencyMs` remains authoritative for end-to-end latency.
+    /// Additive (Phase 122, GP 11): absent in pre-122 traces; old
+    /// consumers deserialise unchanged.
+    StageTimings: (string * float) list
 }
 
 /// Diagnostic payload for the "retrieval was thin" event. Fired when the

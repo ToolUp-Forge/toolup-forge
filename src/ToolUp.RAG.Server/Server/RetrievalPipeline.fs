@@ -324,6 +324,11 @@ type RetrievalPipeline
         member _.Retrieve request ctx = async {
             let stopwatch = System.Diagnostics.Stopwatch.StartNew()
             let stages = ResizeArray<string>()
+            // Per-stage `(name, elapsedMs)` pairs (Phase 122). Appended
+            // sequentially — the concurrent dense/sparse branches return
+            // their elapsed time and the join appends both, so no two
+            // threads touch this list.
+            let timings = ResizeArray<string * float>()
             stages.Add "AuthoriseScopes"
 
             let permitted = authorisedScopes (readPlatformKbMode ()) ctx request.Scopes
@@ -352,6 +357,7 @@ type RetrievalPipeline
                         LatencyMs = stopwatch.ElapsedMilliseconds
                         Stages = stages |> List.ofSeq
                         ResultCount = results.Length
+                        StageTimings = timings |> List.ofSeq
                     }
 
                     do! t.Trace trace ctx
@@ -376,23 +382,47 @@ type RetrievalPipeline
                         // Cosine-only path. When no sparse index AND no
                         // reranker is wired, this is byte-equivalent to the
                         // pre-Phase-14e pipeline.
+                        let denseSw = System.Diagnostics.Stopwatch.StartNew()
                         let! queryVector = embedder.GenerateEmbedding request.Query
-                        return! store.Search permitted queryVector pool
+                        let! results = store.Search permitted queryVector pool
+                        denseSw.Stop()
+                        timings.Add("Dense", denseSw.Elapsed.TotalMilliseconds)
+                        return results
                       }
 
                     | Some sparseIdx -> async {
                         stages.Add "Sparse"
 
+                        // Each branch times itself and returns the elapsed
+                        // ms alongside its matches; the post-join appends
+                        // keep `timings` single-threaded.
                         let denseAsync = async {
+                            let sw = System.Diagnostics.Stopwatch.StartNew()
                             let! queryVector = embedder.GenerateEmbedding request.Query
-                            return! store.Search permitted queryVector pool
+                            let! results = store.Search permitted queryVector pool
+                            sw.Stop()
+                            return results, sw.Elapsed.TotalMilliseconds
                         }
 
-                        let sparseAsync = sparseIdx.Search permitted request.Query pool
+                        let sparseAsync = async {
+                            let sw = System.Diagnostics.Stopwatch.StartNew()
+                            let! results = sparseIdx.Search permitted request.Query pool
+                            sw.Stop()
+                            return results, sw.Elapsed.TotalMilliseconds
+                        }
 
                         let! both = Async.Parallel [ denseAsync; sparseAsync ]
+                        let denseResults, denseMs = both[0]
+                        let sparseResults, sparseMs = both[1]
+                        timings.Add("Dense", denseMs)
+                        timings.Add("Sparse", sparseMs)
+
                         stages.Add "RRF"
-                        return fuseRRF both[0] both[1]
+                        let fuseSw = System.Diagnostics.Stopwatch.StartNew()
+                        let fused = fuseRRF denseResults sparseResults
+                        fuseSw.Stop()
+                        timings.Add("RRF", fuseSw.Elapsed.TotalMilliseconds)
+                        return fused
                       }
 
                 // Optional `OriginFilter`: drop chunks whose `_origin`
@@ -472,7 +502,10 @@ type RetrievalPipeline
                         let head = initial |> List.truncate cap
 
                         async {
+                            let sw = System.Diagnostics.Stopwatch.StartNew()
                             let! reorderedHead = r.Rerank request.Query head
+                            sw.Stop()
+                            timings.Add("Rerank", sw.Elapsed.TotalMilliseconds)
                             // Keep any tail beyond MaxBatchSize at the end —
                             // they had a lower retrieval rank to begin with,
                             // and the reranker hasn't seen them.
@@ -484,7 +517,11 @@ type RetrievalPipeline
                 let diversified =
                     if opts.EnableMmr then
                         stages.Add "MMR"
-                        applyMmr opts.MmrLambda reranked
+                        let sw = System.Diagnostics.Stopwatch.StartNew()
+                        let result = applyMmr opts.MmrLambda reranked
+                        sw.Stop()
+                        timings.Add("MMR", sw.Elapsed.TotalMilliseconds)
+                        result
                     else
                         reranked
 
@@ -499,7 +536,10 @@ type RetrievalPipeline
                         diversified |> List.truncate request.TopK
 
                 stages.Add "Merge"
+                let mergeSw = System.Diagnostics.Stopwatch.StartNew()
                 let final = applyMerge request.Merge request.TopK truncated
+                mergeSw.Stop()
+                timings.Add("Merge", mergeSw.Elapsed.TotalMilliseconds)
 
                 let rerankerName = opts.Reranker |> Option.map _.Name
 

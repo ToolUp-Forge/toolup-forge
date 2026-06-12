@@ -64,6 +64,9 @@ type KnowledgeRetrievedPayload = {
     LatencyMs: int64
     Stages: string list
     ResultCount: int
+    /// Per-stage `(stageName, elapsedMs)` timings (Phase 122). Additive:
+    /// pre-122 events lack the property and old readers ignore it.
+    StageTimings: (string * float) list
 }
 
 /// `KnowledgeRetrievalMiss` payload — fired when post-filter retrieval
@@ -112,6 +115,7 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                     LatencyMs = trace.LatencyMs
                     Stages = trace.Stages
                     ResultCount = trace.ResultCount
+                    StageTimings = trace.StageTimings
                 }
 
                 // Persist to the caller's resolved scope when there is one;
