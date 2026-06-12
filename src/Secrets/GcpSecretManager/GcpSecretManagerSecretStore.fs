@@ -124,7 +124,6 @@ module private Auth =
     let metadataTokenUrl =
         "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
 
-    [<CLIMutable>]
     type ServiceAccountKey = {
         ``type``: string
         client_email: string
@@ -132,18 +131,25 @@ module private Auth =
         token_uri: string
     }
 
-    [<CLIMutable>]
-    type private TokenResponse = {
-        access_token: string
-        expires_in: int
-    }
-
     type AccessToken = {
         Token: string
         ExpiresAtUtc: DateTime
     }
 
-    let private jsonOptions = JsonSerializerOptions(PropertyNameCaseInsensitive = true)
+    // Wire bodies are parsed with `JsonDocument` property reads rather
+    // than `JsonSerializer.Deserialize` into the records above: this
+    // module (and everything in it) is deliberately non-public, and
+    // System.Text.Json's reflection serialiser only sees public
+    // getters/constructors — deserialising a non-public record throws
+    // `NotSupportedException` at runtime. Field names on the wire stay
+    // snake_case, matching Google's responses.
+    let private tryReadString (root: JsonElement) (name: string) =
+        let mutable el = Unchecked.defaultof<JsonElement>
+
+        if root.TryGetProperty(name, &el) && el.ValueKind = JsonValueKind.String then
+            el.GetString()
+        else
+            null
 
     let private base64UrlEncode (bytes: byte[]) =
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
@@ -153,30 +159,46 @@ module private Auth =
 
     let private readServiceAccount (path: string) =
         let json = File.ReadAllText path
-        let key = JsonSerializer.Deserialize<ServiceAccountKey>(json, jsonOptions)
 
-        if isNull (box key) then
+        use doc =
+            try
+                JsonDocument.Parse json
+            with :? JsonException ->
+                invalidArg
+                    "GOOGLE_APPLICATION_CREDENTIALS"
+                    (sprintf "Service-account JSON at '%s' could not be parsed." path)
+
+        let root = doc.RootElement
+
+        if root.ValueKind <> JsonValueKind.Object then
             invalidArg
                 "GOOGLE_APPLICATION_CREDENTIALS"
                 (sprintf "Service-account JSON at '%s' could not be parsed." path)
 
-        if String.IsNullOrWhiteSpace key.client_email then
+        let clientEmail = tryReadString root "client_email"
+        let privateKey = tryReadString root "private_key"
+        let tokenUri = tryReadString root "token_uri"
+
+        if String.IsNullOrWhiteSpace clientEmail then
             invalidArg
                 "GOOGLE_APPLICATION_CREDENTIALS"
                 (sprintf "Service-account JSON at '%s' is missing 'client_email'." path)
 
-        if String.IsNullOrWhiteSpace key.private_key then
+        if String.IsNullOrWhiteSpace privateKey then
             invalidArg
                 "GOOGLE_APPLICATION_CREDENTIALS"
                 (sprintf "Service-account JSON at '%s' is missing 'private_key'." path)
 
-        let tokenUri =
-            if String.IsNullOrWhiteSpace key.token_uri then
-                defaultTokenUri
-            else
-                key.token_uri
-
-        { key with token_uri = tokenUri }
+        {
+            ``type`` = tryReadString root "type"
+            client_email = clientEmail
+            private_key = privateKey
+            token_uri =
+                if String.IsNullOrWhiteSpace tokenUri then
+                    defaultTokenUri
+                else
+                    tokenUri
+        }
 
     let private buildJwt (key: ServiceAccountKey) =
         let now = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
@@ -204,14 +226,35 @@ module private Auth =
         unsigned + "." + base64UrlEncode signature
 
     let private parseToken (body: string) =
-        let parsed = JsonSerializer.Deserialize<TokenResponse>(body, jsonOptions)
+        let accessToken, expiresIn =
+            try
+                use doc = JsonDocument.Parse body
+                let root = doc.RootElement
 
-        if isNull (box parsed) || String.IsNullOrWhiteSpace parsed.access_token then
+                if root.ValueKind <> JsonValueKind.Object then
+                    null, 0
+                else
+                    let mutable expiresEl = Unchecked.defaultof<JsonElement>
+
+                    let expiresIn =
+                        if
+                            root.TryGetProperty("expires_in", &expiresEl)
+                            && expiresEl.ValueKind = JsonValueKind.Number
+                        then
+                            expiresEl.GetInt32()
+                        else
+                            0
+
+                    tryReadString root "access_token", expiresIn
+            with :? JsonException ->
+                null, 0
+
+        if String.IsNullOrWhiteSpace accessToken then
             failwithf "GCP token endpoint returned an unparseable body: %s" body
 
         {
-            Token = parsed.access_token
-            ExpiresAtUtc = DateTime.UtcNow.AddSeconds(float parsed.expires_in)
+            Token = accessToken
+            ExpiresAtUtc = DateTime.UtcNow.AddSeconds(float expiresIn)
         }
 
     let private fetchServiceAccountToken (http: HttpClient) (key: ServiceAccountKey) = async {

@@ -118,9 +118,16 @@ let private readJson<'T> (response: HttpResponseMessage) : Async<'T> = async {
 }
 
 // ─── Docker API DTOs (minimal — only the fields we touch) ────────────
+//
+// Public, not `private`: these go through plain `JsonSerializerOptions`
+// (PascalCase preserved — Docker's API is PascalCase) and
+// System.Text.Json's reflection serialiser only sees public property
+// getters/constructors. A non-public F# record serialises as `{}` and
+// throws `NotSupportedException` on deserialise. Pinned by the
+// wire-DTO pack in `ToolUp.Platform.Tests` (DeployPlaneTests).
 
 [<CLIMutable>]
-type private DockerCreateRequest = {
+type DockerCreateRequest = {
     Image: string
     Env: string[]
     Labels: Dictionary<string, string>
@@ -129,10 +136,10 @@ type private DockerCreateRequest = {
 }
 
 [<CLIMutable>]
-type private DockerCreateResponse = { Id: string; Warnings: string[] }
+type DockerCreateResponse = { Id: string; Warnings: string[] }
 
 [<CLIMutable>]
-type private DockerContainerState = {
+type DockerContainerState = {
     Status: string
     Running: bool
     Restarting: bool
@@ -144,20 +151,20 @@ type private DockerContainerState = {
 }
 
 [<CLIMutable>]
-type private DockerContainerConfig = {
+type DockerContainerConfig = {
     Image: string
     Labels: Dictionary<string, string>
 }
 
 [<CLIMutable>]
-type private DockerInspectResponse = {
+type DockerInspectResponse = {
     Id: string
     State: DockerContainerState
     Config: DockerContainerConfig
 }
 
 [<CLIMutable>]
-type private DockerListItem = {
+type DockerListItem = {
     Id: string
     Image: string
     Labels: Dictionary<string, string>

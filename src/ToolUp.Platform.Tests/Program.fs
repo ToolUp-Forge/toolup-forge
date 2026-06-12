@@ -35,6 +35,14 @@ let allTests =
         AzureKeyVaultSecretStoreTests.tests
         AwsSecretsManagerSecretStoreTests.tests
         HashiCorpVaultSecretStoreTests.tests
+        // Wired in for the first time alongside the always-on
+        // key-parsing pack that follows — the env-gated GCP contract
+        // pack carried an `[<Tests>]` attribute (assuming
+        // auto-discovery) but `runTestsWithCLIArgs` only runs the
+        // supplied `allTests` list, leaving the pack silently dormant
+        // (same class as the SvgPropTests wiring note further down).
+        GcpSecretManagerSecretStoreTests.tests
+        GcpSecretManagerSecretStoreTests.serviceAccountParseTests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
         NarrativeElementTests.tests
@@ -242,6 +250,10 @@ let allTests =
         DeployPlaneTests.deployPipelineTests
         DeployPlaneTests.containerSchedulerInMemoryTests
         DeployPlaneTests.containerSchedulerDockerLocalTests
+        // Always-on wire-DTO pack for the DockerLocal companion — the
+        // contract leg above needs a Docker socket; this one pins the
+        // STJ serialisability of the Docker API DTOs everywhere.
+        DeployPlaneTests.dockerWireDtoTests
         // v0.5.0 — DOM-attr helper module sanity packs + audit ratchet.
         // The DataProp / AriaProp helper modules (sub-task A) ship
         // sanity tests that mirror SvgPropTests' shape; the audit

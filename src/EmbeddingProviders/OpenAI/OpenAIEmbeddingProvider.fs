@@ -7,20 +7,15 @@ open System.Text.Json
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.Secrets
 
-// ─── JSON helpers ────────────────────────────────────────────────
-
-let private jsonOptions =
-    JsonSerializerOptions(PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-
-// ─── API types ────────────────────────────────────────────────────
-
-[<CLIMutable>]
-type private EmbeddingRequest = { Model: string; Input: string }
-
-[<CLIMutable>]
-type private EmbeddingBatchRequest = { Model: string; Input: string array }
-
 // ─── Provider implementation ──────────────────────────────────────
+//
+// Request bodies are serialised from inline anonymous records with
+// wire-cased field names. Named non-public records are NOT an option
+// here: System.Text.Json's reflection serialiser only sees public
+// property getters, so a `private` CLIMutable record serialises as
+// `{}` — every embed call would post an empty body and get a 400.
+// Anonymous records compile with public getters, so they serialise
+// correctly regardless of where they're declared.
 
 /// `batchSize` caps per-call inputs to honour OpenAI's documented limit
 /// (2048) with token-budget headroom. The default 64 keeps total tokens
@@ -76,8 +71,7 @@ type private OpenAIEmbeddingProviderImpl(secretStore: ISecretStore, model: strin
         member _.ModelId = model
 
         member _.GenerateEmbedding(text: string) = async {
-            let body: EmbeddingRequest = { Model = model; Input = text }
-            let! doc = postEmbedding (JsonSerializer.Serialize(body, jsonOptions))
+            let! doc = postEmbedding (JsonSerializer.Serialize {| model = model; input = text |})
 
             return
                 doc.RootElement.GetProperty("data").EnumerateArray()
@@ -102,8 +96,7 @@ type private OpenAIEmbeddingProviderImpl(secretStore: ISecretStore, model: strin
                 let results = ResizeArray<float32 array>(inputs.Length)
 
                 for batch in batches do
-                    let body: EmbeddingBatchRequest = { Model = model; Input = batch }
-                    let! doc = postEmbedding (JsonSerializer.Serialize(body, jsonOptions))
+                    let! doc = postEmbedding (JsonSerializer.Serialize {| model = model; input = batch |})
 
                     let arr =
                         doc.RootElement.GetProperty("data").EnumerateArray()

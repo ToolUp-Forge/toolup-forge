@@ -388,3 +388,92 @@ let containerSchedulerDockerLocalTests =
             testCase "Docker socket not reachable — pack skipped on this machine"
             <| fun _ -> skiptest "no Docker socket available; set up Docker Desktop / dockerd to exercise"
         ]
+
+// ─── DockerLocal wire DTOs (always-on, no Docker needed) ─────────────
+//
+// Pins the serialisability of the Docker API DTOs through the same
+// plain-STJ options shape the scheduler builds (PropertyNamingPolicy =
+// null — Docker's API is PascalCase — plus case-insensitive reads).
+// The DTOs were originally `private`, and System.Text.Json's
+// reflection serialiser only sees public property getters and
+// constructors: every create call posted `{}` and every inspect /
+// list deserialise threw `NotSupportedException`. The defect stayed
+// latent because the Docker-backed contract leg above is env-gated on
+// a reachable Docker socket; this pack runs everywhere.
+
+let dockerWireDtoTests =
+    let jsonOptions =
+        System.Text.Json.JsonSerializerOptions(PropertyNamingPolicy = null, PropertyNameCaseInsensitive = true)
+
+    let serialize value =
+        System.Text.Json.JsonSerializer.Serialize(value, jsonOptions)
+
+    let deserialize (json: string) : 'T =
+        System.Text.Json.JsonSerializer.Deserialize<'T>(json, jsonOptions)
+
+    testList "DockerLocalContainerScheduler — wire DTOs" [
+        testCase "DockerCreateRequest serialises its fields PascalCase (not `{}`)"
+        <| fun _ ->
+            let labels = Dictionary<string, string>()
+            labels["tenantId"] <- "tenant-1"
+            let exposed = Dictionary<string, obj>()
+            exposed["8080/tcp"] <- box (obj ())
+
+            let request: DockerCreateRequest = {
+                Image = "alpine:latest"
+                Env = [| "A=1" |]
+                Labels = labels
+                ExposedPorts = exposed
+                Healthcheck = null
+            }
+
+            use doc = System.Text.Json.JsonDocument.Parse(serialize request)
+            let root = doc.RootElement
+
+            Expect.equal (root.GetProperty("Image").GetString()) "alpine:latest" "Image written PascalCase"
+            let env0 = root.GetProperty("Env")[0]
+            Expect.equal (env0.GetString()) "A=1" "Env written"
+
+            Expect.equal (root.GetProperty("Labels").GetProperty("tenantId").GetString()) "tenant-1" "Labels written"
+
+            let hasExposedPorts, exposedEl = root.TryGetProperty "ExposedPorts"
+            Expect.isTrue hasExposedPorts "ExposedPorts written"
+
+            Expect.equal
+                (exposedEl.GetProperty("8080/tcp").ValueKind)
+                System.Text.Json.JsonValueKind.Object
+                "port key maps to an empty object, per the Docker create contract"
+
+        testCase "DockerCreateResponse deserialises a containers/create body"
+        <| fun _ ->
+            let parsed: DockerCreateResponse = deserialize """{"Id":"abc123","Warnings":[]}"""
+
+            Expect.equal parsed.Id "abc123" "Id read"
+
+        testCase "DockerInspectResponse deserialises nested State + Config"
+        <| fun _ ->
+            let body =
+                """{
+  "Id": "abc123",
+  "State": { "Status": "exited", "Running": false, "Restarting": false, "Dead": false, "ExitCode": 0,
+             "StartedAt": "2024-01-01T00:00:00Z", "FinishedAt": "2024-01-01T00:01:00Z", "Error": "" },
+  "Config": { "Image": "alpine:latest", "Labels": { "tenantId": "tenant-1" } }
+}"""
+
+            let parsed: DockerInspectResponse = deserialize body
+            Expect.equal parsed.Id "abc123" "Id read"
+            Expect.equal parsed.State.Status "exited" "State.Status read"
+            Expect.equal parsed.Config.Image "alpine:latest" "Config.Image read"
+            Expect.equal parsed.Config.Labels["tenantId"] "tenant-1" "Config.Labels read"
+
+        testCase "DockerListItem array deserialises a containers/json body"
+        <| fun _ ->
+            let body =
+                """[{"Id":"abc","Image":"alpine:latest","Labels":{"tenantId":"t1"},"State":"running","Status":"Up 2 minutes"}]"""
+
+            let parsed: DockerListItem[] = deserialize body
+            Expect.equal parsed.Length 1 "one item"
+            Expect.equal parsed[0].Id "abc" "Id read"
+            Expect.equal parsed[0].State "running" "State read"
+            Expect.equal parsed[0].Labels["tenantId"] "t1" "Labels read"
+    ]
