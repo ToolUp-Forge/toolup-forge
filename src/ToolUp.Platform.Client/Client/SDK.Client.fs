@@ -171,6 +171,13 @@ module Client =
         /// discipline that eliminates the cold-load AG-Grid-destroyed-
         /// mid-flight race (Issue #3).
         InitPhase: InitPhase
+        /// Phase 121 — failed boot loads accumulated for the standard
+        /// dismissible banner (deduped by source; empty on a clean boot,
+        /// GP 13). A failed load keeps its benign default (empty teams,
+        /// no active team, …) AND records an entry here so the failure
+        /// is distinguishable from genuinely-empty data (GP 9). Wiped on
+        /// `TeamSwitched` like every other per-boot-cycle field.
+        Degradations: BootDegradation.BootDegradation list
     }
 
     type Msg =
@@ -284,6 +291,24 @@ module Client =
         /// `ModuleStates` entry stays empty, `OnError` fires, and the
         /// next `ModuleSelected` for this module retries from scratch.
         | ResetModule of moduleId: string
+        /// Phase 121 — a boot loader threw (routed via `Cmd.OfAsync.either`
+        /// in `bootLoadCmd`, or dispatched directly by a failing effect).
+        /// Accumulates a `BootDegradation` entry on the Model and warns
+        /// through the category logger; the Model keeps the loader's
+        /// benign default, so rendering is unchanged except for the
+        /// banner.
+        | BootLoadFailed of source: string * error: string
+        /// Phase 121 — user clicked Retry on the degradation banner.
+        /// Optimistically clears the source's entry and re-fires the
+        /// matching loader Cmd; a re-failure re-adds via `BootLoadFailed`.
+        | RetryBootLoad of source: string
+        /// Phase 121 — a previously-degraded source recovered through its
+        /// own channel (the auth bridge's refresh interval succeeding
+        /// again). Clears the entry without re-firing anything.
+        | BootLoadRecovered of source: string
+        /// Phase 121 — user dismissed the degradation banner. Clears every
+        /// entry; later failures re-surface it.
+        | DismissBootDegradations
 
     // Header freshness is the CsrfClient request-guard's job — see UserSession.fs:342 + installRequestGuard below.
     // Proxies are constructed at module load; identity + CSRF headers are read live per request by the send-time guard.
@@ -336,11 +361,12 @@ module Client =
     /// doesn't expose it). A failed load leaves the sidebar
     /// permissive.
     let private loadAccessibleModules = async {
-        try
-            let! response = accessibilityApi.GetAccessibleModules()
-            return Some response
-        with _ ->
-            return None
+        // Phase 121 — no internal catch: a thrown fetch routes through
+        // `bootLoadCmd`'s `Cmd.OfAsync.either` to `BootLoadFailed`, and
+        // `AccessibleModules` stays `None` (the permissive fallback) —
+        // same render, but the failure is now visible.
+        let! response = accessibilityApi.GetAccessibleModules()
+        return Some response
     }
 
     /// Gate a boot-time loader on the shared CSRF prefetch. Under
@@ -358,82 +384,72 @@ module Client =
     /// Fetch every registered module's config (including the reserved
     /// `_platform` entry). Failures per module degrade to an empty
     /// entry so the shell can still render — `Anonymous` mode, for
-    /// example, rejects every read because no scope resolves. A total
-    /// failure of `ListModules` returns the empty map so `init` can
-    /// finish without blocking on the network.
+    /// example, rejects every read because no scope resolves. Phase
+    /// 121 — a total failure of `ListModules` now throws (routed to
+    /// `BootLoadFailed`, whose handler applies the empty map AND flips
+    /// the prefetch gate so `init` still finishes without blocking).
     let private loadAllConfigs = async {
-        try
-            let! entries = configApi.ListModules()
+        let! entries = configApi.ListModules()
 
-            let! pairs =
-                entries
-                |> List.map (fun entry -> async {
-                    try
-                        let! result = configApi.GetModuleConfig entry.ModuleKey
+        let! pairs =
+            entries
+            |> List.map (fun entry -> async {
+                try
+                    let! result = configApi.GetModuleConfig entry.ModuleKey
 
-                        return
-                            match result with
-                            | Ok view -> Some(view.ModuleKey, view.Values)
-                            | Error _ -> None
-                    with _ ->
-                        return None
-                })
-                |> Async.Parallel
+                    return
+                        match result with
+                        | Ok view -> Some(view.ModuleKey, view.Values)
+                        | Error _ -> None
+                with _ ->
+                    return None
+            })
+            |> Async.Parallel
 
-            return pairs |> Array.choose id |> Map.ofArray
-        with _ ->
-            return Map.empty
+        return pairs |> Array.choose id |> Map.ofArray
     }
 
-    /// Fetch the resolved feature-flag map for the caller. Failure
-    /// degrades to an empty map — the prefetch is best-effort and
-    /// modules that declare flags continue to see `Map.empty` (i.e.
-    /// every `flag` returns `false`) until a future load succeeds.
-    /// An `Anonymous` deployment that declares no platform flags
-    /// will also see an empty map, which is the correct answer.
-    let private loadResolvedFlags = async {
-        try
-            return! featureFlagApi.GetResolvedFlags()
-        with _ ->
-            return Map.empty
-    }
+    /// Fetch the resolved feature-flag map for the caller. The prefetch
+    /// is best-effort: on failure (routed to `BootLoadFailed`, Phase
+    /// 121) modules that declare flags see `Map.empty` (every `flag`
+    /// returns `false`) until a retry succeeds. An `Anonymous`
+    /// deployment that declares no platform flags also sees an empty
+    /// map, which is the correct answer — and is now distinguishable
+    /// from a failed fetch.
+    let private loadResolvedFlags = async { return! featureFlagApi.GetResolvedFlags() }
 
     /// Fetch the user's team memberships for the header switcher and
-    /// any other caller that wants membership-aware UI. Failure
-    /// degrades to an empty list. Fires on init in team-scoped modes
-    /// and after `TeamSwitched` to pick up newly-created teams.
-    let private loadMyTeams = async {
-        try
-            return! teamApi.GetMyTeams()
-        with _ ->
-            return []
-    }
+    /// any other caller that wants membership-aware UI. Fires on init
+    /// in team-scoped modes and after `TeamSwitched` to pick up newly-
+    /// created teams. Phase 121 — failure no longer silently degrades
+    /// to `[]` (indistinguishable from a genuinely teamless user, the
+    /// "my teams disappeared" ticket): it routes to `BootLoadFailed`,
+    /// the model keeps the empty default, and the banner offers retry.
+    let private loadMyTeams = async { return! teamApi.GetMyTeams() }
 
-    /// Fetch the user's currently-selected active team id. Failure
-    /// degrades to `None`.
-    let private loadActiveTeam = async {
-        try
-            return! teamApi.GetActiveTeam()
-        with _ ->
-            return None
-    }
+    /// Fetch the user's currently-selected active team id. Phase 121 —
+    /// failure routes to `BootLoadFailed`; `ActiveTeamLoadCompleted`
+    /// stays `false`, so the sole-team auto-select never fires off the
+    /// back of a failed fetch.
+    let private loadActiveTeam = async { return! teamApi.GetActiveTeam() }
 
     /// Sole-team auto-select: persist `teamId` as the caller's active
     /// team, then run the standard `TeamSwitched` reset so every
     /// boot loader re-fetches against the now-team-scoped subject.
     /// Failure (older server still gating `SetActiveTeam` on
-    /// `teamScoped`, network glitch) is swallowed — the user stays in
-    /// the no-active-team state and the header switcher / Team
-    /// Manager remain the manual affordances.
+    /// `teamScoped`, network glitch) leaves the user in the
+    /// no-active-team state with the header switcher / Team Manager as
+    /// the manual affordances — but Phase 121 surfaces the failure as
+    /// a degradation (with retry) instead of swallowing it.
     let private autoSelectSoleTeamCmd (teamId: string) : Cmd<Msg> =
         Cmd.ofEffect (fun dispatch ->
             async {
                 try
                     match! withCsrf (teamApi.SetActiveTeam teamId) with
                     | Ok() -> dispatch (TeamSwitched(Some teamId))
-                    | Error _ -> ()
-                with _ ->
-                    ()
+                    | Error err -> dispatch (BootLoadFailed("team-auto-select", sprintf "%A" err))
+                with ex ->
+                    dispatch (BootLoadFailed("team-auto-select", ex.Message))
             }
             |> Async.StartImmediate)
 
@@ -454,27 +470,52 @@ module Client =
         | _ -> Cmd.none
 
     /// Phase 4b — fetch whether the caller holds
-    /// `PlatformRole.PlatformAdmin`. Failure (Anonymous mode, network
-    /// glitch, server doesn't expose the API yet) degrades to `false`,
-    /// which leaves the "Platform Admin" sidebar group hidden — the
-    /// safe default. Fires once at shell init; the role doesn't change
-    /// when switching teams (it's user-bound, not team-bound), so no
-    /// refresh on `TeamSwitched`.
-    let private loadPlatformRole = async {
-        try
-            return! platformAdminApi.IsPlatformAdmin()
-        with ex ->
-            // A thrown call (CSRF/auth seam, network glitch, server not
-            // exposing the API yet) is otherwise silently identical to a
-            // clean `false`. The warn distinguishes a *failed role check*
-            // from a definitive "not an admin" in browser dev tools.
-            log.Warn(
-                sprintf
-                    "[PlatformAdmin] IsPlatformAdmin() call FAILED (%s) — treating caller as non-admin, so the \"Platform Admin\" sidebar group (Health Monitor, etc.) stays hidden. This is a transport/role-check failure, not a definitive \"you are not an admin\"."
-                    ex.Message
-            )
+    /// `PlatformRole.PlatformAdmin`. Failure (CSRF/auth seam, network
+    /// glitch, server doesn't expose the API yet) leaves the role
+    /// `None`, which keeps the "Platform Admin" sidebar group hidden —
+    /// the safe default. Phase 121 — the failure routes to
+    /// `BootLoadFailed` (this loader's warn was the precedent the
+    /// degradation surface generalises): a failed role check is now
+    /// banner-visible and retryable, not just a dev-tools warn that is
+    /// otherwise identical to a definitive "not an admin". Fires once
+    /// at shell init; the role doesn't change when switching teams
+    /// (it's user-bound, not team-bound), so no refresh on
+    /// `TeamSwitched`.
+    let private loadPlatformRole = async { return! platformAdminApi.IsPlatformAdmin() }
 
-            return false
+    // ─── Phase 121 — boot-degradation plumbing ───────────────────────
+
+    /// Wrap a boot loader so a thrown load surfaces as `BootLoadFailed`
+    /// (typed accumulator + banner) instead of being swallowed into a
+    /// benign-looking default. GP 9 — a failed load must be
+    /// distinguishable from empty data.
+    let private bootLoadCmd (source: string) (loader: Async<'T>) (onLoaded: 'T -> Msg) : Cmd<Msg> =
+        Cmd.OfAsync.either (fun () -> loader) () onLoaded (fun ex -> BootLoadFailed(source, ex.Message))
+
+    /// Banner row label per degradation source key.
+    let private degradationLabel (source: string) =
+        match source with
+        | "teams" -> "Team memberships"
+        | "active-team" -> "Active team"
+        | "team-auto-select" -> "Team auto-select"
+        | "permissions" -> "Module permissions"
+        | "configs" -> "Saved configuration"
+        | "flags" -> "Feature flags"
+        | "platform-role" -> "Platform-admin role"
+        | "auth-bridge" -> "Session refresh"
+        | other -> other
+
+    /// Sources the shell can re-run on demand. The auth bridge retries
+    /// itself on its refresh interval, so its banner row carries no
+    /// Retry button.
+    let private degradationRetryable (source: string) = source <> "auth-bridge"
+
+    let private degradationEntry (source: string) (error: string) : BootDegradation.BootDegradation = {
+        Source = source
+        Label = degradationLabel source
+        Error = error
+        Retryable = degradationRetryable source
+        OccurredAt = System.DateTime.UtcNow
     }
 
     /// Module-level capture of the shell's Elmish `dispatch` function.
@@ -713,14 +754,15 @@ module Client =
     /// persists a fresh JWT (signal arrives via the
     /// `auth-token-acquired` `programLifetime` effect).
     let private bootLoadCommandsFor (config: ClientConfig) : Cmd<Msg> =
+        // Phase 121 — every loader rides `bootLoadCmd` so a thrown load
+        // dispatches `BootLoadFailed` instead of silently resolving to
+        // its default.
         let loadPerms =
-            Cmd.OfAsync.perform (fun () -> withCsrf loadAccessibleModules) () AccessibleModulesLoaded
+            bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
 
-        let loadConfigs =
-            Cmd.OfAsync.perform (fun () -> withCsrf loadAllConfigs) () ConfigsLoaded
+        let loadConfigs = bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
 
-        let loadFlags =
-            Cmd.OfAsync.perform (fun () -> withCsrf loadResolvedFlags) () FlagsLoaded
+        let loadFlags = bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
 
         // Team-scoped deployments load the user's team list and active-
         // team id so the header (when `HeaderSwitcher`-UX) can render
@@ -730,8 +772,8 @@ module Client =
         let teamScopedLoaders =
             if ClientConfig.hasTeamScope config then
                 [
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadMyTeams) () MyTeamsLoaded
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadActiveTeam) () ActiveTeamLoaded
+                    bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
+                    bootLoadCmd "active-team" (withCsrf loadActiveTeam) ActiveTeamLoaded
                 ]
             else
                 []
@@ -741,7 +783,7 @@ module Client =
                 loadPerms
                 loadConfigs
                 loadFlags
-                Cmd.OfAsync.perform (fun () -> loadPlatformRole) () PlatformRoleLoaded
+                bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
             ]
             @ teamScopedLoaders
         )
@@ -834,6 +876,7 @@ module Client =
             FlagsPrefetch = Prefetch.none
             ResetCounters = Map.empty
             InitPhase = initPhase
+            Degradations = []
         }
 
         // 0.5.5 — Boot-time fetches are gated on auth state below.
@@ -872,6 +915,71 @@ module Client =
                 [ moduleInitCmd; bootLoadCommands ]
 
         model, Cmd.batch initCmds
+
+    /// Shared body of the `ConfigsLoaded` arm — also invoked by the
+    /// `BootLoadFailed("configs", _)` path with `Map.empty` so a failed
+    /// fetch still flips the `ConfigsPrefetch` gate (pre-121 behaviour:
+    /// the loader swallowed the failure into an empty map; the gate must
+    /// not dead-lock the `Prefetching` skeleton just because the failure
+    /// is now visible). `prior` is the pre-arm model handed to the
+    /// skip-when-unchanged re-init guard.
+    let private applyConfigsLoaded
+        (_config: ClientConfig)
+        (queryBus: IModuleQueryBus)
+        (modules: ErasedModule list)
+        (configs: Map<string, Map<string, string>>)
+        (prior: Model)
+        (model: Model)
+        : Model * Cmd<Msg> =
+        let platformCfg =
+            configs
+            |> Map.tryFind ConfigKeys.PlatformModuleKey
+            |> Option.defaultValue Map.empty
+
+        let moduleCfgs = configs |> Map.remove ConfigKeys.PlatformModuleKey
+
+        let updated = {
+            model with
+                ModuleConfigs = moduleCfgs
+                PlatformConfig = platformCfg
+                ConfigsPrefetch = Prefetch.loaded ()
+        }
+
+        if Prefetch.isComplete updated.FlagsPrefetch then
+            match updated.InitPhase with
+            | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
+            | Ready
+            | Reprefetching ->
+                let resolved = { updated with InitPhase = Ready }
+                reinitActiveAfterPrefetch _config queryBus modules prior resolved
+        else
+            updated, Cmd.none
+
+    /// Shared body of the `FlagsLoaded` arm — same dual-call shape as
+    /// `applyConfigsLoaded` above.
+    let private applyFlagsLoaded
+        (_config: ClientConfig)
+        (queryBus: IModuleQueryBus)
+        (modules: ErasedModule list)
+        (flags: Map<string, FlagValue>)
+        (prior: Model)
+        (model: Model)
+        : Model * Cmd<Msg> =
+        let updated = {
+            model with
+                ResolvedFlags = flags
+                FlagsPrefetch = Prefetch.loaded ()
+        }
+
+        if Prefetch.isComplete updated.ConfigsPrefetch then
+            match updated.InitPhase with
+            | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
+            | Ready
+            | Reprefetching ->
+                let resolved = { updated with InitPhase = Ready }
+                reinitActiveAfterPrefetch _config queryBus modules prior resolved
+        else
+            updated, Cmd.none
 
     let update (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let newModel, cmd =
@@ -957,6 +1065,9 @@ module Client =
                 {
                     model with
                         AccessibleModules = accessible
+                        // Phase 121 — the data arrived after all; clear
+                        // any prior failure entry for this source.
+                        Degradations = BootDegradation.remove "permissions" model.Degradations
                 },
                 Cmd.none
 
@@ -968,57 +1079,25 @@ module Client =
                 // prefetches are complete the second handler promotes the
                 // shell out of the `Prefetching` skeleton (first-load) OR
                 // re-inits the active module via the skip-when-unchanged
-                // guard (Ready / Reprefetching follow-ups).
-                let platformCfg =
-                    configs
-                    |> Map.tryFind ConfigKeys.PlatformModuleKey
-                    |> Option.defaultValue Map.empty
-
-                let moduleCfgs = configs |> Map.remove ConfigKeys.PlatformModuleKey
-
-                let updated = {
+                // guard (Ready / Reprefetching follow-ups). Body factored
+                // into `applyConfigsLoaded` (Phase 121) so the
+                // `BootLoadFailed("configs", _)` path can flip the same
+                // gate without synthesising a fake success message.
+                let cleared = {
                     model with
-                        ModuleConfigs = moduleCfgs
-                        PlatformConfig = platformCfg
-                        ConfigsPrefetch = Prefetch.loaded ()
+                        Degradations = BootDegradation.remove "configs" model.Degradations
                 }
 
-                if Prefetch.isComplete updated.FlagsPrefetch then
-                    match updated.InitPhase with
-                    | Prefetching ->
-                        // First-load promotion. Module `Init` has not run;
-                        // call it now with the populated context and flip
-                        // to Ready.
-                        initActiveOnFirstPrefetchReady _config queryBus modules updated
-                    | Ready
-                    | Reprefetching ->
-                        // Already mounted. Apply the skip-when-unchanged
-                        // guard (0.5.15) — preserves the React subtree
-                        // when the refresh returned the same values, re-
-                        // inits when they differ. Flip back to Ready as a
-                        // side-effect.
-                        let resolved = { updated with InitPhase = Ready }
-                        reinitActiveAfterPrefetch _config queryBus modules model resolved
-                else
-                    updated, Cmd.none
+                applyConfigsLoaded _config queryBus modules configs model cleared
 
             | FlagsLoaded flags ->
                 // Same gate as `ConfigsLoaded` — see that handler.
-                let updated = {
+                let cleared = {
                     model with
-                        ResolvedFlags = flags
-                        FlagsPrefetch = Prefetch.loaded ()
+                        Degradations = BootDegradation.remove "flags" model.Degradations
                 }
 
-                if Prefetch.isComplete updated.ConfigsPrefetch then
-                    match updated.InitPhase with
-                    | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
-                    | Ready
-                    | Reprefetching ->
-                        let resolved = { updated with InitPhase = Ready }
-                        reinitActiveAfterPrefetch _config queryBus modules model resolved
-                else
-                    updated, Cmd.none
+                applyFlagsLoaded _config queryBus modules flags model cleared
 
             | TeamSwitched newTeamIdOpt ->
                 // Active team changed. Every per-team piece of shell
@@ -1061,14 +1140,18 @@ module Client =
                         ConfigsPrefetch = Prefetch.none
                         FlagsPrefetch = Prefetch.none
                         InitPhase = Prefetching
+                        // Phase 121 — degradations from the prior boot
+                        // cycle are stale against the new scope; the
+                        // re-issued loaders below re-add any that recur.
+                        Degradations = []
                 }
 
                 reset,
                 Cmd.batch [
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadAccessibleModules) () AccessibleModulesLoaded
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadAllConfigs) () ConfigsLoaded
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadResolvedFlags) () FlagsLoaded
-                    Cmd.OfAsync.perform (fun () -> withCsrf loadMyTeams) () MyTeamsLoaded
+                    bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
+                    bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
+                    bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
+                    bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
                 ]
 
             | MembershipRevoked teamId ->
@@ -1080,7 +1163,7 @@ module Client =
                 if model.ActiveTeamId = Some teamId then
                     model, Cmd.ofMsg (TeamSwitched None)
                 else
-                    model, Cmd.OfAsync.perform (fun () -> withCsrf loadMyTeams) () MyTeamsLoaded
+                    model, bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
 
             | MembershipActiveTeamSet teamId ->
                 // Server-driven `MembershipChanged.ActiveTeamSet` for
@@ -1099,18 +1182,30 @@ module Client =
                 // after the active-team fetch) or in `ActiveTeamLoaded`
                 // (the reverse order) — the guard inside
                 // `maybeAutoSelectSoleTeam` makes the double-check safe.
-                let updated = { model with MyTeams = teams }
+                let updated = {
+                    model with
+                        MyTeams = teams
+                        Degradations = BootDegradation.remove "teams" model.Degradations
+                }
+
                 updated, maybeAutoSelectSoleTeam updated
 
             | PlatformRoleLoaded isAdmin ->
                 let role = if isAdmin then Some PlatformRole.PlatformAdmin else None
-                { model with PlatformRole = role }, Cmd.none
+
+                {
+                    model with
+                        PlatformRole = role
+                        Degradations = BootDegradation.remove "platform-role" model.Degradations
+                },
+                Cmd.none
 
             | ActiveTeamLoaded teamId ->
                 let updated = {
                     model with
                         ActiveTeamId = teamId
                         ActiveTeamLoadCompleted = true
+                        Degradations = BootDegradation.remove "active-team" model.Degradations
                 }
 
                 updated, maybeAutoSelectSoleTeam updated
@@ -1146,6 +1241,62 @@ module Client =
                             FlagsPrefetch = Prefetch.none
                     },
                     bootLoadCommandsFor _config
+
+            // ─── Phase 121 — boot-degradation arms ───────────────────
+
+            | BootLoadFailed(source, error) ->
+                log.Warn(
+                    sprintf
+                        "[BootDegradation] %s load FAILED (%s) — rendering with the benign default; the degradation banner offers retry. A failed load is NOT the same as empty data."
+                        source
+                        error
+                )
+
+                let updated = {
+                    model with
+                        Degradations = BootDegradation.add (degradationEntry source error) model.Degradations
+                }
+
+                // The prefetch-gated loaders must still flip their gate on
+                // failure, or the shell would dead-lock in the
+                // `Prefetching` skeleton — apply the same empty-map state
+                // the pre-121 swallow produced, via the shared arm bodies.
+                match source with
+                | "configs" -> applyConfigsLoaded _config queryBus modules Map.empty updated updated
+                | "flags" -> applyFlagsLoaded _config queryBus modules Map.empty updated updated
+                | _ -> updated, Cmd.none
+
+            | RetryBootLoad source ->
+                // Optimistic clear — a re-failure re-adds via
+                // `BootLoadFailed`, so the banner row flickers off only
+                // while the retry is in flight.
+                let updated = {
+                    model with
+                        Degradations = BootDegradation.remove source model.Degradations
+                }
+
+                let retryCmd =
+                    match source with
+                    | "teams" -> bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
+                    | "active-team" -> bootLoadCmd "active-team" (withCsrf loadActiveTeam) ActiveTeamLoaded
+                    | "permissions" ->
+                        bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
+                    | "configs" -> bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
+                    | "flags" -> bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
+                    | "platform-role" -> bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
+                    | "team-auto-select" -> maybeAutoSelectSoleTeam updated
+                    | _ -> Cmd.none
+
+                updated, retryCmd
+
+            | BootLoadRecovered source ->
+                {
+                    model with
+                        Degradations = BootDegradation.remove source model.Degradations
+                },
+                Cmd.none
+
+            | DismissBootDegradations -> { model with Degradations = [] }, Cmd.none
 
             | ResetModule moduleId ->
                 // Phase 12c — clear the named module's state, bump its
@@ -1829,11 +1980,17 @@ module Client =
             let serverKeys = model.ResolvedFlags |> Map.toSeq |> Seq.map fst |> Set.ofSeq
             Set.union moduleKeys serverKeys
 
+        // Phase 121 — standard dismissible degradation banner. Renders
+        // `Html.none` when no boot load has failed (GP 13).
+        let degradationBanner =
+            BootDegradation.banner model.Degradations (RetryBootLoad >> dispatch) (fun () ->
+                dispatch DismissBootDegradations)
+
         let flagged =
             FeatureFlags.provider
                 declaredKeys
                 model.ResolvedFlags
-                (React.Fragment([ shell; toastCentre ] @ globalOverlays))
+                (React.Fragment([ shell; toastCentre; degradationBanner ] @ globalOverlays))
 
         // Wrap in `ProcessedDataContext.Context` provider — publishes
         // the platform-aggregated `ProcessedFileEntry` list to module
@@ -2697,12 +2854,30 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        // Phase 121 — auth-bridge health observer. `UserSession` counts
+        // consecutive `GetJwt` failures and notifies once the streak
+        // crosses its threshold (and again on recovery); the shell maps
+        // the transition onto the boot-degradation banner so a silently-
+        // expiring session is visible before the user is signed out.
+        let bridgeHealthEffect =
+            EffectHandle.programLifetime "auth-bridge-health" (fun dispatch ->
+                let unsubscribe =
+                    UserSession.onBridgeHealthChange (fun health ->
+                        match health with
+                        | Some message -> dispatch (BootLoadFailed("auth-bridge", message))
+                        | None -> dispatch (BootLoadRecovered "auth-bridge"))
+
+                { new System.IDisposable with
+                    member _.Dispose() = unsubscribe ()
+                })
+
         prog
         |> Program.withErrorReporter elmishReporter
         |> Program.withEffect navigationEffect
         |> Program.withEffect moduleEventsEffect
         |> Program.withEffect notificationsEffect
         |> Program.withEffect authTokenAcquiredEffect
+        |> Program.withEffect bridgeHealthEffect
 
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
     /// the full shell bootstrap (the dispatcher has rendered its own program).

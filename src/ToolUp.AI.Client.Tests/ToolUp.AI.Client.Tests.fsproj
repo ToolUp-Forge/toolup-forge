@@ -52,6 +52,9 @@
              (Platform.Client tier, reached transitively; same Phase 110
              precedent as ClientHostBridgeTests). -->
         <Compile Include="NotificationClientTests.fs" />
+        <!-- Phase 121 — boot-degradation accumulator + shell update arms +
+             UserSession bridge-failure counter (Platform.Client tier). -->
+        <Compile Include="BootDegradationTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

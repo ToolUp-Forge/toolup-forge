@@ -151,6 +151,10 @@
         <Compile Include="Components\Modal.fs" />
         <Compile Include="Components\SvgTree.fs" />
         <Compile Include="Components\ToastCentre.fs" />
+        <!-- Phase 121 — typed boot-degradation accumulator + dismissible
+             banner. Pure data + one Feliz component; the shell (SDK.Client)
+             owns accumulation, retry dispatch, and the banner mount. -->
+        <Compile Include="Client\BootDegradation.fs" />
         <Compile Include="Client\FileManagerUI.fs" />
         <!-- 0.5.7 — Debounced typeahead component over IUserDirectoryApi.
              Consumed by TeamManagerUI's "Invite a member" form; degrades

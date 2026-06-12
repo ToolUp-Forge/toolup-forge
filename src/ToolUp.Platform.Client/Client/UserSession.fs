@@ -367,12 +367,64 @@ let mutable private currentBridge: IAuthBridge option = None
 /// burning cycles. The bridge's own SDK cache absorbs most calls.
 let private bridgeRefreshIntervalMs = 60_000
 
+// ─── Phase 121 — bridge-refresh health ───────────────────────────────
+//
+// `refreshFromBridgeOnce` used to swallow every bridge failure
+// (`with _ -> ()`): a persistently failing bridge (Clerk misconfig,
+// expired MSAL session, CSP blocking the IdP iframe) silently let the
+// cached JWT expire and degraded the user to an effectively-anonymous
+// subject with zero observability. The streak counter below surfaces
+// the failure once it is clearly persistent rather than transient:
+// at `bridgeFailureThreshold` consecutive failures it emits through
+// `AuthDiagnostics` + the `client.auth.bridge` category logger and
+// notifies `onBridgeHealthChange` subscribers (the shell maps the
+// notification to a boot-degradation banner entry). A subsequent
+// clean round-trip resets the streak and notifies recovery.
+
+let private bridgeFailureThreshold = 3
+let mutable private bridgeFailureStreak = 0
+let mutable private bridgeDegradationNotified = false
+let mutable private nextBridgeHealthHandlerId = 0
+let mutable private bridgeHealthHandlers: (int * (string option -> unit)) list = []
+
+let private bridgeLog = Logger.forCategory "client.auth.bridge"
+
+/// Phase 121 — observe bridge-refresh health transitions. The callback
+/// receives `Some message` when the bridge has failed
+/// `bridgeFailureThreshold` consecutive refreshes (degraded), and
+/// `None` when a later refresh succeeds (recovered). Fires once per
+/// transition, not per failing poll. Returns a dispose callback.
+let onBridgeHealthChange (handler: string option -> unit) : unit -> unit =
+    let id = nextBridgeHealthHandlerId
+    nextBridgeHealthHandlerId <- nextBridgeHealthHandlerId + 1
+    bridgeHealthHandlers <- (id, handler) :: bridgeHealthHandlers
+
+    fun () -> bridgeHealthHandlers <- bridgeHealthHandlers |> List.filter (fun (hid, _) -> hid <> id)
+
+let private notifyBridgeHealth (health: string option) =
+    for _, handler in bridgeHealthHandlers do
+        try
+            handler health
+        with _ ->
+            ()
+
 let private refreshFromBridgeOnce () = async {
     match currentBridge with
     | None -> return ()
     | Some bridge ->
         try
             let! jwt = bridge.GetJwt()
+
+            // Phase 121 — a clean round-trip (token present OR a
+            // definitive signed-out answer) resets the failure streak;
+            // if a degradation had been surfaced, announce recovery.
+            bridgeFailureStreak <- 0
+
+            if bridgeDegradationNotified then
+                bridgeDegradationNotified <- false
+                bridgeLog.Info "auth-bridge refresh recovered"
+                AuthDiagnostics.emitOk None "bridge-refresh-recovered" None
+                notifyBridgeHealth None
 
             match jwt with
             | Some token ->
@@ -389,22 +441,56 @@ let private refreshFromBridgeOnce () = async {
                 // signed out.
                 if (Browser.Dom.window.localStorage.getItem tokenKey) <> null then
                     clearAuthToken ()
-        with _ ->
-            // Bridge errors are non-fatal — leave the cached token
-            // in place. The deployment's auth UI is responsible for
-            // surfacing visible failures via its own UI affordances.
-            ()
+        with ex ->
+            // Bridge errors are non-fatal — leave the cached token in
+            // place (the deployment's auth UI surfaces sign-in
+            // failures via its own affordances). Phase 121: count the
+            // consecutive failures instead of discarding them, and
+            // surface the streak once it crosses the threshold.
+            bridgeFailureStreak <- bridgeFailureStreak + 1
+
+            if bridgeFailureStreak >= bridgeFailureThreshold && not bridgeDegradationNotified then
+                bridgeDegradationNotified <- true
+
+                bridgeLog.Warn(
+                    sprintf
+                        "auth-bridge GetJwt failed %d times in a row (%s) — the cached JWT will expire and this session will degrade to effectively-anonymous. Check the identity-provider SDK configuration (Clerk/MSAL/Auth0), the provider session validity, and any CSP rule blocking the IdP iframe."
+                        bridgeFailureStreak
+                        ex.Message
+                )
+
+                AuthDiagnostics.emitErr None "bridge-refresh-failing" {
+                    Kind = "BridgeRefreshFailing"
+                    SubCause = Some ex.Message
+                }
+
+                notifyBridgeHealth (Some "Session refresh is failing — you may be signed out shortly")
 }
 
 [<Emit("setInterval($0, $1)")>]
 let private setInterval (cb: unit -> unit) (ms: int) : int = jsNative
 
+[<Emit("clearInterval($0)")>]
+let private clearInterval (handle: int) : unit = jsNative
+
+/// Phase 121 — handle of the live bridge-refresh interval, so a
+/// re-install (or `uninstallBridge`) can stop the prior loop instead
+/// of leaking one interval per install.
+let mutable private bridgeRefreshIntervalHandle: int option = None
+
 /// Install a deployment-specific auth bridge. Called once during
 /// `SDK.Client.run` if `ClientConfig.AuthBridge` is `Some`. Kicks off
 /// an immediate JWT fetch + a periodic refresh loop. Idempotent — a
-/// re-install replaces the previous bridge but does not stop the
-/// existing refresh interval (in practice, deployments install once).
+/// re-install replaces the previous bridge AND stops the previous
+/// refresh interval (pre-121 the old interval leaked and kept polling
+/// the replaced bridge).
 let installBridge (bridge: IAuthBridge) =
+    match bridgeRefreshIntervalHandle with
+    | Some handle ->
+        clearInterval handle
+        bridgeRefreshIntervalHandle <- None
+    | None -> ()
+
     currentBridge <- Some bridge
 
     // Immediate fetch so the cookie + localStorage are populated
@@ -412,8 +498,22 @@ let installBridge (bridge: IAuthBridge) =
     // the interval below.
     Async.StartImmediate(refreshFromBridgeOnce ())
 
-    setInterval (fun () -> Async.StartImmediate(refreshFromBridgeOnce ())) bridgeRefreshIntervalMs
-    |> ignore
+    bridgeRefreshIntervalHandle <-
+        Some(setInterval (fun () -> Async.StartImmediate(refreshFromBridgeOnce ())) bridgeRefreshIntervalMs)
+
+/// Phase 121 — remove the installed bridge and stop its refresh
+/// interval. Sign-out cleanup affordance (and test teardown); the
+/// bridge-health streak resets so a later install starts clean.
+let uninstallBridge () =
+    match bridgeRefreshIntervalHandle with
+    | Some handle ->
+        clearInterval handle
+        bridgeRefreshIntervalHandle <- None
+    | None -> ()
+
+    currentBridge <- None
+    bridgeFailureStreak <- 0
+    bridgeDegradationNotified <- false
 
 /// Read the installed bridge, if any. Used by trace logging in
 /// `withRequestHeaders` and the dev panel's auth surface.
@@ -426,9 +526,7 @@ let getBridge () = currentBridge
 let refreshFromBridge () = refreshFromBridgeOnce ()
 
 // ─── Auth-token transition observer (Phase 3d.A) ───────────────────
-
-[<Emit("clearInterval($0)")>]
-let private clearInterval (handle: int) : unit = jsNative
+// (`clearInterval` is bound once above, next to `setInterval`.)
 
 /// Phase 3d.A — observe `getAuthToken ()` transitions. Returns a
 /// dispose callback the caller invokes to unsubscribe. Internally

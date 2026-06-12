@@ -10,6 +10,8 @@ let allTests =
         // Phase 117 — NotificationClient identity-aware SSE lifecycle
         // (Platform.Client tier).
         NotificationClientTests.tests
+        // Phase 121 — boot-degradation surface (Platform.Client tier).
+        BootDegradationTests.tests
     ]
 
 [<EntryPoint>]
