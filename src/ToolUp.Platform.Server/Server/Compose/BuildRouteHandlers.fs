@@ -161,7 +161,11 @@ let buildRouteHandlers
                 let manager =
                     ctx.RequestServices.GetService(typeof<SSEConnectionManager>) :?> SSEConnectionManager
 
-                NotificationHandler.notificationHandler channel manager next ctx
+                // Phase 117 — SseAuthMode threads through so the handler's
+                // shared scope resolution can refuse unauthenticated
+                // connects under CookieRequired instead of trusting a
+                // client-supplied ?userId=.
+                NotificationHandler.notificationHandler channel manager config.SseAuthMode next ctx
           ]
 
     // Dev diagnostics endpoint (`/dev/inspect`). Runtime-gated via

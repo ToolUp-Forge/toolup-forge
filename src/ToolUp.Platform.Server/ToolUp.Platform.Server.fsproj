@@ -98,6 +98,11 @@
         <Compile Include="Server\INotificationSink.fs" />
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />
+        <!-- Phase 117 — shared SSE scope resolution. One resolution path
+             (principal-wins + SseAuthMode-gated fallback + mismatch audit)
+             consumed by both NotificationHandler below and
+             ToolUp.AI.Server's SSEHandler so the two cannot drift. -->
+        <Compile Include="Server\Notifications\SseScopeResolution.fs" />
         <Compile Include="Server\Notifications\NotificationHandler.fs" />
         <!-- Phase 112 — scope-isolated server-driven live-session host:
              ILiveChannel / ILiveSessionHost (six-rule, GP 4 structural

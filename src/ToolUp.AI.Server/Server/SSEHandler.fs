@@ -63,11 +63,14 @@ let sendEvent (manager: SSEConnectionManager) (scopeId: string) (event: AIStream
 /// shared `SSEConnectionManager`, and holds it open until the client
 /// disconnects.
 ///
-/// **Scope resolution** uses `ctx.Items["ToolUp.UserId"]` populated by
-/// `ScopeResolutionMiddleware`. The `?userId=` / `X-User-Id` fallback
-/// (EventSource cannot set custom headers) is gated on
-/// `SseAuthMode`: it is ONLY honoured under `QueryParamFallback`
-/// (the documented dev / Anonymous path; preflight `SseAuthModeValidator`
+/// **Scope resolution** is the shared
+/// `ToolUp.Platform.SseScopeResolution.resolve` — the same code path
+/// `ToolUp.Platform.NotificationHandler` calls, so the two SSE
+/// endpoints cannot drift (Phase 117). Middleware-resolved identity
+/// always wins and a mismatching `?userId=` is audited; the
+/// `?userId=` / `X-User-Id` fallback (EventSource cannot set custom
+/// headers) is honoured ONLY under `QueryParamFallback` (the
+/// documented dev / Anonymous path; preflight `SseAuthModeValidator`
 /// already refuses authenticated mode + fallback unless explicitly
 /// opted in). Under `CookieRequired` the fallback is disabled — a
 /// missing / `"anonymous"` resolved identity is refused with 401
@@ -80,39 +83,13 @@ let sseHandler (manager: SSEConnectionManager) (sseAuthMode: SseAuthMode) : Http
         // return HTTP 429 cleanly. Once writeReadyResponse runs the
         // headers are committed to text/event-stream and an explicit
         // status code becomes inaccessible.
-        // Middleware-resolved identity always wins. The `?userId=` /
-        // `X-User-Id` fallback is honoured ONLY under
-        // `QueryParamFallback`; under `CookieRequired` a missing /
-        // "anonymous" identity yields `None` → 401 (no client-trusted
-        // fallback, which would be a cross-user stream-leak vector).
-        let scopeIdOpt =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) when not (String.IsNullOrEmpty id) && id <> "anonymous" -> Some id
-            | _ ->
-                match sseAuthMode with
-                | CookieRequired -> None
-                | QueryParamFallback ->
-                    match ctx.Request.Query.TryGetValue "userId" with
-                    | true, values when values.Count > 0 -> Some(string values[0])
-                    | _ ->
-                        match ctx.Request.Headers.TryGetValue "X-User-Id" with
-                        | true, values when values.Count > 0 -> Some(string values[0])
-                        | _ -> Some "anonymous"
-
-        match scopeIdOpt with
-        | None ->
+        match SseScopeResolution.resolve sseAuthMode ctx with
+        | SseScopeResolution.SseUnauthenticated ->
             // CookieRequired + no resolved identity. Refuse rather than
             // trust a client-supplied userId.
-            ctx.Response.StatusCode <- 401
-            ctx.Response.ContentType <- "text/plain; charset=utf-8"
-
-            do!
-                ctx.Response.WriteAsync(
-                    "SSE connection requires an authenticated session (SseAuthMode = CookieRequired). No middleware-resolved identity was present and the query-param fallback is disabled in this mode."
-                )
-
+            do! SseScopeResolution.refuseUnauthenticated ctx
             return Some ctx
-        | Some scopeId ->
+        | SseScopeResolution.SseScope scopeId ->
 
             let sink = SseConnectionSink.fromHttpResponse ctx.Response ctx.RequestAborted
 

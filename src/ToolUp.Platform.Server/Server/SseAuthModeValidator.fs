@@ -13,16 +13,21 @@ open ToolUp.Platform.ConfigValidation
 // In Anonymous mode that's correct — there is no real identity, the
 // userId is a per-tab session marker.
 //
-// In authenticated modes the same fallback is identity exposure:
+// In authenticated modes the same fallback is live stream
+// eavesdropping (Phase 117 sharpened this from the original
+// "PII-grade identifier" framing — the exposure is worse than that):
 //   - `userId` is now a real (server-resolved) user id
-//   - It rides in the URL — visible in browser history, web-server
-//     access logs, CDN access logs, `Referer` headers on subsequent
-//     navigations, and any reverse-proxy log line that captures the
-//     query string
-//   - An attacker capturing the URL gets the userId for free. They
-//     can't impersonate (no session cookie / JWT) but they have a
-//     PII-grade identifier they shouldn't have, and they can DoS-
-//     subscribe by spamming `EventSource` connections under it.
+//   - An unauthenticated caller who knows or captures a userId can
+//     `GET /api/notifications?userId=<victim>` and receive the
+//     victim's live notification stream — membership changes, job
+//     completions, system messages — for as long as the connection
+//     stays open. No cookie, no JWT, no challenge.
+//   - The id itself rides in the URL — visible in browser history,
+//     web-server access logs, CDN access logs, `Referer` headers on
+//     subsequent navigations, and any reverse-proxy log line that
+//     captures the query string — so "knows or captures" is cheap.
+//   - The same connection spam is a DoS-subscribe vector against the
+//     per-scope connection cap.
 //
 // Operators who provision Individual / Team / MultiTeam mode but
 // don't read DEPLOYMENT.md carefully end up with this fallback active.
@@ -56,7 +61,7 @@ type SseAuthModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
                 return
                     Error(
                         sprintf
-                            "ServerConfig.Surfaces = %s but SseAuthMode = QueryParamFallback. The browser's EventSource will connect to /api/notifications?userId=<guid> with the userId in the URL — visible in CDN logs, web-server logs, browser history, and Referer headers on subsequent navigations. In an authenticated mode that userId is a real identity, not a per-session marker. Set TOOLUP_SSE_AUTH=cookie (production default for auth modes — requires the client's IAuthBridge to write the JWT cookie) or set ServerConfig.AcceptQueryParamSseAuthWhenAuthRequired = true (TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE=1) for dev / CI / behind-query-stripping-proxy deployments where you've made an informed decision. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            "ServerConfig.Surfaces = %s but SseAuthMode = QueryParamFallback. In this mode any caller who knows a userId can open /api/notifications?userId=<victim> WITHOUT a cookie or JWT and receive that user's live notification stream (membership changes, job completions, system messages) — live stream eavesdropping, not just identifier leakage. The userId also rides in the URL (CDN logs, web-server logs, browser history, Referer headers), so capturing one is cheap. Set TOOLUP_SSE_AUTH=cookie (production default for auth modes — requires the client's IAuthBridge to write the JWT cookie) or set ServerConfig.AcceptQueryParamSseAuthWhenAuthRequired = true (TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE=1) ONLY for dev / CI / behind-query-stripping-proxy deployments where you accept that exposure. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
                     )
             else
