@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Tabular</PackageId>
+        <Description>ToolUp.Tabular — typed CSV / XLSX ingestion for ToolUp.Platform consumers. Parses tabular files into typed rows against a declared column schema and returns a structured per-row / per-cell error report (row index, column, expected, actual, constraint violated) instead of throwing on first error. CSV leg is zero-dependency BCL RFC 4180; XLSX leg reads via DocumentFormat.OpenXml. Streaming row enumeration keeps large files out of memory.</Description>
+        <PackageTags>fsharp;sdk;server;csv;xlsx;spreadsheet;ingestion;validation;tabular</PackageTags>
+        <!-- Phase 123 — single-tier companion (server-side; no Fable
+             client surface). Deliberately substrate-free: no
+             ToolUp.Platform.* reference — parsing + validation is pure,
+             so the companion's only dependency is the OpenXml reader
+             for the XLSX leg (GP 1: the vendor dep stays here, never
+             in ToolUp.Platform.*). README lives alongside the fsproj
+             and is packed via the Directory.Build.props auto-include. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- XLSX leg only. The CSV leg is BCL-only by design — no
+             vendor dependency (Phase 123 acceptance criterion). -->
+        <PackageReference Include="DocumentFormat.OpenXml" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="TabularTypes.fs" />
+        <Compile Include="Csv.fs" />
+        <Compile Include="Xlsx.fs" />
+        <Compile Include="TabularReader.fs" />
+    </ItemGroup>
+</Project>
