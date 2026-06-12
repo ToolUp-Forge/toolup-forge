@@ -218,6 +218,7 @@ let securityClassValidatorNames: Set<string> =
         "oidc-audience-binding" // auth=oidc with unbound audience (token reuse)
         "sse-auth-mode" // QueryParamFallback SSE in an auth Mode (userId leak)
         "encrypted-secret-store-mode" // plaintext secrets in an auth Mode
+        "oauth-secret-encryption-mode" // OAuth connector tokens persisted to a non-encrypting store (Phase 138)
         "oauth-state-store-instance" // in-memory OAuth state under multi-instance
         "per-scope-key-resolver-distributed" // crypto-shred key resolver under multi-instance
         "auto-bootstrap-dev-admin-mode" // first sign-in auto-promotes to Platform Admin (privilege-escalation surface) — warning must survive the SkipPreflight bypass lever

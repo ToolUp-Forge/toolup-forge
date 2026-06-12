@@ -25,6 +25,7 @@ let allTests =
         OAuthSubstrateTests.credentialFlowTests
         OAuthSubstrateTests.pkceCredentialFlowTests
         OAuthSubstrateTests.pkceFlowTests
+        OAuthSecretEncryptionModeValidatorTests.tests
         FileSecretStoreTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests

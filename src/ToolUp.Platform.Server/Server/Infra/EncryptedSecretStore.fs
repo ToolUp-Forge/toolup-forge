@@ -203,6 +203,16 @@ type EncryptedSecretStore(inner: ISecretStore, masterKey: byte[] option) =
         // value bytes, not key names.
         member _.ListKeys(scopeId) = async { return! inner.ListKeys(scopeId) }
 
+    /// Phase 138 — does this wrapper actually encrypt at rest? True only
+    /// when a master key is configured; with `masterKey = None` the
+    /// wrapper is in plaintext-passthrough mode (see `SetSecret` above).
+    /// Lets a config validator distinguish "encryption-capable store
+    /// with a key" from "wrapper that silently writes plaintext", which
+    /// the env-var-only `EncryptedSecretStoreModeValidator` cannot —
+    /// and the default composition's raw `FileSecretStore` (no wrapper
+    /// at all) reports `false` via the seam helper below.
+    member _.ProvidesEncryptionAtRest = masterKey.IsSome
+
 // ─── Rotation helper ─────────────────────────────────────────────
 
 /// Per-secret outcome when rotating a scope. `Rotated` = decrypted

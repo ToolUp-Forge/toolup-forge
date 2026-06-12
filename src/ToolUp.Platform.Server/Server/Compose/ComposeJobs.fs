@@ -311,6 +311,19 @@ let registerDataIngestion
         )
         |> ignore
 
+        // Phase 138 — refuse an authenticated OAuth-connector deployment
+        // whose ISecretStore does not encrypt at rest (connector refresh
+        // tokens would persist in plaintext). Registered here (not in the
+        // generic validator block) so it is scoped to the OAuth substrate
+        // being active — same pattern as OAuthStateStoreInstanceValidator
+        // above. Store-type-aware, complementing the env-var-only
+        // EncryptedSecretStoreModeValidator.
+        services.AddSingleton<ConfigValidation.IConfigValidator>(
+            OAuthSecretEncryptionModeValidator.OAuthSecretEncryptionModeValidator(config, secretStore)
+            :> ConfigValidation.IConfigValidator
+        )
+        |> ignore
+
 /// Phase 10h — opt-in OAuth token refresher substrate.
 /// `NoOAuthRefresher` (default) skips registration entirely: connectors
 /// using OAuth Authorization Code (Phase 10e) refresh synchronously per
