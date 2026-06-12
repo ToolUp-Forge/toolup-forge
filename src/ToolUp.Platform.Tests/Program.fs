@@ -47,6 +47,7 @@ let allTests =
         // + audit annotation sweep contract packs.
         AuthorizationTests.tests
         AuditTests.tests
+        RateLimitTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
         NarrativeElementTests.tests

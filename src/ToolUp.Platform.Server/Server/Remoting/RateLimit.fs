@@ -157,22 +157,48 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
 
 module internal RateLimit =
 
+    // Phase 69d.tail parity — reflect over both public AND non-public
+    // record types so internal / private API records arm the rate-limit
+    // classifier exactly like public ones. A bare `FSharpType.IsRecord`
+    // reports false for a non-public record and would silently skip
+    // budget enforcement (the same fail-open hole 69d closed for auth).
+    let private reflectionFlags =
+        System.Reflection.BindingFlags.Public
+        ||| System.Reflection.BindingFlags.NonPublic
+
+    /// Normalise either attribute family — the server-tier
+    /// `ToolUp.Remoting.Server.RateLimitAttribute` or the tier-shared
+    /// `ToolUp.Platform.RateLimitAttribute` mirror (which Fable-compiled
+    /// Core API records carry) — into the server-tier budget shape the
+    /// evaluator consumes. Family is recognised by simple type name +
+    /// reflective `Count` / `WindowSeconds` read, mirroring how the auth
+    /// and audit classifiers bridge their Core mirrors.
+    let private tryBudget (a: obj) : RateLimitAttribute option =
+        match a with
+        | :? RateLimitAttribute as rl -> Some rl
+        | _ when a.GetType().Name = "RateLimitAttribute" ->
+            let t = a.GetType()
+
+            match t.GetProperty "Count", t.GetProperty "WindowSeconds" with
+            | null, _
+            | _, null -> None
+            | countProp, windowProp ->
+                match countProp.GetValue a, windowProp.GetValue a with
+                | (:? int as c), (:? int as w) -> Some(RateLimitAttribute(c, w))
+                | _ -> None
+        | _ -> None
+
     /// Cache `[<RateLimit>]` attributes per API record field at startup.
     let classify (apiType: Type) : Map<string, RateLimitAttribute list> =
-        if not (Microsoft.FSharp.Reflection.FSharpType.IsRecord apiType) then
+        if not (Microsoft.FSharp.Reflection.FSharpType.IsRecord(apiType, reflectionFlags)) then
             Map.empty
         else
-            let fields = Microsoft.FSharp.Reflection.FSharpType.GetRecordFields apiType
+            let fields =
+                Microsoft.FSharp.Reflection.FSharpType.GetRecordFields(apiType, reflectionFlags)
 
             fields
             |> Array.map (fun pi ->
-                let attrs =
-                    pi.GetCustomAttributes(true)
-                    |> Array.choose (fun a ->
-                        match a with
-                        | :? RateLimitAttribute as rl -> Some rl
-                        | _ -> None)
-                    |> Array.toList
+                let attrs = pi.GetCustomAttributes(true) |> Array.choose tryBudget |> Array.toList
 
                 pi.Name, attrs)
             |> Map.ofArray

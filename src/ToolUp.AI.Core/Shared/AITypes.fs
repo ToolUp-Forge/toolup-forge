@@ -269,7 +269,12 @@ type AIAssistantApi = {
     /// Submit a message to a conversation (creates conversation if new).
     /// Anonymous-mode deployments chat with the assistant; per-scope
     /// isolation + the Phase 6j.D ownership gate run in the handler.
+    // Phase 69g.tail — LLM inference is the platform's most expensive
+    // per-call path (provider tokens + optional RAG retrieval + tool
+    // loops). Conservative per-subject burst cap; dormant until an
+    // `IRateLimitStore` is composed.
     [<AllowAnonymous>]
+    [<RateLimit(30, RateLimitSeconds.perMinute)>]
     SubmitMessage: AIMessageRequest -> Async<AITask>
     /// Get conversation history
     [<AllowAnonymous>]

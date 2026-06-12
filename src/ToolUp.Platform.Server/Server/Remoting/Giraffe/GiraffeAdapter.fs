@@ -950,6 +950,45 @@ module GiraffeUtil =
                                     ctx.Response.Headers["Retry-After"] <-
                                         Microsoft.Extensions.Primitives.StringValues(string secondsRounded)
 
+                                    // Phase 69g.tail — denial telemetry. A bridged
+                                    // `IMetricsSink` records `RateLimited` distinctly from
+                                    // handler errors so saturation is separable from 5xx on
+                                    // dashboards. `ElapsedMs = 0` — the handler never ran;
+                                    // denial is a pre-flight short-circuit.
+                                    match options.Telemetry with
+                                    | Some sink when
+                                        (match options.TelemetryGate with
+                                         | Some gate -> gate ()
+                                         | None -> true)
+                                        ->
+                                        sink.OnMethodCompleted {
+                                            MethodName = methodNameForAuth
+                                            ElapsedMs = 0
+                                            Outcome = MethodOutcome.RateLimited retryAfter
+                                            CorrelationId = Some correlationId
+                                        }
+                                    | _ -> ()
+
+                                    // Phase 69g.tail — denial audit. Emitted regardless of
+                                    // whether the method also carries `[<Audit>]`, so
+                                    // rate-limit denial patterns surface in the audit trail.
+                                    // `SubjectId` is the rate-limit bucket identity (the
+                                    // resolved subject id, or the per-IP fallback for
+                                    // anonymous callers).
+                                    match options.AuditEmitter with
+                                    | Some emitter ->
+                                        do!
+                                            emitter.Emit {
+                                                Kind = AuditKind.RateLimitExceeded
+                                                MethodName = methodNameForAuth
+                                                SubjectId = subjectKey
+                                                CorrelationId = Some correlationId
+                                                Timestamp = System.DateTimeOffset.UtcNow
+                                                Payload = Map.ofList [ "retryAfterSeconds", string secondsRounded ]
+                                            }
+                                            |> Async.StartAsTask
+                                    | None -> ()
+
                                     let envelope =
                                         Errors.categorisedWithSchema
                                             options.SchemaVersion

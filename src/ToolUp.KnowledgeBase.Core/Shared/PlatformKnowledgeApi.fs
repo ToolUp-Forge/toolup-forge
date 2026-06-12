@@ -50,8 +50,12 @@ type IPlatformKnowledgeApi = {
     /// entry through the same code path. Vectorisation runs
     /// asynchronously after the call returns; subscribe to
     /// `IngestionStatusNotificationKey` to watch progress.
+    // Phase 69g.tail — platform-wide document ingestion (extract +
+    // chunk + embed). Conservative per-subject cap; dormant until an
+    // `IRateLimitStore` is composed.
     [<RequiresRole "PlatformAdmin">]
     [<Audit "Custom:PlatformDocumentUploaded">]
+    [<RateLimit(20, RateLimitSeconds.perMinute)>]
     UploadPlatformDocument: byte[] -> string -> Async<Result<KnowledgeDocument, string>>
 
     /// Delete a Platform Knowledge Base document by id. Gated on

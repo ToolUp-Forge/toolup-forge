@@ -224,9 +224,66 @@ let private buildDrift (ctx: HttpContext) (mode: ConfigDriftDetectionMode) : Asy
                     "ServerConfig.ConfigDriftDetection = EnabledConfigDriftDetection but IAuditLog could not be resolved from DI."
 }
 
-let private buildRateLimit (mode: RateLimiterMode) : Async<RateLimitSummary> = async {
+let private buildRateLimit (ctx: HttpContext) (mode: RateLimiterMode) : Async<RateLimitSummary> = async {
+    // Phase 69g.tail — per-method `[<RateLimit>]` denial activity, read
+    // from the audit trail. A denied call emits a `RateLimitExceeded`
+    // `RemotingMethodAudited` row (dispatcher rate-limit pre-flight);
+    // platform-API-record denials land at the `_platform` scope. Per-
+    // tenant-scoped denials surface under their own scope — the same
+    // cross-scope read-cost limitation noted for the outbound limiter
+    // below — so this is the platform-scope denial signal, not a global
+    // total. The read is cheap: one `_platform` audit query, mirroring
+    // `buildDrift`.
+    let! (rlSeverity, rlDetails) = async {
+        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+        | :? IAuditLog as auditLog ->
+            let now = DateTime.UtcNow
+            let lookback = now.AddHours -24.0
+
+            let! rows = auditLog.GetAuditTrail("_platform", Some(lookback, now), Some "RemotingMethodAudited")
+
+            let denials =
+                rows
+                |> List.choose (fun evt ->
+                    match evt with
+                    | RemotingMethodAudited p when p.Kind = "RateLimitExceeded" -> Some p.MethodName
+                    | _ -> None)
+
+            if denials.IsEmpty then
+                return StatusSeverity.Ok, []
+            else
+                let byMethod =
+                    denials
+                    |> List.countBy id
+                    |> List.sortByDescending snd
+                    |> List.map (fun (m, n) -> sprintf "  %s — %d denial(s) in the last 24h" m n)
+
+                let headline =
+                    sprintf
+                        "Per-method [<RateLimit>] budgets denied %d call(s) at the platform scope in the last 24h:"
+                        denials.Length
+
+                return StatusSeverity.Warn, headline :: byMethod
+        | _ -> return StatusSeverity.Ok, []
+    }
+
     match mode with
-    | NoRateLimiter -> return SectionSummary.disabled "Outbound rate limiter disabled (ServerConfig.RateLimiter)."
+    | NoRateLimiter ->
+        // The outbound `IRateLimiter` is off, but per-method `[<RateLimit>]`
+        // budgets are an independent dispatcher subsystem — still report
+        // their denial activity if any.
+        if rlDetails.IsEmpty then
+            return
+                SectionSummary.disabled
+                    "Outbound rate limiter disabled (ServerConfig.RateLimiter). No per-method [<RateLimit>] denials at the platform scope in the last 24h."
+        else
+            return {
+                Disabled = false
+                DisabledReason = ""
+                Severity = rlSeverity
+                Headline = "Outbound rate limiter disabled; per-method [<RateLimit>] budgets active."
+                Details = rlDetails
+            }
     | EnabledRateLimiter ->
         // The `IRateLimiter` substrate does not expose a cross-scope
         // refused-count read — `RateLimitRefused` audit rows live under
@@ -234,15 +291,16 @@ let private buildRateLimit (mode: RateLimiterMode) : Async<RateLimitSummary> = a
         // every snapshot request defeats the "cheap read" budget. Per-
         // scope refused-counts surface through the existing audit-log
         // admin module instead; this section reports substrate
-        // enablement and points operators to the deeper surface.
+        // enablement, the per-method denial signal, and points operators
+        // to the deeper surface.
         return {
             Disabled = false
             DisabledReason = ""
-            Severity = StatusSeverity.Ok
+            Severity = rlSeverity
             Headline = "Outbound rate limiter active."
-            Details = [
+            Details =
                 "Per-scope refused-call detail: inspect RateLimitRefused / RateLimitWaited audit rows under the affected tenant scope."
-            ]
+                :: rlDetails
         }
 }
 
@@ -383,7 +441,7 @@ let private buildSnapshot (config: ServerConfig) (ctx: HttpContext) : Async<Serv
         withTimeout ServiceStatusSnapshot.DriftSection (buildDrift ctx config.ConfigDriftDetection)
 
     let rateLimit =
-        withTimeout ServiceStatusSnapshot.RateLimitSection (buildRateLimit config.RateLimiter)
+        withTimeout ServiceStatusSnapshot.RateLimitSection (buildRateLimit ctx config.RateLimiter)
 
     let jobQueue =
         withTimeout ServiceStatusSnapshot.JobQueueSection (buildJobQueue ctx config.JobScheduler)
@@ -467,7 +525,7 @@ let serviceStatusBoardApi (config: ServerConfig) (ctx: HttpContext) : IServiceSt
             fun () ->
                 withGate (fun () -> async {
                     let! summary =
-                        withTimeout ServiceStatusSnapshot.RateLimitSection (buildRateLimit config.RateLimiter)
+                        withTimeout ServiceStatusSnapshot.RateLimitSection (buildRateLimit ctx config.RateLimiter)
 
                     return Ok summary
                 })

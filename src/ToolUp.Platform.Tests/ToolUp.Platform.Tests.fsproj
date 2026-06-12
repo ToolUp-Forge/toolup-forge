@@ -458,6 +458,7 @@
              forge SDK API record method loses its attribute. -->
         <Compile Include="InProcess\AuthorizationTests.fs" />
         <Compile Include="InProcess\AuditTests.fs" />
+        <Compile Include="InProcess\RateLimitTests.fs" />
         <!-- Phase 69m — Dispatcher body + argument-parse fastpath.
              Textual checks pin (a) InvocationPropsInt.Arguments holding
              JsonElement (not raw text); (b) InvocationProps.InputBytes

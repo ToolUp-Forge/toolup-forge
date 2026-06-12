@@ -70,7 +70,11 @@ type FileListSnapshot = {
 /// within their session scope, and `StorageScope` isolation is the
 /// enforcement.
 type FileManagementApi = {
+    // Phase 69g.tail — file upload carries bytes + optional DataType
+    // processing (parse / extract). Conservative per-subject cap;
+    // dormant until an `IRateLimitStore` is composed.
     [<AllowAnonymous>]
+    [<RateLimit(30, RateLimitSeconds.perMinute)>]
     UploadFile: FileUploadRequest -> Async<FileUploadResult>
     [<AllowAnonymous>]
     ListFiles: unit -> Async<FileListSnapshot>

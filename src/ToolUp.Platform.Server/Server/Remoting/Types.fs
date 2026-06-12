@@ -270,6 +270,12 @@ type AuditKind =
     | PermissionRevoked
     | TenantCreated
     | TenantDeleted
+    /// Phase 69g.tail — emitted when a `[<RateLimit>]`-attributed method
+    /// denies a call because a budget is exhausted. Unlike the other
+    /// kinds (which ride an `[<Audit>]` annotation on success), this one
+    /// is emitted by the dispatcher's rate-limit pre-flight on denial,
+    /// regardless of whether the method also carries `[<Audit>]`.
+    | RateLimitExceeded
     | Custom of string
 
 /// Phase 69h — audit event emitted on every successful invocation of
@@ -408,6 +414,14 @@ type IJobDispatcher =
 type MethodOutcome =
     | Succeeded
     | Failed of exn
+    /// Phase 69g.tail — the dispatcher denied the call at the rate-limit
+    /// pre-flight stage (a `[<RateLimit>]` budget was exhausted). The
+    /// handler never ran; `retryAfter` is the budget's recovery window
+    /// (the same value sent on the `Retry-After` header). A telemetry
+    /// sink bridging to `IMetricsSink` records this as a distinct
+    /// outcome from `Failed` so rate-limit saturation is separable from
+    /// handler errors on dashboards.
+    | RateLimited of retryAfter: System.TimeSpan
 
 /// Phase 69b.C — telemetry record emitted on each method completion.
 ///

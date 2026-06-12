@@ -283,7 +283,11 @@ type KnowledgeApi = {
     /// Anonymous-mode deployments upload KB documents into session
     /// scope; the handler derives the target scope from the resolved
     /// `StorageScope`, never from the caller (GP 4).
+    // Phase 69g.tail — document ingestion (extract + chunk + embed) is
+    // an expensive multi-stage path. Conservative per-subject cap;
+    // dormant until an `IRateLimitStore` is composed.
     [<AllowAnonymous>]
+    [<RateLimit(20, RateLimitSeconds.perMinute)>]
     UploadDocument: byte[] -> string -> Async<KnowledgeDocument>
     [<AllowAnonymous>]
     GetDocuments: unit -> Async<KnowledgeDocument list>

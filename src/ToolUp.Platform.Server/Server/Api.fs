@@ -167,6 +167,7 @@ module internal ApiSeams =
                             match t.Outcome with
                             | MethodOutcome.Succeeded -> "ok"
                             | MethodOutcome.Failed _ -> "error"
+                            | MethodOutcome.RateLimited _ -> "rate-limited"
 
                         let tags = Map.ofList [ "method", t.MethodName; "outcome", outcomeTag ]
 

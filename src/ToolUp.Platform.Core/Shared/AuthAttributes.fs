@@ -124,3 +124,46 @@ type AuditAttribute(kindName: string) =
 [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
 type PiiSafeAttribute() =
     inherit Attribute()
+
+// 0.5.0 (Phase 69g.tail) — forge-native rate-limit attribute mirroring
+// ToolUp.Remoting.Server's Phase 69g RateLimitAttribute. Same rationale
+// as the auth / audit markers above: forge API records sit in
+// Platform.Core (compiled by the Fable client too) and cannot take a
+// server-tier dependency. The dispatcher's rate-limit classifier
+// recognises both families by simple type name + a reflective
+// Count / WindowSeconds read, normalising to the server-tier budget.
+
+/// Caps a method at `count` calls per `windowSeconds`-second sliding
+/// window, per subject (the resolved auth-context `SubjectId`, or the
+/// per-IP fallback for anonymous callers). Multi-attribute is AND —
+/// every budget must pass (short-burst + sustained caps compose). Use
+/// the `RateLimitSeconds` constants for the window, e.g.
+/// `[<RateLimit(30, RateLimitSeconds.perMinute)>]`.
+///
+/// Dormant until an `IRateLimitStore` is composed (GP 13 — zero cost
+/// when no store is wired). On denial the dispatcher returns 429 +
+/// `Retry-After`, emits `MethodOutcome.RateLimited` telemetry, and
+/// emits a `RateLimitExceeded` audit row.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field, AllowMultiple = true)>]
+type RateLimitAttribute(count: int, windowSeconds: int) =
+    inherit Attribute()
+    member _.Count = count
+    member _.WindowSeconds = windowSeconds
+
+/// Named window-size constants (in seconds) for
+/// `[<RateLimit(count, window)>]`. Named `RateLimitSeconds` rather than
+/// `RateLimitWindow` because the latter is already a DU type in this
+/// namespace (the Phase 56 inbound-limiter window); these are plain
+/// integer-seconds literals the attribute constructor takes.
+module RateLimitSeconds =
+    [<Literal>]
+    let perSecond = 1
+
+    [<Literal>]
+    let perMinute = 60
+
+    [<Literal>]
+    let perHour = 3600
+
+    [<Literal>]
+    let perDay = 86400
