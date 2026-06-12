@@ -124,6 +124,21 @@ type MaxValueAttribute(n: float) =
     inherit Attribute()
     member _.MaxValue = n
 
+// 0.5.0 (Phase 69f) — forge-native idempotency marker mirroring
+// ToolUp.Remoting.Server's Phase 69f IdempotentAttribute. Same rationale
+// as the markers above: forge API records sit in Platform.Core
+// (Fable-compiled) and can't reference the server tier. The dispatcher's
+// idempotency classifier recognises both families by simple type name.
+
+/// Opts a method into client-key-driven idempotency. Calls MUST carry an
+/// `X-Idempotency-Key` header (when an `IIdempotencyStore` is composed);
+/// the dispatcher memoises the first response and replays it on
+/// subsequent same-key calls within the TTL. Dormant when no store is
+/// composed.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type IdempotentAttribute() =
+    inherit Attribute()
+
 // 0.5.0 (Phase 69h.tail) — forge-native audit attributes mirroring
 // ToolUp.Remoting.Server's Phase 69h AuditAttribute / PiiSafeAttribute.
 // Same rationale as the auth markers above: forge API records sit in

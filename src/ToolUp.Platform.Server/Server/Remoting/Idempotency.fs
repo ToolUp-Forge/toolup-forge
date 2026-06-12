@@ -116,17 +116,116 @@ type InMemoryIdempotencyStore(?maxEntries: int) =
 
 // -----------------------------------------------------------------------------
 
+/// Phase 69f.C — distributed `IIdempotencyStore` over `IBlobStorage`.
+/// Memoised entries are JSON blobs under the `_platform` container (the
+/// reserved SDK-level scope), named by a SHA-256 of `{scope}|{key}` so
+/// arbitrary subject ids / method names / client keys produce a safe,
+/// collision-resistant blob name. TTL is carried in the envelope and
+/// enforced lazily on `TryGet` (an expired entry is read as a miss and
+/// best-effort deleted).
+///
+/// **Concurrency.** `IBlobStorage` exposes no conditional-write / ETag
+/// surface, so two requests racing the same key both miss-then-store and
+/// the second overwrites the first — last-write-wins. The handler is
+/// idempotent by contract, so both writes carry the same response and
+/// the race is benign for replay correctness; it does NOT guarantee
+/// exactly-once *handler invocation* under a concurrent race (neither
+/// does the in-process default — that needs a conditional-write the
+/// interface doesn't model). Distributed deployments that need stricter
+/// once-only semantics wire a store with a compare-and-set primitive
+/// (Redis SETNX / DynamoDB conditional put) against the same contract.
+type BlobIdempotencyStore(blobStorage: ToolUp.Platform.BlobStorage.IBlobStorage, ?container: string) =
+    let container = defaultArg container "_platform"
+
+    let blobName (scope: string) (key: string) : string =
+        use sha = System.Security.Cryptography.SHA256.Create()
+        let bytes = System.Text.Encoding.UTF8.GetBytes(scope + "|" + key)
+        let hash = System.Convert.ToHexString(sha.ComputeHash bytes).ToLowerInvariant()
+        "idem/" + hash + ".json"
+
+    // Serialise the envelope with `Utf8JsonWriter` / read it with
+    // `JsonDocument` — no reflection over an F# record type, so the
+    // round-trip is robust regardless of STJ's F#-record handling. The
+    // body is base64 so the JSON stays text-clean for binary responses.
+    let serialise (response: MemoisedResponse) (expiryTicks: int64) : byte[] =
+        use ms = new System.IO.MemoryStream()
+
+        (use writer = new System.Text.Json.Utf8JsonWriter(ms)
+         writer.WriteStartObject()
+         writer.WriteNumber("StatusCode", response.StatusCode)
+         writer.WriteString("ContentType", response.ContentType)
+         writer.WriteString("RequestBodyHash", response.RequestBodyHash)
+         writer.WriteNumber("ExpiryUtcTicks", expiryTicks)
+         writer.WriteString("BodyBase64", System.Convert.ToBase64String response.Body)
+         writer.WriteEndObject()
+         writer.Flush())
+
+        ms.ToArray()
+
+    interface IIdempotencyStore with
+        member _.TryGet(key, scope) = async {
+            let name = blobName scope key
+            let! downloaded = blobStorage.Download(container, name)
+
+            match downloaded with
+            | Ok bytes ->
+                try
+                    use doc = System.Text.Json.JsonDocument.Parse(System.ReadOnlyMemory<byte>(bytes))
+                    let root = doc.RootElement
+                    let expiry = root.GetProperty("ExpiryUtcTicks").GetInt64()
+
+                    if DateTimeOffset.UtcNow.UtcTicks < expiry then
+                        return
+                            Some {
+                                Body = System.Convert.FromBase64String(root.GetProperty("BodyBase64").GetString())
+                                StatusCode = root.GetProperty("StatusCode").GetInt32()
+                                ContentType = root.GetProperty("ContentType").GetString()
+                                RequestBodyHash = root.GetProperty("RequestBodyHash").GetString()
+                            }
+                    else
+                        // Lazy TTL expiry — best-effort delete, read as miss.
+                        let! _ = blobStorage.Delete(container, name)
+                        return None
+                with _ ->
+                    // Corrupt / unreadable envelope is a miss, never a crash.
+                    return None
+            | Error _ -> return None
+        }
+
+        member _.Store(key, scope, response, ttl) = async {
+            let expiryTicks = (DateTimeOffset.UtcNow + ttl).UtcTicks
+            let! _ = blobStorage.Upload(container, blobName scope key, serialise response expiryTicks)
+            return ()
+        }
+
+// -----------------------------------------------------------------------------
+
 module internal Idempotency =
+
+    // Reflect over public AND non-public records, and recognise BOTH the
+    // server-tier `IdempotentAttribute` and the tier-shared
+    // `ToolUp.Platform.IdempotentAttribute` mirror (which Fable-compiled
+    // Core API records carry) by simple type name — same family-agnostic
+    // + fail-open fix as the 69d/69h/69g/69e classifiers. Without it a
+    // Core API record's `[<Idempotent>]` is invisible (idempotency never
+    // engages), and a non-public record silently skips classification.
+    let private reflectionFlags =
+        System.Reflection.BindingFlags.Public
+        ||| System.Reflection.BindingFlags.NonPublic
+
+    let private isIdempotentAttr (a: obj) : bool =
+        match a with
+        | :? IdempotentAttribute -> true
+        | _ -> a.GetType().Name = "IdempotentAttribute"
 
     /// Cache the `[<Idempotent>]` classification per method at startup.
     let classify (apiType: Type) : Set<string> =
-        if not (FSharpType.IsRecord apiType) then
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             Set.empty
         else
-            FSharpType.GetRecordFields apiType
+            FSharpType.GetRecordFields(apiType, reflectionFlags)
             |> Array.choose (fun pi ->
-                let hasIdempotent =
-                    pi.GetCustomAttributes(true) |> Array.exists (fun a -> a :? IdempotentAttribute)
+                let hasIdempotent = pi.GetCustomAttributes(true) |> Array.exists isIdempotentAttr
 
                 if hasIdempotent then Some pi.Name else None)
             |> Set.ofArray

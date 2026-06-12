@@ -1,6 +1,6 @@
 # Phase 69f — idempotency keys on mutating methods
 
-> **Substrate status: shipped, with one deferred companion.** The `[<Idempotent>]` attribute, the `IIdempotencyStore` seam, the bounded `InMemoryIdempotencyStore` default, and the dispatcher enforcement (including request-body conflict detection) are all live (`Server/Remoting/Idempotency.fs` + `Types.fs`). A blob-backed distributed store is a planned follow-up; until it lands, multi-instance deployments implement `IIdempotencyStore` themselves (two methods).
+> **Substrate status: complete.** The `[<Idempotent>]` attribute (server-tier + the Fable-safe `ToolUp.Platform` mirror, recognised family-agnostically), the `IIdempotencyStore` seam, the bounded `InMemoryIdempotencyStore` default, the **distributed `BlobIdempotencyStore`** (over any `IBlobStorage`), the `IIdempotencyStoreContract` portability conformance pack, and the dispatcher enforcement (including request-body conflict detection) are all live (`Server/Remoting/Idempotency.fs` + `Types.fs`).
 
 ## What changes
 
@@ -34,7 +34,13 @@ Remoting.createApi ()
 
 Clients attach the header per call (one UUID per logical operation, reused across retries of that operation). The replayed response carries the original response bytes, so clients need no special handling.
 
-`InMemoryIdempotencyStore` is single-instance and restart-volatile — right for dev and single-node deployments. For multi-instance, implement `IIdempotencyStore` (`TryGet` / `Store`, both async, string-keyed — the interface honours the six portability rules) over Redis / a database / blob storage.
+`InMemoryIdempotencyStore` is single-instance and restart-volatile — right for dev and single-node deployments. For multi-instance, compose **`BlobIdempotencyStore`** over your existing `IBlobStorage` (entries are JSON blobs under the `_platform` container, named by a SHA-256 of `{scope}|{key}`; TTL is carried in the envelope and enforced lazily on read):
+
+```fsharp
+|> Remoting.withIdempotencyStore (BlobIdempotencyStore(blobStorage))
+```
+
+**Concurrency note.** `IBlobStorage` exposes no conditional-write / ETag surface, so two requests racing the *same* key both miss-then-store and the second overwrites the first (last-write-wins). The handler is idempotent by contract, so both writes carry the same response and the race is benign for *replay* correctness — but it does not guarantee exactly-once *handler invocation* under a concurrent race (neither does the in-process default — that needs a conditional-write the interface doesn't model). Deployments needing stricter once-only semantics wire a store with a compare-and-set primitive (Redis `SETNX`, DynamoDB conditional put) against the same `IIdempotencyStore` contract — validate it with the `IIdempotencyStoreContract` conformance pack.
 
 ## Verification
 
@@ -44,6 +50,7 @@ Clients attach the header per call (one UUID per logical operation, reused acros
 4. Same header `K` but a different body: `409 Conflict` with a `User`-categorised envelope.
 5. Call to an `[<Idempotent>]` method with **no** header (store composed): refused with a `User`-categorised envelope.
 6. Unmarked methods ignore the header entirely.
+7. Contract pack: `InProcess/IdempotencyTests.fs` (`ToolUp.Platform.Tests`) binds the `IIdempotencyStoreContract` conformance pack to BOTH `InMemoryIdempotencyStore` and `BlobIdempotencyStore` (over a temp `LocalFileStorage`) — round-trip, per-scope + per-key isolation, and TTL expiry — plus the family-agnostic (server + `ToolUp.Platform` mirror) classification and the idempotency-before-rate-limit ordering pin.
 
 ## Rollback
 

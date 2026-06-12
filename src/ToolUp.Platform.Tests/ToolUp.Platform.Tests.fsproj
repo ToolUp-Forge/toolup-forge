@@ -71,6 +71,7 @@
         <Compile Include="Contracts\IAIProviderContract.fs" />
         <Compile Include="Contracts\IRateLimiterContract.fs" />
         <Compile Include="Contracts\IRateLimitStoreContract.fs" />
+        <Compile Include="Contracts\IIdempotencyStoreContract.fs" />
         <Compile Include="Contracts\IClientToolAuthorizerContract.fs" />
         <!-- Phase 113 — host-neutral action-authorizer conformance bar
              (decision invariants over a fixture's allowed/denied calls). -->
@@ -460,6 +461,7 @@
         <Compile Include="InProcess\AuditTests.fs" />
         <Compile Include="InProcess\RateLimitTests.fs" />
         <Compile Include="InProcess\ValidationTests.fs" />
+        <Compile Include="InProcess\IdempotencyTests.fs" />
         <!-- Phase 69m — Dispatcher body + argument-parse fastpath.
              Textual checks pin (a) InvocationPropsInt.Arguments holding
              JsonElement (not raw text); (b) InvocationProps.InputBytes
