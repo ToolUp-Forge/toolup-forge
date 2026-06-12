@@ -77,3 +77,41 @@ jobs:
       # cwd = src/ToolUp.RAG.Evaluation/ (see the NOTE in the header).
       - name: Run RAG eval harness (5% Recall@5 / nDCG@10 regression gate)
         run: dotnet run --project src/ToolUp.RAG.Evaluation -c Release -- --baseline fixtures/eval-baseline.json
+
+  # Phase 122 — pipeline-composition ablation gate. Runs the same BEIR
+  # scifact subset through dense-only / dense+BM25 / dense+BM25+reranker /
+  # HNSW-vs-flat and fails on (i) a pinned per-configuration Recall@10 /
+  # nDCG@10 floor breach or (ii) ordering divergence across two fresh-build
+  # runs of the identical configuration. Console subcommand, not
+  # `dotnet test` — the repo's test packs are Expecto-style console
+  # runners and `dotnet test` is a silent false-green against them.
+  #
+  # The BEIR drop is cached across runs (the corpora are CC BY-NC, so they
+  # are downloaded from the public mirror rather than committed); a cache
+  # miss costs one ~3 MB download. The gate itself is deterministic — the
+  # metric pins live in Ablation.metricFloors and are re-pinned in the same
+  # PR as any legitimate embedder / subset change (same discipline as
+  # fixtures/eval-baseline.json above).
+  rag-ablation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Workspace-relative path on both sides: actions/cache resolves it
+      # against the workspace, and the env var reaches the .NET process as
+      # a literal string (no shell `~` expansion happens in `env:`).
+      - name: Cache BEIR dataset drop
+        uses: actions/cache@v4
+        with:
+          path: .beir-cache
+          key: beir-scifact-v1
+
+      - name: Run RAG ablation gate (metric floors + ordering determinism)
+        env:
+          TOOLUP_BEIR_CACHE: ${{ github.workspace }}/.beir-cache
+        run: dotnet run --project src/ToolUp.RAG.Evaluation -c Release -- ablation
