@@ -196,7 +196,27 @@ module internal ApiSeams =
 
         return
             { new ForgeAuthContext with
-                member _.HasRole role = user.Roles |> List.contains role
+                member _.HasRole role =
+                    // Phase 132 — the SDK's platform-admin grant is
+                    // server-resolved into `ToolUp.PlatformRole` (Middleware
+                    // Phase 4b, from `IPlatformAdminStore`), NOT the
+                    // JWT-derived `user.Roles` list — which every shipped
+                    // auth provider leaves empty. Without this bridge,
+                    // `[<RequiresRole "PlatformAdmin">]` (on every shipped
+                    // admin API record) evaluates `[].contains "PlatformAdmin"`
+                    // → deny for *everyone*, including a genuine admin, so the
+                    // attribute is dead enforcement and the handler-side
+                    // `canModifyPlatformConfig` gate is the only real guard.
+                    // Bridge the conventional "PlatformAdmin" role string to
+                    // the server-resolved source of truth; any other role
+                    // string falls through to `user.Roles` (consumer
+                    // claim-mapper territory).
+                    if role = "PlatformAdmin" then
+                        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
+                        | true, (:? PlatformRole as r) -> r = PlatformRole.PlatformAdmin
+                        | _ -> false
+                    else
+                        user.Roles |> List.contains role
 
                 member _.HasClaim(claim, value) =
                     // Forge's first-party identity shape exposes

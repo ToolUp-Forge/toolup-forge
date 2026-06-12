@@ -137,6 +137,26 @@ let private forgeApiRecords: (string * Type) list = [
 let tests =
     testList "Phase 69d.tail — authorization metadata" [
 
+        // ── Phase 132 — RequiresRole "PlatformAdmin" bridges to the
+        //    server-resolved PlatformRole, not the always-empty user.Roles ──
+        testCaseAsync "Phase 132: HasRole PlatformAdmin reads server-resolved ToolUp.PlatformRole"
+        <| async {
+            let ctx = DefaultHttpContext() :> HttpContext
+            ctx.Items["ToolUp.PlatformRole"] <- box ToolUp.Platform.PlatformRole.PlatformAdmin
+            let! authCtx = ToolUp.Platform.ApiSeams.defaultForgeAuthContextResolver ctx
+            Expect.isTrue (authCtx.HasRole "PlatformAdmin") "a real admin (PlatformRole stamped) is allowed"
+        }
+
+        testCaseAsync "Phase 132: HasRole PlatformAdmin denies when PlatformRole is absent"
+        <| async {
+            // Before the bridge this returned false for EVERYONE (user.Roles
+            // is always empty) — including genuine admins. Now: false only
+            // when the server did not resolve PlatformAdmin.
+            let ctx = DefaultHttpContext() :> HttpContext
+            let! authCtx = ToolUp.Platform.ApiSeams.defaultForgeAuthContextResolver ctx
+            Expect.isFalse (authCtx.HasRole "PlatformAdmin") "no PlatformRole stamped → denied"
+        }
+
         // ── Classification: server family ──
         test "server-family attributes classify per method" {
             let cls = AuthClassifier.classify typeof<ServerAttributedApi>
