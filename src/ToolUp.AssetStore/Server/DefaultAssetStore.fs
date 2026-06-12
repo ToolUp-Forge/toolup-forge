@@ -58,7 +58,9 @@ type DefaultAssetStore
         profiles: DerivativeProfileRegistry,
         auditLog: IAuditLog,
         logger: ILogger,
-        options: AssetStoreOptions
+        options: AssetStoreOptions,
+        mimeRenderers: MimeRendererRegistry,
+        asyncCoordinator: DerivativeJobCoordinator option
     ) =
 
     static let recordsPrefix = "assets/records/"
@@ -117,6 +119,20 @@ type DefaultAssetStore
             }
         else
             async.Return()
+
+    /// Pre-Phase-127 constructor shape — image-only profiles, no
+    /// general MIME renderers, no async derivation. Existing call
+    /// sites compile and behave byte-for-byte unchanged (GP 11).
+    new
+        (
+            blobStorage: IBlobStorage,
+            renderer: IDerivativeRenderer,
+            profiles: DerivativeProfileRegistry,
+            auditLog: IAuditLog,
+            logger: ILogger,
+            options: AssetStoreOptions
+        ) =
+        DefaultAssetStore(blobStorage, renderer, profiles, auditLog, logger, options, MimeRendererRegistry.empty, None)
 
     interface IAssetStore with
 
@@ -197,9 +213,96 @@ type DefaultAssetStore
             match recordOpt with
             | None -> return Error AssetDerivativeError.AssetNotFound
             | Some record ->
-                match DerivativeProfileRegistry.resolveSpec record.DerivativeProfile derivativeName profiles with
+                match DerivativeProfileRegistry.resolveEntry record.DerivativeProfile derivativeName profiles with
                 | None -> return Error(AssetDerivativeError.UnknownDerivative derivativeName)
-                | Some spec ->
+                | Some(GeneralDerivative generalSpec) ->
+                    // Phase 127 — general (arbitrary-MIME) entry.
+                    let cacheKey =
+                        sprintf
+                            "%s%s/%s.%s"
+                            derivativesPrefix
+                            record.ContentHash
+                            generalSpec.Name
+                            generalSpec.FileExtension
+
+                    let! cached = blobStorage.Download(scopeContainer, cacheKey)
+
+                    match cached with
+                    | Ok bytes ->
+                        // The unchanged instant hit path — async-mode
+                        // entries land here on every request after
+                        // the job completes.
+                        return Ok(bytes, generalSpec.OutputMime)
+                    | Error _ when not (GeneralDerivativeSpec.acceptsMime record.MimeType generalSpec) ->
+                        return
+                            Error(
+                                AssetDerivativeError.RenderFailed(
+                                    sprintf
+                                        "derivative '%s' does not accept input MIME '%s'"
+                                        generalSpec.Name
+                                        record.MimeType
+                                )
+                            )
+                    | Error _ ->
+                        match generalSpec.Mode with
+                        | AsyncJob ->
+                            match asyncCoordinator with
+                            | None ->
+                                // GP 13 — without the compose-time
+                                // opt-in there is no scheduler wiring
+                                // to fall back to; failing typed beats
+                                // silently rendering seconds-class
+                                // work on the request path.
+                                return
+                                    Error(
+                                        AssetDerivativeError.RenderFailed(
+                                            "async derivation is not enabled — compose with AssetCompose.withAsyncDerivation"
+                                        )
+                                    )
+                            | Some coordinator ->
+                                match! coordinator.EnsureQueued(scopeContainer, record, derivativeName) with
+                                | StatusPending(correlationId, _) ->
+                                    return Error(AssetDerivativeError.DerivationPending correlationId)
+                                | StatusFailed(message, _, _) -> return Error(AssetDerivativeError.RenderFailed message)
+                        | Sync ->
+                            match MimeRendererRegistry.resolve generalSpec.RendererKey mimeRenderers with
+                            | None ->
+                                return
+                                    Error(
+                                        AssetDerivativeError.RenderFailed(
+                                            sprintf "no MIME renderer registered under key '%s'" generalSpec.RendererKey
+                                        )
+                                    )
+                            | Some mimeRenderer ->
+                                let! originalResult =
+                                    blobStorage.Download(scopeContainer, originalKey record.ContentHash)
+
+                                match originalResult with
+                                | Error msg -> return Error(AssetDerivativeError.StorageError msg)
+                                | Ok originalBytes ->
+                                    let! rendered = mimeRenderer.Render(originalBytes, record.MimeType, generalSpec)
+
+                                    match rendered with
+                                    | Error err ->
+                                        let msg =
+                                            match err with
+                                            | DecodeFailed m
+                                            | DerivativeRenderError.RenderFailed m -> m
+                                            | EncodeFailed(fmt, m) -> sprintf "%s encode failed: %s" fmt m
+
+                                        return Error(AssetDerivativeError.RenderFailed msg)
+                                    | Ok(bytes, mime) ->
+                                        let! cacheWrite = blobStorage.Upload(scopeContainer, cacheKey, bytes)
+
+                                        match cacheWrite with
+                                        | Error msg ->
+                                            logger.Warn(
+                                                sprintf "[AssetStore] cache write failed for %s: %s" cacheKey msg
+                                            )
+
+                                            return Ok(bytes, mime)
+                                        | Ok _ -> return Ok(bytes, mime)
+                | Some(ImageDerivative spec) ->
                     let cacheKey = derivativeKey record.ContentHash spec
                     let! cached = blobStorage.Download(scopeContainer, cacheKey)
 

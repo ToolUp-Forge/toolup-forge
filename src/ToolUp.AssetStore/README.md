@@ -56,9 +56,33 @@ Windows + macOS dev environments pull the native assets transitively — no extr
 
 `AssetUploaded` and `AssetDeleted` events emit under `SourceModule = "_platform.assets"`. Payloads carry `AssetId` / `ContentHash` / `MimeType` / `SizeBytes` / `UploadedBy`. Alt-text and caption are NOT included in audit payloads (treated as user-controlled content per the audit-payload-hygiene GP).
 
+## Generalised derivative profiles + async derivation (Phase 127)
+
+**Nothing changes unless you opt in** — existing image profiles, the SkiaSharp default, and every cache path behave byte-for-byte as before. Two additive capabilities:
+
+**Arbitrary-MIME profile entries.** A profile is now a list of `ProfileEntry` — the image specs you already register (`ImageDerivative`, what `withDerivativeProfile` produces) and `GeneralDerivative` entries declaring accepted input MIME(s), output MIME, a cache file extension, and a renderer key resolved against the deployment's `MimeRendererRegistry`:
+
+```fsharp
+AssetStoreServerApp.create ()
+|> AssetStoreServerApp.withDerivativeProfileEntries (DerivativeProfileId "media") [
+    GeneralDerivative {
+        Name = "poster"; AcceptedInputMimes = [ "video/*" ]
+        OutputMime = "image/jpeg"; FileExtension = "jpg"
+        RendererKey = "video-poster"; Mode = AsyncJob; Parameters = Map.empty
+    }
+  ]
+|> AssetStoreServerApp.withMimeRenderer "video-poster" posterRenderer  // IMimeDerivativeRenderer
+```
+
+Renderer implementations carrying vendor dependencies ship as companions (GP 1); `IMimeDerivativeRenderer` is a new sibling interface — `IDerivativeRenderer` and its implementations are untouched.
+
+**Async job-backed mode** (for seconds-to-minutes-class derivations) — opt in with `withAsyncDerivation AsyncDerivationOptions.defaults`. A request for an uncached `Mode = AsyncJob` entry enqueues exactly one derivation job per (content hash, derivative name) — concurrent requests coalesce via an in-process gate plus the scheduler's idempotency-key dedup — and returns `Error (DerivationPending correlationId)`. The job (a stateless, idempotent `IJobHandler` that re-checks the cache on entry) renders off the request path, writes the content-hash cache, and publishes a `CustomNotification` under the **`AssetStore.DerivativeReady`** key on the asset's scope; every subsequent request is an instant cache hit. Failures honour the registration's `RetryPolicy`; once attempts are exhausted the failure is recorded and requests answer a typed `RenderFailed` rather than re-enqueueing forever. Without the opt-in there is no job registration and no channel traffic (GP 13); async-mode entries fail typed with a pointer to the opt-in.
+
+Requires `ServerConfig.JobScheduler` to be enabled (the job substrate) — multi-node coalescing is best-effort (idempotent handler absorbs a duplicate run); single-process coalescing is exact.
+
 ## Sub-companions (deferred)
 
-`src/AssetStore/Imagemagick/` (wider format coverage) and `src/AssetStore/Cloudinary/` (hosted alternative) are sketched but not built — trigger-gated on deployment demand.
+`src/AssetStore/Imagemagick/` (wider format coverage) and `src/AssetStore/Cloudinary/` (hosted alternative) are sketched but not built — trigger-gated on deployment demand. Phase 127's generalised seam is where FFmpeg poster-frame / document-preview / model-compression renderers plug in per demand.
 
 ## See also
 

@@ -33,6 +33,7 @@
         <Compile Include="Server\IAssetStore.fs" />
         <Compile Include="Server\SkiaSharpDerivativeRenderer.fs" />
         <Compile Include="Server\DerivativeProfiles.fs" />
+        <Compile Include="Server\DerivativeJobs.fs" />
         <Compile Include="Server\DefaultAssetStore.fs" />
         <Compile Include="Server\AssetApi.fs" />
         <Compile Include="Server\AssetUploadHandler.fs" />

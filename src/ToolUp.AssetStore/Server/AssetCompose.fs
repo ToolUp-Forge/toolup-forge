@@ -53,7 +53,32 @@ type AssetStoreServerApp = {
     /// substituting Cloudinary / Imgix / S3-direct-CDN supply
     /// their own impl here.
     StoreOverride: IAssetStore option
+    /// Phase 127 — renderers for general (arbitrary-MIME) profile
+    /// entries, keyed by `GeneralDerivativeSpec.RendererKey`.
+    /// Empty by default; image profiles never consult it.
+    MimeRenderers: MimeRendererRegistry
+    /// Phase 127 — opt-in async job-backed derivation. `None`
+    /// (default) registers no job handler and emits no channel
+    /// traffic (GP 13); async-mode profile entries fail typed.
+    AsyncDerivation: AsyncDerivationOptions option
 }
+
+/// Compose-time options for the async derivation mode (Phase 127).
+and AsyncDerivationOptions = {
+    /// Retry behaviour the scheduler applies to derivation jobs
+    /// (GP 12 rule 3 — retry as data).
+    RetryPolicy: JobRetryPolicy
+}
+
+module AsyncDerivationOptions =
+    let defaults: AsyncDerivationOptions = {
+        RetryPolicy = {
+            MaxAttempts = 3
+            InitialBackoff = TimeSpan.FromSeconds 30.0
+            MaxBackoff = TimeSpan.FromMinutes 10.0
+            DeadLetterDestination = None
+        }
+    }
 
 module AssetStoreServerApp =
 
@@ -63,6 +88,8 @@ module AssetStoreServerApp =
         RendererOverride = None
         Profiles = DerivativeProfileRegistry.withWebDefault
         StoreOverride = None
+        MimeRenderers = MimeRendererRegistry.empty
+        AsyncDerivation = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -158,6 +185,48 @@ module AssetStoreServerApp =
             StoreOverride = Some store
     }
 
+    /// Phase 127 — register a profile whose entries mix image and
+    /// general (arbitrary-MIME) derivatives. Re-registering an
+    /// existing id replaces it; `withDerivativeProfile` remains the
+    /// image-only shorthand.
+    let withDerivativeProfileEntries
+        (id: DerivativeProfileId)
+        (entries: ProfileEntry list)
+        (app: AssetStoreServerApp)
+        : AssetStoreServerApp =
+        {
+            app with
+                Profiles = DerivativeProfileRegistry.registerEntries id entries app.Profiles
+        }
+
+    /// Phase 127 — register a renderer for general (arbitrary-MIME)
+    /// profile entries under `key`
+    /// (`GeneralDerivativeSpec.RendererKey` names it). Renderer
+    /// implementations carrying vendor dependencies ship as
+    /// companions (GP 1).
+    let withMimeRenderer
+        (key: string)
+        (renderer: IMimeDerivativeRenderer)
+        (app: AssetStoreServerApp)
+        : AssetStoreServerApp =
+        {
+            app with
+                MimeRenderers = MimeRendererRegistry.register key renderer app.MimeRenderers
+        }
+
+    /// Phase 127 — opt into async job-backed derivation for
+    /// `DerivationMode.AsyncJob` profile entries: derivations run on
+    /// the deployment's `IJobScheduler`, completion surfaces over
+    /// the notification channel
+    /// (`DerivativeJobs.DerivativeReadyNotificationKey`), and the
+    /// content-hash cache serves instantly thereafter. Without this
+    /// opt-in nothing changes (GP 13): no job-handler registration,
+    /// no channel traffic; async-mode entries fail typed.
+    let withAsyncDerivation (options: AsyncDerivationOptions) (app: AssetStoreServerApp) : AssetStoreServerApp = {
+        app with
+            AsyncDerivation = Some options
+    }
+
     /// Drive the final composition. When
     /// `ServerConfig.AssetStore = NoAssetStore`, short-circuits
     /// to `ServerApp.run` — byte-for-byte the same shape as the
@@ -174,6 +243,8 @@ module AssetStoreServerApp =
             let profiles = app.Profiles
             let explicitRenderer = app.RendererOverride
             let explicitStore = app.StoreOverride
+            let mimeRenderers = app.MimeRenderers
+            let asyncDerivation = app.AsyncDerivation
 
             let asLogger =
                 app.Base.Logger
@@ -197,7 +268,63 @@ module AssetStoreServerApp =
                                 let blob = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
                                 let renderer = sp.GetService(typeof<IDerivativeRenderer>) :?> IDerivativeRenderer
                                 let audit = sp.GetService(typeof<IAuditLog>) :?> IAuditLog
-                                DefaultAssetStore(blob, renderer, profiles, audit, asLogger, options) :> IAssetStore)
+
+                                // Phase 127 — async derivation wiring,
+                                // only when opted in (GP 13). The
+                                // factory runs once (singleton), so the
+                                // handler registration is once-per-
+                                // process and precedes the first
+                                // enqueue (the first request resolves
+                                // this factory before it can request a
+                                // derivative).
+                                let coordinator =
+                                    asyncDerivation
+                                    |> Option.bind (fun asyncOptions ->
+                                        match sp.GetService(typeof<IJobScheduler>) with
+                                        | :? IJobScheduler as scheduler ->
+                                            let channel =
+                                                match sp.GetService(typeof<INotificationChannel>) with
+                                                | :? INotificationChannel as c -> Some c
+                                                | _ -> None
+
+                                            scheduler.RegisterHandler(
+                                                DerivativeJobs.HandlerName,
+                                                DerivativeJobHandler(
+                                                    blob,
+                                                    profiles,
+                                                    mimeRenderers,
+                                                    channel,
+                                                    asLogger,
+                                                    asyncOptions.RetryPolicy.MaxAttempts
+                                                )
+                                            )
+
+                                            Some(
+                                                DerivativeJobCoordinator(
+                                                    blob,
+                                                    scheduler,
+                                                    asyncOptions.RetryPolicy,
+                                                    asLogger
+                                                )
+                                            )
+                                        | _ ->
+                                            asLogger.Warn(
+                                                "[AssetStore] withAsyncDerivation set but no IJobScheduler is registered — async-mode derivatives will fail typed"
+                                            )
+
+                                            None)
+
+                                DefaultAssetStore(
+                                    blob,
+                                    renderer,
+                                    profiles,
+                                    audit,
+                                    asLogger,
+                                    options,
+                                    mimeRenderers,
+                                    coordinator
+                                )
+                                :> IAssetStore)
                     )
 
             // ─── Fable.Remoting handler ──────────────────────────

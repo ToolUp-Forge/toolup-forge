@@ -61,3 +61,44 @@ and DerivativeRenderError =
     /// Encoder rejected the target format (AVIF encoder
     /// missing on this SkiaSharp build, etc.).
     | EncodeFailed of format: string * message: string
+// ─── Phase 127 — MIME-general renderer seam ──────────────────────
+
+/// Arbitrary-MIME renderer surface for general profile entries
+/// (document → preview image, video → poster frame, model →
+/// compressed variant). Implementations carrying vendor
+/// dependencies ship as companions (GP 1); the deployment
+/// registers them by key via `AssetCompose.withMimeRenderer` and
+/// profile entries name the key in `GeneralDerivativeSpec.RendererKey`.
+///
+/// Six portability rules: inputs / outputs are `byte[]` + value
+/// records (rule 1); `Async` at the boundary (rule 2); failures
+/// flow through `DerivativeRenderError` as data (rule 3);
+/// implementations MUST be stateless between calls (rule 4) — the
+/// async job mode re-invokes after process restarts; each call is
+/// independent (rule 5); no sub-second / sub-pixel promises (rule 6).
+type IMimeDerivativeRenderer =
+    /// Produce the derivative for `spec` from the original bytes.
+    /// `inputMime` is the record's stored MIME (already validated
+    /// against `spec.AcceptedInputMimes` by the store). Returns the
+    /// encoded bytes + the output MIME (normally `spec.OutputMime`).
+    abstract Render:
+        originalBytes: byte[] * inputMime: string * spec: GeneralDerivativeSpec ->
+            Async<Result<byte[] * string, DerivativeRenderError>>
+
+/// Key → renderer table for general profile entries. Immutable
+/// value built at compose time (GP 5).
+type MimeRendererRegistry = private {
+    renderers: Map<string, IMimeDerivativeRenderer>
+}
+
+module MimeRendererRegistry =
+    let empty: MimeRendererRegistry = { renderers = Map.empty }
+
+    /// Register `renderer` under `key`. Re-registering a key
+    /// replaces it.
+    let register (key: string) (renderer: IMimeDerivativeRenderer) (registry: MimeRendererRegistry) = {
+        renderers = Map.add key renderer registry.renderers
+    }
+
+    let resolve (key: string) (registry: MimeRendererRegistry) : IMimeDerivativeRenderer option =
+        Map.tryFind key registry.renderers

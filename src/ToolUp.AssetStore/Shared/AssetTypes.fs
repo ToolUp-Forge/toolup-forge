@@ -195,6 +195,12 @@ type AssetDerivativeError =
     | RenderFailed of message: string
     /// Reading the original from blob storage failed.
     | StorageError of message: string
+    /// Phase 127 — the derivative is an async-mode profile entry
+    /// whose derivation job is queued / running. Carries the job
+    /// correlation id; completion surfaces over the notification
+    /// channel (`DerivativeJobs.DerivativeReadyNotificationKey`)
+    /// and the content-hash cache serves instantly thereafter.
+    | DerivationPending of correlationId: string
 
 /// Why a delete failed.
 type AssetDeleteError =
@@ -334,3 +340,78 @@ module UploadRequest =
                 uploadedBy = uploadedBy
                 profile = profile
             }
+// ─── Phase 127 — generalised derivative profiles ─────────────────
+//
+// The original profile vocabulary is image-typed (`DerivativeSpec`
+// — bounding box + `ImageFormat` + quality). The generalisation
+// adds a parallel general entry kind for arbitrary MIME →
+// derivative mappings (document → preview image, video → poster
+// frame, model → compressed variant) without touching the image
+// entries: a profile is now a list of `ProfileEntry`, and every
+// pre-existing registration maps onto `ImageDerivative` unchanged
+// (GP 11 — same registry API, same resolution, same cache paths).
+
+/// When the derivative is produced relative to the request.
+type DerivationMode =
+    /// Rendered inline on the requesting call (the cache-miss
+    /// behaviour image profiles have always had). For renders in
+    /// the tens-to-hundreds-of-milliseconds class.
+    | Sync
+    /// Rendered on `IJobScheduler` off the request path; the
+    /// request returns `DerivationPending` until the job completes
+    /// and notifies. For seconds-to-minutes-class derivations.
+    /// Requires the compose-time async-derivation opt-in (GP 13).
+    | AsyncJob
+
+/// A general (arbitrary-MIME) derivative shape. Identity by value
+/// throughout (GP 12 rule 1): names, MIME strings and a string
+/// renderer key — the renderer registry resolves the key to an
+/// implementation at render time.
+type GeneralDerivativeSpec = {
+    /// Stable name — cache-blob suffix and `GetDerivative` lookup
+    /// key, exactly like `DerivativeSpec.Name`.
+    Name: string
+    /// Input MIME types this entry accepts. Exact matches
+    /// (`"video/mp4"`), prefix wildcards (`"image/*"`), or the
+    /// universal `"*"`. A request whose record MIME matches none
+    /// fails typed rather than handing the renderer bytes it
+    /// never claimed to accept.
+    AcceptedInputMimes: string list
+    /// MIME type of the produced derivative.
+    OutputMime: string
+    /// File-extension suffix for the cache path
+    /// (`assets/derivatives/{hash}/{name}.{ext}`).
+    FileExtension: string
+    /// Key into the deployment's MIME-renderer registry
+    /// (`AssetCompose.withMimeRenderer`). Renderer implementations
+    /// carrying vendor dependencies stay in companions (GP 1).
+    RendererKey: string
+    Mode: DerivationMode
+    /// Opaque per-spec parameters handed to the renderer (target
+    /// dimensions, codec hints, compression level — whatever the
+    /// renderer's README documents).
+    Parameters: Map<string, string>
+}
+
+module GeneralDerivativeSpec =
+    /// Does the record's MIME satisfy the entry's accept list?
+    let acceptsMime (inputMime: string) (spec: GeneralDerivativeSpec) : bool =
+        spec.AcceptedInputMimes
+        |> List.exists (fun accepted ->
+            accepted = "*"
+            || String.Equals(accepted, inputMime, StringComparison.OrdinalIgnoreCase)
+            || (accepted.EndsWith "*"
+                && inputMime.StartsWith(accepted.TrimEnd '*', StringComparison.OrdinalIgnoreCase)))
+
+/// One derivative a profile declares — the image shape every
+/// existing profile uses, or the generalised arbitrary-MIME shape.
+type ProfileEntry =
+    | ImageDerivative of DerivativeSpec
+    | GeneralDerivative of GeneralDerivativeSpec
+
+module ProfileEntry =
+    /// The entry's stable lookup name.
+    let name =
+        function
+        | ImageDerivative spec -> spec.Name
+        | GeneralDerivative spec -> spec.Name

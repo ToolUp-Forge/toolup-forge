@@ -15,8 +15,13 @@ namespace ToolUp.AssetStore
 /// merges any file-loaded profiles on top of compose-registered
 /// ones (file wins on collision so ops can override a
 /// hard-coded baseline without a redeploy).
+/// Phase 127 — internally the registry holds `ProfileEntry` lists
+/// so profiles can mix image and general (arbitrary-MIME)
+/// derivatives; the original `DerivativeSpec`-shaped API is
+/// unchanged (every pre-existing registration maps onto
+/// `ImageDerivative` — GP 11).
 type DerivativeProfileRegistry = private {
-    profiles: Map<string, DerivativeSpec list>
+    profiles: Map<string, ProfileEntry list>
 }
 
 module DerivativeProfileRegistry =
@@ -62,25 +67,63 @@ module DerivativeProfileRegistry =
     /// `AssetCompose.create` uses this; `withDerivativeProfile`
     /// appends / overrides.
     let withWebDefault: DerivativeProfileRegistry = {
-        profiles = Map.ofList [ DerivativeProfileId.value DerivativeProfileId.webDefault, webDefaultSpecs ]
+        profiles =
+            Map.ofList [
+                DerivativeProfileId.value DerivativeProfileId.webDefault, webDefaultSpecs |> List.map ImageDerivative
+            ]
     }
+
+    /// Register a profile whose entries mix image and general
+    /// derivatives (Phase 127). Re-registering an existing id
+    /// replaces it.
+    let registerEntries
+        (id: DerivativeProfileId)
+        (entries: ProfileEntry list)
+        (registry: DerivativeProfileRegistry)
+        : DerivativeProfileRegistry =
+        {
+            profiles = Map.add (DerivativeProfileId.value id) entries registry.profiles
+        }
 
     let register
         (id: DerivativeProfileId)
         (specs: DerivativeSpec list)
         (registry: DerivativeProfileRegistry)
         : DerivativeProfileRegistry =
-        {
-            profiles = Map.add (DerivativeProfileId.value id) specs registry.profiles
-        }
+        registerEntries id (specs |> List.map ImageDerivative) registry
 
-    /// Resolve a profile id to its derivative list. `None` for
-    /// unknown ids — caller surfaces `UnknownDerivative`.
-    let resolve (id: DerivativeProfileId) (registry: DerivativeProfileRegistry) : DerivativeSpec list option =
+    /// Resolve a profile id to its full entry list (Phase 127).
+    /// `None` for unknown ids.
+    let resolveEntries (id: DerivativeProfileId) (registry: DerivativeProfileRegistry) : ProfileEntry list option =
         Map.tryFind (DerivativeProfileId.value id) registry.profiles
 
-    /// Resolve a (profile, derivative-name) pair to the spec.
-    /// `None` when either is unknown.
+    /// Resolve a (profile, derivative-name) pair to its entry
+    /// (Phase 127). `None` when either is unknown.
+    let resolveEntry
+        (id: DerivativeProfileId)
+        (derivativeName: string)
+        (registry: DerivativeProfileRegistry)
+        : ProfileEntry option =
+        registry
+        |> resolveEntries id
+        |> Option.bind (List.tryFind (fun e -> ProfileEntry.name e = derivativeName))
+
+    /// Resolve a profile id to its IMAGE derivative list — the
+    /// original pre-Phase-127 view of the registry. `None` for
+    /// unknown ids — caller surfaces `UnknownDerivative`.
+    let resolve (id: DerivativeProfileId) (registry: DerivativeProfileRegistry) : DerivativeSpec list option =
+        registry
+        |> resolveEntries id
+        |> Option.map (
+            List.choose (function
+                | ImageDerivative spec -> Some spec
+                | GeneralDerivative _ -> None)
+        )
+
+    /// Resolve a (profile, derivative-name) pair to the image
+    /// spec — the original pre-Phase-127 lookup. `None` when
+    /// either is unknown (or the name resolves to a general
+    /// entry; use `resolveEntry` for the full vocabulary).
     let resolveSpec
         (id: DerivativeProfileId)
         (derivativeName: string)
