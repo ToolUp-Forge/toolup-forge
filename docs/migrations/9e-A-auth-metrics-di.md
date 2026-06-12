@@ -99,7 +99,7 @@ ServerApp.empty
 |> ...
 ```
 
-`fromEnvMetered` shares all dispatch behaviour with `fromEnv` — `HeaderAuthProvider` fallback, unrecognised-mode warning text, missing-issuer warning text. Metrics only flow when `TOOLUP_AUTH_MODE=oidc` resolves to the OIDC branch.
+`fromEnvMetered` shares all dispatch behaviour with `fromEnv` — including the auth-hardening sweep's fail-fast dispatch (2026-06-12): an explicit `TOOLUP_AUTH_MODE=oidc` without `TOOLUP_OIDC_ISSUER`, and any unrecognised `TOOLUP_AUTH_MODE` value, now **refuse startup** (`invalidOp`) instead of warning and falling back; only a genuinely-unset mode falls back to the dev `HeaderAuthProvider`. Metrics only flow when `TOOLUP_AUTH_MODE=oidc` resolves to the OIDC branch.
 
 ### Pattern 3 — Entra External ID
 

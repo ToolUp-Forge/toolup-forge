@@ -72,6 +72,8 @@ let authProvider =
 
 Consumers that don't ship a given cloud companion simply omit the corresponding resolver — `TOOLUP_SECRET_STORE=azure-key-vault` in a consumer without the `ToolUp.Secrets.AzureKeyVault` reference falls back to encrypted-local with a Warn, same posture as today.
 
+**Auth-dispatch hardening (2026-06-12, post-11.G).** `AuthProvider.fromEnv` / `fromEnvMetered` no longer Warn-and-fall-back on explicit misconfiguration: `TOOLUP_AUTH_MODE=oidc` without `TOOLUP_OIDC_ISSUER`, and any unrecognised `TOOLUP_AUTH_MODE` value, refuse startup via `invalidOp`. Only a genuinely-unset `TOOLUP_AUTH_MODE` keeps the dev `HeaderAuthProvider` fallback (GP 11 — the unset-everything dev posture is unchanged). The "byte-for-byte identical fallback messages" contract stated at the top of this doc therefore no longer covers the two explicit-misconfiguration arms of the auth dispatch — those now fail the boot deliberately.
+
 ## `ServerConfigOverrides`
 
 Curated record carrying the small set of fields that need consumer-specific values on top of `ServerConfig.fromEnv`'s env-var-derived baseline:
