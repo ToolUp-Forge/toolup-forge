@@ -756,6 +756,16 @@ let compose
     | Some cfg -> cfg services |> ignore
     | None -> ()
 
+    // Giraffe stock-helper DI defaults (extracted to
+    // `ComposeBootstrap.registerGiraffeDefaults`) — `INegotiationConfig`
+    // + `Json.ISerializer` (FableConverters-backed) + `Xml.ISerializer`,
+    // so consumer handlers can use `RequestErrors.*` / `negotiate` /
+    // `json` without a `Giraffe.MissingDependencyException`. Every
+    // registration is `TryAdd`-semantics and this runs AFTER the
+    // `extensions.ServiceConfig` hook, so a consumer-registered
+    // serializer / negotiation config always wins.
+    registerGiraffeDefaults services
+
     // Phase 15e tail — per-request scope/subject/surface DI wiring
     // (extracted to `ComposeScopeResolver.registerScopeResolution`).
     // Resolves `IStorageScopeResolver` / `ISubjectResolver` /

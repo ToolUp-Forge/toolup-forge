@@ -142,7 +142,10 @@ let private buildSellerHost (auth: IPeerAuthProvider) (peer: IPlatformPeer) (aud
             webHost
                 .UseTestServer()
                 .ConfigureServices(fun services ->
-                    services.AddGiraffe() |> ignore
+                    // No `AddGiraffe()` needed: `JsonRpcPeerHost.routes`
+                    // writes via the DI-free `SetStatusCode` /
+                    // `WriteStringAsync` primitives and never resolves
+                    // the Giraffe serializer / negotiation services.
                     services.AddSingleton<IPeerAuthProvider>(auth) |> ignore
                     services.AddSingleton<IPlatformPeer>(peer) |> ignore
                     services.AddSingleton<IAuditLog>(audit) |> ignore)

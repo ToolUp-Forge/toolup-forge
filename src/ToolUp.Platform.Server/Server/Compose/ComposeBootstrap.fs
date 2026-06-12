@@ -4,6 +4,7 @@ open Giraffe
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.DependencyInjection.Extensions
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -102,6 +103,43 @@ let runConfigPreflight (services: IServiceCollection) (config: ServerConfig) (re
 let registerCspAggregate (services: IServiceCollection) (config: ServerConfig) : unit =
     services.AddSingleton<SecurityHardening.ResolvedCspPolicy>(SecurityHardening.aggregate services config)
     |> ignore
+
+/// Giraffe stock-helper DI defaults. The pipeline mounts Giraffe
+/// (`app.UseGiraffe` in `configurePipeline`), but until this landed the
+/// service composition never registered the services Giraffe's stock
+/// response helpers resolve from DI per request: `INegotiationConfig`
+/// (the whole negotiating `RequestErrors.*` / `ServerErrors.*` /
+/// `Successful.*` family plus `negotiate` / `negotiateWith`),
+/// `Giraffe.Json.ISerializer` (the `json` helper) and
+/// `Giraffe.Xml.ISerializer` (the `xml` helper). A consumer route
+/// handler reaching for any of them threw
+/// `Giraffe.MissingDependencyException` at request time, which the
+/// exception middleware masked as an opaque 500 — even on the error
+/// branches that should have explained the problem (observed in a
+/// consumer deployment where `RequestErrors.BAD_REQUEST` itself 500'd).
+///
+/// Shape: `Json.ISerializer` is pinned FIRST to a Giraffe serializer
+/// backed by the SDK's STJ wire options (`FableConverters.shared`) so
+/// `json`-helper output matches the platform wire format for F# records
+/// / options / DUs — Giraffe's own default (camelCase STJ without the
+/// F# converter set) does not handle those shapes the same way. Then
+/// `AddGiraffe()` fills in the rest (`RecyclableMemoryStreamManager`,
+/// `Xml.ISerializer`, `INegotiationConfig`); its internal
+/// `Json.ISerializer` registration no-ops against the pin because every
+/// registration `AddGiraffe()` makes is `TryAdd`-semantics.
+///
+/// Ordering contract: must run AFTER the `extensions.ServiceConfig`
+/// hook, so a consumer- or companion-registered `Json.ISerializer` /
+/// `INegotiationConfig` / `Xml.ISerializer` makes the SDK's `TryAdd`
+/// registrations no-op — the consumer always wins. The SDK's own code
+/// paths resolve none of these services, so existing deployments are
+/// byte-for-byte unaffected (GP 11); this is purely additive enablement
+/// for consumer handlers.
+let registerGiraffeDefaults (services: IServiceCollection) : unit =
+    services.TryAddSingleton<Json.ISerializer>(fun _ ->
+        Json.Serializer(ToolUp.Remoting.Json.SystemTextJson.FableConverters.shared) :> Json.ISerializer)
+
+    services.AddGiraffe() |> ignore
 
 /// Phase 16a — branch the `Build()` call by `ProcessProfile`.
 /// `WebApplicationBuilder.Build()` returns `WebApplication` (Kestrel

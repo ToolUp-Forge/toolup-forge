@@ -96,6 +96,7 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 - **Config admin API** — when any registered module declares a `ModuleConfigSchema`.
 - **Audit log** — `AuditLog` backed by `IEventStore`, sourcing events under `_platform.audit`.
 - **Notification channel** — `InMemoryNotificationChannel` by default; replaceable.
+- **Giraffe response-helper services** — `INegotiationConfig`, `Json.ISerializer`, and `Xml.ISerializer`, so route handlers can use Giraffe's stock helpers (`json`, `xml`, `negotiate`, and the negotiating `RequestErrors.*` / `ServerErrors.*` / `Successful.*` families) out of the box. The `json` helper is backed by the SDK's System.Text.Json wire options (`ToolUp.Remoting.Json.SystemTextJson.FableConverters`), so its output matches the platform wire format for F# records / options / DUs — not Giraffe's default camelCase serialization. Every registration uses `TryAdd` semantics and runs after consumer/companion service config, so registering your own `Json.ISerializer` / `INegotiationConfig` overrides the SDK default.
 - **Health / ready endpoints** — `/health` (liveness) + `/ready` (readiness).
 - **Config preflight** — runs every registered `IConfigValidator` before HTTP binds; refuses to start on `Error` outcomes.
 - **Metrics endpoint** — `/metrics` (OpenMetrics text) when `MetricsEndpoint` is enabled.

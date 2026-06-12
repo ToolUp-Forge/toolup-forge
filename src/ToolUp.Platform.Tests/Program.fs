@@ -272,6 +272,12 @@ let allTests =
         // RootRequestId across the HTTP boundary).
         PlatformPeerTests.inProcessTests
         PlatformPeerTests.workedExampleTests
+        // Giraffe stock-helper DI defaults — the SDK composition registers
+        // INegotiationConfig + Json.ISerializer (FableConverters-backed) +
+        // Xml.ISerializer so consumer handlers can use RequestErrors.* /
+        // negotiate / json without a MissingDependencyException; TryAdd
+        // semantics keep consumer-registered overrides winning.
+        GiraffeStockHelperTests.tests
         // Phase 18a — cross-deployment audit transparency: caller-scoped
         // audit projection + bespoke context-aware dispatch + typed proxy
         // round-trip. The scoping (a peer reads only its own rows) is the
