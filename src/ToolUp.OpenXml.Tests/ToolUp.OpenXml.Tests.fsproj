@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Fixtures.fs" />
+        <Compile Include="InProcess\ImportTests.fs" />
+        <Compile Include="InProcess\RoundTripTests.fs" />
+        <Compile Include="InProcess\RevisionTests.fs" />
+        <Compile Include="InProcess\KnowledgeBaseTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.OpenXml\ToolUp.OpenXml.fsproj" />
+        <!-- Phase 124 — the KB default-path regression fixtures drive
+             `ServerExtractors.extractChunks` directly (via the
+             InternalsVisibleTo grant in the KB Server fsproj) to pin
+             the flat DOCX output and prove the structured mode is
+             opt-in only. -->
+        <ProjectReference Include="..\ToolUp.KnowledgeBase.Server\ToolUp.KnowledgeBase.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <!-- Fixture builder constructs in-memory documents directly. -->
+        <PackageReference Include="DocumentFormat.OpenXml" />
+    </ItemGroup>
+</Project>

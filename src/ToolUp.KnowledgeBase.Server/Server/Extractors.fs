@@ -601,7 +601,14 @@ let extractChunks
         match Path.GetExtension(fileName).ToLowerInvariant() with
         | ".pdf" -> return! extractPdf ocr tables docId fileName bytes
         | ".pptx" -> return extractPptx docId fileName bytes
-        | ".docx" -> return extractDocx docId fileName bytes
+        | ".docx" ->
+            // Phase 124 — compose-time opt-in structured mode
+            // (heading-path-aware chunking over the ToolUp.OpenXml
+            // structural model). GP 11: the flat path stays the
+            // byte-for-byte default.
+            match DocxExtraction.currentMode () with
+            | DocxExtraction.DocxExtractionMode.Structured -> return DocxExtraction.extract docId fileName bytes
+            | DocxExtraction.DocxExtractionMode.Flat -> return extractDocx docId fileName bytes
         | ".xlsx" -> return extractXlsx docId fileName bytes
         | ".csv" -> return extractCsv docId fileName bytes
         | ".txt" -> return extractTxt docId fileName bytes

@@ -21,6 +21,16 @@
         <ProjectReference Include="..\ToolUp.RAG.Core\ToolUp.RAG.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.RAG.Server\ToolUp.RAG.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.KnowledgeBase.Core\ToolUp.KnowledgeBase.Core.fsproj" />
+        <!-- Phase 124 — opt-in structured DOCX extraction builds on the
+             ToolUp.OpenXml structural model. -->
+        <ProjectReference Include="..\ToolUp.OpenXml\ToolUp.OpenXml.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 124 — the KB default-path regression fixtures live in
+             the OpenXml companion's test pack; the extractor module is
+             `internal`, so the pack needs visibility (same shape as
+             Platform.Server → Platform.Tests). -->
+        <InternalsVisibleTo Include="ToolUp.OpenXml.Tests" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -28,6 +38,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Server\JsonHelpers.fs" />
+        <Compile Include="Server\DocxExtraction.fs" />
         <Compile Include="Server\Extractors.fs" />
         <Compile Include="Server\ExtractionErrors.fs" />
         <Compile Include="Server\IndexStorage.fs" />

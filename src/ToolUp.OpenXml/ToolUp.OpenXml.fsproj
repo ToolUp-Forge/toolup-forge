@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.OpenXml</PackageId>
+        <Description>ToolUp.OpenXml — shared structural / revision layer over DocumentFormat.OpenXml for ToolUp.Platform consumers. Imports .docx into an immutable typed structural model (headings, styled runs, tables, numbering, comments, revisions) with an explicit lossy-residue report naming everything the model did not capture; emits the model back to .docx; and lowers programmatic edit sets to native Word tracked changes (w:ins / w:del runs + comment parts with author attribution) a reviewer can accept or reject in Word.</Description>
+        <PackageTags>fsharp;sdk;server;docx;openxml;wordprocessingml;tracked-changes;revisions;redline;documents</PackageTags>
+        <!-- Phase 124 — single-tier companion (server-side; no Fable
+             client surface). Deliberately substrate-free: no
+             ToolUp.Platform.* reference — the structural model, import,
+             emission and revision lowering are pure document transforms,
+             so the companion's only dependency is the OpenXml SDK
+             (GP 1: the vendor dep stays here, never in
+             ToolUp.Platform.*). README lives alongside the fsproj and
+             is packed via the Directory.Build.props auto-include. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="DocumentFormat.OpenXml" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="DocModel.fs" />
+        <Compile Include="Package.fs" />
+        <Compile Include="Import.fs" />
+        <Compile Include="Emit.fs" />
+        <Compile Include="Revisions.fs" />
+    </ItemGroup>
+</Project>
