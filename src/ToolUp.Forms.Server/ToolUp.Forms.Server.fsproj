@@ -31,6 +31,7 @@
         <Compile Include="Server\ActionLedgerMetrics.fs" />
         <Compile Include="Server\WorkflowEngine.fs" />
         <Compile Include="Server\FormValidator.fs" />
+        <Compile Include="Server\ValidationAttributeBridge.fs" />
         <Compile Include="Server\Aggregations.fs" />
         <Compile Include="Server\IFormSubmissionAnalyser.fs" />
         <Compile Include="Server\AnalyserCache.fs" />

@@ -1,6 +1,8 @@
 namespace ToolUp.Remoting.Server
 
 open System
+open System.Collections
+open System.Collections.Generic
 open System.Reflection
 open System.Text.RegularExpressions
 open Microsoft.FSharp.Reflection
@@ -32,6 +34,19 @@ type ValidationAttribute() =
     /// wraps the message into a `FieldViolation` carrying the field
     /// path it was evaluated on.
     abstract Validate: value: obj -> string option
+
+/// Phase 69e — shared numeric coercion for the range / min / max
+/// attributes. Boxes `int` / `int64` / `float` / `decimal` to `float`;
+/// anything else is `None` (the attribute passes — strong typing or a
+/// dedicated attribute covers non-numeric shapes).
+module internal Numeric =
+    let asFloat (value: obj) : float option =
+        match value with
+        | :? int as i -> Some(float i)
+        | :? int64 as i -> Some(float i)
+        | :? float as f -> Some f
+        | :? decimal as d -> Some(float d)
+        | _ -> None
 
 /// Phase 69e — value's string length must be at least `n` characters.
 /// Null strings always fail. For non-string values the attribute passes
@@ -120,12 +135,73 @@ type RangeAttribute(min: float, max: float) =
         | Some v when v < min || v > max -> Some(sprintf "value %g outside allowed range [%g, %g]" v min max)
         | Some _ -> None
 
+/// Phase 69e — numeric value must be >= `n`. Accepts `int` / `int64` /
+/// `float` / `decimal` via boxed comparison; non-numeric values pass.
+type MinValueAttribute(n: float) =
+    inherit ValidationAttribute()
+    member _.MinValue = n
+
+    override _.Validate value =
+        match Numeric.asFloat value with
+        | Some v when v < n -> Some(sprintf "value %g below minimum %g" v n)
+        | _ -> None
+
+/// Phase 69e — numeric value must be <= `n`.
+type MaxValueAttribute(n: float) =
+    inherit ValidationAttribute()
+    member _.MaxValue = n
+
+    override _.Validate value =
+        match Numeric.asFloat value with
+        | Some v when v > n -> Some(sprintf "value %g above maximum %g" v n)
+        | _ -> None
+
+/// Phase 69e — string value must parse as an absolute URI.
+type UriAttribute() =
+    inherit ValidationAttribute()
+
+    override _.Validate value =
+        match value with
+        | :? string as s when not (isNull s) ->
+            match Uri.TryCreate(s, UriKind.Absolute) with
+            | true, _ -> None
+            | false, _ -> Some "value is not a valid absolute URI"
+        | _ -> None
+
+// -----------------------------------------------------------------------------
+
+/// Phase 69e — per-request validation context handed to an
+/// `IFieldValidator`. Carries the Phase 69b request context (subject id
+/// + correlation id) so a custom validator can make a context-dependent
+/// decision (e.g. "unique within this tenant"). Async resolution is a
+/// future extension; v0 validators are synchronous.
+type IValidationContext =
+    abstract SubjectId: string
+    abstract CorrelationId: string option
+
+/// Phase 69e — custom field-validator escape hatch. The single method
+/// returns `None` on pass, `Some message` on fail — same convention as
+/// the built-in attributes, but with the per-request context available.
+/// Implementations must have a parameterless constructor (the engine
+/// instantiates by type) and be stateless between calls.
+type IFieldValidator =
+    abstract Validate: value: obj * context: IValidationContext -> string option
+
+/// Phase 69e — wires a consumer-supplied `IFieldValidator` onto a field.
+/// `[<Custom(typeof<MyValidator>)>]` where `MyValidator :> IFieldValidator`.
+/// The base `Validate` is a no-op (the engine dispatches the custom
+/// validator with the request context, which the attribute can't see).
+type CustomAttribute(validatorType: Type) =
+    inherit ValidationAttribute()
+    member _.ValidatorType = validatorType
+    override _.Validate(_value: obj) = None
+
 // -----------------------------------------------------------------------------
 
 /// Phase 69e — per-field violation surfaced in the categorised envelope.
-/// `Path` is the dotted field path (e.g. `Address.Postcode`) for nested
-/// records. v0 ships the top-level field name; nested traversal lands
-/// in a follow-up.
+/// `Path` is the dotted/indexed field path: `Address.Postcode` for a
+/// nested record field, `Lines[2].Sku` for a list element. `Code` is the
+/// attribute name minus the `Attribute` suffix (`MinLength`, `Custom`, …).
 type FieldViolation = {
     Path: string
     Code: string
@@ -134,7 +210,89 @@ type FieldViolation = {
 
 // -----------------------------------------------------------------------------
 
+/// Phase 69e — empty/anonymous validation context. The dispatcher
+/// supplies a real one (subject id + correlation id from the Phase 69b
+/// request context); tests and non-dispatcher callers use this.
+[<RequireQualifiedAccess>]
+module ValidationContext =
+    let none =
+        { new IValidationContext with
+            member _.SubjectId = "anonymous"
+            member _.CorrelationId = None
+        }
+
 module internal Validation =
+
+    // Reflect over public AND non-public records — input DTOs are usually
+    // public, but a consumer may declare an internal input record; the
+    // engine must see its fields either way (Phase 69d.tail parity).
+    let private reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
+
+    // Phase 69e — family-agnostic attribute recognition. forge API records
+    // sit in Platform.Core (Fable-compiled) and carry the tier-shared
+    // `ToolUp.Platform.*` validation mirrors, which are pure-metadata
+    // attributes that DON'T inherit the server-tier `ValidationAttribute`
+    // (they can't — the Core tier has no server dependency). Without this
+    // bridge those mirrors are invisible to the engine — validation on a
+    // Fable API record silently never fires (the same defect class the
+    // 69d.tail auth classifier closed). `tryNormalise` maps either family
+    // to the server-tier attribute whose `Validate` carries the logic,
+    // reading the mirror's properties reflectively by simple type name.
+    let private intProp (a: obj) (name: string) : int option =
+        match a.GetType().GetProperty name with
+        | null -> None
+        | p ->
+            match p.GetValue a with
+            | :? int as i -> Some i
+            | _ -> None
+
+    let private floatProp (a: obj) (name: string) : float option =
+        match a.GetType().GetProperty name with
+        | null -> None
+        | p ->
+            match p.GetValue a with
+            | :? float as f -> Some f
+            | :? int as i -> Some(float i)
+            | _ -> None
+
+    let private strProp (a: obj) (name: string) : string option =
+        match a.GetType().GetProperty name with
+        | null -> None
+        | p ->
+            match p.GetValue a with
+            | :? string as s when not (isNull s) -> Some s
+            | _ -> None
+
+    let private tryNormalise (a: obj) : ValidationAttribute option =
+        match a with
+        // Server-tier family (incl. CustomAttribute, itself a
+        // ValidationAttribute) passes straight through.
+        | :? ValidationAttribute as v -> Some v
+        | _ ->
+            match a.GetType().Name with
+            | "MinLengthAttribute" ->
+                intProp a "MinLength"
+                |> Option.map (fun n -> MinLengthAttribute n :> ValidationAttribute)
+            | "MaxLengthAttribute" ->
+                intProp a "MaxLength"
+                |> Option.map (fun n -> MaxLengthAttribute n :> ValidationAttribute)
+            | "NotEmptyAttribute" -> Some(NotEmptyAttribute() :> ValidationAttribute)
+            | "RegexAttribute" ->
+                strProp a "Pattern"
+                |> Option.map (fun p -> RegexAttribute p :> ValidationAttribute)
+            | "EmailAttribute" -> Some(EmailAttribute() :> ValidationAttribute)
+            | "UriAttribute" -> Some(UriAttribute() :> ValidationAttribute)
+            | "RangeAttribute" ->
+                match floatProp a "Min", floatProp a "Max" with
+                | Some lo, Some hi -> Some(RangeAttribute(lo, hi) :> ValidationAttribute)
+                | _ -> None
+            | "MinValueAttribute" ->
+                floatProp a "MinValue"
+                |> Option.map (fun n -> MinValueAttribute n :> ValidationAttribute)
+            | "MaxValueAttribute" ->
+                floatProp a "MaxValue"
+                |> Option.map (fun n -> MaxValueAttribute n :> ValidationAttribute)
+            | _ -> None
 
     /// Extract the input type from an API record field. Fable.Remoting
     /// method signatures are F# function types (`'input -> Async<'output>`);
@@ -151,62 +309,168 @@ module internal Validation =
         else
             None
 
-    /// Walk fields of a record type once at startup and report whether
-    /// any field carries a `ValidationAttribute`. Used to fast-skip the
-    /// per-request engine when no method requires validation.
-    let private recordHasValidations (recordType: Type) : bool =
-        if not (FSharpType.IsRecord recordType) then
+    /// The F# record type reachable directly from a field's type, if the
+    /// field is a record, an array / list / seq of records, or an option
+    /// of a record. Used both to decide whether to recurse at request
+    /// time and whether a method needs validation at startup.
+    let private nestedRecordType (t: Type) : Type option =
+        if FSharpType.IsRecord(t, reflectionFlags) then
+            Some t
+        elif t.IsArray then
+            let e = t.GetElementType()
+
+            if FSharpType.IsRecord(e, reflectionFlags) then
+                Some e
+            else
+                None
+        elif t.IsGenericType then
+            let gtd = t.GetGenericTypeDefinition()
+
+            if gtd = typedefof<_ list> || gtd = typedefof<_ option> || gtd = typedefof<seq<_>> then
+                let e = t.GetGenericArguments().[0]
+
+                if FSharpType.IsRecord(e, reflectionFlags) then
+                    Some e
+                else
+                    None
+            else
+                None
+        else
+            None
+
+    /// Recursively report whether a record type — or any nested record /
+    /// list-of-record / option-of-record reachable from it — carries a
+    /// `ValidationAttribute`. `visited` guards against cyclic types.
+    let rec private recordHasValidations (visited: HashSet<Type>) (recordType: Type) : bool =
+        if not (FSharpType.IsRecord(recordType, reflectionFlags)) then
+            false
+        elif not (visited.Add recordType) then
             false
         else
-            FSharpType.GetRecordFields recordType
-            |> Array.exists (fun pi -> pi.GetCustomAttributes(true) |> Array.exists (fun a -> a :? ValidationAttribute))
+            FSharpType.GetRecordFields(recordType, reflectionFlags)
+            |> Array.exists (fun pi ->
+                let hasDirect =
+                    pi.GetCustomAttributes(true)
+                    |> Array.exists (fun a -> tryNormalise a |> Option.isSome)
 
-    /// Cache per-method: input type ONLY when the method's input is a
-    /// record carrying at least one validation attribute. Methods with
-    /// non-record inputs (or records without validators) are absent
-    /// from the map, so per-request lookup is a fast Map.tryFind miss.
+                hasDirect
+                || (match nestedRecordType pi.PropertyType with
+                    | Some nested -> recordHasValidations visited nested
+                    | None -> false))
+
+    /// Cache per-method: input type ONLY when the method's input record
+    /// (or a record nested within it) carries at least one validation
+    /// attribute. Methods with non-record inputs (or records without
+    /// validators anywhere in the tree) are absent from the map, so
+    /// per-request lookup is a fast `Map.tryFind` miss.
     let classify (apiType: Type) : Map<string, Type> =
-        if not (FSharpType.IsRecord apiType) then
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             Map.empty
         else
-            FSharpType.GetRecordFields apiType
+            FSharpType.GetRecordFields(apiType, reflectionFlags)
             |> Array.choose (fun apiField ->
                 match firstInputType apiField with
-                | Some inputT when recordHasValidations inputT -> Some(apiField.Name, inputT)
+                | Some inputT when recordHasValidations (HashSet<Type>()) inputT -> Some(apiField.Name, inputT)
                 | _ -> None)
             |> Map.ofArray
 
-    /// Evaluate every validation attribute on the record's fields
-    /// against the deserialised input value. Returns the list of
-    /// violations; empty list means pass.
-    let evaluate (inputType: Type) (inputValue: obj) : FieldViolation list =
-        if isNull inputValue then
-            []
+    /// Instantiate an `IFieldValidator` by type (parameterless ctor).
+    /// Returns `None` if the type doesn't implement the interface or
+    /// can't be constructed — a misconfigured custom validator must not
+    /// crash the request path (it just doesn't run).
+    let private instantiateValidator (validatorType: Type) : IFieldValidator option =
+        try
+            match Activator.CreateInstance validatorType with
+            | :? IFieldValidator as v -> Some v
+            | _ -> None
+        with _ ->
+            None
+
+    /// Unwrap an F# `option` value reflectively — `Some inner` → `Some
+    /// inner`, `None` → `None`.
+    let private optionInner (optionType: Type) (value: obj) : obj option =
+        if isNull value then
+            None
         else
-            FSharpType.GetRecordFields inputType
-            |> Array.collect (fun pi ->
-                let attrs =
-                    pi.GetCustomAttributes(true)
-                    |> Array.choose (fun a ->
-                        match a with
-                        | :? ValidationAttribute as v -> Some v
-                        | _ -> None)
+            let case, fields = FSharpValue.GetUnionFields(value, optionType)
+            if case.Name = "Some" then Some fields.[0] else None
 
-                let value = pi.GetValue inputValue
+    /// Evaluate every validation attribute across the input record's
+    /// fields AND recursively into nested records, list / array / seq
+    /// elements, and option-wrapped records. Violations carry a dotted /
+    /// indexed path (`Address.Postcode`, `Lines[2].Sku`). Collect-then-
+    /// emit: every violation from one bad input is reported in a single
+    /// pass (no short-circuit). `context` is handed to any `[<Custom>]`
+    /// `IFieldValidator`.
+    let evaluate (context: IValidationContext) (inputType: Type) (inputValue: obj) : FieldViolation list =
+        let violations = ResizeArray<FieldViolation>()
 
-                attrs
-                |> Array.choose (fun attr ->
-                    match attr.Validate value with
-                    | Some message ->
-                        let code = attr.GetType().Name.Replace("Attribute", "")
+        let rec walk (prefix: string) (recordType: Type) (recordValue: obj) =
+            if isNull recordValue || not (FSharpType.IsRecord(recordType, reflectionFlags)) then
+                ()
+            else
+                for pi in FSharpType.GetRecordFields(recordType, reflectionFlags) do
+                    let value = pi.GetValue recordValue
 
-                        Some {
-                            Path = pi.Name
-                            Code = code
-                            Message = message
-                        }
-                    | None -> None))
-            |> Array.toList
+                    let path = if prefix = "" then pi.Name else prefix + "." + pi.Name
+
+                    for a in pi.GetCustomAttributes(true) do
+                        match tryNormalise a with
+                        | Some(:? CustomAttribute as c) ->
+                            match instantiateValidator c.ValidatorType with
+                            | Some v ->
+                                match v.Validate(value, context) with
+                                | Some message ->
+                                    violations.Add {
+                                        Path = path
+                                        Code = "Custom"
+                                        Message = message
+                                    }
+                                | None -> ()
+                            | None -> ()
+                        | Some attr ->
+                            match attr.Validate value with
+                            | Some message ->
+                                violations.Add {
+                                    Path = path
+                                    Code = attr.GetType().Name.Replace("Attribute", "")
+                                    Message = message
+                                }
+                            | None -> ()
+                        | None -> ()
+
+                    descend path pi.PropertyType value
+
+        and descend (path: string) (fieldType: Type) (value: obj) =
+            if isNull value then
+                ()
+            elif FSharpType.IsRecord(fieldType, reflectionFlags) then
+                walk path fieldType value
+            elif fieldType.IsArray then
+                let e = fieldType.GetElementType()
+
+                if FSharpType.IsRecord(e, reflectionFlags) then
+                    (value :?> IEnumerable)
+                    |> Seq.cast<obj>
+                    |> Seq.iteri (fun i item -> walk (sprintf "%s[%d]" path i) e item)
+            elif fieldType.IsGenericType then
+                let gtd = fieldType.GetGenericTypeDefinition()
+                let e = fieldType.GetGenericArguments().[0]
+
+                if gtd = typedefof<_ option> && FSharpType.IsRecord(e, reflectionFlags) then
+                    match optionInner fieldType value with
+                    | Some inner -> walk path e inner
+                    | None -> ()
+                elif
+                    (gtd = typedefof<_ list> || gtd = typedefof<seq<_>>)
+                    && FSharpType.IsRecord(e, reflectionFlags)
+                then
+                    (value :?> IEnumerable)
+                    |> Seq.cast<obj>
+                    |> Seq.iteri (fun i item -> walk (sprintf "%s[%d]" path i) e item)
+
+        walk "" inputType inputValue
+        violations |> List.ofSeq
 
     /// Parse the request body (a JSON `[arg1, arg2, ...]` array, post
     /// body-normalisation) and pull the first argument as the

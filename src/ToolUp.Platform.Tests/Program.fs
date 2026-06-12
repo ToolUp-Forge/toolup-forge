@@ -48,6 +48,7 @@ let allTests =
         AuthorizationTests.tests
         AuditTests.tests
         RateLimitTests.tests
+        ValidationTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
         NarrativeElementTests.tests

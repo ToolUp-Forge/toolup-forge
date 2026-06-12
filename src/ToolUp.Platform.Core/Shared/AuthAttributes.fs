@@ -94,6 +94,36 @@ type RegexAttribute(pattern: string) =
     inherit Attribute()
     member _.Pattern = pattern
 
+/// Input field's string value must be a syntactically valid email.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type EmailAttribute() =
+    inherit Attribute()
+
+/// Input field's string value must parse as an absolute URI.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type UriAttribute() =
+    inherit Attribute()
+
+/// Input field's numeric value must be in the inclusive range
+/// `[min, max]` (accepts int / int64 / float / decimal).
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type RangeAttribute(min: float, max: float) =
+    inherit Attribute()
+    member _.Min = min
+    member _.Max = max
+
+/// Input field's numeric value must be >= `n`.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type MinValueAttribute(n: float) =
+    inherit Attribute()
+    member _.MinValue = n
+
+/// Input field's numeric value must be <= `n`.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type MaxValueAttribute(n: float) =
+    inherit Attribute()
+    member _.MaxValue = n
+
 // 0.5.0 (Phase 69h.tail) — forge-native audit attributes mirroring
 // ToolUp.Remoting.Server's Phase 69h AuditAttribute / PiiSafeAttribute.
 // Same rationale as the auth markers above: forge API records sit in

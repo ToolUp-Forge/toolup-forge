@@ -14,6 +14,7 @@ let allTests =
         FormsServerHygieneTests.tests
         PublishableHardeningTests.tests
         PublicSubmitSurfaceTests.tests
+        ValidationBridgeTests.tests
     ]
 
 [<EntryPoint>]

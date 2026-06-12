@@ -746,7 +746,21 @@ module GiraffeUtil =
                                 match Validation.parseFirstArgFromBody bodyText inputT stjOptions with
                                 | Some inputValue ->
                                     validationParsedFirstArg.Value <- Some inputValue
-                                    return Validation.evaluate inputT inputValue
+
+                                    // Phase 69e — hand the per-request context to
+                                    // any `[<Custom>]` IFieldValidator (subject id +
+                                    // correlation id from the Phase 69b context).
+                                    let validationContext =
+                                        { new IValidationContext with
+                                            member _.SubjectId =
+                                                match resolvedAuthContextForRequest with
+                                                | Some c -> c.SubjectId
+                                                | None -> "anonymous"
+
+                                            member _.CorrelationId = Some correlationId
+                                        }
+
+                                    return Validation.evaluate validationContext inputT inputValue
                                 | None -> return []
                             | _ -> return []
                         }
