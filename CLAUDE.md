@@ -203,6 +203,17 @@ For HTTP-shaped companions (audit sinks, notification sinks): use BCL `HttpClien
 
 For stateful companions (job scheduler, vector store, etc.): document explicitly in the file header whether the impl is dev-only or distributed-ready. Distributed-ready impls must be stateless between handler calls (rule 4). Dev-only impls are clearly marked.
 
+### Native-dependency companions (P/Invoke)
+
+Every shipped companion to date wraps a managed SDK. A companion that wraps a *native* library (via P/Invoke) follows these additional conventions:
+
+- **RID-specific vendoring.** Native binaries ship inside the nupkg under `runtimes/{rid}/native/` (`runtimes/win-x64/native/`, `runtimes/linux-x64/native/`, `runtimes/osx-arm64/native/`, …) so the .NET host resolves the right artefact per platform at restore time. Declare only the RIDs actually built and tested. An absent RID must fail loudly at companion `create` time — probe for the native library and raise a descriptive error naming the missing RID — never at first P/Invoke call deep in a request path.
+- **Narrow C-shim facade.** Bind against a deliberately small, stable C surface. If the upstream API is wide or C++-shaped, vendor a thin C shim exposing only the entry points the companion needs. All `DllImport` extern declarations live in a single `Native.fs` per companion; everything above it is ordinary managed F# implementing the SDK interface. Treat the extern file like a wire contract — changes are reviewed as breaking-change candidates.
+- **Native artefact CI: build-or-vendor, hash-pinned.** Decide per companion whether CI *builds* the native artefact from pinned upstream source or *vendors* a prebuilt binary. Either way the artefact is hash-pinned — SHA-256 recorded in the repo and verified during the build — so a silently-swapped binary fails the build instead of shipping. Vendored binaries record upstream version, source URL, and hash in the companion README.
+- **Packaging + licensing for LGPL-class native deps.** Dynamic linking only — the P/Invoke boundary is dynamic by construction; keep it that way (no static linking of LGPL code into a shipped artefact). Ship the native library unmodified, credit it in `NOTICE.md` (licence + version) and the companion README, and keep the binary user-replaceable — the `runtimes/{rid}/native/` layout already satisfies LGPL's relinking expectation. Stronger-copyleft (GPL-class) native deps are not shippable as companions consumers compose by default; if one is genuinely needed, gate it behind explicit opt-in and document the licence implications in the README.
+
+Everything else follows the standard companion rules above: GP 1 isolation (the native dependency never reaches `ToolUp.Platform.*`), substrate dependencies through `create`, README packed into the nupkg, and an explicit dev-only vs production-ready declaration in the file header.
+
 ## Props-injection pattern (legacy source-injection contract)
 
 Some Client-tier companions still inject source via `.Client.props` rather than ship a DLL nupkg. The contract: a companion's `.Client.props` file extends the `_ToolUpPlatformClientSources` item group, and `ToolUp.Platform.Client.props` (in the consuming app's MSBuild graph) prepends those items to `<Compile>` before CoreCompile.
