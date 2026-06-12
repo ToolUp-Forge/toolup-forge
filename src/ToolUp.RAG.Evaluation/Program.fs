@@ -88,75 +88,94 @@ let private writeReport (path: string) (report: EvalReport) =
 
 // ─── Entry point ──────────────────────────────────────────────────
 
+// Phase 122 — `ablation` subcommand: the pipeline-composition gate.
+// `dotnet run --project src/ToolUp.RAG.Evaluation -- ablation [--dataset <name>]`
+// (default dataset: scifact). Exits non-zero on a metric-floor breach or
+// on non-deterministic ordering across identical runs. Kept as a console
+// subcommand rather than a `dotnet test` category per the repo's testing
+// convention (Expecto-style console runners; `dotnet test` is a silent
+// false-green against them — see CLAUDE.md "Build pipeline").
+let private runAblation (argv: string list) =
+    let datasetName =
+        match argv with
+        | "--dataset" :: name :: _ -> name
+        | _ -> "scifact"
+
+    Ablation.run datasetName |> Async.RunSynchronously
+
 [<EntryPoint>]
 let main argv =
-    let fixturesArg, baselineArg, outArg =
-        let mutable fixtures = []
-        let mutable baseline: string option = None
-        let mutable out: string option = None
-        let mutable i = 0
+    match List.ofArray argv with
+    | "ablation" :: rest -> runAblation rest
+    | _ ->
 
-        while i < argv.Length do
-            match argv[i] with
-            | "--baseline" when i + 1 < argv.Length ->
-                baseline <- Some argv[i + 1]
-                i <- i + 2
-            | "--out" when i + 1 < argv.Length ->
-                out <- Some argv[i + 1]
-                i <- i + 2
-            | f ->
-                fixtures <- fixtures @ [ f ]
-                i <- i + 1
+        let fixturesArg, baselineArg, outArg =
+            let mutable fixtures = []
+            let mutable baseline: string option = None
+            let mutable out: string option = None
+            let mutable i = 0
 
-        fixtures, baseline, out
+            while i < argv.Length do
+                match argv[i] with
+                | "--baseline" when i + 1 < argv.Length ->
+                    baseline <- Some argv[i + 1]
+                    i <- i + 2
+                | "--out" when i + 1 < argv.Length ->
+                    out <- Some argv[i + 1]
+                    i <- i + 2
+                | f ->
+                    fixtures <- fixtures @ [ f ]
+                    i <- i + 1
 
-    let fixtures =
-        if List.isEmpty fixturesArg then
-            [ Path.Combine(AppContext.BaseDirectory, "fixtures", "platform-readme.json") ]
-        else
-            fixturesArg
+            fixtures, baseline, out
 
-    let mutable regressionFound = false
+        let fixtures =
+            if List.isEmpty fixturesArg then
+                [ Path.Combine(AppContext.BaseDirectory, "fixtures", "platform-readme.json") ]
+            else
+                fixturesArg
 
-    for fixturePath in fixtures do
-        if not (File.Exists fixturePath) then
-            eprintfn "Fixture not found: %s" fixturePath
-            regressionFound <- true
-        else
-            let fixture = FixtureLoader.load fixturePath
+        let mutable regressionFound = false
 
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "rag-eval-" + Guid.NewGuid().ToString("N"))
+        for fixturePath in fixtures do
+            if not (File.Exists fixturePath) then
+                eprintfn "Fixture not found: %s" fixturePath
+                regressionFound <- true
+            else
+                let fixture = FixtureLoader.load fixturePath
 
-            try
-                let pipeline = buildPipeline tempDir
-                let report = RetrievalEval.evaluate pipeline fixture |> Async.RunSynchronously
-                printReport report
+                let tempDir =
+                    Path.Combine(Path.GetTempPath(), "rag-eval-" + Guid.NewGuid().ToString("N"))
 
-                match outArg with
-                | Some path -> writeReport path report
-                | None -> ()
-
-                match baselineArg with
-                | None -> ()
-                | Some path when not (File.Exists path) ->
-                    eprintfn "Baseline not found: %s — skipping regression check" path
-                | Some path ->
-                    let json = File.ReadAllText path
-
-                    let options = FableConverters.create ()
-
-                    let baseline = JsonSerializer.Deserialize<EvalReport>(json, options)
-
-                    match RetrievalEval.detectRegression 0.05 baseline report with
-                    | Ok() -> printfn "✓ No regression vs baseline (%s)" path
-                    | Error msg ->
-                        eprintfn "✗ Regression detected: %s" msg
-                        regressionFound <- true
-            finally
                 try
-                    Directory.Delete(tempDir, recursive = true)
-                with _ ->
-                    ()
+                    let pipeline = buildPipeline tempDir
+                    let report = RetrievalEval.evaluate pipeline fixture |> Async.RunSynchronously
+                    printReport report
 
-    if regressionFound then 1 else 0
+                    match outArg with
+                    | Some path -> writeReport path report
+                    | None -> ()
+
+                    match baselineArg with
+                    | None -> ()
+                    | Some path when not (File.Exists path) ->
+                        eprintfn "Baseline not found: %s — skipping regression check" path
+                    | Some path ->
+                        let json = File.ReadAllText path
+
+                        let options = FableConverters.create ()
+
+                        let baseline = JsonSerializer.Deserialize<EvalReport>(json, options)
+
+                        match RetrievalEval.detectRegression 0.05 baseline report with
+                        | Ok() -> printfn "✓ No regression vs baseline (%s)" path
+                        | Error msg ->
+                            eprintfn "✗ Regression detected: %s" msg
+                            regressionFound <- true
+                finally
+                    try
+                        Directory.Delete(tempDir, recursive = true)
+                    with _ ->
+                        ()
+
+        if regressionFound then 1 else 0
