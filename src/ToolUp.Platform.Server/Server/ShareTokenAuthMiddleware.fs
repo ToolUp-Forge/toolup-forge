@@ -118,6 +118,21 @@ type ShareTokenAuthMiddleware(next: RequestDelegate) =
                 // deployment land here.
                 do! next.Invoke(ctx)
             | Some token ->
+                // Phase 136 — the share token rides in the URL (`?token=`)
+                // or the `X-Share-Token` header; either way it is the
+                // bearer secret. Stamp `Referrer-Policy: no-referrer` and
+                // `Cache-Control: no-store` on the response so the token
+                // is not leaked via the `Referer` header of any cross-
+                // origin sub-resource the shared page loads, nor cached by
+                // an intermediary. Set here (before `next`) only when
+                // absent, so the downstream handler — which runs after —
+                // can still override per route.
+                if not (ctx.Response.Headers.ContainsKey "Referrer-Policy") then
+                    ctx.Response.Headers["Referrer-Policy"] <- StringValues "no-referrer"
+
+                if not (ctx.Response.Headers.ContainsKey "Cache-Control") then
+                    ctx.Response.Headers["Cache-Control"] <- StringValues "no-store"
+
                 let store =
                     match ctx.RequestServices.GetService(typeof<IShareTokenStore>) with
                     | :? IShareTokenStore as s -> Some s

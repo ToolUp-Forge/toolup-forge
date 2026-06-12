@@ -108,6 +108,7 @@ let allTests =
         AuditReplicatorTests.tests
         Ed25519ArtifactSubstrateTests.tests
         ShareTokenStoreTests.tests
+        ShareTokenAuthMiddlewareTests.tests
         InMemoryPendingInviteStoreTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests
