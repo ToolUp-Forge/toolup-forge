@@ -136,6 +136,8 @@ Additionally:
 
 `ToolUp.Platform.Tests` ships contract test packs (`IJobSchedulerContract`, `IModuleQueryBusContract`, `IShareTokenStoreContract`, `IDataSourceContract`, `IEntityStoreContract`, etc.). Any external implementation can validate against the same conformance bar.
 
+**Authorization-by-attribute (Phase 69d.tail) is part of the same structural-enforcement story.** API record methods declare their access requirement via `[<RequiresRole>]` / `[<RequiresClaim>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` / `[<PublicEndpoint>]` (the tier-shared `ToolUp.Platform.*` mirrors for Fable-compiled records), and the dispatcher's startup classifier refuses to start on any unclassified method. This satisfies rule 4 by construction: the handler's auth state arrives parameter-passed per request via the Phase 66 `Subject` resolution, never closure-captured — so any distributed dispatcher implementation evaluates the same normalised `AuthRequirement` data. Migration recipe: [`docs/migrations/69d-authorization-metadata.md`](docs/migrations/69d-authorization-metadata.md); audit twin: [`docs/migrations/69h-audit-annotation-sweep.md`](docs/migrations/69h-audit-annotation-sweep.md).
+
 ## Module convention (consumer-facing, 4 files per module)
 
 Consumers organise their domain modules as four files. Single-fsproj — modules are not subject to the cross-tier split that applies to SDK companions. The Core/Server/Client split applies only to **publishable SDK packages** because DLL boundaries are part of their public contract; consumer modules are deployment-specific.
