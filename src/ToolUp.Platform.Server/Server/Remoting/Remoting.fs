@@ -37,6 +37,7 @@ module Remoting =
         AuthContextResolver = None
         RateLimitStore = None
         AuditEmitter = None
+        RequireAuditOnRoleGated = false
         IdempotencyStore = None
         IdempotencyTtl = System.TimeSpan.FromHours 1.0
         SchemaVersion = 1
@@ -203,6 +204,18 @@ module Remoting =
     let withAudit (emitter: IAuditEmitter) (options: RemotingOptions<'t, 'implementation>) = {
         options with
             AuditEmitter = Some emitter
+    }
+
+    /// Phase 69h.tail — admin-must-be-audited startup gate. With this
+    /// composed, the dispatcher refuses to start when any method carrying
+    /// a `[<RequiresRole>]` requirement lacks an `[<Audit>]` annotation.
+    /// Role-gated methods are admin-shaped; compliance-edition deployments
+    /// use this to make "admin action without an audit row" structurally
+    /// impossible. Off by default (GP 11) — forge's `Api.make` composes it
+    /// when `TOOLUP_AUDIT_ADMIN_REQUIRED=true` is set in the environment.
+    let withAuditRequiredOnRoleGated (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            RequireAuditOnRoleGated = true
     }
 
     /// Phase 69f — compose an `IIdempotencyStore` against which

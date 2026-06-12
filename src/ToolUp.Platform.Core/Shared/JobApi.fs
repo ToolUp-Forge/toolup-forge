@@ -26,13 +26,16 @@ type JobApi = {
     /// List every job in the caller's resolved scope. Order is
     /// `CreatedAt` ascending. Empty when `JobScheduler` is disabled
     /// for the deployment, or when no jobs are scheduled.
+    [<AllowAnonymous>]
     ListJobs: unit -> Async<JobDefinition list>
 
     /// Read one job by id. `None` for unknown ids — does not throw.
+    [<AllowAnonymous>]
     GetJob: System.Guid -> Async<JobDefinition option>
 
     /// Read the most recent N run-history rows for a job, newest
     /// first. Capped server-side at 50.
+    [<AllowAnonymous>]
     GetRecentRuns: System.Guid * int -> Async<JobRun list>
 
     /// Submit a new job. Returns `Ok JobId` on success, `Error
@@ -41,21 +44,28 @@ type JobApi = {
     /// The handler stamps `CreatedBy` from the caller's
     /// `AccessContext.UserId` regardless of the value supplied on
     /// the wire (informational only). `ScopeId` is overwritten by
-    /// the resolved scope.
+    /// the resolved scope. Dispatcher-anonymous by design: the
+    /// handler's Owner/Admin write gate applies only to `TeamMember`
+    /// subjects; single-user modes own their scope's jobs.
+    [<AllowAnonymous>]
     Schedule: JobRegistration -> Async<Result<System.Guid, ScheduleError>>
 
     /// Cancel a job — sets `Status = Cancelled`. Idempotent.
+    [<AllowAnonymous>]
     Cancel: System.Guid -> Async<Result<unit, string>>
 
     /// Disable a job — sets `Status = Disabled`. Re-enable via
     /// `Enable`. Stops dispatch without losing the schedule.
+    [<AllowAnonymous>]
     Disable: System.Guid -> Async<Result<unit, string>>
 
     /// Re-enable a previously-disabled job. No-op when already
     /// `Active`.
+    [<AllowAnonymous>]
     Enable: System.Guid -> Async<Result<unit, string>>
 
     /// Fire a job immediately, regardless of its `Trigger`.
     /// `Error` when the job is unknown or `Status = Cancelled`.
+    [<AllowAnonymous>]
     TriggerOnce: System.Guid -> Async<Result<unit, string>>
 }

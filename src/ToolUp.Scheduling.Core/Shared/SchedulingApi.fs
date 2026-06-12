@@ -1,6 +1,7 @@
 module ToolUp.Scheduling.SchedulingApi
 
 open System
+open ToolUp.Platform // 0.5.0 — forge-native auth attributes
 open ToolUp.Scheduling.SchedulingTypes
 
 // ─── Phase 20 — Fable.Remoting wire contract ────────────────────────
@@ -40,26 +41,47 @@ type SlotSearchRequest = {
 /// applies write gating, and delegates to `IBookingScheduler`.
 type ISchedulingApi = {
     // ─── Resources ───────────────────────────────────────────────
+    // Handler (`SchedulingApiHandler.schedulingApi`) applies no
+    // per-method role gate in v1 — every caller with a resolved
+    // session scope (including anonymous-mode sessions) can call
+    // every method; StorageScope isolation is the gating layer.
+    // Hence `AllowAnonymous` across the surface (honest
+    // classification of today's behaviour, not a policy choice).
+    [<AllowAnonymous>]
     RegisterResource: BookableResource -> Async<Result<unit, BookingError>>
+    [<AllowAnonymous>]
     GetResource: ResourceId -> Async<BookableResource option>
+    [<AllowAnonymous>]
     ListResources: unit -> Async<BookableResource list>
 
     // ─── Bookings ────────────────────────────────────────────────
+    [<AllowAnonymous>]
     Book: Booking -> Async<Result<Booking, BookingError>>
+    [<AllowAnonymous>]
     GetBooking: BookingId -> Async<Booking option>
+    [<AllowAnonymous>]
     Cancel: BookingId * string -> Async<Result<unit, BookingError>>
+    [<AllowAnonymous>]
     Reschedule: RescheduleRequest -> Async<Result<Booking, BookingError>>
+    [<AllowAnonymous>]
     MarkNoShow: BookingId -> Async<Result<unit, BookingError>>
+    [<AllowAnonymous>]
     ListBookings: ResourceId * DateRange -> Async<Booking list>
 
     // ─── Availability ────────────────────────────────────────────
+    [<AllowAnonymous>]
     AddAvailabilityException: AvailabilityException -> Async<Result<unit, BookingError>>
+    [<AllowAnonymous>]
     RemoveAvailabilityException: string -> Async<Result<unit, BookingError>>
+    [<AllowAnonymous>]
     ListAvailabilityExceptions: ResourceId * DateRange -> Async<AvailabilityException list>
 
     // ─── Read-only utilities ─────────────────────────────────────
+    [<AllowAnonymous>]
     FindAvailableSlots: SlotSearchRequest -> Async<TimeSlot list>
+    [<AllowAnonymous>]
     DetectConflicts: Booking -> Async<BookingConflict list>
+    [<AllowAnonymous>]
     ExpandRecurrence: Booking * DateRange -> Async<Booking list>
 }
 

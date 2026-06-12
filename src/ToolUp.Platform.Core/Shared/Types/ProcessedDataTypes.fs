@@ -5,6 +5,10 @@ module ProcessedDataTypes
 
 open System
 open DataManagementTypes
+// Auth/audit attributes (`AllowAnonymous`, `Audit`) — this file is a
+// top-level module, not inside `namespace ToolUp.Platform`, so the
+// attribute namespace must be opened explicitly.
+open ToolUp.Platform
 
 /// Server-side processed payload for a data file. `TypeName` is a string
 /// identifier — typically the fully-qualified F# type name — that routing
@@ -61,11 +65,18 @@ type FileListSnapshot = {
     Processed: ProcessedFileEntry list
 }
 
-/// File Management API contract
+/// File Management API contract. Data-path methods are dispatcher-
+/// anonymous by design: Anonymous-mode deployments upload/read/delete
+/// within their session scope, and `StorageScope` isolation is the
+/// enforcement.
 type FileManagementApi = {
+    [<AllowAnonymous>]
     UploadFile: FileUploadRequest -> Async<FileUploadResult>
+    [<AllowAnonymous>]
     ListFiles: unit -> Async<FileListSnapshot>
+    [<AllowAnonymous>]
     GetFileContent: FileContentRequest -> Async<FileContentResult>
+    [<AllowAnonymous>]
     DeleteFile: string -> Async<Result<unit, string>>
     /// Re-run `DataType.Process` on a previously-uploaded file's
     /// persisted bytes, overwrite the persisted `ProcessedFileEntry`
@@ -75,6 +86,7 @@ type FileManagementApi = {
     /// alternative without this surface is delete + re-upload.
     /// Post-save hooks are NOT fired on reprocess; the raw bytes are
     /// unchanged, so RAG / vectorisation indexing is not invalidated.
+    [<AllowAnonymous>]
     ReprocessFile: string -> Async<Result<ProcessedFileEntry, string>>
     /// Owner / Admin escape hatch — wipe every uploaded file plus its
     /// `_processed_entry__` sidecar in the caller's storage scope.
@@ -83,6 +95,10 @@ type FileManagementApi = {
     /// in `Team` / `MultiTeam` mode; single-user modes (`Anonymous`,
     /// `AuthenticatedEphemeral`, `Individual`) are ungated since the
     /// caller IS the data owner. Emits a single `DataStoreReset`
-    /// audit event — not one `FileDeleted` per file.
+    /// audit event — not one `FileDeleted` per file. Dispatcher-
+    /// anonymous because single-user modes are ungated by design;
+    /// the handler's `canWriteTeamConfig` gate covers team modes.
+    [<AllowAnonymous>]
+    [<Audit "Custom:DataStoreReset">]
     ResetDataStore: unit -> Async<Result<int, string>>
 }

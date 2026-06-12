@@ -4,6 +4,7 @@
 module ToolUp.Forms.FormApi
 
 open System
+open ToolUp.Platform // 0.5.0 — forge-native auth + audit attributes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
@@ -66,14 +67,20 @@ type IssueRecipient = {
 /// Server-side checks: the schema must exist, must be `Publishable`,
 /// and `ServerConfig.PublicBaseUrl` must be set.
 type IssueTokensRequest = {
+    [<PiiSafe>]
     SchemaId: FormSchemaId
+    // `Recipients` deliberately NOT [<PiiSafe>] — handles may be
+    // emails / panel ids and display names are personal data; the
+    // audit payload redacts the field.
     Recipients: IssueRecipient list
     /// `None` = use the share-token store's default lifetime
     /// (typically issue-time + 30 days).
+    [<PiiSafe>]
     ExpiresAt: DateTimeOffset option
     /// `None` = use the share-token store's default (`Some 1` —
     /// one-and-done). `Some None` = explicitly unlimited; useful
     /// for shared-link surveys. `Some (Some n)` = at most `n` uses.
+    [<PiiSafe>]
     UseLimit: int option option
 }
 
@@ -185,7 +192,9 @@ type CloseSurveyMode =
 
 /// Phase 21b (slice 7) — `CloseSurvey` request payload.
 type CloseSurveyRequest = {
+    [<PiiSafe>]
     SchemaId: FormSchemaId
+    [<PiiSafe>]
     Mode: CloseSurveyMode
 }
 
@@ -230,25 +239,40 @@ type DispatchSummary = {
 /// permission gating, and delegates to `IFormStore` / `IWorkflowEngine`.
 type IFormApi = {
     // ─── Schema management (Owner/Admin) ─────────────────────────
+    // Handler gate (`FormApiHandler.withWriteGate`): Owner/Admin in
+    // Team mode; ungated in user-scoped / anonymous-session modes —
+    // so the dispatcher-level classification is `AllowAnonymous` and
+    // the in-handler role gate + StorageScope isolation keep gating.
+    [<AllowAnonymous>]
     SaveSchema: FormSchema -> Async<Result<FormSchema, FormError>>
+    [<AllowAnonymous>]
     GetSchema: FormSchemaId * int option -> Async<FormSchema option>
+    [<AllowAnonymous>]
     ListSchemas: unit -> Async<FormSchema list>
+    [<AllowAnonymous>]
+    [<Audit "PolicyChanged">]
     DeleteSchema: FormSchemaId -> Async<Result<unit, FormError>>
 
     // ─── Submission lifecycle (any authenticated) ────────────────
+    [<AllowAnonymous>]
     Submit: SubmitRequest -> Async<Result<Submission, FormError>>
+    [<AllowAnonymous>]
     UpdateDraft: UpdateDraftRequest -> Async<Result<Submission, FormError>>
+    [<AllowAnonymous>]
     GetSubmission: SubmissionId -> Async<Submission option>
     /// Filtered list. Members see their own submissions only;
     /// Owner/Admin see everything in scope. Server intersects the
     /// caller-supplied query with the visibility predicate.
+    [<AllowAnonymous>]
     ListSubmissions: EntityQuery<Submission> -> Async<Result<Submission list, FormError>>
 
     // ─── Workflow operations ─────────────────────────────────────
+    [<AllowAnonymous>]
     ApplyTransition: ApplyTransitionRequest -> Async<Result<Submission, FormError>>
     /// Enumerate transitions available from the submission's current
     /// state under the workflow it's bound to. Empty list if the
     /// submission has no workflow or has reached a terminal state.
+    [<AllowAnonymous>]
     ListPossibleTransitions: SubmissionId -> Async<Transition list>
 
     // ─── Phase 21b — share-link issuance (Owner/Admin) ────────────
@@ -258,6 +282,8 @@ type IFormApi = {
     /// distribution (own MTA, third-party survey provider, paper /
     /// QR codes, etc.). Requires `ServerConfig.ShareTokenStore =
     /// EnabledShareTokenStore` and `PublicBaseUrl = Some _`.
+    [<AllowAnonymous>]
+    [<Audit "Custom:ShareTokensIssued">]
     IssueTokens: IssueTokensRequest -> Async<Result<IssuedToken list, FormError>>
 
     // ─── Phase 21b — aggregation dashboard (Owner/Admin) ──────────
@@ -269,6 +295,7 @@ type IFormApi = {
     /// invited-respondent submissions. Reserved analyser-output
     /// slot stays empty until an `IFormSubmissionAnalyser`
     /// companion is registered server-side.
+    [<AllowAnonymous>]
     GetAggregations: FormSchemaId -> Async<Result<AggregationSummary, FormError>>
 
     // ─── Phase 21b (slice 6) — optional email-dispatch convenience
@@ -281,6 +308,7 @@ type IFormApi = {
     /// alongside the existing `IssueTokens` prerequisites
     /// (ShareTokenStore enabled + PublicBaseUrl set + schema
     /// Publishable).
+    [<AllowAnonymous>]
     DispatchInvitationsByEmail: DispatchInvitationsRequest -> Async<Result<DispatchSummary, FormError>>
 
     // ─── Phase 21b (slice 7) — multi-survey admin ─────────────────
@@ -290,6 +318,7 @@ type IFormApi = {
     /// `GetAggregations` calls. Any authenticated caller; the
     /// returned list is filtered to the caller's scope by the
     /// underlying `IFormStore.ListSchemas` semantics.
+    [<AllowAnonymous>]
     ListSchemasOverview: unit -> Async<SurveyOverviewRow list>
     /// Close a survey. `HideSchema` flips `Visibility` to
     /// `Internal` (instant — `PublicFormApiHandler` re-checks on
@@ -298,6 +327,8 @@ type IFormApi = {
     /// re-publishing doesn't re-activate); `HideSchemaAndRevoke`
     /// does both. Owner/Admin gated. Returns the count of tokens
     /// revoked plus the post-call visibility.
+    [<AllowAnonymous>]
+    [<Audit "PolicyChanged">]
     CloseSurvey: CloseSurveyRequest -> Async<Result<CloseSurveyResult, FormError>>
 
     // ─── Phase 21c — analyser-output cache control (Owner/Admin) ──
@@ -309,6 +340,7 @@ type IFormApi = {
     /// the count of cache entries invalidated. No-op (returns `0`)
     /// when no cache is wired (deployments without
     /// `withAnalyserCache`).
+    [<AllowAnonymous>]
     RebuildAnalyserOutputs: FormSchemaId -> Async<Result<int, FormError>>
 }
 

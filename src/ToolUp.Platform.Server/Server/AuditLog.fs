@@ -183,6 +183,8 @@ let private decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
             Some(KnowledgeOriginalRetrieved(fromAuditJson<KnowledgeOriginalRetrievedPayload> evt.Payload))
         | "KnowledgeOriginalRetrievalDenied" ->
             Some(KnowledgeOriginalRetrievalDenied(fromAuditJson<KnowledgeOriginalRetrievalDeniedPayload> evt.Payload))
+        | "RemotingMethodAudited" ->
+            Some(RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> evt.Payload))
         | _ -> None
     with _ ->
         None
@@ -315,6 +317,11 @@ type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger) =
         // + logged as a write failure, silently losing the audit row).
         | KnowledgeOriginalRetrieved p -> toAuditJson p
         | KnowledgeOriginalRetrievalDenied p -> toAuditJson p
+        // Phase 69h.tail — dispatcher-emitted uniform audit rows arriving
+        // through the `Api.make` default `IAuditEmitter` → `IAuditLog`
+        // bridge. Same partial-match rule as the cases above: added in the
+        // same commit as the DU case.
+        | RemotingMethodAudited p -> toAuditJson p
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {

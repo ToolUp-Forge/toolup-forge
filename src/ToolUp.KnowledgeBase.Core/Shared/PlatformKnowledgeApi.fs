@@ -3,6 +3,7 @@
 
 module PlatformKnowledgeApi
 
+open ToolUp.Platform
 open SharedTypes
 
 // ─── PlatformKnowledgeApi (Fable.Remoting wire surface) ───────────────
@@ -49,12 +50,16 @@ type IPlatformKnowledgeApi = {
     /// entry through the same code path. Vectorisation runs
     /// asynchronously after the call returns; subscribe to
     /// `IngestionStatusNotificationKey` to watch progress.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "Custom:PlatformDocumentUploaded">]
     UploadPlatformDocument: byte[] -> string -> Async<Result<KnowledgeDocument, string>>
 
     /// Delete a Platform Knowledge Base document by id. Gated on
     /// `canModifyPlatformConfig`. Removes the raw blob, the index
     /// entry, and every embedded vector chunk in `VectorScope.Platform`.
     /// Idempotent — deleting an unknown id returns `Ok ()`.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "Custom:PlatformDocumentDeleted">]
     DeletePlatformDocument: string -> Async<Result<unit, string>>
 
     /// List every document in the Platform Knowledge Base. Read-only
@@ -64,6 +69,7 @@ type IPlatformKnowledgeApi = {
     /// toggle state so they can manage content before flipping the
     /// read switch on. Empty list when no Platform KB content exists
     /// in the deployment.
+    [<AllowAnonymous>]
     ListPlatformDocuments: unit -> Async<KnowledgeDocument list>
 
     /// Phase 4b deferred follow-up — server-side copy of a team-scope
@@ -91,5 +97,6 @@ type IPlatformKnowledgeApi = {
     /// caller holds `PlatformRole.PlatformAdmin`) is a follow-up;
     /// operators can call the API directly via the Fable.Remoting
     /// proxy in the meantime.
+    [<RequiresRole "PlatformAdmin">]
     PromoteTeamDocumentToPlatform: string -> Async<Result<KnowledgeDocument, string>>
 }

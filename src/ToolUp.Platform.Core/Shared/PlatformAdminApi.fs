@@ -61,6 +61,7 @@ type PlatformAdminApi = {
     /// re-emitting the audit event. The actor recorded on the audit
     /// event is the calling user's `AccessContext.UserId`.
     [<RequiresRole "PlatformAdmin">]
+    [<Audit "PermissionGranted">]
     AssignPlatformAdmin: string -> Async<Result<unit, string>>
 
     /// Revoke `PlatformRole.PlatformAdmin` from `targetUserId`. Gated
@@ -70,6 +71,7 @@ type PlatformAdminApi = {
     /// Idempotent — revoking a non-admin returns `Ok` without an audit
     /// event.
     [<RequiresRole "PlatformAdmin">]
+    [<Audit "PermissionRevoked">]
     RevokePlatformAdmin: string -> Async<Result<unit, string>>
 
     /// Read the current runtime
@@ -89,5 +91,6 @@ type PlatformAdminApi = {
     /// Returns `Error` on persistence failure (the in-memory cell is
     /// only updated on successful save).
     [<RequiresRole "PlatformAdmin">]
+    [<Audit "PolicyChanged">]
     SetPlatformKnowledgeBase: PlatformKnowledgeBaseMode -> Async<Result<unit, string>>
 }

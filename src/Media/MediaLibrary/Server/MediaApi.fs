@@ -3,6 +3,8 @@
 
 namespace ToolUp.MediaLibrary
 
+open ToolUp.Platform // 0.5.0 — forge-native auth + audit attributes
+
 // ─── Phase 88 — IMediaApi (Fable.Remoting contract) ───────────────────
 //
 // The metadata + management surface a client uses alongside the raw
@@ -12,9 +14,19 @@ namespace ToolUp.MediaLibrary
 // path bound to the caller's active scope.
 
 type IMediaApi = {
+    // Handler (`MediaCompose.mediaApi`) requires a resolved
+    // `StorageScope` (fails closed without one) but applies no
+    // role/claim gate beyond it — anonymous-mode session scopes
+    // qualify, so `AllowAnonymous` is the honest classification;
+    // scope isolation keeps gating.
+    [<AllowAnonymous>]
     GetMedia: string -> Async<MediaRecord option>
+    [<AllowAnonymous>]
     ListMedia: string * int -> Async<MediaRecord list>
+    [<AllowAnonymous>]
+    [<Audit "Custom:MediaDeleted">]
     DeleteMedia: string -> Async<Result<unit, MediaDeleteError>>
+    [<AllowAnonymous>]
     GetSignedUrl: string * int -> Async<Result<string, SignedUrlError>>
 }
 

@@ -88,18 +88,43 @@ module internal Streaming =
                 | Some _ ->
                     let attrs = apiField.GetCustomAttributes(true)
 
+                    // Simple-name matching so the tier-shared
+                    // `ToolUp.Platform.*` attribute mirrors are caught
+                    // alongside this assembly's own family (Phase
+                    // 69d.tail — same rationale as `AuthClassifier`).
+                    let stringProp (name: string) (a: obj) : string option =
+                        match a.GetType().GetProperty name with
+                        | null -> None
+                        | p ->
+                            match p.GetValue a with
+                            | :? string as s -> Some s
+                            | _ -> None
+
                     let unenforceable =
                         attrs
                         |> Array.choose (fun a ->
                             match a with
-                            | :? RequiresRoleAttribute as r -> Some(sprintf "RequiresRole(\"%s\")" r.Role)
-                            | :? RequiresClaimAttribute as c -> Some(sprintf "RequiresClaim(\"%s\")" c.Claim)
-                            | :? TenantScopedAttribute -> Some "TenantScoped"
                             | :? RateLimitAttribute as rl ->
                                 Some(sprintf "RateLimit(%d, %ds)" rl.Count rl.WindowSeconds)
-                            | :? AuditAttribute as au -> Some(sprintf "Audit(\"%s\")" au.KindName)
-                            | :? IdempotentAttribute -> Some "Idempotent"
-                            | _ -> None)
+                            | _ ->
+                                match a.GetType().Name with
+                                | "RequiresRoleAttribute" ->
+                                    Some(
+                                        sprintf
+                                            "RequiresRole(\"%s\")"
+                                            (stringProp "Role" a |> Option.defaultValue "?")
+                                    )
+                                | "RequiresClaimAttribute" ->
+                                    Some(
+                                        sprintf
+                                            "RequiresClaim(\"%s\")"
+                                            (stringProp "Claim" a |> Option.defaultValue "?")
+                                    )
+                                | "TenantScopedAttribute" -> Some "TenantScoped"
+                                | "AuditAttribute" ->
+                                    Some(sprintf "Audit(\"%s\")" (stringProp "KindName" a |> Option.defaultValue "?"))
+                                | "IdempotentAttribute" -> Some "Idempotent"
+                                | _ -> None)
                         |> Array.toList
 
                     if List.isEmpty unenforceable then

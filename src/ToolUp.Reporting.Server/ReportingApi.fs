@@ -1,5 +1,7 @@
 namespace ToolUp.Reporting
 
+open ToolUp.Platform // 0.5.0 — forge-native auth attributes
+
 // ─── Phase 23 — ReportApi Fable.Remoting contract ────────────────────
 //
 // Typed RPC the client (Reporting admin UI / module-side render
@@ -32,17 +34,26 @@ type RenderRpcError =
 /// `Async<Result<_, _>>` per the SDK convention. The handler is
 /// scope-resolved per request; callers don't pass scopeId.
 type IReportApi = {
+    // `ReportApiHandler.create` itself applies no role/claim gate —
+    // the scopeId is resolved caller-side and scope isolation is the
+    // gating layer (the "Owner / Admin gated" doc lines below
+    // describe the intended deployment wiring, not an in-handler
+    // enforcement). `AllowAnonymous` documents today's behaviour.
     /// List every template the caller can see at the resolved
     /// scope. Owner / Admin see CRUD-managed templates; non-admins
     /// see render-allowed templates only.
+    [<AllowAnonymous>]
     ListTemplates: unit -> Async<ReportTemplate list>
     /// Save (create or update) a template. Owner / Admin gated.
+    [<AllowAnonymous>]
     SaveTemplate: ReportTemplate -> Async<Result<ReportTemplate, string>>
     /// Delete a template. Owner / Admin gated.
+    [<AllowAnonymous>]
     DeleteTemplate: TemplateId -> Async<Result<unit, string>>
     /// Render the named template against the supplied placeholder
     /// values. Inline-vs-blob routing decided by the handler based
     /// on output size + ReportApiConfig.
+    [<AllowAnonymous>]
     Render: TemplateId * Map<string, PlaceholderValue> -> Async<Result<RenderOutcome, RenderRpcError>>
 }
 

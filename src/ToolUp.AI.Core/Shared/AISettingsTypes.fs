@@ -4,6 +4,7 @@
 namespace ToolUp.AI
 
 open System
+open ToolUp.Platform
 
 // ─── Client-facing view types ────────────────────────────────────
 
@@ -78,10 +79,12 @@ type AISettingsApi = {
     /// Providers the caller can configure. Returns the factory's
     /// `Available` list — empty when the deployment is `PlatformOnly`
     /// (user configuration is disabled deployment-wide).
+    [<AllowAnonymous>]
     ListAvailable: unit -> Async<AIProviderDescriptor list>
     /// Current scope's configuration, as a client-safe view. Returns
     /// an empty view when no config has been saved or when the mode
     /// does not support persistent config.
+    [<AllowAnonymous>]
     GetMyConfig: unit -> Async<AIUserConfigView>
     /// Create a new instance or replace an existing one keyed by
     /// `Label`. The request's `ApiKey` is written to the secret
@@ -91,16 +94,19 @@ type AISettingsApi = {
     /// Validation: `ProviderId` must match a descriptor from
     /// `ListAvailable`. Unknown providers are rejected to prevent
     /// orphaned configurations.
+    [<RequiresClaim "scope">]
     SaveInstance: AIProviderInstanceSaveRequest -> Async<Result<unit, string>>
     /// Remove an instance and its stored API key by label. Idempotent
     /// — deleting a non-existent label succeeds silently. When the
     /// deleted label was `ActiveProviderLabel`, active is cleared so
     /// the factory falls back per policy on the next request.
+    [<RequiresClaim "scope">]
     DeleteInstance: string -> Async<Result<unit, string>>
     /// Set (or clear) the active instance for chat. Passing `None`
     /// clears the active label — the factory then falls back per
     /// policy. Passing `Some l` requires `l` to exist in
     /// `ConfiguredProviders`; unknown labels are rejected.
+    [<RequiresClaim "scope">]
     SetActive: string option -> Async<Result<unit, string>>
     /// Verify a configured instance's API key by sending a minimal
     /// prompt to its provider. Returns `Ok ()` on any successful
@@ -109,6 +115,7 @@ type AISettingsApi = {
     /// user-facing message from either `ProviderResolutionError` or
     /// `AIProviderError`. Used by the settings UI before the user
     /// activates the instance.
+    [<AllowAnonymous>]
     TestConnection: string -> Async<Result<unit, string>>
     /// Descriptors for every platform-configured provider the
     /// deployment has wired up (Phase 70). Empty list when the factory
@@ -119,12 +126,14 @@ type AISettingsApi = {
     /// (byte-identical to pre-Phase-70 single-provider behaviour);
     /// two-or-more descriptors render both dropdowns and let the user
     /// switch between Anthropic / OpenAI / Gemini.
+    [<AllowAnonymous>]
     GetPlatformDescriptors: unit -> Async<AIProviderDescriptor list>
     /// Set (or clear) the caller's preferred model for the platform
     /// provider. Persisted at the caller's config scope. `None`
     /// clears the override — subsequent resolution uses the platform
     /// descriptor's `DefaultModel`. In `Anonymous` mode the request
     /// is rejected (no persistent config scope).
+    [<RequiresClaim "scope">]
     SetPlatformModelOverride: string option -> Async<Result<unit, string>>
     /// Phase 70 — Set (or clear) the caller's preferred provider id
     /// when the deployment wires ≥2 platform providers. Persisted at
@@ -135,5 +144,6 @@ type AISettingsApi = {
     /// `factory.PlatformDescriptors`); unknown values reject. Same
     /// scope semantics as `SetPlatformModelOverride` — user-rendering
     /// choice, not team-config.
+    [<RequiresClaim "scope">]
     SetPlatformProviderOverride: string option -> Async<Result<unit, string>>
 }

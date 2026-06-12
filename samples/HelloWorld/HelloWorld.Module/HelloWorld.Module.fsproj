@@ -44,5 +44,10 @@
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
+        <!-- Phase 69d.tail — the API record carries the forge-native
+             auth attributes ([<AllowAnonymous>] etc.), which live in
+             ToolUp.Platform.Core. A real consumer module gets this
+             transitively from the ToolUp.Platform NuGet packages. -->
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     </ItemGroup>
 </Project>

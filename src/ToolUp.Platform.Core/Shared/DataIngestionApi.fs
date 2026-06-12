@@ -25,19 +25,25 @@ type IDataIngestionApi = {
     /// List every data-source config in the caller's resolved scope.
     /// Empty when `DataIngestion` is disabled for the deployment, or
     /// when no sources have been configured.
+    [<AllowAnonymous>]
     ListDataSources: unit -> Async<DataSourceConfig list>
 
     /// Read one data-source config by id. `None` for unknown ids —
     /// does not throw.
+    [<AllowAnonymous>]
     GetDataSource: DataSourceId -> Async<DataSourceConfig option>
 
     /// Persist a data-source config. Idempotent — re-saving the same
     /// `Id` overwrites. Owner / Admin only in Team mode.
+    [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     SaveDataSource: DataSourceConfig -> Async<Result<unit, string>>
 
     /// Delete a data-source config (and stop scheduled refreshes
     /// against it). Does not delete the persisted `IngestionRun`
     /// history — that remains for audit. Owner / Admin only.
+    [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     DeleteDataSource: DataSourceId -> Async<Result<unit, string>>
 
     /// Trigger an immediate refresh of one table from a data source.
@@ -47,11 +53,13 @@ type IDataIngestionApi = {
     /// ingestion runs asynchronously on the scheduler's worker;
     /// admin UIs poll `ListRecentRuns` for completion.
     /// Owner / Admin only in Team mode.
+    [<RequiresClaim "scope">]
     TriggerRefresh: DataSourceId * string -> Async<Result<System.Guid, string>>
 
     /// Read the most recent N ingestion-run rows for a data source.
     /// First tuple element is the source id; second is the count
     /// (capped server-side at 50). Newest first.
+    [<AllowAnonymous>]
     ListRecentRuns: DataSourceId * int -> Async<IngestionRun list>
 
     /// Start an OAuth Authorization Code flow for the
@@ -64,6 +72,7 @@ type IDataIngestionApi = {
     /// `flowName`). The `flowName` matches `IOAuthCredentialFlow.Name`
     /// (e.g. `"google-analytics"`) and is contributed by the
     /// connector companion's credential-UI plugin.
+    [<RequiresClaim "scope">]
     BeginOAuth: DataSourceId * string -> Async<Result<string, string>>
 
     /// Read the credential status for a data source.
@@ -74,6 +83,7 @@ type IDataIngestionApi = {
     /// last refresh attempt was rejected upstream. Generic across
     /// credential shapes (OAuth, service-account, bearer-token); the
     /// admin UI dispatches on the case.
+    [<AllowAnonymous>]
     GetCredentialStatus: DataSourceId -> Async<CredentialStatus>
 
     /// Disconnect a data source. Best-effort revokes the
@@ -83,6 +93,8 @@ type IDataIngestionApi = {
     /// audit event. The `DataSourceConfig` is preserved — operators
     /// re-authorise rather than re-create. Owner / Admin only in
     /// `Team` / `MultiTeam` mode.
+    [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     Disconnect: DataSourceId -> Async<Result<unit, string>>
 
     /// Phase 10h — read the OAuth-refresh token status for a data
@@ -94,5 +106,6 @@ type IDataIngestionApi = {
     /// derived from the `_platform.oauth.refresh` audit family
     /// otherwise. Read-only — no permission gate beyond scope
     /// resolution.
+    [<AllowAnonymous>]
     GetTokenStatus: DataSourceId -> Async<TokenStatus option>
 }

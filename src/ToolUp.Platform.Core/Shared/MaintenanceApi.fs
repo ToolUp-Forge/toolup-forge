@@ -30,6 +30,7 @@ type MaintenanceApi = {
     /// count of canonical events processed, or `Error` when the
     /// event store is in-memory (no indexes to rebuild) or when
     /// the caller lacks Owner / Admin role.
+    [<RequiresClaim "scope">]
     RebuildEventIndexes: unit -> Async<Result<int, string>>
 
     /// Rebuild the idempotency-key and next-run indexes for
@@ -37,5 +38,6 @@ type MaintenanceApi = {
     /// canonical definitions processed, or `Error` when no job
     /// scheduler is enabled or when the caller lacks Owner / Admin
     /// role.
+    [<RequiresClaim "scope">]
     RebuildJobIndexes: unit -> Async<Result<int, string>>
 }

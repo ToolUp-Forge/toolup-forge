@@ -123,7 +123,9 @@ type IModuleQueryBusApi = {
     /// the same three-valued shape as the infrastructure interface.
     /// Permission denial surfaces as `Some (Error (PermissionDenied _))`
     /// rather than an HTTP 403 so the client can branch on it like any
-    /// other typed error.
+    /// other typed error. Dispatcher-anonymous by design — the bus's
+    /// RBAC check against the resolved `AccessContext` is the gate.
+    [<AllowAnonymous>]
     Ask: ModuleQueryRequest -> Async<Result<ModuleQueryResponse, ModuleQueryError> option>
 }
 

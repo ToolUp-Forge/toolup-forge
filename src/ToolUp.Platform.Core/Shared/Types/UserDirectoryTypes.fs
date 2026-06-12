@@ -173,5 +173,6 @@ type IUserDirectoryApi = {
     /// (the companion lost its credential, the provider returned a
     /// 5xx after retries, etc.) — the UI renders the error string
     /// under the typeahead input.
+    [<RequiresClaim "scope">]
     SearchUsers: string * int -> Async<Result<UserSummary list, string>>
 }

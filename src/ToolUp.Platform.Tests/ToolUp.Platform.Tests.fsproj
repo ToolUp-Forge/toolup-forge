@@ -450,6 +450,14 @@
              allocation-pin test is deferred to a TIDY-UP follow-up (requires
              a TestServer scaffold this repo doesn't have today). -->
         <Compile Include="InProcess\TelemetryZeroCostGateTests.fs" />
+        <!-- Phase 69d.tail + 69h.tail — per-method authorization metadata
+             (classifier default-on, family-agnostic recognition) + the
+             [<Audit>] annotation sweep (kind decoding, PII redaction,
+             admin-must-be-audited gate, default IAuditLog bridge). The
+             sweep-enforcement list in AuthorizationTests fails when any
+             forge SDK API record method loses its attribute. -->
+        <Compile Include="InProcess\AuthorizationTests.fs" />
+        <Compile Include="InProcess\AuditTests.fs" />
         <!-- Phase 69m — Dispatcher body + argument-parse fastpath.
              Textual checks pin (a) InvocationPropsInt.Arguments holding
              JsonElement (not raw text); (b) InvocationProps.InputBytes

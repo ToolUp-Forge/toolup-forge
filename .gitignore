@@ -31,6 +31,9 @@ secrets.json
 # up by the SDK on first run). Source content under `samples/*/content/`
 # is tracked; runtime state under `samples/*/data/` is not.
 samples/*/data/
+# Same class at the repo root — running a sample/test server with the
+# repo root as cwd spins up `data/_platform/{dataprotection,preflight}`.
+/data/
 
 # Claude Code worktrees + per-machine settings.
 .claude/worktrees/

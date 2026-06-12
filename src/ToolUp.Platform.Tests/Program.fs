@@ -43,6 +43,10 @@ let allTests =
         // (same class as the SvgPropTests wiring note further down).
         GcpSecretManagerSecretStoreTests.tests
         GcpSecretManagerSecretStoreTests.serviceAccountParseTests
+        // Phase 69d.tail + 69h.tail — authorization classifier default-on
+        // + audit annotation sweep contract packs.
+        AuthorizationTests.tests
+        AuditTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
         NarrativeElementTests.tests

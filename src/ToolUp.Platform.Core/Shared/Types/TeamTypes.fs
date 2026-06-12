@@ -91,6 +91,9 @@ type AccessibleModulesResponse = {
 /// to render a login affordance. Auto-injected by `SDK.Server.compose`.
 type PlatformInfoApi = {
     /// Get current platform configuration (mode, auth requirements).
+    /// Ungated by design — the client shell calls this before any
+    /// sign-in to decide whether to render a login affordance.
+    [<AllowAnonymous>]
     GetPlatformInfo: unit -> Async<PlatformInfo>
 }
 
@@ -103,7 +106,9 @@ type PlatformInfoApi = {
 /// team on behalf of someone else, e.g. before the named owner has
 /// even signed in.
 type CreateTeamRequest = {
-    /// Display name for the new team.
+    /// Display name for the new team. Free text — NOT marked
+    /// `PiiSafe`, so it is redacted from dispatcher-emitted audit
+    /// payloads (the in-handler `TeamCreated` event carries it).
     Name: string
     /// Initial Owner's user id. The named user is added as the
     /// team's `Owner` immediately after the team row is minted; if
@@ -112,6 +117,7 @@ type CreateTeamRequest = {
     /// the IdP having seen them — the pending-invite substrate is
     /// the recommended path when the recipient is identified by
     /// email only).
+    [<PiiSafe>]
     InitialOwnerUserId: string
 }
 
@@ -123,23 +129,34 @@ type TeamApi = {
     /// Legacy path retained so callers can self-Owner without a
     /// directory lookup; the Platform-Management UI uses
     /// `CreateTeamWithOwner` so a Platform Admin can spin up a team
-    /// for someone else.
+    /// for someone else. Authenticated callers only; the handler's
+    /// `TeamCreationPolicy` gate (default `PlatformAdminOnly`) is the
+    /// real enforcement.
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:TeamCreated">]
     CreateTeam: string -> Async<Result<TeamInfo, string>>
     /// Phase 0.5.x — create a team naming an initial Owner explicitly.
     /// Same `TeamCreationPolicy` gate as `CreateTeam` (default
     /// `PlatformAdminOnly`). The caller is NOT auto-promoted to
     /// Owner; only `request.InitialOwnerUserId` is — pass the
     /// caller's own user id when "self" is the intended owner.
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:TeamCreated">]
     CreateTeamWithOwner: CreateTeamRequest -> Async<Result<TeamInfo, string>>
-    /// Get all teams the current user belongs to.
+    /// Get all teams the current user belongs to. Ungated — callers
+    /// without a team store (Anonymous / Individual modes) get `[]`.
+    [<AllowAnonymous>]
     GetMyTeams: unit -> Async<TeamInfo list>
     /// Add a member to a team. Requires Owner or Admin role, plus
     /// `TeamRoles.canManageRole callerRole targetRole` — Admins
     /// cannot add other Admins (only Owners can).
+    [<RequiresClaim "scope">]
     AddTeamMember: string * string * TeamRole -> Async<Result<unit, string>>
     /// Remove a member from a team. Requires Owner or Admin role,
     /// plus `TeamRoles.canManageRole callerRole targetRole` —
     /// Admins cannot remove other Admins (only Owners can).
+    [<RequiresClaim "scope">]
+    [<Audit "PermissionRevoked">]
     RemoveTeamMember: string * string -> Async<Result<unit, string>>
     /// Change an existing member's role on a team. Requires Owner or
     /// Admin. Idempotent — no-op when the member already holds the
@@ -147,12 +164,21 @@ type TeamApi = {
     /// `TeamRoles.canManageRole` gates the caller against BOTH the
     /// old and new roles — Admins cannot promote a Member to Admin
     /// or demote an Admin to Member.
+    [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     ChangeMemberRole: string * string * TeamRole -> Async<Result<unit, string>>
-    /// List all members of a team.
+    /// List all members of a team. Ungated at the dispatcher — the
+    /// handler's leak guard returns `[]` for non-members (same shape
+    /// as "no such team", so team existence doesn't leak).
+    [<AllowAnonymous>]
     GetTeamMembers: string -> Async<TeamMembership list>
-    /// Set the active team for the current user.
+    /// Set the active team for the current user. Ungated at the
+    /// dispatcher — the handler verifies target-team membership
+    /// before persisting.
+    [<AllowAnonymous>]
     SetActiveTeam: string -> Async<Result<unit, string>>
     /// Get the current user's active team.
+    [<AllowAnonymous>]
     GetActiveTeam: unit -> Async<string option>
     /// Phase 5f — read the deployment's `TeamCreationPolicy` so the
     /// `TeamManagerUI` can decide whether to render the Create form
@@ -161,6 +187,7 @@ type TeamApi = {
     /// `PlatformAdminApi.IsPlatformAdmin` to decide whether the caller
     /// would clear the server-side gate; the server-side gate inside
     /// `CreateTeam` is the real enforcement.
+    [<AllowAnonymous>]
     GetTeamCreationPolicy: unit -> Async<TeamCreationPolicy>
 }
 
@@ -173,13 +200,18 @@ type PermissionApi = {
     /// Fetch the full per-team permission document. Owner/Admin only —
     /// members receive `Error`. Returns the empty document when no
     /// permissions are configured (the default on a fresh team).
+    [<RequiresClaim "scope">]
     GetTeamPermissions: string -> Async<Result<TeamPermissions, string>>
     /// Set one member's permissions on one module. Pass an empty list
     /// to remove that member's override (falls back to team defaults).
     /// Owner/Admin only.
+    [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     SetMemberPermissions: string * string * string * ModulePermission list -> Async<Result<unit, string>>
     /// Replace the team's default per-module permissions — applied to
     /// members who lack an explicit override. Owner/Admin only.
+    [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     SetTeamDefaults: string * Map<string, ModulePermission list> -> Async<Result<unit, string>>
 }
 
@@ -205,6 +237,9 @@ type AccessibilityApi = {
     /// `ModulePermissions`) have every managed module in `Accessible` —
     /// opt-in RBAC preserves today's "everyone sees everything"
     /// behaviour until an admin configures perms.
+    /// Ungated by design — anonymous subjects get the full Managed
+    /// list (the handler's Anonymous branch).
+    [<AllowAnonymous>]
     GetAccessibleModules: unit -> Async<AccessibleModulesResponse>
 }
 
@@ -219,5 +254,6 @@ type DataCatalogApi = {
     /// ingest?") and AI tool discovery. The schema for a given type
     /// rides on `entry.Info.Schema`; modules that haven't documented
     /// their columns leave it `None`.
+    [<AllowAnonymous>]
     GetDataCatalog: unit -> Async<DataManagementTypes.DataCatalogResponse>
 }

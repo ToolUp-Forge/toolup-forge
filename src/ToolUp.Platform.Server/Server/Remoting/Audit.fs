@@ -57,24 +57,91 @@ type PiiSafeAttribute() =
 
 module internal Audit =
 
+    /// Decode the string-literal kind name shared by both attribute
+    /// families ("MoneyMoved", "Custom:<name>", …) into an `AuditKind`.
+    let decodeKind (kindName: string) : AuditKind =
+        if kindName.StartsWith "Custom:" then
+            AuditKind.Custom(kindName.Substring 7)
+        else
+            match kindName with
+            | "MoneyMoved" -> AuditKind.MoneyMoved
+            | "PolicyChanged" -> AuditKind.PolicyChanged
+            | "PiiAccessed" -> AuditKind.PiiAccessed
+            | "DataExported" -> AuditKind.DataExported
+            | "PermissionGranted" -> AuditKind.PermissionGranted
+            | "PermissionRevoked" -> AuditKind.PermissionRevoked
+            | "TenantCreated" -> AuditKind.TenantCreated
+            | "TenantDeleted" -> AuditKind.TenantDeleted
+            | other -> AuditKind.Custom other
+
+    // Phase 69d.tail / 69h.tail — like the auth classifier, audit
+    // attribute recognition is by simple type name so BOTH families are
+    // honoured: this assembly's `ToolUp.Remoting.Server.AuditAttribute`
+    // and the tier-shared `ToolUp.Platform.AuditAttribute` mirror that
+    // Fable-compiled API records carry (they cannot reference this
+    // server-tier assembly). Name matching + a reflective property read
+    // happen once per API record at startup.
+    let private tryAuditKind (a: obj) : AuditKind option =
+        match a with
+        | :? AuditAttribute as au -> Some au.Kind
+        | _ when a.GetType().Name = "AuditAttribute" ->
+            match a.GetType().GetProperty "KindName" with
+            | null -> None
+            | p ->
+                match p.GetValue a with
+                | :? string as kindName when not (isNull kindName) -> Some(decodeKind kindName)
+                | _ -> None
+        | _ -> None
+
+    // Same non-public reflection rule as `AuthClassifier.reflectionFlags`:
+    // internal/private API records (and private input records) must
+    // classify identically to public ones — an empty map here silently
+    // skips audit emission for them (fail-open).
+    let private reflectionFlags =
+        System.Reflection.BindingFlags.Public
+        ||| System.Reflection.BindingFlags.NonPublic
+
     /// Cache the `[<Audit>]` attribute per method at startup. Returns
     /// `None` for unaudited methods; `Some kind` for audited.
     let classify (apiType: Type) : Map<string, AuditKind> =
-        if not (FSharpType.IsRecord apiType) then
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             Map.empty
         else
-            FSharpType.GetRecordFields apiType
+            FSharpType.GetRecordFields(apiType, reflectionFlags)
             |> Array.choose (fun pi ->
-                let attr =
-                    pi.GetCustomAttributes(true)
-                    |> Array.tryPick (fun a ->
-                        match a with
-                        | :? AuditAttribute as au -> Some au.Kind
-                        | _ -> None)
+                let attr = pi.GetCustomAttributes(true) |> Array.tryPick tryAuditKind
 
                 match attr with
                 | Some kind -> Some(pi.Name, kind)
                 | None -> None)
+            |> Map.ofArray
+
+    /// Phase 69h.tail — cache the first-argument record type per audited
+    /// method so the dispatcher can build the PII-redacted payload even
+    /// when the input type carries no `ValidationAttribute` (pre-69h.tail
+    /// the payload extraction rode the validation classifier only, so
+    /// audited methods without validators always emitted empty payloads).
+    /// Same first-input derivation as `Validation.firstInputType` —
+    /// replicated locally because this file compiles before Validation.fs.
+    let inputTypes (apiType: Type) : Map<string, Type> =
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
+            Map.empty
+        else
+            let audited = classify apiType
+
+            FSharpType.GetRecordFields(apiType, reflectionFlags)
+            |> Array.choose (fun pi ->
+                if not (audited.ContainsKey pi.Name) then
+                    None
+                elif FSharpType.IsFunction pi.PropertyType then
+                    let inputT, _ = FSharpType.GetFunctionElements pi.PropertyType
+
+                    if FSharpType.IsRecord(inputT, reflectionFlags) then
+                        Some(pi.Name, inputT)
+                    else
+                        None
+                else
+                    None)
             |> Map.ofArray
 
     /// Build the PII-redacted payload map from an input record value.
@@ -91,14 +158,16 @@ module internal Audit =
         else string value
 
     let private isPiiSafe (pi: System.Reflection.PropertyInfo) : bool =
+        // Simple-name match so the tier-shared `ToolUp.Platform.PiiSafeAttribute`
+        // mirror is honoured alongside this assembly's own attribute.
         pi.GetCustomAttributes(true)
-        |> Array.exists (fun (a: obj) -> a :? PiiSafeAttribute)
+        |> Array.exists (fun (a: obj) -> a.GetType().Name = "PiiSafeAttribute")
 
     let payloadFromInputRecord (inputType: System.Type) (inputValue: obj) : Map<string, string> =
-        if isNull inputValue || not (FSharpType.IsRecord inputType) then
+        if isNull inputValue || not (FSharpType.IsRecord(inputType, reflectionFlags)) then
             Map.empty
         else
-            FSharpType.GetRecordFields inputType
+            FSharpType.GetRecordFields(inputType, reflectionFlags)
             |> Array.map (fun pi ->
                 let value = pi.GetValue inputValue
 

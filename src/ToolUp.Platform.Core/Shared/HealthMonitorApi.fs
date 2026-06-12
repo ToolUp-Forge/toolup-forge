@@ -110,6 +110,10 @@ type IHealthMonitorApi = {
     /// Run every registered `IHealthCheck` once, in parallel, with
     /// per-probe timeouts capped at the same 10s aggregator budget
     /// the dev endpoint uses. Returns the live snapshot.
+    /// Phase 4b re-gate: the handler requires `PlatformRole.PlatformAdmin`
+    /// (`canModifyPlatformConfig`) — mode-agnostic, team roles no longer
+    /// suffice.
+    [<RequiresRole "PlatformAdmin">]
     GetCurrentHealth: unit -> Async<Result<HealthSnapshot, string>>
 
     /// Read `IPreflightSnapshot.LastRun`. Snapshot-only — validators
@@ -118,6 +122,7 @@ type IHealthMonitorApi = {
     /// side effects. The dedicated refresh button still hits this
     /// method so a deployer can confirm the most recent boot's
     /// outcome without a hard reload.
+    [<RequiresRole "PlatformAdmin">]
     GetPreflightSnapshot: unit -> Async<Result<PreflightSnapshotView, string>>
 
     /// Phase 9b.A — read the job scheduler's missed-tick telemetry.
@@ -126,5 +131,6 @@ type IHealthMonitorApi = {
     /// that didn't register one); the UI then suppresses the panel.
     /// Cheap pull (in-memory rolling counter) so the dedicated refresh
     /// hits this method on every press without amplifying load.
+    [<RequiresRole "PlatformAdmin">]
     GetJobSchedulerTelemetry: unit -> Async<Result<JobSchedulerTelemetryView, string>>
 }

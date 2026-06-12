@@ -3,6 +3,7 @@
 
 namespace ToolUp.ContentAuthoring
 
+open ToolUp.Platform // 0.5.0 — forge-native auth + audit attributes
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.PublicRendering
@@ -36,11 +37,28 @@ type ContentAdminError =
 /// time; `RestoreRevision` appends the chosen revision as the new
 /// current version (history preserved).
 type IContentAdminApi = {
+    // `ContentAdminApiImpl.create` applies no role/claim gate of its
+    // own — `withContentAdmin` mounts the handler bare and relies on
+    // the deployment's auth middleware to fence `/api/content-admin/*`.
+    // `AllowAnonymous` documents that existing behaviour exactly
+    // (honest classification, not a policy choice). NOTE: this
+    // surface writes the shared `_public` page overlay — a follow-up
+    // tightening to `RequiresRole` is a candidate once the handler
+    // grows an explicit admin gate.
+    [<AllowAnonymous>]
     ListPages: unit -> Async<ContentPageSummary list>
+    [<AllowAnonymous>]
     GetPage: string -> Async<PublicPage option>
+    [<AllowAnonymous>]
     SavePage: PublicPage -> Async<Result<unit, ContentAdminError>>
+    /// Publish / unpublish / schedule lever — the policy-changing
+    /// method on this surface, hence the dispatcher audit opt-in.
+    [<AllowAnonymous>]
+    [<Audit "PolicyChanged">]
     SetStatus: string * PublishStatus -> Async<Result<unit, ContentAdminError>>
+    [<AllowAnonymous>]
     ListRevisions: string -> Async<PublicPageRevisions.PageRevision list>
+    [<AllowAnonymous>]
     RestoreRevision: string * int -> Async<Result<unit, ContentAdminError>>
 }
 

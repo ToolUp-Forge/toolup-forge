@@ -4,6 +4,7 @@
 module SharedTypes
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.Narrative
 
 // ─── Ingestion status ─────────────────────────────────────────────
@@ -279,24 +280,35 @@ type AIContextEntry = {
 // ─── API contract ─────────────────────────────────────────────────
 
 type KnowledgeApi = {
+    /// Anonymous-mode deployments upload KB documents into session
+    /// scope; the handler derives the target scope from the resolved
+    /// `StorageScope`, never from the caller (GP 4).
+    [<AllowAnonymous>]
     UploadDocument: byte[] -> string -> Async<KnowledgeDocument>
+    [<AllowAnonymous>]
     GetDocuments: unit -> Async<KnowledgeDocument list>
+    [<AllowAnonymous>]
     DeleteDocument: string -> Async<Result<unit, string>>
+    [<AllowAnonymous>]
     GetStatus: string -> Async<IngestionStatus>
+    [<AllowAnonymous>]
     IngestNarrative: IngestNarrativeRequest -> Async<Result<KnowledgeDocument, IngestNarrativeError>>
     /// Create a free-form team note. Body is split by blank lines into
     /// paragraph chunks and enqueued through the same RAG ingestion path
     /// as uploads, so the AI can retrieve the note like any other KB
     /// content. Empty body returns `Error`.
+    [<AllowAnonymous>]
     AddNote: AddNoteRequest -> Async<Result<KnowledgeDocument, string>>
     /// Edit an existing note. Re-chunks the body, replaces the prior
     /// chunks in the vector store (per-doc scope-delete + re-enqueue),
     /// bumps `LastEditedAt`. Returns `Error` if `DocId` is not a note
     /// in the caller's scope.
+    [<AllowAnonymous>]
     UpdateNote: UpdateNoteRequest -> Async<Result<KnowledgeDocument, string>>
     /// Read the team's standing AI context. Returns `None` when no
     /// context has been written for this scope or when the scope is
     /// `Anonymous` (no persistent scope).
+    [<AllowAnonymous>]
     GetAIContext: unit -> Async<AIContextEntry option>
     /// Write the team's standing AI context. Body must be markdown;
     /// passing `""` clears the entry. Owner / Admin only in Team and
@@ -304,12 +316,15 @@ type KnowledgeApi = {
     /// AuthenticatedEphemeral. Always rejected in Anonymous mode (no
     /// persistent scope). Emits an `AIContextUpdated` audit event on
     /// every successful write.
+    [<RequiresClaim "scope">]
     SetAIContext: string -> Async<Result<AIContextEntry, string>>
     /// Wipe the caller's KB scope: deletes the index, every uploaded blob,
     /// and every embedded vector chunk. Owner / Admin only in Team and
     /// MultiTeam modes; unrestricted in Anonymous / AuthenticatedEphemeral
     /// / Individual modes (the user only has access to their own scope).
     /// Idempotent — calling twice on an empty index returns `Ok ()`.
+    [<AllowAnonymous>]
+    [<Audit "Custom:KnowledgeIndexReset">]
     ResetIndex: unit -> Async<Result<unit, string>>
     /// Suggested zero-state questions for the AI side panel. The AI
     /// client renders 3-5 of these as clickable affordances when the
@@ -318,6 +333,7 @@ type KnowledgeApi = {
     /// `None` for global suggestions); the server samples document
     /// names and notes from the KB to produce contextual prompts.
     /// Returns an empty list when the KB is empty.
+    [<AllowAnonymous>]
     GetSuggestedQuestions: string option -> Async<string list>
     /// Re-publish a fresh `InventoryUpdated` notification so subscribed
     /// clients (the AI side panel's KB-presence badge, the suggested-
@@ -327,6 +343,7 @@ type KnowledgeApi = {
     /// mutations and want to force a fresh snapshot, and (b) operators
     /// who want a manual "push current state to AI" affordance.
     /// Idempotent — safe to call repeatedly.
+    [<AllowAnonymous>]
     RefreshAIContext: unit -> Async<unit>
     /// Fetch the *original* ingested document for a `KnowledgeDocument`
     /// id (Phase 102) — the handle a citation's
@@ -339,5 +356,9 @@ type KnowledgeApi = {
     /// synthetic sources (narratives, AI-context) return
     /// `Error NoOriginalAvailable`. Every successful fetch emits a
     /// `KnowledgeOriginalRetrieved` audit event (Phase 107).
+    /// Deliberately NOT `[<Audit>]`-annotated — the Phase 107 handler
+    /// emits the richer `KnowledgeOriginalRetrieved` row; a dispatcher
+    /// attribute here would double-row the trail.
+    [<AllowAnonymous>]
     GetOriginalDocument: string -> Async<Result<OriginalDocument, KnowledgeBaseError>>
 }

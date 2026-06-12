@@ -43,10 +43,12 @@ type IFeatureFlagApi = {
     /// In Team mode additionally requires Owner/Admin
     /// (`TeamRoles.canWriteTeamConfig`).
     [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     SetOverride: string * FlagValue -> Async<Result<unit, string>>
     /// Remove one override at the caller's admin scope — subsequent
     /// reads fall through. Idempotent. In Team mode requires Owner/Admin.
     [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     ClearOverride: string -> Async<Result<unit, string>>
 }
 

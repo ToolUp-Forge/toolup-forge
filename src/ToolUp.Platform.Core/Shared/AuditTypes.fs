@@ -1803,6 +1803,33 @@ type TenantLifecycleHookFailedPayload = {
     Error: string
 }
 
+/// Phase 69h.tail — uniform-shape audit row emitted by the ToolUp.Remoting
+/// dispatcher for `[<Audit>]`-annotated API record methods. One payload
+/// shape for every annotated method: the dispatcher knows the method
+/// name, the resolved subject, the request correlation id, the declared
+/// audit kind, and a PII-redacted snapshot of the input record (fields
+/// without `[<PiiSafe>]` are `<redacted:TypeName>`). Bespoke per-domain
+/// audit cases continue to exist where richer payloads are load-bearing;
+/// this case is the structural floor every annotated method gets for free.
+type RemotingMethodAuditedPayload = {
+    /// Declared audit kind from the `[<Audit "...">]` attribute —
+    /// `"MoneyMoved"`, `"PolicyChanged"`, `"PermissionGranted"`, … or
+    /// `"Custom:<name>"` for open-vocabulary kinds.
+    Kind: string
+    /// The invoked API record method's bare name (e.g. `SetOverride`).
+    MethodName: string
+    /// Resolved subject id from the request's auth context
+    /// (`user:{id}` / `team:{tid}:user:{uid}` / `anonymous:{sid}`), or
+    /// `"anonymous"` when no auth context resolved.
+    SubjectId: string
+    /// Request correlation id (Phase 69b.D) for joining against logs +
+    /// telemetry of the same request.
+    CorrelationId: string option
+    /// PII-redacted input-record snapshot. Field name → string value
+    /// for `[<PiiSafe>]` fields; `<redacted:TypeName>` otherwise.
+    Payload: Map<string, string>
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2179,6 +2206,11 @@ type AuditEvent =
     /// (out-of-scope id or no retrievable original). Denials on the
     /// team boundary are audited (GP 4 + GP 6).
     | KnowledgeOriginalRetrievalDenied of KnowledgeOriginalRetrievalDeniedPayload
+    /// Phase 69h.tail — uniform dispatcher-emitted audit row for an
+    /// `[<Audit>]`-annotated ToolUp.Remoting API method. Emitted by the
+    /// default `IAuditEmitter` bridge `Api.make` composes over the
+    /// registered `IAuditLog`. Reserved `SourceModule = "_platform.audit"`.
+    | RemotingMethodAudited of RemotingMethodAuditedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2277,6 +2309,7 @@ module AuditEvent =
         | TenantLifecycleHookFailed _ -> "TenantLifecycleHookFailed"
         | KnowledgeOriginalRetrieved _ -> "KnowledgeOriginalRetrieved"
         | KnowledgeOriginalRetrievalDenied _ -> "KnowledgeOriginalRetrievalDenied"
+        | RemotingMethodAudited _ -> "RemotingMethodAudited"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

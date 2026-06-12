@@ -4,6 +4,10 @@
 namespace ToolUp.Platform.Usage
 
 open System
+// Auth attributes (`RequiresClaim`) — this file lives in the
+// `ToolUp.Platform.Usage` namespace, so the attribute namespace must
+// be opened explicitly.
+open ToolUp.Platform
 
 // ─── Usage admin API (Fable.Remoting surface) ────────────────────
 //
@@ -41,11 +45,13 @@ type IUsageQueryApi = {
     /// Filtered record query. Caller supplies optional resource kind
     /// + date range; the handler scopes to the caller's resolved
     /// `AccessContext.ScopeId`.
+    [<RequiresClaim "scope">]
     Query: string option * UsageDateRange option -> Async<UsageRecord list>
 
     /// Aggregate by the requested grouping. Returns a list of
     /// `(bucket, sum)` rows so Fable serialisation is deterministic
     /// (Map serialises differently across providers).
+    [<RequiresClaim "scope">]
     Aggregate: UsageGrouping -> Async<UsageAggregateRow list>
 
     /// CSV export, finance-ready. Headers:
@@ -54,6 +60,7 @@ type IUsageQueryApi = {
     /// without an additional round trip. Optional date range; no
     /// filter on resource kind (full export by design — finance
     /// reconciles all kinds).
+    [<RequiresClaim "scope">]
     ExportCsv: UsageDateRange option -> Async<byte[]>
 }
 

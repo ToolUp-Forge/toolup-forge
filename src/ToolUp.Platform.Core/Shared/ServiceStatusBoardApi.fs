@@ -30,23 +30,27 @@ type IServiceStatusBoardApi = {
     /// builder in parallel with per-section timeout. Disabled
     /// substrates are skipped (no underlying read; section reports
     /// `Disabled = true`). One Fable.Remoting call per snapshot.
+    [<RequiresRole "PlatformAdmin">]
     GetSnapshot: unit -> Async<Result<ServiceStatusSnapshot, string>>
 
     /// Re-run every registered `IHealthCheck` and return the fresh
     /// section summary. Same per-probe timeout as the dedicated
     /// `IHealthMonitorApi.GetCurrentHealth`.
+    [<RequiresRole "PlatformAdmin">]
     RefreshHealth: unit -> Async<Result<HealthSummary, string>>
 
     /// Re-read `IPreflightSnapshot.LastRun`. Validators are
     /// heavier than probes (sentinel writes, DNS resolution) so we
     /// do not re-run them on refresh — the snapshot is the most
     /// recent boot's outcome; redeploying re-populates it.
+    [<RequiresRole "PlatformAdmin">]
     RefreshPreflight: unit -> Async<Result<PreflightSummary, string>>
 
     /// Re-read the most recent `ConfigDrift` audit event under the
     /// `_platform` scope. We do not re-run the drift detector
     /// (which writes to `IBlobStorage` and emits a fresh audit row)
     /// — a refresh is observational, not a state transition.
+    [<RequiresRole "PlatformAdmin">]
     RefreshDrift: unit -> Async<Result<DriftSummary, string>>
 
     /// Re-build the rate-limiter summary. Best-effort — the
@@ -55,6 +59,7 @@ type IServiceStatusBoardApi = {
     /// each tenant scope, not `_platform`), so the section reports
     /// substrate enablement plus a pointer to the audit log rather
     /// than a live refused-count figure.
+    [<RequiresRole "PlatformAdmin">]
     RefreshRateLimit: unit -> Async<Result<RateLimitSummary, string>>
 
     /// Re-walk `IJobStore.ListScopesWithJobs()` and tally
@@ -62,6 +67,7 @@ type IServiceStatusBoardApi = {
     /// with jobs. Bounded by the deployment's scope count × jobs-
     /// per-scope; cheap up to the few-thousand-jobs ceiling the
     /// blob-backed default targets.
+    [<RequiresRole "PlatformAdmin">]
     RefreshJobQueue: unit -> Async<Result<JobQueueSummary, string>>
 
     /// Re-read the most recent smoke-test audit event under the
@@ -70,5 +76,6 @@ type IServiceStatusBoardApi = {
     /// effects (sentinel writes against blob storage, transient
     /// notifications), and the deploy pipeline owns triggering
     /// them via the token-gated `/api/_internal/smoke` endpoint.
+    [<RequiresRole "PlatformAdmin">]
     RefreshSmokeTest: unit -> Async<Result<SmokeTestSummary, string>>
 }

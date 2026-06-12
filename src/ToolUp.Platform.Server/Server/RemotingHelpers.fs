@@ -50,10 +50,13 @@ let makeApi api =
 
     Api.make (api, errorHandler = errorHandler)
 
-/// `makeApi` variant that gates a module's routes on
-/// `AccessContext.canAccessModule moduleName`. The check runs inside
-/// the api-constructor path so it fires on every dispatch to one of
-/// the module's methods.
+/// Module-access gate + standard error handling shared by
+/// `ServerModule.withGuardedApi` (the canonical module composition path)
+/// and the obsolete public `makePermissionGuardedApi` shim below. Gates
+/// a module's routes on `AccessContext.canAccessModule moduleName` —
+/// module-level RBAC (per-team module grants via `IPermissionStore`),
+/// which is a DIFFERENT axis from Phase 69d's per-method authorisation
+/// attributes and therefore survives their adoption.
 ///
 /// Denials raise `UnauthorizedAccessException`; the error handler
 /// translates that to HTTP 403 with the access-denied message as the
@@ -63,7 +66,7 @@ let makeApi api =
 /// `moduleName` is the ToolUp module identifier (e.g. "SkuAnalysis")
 /// — matches the keys used by `AccessContext.ModulePermissions` and
 /// `IPermissionStore`.
-let makePermissionGuardedApi<'T> (moduleName: string) (apiBuilder: HttpContext -> 'T) : HttpHandler =
+let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: HttpContext -> 'T) : HttpHandler =
     let guardedBuilder (ctx: HttpContext) : 'T =
         match ctx.RequestServices.GetService(typeof<AccessContext>) with
         | :? AccessContext as accessCtx when not (AccessContext.canAccessModule moduleName accessCtx) ->
@@ -83,3 +86,17 @@ let makePermissionGuardedApi<'T> (moduleName: string) (apiBuilder: HttpContext -
                 ToolUp.Remoting.Server.ErrorResult.Propagate ex
 
     Api.make (guardedBuilder, errorHandler = errorHandler)
+
+/// `makeApi` variant that gates a module's routes on
+/// `AccessContext.canAccessModule moduleName`.
+///
+/// Phase 69d.tail — obsolete as a public entry point. Compose modules
+/// via `ServerModule.withGuardedApi` (which carries the same module-
+/// access gate), and declare method-level authorisation with the
+/// per-method attributes (`[<RequiresRole>]` / `[<RequiresClaim>]` /
+/// `[<TenantScoped>]` / `[<AllowAnonymous>]` / `[<PublicEndpoint>]`)
+/// that the dispatcher's startup classifier now enforces default-on.
+/// Deletion target: next major version.
+[<Obsolete("Compose modules via ServerModule.withGuardedApi and declare method-level authorisation with per-method attributes ([<RequiresRole>] / [<TenantScoped>] / [<AllowAnonymous>] / ...) — the startup classifier enforces them default-on (Phase 69d.tail). See docs/migrations/69d-authorization-metadata.md.")>]
+let makePermissionGuardedApi<'T> (moduleName: string) (apiBuilder: HttpContext -> 'T) : HttpHandler =
+    permissionGuardedApiCore<'T> moduleName apiBuilder

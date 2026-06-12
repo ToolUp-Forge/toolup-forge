@@ -41,16 +41,20 @@ open System
 type PendingInviteIssueRequest = {
     /// Team the invitation will attach the recipient to. Caller must
     /// hold `Owner`/`Admin` on this team.
+    [<PiiSafe>]
     TeamId: string
     /// Email claim the recipient's IdP will issue when they sign in.
     /// Matched case-insensitively against the `email` claim on their
-    /// first authenticated request resolve.
+    /// first authenticated request resolve. NOT `PiiSafe` — redacted
+    /// from dispatcher-emitted audit payloads.
     Email: string
     /// Role granted on auto-join. Same `Owner` restriction as the
     /// link-based flow — rejected at the handler.
+    [<PiiSafe>]
     Role: TeamRole
     /// Lifetime from issue time. `None` -> default
     /// (`TeamInviteTypes.DefaultExpiry`, 7 days).
+    [<PiiSafe>]
     ExpiresIn: TimeSpan option
 }
 
@@ -60,22 +64,28 @@ type PendingInviteIssueRequest = {
 /// authenticated caller's `AccessContext`.
 type TeamInviteIssueRequest = {
     /// Team the invitation will attach the recipient to.
+    [<PiiSafe>]
     TeamId: string
     /// Role granted on acceptance. `Owner` rejected at the handler
     /// (a delegation surface should not be able to mint new
     /// owners; ownership transfer happens through a separate Phase 5f
     /// surface).
+    [<PiiSafe>]
     Role: TeamRole
     /// Lifetime from issue time. `None` -> store's default
     /// (`ShareTokenTypes.DefaultLifetime`, typically 30 days).
+    [<PiiSafe>]
     ExpiresIn: TimeSpan option
     /// Optional email hint. When present alongside a wired
     /// `INotificationSink` of `Email` kind, the issue handler
     /// dispatches the invitation link via the email companion.
     /// Best-effort — failure to send does not roll back issuance.
+    /// NOT `PiiSafe` — redacted from dispatcher-emitted audit
+    /// payloads.
     EmailHint: string option
     /// Maximum number of acceptances permitted. `None` -> default
     /// `1`.
+    [<PiiSafe>]
     MaxUses: int option
 }
 
@@ -85,6 +95,8 @@ type ITeamInviteApi = {
     /// consumer-facing URL (typically `https://<app>/invite/<token>`)
     /// and the substrate-level `TokenId` for later revocation. Caller
     /// must hold `Owner` or `Admin` on the team.
+    [<RequiresClaim "scope">]
+    [<Audit "PermissionGranted">]
     IssueInvite: TeamInviteIssueRequest -> Async<Result<TeamInviteIssueResult, string>>
 
     /// Accept an invitation. Validates the supplied token, checks
@@ -96,6 +108,7 @@ type ITeamInviteApi = {
     /// authenticated; the public `/invite/{token}` page is responsible
     /// for routing visitors through the configured sign-in flow before
     /// invoking this method.
+    [<RequiresClaim "scope">]
     AcceptInvite: string -> Async<Result<TeamInviteAcceptResult, string>>
 
     /// Revoke an outstanding invite. Subsequent `AcceptInvite`
@@ -103,12 +116,15 @@ type ITeamInviteApi = {
     /// `"This invitation has been revoked"`. Caller must hold
     /// `Owner`/`Admin` on the team the token was issued for.
     /// Idempotent — revoking an already-revoked token returns `Ok ()`.
+    [<RequiresClaim "scope">]
+    [<Audit "PermissionRevoked">]
     RevokeInvite: string -> Async<Result<unit, string>>
 
     /// List outstanding invitations for the supplied team. Caller
     /// must hold `Owner`/`Admin` on the team. Returns both active and
     /// revoked invites — the UI filters as needed (typically a
     /// "Show revoked" toggle).
+    [<RequiresClaim "scope">]
     ListPendingInvites: string -> Async<Result<TeamInviteSummary list, string>>
 
     /// Issue a pending-by-email invitation. No link is minted; the
@@ -117,18 +133,23 @@ type ITeamInviteApi = {
     /// (case-insensitive). Caller must hold `Owner`/`Admin` on
     /// `request.TeamId`. Replaces any existing pending entry for the
     /// same email (last write wins).
+    [<RequiresClaim "scope">]
+    [<Audit "PermissionGranted">]
     IssuePendingInviteByEmail: PendingInviteIssueRequest -> Async<Result<unit, string>>
 
     /// List every pending-by-email entry associated with the supplied
     /// team. Caller must hold `Owner`/`Admin` on the team. Returns
     /// `(email, pendingEntry)` pairs filtered to this team. Email
     /// strings are returned in their stored case (lower-invariant).
+    [<RequiresClaim "scope">]
     ListPendingInvitesByEmail: string -> Async<Result<(string * PendingInviteByEmail) list, string>>
 
     /// Remove the pending entry for the supplied email. Idempotent —
     /// removing an absent entry returns `Ok ()`. Caller must hold
     /// `Owner`/`Admin` on the team the pending entry targets; the
     /// handler resolves the entry first to enforce the gate.
+    [<RequiresClaim "scope">]
+    [<Audit "PermissionRevoked">]
     RevokePendingInviteByEmail: string -> Async<Result<unit, string>>
 }
 

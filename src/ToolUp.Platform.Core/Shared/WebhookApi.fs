@@ -17,8 +17,10 @@ open System
 /// random string; nothing on the server enforces a minimum length yet
 /// — that's a follow-up tied to a future secret-rotation API.
 type CreateWebhookRequest = {
+    [<PiiSafe>]
     TargetUrl: string
     Secret: string
+    [<PiiSafe>]
     EventTypes: string list
 }
 
@@ -64,37 +66,47 @@ type IWebhookApi = {
     /// only response in the API that does so. The admin UI displays
     /// the secret once, behind a "I have copied this" confirmation,
     /// then refreshes the list (which re-fetches with masking).
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:WebhookSubscriptionCreated">]
     CreateSubscription: CreateWebhookRequest -> Async<Result<WebhookSubscription, string>>
 
     /// Enumerate the caller's scope's subscriptions, secrets masked.
     /// Order is undefined; the admin UI sorts by `CreatedAt` desc.
+    [<RequiresClaim "scope">]
     ListSubscriptions: unit -> Async<Result<WebhookSubscription list, string>>
 
     /// Single subscription by id, secret masked. Returns `Error` when
     /// the subscription does not exist in the caller's scope (cross-
     /// scope reads are impossible — the handler scopes the lookup).
+    [<RequiresClaim "scope">]
     GetSubscription: Guid -> Async<Result<WebhookSubscription, string>>
 
     /// Flip subscription status. The admin UI uses this to pause
     /// (during incident response) or to re-enable an auto-disabled
     /// subscription after fixing the receiver. Setting `Active` from
     /// `Disabled` resets `ConsecutiveFailures` to 0.
+    [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     UpdateStatus: Guid * WebhookStatus -> Async<Result<unit, string>>
 
     /// Delete the subscription and its delivery log. Idempotent —
     /// succeeds when the subscription does not exist. Emits a
     /// `WebhookSubscriptionDeleted` audit event.
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:WebhookSubscriptionDeleted">]
     DeleteSubscription: Guid -> Async<Result<unit, string>>
 
     /// Post a synthetic `WebhookTest` event to the subscription's
     /// target *now*, bypassing the dispatcher's queue. Returns the
     /// first-attempt outcome — no retries on test-fires.
+    [<RequiresClaim "scope">]
     TestFire: Guid -> Async<Result<WebhookTestResult, string>>
 
     /// Recent delivery log rows for the subscription, newest first,
     /// capped at 100 entries. Older entries are pruned by the
     /// dispatcher per `WebhookRetention` (server-side knob, not
     /// admin-tunable).
+    [<RequiresClaim "scope">]
     ListDeliveries: Guid -> Async<Result<WebhookDelivery list, string>>
 }
 

@@ -93,3 +93,34 @@ type NotEmptyAttribute() =
 type RegexAttribute(pattern: string) =
     inherit Attribute()
     member _.Pattern = pattern
+
+// 0.5.0 (Phase 69h.tail) — forge-native audit attributes mirroring
+// ToolUp.Remoting.Server's Phase 69h AuditAttribute / PiiSafeAttribute.
+// Same rationale as the auth markers above: forge API records sit in
+// Platform.Core (compiled by the Fable client too) and cannot take a
+// server-tier dependency. The dispatcher's audit classifier recognises
+// both families by simple type name + a reflective `KindName` read.
+
+/// Opts a method into dispatcher-emitted audit. After every successful
+/// invocation the dispatcher emits an audit event with the configured
+/// kind, the caller's subject id, the request correlation id, and a
+/// PII-redacted snapshot of the input record.
+///
+/// `kindName` is the string-literal name of a well-known kind
+/// (`"MoneyMoved"`, `"PolicyChanged"`, `"PiiAccessed"`, `"DataExported"`,
+/// `"PermissionGranted"`, `"PermissionRevoked"`, `"TenantCreated"`,
+/// `"TenantDeleted"`) or `"Custom:<name>"` for an open-vocabulary kind.
+/// F# attributes can't take DU values directly so the string encoding is
+/// the workaround — mirrored verbatim from the server-tier attribute.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type AuditAttribute(kindName: string) =
+    inherit Attribute()
+    member _.KindName = kindName
+
+/// Opts a record field into PII-safe audit payload inclusion. Fields
+/// WITHOUT this attribute are redacted to `<redacted:TypeName>` in the
+/// emitted audit row's payload. Fail-safe: forgetting the attribute
+/// keeps PII out of audit rows.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type PiiSafeAttribute() =
+    inherit Attribute()

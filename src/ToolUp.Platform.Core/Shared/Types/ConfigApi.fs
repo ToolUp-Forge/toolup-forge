@@ -64,10 +64,12 @@ type IConfigApi = {
     /// Replace the persisted map for one module. Validated against
     /// the schema server-side. Team mode: Owner/Admin only.
     [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     SaveModuleConfig: string * Map<string, string> -> Async<Result<unit, string>>
     /// Clear the persisted map for one module (all fields fall back
     /// to schema defaults on next read). Team mode: Owner/Admin only.
     [<RequiresClaim "scope">]
+    [<Audit "PolicyChanged">]
     ClearModuleConfig: string -> Async<Result<unit, string>>
 }
 

@@ -498,6 +498,15 @@ type RemotingOptions<'context, 'serverImpl> = {
     AuthContextResolver: ('context -> Async<IAuthContext>) option
     RateLimitStore: IRateLimitStore option
     AuditEmitter: IAuditEmitter option
+    /// Phase 69h.tail — admin-must-be-audited startup gate. When `true`,
+    /// the dispatcher refuses to start if any method classified with a
+    /// `[<RequiresRole>]` requirement does NOT also carry an `[<Audit>]`
+    /// annotation — role-gated methods are admin-shaped, and
+    /// compliance-edition deployments require every admin action to be
+    /// auditable. Default `false` (off — GP 11); forge's `Api.make`
+    /// flips it from the `TOOLUP_AUDIT_ADMIN_REQUIRED` env var.
+    /// Compose via `Remoting.withAuditRequiredOnRoleGated`.
+    RequireAuditOnRoleGated: bool
     IdempotencyStore: IIdempotencyStore option
     IdempotencyTtl: System.TimeSpan
     /// Phase 69j — `__schema_version` field stamped on every

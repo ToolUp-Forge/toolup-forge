@@ -49,6 +49,8 @@ type IPlatformTenantApi = {
     /// `Error "platform admin role required"`. Per-hook failure does
     /// NOT abort the run — the summary records the partial state and a
     /// `TenantLifecycleHookFailed` audit row fires per failed hook.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "TenantCreated">]
     ProvisionTenant: string * string * ProvisioningRequest -> Async<Result<LifecycleSummary, string>>
 
     /// Run every registered `OnDeprovisioned` hook for `scopeId`,
@@ -58,6 +60,8 @@ type IPlatformTenantApi = {
     /// only. The offboard runs every hook even if one fails (partial
     /// state recorded), so a single misbehaving companion hook cannot
     /// block the crypto-shred / erasure of the rest.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "TenantDeleted">]
     DeprovisionTenant: string * string * string -> Async<Result<LifecycleSummary, string>>
 
     /// Read the most recent lifecycle run's `LifecycleSummary` for
@@ -66,6 +70,7 @@ type IPlatformTenantApi = {
     /// record is the audit trail; this surface exists so the admin UI
     /// can render "last offboard: 3 hooks completed, 1 skipped" without
     /// replaying audit events. Owner / Platform-Admin only.
+    [<RequiresRole "PlatformAdmin">]
     GetLifecycleSummary: string -> Async<Result<LifecycleSummary option, string>>
 }
 

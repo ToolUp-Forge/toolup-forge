@@ -3,6 +3,8 @@
 
 namespace ToolUp.AssetStore
 
+open ToolUp.Platform // 0.5.0 — forge-native auth attributes
+
 /// Fable.Remoting contract for the asset-store API. The
 /// multipart upload endpoint (`/api/assets/upload`) is the
 /// canonical path for browser file uploads — see
@@ -16,12 +18,19 @@ namespace ToolUp.AssetStore
 /// default — `AuthEnforcementMiddleware` covers every non-
 /// anonymous route.
 type IAssetApi = {
+    // Handler (`AssetCompose.assetApi`) requires a resolved
+    // `StorageScope` (fails closed without one) but applies no
+    // role/claim gate beyond it — anonymous-mode session scopes
+    // qualify, so `AllowAnonymous` is the honest classification;
+    // scope isolation keeps gating.
     /// Resolve an asset id to its record. `None` on unknown
     /// id; same shape as `IAssetStore.Get`.
+    [<AllowAnonymous>]
     GetAsset: string -> Async<AssetRecord option>
     /// List the scope's assets (newest first), optionally
     /// filtered by id-prefix, paginated by `page` (0-indexed,
     /// 50 records per page).
+    [<AllowAnonymous>]
     ListAssets: string * int -> Async<AssetRecord list>
     /// Fetch (or generate-on-demand) a derivative. Returns
     /// the bytes + mime type so a Feliz component can render
@@ -29,9 +38,15 @@ type IAssetApi = {
     /// For high-volume reads, deployments serve derivatives
     /// directly from CDN-fronted blob storage; this Remoting
     /// path is the fallback.
+    [<AllowAnonymous>]
     GetDerivative: string * string -> Async<Result<byte[] * string, AssetDerivativeError>>
     /// Delete an asset by id. Idempotent — unknown ids
-    /// resolve to `Ok ()`.
+    /// resolve to `Ok ()`. No `[<Audit>]` attribute here:
+    /// `DefaultAssetStore.Delete` already emits the richer
+    /// `AuditEvent.AssetDeleted` through `IAuditLog` (gated by
+    /// `AssetStoreOptions.EmitAudit`); a dispatcher-level audit
+    /// row would duplicate it.
+    [<AllowAnonymous>]
     DeleteAsset: string -> Async<Result<unit, AssetDeleteError>>
 }
 

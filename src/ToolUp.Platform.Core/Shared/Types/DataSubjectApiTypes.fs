@@ -24,7 +24,9 @@ open ToolUp.Platform
 /// reason; the scope is resolved from the caller's session by the
 /// handler.
 type ExportRequestInput = {
+    [<PiiSafe>]
     SubjectUserId: string
+    [<PiiSafe>]
     TeamId: string option
     Reason: string
 }
@@ -35,9 +37,12 @@ type ExportRequestInput = {
 /// by default but a verified GDPR Article 17 demand requires
 /// `HardDelete`).
 type ErasureRequestInput = {
+    [<PiiSafe>]
     SubjectUserId: string
+    [<PiiSafe>]
     TeamId: string option
     Reason: string
+    [<PiiSafe>]
     OverridePolicy: ErasurePolicy option
 }
 
@@ -76,6 +81,10 @@ type ErasureRunResult =
 /// Fable.Remoting contract surface — every method returns
 /// `Async<Result<_, string>>` per the SDK convention. Owner / Admin
 /// gated upstream.
+/// Annotation note (69d.tail): neither `DataSubjectRequestApiHandler.create`
+/// nor the compose mount applies an in-handler role gate today — the only
+/// guard is the deployment's auth middleware, so the honest classification
+/// is `AllowAnonymous` (handler behaviour unchanged; see gap flag).
 type IDataSubjectRequestApi = {
     /// Stream every record across every registered exporter that
     /// names the subject. Returns a single byte payload (the
@@ -83,14 +92,20 @@ type IDataSubjectRequestApi = {
     /// zip / tar / raw concatenation based on byte budget). For
     /// the MVP the payload is a JSON envelope `{ segments: [...] }`
     /// where each segment carries name / mimeType / base64 bytes.
+    [<AllowAnonymous>]
+    [<Audit "DataExported">]
     RequestExport: ExportRequestInput -> Async<Result<byte[], string>>
 
     /// Phase 1 of an erasure — preview only. Returns the affected-
     /// record counts per handler. No mutation.
+    [<AllowAnonymous>]
+    [<Audit "PiiAccessed">]
     PreviewErasure: ErasureRequestInput -> Async<Result<ErasurePreview, string>>
 
     /// Phase 2 of an erasure — confirm a previously-previewed
     /// request and execute. Caller passes the preview's
     /// `Request.Id` so the handler can correlate.
+    [<AllowAnonymous>]
+    [<Audit "Custom:DataErased">]
     ConfirmErasure: DataSubjectRequestId -> Async<Result<ErasureRunResult, string>>
 }

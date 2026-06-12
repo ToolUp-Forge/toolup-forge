@@ -266,17 +266,26 @@ type AIMessageRequest = {
 /// API for conversation/task management (request/response, not streaming).
 /// Streaming progress is delivered via SSE, not this API.
 type AIAssistantApi = {
-    /// Submit a message to a conversation (creates conversation if new)
+    /// Submit a message to a conversation (creates conversation if new).
+    /// Anonymous-mode deployments chat with the assistant; per-scope
+    /// isolation + the Phase 6j.D ownership gate run in the handler.
+    [<AllowAnonymous>]
     SubmitMessage: AIMessageRequest -> Async<AITask>
     /// Get conversation history
+    [<AllowAnonymous>]
     GetConversation: Guid -> Async<ConversationMessage list>
     /// List all conversations for current user/scope
+    [<AllowAnonymous>]
     ListConversations: unit -> Async<Conversation list>
     /// Get available tools
+    [<AllowAnonymous>]
     GetAvailableTools: unit -> Async<AIToolDefinition list>
     /// Get task status
+    [<AllowAnonymous>]
     GetTaskStatus: Guid -> Async<AITask option>
     /// Delete a conversation
+    [<AllowAnonymous>]
+    [<Audit "Custom:ConversationDeleted">]
     DeleteConversation: Guid -> Async<Result<unit, string>>
     /// Persist a per-conversation provider override. `Some label`
     /// records the configured-provider instance the agent loop
@@ -284,6 +293,7 @@ type AIAssistantApi = {
     /// `None` clears any stored override (subsequent messages fall
     /// back to per-request override or the account-level active
     /// provider). Idempotent.
+    [<AllowAnonymous>]
     SetConversationOverride: Guid * string option -> Async<Result<unit, string>>
 }
 

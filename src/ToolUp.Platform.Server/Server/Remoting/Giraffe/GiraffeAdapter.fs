@@ -148,7 +148,17 @@ module GiraffeUtil =
         // start on unclassified methods" guarantee fall through unnoticed.
         // Refuse at compose time whenever a seam expecting record reflection
         // is composed against a non-record `'impl`.
-        let isRecordImpl = Microsoft.FSharp.Reflection.FSharpType.IsRecord typeof<'impl>
+        // NonPublic flags — internal/private API records (module-internal
+        // contracts, test fixtures) are records too; without the flags
+        // `IsRecord` reports false for them and this guard would refuse
+        // compositions the classifiers handle fine (the classifiers
+        // reflect with the same flags — see `AuthClassifier`).
+        let isRecordImpl =
+            Microsoft.FSharp.Reflection.FSharpType.IsRecord(
+                typeof<'impl>,
+                System.Reflection.BindingFlags.Public
+                ||| System.Reflection.BindingFlags.NonPublic
+            )
 
         let seamsRequiringRecord =
             options.AuthContextResolver.IsSome
@@ -189,6 +199,43 @@ module GiraffeUtil =
         // Empty for non-audited methods; emission on each successful
         // invocation looks up the kind here.
         let audits = Audit.classify typeof<'impl>
+
+        // Phase 69h.tail — cache the first-argument record type per
+        // audited method so payload extraction works even when the input
+        // type carries no ValidationAttribute (the validation classifier
+        // only caches input types for validated methods).
+        let auditInputTypes = Audit.inputTypes typeof<'impl>
+
+        // Phase 69h.tail — admin-must-be-audited startup gate. Role-gated
+        // methods are admin-shaped; when the gate is composed
+        // (TOOLUP_AUDIT_ADMIN_REQUIRED=true via forge's Api.make, or
+        // Remoting.withAuditRequiredOnRoleGated directly), every method
+        // carrying a [<RequiresRole>] requirement must also carry an
+        // [<Audit>] annotation or the dispatcher refuses to start.
+        if options.RequireAuditOnRoleGated then
+            let roleGatedUnaudited =
+                classifications
+                |> Map.toList
+                |> List.choose (fun (name, cls) ->
+                    match cls with
+                    | RequiresAuth requirements when
+                        requirements
+                        |> List.exists (function
+                            | RoleRequired _ -> true
+                            | _ -> false)
+                        && not (audits.ContainsKey name)
+                        ->
+                        Some name
+                    | _ -> None)
+
+            if not (List.isEmpty roleGatedUnaudited) then
+                invalidOp (
+                    sprintf
+                        "ToolUp.Remoting refused to start: audit-required-on-role-gated is composed (TOOLUP_AUDIT_ADMIN_REQUIRED), but API record '%s' has %d role-gated method(s) without an [<Audit>] annotation: [%s]. Annotate each with [<Audit \"<kind>\">] (see ToolUp.Remoting README §69h), or unset the gate."
+                        typeof<'impl>.Name
+                        roleGatedUnaudited.Length
+                        (String.concat "; " roleGatedUnaudited)
+                )
 
         // Phase 69f — cache idempotency classifications per method at
         // startup. Empty set means no methods are idempotent; per-call
@@ -1072,6 +1119,12 @@ module GiraffeUtil =
                                             // reuse the cached value instead
                                             // of re-running `parseFirstArgFromBody`
                                             // a second time.
+                                            // Phase 69h.tail — input type comes from the
+                                            // validation classifier when the method is
+                                            // validated (reusing its parsed-arg cache), or
+                                            // from the audit classifier's own input-type map
+                                            // otherwise — audited methods without validators
+                                            // used to emit empty payloads.
                                             let! payload = task {
                                                 match validationInputTypes |> Map.tryFind methodName with
                                                 | Some inputT ->
@@ -1086,7 +1139,18 @@ module GiraffeUtil =
                                                         with
                                                         | Some v -> return Audit.payloadFromInputRecord inputT v
                                                         | None -> return Map.empty
-                                                | None -> return Map.empty
+                                                | None ->
+                                                    match auditInputTypes |> Map.tryFind methodName with
+                                                    | Some inputT ->
+                                                        let (SystemTextJson stjOpts) = options.JsonSerializer
+                                                        let! bodyText = readCachedBodyText ()
+
+                                                        match
+                                                            Validation.parseFirstArgFromBody bodyText inputT stjOpts
+                                                        with
+                                                        | Some v -> return Audit.payloadFromInputRecord inputT v
+                                                        | None -> return Map.empty
+                                                    | None -> return Map.empty
                                             }
 
                                             let evt = {

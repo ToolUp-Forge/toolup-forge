@@ -61,6 +61,16 @@ type AuthDecision =
     /// surfaced in the wire body to avoid leaking authorisation rules.
     | Deny of reason: string
 
+/// Phase 69d.tail — a method's authorisation requirements, normalised
+/// from the attribute instances at classify time. Per-request evaluation
+/// runs over this data shape, never over raw attribute instances — which
+/// is what makes the classifier attribute-family-agnostic (see the note
+/// on `AuthClassifier` below).
+type internal AuthRequirement =
+    | RoleRequired of role: string
+    | ClaimRequired of claim: string * value: string option
+    | TenantRequired
+
 /// Method's classification, cached at startup. `Unclassified` is allowed
 /// to exist as a transient internal value but the dispatcher refuses to
 /// start when any method ends up classified this way. Internal visibility:
@@ -69,43 +79,80 @@ type AuthDecision =
 type internal MethodClassification =
     | Public
     | Anonymous
-    | RequiresAuth of attrs: Attribute list
+    | RequiresAuth of requirements: AuthRequirement list
     | Unclassified
 
 module internal AuthClassifier =
 
+    // Phase 69d.tail — attribute recognition is by simple type name, not
+    // CLR type identity. Two attribute families exist by design: the
+    // `ToolUp.Remoting.Server.*` set in this assembly (server-tier
+    // consumers) and the `ToolUp.Platform.*` mirrors in the tier-shared
+    // `ToolUp.Platform.Core` (carried by API records the Fable client
+    // also compiles — those records cannot reference this server-tier
+    // assembly). The dispatcher honours both: simple-name matching plus
+    // reflective property reads cost microseconds once per API record at
+    // startup, and per-request evaluation runs over the normalised
+    // `AuthRequirement` data.
+
+    let private stringProperty (name: string) (a: Attribute) : string option =
+        match a.GetType().GetProperty name with
+        | null -> None
+        | p ->
+            match p.GetValue a with
+            | :? string as s when not (isNull s) -> Some s
+            | _ -> None
+
+    let private tryRequirement (a: Attribute) : AuthRequirement option =
+        match a.GetType().Name with
+        | "RequiresRoleAttribute" -> stringProperty "Role" a |> Option.map RoleRequired
+        | "RequiresClaimAttribute" ->
+            stringProperty "Claim" a
+            |> Option.map (fun claim -> ClaimRequired(claim, stringProperty "Value" a))
+        | "TenantScopedAttribute" -> Some TenantRequired
+        | _ -> None
+
+    let private isPublicEndpoint (a: Attribute) =
+        a.GetType().Name = "PublicEndpointAttribute"
+
+    let private isAllowAnonymous (a: Attribute) =
+        a.GetType().Name = "AllowAnonymousAttribute"
+
+    // Reflection must see non-public record types too: consumer API
+    // records can be `internal`/`private` (module-internal contracts,
+    // test fixtures). Without `BindingFlags.NonPublic`, `IsRecord`
+    // reports `false` for them and classification silently returns the
+    // empty map — which would skip the startup classifier entirely for
+    // exactly those records (fail-OPEN). Public records are unaffected.
+    let private reflectionFlags =
+        System.Reflection.BindingFlags.Public
+        ||| System.Reflection.BindingFlags.NonPublic
+
     /// Walk an API record type's fields, return classification per field.
     let classify (apiType: Type) : Map<string, MethodClassification> =
-        if not (FSharpType.IsRecord apiType) then
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             // The Empty implementation path on RemotingOptions never has a
             // real API record to inspect. Empty classification map.
             Map.empty
         else
-            let fields = FSharpType.GetRecordFields apiType
+            let fields = FSharpType.GetRecordFields(apiType, reflectionFlags)
 
             fields
             |> Array.map (fun pi ->
                 let attrs =
                     pi.GetCustomAttributes(true) |> Array.choose (fun a -> a :?> Attribute |> Some)
 
-                let hasPublic = attrs |> Array.exists (fun a -> a :? PublicEndpointAttribute)
-                let hasAnon = attrs |> Array.exists (fun a -> a :? AllowAnonymousAttribute)
-
-                let authAttrs =
-                    attrs
-                    |> Array.filter (fun a ->
-                        a :? RequiresRoleAttribute
-                        || a :? RequiresClaimAttribute
-                        || a :? TenantScopedAttribute)
-                    |> Array.toList
+                let hasPublic = attrs |> Array.exists isPublicEndpoint
+                let hasAnon = attrs |> Array.exists isAllowAnonymous
+                let requirements = attrs |> Array.choose tryRequirement |> Array.toList
 
                 let cls =
                     if hasPublic then
                         Public
                     elif hasAnon then
                         Anonymous
-                    elif not (List.isEmpty authAttrs) then
-                        RequiresAuth authAttrs
+                    elif not (List.isEmpty requirements) then
+                        RequiresAuth requirements
                     else
                         Unclassified
 
@@ -145,7 +192,7 @@ module internal AuthClassifier =
             // Should never reach here; startup-classifier refuses to start.
             // Belt + braces — fail-closed if reached at runtime.
             Deny "unclassified-method"
-        | RequiresAuth attrs ->
+        | RequiresAuth requirements ->
             match context with
             | None ->
                 // No auth-context resolver registered, but the method
@@ -156,23 +203,20 @@ module internal AuthClassifier =
                     Deny "anonymous-not-permitted"
                 else
                     let denials =
-                        attrs
-                        |> List.choose (fun a ->
-                            match a with
-                            | :? RequiresRoleAttribute as r ->
-                                if ctx.HasRole r.Role then
+                        requirements
+                        |> List.choose (fun req ->
+                            match req with
+                            | RoleRequired role ->
+                                if ctx.HasRole role then
                                     None
                                 else
-                                    Some(sprintf "missing-role: %s" r.Role)
-                            | :? RequiresClaimAttribute as c ->
-                                let v = if isNull c.Value then None else Some c.Value
-
-                                if ctx.HasClaim(c.Claim, v) then
+                                    Some(sprintf "missing-role: %s" role)
+                            | ClaimRequired(claim, value) ->
+                                if ctx.HasClaim(claim, value) then
                                     None
                                 else
-                                    Some(sprintf "missing-claim: %s" c.Claim)
-                            | :? TenantScopedAttribute -> if ctx.HasTenant() then None else Some "missing-tenant"
-                            | _ -> None)
+                                    Some(sprintf "missing-claim: %s" claim)
+                            | TenantRequired -> if ctx.HasTenant() then None else Some "missing-tenant")
 
                     if List.isEmpty denials then
                         Allow

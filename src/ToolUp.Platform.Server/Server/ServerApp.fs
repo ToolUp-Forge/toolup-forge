@@ -141,9 +141,14 @@ module ServerModule =
 
     /// Attach a permission-guarded Fable.Remoting api factory. Uses the
     /// module's `Name` as the RBAC key, so callers never duplicate it.
+    ///
+    /// Phase 69d.tail — the module-access gate (`canAccessModule`) is
+    /// module-level RBAC and survives per-method attribute adoption;
+    /// the wrapped record's METHODS must each carry an authorisation
+    /// attribute or the startup classifier refuses to start (default-on).
     let withGuardedApi<'T> (apiBuilder: HttpContext -> 'T) (m: ServerModule) : ServerModule = {
         m with
-            Handlers = m.Handlers @ [ makePermissionGuardedApi m.Name apiBuilder ]
+            Handlers = m.Handlers @ [ RemotingHelpers.permissionGuardedApiCore m.Name apiBuilder ]
     }
 
     /// Attach an un-guarded handler (advanced — normally prefer `withGuardedApi`).

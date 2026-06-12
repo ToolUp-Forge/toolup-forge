@@ -46,6 +46,23 @@ namespace ToolUp.Platform
 //     consumers used to write by hand collapses into this default,
 //     and the 0.4.3 silent-no-op guard is no longer needed — the
 //     default always enforces.
+//
+// 0.5.0 (Phase 69d.tail + 69h.tail) — the classifier validator goes
+// DEFAULT-ON and dispatcher-emitted audit lights up:
+//   * The default auth resolver is composed for EVERY F# record API
+//     type, not just records that already carry auth attributes. The
+//     dispatcher's startup classifier therefore refuses startup on any
+//     record method lacking a `[<RequiresRole>]` / `[<RequiresClaim>]`
+//     / `[<TenantScoped>]` / `[<AllowAnonymous>]` / `[<PublicEndpoint>]`
+//     classification. BREAKING for consumers with unannotated records —
+//     migration recipe at docs/migrations/69d-authorization-metadata.md.
+//   * Records carrying `[<Audit "kind">]` annotations get a default
+//     `IAuditEmitter` bridging dispatcher audit events to the
+//     DI-registered `IAuditLog` as `RemotingMethodAudited` rows under
+//     the request's config scope.
+//   * `TOOLUP_AUDIT_ADMIN_REQUIRED=true` composes the admin-must-be-
+//     audited startup gate: role-gated methods without `[<Audit>]`
+//     refuse startup (compliance editions).
 
 open System.Threading
 open Microsoft.AspNetCore.Http
@@ -82,6 +99,14 @@ module internal ApiSeams =
     /// instance is identical across requests; thread-pool worker
     /// reuse between requests is therefore harmless for this seam.
     let requestServices = AsyncLocal<System.IServiceProvider>()
+
+    /// Phase 69h.tail — per-request audit recording scope captured from
+    /// the wrapped api builder (the request's `AccessContext` config
+    /// scope, falling back to the caller's user id, then `_platform`).
+    /// The default `IAuditEmitter` bridge reads from this AsyncLocal
+    /// because `Emit` does not receive `HttpContext` directly — same
+    /// pattern as `requestServices` above.
+    let requestScopeId = AsyncLocal<string>()
 
     /// Phase 69l — process-wide memoised "is the registered
     /// `IMetricsSink` actually a real sink?" flag. Resolved on the
@@ -177,11 +202,20 @@ module internal ApiSeams =
                     // `Email` and `TenantId` directly; bespoke claim
                     // consumers (e.g. custom JWT scopes) continue to
                     // wire their own resolver via `?authContext`.
+                    //
+                    // Phase 69d.tail — `"scope"` is the forge-conventional
+                    // claim for "any authenticated caller with a config
+                    // scope" (`IConfigApi.SaveModuleConfig`-shaped methods:
+                    // not role-gated, not tenant-only, but never anonymous).
+                    // The `RequiresAuth` evaluation already denies anonymous
+                    // callers before claims are consulted, so presence of a
+                    // non-anonymous subject IS the scope claim.
                     match claim, value with
                     | "email", Some v -> user.Email = Some v
                     | "email", None -> user.Email.IsSome
                     | "tenantId", Some v -> user.TenantId = Some v
                     | "tenantId", None -> user.TenantId.IsSome
+                    | "scope", None -> not isAnonymousUser
                     | _ -> false
 
                 member _.HasTenant() =
@@ -202,34 +236,57 @@ module internal ApiSeams =
             }
     }
 
-    /// True when `'T` declares at least one forge auth attribute on a
-    /// property or field. Used to decide whether the default
-    /// `ForgeAuthContext` resolver should be composed when the consumer
-    /// omits `?authContext`. Avoids paying the resolver's per-request
-    /// cost on API records that don't need it.
-    let typeHasForgeAuthAttrs (t: System.Type) : bool =
-        let forgeAuthAttrFullNames =
-            Set.ofList [
-                typeof<RequiresRoleAttribute>.FullName
-                typeof<RequiresClaimAttribute>.FullName
-                typeof<TenantScopedAttribute>.FullName
-                typeof<AllowAnonymousAttribute>.FullName
-                typeof<PublicEndpointAttribute>.FullName
-            ]
+    /// Phase 69h.tail — default `IAuditEmitter` bridging dispatcher-
+    /// emitted audit events to forge's DI-registered `IAuditLog` as
+    /// `AuditEvent.RemotingMethodAudited` rows. No-op when no
+    /// `IServiceProvider` has been stashed (test paths that bypass the
+    /// wrapper) or when `IAuditLog` is unregistered. The recording scope
+    /// comes from `requestScopeId` (stashed per request by the wrapped
+    /// api builder), falling back to `_platform`.
+    let defaultAuditEmitter: IAuditEmitter =
+        { new IAuditEmitter with
+            member _.Emit evt = async {
+                match requestServices.Value with
+                | null -> ()
+                | services ->
+                    match services.GetService(typeof<IAuditLog>) with
+                    | :? IAuditLog as auditLog ->
+                        let scopeId =
+                            match requestScopeId.Value with
+                            | null
+                            | "" -> "_platform"
+                            | s -> s
 
-        let hasOnProperty =
-            t.GetProperties()
-            |> Array.exists (fun p ->
-                p.GetCustomAttributes(false)
-                |> Array.exists (fun a -> forgeAuthAttrFullNames.Contains(a.GetType().FullName)))
+                        let kindName =
+                            match evt.Kind with
+                            | AuditKind.Custom name -> "Custom:" + name
+                            | wellKnown -> string wellKnown
 
-        let hasOnField =
-            t.GetFields()
-            |> Array.exists (fun f ->
-                f.GetCustomAttributes(false)
-                |> Array.exists (fun a -> forgeAuthAttrFullNames.Contains(a.GetType().FullName)))
+                        let payload: RemotingMethodAuditedPayload = {
+                            Kind = kindName
+                            MethodName = evt.MethodName
+                            SubjectId = evt.SubjectId
+                            CorrelationId = evt.CorrelationId
+                            Payload = evt.Payload
+                        }
 
-        hasOnProperty || hasOnField
+                        do! auditLog.Record(scopeId, ToolUp.Platform.AuditEvent.RemotingMethodAudited payload)
+                    | _ -> ()
+            }
+        }
+
+    /// Phase 69h.tail — `TOOLUP_AUDIT_ADMIN_REQUIRED` env-var gate,
+    /// read once per process. When truthy, `Api.make` composes
+    /// `Remoting.withAuditRequiredOnRoleGated` so every role-gated
+    /// method must also carry an `[<Audit>]` annotation or the
+    /// dispatcher refuses startup (compliance-edition deployments).
+    let auditAdminRequired =
+        lazy
+            (match System.Environment.GetEnvironmentVariable "TOOLUP_AUDIT_ADMIN_REQUIRED" with
+             | null -> false
+             | v ->
+                 let v = v.Trim()
+                 v.Equals("true", System.StringComparison.OrdinalIgnoreCase) || v = "1")
 
 /// Server-side Fable Remoting helper. Mirrors SAFE.Api.make so server
 /// call sites keep using `Api.make (builder, errorHandler = eh)`.
@@ -283,22 +340,55 @@ type Api =
         // Phase 69b.tail — wrap the consumer's api builder so each
         // request stashes its `IServiceProvider` for the default
         // telemetry bridge to read. Composition with `Remoting.fromContext`
-        // remains source-compat.
+        // remains source-compat. Phase 69h.tail adds the audit recording
+        // scope (the request's `AccessContext` config scope) for the
+        // default audit emitter to read.
         let capturingApi (ctx: HttpContext) : 'T =
             ApiSeams.requestServices.Value <- ctx.RequestServices
+
+            ApiSeams.requestScopeId.Value <-
+                match ctx.RequestServices.GetService(typeof<AccessContext>) with
+                | :? AccessContext as ac ->
+                    ac
+                    |> AccessContext.configScope
+                    |> Option.map _.ScopeId
+                    |> Option.defaultValue ac.UserId
+                | _ -> "_platform"
+
             api ctx
 
-        // Phase 69b.tail — resolve effective authContext. The default
-        // resolver reads `HttpContext.Items["ToolUp.Subject"]` (Phase
-        // 66) so consumers don't have to write the closure-captured
-        // boilerplate. Skipped entirely when the type carries no forge
-        // auth attributes — the dispatcher pays zero per-call cost in
-        // that case.
+        // Phase 69d.tail — the classifier validator is DEFAULT-ON. For
+        // every F# record API type the wrapper composes an auth-context
+        // resolver (the consumer's, or the default reading Phase 66's
+        // `Subject` from `HttpContext.Items`), which arms the dispatcher's
+        // startup classifier: any record method without one of
+        // `[<RequiresRole>]` / `[<RequiresClaim>]` / `[<TenantScoped>]` /
+        // `[<AllowAnonymous>]` / `[<PublicEndpoint>]` refuses startup with
+        // a diagnostic naming the record + field. Pre-0.5.0 the resolver
+        // was only composed when the record already carried at least one
+        // attribute — which silently skipped enforcement for entirely
+        // unannotated records, the exact "forgot the guard" defect class
+        // Phase 69d exists to close. Non-record API types keep the
+        // dormant pre-69d behaviour (record-field reflection cannot
+        // classify them; the dispatcher refuses seam composition on
+        // non-records anyway). Migration: docs/migrations/69d-authorization-metadata.md.
+        // NonPublic flags — internal/private API records must arm the
+        // classifier exactly like public ones; a bare `IsRecord` reports
+        // false for them, which would silently skip the default-on
+        // enforcement for precisely those records (fail-open). Same rule
+        // as `AuthClassifier.reflectionFlags`.
+        let typeIsRecord =
+            Microsoft.FSharp.Reflection.FSharpType.IsRecord(
+                typeof<'T>,
+                System.Reflection.BindingFlags.Public
+                ||| System.Reflection.BindingFlags.NonPublic
+            )
+
         let effectiveAuthContext: (HttpContext -> Async<ForgeAuthContext>) option =
             match authContext with
             | Some resolver -> Some resolver
             | None ->
-                if ApiSeams.typeHasForgeAuthAttrs typeof<'T> then
+                if typeIsRecord then
                     Some ApiSeams.defaultForgeAuthContextResolver
                 else
                     None
@@ -339,6 +429,13 @@ type Api =
                         }
                 })
 
+        // Phase 69h.tail — default audit emitter. Composed only when the
+        // record actually carries `[<Audit>]` annotations (zero cost for
+        // unaudited records, GP 13); bridges dispatcher audit events to
+        // the DI-registered `IAuditLog` as `RemotingMethodAudited` rows.
+        let hasAuditedMethods =
+            typeIsRecord && not (Map.isEmpty (Audit.classify typeof<'T>))
+
         Remoting.createApi ()
         |> Remoting.withRouteBuilder routeBuilder
         |> Remoting.fromContext capturingApi
@@ -351,6 +448,14 @@ type Api =
         |> Remoting.withTelemetry effectiveTelemetry
         |> (if telemetryIsDefault then
                 Remoting.withTelemetryGate ApiSeams.defaultBridgeGate
+            else
+                id)
+        |> (if hasAuditedMethods then
+                Remoting.withAudit ApiSeams.defaultAuditEmitter
+            else
+                id)
+        |> (if ApiSeams.auditAdminRequired.Value then
+                Remoting.withAuditRequiredOnRoleGated
             else
                 id)
         |> customOptions

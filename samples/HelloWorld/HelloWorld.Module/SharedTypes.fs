@@ -1,5 +1,7 @@
 module HelloWorld.Module.SharedTypes
 
+open ToolUp.Platform // forge-native auth attributes
+
 // ─── Cross-cut module types ─────────────────────────────────────
 //
 // Types declared here are visible to BOTH the server (compiled into
@@ -19,5 +21,10 @@ type EchoResponse = { Echoed: string }
 /// per module with `unit -> Async<...>` or `<Request> -> Async<...>`
 /// methods.
 type HelloWorldApi = {
+    /// Demo-scoped echo — the sample's composition root wires an
+    /// anonymous-friendly resolver (`requestStartedAtResolver`
+    /// returns `IsAnonymous () = true`), so anonymous callers are
+    /// admitted by design.
+    [<AllowAnonymous>]
     Echo: EchoRequest -> Async<EchoResponse>
 }
