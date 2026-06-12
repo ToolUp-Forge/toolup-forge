@@ -134,21 +134,37 @@ let private tokenOrEmpty () : string =
     | Some t -> t
     | None -> ""
 
+/// JS-awaitable view of `ensure ()` for the request-guard's fetch
+/// branch: resolves (never rejects — `ensure` swallows) once the
+/// shared token fetch has completed and the cache is populated,
+/// returning the token or "". Multicast like `ensure` itself — the
+/// boot prefetch and any guard-side wait share one round-trip.
+let private ensureTokenForGuard () : JS.Promise<string> =
+    Async.StartAsPromise(
+        async {
+            do! ensure ()
+            return tokenOrEmpty ()
+        }
+    )
+
 let mutable private guardInstalled = false
 
-// One-time wrap of BOTH `XMLHttpRequest.prototype.{open,send}` and
-// `window.fetch`. $0 = CSRF-token getter, $1 = identity-pairs getter
+// One-time wrap of `XMLHttpRequest.prototype.{open,send,setRequestHeader}`
+// and `window.fetch`. $0 = CSRF-token getter, $1 = identity-pairs getter
 // (`[[k,v],...]`), $2 = configured-API-origin getter ("" = unset),
 // $3 = per-request correlation-id getter (returns fresh string per call),
 // $4 = warnOnce sink callback (called as `sink(kind, message)` on the
 // first occurrence of each kind — A6 routes these through F#-side
 // AuthDiagnostics + Logger), $5 = csrfEnabled boolean (false in
 // anonymous-only deployments — short-circuits the state-changing
-// branch so no token attempt is made and no `notoken` warn fires).
+// branch so no token attempt is made and no `notoken` warn fires),
+// $6 = ensure-token awaitable (returns the shared in-flight token
+// fetch as a Promise — the fetch branch awaits it up to 2s before a
+// state-changing dispatch when the cache is still empty).
 // Reads the getters at send time, so it is correct regardless of when
 // the calling proxy/closure was built. Never throws; the original
 // transport is always invoked; idempotent via sentinels.
-[<Emit("""(function(getTok, getIdent, getApiOrigin, getCorrId, warnOnceSink, csrfEnabled){
+[<Emit("""(function(getTok, getIdent, getApiOrigin, getCorrId, warnOnceSink, csrfEnabled, getEnsure){
   var WARNED = {};
   function warnOnce(k, msg){
     if (!WARNED[k]) {
@@ -196,7 +212,7 @@ let mutable private guardInstalled = false
       var tok = '';
       try { tok = getTok() || ''; } catch(e){}
       if (tok) { if (!hasHeader('X-CSRF-Token')) { try { setHeader('X-CSRF-Token', tok); } catch(e){} } }
-      else { warnOnce('notoken', 'a state-changing /api request was issued before the CSRF token resolved; if it 403s this is a startup race (the boot prefetch normally wins). A manual retry will succeed.'); }
+      else { warnOnce('notoken', 'a state-changing /api request was dispatched without a CSRF token (the fetch path waits up to 2s for the token fetch; the XHR path cannot wait inside send). If it 403s, the /api/csrf-token endpoint is unreachable or slow — a manual retry after the token resolves will succeed.'); }
     }
   }
 
@@ -205,7 +221,20 @@ let mutable private guardInstalled = false
     P.__toolupReqGuard = true;
     var rawOpen = P.open;
     var rawSend = P.send;
+    var rawSetHeader = P.setRequestHeader;
     P.open = function(){ try { this.__tuMethod = arguments[0]; this.__tuUrl = arguments[1]; this.__tuSet = {}; } catch (e) {} return rawOpen.apply(this, arguments); };
+    P.setRequestHeader = function(k, v){
+      // Record EVERY header write in __tuSet — including writes the
+      // Remoting proxy or consumer code makes directly — so the
+      // guard's hasHeader check at send time sees them. Without this,
+      // a consumer using Remoting.withAuthorizationHeader got the
+      // guard's identity Authorization APPENDED to the proxy's own
+      // (XHR setRequestHeader appends rather than replaces), and the
+      // server saw 'Bearer <stale>, Bearer <live>' — random-looking
+      // 401s for consumers who did the extra-correct thing.
+      try { if (this.__tuSet) { this.__tuSet[String(k).toLowerCase()] = true; } } catch (e) {}
+      return rawSetHeader.apply(this, arguments);
+    };
     P.send = function(){
       try {
         var ctx = eligible(this.__tuMethod, this.__tuUrl);
@@ -213,7 +242,7 @@ let mutable private guardInstalled = false
           var self = this;
           applyHeaders(ctx,
             function(k){ return !!(self.__tuSet && self.__tuSet[k.toLowerCase()]); },
-            function(k, v){ if (self.__tuSet) { self.__tuSet[k.toLowerCase()] = true; } self.setRequestHeader(k, v); });
+            function(k, v){ self.setRequestHeader(k, v); });
         }
       } catch (e) {}
       return rawSend.apply(this, arguments);
@@ -229,10 +258,34 @@ let mutable private guardInstalled = false
         var method = (init && init.method) || (isReq && input.method) || 'GET';
         var ctx = eligible(method, url);
         if (ctx) {
-          var h = new Headers((init && init.headers) || (isReq && input.headers) || undefined);
-          applyHeaders(ctx, function(k){ return h.has(k); }, function(k, v){ h.set(k, v); });
-          var newInit = Object.assign({}, init || {}, { headers: h });
-          return rawFetch.call(this, input, newInit);
+          var self = this;
+          var dispatch = function(){
+            var h = new Headers((init && init.headers) || (isReq && input.headers) || undefined);
+            applyHeaders(ctx, function(k){ return h.has(k); }, function(k, v){ h.set(k, v); });
+            var newInit = Object.assign({}, init || {}, { headers: h });
+            return rawFetch.call(self, input, newInit);
+          };
+          var stateChanging = ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'PATCH' || ctx.method === 'DELETE';
+          if (csrfEnabled && stateChanging) {
+            var tok = '';
+            try { tok = getTok() || ''; } catch(e){}
+            if (!tok) {
+              // First-click protection: the token cache is empty (a
+              // fast click after paint can beat the boot prefetch).
+              // Await the SHARED in-flight token fetch — multicast, so
+              // this never issues a second round-trip — capped at 2s,
+              // then dispatch with whatever resolved. The XHR branch
+              // cannot wait (send() is synchronous by contract), so
+              // this protection is fetch-path only.
+              var waited;
+              try { waited = getEnsure(); } catch(e){ waited = null; }
+              if (waited && typeof waited.then === 'function') {
+                var capped = new Promise(function(res){ setTimeout(res, 2000); });
+                return Promise.race([waited, capped]).then(dispatch, dispatch);
+              }
+            }
+          }
+          return dispatch();
         }
       } catch (e) {}
       return rawFetch.apply(this, arguments);
@@ -240,7 +293,7 @@ let mutable private guardInstalled = false
     wrapped.__toolupReqGuard = true;
     window.fetch = wrapped;
   }
-})($0, $1, $2, $3, $4, $5)""")>]
+})($0, $1, $2, $3, $4, $5, $6)""")>]
 let private installGuardJs
     (tokenGetter: unit -> string)
     (identityGetter: unit -> (string * string)[])
@@ -248,6 +301,7 @@ let private installGuardJs
     (correlationGetter: unit -> string)
     (warnOnceSink: string -> string -> unit)
     (csrfEnabled: bool)
+    (ensureToken: unit -> JS.Promise<string>)
     : unit =
     jsNative
 
@@ -303,7 +357,14 @@ let installRequestGuard
                 ()
 
         try
-            installGuardJs tokenOrEmpty identityGetter apiOriginGetter correlationGetter warnSink csrfEnabled
+            installGuardJs
+                tokenOrEmpty
+                identityGetter
+                apiOriginGetter
+                correlationGetter
+                warnSink
+                csrfEnabled
+                ensureTokenForGuard
         with _ ->
             ()
 

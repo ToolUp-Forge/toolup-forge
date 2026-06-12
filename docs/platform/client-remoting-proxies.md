@@ -51,6 +51,17 @@ The request-guard itself is installed by `SDK.Client.fs`'s `installRequestGuard`
 
 So: the proxy's construction-time customiser doesn't matter for header freshness — the work happens at the wire, not in the proxy's options record.
 
+## Guard-owned header keys — don't set them anywhere else
+
+The request-guard owns four header keys: `Authorization`, `X-User-Id`, `X-CSRF-Token`, and `x-correlation-id`. It is the **single sanctioned seam** for them. Do not set those keys via `Remoting.withAuthorizationHeader`, `Remoting.withCustomHeader`, or a raw `xhr.setRequestHeader` / `fetch` headers object:
+
+- A value set at proxy-build time is **frozen** — it goes stale on sign-in / token refresh.
+- The guard tracks **every** header write (it wraps `XMLHttpRequest.prototype.setRequestHeader` as well as `fetch` headers), and it defers to a header the request already carries rather than appending a duplicate. So a stale proxy-set `Authorization` doesn't produce a malformed double header — it produces a request that keeps sending the stale token, which 401s in a way that looks random.
+
+The doc-comments on `Remoting.withAuthorizationHeader` / `withCustomHeader` carry the same warning at the call site. Use those helpers only for app-specific keys the guard doesn't own, or on proxies that deliberately target an origin the guard excludes.
+
+One more guard behaviour worth knowing: on the `fetch` path, a state-changing request issued before the CSRF token cache is populated **waits (up to 2s) on the shared in-flight token fetch** before dispatching — a fast first click after paint no longer 403s. The XHR path cannot wait (`send()` is synchronous by contract), so XHR-transported Remoting calls in that window still rely on the boot prefetch winning the race.
+
 ## When per-call would be needed — re-introducing a snapshot customiser is a regression
 
 The per-call construction pattern (`let private fooApi () = …`) was the workaround for a now-fixed defect where `UserSession.withRequestHeaders` spliced live header state into the options record at construction time, freezing whatever was cached at that moment. That defect is gone. Workaround comments still appearing in pre-2026-05 history are descriptive of an architecture that no longer exists.

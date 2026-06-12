@@ -28,10 +28,32 @@ module Remoting =
     /// Sets the base url for the request. Useful if you are making cross-domain requests
     let withBaseUrl url (options: RemoteBuilderOptions) = { options with BaseUrl = Some url }
 
-    /// Adds custom headers to each request of the proxy
+    /// Adds custom headers to each request of the proxy.
+    ///
+    /// **ToolUp deployments: do NOT use this for the guard-owned keys**
+    /// (`Authorization`, `X-User-Id`, `X-CSRF-Token`, `x-correlation-id`).
+    /// The SDK's request guard (`CsrfClient.installRequestGuard`, wired
+    /// by `SDK.Client.program`) attaches those at *send* time from the
+    /// live identity / token caches — that is the sanctioned seam, and
+    /// it is correct no matter when the proxy was built. A header set
+    /// here is frozen at proxy-build time: it goes stale on sign-in /
+    /// token refresh, and the guard (which tracks every header write)
+    /// will defer to it rather than overwrite — so you keep sending the
+    /// stale value. Use this helper only for app-specific keys the
+    /// guard doesn't own.
     let withCustomHeader headers (options: RemoteBuilderOptions) = { options with CustomHeaders = headers }
 
-    /// Sets the authorization header of every request from the proxy
+    /// Sets the authorization header of every request from the proxy.
+    ///
+    /// **ToolUp deployments: avoid this.** The SDK's request guard
+    /// (`CsrfClient.installRequestGuard`) already attaches the live
+    /// `Authorization` identity header at *send* time on every eligible
+    /// `/api/*` request. A token passed here is frozen at proxy-build
+    /// time — it goes stale on sign-in / refresh, and because the guard
+    /// defers to headers the proxy set itself, the stale value is what
+    /// the server keeps seeing. Only reach for this on a proxy that
+    /// deliberately bypasses the guard (e.g. a cross-origin API the
+    /// guard excludes).
     let withAuthorizationHeader token (options: RemoteBuilderOptions) = {
         options with
             Authorization = Some token
