@@ -2634,8 +2634,25 @@ module Client =
                     if needsAuth then
                         UserSession.onAuthTokenChange (fun token ->
                             match token with
-                            | Some _ -> subscribeNow ()
-                            | None -> unsubscribeNow ())
+                            | Some _ ->
+                                subscribeNow ()
+                                // Phase 117 — a transition with a token present
+                                // is a sign-in or a token-identity change: cycle
+                                // the EventSource so the stream re-registers
+                                // under the fresh identity (no-op for same-user
+                                // token refreshes; also clears the give-up
+                                // latch so a pre-sign-in 401 doesn't keep
+                                // notifications dead after sign-in).
+                                NotificationClient.reconnect ()
+                            | None ->
+                                unsubscribeNow ()
+                                // Phase 117 — sign-out: close the stream so the
+                                // previous user's subscription doesn't outlive
+                                // the session (pre-117 only the shell's handler
+                                // was removed; the EventSource stayed registered
+                                // under the old identity and kept receiving
+                                // their broadcasts).
+                                NotificationClient.reset ())
                     else
                         ignore
 
