@@ -34,11 +34,16 @@ let DefaultMaxTokens = 4096
 
 /// Known-good model identifiers surfaced by the Phase D settings UI.
 /// Users may enter custom strings for models released after the build.
+///
+/// Refreshed 2026-06-12 — the prior list pinned `claude-sonnet-4-20250514`
+/// (now returns `not_found_error` on the API) and the long-retired
+/// haiku-3.5. Current Anthropic ids are date-suffix-free aliases except
+/// Haiku 4.5, whose canonical full id retains the date.
 let KnownModels = [
     "claude-haiku-4-5-20251001"
-    "claude-sonnet-4-20250514"
-    "claude-opus-4-20250514"
-    "claude-haiku-3-5-20241022"
+    "claude-sonnet-4-6"
+    "claude-opus-4-8"
+    "claude-fable-5"
 ]
 
 // Shared per-process HttpClient. Phase 70's factory builds a fresh
@@ -632,12 +637,22 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                         // tool-call's `input` JSON so
                                         // the response shape matches
                                         // Gemini / OpenAI's native
-                                        // paths. Strip the schema-tool
-                                        // from ToolCalls; surface any
-                                        // user-tool calls (should be
-                                        // empty per the forced
-                                        // tool_choice, but defensively
-                                        // preserved).
+                                        // paths. The payload first runs
+                                        // through the deterministic
+                                        // normalisation pass — Claude
+                                        // models sometimes wrap the
+                                        // response in a single-key
+                                        // `{ "input": ... }` envelope
+                                        // and/or emit it as a
+                                        // JSON-encoded string, and
+                                        // Anthropic does not validate
+                                        // tool inputs against the
+                                        // schema server-side. Strip the
+                                        // schema-tool from ToolCalls;
+                                        // surface any user-tool calls
+                                        // (should be empty per the
+                                        // forced tool_choice, but
+                                        // defensively preserved).
                                         let userToolCalls =
                                             parsed.ToolCalls
                                             |> List.filter (fun tc ->
@@ -646,7 +661,10 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                         return
                                             Ok {
                                                 parsed with
-                                                    Content = call.Arguments
+                                                    Content =
+                                                        ClaudeAIProviderWire.normaliseStructuredPayload
+                                                            schema
+                                                            call.Arguments
                                                     ToolCalls = userToolCalls
                                                     StopReason = "end_turn"
                                             }

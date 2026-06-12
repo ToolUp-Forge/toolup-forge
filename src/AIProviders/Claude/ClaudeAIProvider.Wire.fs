@@ -154,10 +154,14 @@ let private cacheControlMarker: obj = box {| ``type`` = "ephemeral" |}
 // add new vision-capable model ids here as they ship.
 let isVisionCapable (model: string) =
     let m = model.ToLowerInvariant()
-    // Sonnet 4 / Opus 4 family + earlier sonnet-3.5/3.7 support
-    // vision. Haiku-Compact and the older haiku-3 family do not.
+    // Sonnet / Opus / Fable families and Haiku 4.5+ support vision, as
+    // did the retired haiku-3.5. Only the original haiku-3 family does
+    // not. (Refreshed 2026-06-12 alongside KnownModels — haiku-4-5 is
+    // the provider default and was previously mis-rejected here.)
     (m.Contains "claude-sonnet" || m.Contains "sonnet")
     || m.Contains "claude-opus"
+    || m.Contains "claude-fable"
+    || m.Contains "haiku-4"
     || (m.Contains "haiku-3.5" || m.Contains "haiku-3-5")
 
 /// Serialise an `ImagePayload` into Anthropic's `image` content
@@ -334,6 +338,96 @@ let private buildTools (tools: AIProviderToolDef list) =
 [<Literal>]
 let StructuredResponseToolName = "structured_response"
 
+/// Phase 67b follow-up — deterministic repair of the two malformed
+/// structured-output shapes Claude models have been observed emitting
+/// under the tool-based workaround (Haiku 4.5 / Sonnet 4.6 / Opus 4.8),
+/// even with `tool_choice` forcing the schema-tool:
+///
+///   1. Envelope wrapping — the model reads the schema-tool description
+///      literally and returns `{ "input": <response> }` instead of the
+///      response object itself.
+///   2. String encoding — the response (or the envelope's value) arrives
+///      as a JSON-encoded *string* rather than JSON structure.
+///
+/// Anthropic does not hard-validate tool inputs against `input_schema`,
+/// so both shapes parse as syntactically valid tool calls and would
+/// otherwise reach callers as broken content. Repairs apply only when
+/// unambiguous:
+///   - a whole-payload string is replaced by its parsed content only
+///     when that content is a JSON object or array;
+///   - the `input` envelope is unwrapped only when the payload is a
+///     single-key object whose key is `input`, the supplied schema does
+///     NOT itself declare a top-level `input` property, and the wrapped
+///     value (after un-stringing) is an object or array.
+/// Anything else passes through byte-identical, including payloads that
+/// fail to parse as JSON at all (callers surface those as schema errors
+/// with the original evidence intact).
+let normaliseStructuredPayload (schemaJson: string) (payload: string) : string =
+    // Does the caller's schema legitimately have a top-level "input"
+    // property? If so, a single-key { "input": ... } payload is (or at
+    // least may be) the real response — never unwrap it.
+    let schemaDeclaresInput =
+        try
+            use doc = JsonDocument.Parse(schemaJson)
+
+            match doc.RootElement.TryGetProperty("properties") with
+            | true, props when props.ValueKind = JsonValueKind.Object ->
+                match props.TryGetProperty("input") with
+                | true, _ -> true
+                | _ -> false
+            | _ -> false
+        with _ ->
+            false
+
+    // A JSON string whose content itself parses as a JSON object or
+    // array — the string-encoding disease. Scalar-content strings stay
+    // strings (a field value of "123" or "true" is plausibly literal).
+    let tryUnstring (el: JsonElement) : JsonElement option =
+        if el.ValueKind = JsonValueKind.String then
+            try
+                use inner = JsonDocument.Parse(el.GetString())
+
+                match inner.RootElement.ValueKind with
+                | JsonValueKind.Object
+                | JsonValueKind.Array -> Some(inner.RootElement.Clone())
+                | _ -> None
+            with _ ->
+                None
+        else
+            None
+
+    try
+        use doc = JsonDocument.Parse(payload)
+        let mutable el = doc.RootElement.Clone()
+
+        // Whole payload as a JSON-encoded string.
+        match tryUnstring el with
+        | Some inner -> el <- inner
+        | None -> ()
+
+        // Single-key { "input": ... } envelope.
+        if not schemaDeclaresInput && el.ValueKind = JsonValueKind.Object then
+            match el.EnumerateObject() |> Seq.toList with
+            | [ p ] when p.Name = "input" ->
+                let unwrapped =
+                    match tryUnstring p.Value with
+                    | Some inner -> inner
+                    | None -> p.Value
+
+                // Only unwrap to JSON structure — a bare scalar under
+                // "input" is more plausibly a (degenerate) legitimate
+                // payload than the envelope disease.
+                if
+                    unwrapped.ValueKind = JsonValueKind.Object
+                    || unwrapped.ValueKind = JsonValueKind.Array
+                then
+                    el <- unwrapped.Clone()
+            | _ -> ()
+
+        el.GetRawText()
+    with _ ->
+        payload
+
 let buildRequestBody
     (model: string)
     (maxTokens: int)
@@ -390,10 +484,23 @@ let buildRequestBody
     let effectiveTools =
         match structuredOutputSchema with
         | Some schema ->
+            // Description wording is load-bearing. The previous text said
+            // "the `input` argument MUST conform to the supplied JSON
+            // Schema" — models took "the `input` argument" literally and
+            // wrapped the whole response as `{ "input": <doc> }` (or a
+            // JSON-encoded string thereof), and Anthropic does not
+            // hard-validate tool inputs against input_schema, so the
+            // malformed shape reached callers. Observed across Haiku 4.5,
+            // Sonnet 4.6 and Opus 4.8. Do not reintroduce the words
+            // "input argument" here.
             let schemaTool: AIProviderToolDef = {
                 Name = StructuredResponseToolName
                 Description =
-                    "Return the structured response. The `input` argument MUST conform to the supplied JSON Schema."
+                    "Return the structured response. The tool input IS the response object itself "
+                    + "and MUST conform to the tool's input schema — top-level fields are the "
+                    + "schema's top-level properties. Do NOT wrap the response in any envelope "
+                    + "(no outer `input` key). Field values must be JSON structure (objects, "
+                    + "arrays, numbers, booleans), never serialised JSON strings."
                 InputSchema = schema
             }
 
