@@ -91,6 +91,23 @@ type CachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbeddingCache)
                     let missTexts = misses |> Seq.map (fun i -> arr[i]) |> Seq.toArray
                     let! freshResults = inner.GenerateEmbeddings missTexts
 
+                    // The stitch below trusts the IEmbeddingProvider batch
+                    // contract (output[i] embeds input[i], same length).
+                    // Verify the length half explicitly: a short response
+                    // would otherwise surface as an IndexOutOfRange in the
+                    // loop below — far from the misbehaving provider — and
+                    // a long one would silently mis-stitch nothing today
+                    // but is equally a contract breach worth naming.
+                    if freshResults.Length <> misses.Count then
+                        failwith (
+                            sprintf
+                                "Embedding provider '%s/%s' returned %d embeddings for %d inputs from GenerateEmbeddings — refusing to stitch the batch into the cache. The provider has broken the positional batch contract (output[i] embeds input[i]); accepting it would cache wrong embeddings under the inputs' hashes."
+                                inner.ProviderId
+                                inner.ModelId
+                                freshResults.Length
+                                misses.Count
+                        )
+
                     for j in 0 .. misses.Count - 1 do
                         let idx = misses[j]
                         let embedding = freshResults[j]

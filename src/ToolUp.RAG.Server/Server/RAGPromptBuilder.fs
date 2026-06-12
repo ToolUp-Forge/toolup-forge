@@ -132,6 +132,13 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
         Origin = origin
         LocationHint = locationHint
         OriginalRef = originalRef
+        // Lineage widening (Investigate gaps 2026-06-12): scope drives
+        // the Sources-panel authority badge; chunk id is the stable
+        // join key between a source and its citation marker. Both are
+        // always present on a live VectorMatch — `None` exists only
+        // for pre-widening persisted conversation payloads.
+        Scope = Some m.Scope
+        ChunkId = Some m.ChunkId
     }
 
 // ─── Retrieval builder ────────────────────────────────────────────

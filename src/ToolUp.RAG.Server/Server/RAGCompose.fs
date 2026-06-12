@@ -602,6 +602,43 @@ let composeWithRAG
     let dispatchRegistry = ToolUp.AI.ClientToolDispatch.ClientToolDispatchRegistry()
     let cancellationRegistry = ToolUp.AI.AICancellationRegistry.AICancellationRegistry()
 
+    // Phase 6q follow-up C — /dev/rag-citation rolling-window stats.
+    // Master gate is `ServerConfig.EnableDevEndpoints`; the per-endpoint
+    // `ServerConfig.EnableCitationDevEndpoint` override can only
+    // suppress, never force-on (Investigate gaps 2026-06-12, RAG Gap 8
+    // — deliberately reverses Phase 14s Gap #4's force-on arm).
+    // `/dev/rag-citation` is the most privacy-sensitive dev endpoint:
+    // `RecentRewrites` carries conversation-derived text, the handler
+    // has no auth gate of its own, and this registration site carries
+    // no compile-time gate, so it registers live in Release builds.
+    // The "master off ⇒ no dev surface" audit invariant therefore
+    // holds for it unconditionally: `Some true` collapses to
+    // follow-master, and `CitationDevEndpointValidator` warns at
+    // startup when the now-inert force-on shape is configured. If the
+    // citation-only-probe use case ever materialises, reintroduce it
+    // as a named capability-as-type DU case with auth on the endpoint
+    // — trigger-gated, not preserved speculatively.
+    let citationEndpointEnabled =
+        match config.EnableCitationDevEndpoint with
+        | Some explicit -> explicit && config.EnableDevEndpoints
+        | None -> config.EnableDevEndpoints
+
+    // Startup visibility: one line naming the dev endpoints this
+    // composition actually registered, so an operator audits the live
+    // dev surface from the log instead of re-deriving the gate logic.
+    // The default-off shape stays log-silent.
+    do
+        let active = [
+            if config.EnableDevEndpoints then
+                yield "/dev/ai-fastpath"
+                yield "/dev/ai-latency"
+            if citationEndpointEnabled then
+                yield "/dev/rag-citation"
+        ]
+
+        if not active.IsEmpty then
+            ragLogger.Info(sprintf "[RAGCompose] Dev endpoints registered: %s" (String.concat ", " active))
+
     let aiHandlers = [
         makeApi (fun ctx ->
             ToolUp.AI.AIAssistantHandler.aiAssistantApi resolvedAiConfig moduleAIContextMap (resolveManager ctx) ctx)
@@ -655,16 +692,8 @@ let composeWithRAG
             yield! ToolUp.AI.FastPathTelemetryHandler.routes
             yield! ToolUp.AI.AILatencyHandler.routes
         // Phase 6q follow-up C — /dev/rag-citation rolling-window stats.
-        // Master gate is `ServerConfig.EnableDevEndpoints` (same activation
-        // as `/dev/ai-latency` / `/dev/ai-fastpath`); per-endpoint override
-        // is `ServerConfig.EnableCitationDevEndpoint` (None = follow master;
-        // Some false = suppress this one even when master is on; Some true =
-        // register even when master is off — rare, for citation-only probes).
-        let citationEndpointEnabled =
-            match config.EnableCitationDevEndpoint with
-            | Some explicit -> explicit
-            | None -> config.EnableDevEndpoints
-
+        // Gate resolved above (`citationEndpointEnabled`): master switch
+        // ANDed with the suppress-only per-endpoint override.
         if citationEndpointEnabled then
             yield! ToolUp.RAG.RAGCitationDevEndpoint.routes
     ]
@@ -1669,12 +1698,20 @@ module RAGServerApp =
             ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator app.RetrievalDefaultsClampLog
             :> ConfigValidation.IConfigValidator
 
+        // Investigate gaps 2026-06-12 (RAG Gap 8) — warn when the
+        // citation-dev-endpoint override is configured as the retired
+        // force-on shape (Some true under a disabled master switch),
+        // which composeWithRAG now resolves to suppressed.
+        let citationDevEndpointValidator =
+            ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator finalConfig :> ConfigValidation.IConfigValidator
+
         let configValidatorsWithTeamModeCheck =
             teamModeEmbedderValidator
             :: persistenceValidator
             :: ingestionInstanceValidator
             :: sharedCacheValidator
             :: retrievalDefaultsValidator
+            :: citationDevEndpointValidator
             :: b.ConfigValidators
 
         // Phase 16 — `composeWithRAG` returns `IServerHost`. Chain

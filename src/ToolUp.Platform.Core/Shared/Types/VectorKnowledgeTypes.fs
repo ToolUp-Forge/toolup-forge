@@ -242,6 +242,24 @@ type RetrievedSource = {
     /// pre-existing wire payloads without the field deserialise to
     /// `None`.
     OriginalRef: OriginalDocumentRef option
+    /// Scope the chunk was retrieved from, so the Sources panel can
+    /// render an authority badge (Platform-curated vs deployment-wide
+    /// vs the caller's own team) instead of relying on the prompt
+    /// builder's in-prose labelling. Always `Some` at production time
+    /// (every `VectorMatch` carries a scope); `None` only for
+    /// conversation history persisted before this field existed —
+    /// replayed pre-widening payloads deserialise safely (GP 11)
+    /// rather than materialising a null scope, and the UI omits the
+    /// badge rather than guessing (GP 9).
+    Scope: VectorScope option
+    /// Vector-store chunk id of the retrieved chunk — the stable wire
+    /// join key between this source and the `[¹]` citation markers in
+    /// the assistant's reply (markers are positional and survive
+    /// `CitationNormaliser` rewrites only by index; the chunk id gives
+    /// renderers an identity that doesn't shift when markers are
+    /// normalised). Always `Some` at production time; `None` only for
+    /// pre-widening persisted conversation payloads (GP 11).
+    ChunkId: string option
 }
 
 /// Controls how results from multiple scopes are combined.

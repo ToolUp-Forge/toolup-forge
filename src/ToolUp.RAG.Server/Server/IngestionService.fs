@@ -60,6 +60,12 @@ type IngestionBackgroundService
     let toJson o =
         JsonSerializer.Serialize(o, jsonOptions)
 
+    // Both emit helpers are best-effort swallow-and-log (mirroring
+    // `usageLog.Record` below): `processJob` runs fire-and-forget via
+    // `Async.Start`, and the emits are called from *catch paths* — an
+    // event-store outage must degrade to a lost audit event, never to
+    // an escaping exception that aborts the document's remaining chunks
+    // and strands its ingestion status as "in progress" forever.
     let emitIndexed (job: IngestionJob) = async {
         let payload =
             toJson {|
@@ -69,7 +75,14 @@ type IngestionBackgroundService
             |}
 
         let evt = Events.create job.ScopeId "ToolUp.RAG" "KnowledgeChunkIndexed" payload
-        do! eventStore.Write(evt)
+
+        try
+            do! eventStore.Write(evt)
+        with ex ->
+            logger.Error(
+                $"[IngestionBackgroundService] event=audit_emit_failed kind=KnowledgeChunkIndexed doc={job.DocumentId} chunk={job.ChunkId}: event-store write failed; the chunk IS indexed but the audit event is lost",
+                Some ex
+            )
     }
 
     let emitFailed (job: IngestionJob) (error: string) = async {
@@ -81,7 +94,14 @@ type IngestionBackgroundService
             |}
 
         let evt = Events.create job.ScopeId "ToolUp.RAG" "KnowledgeChunkFailed" payload
-        do! eventStore.Write(evt)
+
+        try
+            do! eventStore.Write(evt)
+        with ex ->
+            logger.Error(
+                $"[IngestionBackgroundService] event=audit_emit_failed kind=KnowledgeChunkFailed doc={job.DocumentId} chunk={job.ChunkId}: event-store write failed; the per-chunk failure report is lost (original chunk error: {error})",
+                Some ex
+            )
     }
 
     let notifyObservers (callback: string) (job: IngestionJob) (notify: IIngestionStatusObserver -> Async<unit>) = async {
@@ -118,95 +138,123 @@ type IngestionBackgroundService
         OriginatingUserId = doc.OriginatingUserId
     }
 
+    let processJobCore (doc: DocumentIngestionJob) = async {
+        let chunkTexts = doc.Chunks |> List.map (fun (_, c) -> c.Content) |> List.toArray
+
+        // Phase 9 compute-quota: embedding API calls are billable
+        // and were previously unattributed AND ungated. Pre-flight
+        // the per-scope budget BEFORE the call. On breach, mark every
+        // chunk `Failed` (observable — consistent with the ingestion
+        // back-pressure contract; NEVER a silent drop) and skip the
+        // document; no embedding spend is incurred.
+        let! quotaGate = quota.CheckTokenBudget(doc.ScopeId, ResourceKinds.apiRequests, decimal chunkTexts.Length)
+
+        match quotaGate with
+        | Error qb ->
+            let msg =
+                sprintf
+                    "Embedding quota exceeded for scope '%s' (%s limit %M): document not indexed. Usage resets per the configured per-day / per-month window."
+                    qb.ScopeId
+                    qb.Kind
+                    qb.Limit
+
+            logger.Error(
+                $"[IngestionBackgroundService] event=embedding_quota_breached doc={doc.DocumentId} scope={doc.ScopeId}: {msg}",
+                None
+            )
+
+            for (chunkId, chunk) in doc.Chunks do
+                let job = chunkJob doc chunkId chunk
+                do! emitFailed job msg
+                do! notifyObservers "OnChunkFailed" job (fun o -> o.OnChunkFailed(job, msg))
+        | Ok() ->
+            // Pre-warm the embedding cache with one batched call. Failures
+            // here propagate to per-chunk failure events because the
+            // subsequent `pipeline.Index` calls will rerun the same
+            // embedding step and surface the same error per chunk —
+            // observers see the failure on the unit they care about.
+            try
+                let sw = System.Diagnostics.Stopwatch.StartNew()
+                let! _ = embedder.GenerateEmbeddings chunkTexts
+                sw.Stop()
+                telemetry.RecordEmbedding(chunkTexts.Length, sw.ElapsedMilliseconds)
+
+                // Best-effort per-scope usage attribution (billing
+                // visibility). A `Record` failure must NEVER fail
+                // ingestion (mirrors the AI `MeteringProvider`).
+                try
+                    do!
+                        usageLog.Record {
+                            RecordId = Guid.NewGuid()
+                            ScopeId = doc.ScopeId
+                            ResourceKind = ResourceKinds.apiRequests
+                            Quantity = decimal chunkTexts.Length
+                            Unit = "embeddings"
+                            Origin = None
+                            Metadata =
+                                Map.ofList [
+                                    "provider", embedder.ProviderId
+                                    "model", embedder.ModelId
+                                    "documentId", doc.DocumentId
+                                ]
+                            Timestamp = DateTime.UtcNow
+                        }
+                with _ ->
+                    ()
+            with ex ->
+                // NOT a graceful fallback — `pipeline.Index` below calls
+                // the SAME embedder per chunk, so a down / misconfigured
+                // provider means every chunk of this document is about to
+                // fail identically (N KnowledgeChunkFailed events). Say
+                // that plainly instead of the old misleading "falling
+                // back to per-chunk embed" text, which sent operators
+                // chasing a per-chunk bug during a provider outage.
+                logger.Error(
+                    $"[IngestionBackgroundService] event=batched_embedding_failed doc={doc.DocumentId} docName={doc.DocumentName} chunks={doc.Chunks.Length} provider={embedder.ProviderId}/{embedder.ModelId}: the batched embedding call failed; the per-chunk Index path uses the same provider, so every chunk of this document will now fail the same way. This is almost always a provider-level problem (missing/invalid API key, rate limit, or network), not a per-chunk data issue — fix the embedding provider and re-ingest the document.",
+                    Some ex
+                )
+
+            for (chunkId, chunk) in doc.Chunks do
+                let job = chunkJob doc chunkId chunk
+
+                try
+                    do! pipeline.Index chunkId chunk doc.Scope
+                    do! emitIndexed job
+                    do! notifyObservers "OnChunkIndexed" job (fun o -> o.OnChunkIndexed job)
+                with ex ->
+                    do! emitFailed job ex.Message
+                    do! notifyObservers "OnChunkFailed" job (fun o -> o.OnChunkFailed(job, ex.Message))
+    }
+
     let processJob (doc: DocumentIngestionJob) = async {
         do! sem.WaitAsync() |> Async.AwaitTask
 
         try
-            let chunkTexts = doc.Chunks |> List.map (fun (_, c) -> c.Content) |> List.toArray
-
-            // Phase 9 compute-quota: embedding API calls are billable
-            // and were previously unattributed AND ungated. Pre-flight
-            // the per-scope budget BEFORE the call. On breach, mark every
-            // chunk `Failed` (observable — consistent with the ingestion
-            // back-pressure contract; NEVER a silent drop) and skip the
-            // document; no embedding spend is incurred.
-            let! quotaGate = quota.CheckTokenBudget(doc.ScopeId, ResourceKinds.apiRequests, decimal chunkTexts.Length)
-
-            match quotaGate with
-            | Error qb ->
-                let msg =
-                    sprintf
-                        "Embedding quota exceeded for scope '%s' (%s limit %M): document not indexed. Usage resets per the configured per-day / per-month window."
-                        qb.ScopeId
-                        qb.Kind
-                        qb.Limit
-
+            // Top-level guard: `processJob` is dispatched via `Async.Start`
+            // (fire-and-forget), so an exception escaping it has no
+            // observer — the document's remaining chunks are silently
+            // abandoned and its status stays "in progress" forever. The
+            // per-chunk paths inside `processJobCore` carry their own
+            // try/with (and the emit helpers swallow-and-log), so this
+            // catch fires only for failures outside them (e.g. the quota
+            // gate throwing); at that point no chunk has been reported,
+            // so the best-effort mark-failed sweep below cannot
+            // contradict an already-emitted per-chunk event.
+            try
+                do! processJobCore doc
+            with ex ->
                 logger.Error(
-                    $"[IngestionBackgroundService] event=embedding_quota_breached doc={doc.DocumentId} scope={doc.ScopeId}: {msg}",
-                    None
+                    $"[IngestionBackgroundService] event=process_job_crashed doc={doc.DocumentId} docName={doc.DocumentName} chunks={doc.Chunks.Length} provider={embedder.ProviderId}/{embedder.ModelId}: document processing aborted before per-chunk reporting started; marking every chunk Failed (best-effort)",
+                    Some ex
                 )
+
+                let msg =
+                    sprintf "Document processing aborted before this chunk was attempted: %s" ex.Message
 
                 for (chunkId, chunk) in doc.Chunks do
                     let job = chunkJob doc chunkId chunk
                     do! emitFailed job msg
                     do! notifyObservers "OnChunkFailed" job (fun o -> o.OnChunkFailed(job, msg))
-            | Ok() ->
-                // Pre-warm the embedding cache with one batched call. Failures
-                // here propagate to per-chunk failure events because the
-                // subsequent `pipeline.Index` calls will rerun the same
-                // embedding step and surface the same error per chunk —
-                // observers see the failure on the unit they care about.
-                try
-                    let sw = System.Diagnostics.Stopwatch.StartNew()
-                    let! _ = embedder.GenerateEmbeddings chunkTexts
-                    sw.Stop()
-                    telemetry.RecordEmbedding(chunkTexts.Length, sw.ElapsedMilliseconds)
-
-                    // Best-effort per-scope usage attribution (billing
-                    // visibility). A `Record` failure must NEVER fail
-                    // ingestion (mirrors the AI `MeteringProvider`).
-                    try
-                        do!
-                            usageLog.Record {
-                                RecordId = Guid.NewGuid()
-                                ScopeId = doc.ScopeId
-                                ResourceKind = ResourceKinds.apiRequests
-                                Quantity = decimal chunkTexts.Length
-                                Unit = "embeddings"
-                                Origin = None
-                                Metadata =
-                                    Map.ofList [
-                                        "provider", embedder.ProviderId
-                                        "model", embedder.ModelId
-                                        "documentId", doc.DocumentId
-                                    ]
-                                Timestamp = DateTime.UtcNow
-                            }
-                    with _ ->
-                        ()
-                with ex ->
-                    // NOT a graceful fallback — `pipeline.Index` below calls
-                    // the SAME embedder per chunk, so a down / misconfigured
-                    // provider means every chunk of this document is about to
-                    // fail identically (N KnowledgeChunkFailed events). Say
-                    // that plainly instead of the old misleading "falling
-                    // back to per-chunk embed" text, which sent operators
-                    // chasing a per-chunk bug during a provider outage.
-                    logger.Error(
-                        $"[IngestionBackgroundService] event=batched_embedding_failed doc={doc.DocumentId} docName={doc.DocumentName} chunks={doc.Chunks.Length} provider={embedder.ProviderId}/{embedder.ModelId}: the batched embedding call failed; the per-chunk Index path uses the same provider, so every chunk of this document will now fail the same way. This is almost always a provider-level problem (missing/invalid API key, rate limit, or network), not a per-chunk data issue — fix the embedding provider and re-ingest the document.",
-                        Some ex
-                    )
-
-                for (chunkId, chunk) in doc.Chunks do
-                    let job = chunkJob doc chunkId chunk
-
-                    try
-                        do! pipeline.Index chunkId chunk doc.Scope
-                        do! emitIndexed job
-                        do! notifyObservers "OnChunkIndexed" job (fun o -> o.OnChunkIndexed job)
-                    with ex ->
-                        do! emitFailed job ex.Message
-                        do! notifyObservers "OnChunkFailed" job (fun o -> o.OnChunkFailed(job, ex.Message))
         finally
             sem.Release() |> ignore
     }

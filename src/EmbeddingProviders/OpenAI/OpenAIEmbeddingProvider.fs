@@ -62,6 +62,50 @@ type private OpenAIEmbeddingProviderImpl(secretStore: ISecretStore, model: strin
         |> Seq.map _.GetSingle()
         |> Seq.toArray
 
+    // Reassemble a response's `data` array into input order. The API
+    // documents that entries carry an `index` field and does not promise
+    // arrival order; mapping positionally would silently assign wrong
+    // embeddings to chunks on an out-of-order response — corpus
+    // corruption that re-embedding cannot heal, because the version
+    // stamps (provider/model/dim) still match. Count + range + duplicate
+    // checks together guarantee every slot is filled (pigeonhole), so a
+    // short or malformed response fails the batch loudly instead.
+    let reassembleByIndex (inputCount: int) (doc: JsonDocument) : float32 array array =
+        let data = doc.RootElement.GetProperty("data")
+        let count = data.GetArrayLength()
+
+        if count <> inputCount then
+            failwith (
+                sprintf
+                    "OpenAI embeddings response carried %d data entries for %d inputs — refusing the batch. Accepting a short/long response would assign embeddings to the wrong chunks (silent corpus corruption that re-embedding cannot heal — version stamps still match)."
+                    count
+                    inputCount
+            )
+
+        let results = Array.zeroCreate<float32 array> inputCount
+
+        for el in data.EnumerateArray() do
+            let idx = el.GetProperty("index").GetInt32()
+
+            if idx < 0 || idx >= inputCount then
+                failwith (
+                    sprintf
+                        "OpenAI embeddings response entry carried index %d, outside the request's input range 0..%d — refusing the batch."
+                        idx
+                        (inputCount - 1)
+                )
+
+            if not (isNull (box results[idx])) then
+                failwith (
+                    sprintf
+                        "OpenAI embeddings response carried duplicate entries for index %d — refusing the batch."
+                        idx
+                )
+
+            results[idx] <- parseEmbedding el
+
+        results
+
     interface IEmbeddingProvider with
 
         member _.Dimensions = dimensions
@@ -73,10 +117,7 @@ type private OpenAIEmbeddingProviderImpl(secretStore: ISecretStore, model: strin
         member _.GenerateEmbedding(text: string) = async {
             let! doc = postEmbedding (JsonSerializer.Serialize {| model = model; input = text |})
 
-            return
-                doc.RootElement.GetProperty("data").EnumerateArray()
-                |> Seq.head
-                |> parseEmbedding
+            return reassembleByIndex 1 doc |> Array.head
         }
 
         // Native batched path: a single POST carrying `Input` as a string
@@ -98,12 +139,7 @@ type private OpenAIEmbeddingProviderImpl(secretStore: ISecretStore, model: strin
                 for batch in batches do
                     let! doc = postEmbedding (JsonSerializer.Serialize {| model = model; input = batch |})
 
-                    let arr =
-                        doc.RootElement.GetProperty("data").EnumerateArray()
-                        |> Seq.map parseEmbedding
-                        |> Seq.toArray
-
-                    results.AddRange(arr)
+                    results.AddRange(reassembleByIndex batch.Length doc)
 
                 return results.ToArray()
         }

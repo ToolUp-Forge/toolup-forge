@@ -113,13 +113,24 @@ type ReembeddingBackgroundService
             || m <> embedder.ModelId
             || d <> string embedder.Dimensions
 
+    // Both emit helpers are best-effort swallow-and-log (same shape as
+    // `IngestionBackgroundService`): `processOne` runs fire-and-forget via
+    // `Async.Start` and `emitReembedFailed` is called from a *catch path*
+    // — an event-store outage must degrade to a lost audit event, never
+    // to an escaping exception that kills the re-embed worker.
     let emitReembedded (scope: VectorScope) (chunkId: string) = async {
         let payload = toJson {| Scope = scope; ChunkId = chunkId |}
 
         let evt =
             Events.create (scopeId scope) "ToolUp.RAG" "KnowledgeChunkReembedded" payload
 
-        do! eventStore.Write(evt)
+        try
+            do! eventStore.Write(evt)
+        with ex ->
+            logger.Error(
+                $"[ReembeddingService] event=audit_emit_failed kind=KnowledgeChunkReembedded scope=%A{scope} chunk={chunkId}: event-store write failed; the chunk IS re-embedded but the audit event is lost",
+                Some ex
+            )
     }
 
     let emitReembedFailed (scope: VectorScope) (chunkId: string) (error: string) = async {
@@ -133,7 +144,13 @@ type ReembeddingBackgroundService
         let evt =
             Events.create (scopeId scope) "ToolUp.RAG" "KnowledgeChunkReembedFailed" payload
 
-        do! eventStore.Write(evt)
+        try
+            do! eventStore.Write(evt)
+        with ex ->
+            logger.Error(
+                $"[ReembeddingService] event=audit_emit_failed kind=KnowledgeChunkReembedFailed scope=%A{scope} chunk={chunkId}: event-store write failed; the re-embed failure report is lost (original error: {error})",
+                Some ex
+            )
     }
 
     let processOne (scope: VectorScope) (chunkId: string) (chunk: TextChunk) = async {

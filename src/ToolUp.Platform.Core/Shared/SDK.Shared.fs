@@ -1855,21 +1855,25 @@ type ServerConfig = {
     /// gate. Production deployments leave it at the default `false`;
     /// dev environments opt in explicitly.
     EnableDevEndpoints: bool
-    /// Per-endpoint override for the RAG citation dev endpoint
-    /// (`/dev/rag-citation`). Surfaced separately from the master
-    /// `EnableDevEndpoints` flag because the citation telemetry
-    /// exposes per-(provider, model) rewrite samples — useful
-    /// operational data, but lower-sensitivity than no-op latency
-    /// gauges and worth being able to suppress independently.
+    /// Suppress-only per-endpoint override for the RAG citation dev
+    /// endpoint (`/dev/rag-citation`). Surfaced separately from the
+    /// master `EnableDevEndpoints` flag because the citation telemetry
+    /// exposes per-(provider, model) rewrite samples — conversation-
+    /// derived text, the most privacy-sensitive dev surface — and is
+    /// worth being able to suppress independently.
     /// `None` (default) — follow `EnableDevEndpoints`: endpoint
     /// is registered iff the master switch is on.
-    /// `Some true` — register the endpoint even if other dev
-    /// endpoints are off (rare; useful when citation drift is the
-    /// only thing being investigated).
     /// `Some false` — suppress the citation endpoint specifically
     /// while leaving other dev endpoints enabled. Recommended for
     /// deployments that want `/dev/inspect` / `/dev/ai-latency`
     /// but treat citation samples as too sensitive to expose.
+    /// `Some true` — same as `None`. The override can never force
+    /// the endpoint on while the master switch is off: the former
+    /// force-on arm (Phase 14s) broke the "master off ⇒ no dev
+    /// surface" audit invariant for an unauthenticated endpoint and
+    /// was reversed by the 2026-06-12 gaps audit; a `Some true`
+    /// under a disabled master now draws a startup `Warning` from
+    /// `CitationDevEndpointValidator`.
     EnableCitationDevEndpoint: bool option
     /// Startup config-preflight escape hatch. Default
     /// `false`. When `true`, `ConfigValidatorAggregator.validate`

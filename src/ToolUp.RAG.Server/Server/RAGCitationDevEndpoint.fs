@@ -94,8 +94,12 @@ let private citationHandler: HttpHandler =
 
 /// Route registered conditionally by `composeWithRAG`. The activation
 /// gate is `ServerConfig.EnableDevEndpoints` as the master switch, with
-/// `ServerConfig.EnableCitationDevEndpoint` (default `None`) as the
-/// per-endpoint override — `Some false` suppresses this endpoint
-/// specifically while leaving other dev endpoints enabled; `Some true`
-/// registers it even when the master switch is off.
+/// `ServerConfig.EnableCitationDevEndpoint` (default `None`) as a
+/// suppress-only per-endpoint override — `Some false` suppresses this
+/// endpoint specifically while leaving other dev endpoints enabled.
+/// The override cannot force the endpoint on while the master switch
+/// is off (Investigate gaps 2026-06-12, RAG Gap 8 — the former
+/// force-on arm broke the "master off ⇒ no dev surface" audit
+/// invariant for an unauthenticated endpoint carrying
+/// conversation-derived rewrite samples).
 let routes: HttpHandler list = [ route "/dev/rag-citation" >=> citationHandler ]

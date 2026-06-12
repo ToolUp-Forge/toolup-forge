@@ -51,6 +51,59 @@ let private newStore () =
 
     store :> IVectorStore, store :> IDisposable
 
+let private newInMemoryStore () =
+    let tempDir =
+        Path.Combine(Path.GetTempPath(), "toolup-inmem-vec-test-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory tempDir |> ignore
+    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+
+    let store =
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = SilentLogger())
+
+    store :> IVectorStore, store :> IDisposable
+
+/// `IVectorStore` deterministic-ordering contract (RAG Gap 7, Investigate
+/// gaps 2026-06-12): equal-score matches must come back in a stable total
+/// order — tie-broken on `(Scope, ChunkId)` — never in enumeration /
+/// accumulation order, which flips top-K membership run-to-run and is
+/// fatal for the deterministic eval gate. Parameterised over a store
+/// factory so every `IVectorStore` implementation (and any future
+/// companion) binds the same check.
+let deterministicOrderingContract (storeName: string) (makeStore: unit -> IVectorStore * IDisposable) =
+    testCaseAsync (sprintf "%s: equal-score matches return in stable (Scope, ChunkId) order" storeName)
+    <| async {
+        let store, dispose = makeStore ()
+
+        try
+            let vec: float32 array = Array.init 8 (fun i -> if i = 0 then 1.0f else 0.0f)
+
+            // Upsert in deliberately non-sorted id order, across two
+            // scopes, all with the identical vector so every match ties
+            // on score and only the tie-break determines the order.
+            do! store.Upsert (Team "T") "t-c" vec (chunk "tc" "x")
+            do! store.Upsert (Team "T") "t-a" vec (chunk "ta" "x")
+            do! store.Upsert Platform "p-b" vec (chunk "pb" "x")
+            do! store.Upsert (Team "T") "t-b" vec (chunk "tb" "x")
+
+            let! first = store.Search [ Platform; Team "T" ] vec 10
+            let! second = store.Search [ Platform; Team "T" ] vec 10
+
+            let ids = first |> List.map (fun m -> m.Scope, m.ChunkId)
+
+            Expect.equal
+                ids
+                [ Platform, "p-b"; Team "T", "t-a"; Team "T", "t-b"; Team "T", "t-c" ]
+                "ties must resolve on (Scope, ChunkId), not enumeration order"
+
+            Expect.equal
+                (second |> List.map (fun m -> m.Scope, m.ChunkId))
+                ids
+                "repeated identical queries must return the identical ordering"
+        finally
+            dispose.Dispose()
+    }
+
 // `testSequenced` paired with `HnswFidelityTests` — HNSW.Net carries
 // shared static state beyond the per-store RNG fix in HnswVectorStore.fs;
 // concurrent HNSW testList execution surfaces intermittent
@@ -147,6 +200,14 @@ let tests =
             finally
                 dispose.Dispose()
         }
+
+        // Deterministic-ordering contract, bound against both in-tree
+        // `IVectorStore` implementations. Lives here (rather than a new
+        // Contracts file) so it rides an already-registered test module;
+        // external companions bind `deterministicOrderingContract` the
+        // same way from their own test packs.
+        deterministicOrderingContract "HnswVectorStore" newStore
+        deterministicOrderingContract "InMemoryVectorStore" newInMemoryStore
 
         testAsync "tombstoned chunks are excluded from search; restore reinstates them" {
             let store, dispose = newStore ()

@@ -395,6 +395,12 @@ let private lineageTests =
             Expect.equal source.OriginalRef (Some originalRef) "ref round-trips through the projection"
             Expect.equal (source.OriginalRef |> Option.bind _.Location) (Some(SourceLocator.Page 4)) "page anchor"
 
+            // Lineage widening (Investigate gaps 2026-06-12): the live
+            // projection always carries the match's scope (authority
+            // badge) and chunk id (citation join key).
+            Expect.equal source.Scope (Some Deployment) "scope projects from the VectorMatch"
+            Expect.equal source.ChunkId (Some "doc-1:chunk:0") "chunk id projects from the VectorMatch"
+
         testCase "chunks without _originalRef (notes, pre-Phase-103 ingests) project None"
         <| fun _ ->
             let m: VectorMatch = {
@@ -448,6 +454,8 @@ let private lineageTests =
                         SizeBytes = 1024L
                         Location = Some(SourceLocator.RowGroup(2, 50))
                     }
+                Scope = Some(Team "T")
+                ChunkId = Some "doc-1:chunk:0"
             }
 
             let json = JsonSerializer.Serialize(source, opts)
@@ -470,6 +478,13 @@ let private lineageTests =
             let back = JsonSerializer.Deserialize<RetrievedSource>(json, opts)
             Expect.isNone back.OriginalRef "missing field absorbs to None"
             Expect.equal back.DocumentId "doc-1" "legacy fields intact"
+            // Lineage widening (Investigate gaps 2026-06-12): same GP 11
+            // guarantee for the Scope / ChunkId fields — RetrievedSources
+            // ride persisted conversation history, so replayed
+            // pre-widening payloads must absorb to None, never a null
+            // scope that crashes a renderer's pattern match.
+            Expect.isNone back.Scope "missing Scope absorbs to None"
+            Expect.isNone back.ChunkId "missing ChunkId absorbs to None"
     ]
 
 let tests =

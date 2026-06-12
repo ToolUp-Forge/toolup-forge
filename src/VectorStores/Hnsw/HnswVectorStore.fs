@@ -547,7 +547,19 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                                     }
                                 | _ -> ())
 
-            return allMatches |> Seq.sortByDescending _.Score |> Seq.truncate topK |> Seq.toList
+            // Total-order sort: per-scope KNN results are merged from a
+            // ResizeArray whose order depends on scope iteration + graph
+            // traversal, and equal scores are possible (duplicate vectors,
+            // saturated mismatched-dim distances). A score-only sort would
+            // resolve ties by accumulation order and flip top-K membership
+            // run-to-run — fatal for the deterministic eval gate. Tie-break
+            // on the unique `(Scope, ChunkId)`, mirroring the in-tree
+            // defaults (`InMemoryVectorStore`, `InMemoryBM25Index`).
+            return
+                allMatches
+                |> Seq.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+                |> Seq.truncate topK
+                |> Seq.toList
         }
 
         member _.ListChunks scope includeDeleted = async {

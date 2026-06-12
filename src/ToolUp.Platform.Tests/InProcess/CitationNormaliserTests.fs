@@ -28,6 +28,8 @@ let private threeSources: RetrievedSource list = [
         Origin = ChunkOrigin.Document
         LocationHint = None
         OriginalRef = None
+        Scope = None
+        ChunkId = None
     }
     {
         DocumentId = "doc-2"
@@ -37,6 +39,8 @@ let private threeSources: RetrievedSource list = [
         Origin = ChunkOrigin.Document
         LocationHint = None
         OriginalRef = None
+        Scope = None
+        ChunkId = None
     }
     {
         DocumentId = "doc-3"
@@ -46,6 +50,8 @@ let private threeSources: RetrievedSource list = [
         Origin = ChunkOrigin.Document
         LocationHint = None
         OriginalRef = None
+        Scope = None
+        ChunkId = None
     }
 ]
 

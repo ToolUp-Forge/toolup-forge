@@ -203,6 +203,40 @@ type ChunkingConfigValidator(configName: string, config: ToolUp.RAG.Chunking.Chu
                     )
         }
 
+/// Investigate gaps 2026-06-12 (RAG Gap 8) — flags the now-inert
+/// `EnableCitationDevEndpoint = Some true` paired with
+/// `EnableDevEndpoints = false`. Phase 14s shipped that combination as
+/// a force-on arm ("register /dev/rag-citation even when the master is
+/// off"); the 2026-06-12 audit reversed it because the force-on broke
+/// the "master off ⇒ no dev surface" audit invariant for the most
+/// privacy-sensitive dev endpoint (conversation-derived rewrite
+/// samples, no per-endpoint auth). `composeWithRAG` now resolves
+/// `Some v` as `v && EnableDevEndpoints` — the override can suppress
+/// but never force-on — so a config still carrying `Some true` under a
+/// disabled master is dead configuration. `Warning`, not `Error`: the
+/// resolved behaviour is the safe one; the operator just needs to know
+/// their override no longer does what Phase 14s documented.
+type CitationDevEndpointValidator(serverConfig: ServerConfig, ?timeout: TimeSpan) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "rag-citation-dev-endpoint"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            match serverConfig.EnableCitationDevEndpoint with
+            | Some true when not serverConfig.EnableDevEndpoints ->
+                return
+                    Warning(
+                        "EnableCitationDevEndpoint = Some true has no effect while EnableDevEndpoints = false — "
+                        + "the per-endpoint override can suppress /dev/rag-citation but no longer force-registers it "
+                        + "(the former force-on arm exposed conversation-derived rewrite samples on an unauthenticated "
+                        + "endpoint while every other dev surface was off). Set EnableDevEndpoints = true to get the "
+                        + "endpoint, or drop the override to silence this warning."
+                    )
+            | _ -> return Ok
+        }
+
 /// Phase 9j follow-up — refuses an in-process RAG ingestion queue
 /// paired with `ReplicaCount > 1`. `composeWithRAG` builds a
 /// process-local `IngestionQueue` + `IngestionBackgroundService` per
