@@ -119,16 +119,22 @@ let ingestNarrative
                 // failure left orphans in the store and RAG kept
                 // surfacing them under the live document id with no
                 // operator signal.
-                match duplicate, deps.VectorStore with
-                | Some existingDoc, Some vs when chunks.Length < existingDoc.ChunkCount ->
+                //
+                // Phase 115 — the tail delete routes through the unified
+                // lifecycle seam so the sparse index sheds the stale
+                // sections too (pre-115 the `vs.DeleteChunk` loop left
+                // them retrievable through the hybrid sparse leg). The
+                // seam carries the per-chunk failure isolation + survivor
+                // reporting this block used to hand-roll.
+                match duplicate, deps.IndexLifecycle with
+                | Some existingDoc, Some lifecycle when chunks.Length < existingDoc.ChunkCount ->
                     let mutable orphanIds: string list = []
 
                     for i in chunks.Length .. existingDoc.ChunkCount - 1 do
                         let chunkId = sprintf "%s:chunk:%d" docId i
+                        let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
 
-                        try
-                            do! vs.DeleteChunk deps.VectorScope chunkId
-                        with ex ->
+                        if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
                             orphanIds <- chunkId :: orphanIds
 
                             deps.Logger.Warn(
@@ -137,13 +143,13 @@ let ingestNarrative
                                     chunkId
                                     docId
                                     deps.Scope.ScopeId
-                                    ex.Message
+                                    (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise report)
                             )
 
                     if not (List.isEmpty orphanIds) then
                         deps.Logger.Warn(
                             sprintf
-                                "[KnowledgeBase] %d orphan chunk(s) remain in vector store for docId=%s after narrative overwrite; RAG may surface stale section content. Surviving chunk ids: %s"
+                                "[KnowledgeBase] %d orphan chunk(s) remain in the retrieval indexes for docId=%s after narrative overwrite; RAG may surface stale section content. Surviving chunk ids: %s"
                                 orphanIds.Length
                                 docId
                                 (orphanIds |> List.rev |> String.concat "; ")
@@ -273,39 +279,47 @@ let resetIndex (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
             let! _ = deps.Storage.Delete(deps.Scope.Container, indexBlobName)
             ()
 
-        // Drop each prior doc's vector chunks so RAG retrieval
-        // doesn't keep surfacing them. Falls through if no vector
-        // store is wired (tests).
+        // Drop each prior doc's index chunks so retrieval doesn't keep
+        // surfacing them. Falls through if no index seam is wired
+        // (tests).
+        //
+        // Phase 115 — routes through the unified lifecycle seam so the
+        // sparse index sheds the wiped documents too (pre-115 the
+        // `vs.DeleteChunk` loop left them retrievable through the
+        // hybrid sparse leg and at rest in `bm25.json`). Deliberately
+        // per-document rather than `DeleteByScope`: `deps.VectorScope`
+        // can be the shared `Deployment` scope, where a scope-level
+        // delete would wipe other containers' chunks as collateral.
         //
         // 0.4.3 — per-chunk failures caught, counted, and surfaced
         // as a single summary log line per ResetIndex call. Without
         // this, a partial-failure reset left RAG quoting wiped docs
-        // with no operator signal.
-        match deps.VectorStore with
-        | Some vs ->
+        // with no operator signal. The seam now carries the per-chunk
+        // isolation; this block aggregates its survivor reports.
+        match deps.IndexLifecycle with
+        | Some lifecycle ->
             let mutable orphanIds: string list = []
 
             for doc in priorDocs do
-                for i in 0 .. doc.ChunkCount - 1 do
-                    let chunkId = sprintf "%s:chunk:%d" doc.Id i
+                let! report = lifecycle.DeleteDocument deps.VectorScope doc.Id doc.ChunkCount
 
-                    try
-                        do! vs.DeleteChunk deps.VectorScope chunkId
-                    with ex ->
-                        orphanIds <- chunkId :: orphanIds
+                if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                    let survivors = report.SurvivingChunkIds |> List.map snd |> List.distinct
 
-                        deps.Logger.Warn(
-                            sprintf
-                                "[KnowledgeBase] ResetIndex chunk delete failed for %s (scope=%s): %s"
-                                chunkId
-                                deps.Scope.ScopeId
-                                ex.Message
-                        )
+                    orphanIds <- survivors @ orphanIds
+
+                    deps.Logger.Warn(
+                        sprintf
+                            "[KnowledgeBase] ResetIndex chunk delete completed partially for docId=%s (scope=%s): %s"
+                            doc.Id
+                            deps.Scope.ScopeId
+                            (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                    )
 
             if not (List.isEmpty orphanIds) then
                 deps.Logger.Warn(
                     sprintf
-                        "[KnowledgeBase] ResetIndex left %d orphan vector chunk(s) in scope %s; RAG may continue surfacing wiped documents. Surviving chunk ids: %s"
+                        "[KnowledgeBase] ResetIndex left %d orphan chunk(s) in the retrieval indexes for scope %s; RAG may continue surfacing wiped documents. Surviving chunk ids: %s"
                         orphanIds.Length
                         deps.Scope.ScopeId
                         (orphanIds |> List.rev |> String.concat "; ")

@@ -962,10 +962,25 @@ let composeWithRAG
             | :? ITableExtractor as t -> t
             | _ -> ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
 
+        // Phase 115 — the unified index-lifecycle seam over every index
+        // tier this composition fuses. KB resolves it via
+        // `KnowledgeApiDeps` so its deletion paths fan out across the
+        // vector store AND the sparse index (pre-115 they looped
+        // `vs.DeleteChunk` only, leaving deleted content retrievable
+        // through the hybrid sparse leg and at rest in bm25.json).
+        let indexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle =
+            ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(
+                vectorStore,
+                Some sparseIndex,
+                Some embeddingCache,
+                ragLogger
+            )
+
         let s =
             s
                 .AddSingleton<IVectorStore>(vectorStore)
                 .AddSingleton<ISparseIndex>(sparseIndex)
+                .AddSingleton<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>(indexLifecycle)
                 .AddSingleton<IEmbeddingProvider>(cachedEmbedder)
                 .AddSingleton<IEmbeddingCache>(embeddingCache)
                 .AddSingleton<IRetrievalPipeline>(pipeline)

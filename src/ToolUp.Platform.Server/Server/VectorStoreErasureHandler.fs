@@ -36,12 +36,52 @@ let scopeOf (scopeId: string) : VectorScope =
     else
         Team scopeId
 
-type VectorStoreErasureHandler(vectorStore: IVectorStore, embeddingCache: IEmbeddingCache) =
+type VectorStoreErasureHandler
+    (vectorStore: IVectorStore, embeddingCache: IEmbeddingCache, ?sparseIndex: ToolUp.Platform.ISparseIndex.ISparseIndex)
+    =
+
+    // Phase 115 — erase across BOTH retrieval legs. Pre-115 this
+    // handler reached the vector store only, so a hybrid deployment's
+    // BM25 sparse index (full chunk text, persisted to blob storage)
+    // kept serving — and storing at rest — content the DSR had erased.
+    let eraseOnce (scopeId: string) subjectUserId policy dryRun = async {
+        let scope = scopeOf scopeId
+        let! vectorResult = vectorStore.Erase(scope, subjectUserId, policy, dryRun)
+
+        let! sparseResult =
+            match sparseIndex with
+            | Some sparse -> sparse.Erase(scope, subjectUserId, policy, dryRun)
+            | None ->
+                async.Return(
+                    Result.Ok {
+                        HandlerName = HandlerName
+                        RecordsAffected = 0
+                        Note = None
+                    }
+                )
+
+        return
+            match vectorResult, sparseResult with
+            | Result.Ok v, Result.Ok s ->
+                Result.Ok {
+                    HandlerName = HandlerName
+                    RecordsAffected = v.RecordsAffected + s.RecordsAffected
+                    Note =
+                        match v.Note, s.Note with
+                        | Some vn, Some sn -> Some(sprintf "%s; sparse: %s" vn sn)
+                        | Some vn, None -> Some vn
+                        | None, Some sn -> Some(sprintf "sparse: %s" sn)
+                        | None, None -> None
+                }
+            | Result.Error err, _ -> Result.Error err
+            | _, Result.Error err -> Result.Error err
+    }
+
     interface IErasureHandler with
         member _.Name = HandlerName
 
         member _.Erase(scopeId, subjectUserId, policy) = async {
-            let! result = vectorStore.Erase(scopeOf scopeId, subjectUserId, policy, false)
+            let! result = eraseOnce scopeId subjectUserId policy false
             // Flush derived embeddings so an erased chunk's vector
             // can't be served from cache afterwards.
             do! embeddingCache.Clear()
@@ -49,7 +89,7 @@ type VectorStoreErasureHandler(vectorStore: IVectorStore, embeddingCache: IEmbed
         }
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = vectorStore.Erase(scopeOf scopeId, subjectUserId, policy, true)
+            let! result = eraseOnce scopeId subjectUserId policy true
 
             return
                 match result with
@@ -62,6 +102,18 @@ type VectorStoreErasureHandler(vectorStore: IVectorStore, embeddingCache: IEmbed
         }
 
 /// Compose-time registration helper (the IErasureHandler extension
-/// point — no composition-root edit).
+/// point — no composition-root edit). Vector-only deployments keep this
+/// shape; hybrid deployments use `erasureHandlerHybrid` so DSR erasure
+/// covers the sparse leg too (Phase 115).
 let erasureHandler (vectorStore: IVectorStore) (embeddingCache: IEmbeddingCache) : IErasureHandler =
     VectorStoreErasureHandler(vectorStore, embeddingCache) :> IErasureHandler
+
+/// Phase 115 — hybrid-deployment registration helper: erasure fans out
+/// across vector store + sparse index, then flushes the embedding
+/// cache.
+let erasureHandlerHybrid
+    (vectorStore: IVectorStore)
+    (embeddingCache: IEmbeddingCache)
+    (sparseIndex: ToolUp.Platform.ISparseIndex.ISparseIndex)
+    : IErasureHandler =
+    VectorStoreErasureHandler(vectorStore, embeddingCache, sparseIndex) :> IErasureHandler

@@ -37,6 +37,14 @@ type KnowledgeApiDeps = {
     UserId: string
     VectorScope: VectorScope
     VectorStore: IVectorStore option
+    /// Phase 115 — unified deletion/erasure seam over every retrieval
+    /// index the deployment composed (vector store + sparse index +
+    /// embedding cache). Deletion paths route through this instead of
+    /// looping `VectorStore.DeleteChunk` so a deleted document cannot
+    /// keep surfacing through the hybrid sparse leg. `None` only when
+    /// no vector store is wired at all (test harnesses bypassing
+    /// `composeWithRAG`).
+    IndexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle option
     EventStore: IEventStore option
     /// Optional `INarrativeStore` for cross-store reset coherence
     /// (Phase 4b commit 2). Resolved from DI per request; `None` when
@@ -163,6 +171,21 @@ module KnowledgeApiDeps =
             | :? IVectorStore as v -> Some v
             | _ -> None
 
+        // Phase 115 — the composed lifecycle seam wins (it fans out
+        // across vector store + sparse index + embedding cache).
+        // Deployments with a vector store but no registered seam
+        // (KB-without-RAG composition, older composition roots) get a
+        // vector-only wrapper so the handlers have exactly one deletion
+        // path — never the raw `vs.DeleteChunk` loop.
+        let indexLifecycle =
+            match ctx.RequestServices.GetService(typeof<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>) with
+            | :? ToolUp.Platform.IIndexLifecycle.IIndexLifecycle as il -> Some il
+            | _ ->
+                vectorStore
+                |> Option.map (fun vs ->
+                    ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(vs, None, None, logger)
+                    :> ToolUp.Platform.IIndexLifecycle.IIndexLifecycle)
+
         let eventStore =
             match ctx.RequestServices.GetService(typeof<IEventStore>) with
             | :? IEventStore as e -> Some e
@@ -261,6 +284,7 @@ module KnowledgeApiDeps =
             UserId = userId
             VectorScope = vectorScope
             VectorStore = vectorStore
+            IndexLifecycle = indexLifecycle
             EventStore = eventStore
             NarrativeStore = narrativeStore
             AccessContext = accessContext

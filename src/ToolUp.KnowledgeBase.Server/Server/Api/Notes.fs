@@ -136,13 +136,17 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
             | Some prior ->
                 match prior.Source with
                 | Note priorNote ->
-                    // Drop the old chunks one-by-one; chunk ids follow
-                    // `{docId}:chunk:{i}` which the upload + AddNote paths both
-                    // use. Falling through if no vector store is wired (tests).
-                    match deps.VectorStore with
-                    | Some vs ->
-                        for i in 0 .. prior.ChunkCount - 1 do
-                            do! vs.DeleteChunk deps.VectorScope (sprintf "%s:chunk:%d" req.DocId i)
+                    // Phase 115 — drop the old chunks through the unified
+                    // lifecycle seam so the sparse index sheds them too
+                    // (pre-115 the `vs.DeleteChunk` loop left the prior
+                    // note text retrievable through the hybrid sparse
+                    // leg). Best-effort here: the re-ingestion below
+                    // overwrites the same chunk ids, so survivors are
+                    // logged by the seam rather than failing the update.
+                    match deps.IndexLifecycle with
+                    | Some lifecycle ->
+                        let! _ = lifecycle.DeleteDocument deps.VectorScope req.DocId prior.ChunkCount
+                        ()
                     | None -> ()
 
                     let safeTitle = sanitiseTitle title

@@ -88,6 +88,7 @@ let private mkDeps
         UserId = "user-1"
         VectorScope = Deployment
         VectorStore = None
+        IndexLifecycle = None
         EventStore = None
         NarrativeStore = None
         AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")

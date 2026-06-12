@@ -75,6 +75,11 @@
         <Compile Include="Server\IEmbeddingCache.fs" />
         <Compile Include="Server\Rag\IVectorStore.fs" />
         <Compile Include="Server\ISparseIndex.fs" />
+        <!-- Phase 115 — unified index-lifecycle seam: delete/erase fan-out
+             across IVectorStore + ISparseIndex + IEmbeddingCache with
+             per-target failure isolation, so producers (KB) cannot reach
+             one index and miss another. -->
+        <Compile Include="Server\IIndexLifecycle.fs" />
         <Compile Include="Server\IReranker.fs" />
         <Compile Include="Server\ITextSummariser.fs" />
         <Compile Include="Server\IOcrProvider.fs" />

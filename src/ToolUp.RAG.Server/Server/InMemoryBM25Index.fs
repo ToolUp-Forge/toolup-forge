@@ -278,7 +278,24 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
         let scopeKey = scopeToKey scope
 
         match scopes.TryGetValue scopeKey with
-        | false, _ -> ()
+        | false, _ ->
+            // Phase 115 — a dirty scope that is absent from the in-memory
+            // map was removed by `DeleteByScope` (dirty-marking is the
+            // only way to reach here). Pre-115 this short-circuited,
+            // leaving the stale `bm25.json` at rest — the deleted corpus
+            // (full chunk text included) resurrected on the next process
+            // restart. Delete the persisted snapshot so the scope-level
+            // delete survives restart, mirroring what the vector store
+            // achieves by persisting an empty list.
+            let! result = storage.Delete("_rag", blobName scope)
+
+            match result with
+            | Ok _ -> ()
+            | Error e ->
+                log.Warn
+                    $"[InMemoryBM25Index] Failed to delete persisted snapshot for removed scope {scopeKey}: {e} — will retry on next flush."
+
+                markDirty scope
         | true, idx ->
             let snapshot = { Docs = idx.Snapshot() }
             let bytes = toJson snapshot |> System.Text.Encoding.UTF8.GetBytes
@@ -399,6 +416,79 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                 idx.Delete chunkId
                 markDirty scope
             | false, _ -> ()
+        }
+
+        member _.Erase(scope, subjectUserId, policy, dryRun) = async {
+            // Phase 115 — same matching contract as
+            // `IVectorStore.eraseSubject`: the subject id appears in the
+            // chunk content or in any metadata value. BM25 keeps the full
+            // chunk text + metadata per entry, so the match is exact, not
+            // approximate. No tombstone tier exists here — every policy
+            // collapses to a hard delete (noted in the summary); the
+            // persisted `bm25.json` follows on the next flush via
+            // `markDirty`, so the erased text also leaves blob storage.
+            if Erasure.isBlankSubject subjectUserId then
+                return
+                    Result.Ok {
+                        HandlerName = "sparse-index"
+                        RecordsAffected = 0
+                        Note = Some "blank subject — no-op"
+                    }
+            else
+                // Team scopes are lazy-loaded on first access (same as
+                // `Search`) — erasure must see the persisted corpus even
+                // when this process has never searched the scope.
+                match scope with
+                | Team _ ->
+                    if not (scopes.ContainsKey(scopeToKey scope)) then
+                        do! loadScope scope
+                | _ -> ()
+
+                match scopes.TryGetValue(scopeToKey scope) with
+                | false, _ ->
+                    return
+                        Result.Ok {
+                            HandlerName = "sparse-index"
+                            RecordsAffected = 0
+                            Note = Some "scope empty — nothing to erase"
+                        }
+                | true, idx ->
+                    let matched =
+                        idx.Snapshot()
+                        |> Array.filter (fun entry ->
+                            entry.Content.Contains subjectUserId
+                            || entry.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId))
+                        |> Array.map _.ChunkId
+
+                    if dryRun || Array.isEmpty matched then
+                        return
+                            Result.Ok {
+                                HandlerName = "sparse-index"
+                                RecordsAffected = matched.Length
+                                Note = Some(sprintf "%d chunk(s) would be erased in scope" matched.Length)
+                            }
+                    else
+                        for chunkId in matched do
+                            idx.Delete chunkId
+
+                        markDirty scope
+
+                        // `policy` intentionally unused beyond documentation:
+                        // a lexical index holds no soft-delete tier, so
+                        // SoftDelete and HardDelete are the same operation.
+                        ignore policy
+
+                        return
+                            Result.Ok {
+                                HandlerName = "sparse-index"
+                                RecordsAffected = matched.Length
+                                Note =
+                                    Some(
+                                        sprintf
+                                            "%d chunk(s) hard-deleted (lexical index has no tombstone tier)"
+                                            matched.Length
+                                    )
+                            }
         }
 
     interface IDisposable with

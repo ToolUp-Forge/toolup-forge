@@ -146,32 +146,55 @@ let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =
 let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit, string>> = async {
     let! existing = loadIndex deps.Storage deps.Scope.Container
     let prior = existing |> List.tryFind (fun d -> d.Id = docId)
-    let updated = existing |> List.filter (fun d -> d.Id <> docId)
-    do! saveIndex deps.Storage deps.Scope.Container updated
 
     match prior with
     | Some doc ->
-        let rawBlobName = sprintf "knowledge/%s/%s" docId doc.FileName
-        let! _ = deps.Storage.Delete(deps.Scope.Container, rawBlobName)
+        // Phase 115 — index deletion runs FIRST, through the unified
+        // lifecycle seam (vector store + sparse index fan-out), and the
+        // `index.json` entry is removed only after it completes clean.
+        // The pre-115 ordering removed the index entry first and then
+        // ran an unguarded `vs.DeleteChunk` loop — one throw left
+        // orphaned embeddings still retrievable with no index entry to
+        // trace them. A partial failure now leaves the document listed
+        // (retryable) with a survivor-summary log instead.
+        let! lifecycleReport =
+            match deps.IndexLifecycle with
+            | Some lifecycle -> lifecycle.DeleteDocument deps.VectorScope docId doc.ChunkCount
+            | None -> async.Return ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.empty
 
-        // Drop the document's chunks from the vector store so RAG
-        // retrieval stops surfacing them. Chunk ids follow
-        // `{docId}:chunk:{i}` (matches the upload + AddNote paths).
-        // Falls through if no vector store is wired (tests).
-        match deps.VectorStore with
-        | Some vs ->
-            for i in 0 .. doc.ChunkCount - 1 do
-                do! vs.DeleteChunk deps.VectorScope (sprintf "%s:chunk:%d" docId i)
-        | None -> ()
-    | None -> ()
+        if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean lifecycleReport) then
+            let summary =
+                ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise lifecycleReport
 
-    statusCache.TryRemove(docId) |> ignore
-    // Invalidate the prompt-build inventory cache so the next AI
-    // turn sees the updated document count, not the stale 30-s
-    // cached string.
-    KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
-    do! deps.PublishInventory()
-    return Ok()
+            deps.Logger.Warn(
+                sprintf
+                    "[KnowledgeBase] deleteDocument %s completed partially — %s. The document stays listed so the delete can be retried."
+                    docId
+                    summary
+            )
+
+            return Error(sprintf "Some of the document's index entries could not be deleted (%s). Try again." summary)
+        else
+            let rawBlobName = sprintf "knowledge/%s/%s" docId doc.FileName
+            let! _ = deps.Storage.Delete(deps.Scope.Container, rawBlobName)
+
+            let updated = existing |> List.filter (fun d -> d.Id <> docId)
+            do! saveIndex deps.Storage deps.Scope.Container updated
+
+            statusCache.TryRemove(docId) |> ignore
+            // Invalidate the prompt-build inventory cache so the next AI
+            // turn sees the updated document count, not the stale 30-s
+            // cached string.
+            KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
+            do! deps.PublishInventory()
+            return Ok()
+    | None ->
+        // Unknown id — preserve the pre-115 idempotent shape (the index
+        // is already in the requested state).
+        statusCache.TryRemove(docId) |> ignore
+        KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
+        do! deps.PublishInventory()
+        return Ok()
 }
 
 // ─── Original-document retrieval (Phase 102) ─────────────────────

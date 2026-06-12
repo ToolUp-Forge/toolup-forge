@@ -40,3 +40,18 @@ type ISparseIndex =
 
     /// Delete a single chunk by its stable id within a scope.
     abstract DeleteChunk: scope: VectorScope -> chunkId: string -> Async<unit>
+
+    /// Phase 115 — data-subject erasure over the lexical index. Removes
+    /// every chunk in `scope` that names the subject (same matching
+    /// contract as `IVectorStore.eraseSubject`: the subject id appears
+    /// in `Content` or in any metadata value) and ensures any persisted
+    /// snapshot no longer contains the erased text. `dryRun = true`
+    /// reports the affected count without deleting. Lexical indexes
+    /// have no tombstone tier, so `policy` distinctions collapse to a
+    /// hard delete — implementations note this in the returned summary.
+    /// Without this member the BM25 leg of hybrid retrieval kept
+    /// serving (and persisting at rest) content the vector store had
+    /// already erased.
+    abstract Erase:
+        scope: VectorScope * subjectUserId: string * policy: ToolUp.Platform.ErasurePolicy * dryRun: bool ->
+            Async<Result<ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError>>
