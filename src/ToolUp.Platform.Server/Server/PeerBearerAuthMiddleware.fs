@@ -8,6 +8,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Auth
 
 // ─── Phase 37 — peer-bearer-auth middleware ──────────────────────────
 //
@@ -143,6 +144,20 @@ module RejectionReason =
     [<Literal>]
     let TokenMismatch = "token_mismatch"
 
+    /// Phase 137 — `X-Peer-Name` failed charset validation before it was
+    /// interpolated into the ISecretStore key. Distinct from
+    /// `MissingPeerNameHeader` so dashboards can tell a probe (traversal
+    /// attempt) from a benign missing header.
+    [<Literal>]
+    let InvalidPeerName = "invalid_peer_name"
+
+    /// Phase 137 — no `ISecretStore` is registered, so peer auth cannot
+    /// be evaluated. Fail-closed as an audited 401 rather than an
+    /// NRE→500 that would blind the peer audit trail (a composition
+    /// defect, surfaced explicitly).
+    [<Literal>]
+    let NoSecretStore = "no_secret_store"
+
 // ─── Authorization header parsing ────────────────────────────────────
 
 /// Extract the bearer token from an `Authorization: Bearer <token>`
@@ -255,6 +270,13 @@ let authenticate (secretStore: ISecretStore) (ctx: HttpContext) : Async<AuthOutc
 
     match peerNameHeader with
     | None -> return Rejected(None, RejectionReason.MissingPeerNameHeader)
+    | Some peerName when (IdentitySanitiser.sanitiseScopeId peerName) |> Result.isError ->
+        // Phase 137 — `peerName` becomes a path segment of the secret
+        // key (`peers/{peerName}/bearer`). Reject `/`, `\`, `..`, NUL,
+        // control chars, leading-period, etc. before it is interpolated,
+        // so it cannot traverse a path-mapping secret-store companion's
+        // key space. Reuse the wave-wide IdentitySanitiser policy.
+        return Rejected(Some peerName, RejectionReason.InvalidPeerName)
     | Some peerName ->
         let authorization =
             match ctx.Request.Headers.TryGetValue("Authorization") with
@@ -293,9 +315,6 @@ type PeerBearerAuthMiddleware(next: RequestDelegate, config: ServerConfig) =
             if not isPeer then
                 do! next.Invoke(ctx)
             else
-                let secretStore =
-                    ctx.RequestServices.GetService(typeof<ISecretStore>) :?> ISecretStore
-
                 let eventStore =
                     match ctx.RequestServices.GetService(typeof<IEventStore>) with
                     | :? IEventStore as s -> Some s
@@ -306,26 +325,11 @@ type PeerBearerAuthMiddleware(next: RequestDelegate, config: ServerConfig) =
                     | :? ILogger as l -> Some l
                     | _ -> None
 
-                let! outcome = authenticate secretStore ctx |> Async.StartImmediateAsTask
                 let path = ctx.Request.Path.Value
                 let methodName = ctx.Request.Method
                 let now = DateTime.UtcNow
 
-                match outcome with
-                | Accepted peerName ->
-                    ctx.Items[PeerRouteRegistry.PeerNameItemsKey] <- box peerName
-
-                    do!
-                        emitAccepted eventStore logger {
-                            PeerName = peerName
-                            Path = path
-                            Method = methodName
-                            OccurredAt = now
-                        }
-                        |> Async.StartImmediateAsTask
-
-                    do! next.Invoke(ctx)
-                | Rejected(peerName, reason) ->
+                let reject401 (peerName: string option) (reason: string) = task {
                     do!
                         emitRejected eventStore logger {
                             PeerName = peerName
@@ -339,5 +343,35 @@ type PeerBearerAuthMiddleware(next: RequestDelegate, config: ServerConfig) =
                     ctx.Response.StatusCode <- 401
                     ctx.Response.ContentType <- "application/json"
                     do! ctx.Response.WriteAsync("""{"error":"Peer authentication required","status":401}""")
+                }
+
+                // Phase 137 — typed resolution of ISecretStore. When it is
+                // unregistered (a composition defect), fail closed as an
+                // audited 401 with reason `no_secret_store` rather than a
+                // hard downcast that NREs into a 500 and never emits a
+                // PeerCallRejected event — matching the graceful pattern
+                // ShareTokenAuthMiddleware already uses.
+                match ctx.RequestServices.GetService(typeof<ISecretStore>) with
+                | :? ISecretStore as secretStore ->
+                    let! outcome = authenticate secretStore ctx |> Async.StartImmediateAsTask
+
+                    match outcome with
+                    | Accepted peerName ->
+                        ctx.Items[PeerRouteRegistry.PeerNameItemsKey] <- box peerName
+
+                        do!
+                            emitAccepted eventStore logger {
+                                PeerName = peerName
+                                Path = path
+                                Method = methodName
+                                OccurredAt = now
+                            }
+                            |> Async.StartImmediateAsTask
+
+                        do! next.Invoke(ctx)
+                    | Rejected(peerName, reason) -> do! reject401 peerName reason
+                | _ ->
+                    // No ISecretStore registered — fail closed + audited.
+                    do! reject401 None RejectionReason.NoSecretStore
         }
         :> System.Threading.Tasks.Task

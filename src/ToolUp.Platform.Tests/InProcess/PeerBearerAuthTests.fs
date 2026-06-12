@@ -2,6 +2,10 @@ module ToolUp.Platform.Tests.InProcess.PeerBearerAuthTests
 
 open System
 open System.Collections.Concurrent
+open Expecto
+open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.PeerBearerAuthMiddleware
 open ToolUp.Platform.Secrets
@@ -45,7 +49,7 @@ type private InMemorySecretStore() =
                 |> List.ofSeq
         }
 
-let tests =
+let private contractTests =
     let factory () =
         let store = InMemorySecretStore() :> ISecretStore
 
@@ -63,3 +67,58 @@ let tests =
         }
 
     IPeerBearerAuthContract.tests "PeerBearerAuthMiddleware (in-memory secret store)" factory
+
+// ─── Phase 137 — middleware robustness ──────────────────────────────
+
+let private hardeningTests =
+    testList "Phase 137 — peer-bearer middleware robustness" [
+        testCaseAsync "rejects an X-Peer-Name that would traverse the secret key path"
+        <| async {
+            // `../evil` would build the secret key `peers/../evil/bearer`;
+            // the charset guard must reject it before the lookup.
+            let ctx = DefaultHttpContext() :> HttpContext
+            ctx.Request.Headers["X-Peer-Name"] <- StringValues "../evil"
+            ctx.Request.Headers["Authorization"] <- StringValues "Bearer whatever"
+
+            let store = InMemorySecretStore() :> ISecretStore
+            let! outcome = authenticate store ctx
+
+            match outcome with
+            | Rejected(Some "../evil", reason) ->
+                Expect.equal reason RejectionReason.InvalidPeerName "invalid_peer_name reason"
+            | other -> failtestf "expected InvalidPeerName rejection, got %A" other
+        }
+
+        testCaseAsync "no ISecretStore registered → 401 (not 500), next not invoked"
+        <| async {
+            // The composition defect must fail closed as an audited 401,
+            // not an NRE→500 that never emits PeerCallRejected.
+            let services = ServiceCollection()
+            let sp = services.BuildServiceProvider()
+
+            let ctx = DefaultHttpContext() :> HttpContext
+            ctx.RequestServices <- sp
+            ctx.Request.Path <- PathString "/peer/v1/ping"
+            ctx.Response.Body <- new System.IO.MemoryStream()
+
+            let mutable nextCalled = false
+
+            let next =
+                RequestDelegate(fun _ ->
+                    nextCalled <- true
+                    System.Threading.Tasks.Task.CompletedTask)
+
+            let config = {
+                ServerConfig.defaults with
+                    PeerRoutePrefixes = [ "/peer/" ]
+            }
+
+            let mw = PeerBearerAuthMiddleware(next, config)
+            do! mw.InvokeAsync(ctx) |> Async.AwaitTask
+
+            Expect.isFalse nextCalled "next must not run when peer auth fails closed"
+            Expect.equal ctx.Response.StatusCode 401 "fail closed as 401, not 500"
+        }
+    ]
+
+let tests = testList "PeerBearerAuth" [ contractTests; hardeningTests ]
