@@ -59,6 +59,23 @@ let private jwksRefreshCooldown = TimeSpan.FromMinutes 1.0
 /// observed.
 let private discoveryTtl = TimeSpan.FromHours 24.0
 
+/// Phase 134 — a key-fetch URL is acceptable only over https, with http
+/// permitted for loopback hosts (the local mock-IdP dev escape hatch).
+/// This is the single home of the accept rule: the construction-time
+/// `requireHttps` guard in `OidcAuthProvider` delegates here, and the
+/// request-time guards below (`resolveJwksUrl`'s discovered-`jwks_uri`
+/// check + `fetchJwks`) call it too, so a discovered `jwks_uri` cannot
+/// downgrade key-fetch to cleartext. `requireHttps` only validates the
+/// *configured* issuer / explicit JWKS URL at startup; a hostile or
+/// compromised OIDC metadata document can still return an `http://`
+/// `jwks_uri`, which without this guard would be fetched over a
+/// MITM-substitutable channel.
+let isAcceptableKeyFetchUrl (url: string) : bool =
+    match Uri.TryCreate(url, UriKind.Absolute) with
+    | true, uri when uri.Scheme = Uri.UriSchemeHttps -> true
+    | true, uri when uri.Scheme = Uri.UriSchemeHttp && uri.IsLoopback -> true
+    | _ -> false
+
 /// Evict cache entries past their TTL. Self-contained sweep (no hosted
 /// service — the OIDC provider is a props-injected companion the SDK
 /// composition root cannot reference). Driven opportunistically from
@@ -150,6 +167,18 @@ let resolveJwksUrl (httpClient: HttpClient) (source: KeySource) : Async<Result<s
                 use doc = JsonDocument.Parse body
 
                 match tryGetString "jwks_uri" doc.RootElement with
+                | Some jwksUrl when not (isAcceptableKeyFetchUrl jwksUrl) ->
+                    // Phase 134 — the discovered endpoint is cleartext.
+                    // Refuse before caching or fetching: a MITM (or a
+                    // compromised IdP) that returns an `http://` jwks_uri
+                    // could otherwise substitute the signing key set and
+                    // have forged tokens validate. Not cached, so a fixed
+                    // metadata document is re-evaluated on the next call.
+                    return
+                        Error(
+                            JwksUnavailable
+                                $"OIDC metadata at {metadataUrl} returned a cleartext jwks_uri '{jwksUrl}'; refusing to fetch signing keys over a MITM-substitutable channel (https required; http permitted for loopback hosts only)"
+                        )
                 | Some jwksUrl ->
                     discoveryCache[issuer] <- { JwksUrl = jwksUrl; FetchedAt = now }
                     return Ok jwksUrl
@@ -159,11 +188,23 @@ let resolveJwksUrl (httpClient: HttpClient) (source: KeySource) : Async<Result<s
 }
 
 let private fetchJwks (httpClient: HttpClient) (url: string) : Async<Result<Map<string, JwkKey>, JwtValidationError>> = async {
-    try
-        let! body = httpClient.GetStringAsync(url) |> Async.AwaitTask
-        return Ok(parseJwks body)
-    with ex ->
-        return Error(JwksUnavailable ex.Message)
+    // Phase 134 — belt-and-braces scheme guard at the fetch site, so the
+    // `JwksExplicit` path enforces https-or-loopback at fetch time too
+    // (construction-time `requireHttps` already checks the configured
+    // value; this also catches any future caller that reaches `fetchJwks`
+    // with an unchecked URL).
+    if not (isAcceptableKeyFetchUrl url) then
+        return
+            Error(
+                JwksUnavailable
+                    $"refusing to fetch JWKS over cleartext URL '{url}' (https required; http permitted for loopback hosts only)"
+            )
+    else
+        try
+            let! body = httpClient.GetStringAsync(url) |> Async.AwaitTask
+            return Ok(parseJwks body)
+        with ex ->
+            return Error(JwksUnavailable ex.Message)
 }
 
 /// Get JWKS keys for `url`, using the cache when fresh. `forceRefresh`

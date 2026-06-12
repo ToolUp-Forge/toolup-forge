@@ -608,6 +608,76 @@ let private oidcTests =
             | Ok user -> Expect.equal user.UserId "bob" "UserId from sub via discovery flow"
         }
 
+        testCaseAsync "Phase 134: refuses a cleartext (http) discovered jwks_uri"
+        <| async {
+            // Issuer is https (construction-time requireHttps passes), but
+            // a hostile / compromised metadata document returns an http
+            // jwks_uri. The request-time guard must refuse before fetching
+            // keys over a MITM-substitutable channel — even though the stub
+            // WOULD serve a valid key set at that URL.
+            let key = OidcFixture.mkKey ()
+            let evilJwksUrl = "http://evil.example/jwks.json"
+
+            let discoveryDoc =
+                $"""{{"issuer":"{key.IssuerUrl}","jwks_uri":"{evilJwksUrl}","authorization_endpoint":"{key.IssuerUrl}/auth","token_endpoint":"{key.IssuerUrl}/token","id_token_signing_alg_values_supported":["RS256"]}}"""
+
+            let client =
+                mkClient [ key.DiscoveryUrl, discoveryDoc; evilJwksUrl, OidcFixture.buildJwks key ]
+
+            let config = {
+                Issuer = Some key.IssuerUrl
+                Audience = None
+                KeySource = JwksDiscovery key.IssuerUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = None
+                PreferOidWhenPresent = None
+            }
+
+            let p = OidcAuthProvider.fromConfigWith client None config
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "mallory"; "iss", box key.IssuerUrl; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected refusal of cleartext discovered jwks_uri, but validation succeeded"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Phase 134: permits a loopback-http discovered jwks_uri (local dev IdP)"
+        <| async {
+            // The loopback carve-out applies to the discovered endpoint too,
+            // so a local mock IdP serving keys over http on a loopback host
+            // still validates.
+            let key = OidcFixture.mkKey ()
+            let loopbackJwksUrl = "http://127.0.0.1/oidc-fixture-jwks.json"
+
+            let discoveryDoc =
+                $"""{{"issuer":"{key.IssuerUrl}","jwks_uri":"{loopbackJwksUrl}","authorization_endpoint":"{key.IssuerUrl}/auth","token_endpoint":"{key.IssuerUrl}/token","id_token_signing_alg_values_supported":["RS256"]}}"""
+
+            let client =
+                mkClient [ key.DiscoveryUrl, discoveryDoc; loopbackJwksUrl, OidcFixture.buildJwks key ]
+
+            let config = {
+                Issuer = Some key.IssuerUrl
+                Audience = None
+                KeySource = JwksDiscovery key.IssuerUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = None
+                PreferOidWhenPresent = None
+            }
+
+            let p = OidcAuthProvider.fromConfigWith client None config
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "devuser"; "iss", box key.IssuerUrl; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "loopback-http discovered jwks_uri should be permitted; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "devuser" "loopback dev IdP validates"
+        }
+
         testCaseAsync "GetUser lenient: valid token returns the user"
         <| async {
             let key = OidcFixture.mkKey ()

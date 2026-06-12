@@ -390,15 +390,19 @@ let private buildProvider
     // escape hatch (a local mock IdP without TLS); everything else must
     // be https. Construction-time, so the misconfiguration surfaces at
     // startup rather than as silent trust in a poisoned JWKS.
+    // Phase 134 — delegate the scheme decision to the shared
+    // `isAcceptableKeyFetchUrl` predicate (Jwks module) so the accept
+    // rule (https, or http for loopback only) lives in exactly one place
+    // and the construction-time guard here can never drift from the
+    // request-time discovered-`jwks_uri` / fetch guards.
     let requireHttps (label: string) (url: string) =
         match Uri.TryCreate(url, UriKind.Absolute) with
-        | true, uri when uri.Scheme = Uri.UriSchemeHttps -> ()
-        | true, uri when uri.Scheme = Uri.UriSchemeHttp && uri.IsLoopback -> ()
-        | true, _ ->
-            invalidArg
-                (nameof config)
-                $"OidcAuthProvider refuses non-https {label} '{url}': discovery/JWKS fetched over cleartext can be MITM-substituted, letting forged tokens validate. Use https (http is permitted for loopback hosts only)."
         | false, _ -> invalidArg (nameof config) $"OidcAuthProvider {label} '{url}' is not an absolute URL."
+        | true, _ ->
+            if not (isAcceptableKeyFetchUrl url) then
+                invalidArg
+                    (nameof config)
+                    $"OidcAuthProvider refuses non-https {label} '{url}': discovery/JWKS fetched over cleartext can be MITM-substituted, letting forged tokens validate. Use https (http is permitted for loopback hosts only)."
 
     match config.KeySource with
     | StaticSecret _ ->
