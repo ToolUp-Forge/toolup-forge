@@ -48,6 +48,10 @@
              lives in Platform.Client, reached transitively; this is the
              established Fable-tier client harness). -->
         <Compile Include="ClientHostBridgeTests.fs" />
+        <!-- Phase 117 — NotificationClient identity-aware lifecycle
+             (Platform.Client tier, reached transitively; same Phase 110
+             precedent as ClientHostBridgeTests). -->
+        <Compile Include="NotificationClientTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

@@ -7,6 +7,9 @@ let allTests =
         PlatformAIKeysAdminUITests.tests
         // Phase 110 — ClientHostCapabilities routing (Platform.Client tier).
         ClientHostBridgeTests.tests
+        // Phase 117 — NotificationClient identity-aware SSE lifecycle
+        // (Platform.Client tier).
+        NotificationClientTests.tests
     ]
 
 [<EntryPoint>]
