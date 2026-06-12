@@ -1,0 +1,12 @@
+{
+    "name": "@toolup/client-model-viewer",
+    "version": "1.0.0",
+    "private": true,
+    "//": "GP 2 check (Phase 125): @google/model-viewer is Apache-2.0 licensed, no paid tier. GP 1: this is the only place the dependency is declared — consumer apps that compose the companion add it to their own package.json; ToolUp.Platform.Client never references it.",
+    "dependencies": {
+        "@google/model-viewer": "^4.1.0"
+    },
+    "peerDependencies": {
+        "react": ">=18"
+    }
+}

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ModelViewerDemo — in-tree Fable worked example for the
+    ToolUp.Client.ModelViewer companion (Phase 125).
+
+    Purpose: a minimal module-style view rendering a .glb inline with
+    camera controls, poster / loading states, and typed load / error
+    handlers. Doubles as the companion's Fable acceptance gate: from
+    this directory, dotnet tool restore then dotnet fable -o output
+    (with the no-cache switch) must compile clean, and the emitted
+    output/ModelViewer.js carries the @google/model-viewer import —
+    while a client that does NOT reference the companion (see
+    samples/MinimalClient) emits no model-viewer import at all
+    (GP 13 strip check).
+
+    Not in the .sln on purpose: keeps Fable-only concerns out of the
+    main dotnet build ToolUp.Forge.sln path (same stance as
+    samples/MinimalClient).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+    <!-- Nullable stays disabled on Fable-touching projects per the
+         repo CLAUDE.md guidance. -->
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Client.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <ProjectReference Include="..\..\src\ToolUp.Client.ModelViewer\ToolUp.Client.ModelViewer.fsproj" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

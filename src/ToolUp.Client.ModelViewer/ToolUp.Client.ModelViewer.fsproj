@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Client.ModelViewer</PackageId>
+    <AssemblyName>ToolUp.Client.ModelViewer</AssemblyName>
+    <Description>Typed Feliz binding to the &lt;model-viewer&gt; web component (Apache 2.0, glTF-native) for inline 3D display in ToolUp.Platform module views: camera controls, poster / loading states, exposure / environment, AR attribute passthrough, and typed load / error events. Display-only by design; the npm dependency is isolated to this companion.</Description>
+    <PackageTags>fsharp;fable;sdk;client;3d;gltf;glb;model-viewer;webcomponent</PackageTags>
+    <!-- Phase 125 — client-tier display companion per the
+         AgGridEnterprise shim precedent. GP 1: the @google/model-viewer
+         npm dependency lives in this companion's package.json only —
+         ToolUp.Platform.Client gains nothing. GP 13: the component
+         registration import is emitted by Fable only when a consumer
+         compiles this companion's source, so apps that don't compose it
+         ship zero additional script weight. -->
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ModelViewerTypes.fs" />
+    <Compile Include="ModelViewer.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Client-tier packaging: ship source for Fable consumers under
+       fable/. Mirrors the Feliz / Fable.Elmish convention (same shape
+       as AgGridEnterprise). -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Feliz" />
+    <PackageReference Include="Fable.Browser.Dom" />
+  </ItemGroup>
+</Project>
