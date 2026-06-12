@@ -861,7 +861,10 @@ let composeWithRAG
                 sparseIndex,
                 pipelineOptions,
                 retrievalTracer,
-                platformKnowledgeBaseSnapshot = snapshot
+                platformKnowledgeBaseSnapshot = snapshot,
+                // Phase 122 — same instance the `/health/rag` endpoint
+                // resolves, so per-stage P50/P95 surface in the snapshot.
+                telemetry = telemetry
             )
             :> IRetrievalPipeline
 

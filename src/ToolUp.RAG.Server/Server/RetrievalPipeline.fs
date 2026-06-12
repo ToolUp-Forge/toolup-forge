@@ -10,6 +10,7 @@ open ToolUp.Platform.ISparseIndex
 open ToolUp.Platform.IReranker
 open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.IRagTelemetry
 
 // ─── Access validation ────────────────────────────────────────────
 
@@ -298,7 +299,11 @@ type RetrievalPipeline
         ?options: RetrievalPipelineOptions,
         ?tracer: IRetrievalTracer,
         ?platformKnowledgeBase: PlatformKnowledgeBaseMode,
-        ?platformKnowledgeBaseSnapshot: unit -> PlatformKnowledgeBaseMode
+        ?platformKnowledgeBaseSnapshot: unit -> PlatformKnowledgeBaseMode,
+        // Phase 122 — when supplied, each `Retrieve` reports its per-stage
+        // timing breakdown via `RecordRetrievalStages` so `/health/rag`
+        // can expose per-stage P50/P95. `None` costs nothing (GP 13).
+        ?telemetry: IRagTelemetry
     ) =
 
     let sparse = sparseIndex
@@ -542,6 +547,10 @@ type RetrievalPipeline
                 timings.Add("Merge", mergeSw.Elapsed.TotalMilliseconds)
 
                 let rerankerName = opts.Reranker |> Option.map _.Name
+
+                match telemetry with
+                | Some t -> t.RecordRetrievalStages(timings |> List.ofSeq)
+                | None -> ()
 
                 do! emitTrace final pool sparse.IsSome rerankerName
                 return final

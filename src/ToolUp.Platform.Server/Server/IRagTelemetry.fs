@@ -71,6 +71,20 @@ type RagTelemetrySnapshot = {
     /// chunking, or the embedding model needs attention.
     RetrievalAvgTopScore: float
 
+    // ─── Retrieval per-stage timings (Phase 122) ───────────────────
+    /// Per-stage P50 wall-clock latency in ms across the retrieval calls
+    /// in the window, keyed by pipeline stage name (`Dense`, `Sparse`,
+    /// `RRF`, `Rerank`, `MMR`, `Merge` — the timed subset of
+    /// `RetrievalTrace.Stages`). Stages that did not run in the window
+    /// are absent. Entries are sorted by stage name so the serialised
+    /// snapshot is deterministic. Empty when no retrieval ran. Additive
+    /// (GP 11): old `/health/rag` readers ignore the extra properties.
+    RetrievalStageP50Ms: (string * float) list
+    /// Per-stage P95 — same keying and ordering as `RetrievalStageP50Ms`.
+    /// Answers "which stage is the bottleneck" (e.g. a slow reranker)
+    /// from the snapshot alone, without a profiler.
+    RetrievalStageP95Ms: (string * float) list
+
     // ─── Observer dispatch ─────────────────────────────────────────
     /// Number of `IIngestionStatusObserver` callbacks that threw in the
     /// window. The ingestion service catches observer exceptions to
@@ -114,6 +128,14 @@ type IRagTelemetry =
     /// chunks persisted and `latencyMs` is the wall-clock time spent in
     /// the flush.
     abstract RecordFlush: dirtyChunks: int * latencyMs: int64 -> unit
+
+    /// Record the per-stage timing breakdown of one retrieval call
+    /// (Phase 122). `stageTimings` carries `RetrievalTrace.StageTimings`
+    /// — `(stageName, elapsedMs)` pairs for the substantive stages that
+    /// ran. Hot-path sync recorder like the other `Record*` members;
+    /// implementations must tolerate an empty list (the
+    /// permitted-scopes-empty early return runs no stages).
+    abstract RecordRetrievalStages: stageTimings: (string * float) list -> unit
 
     /// Record one retrieval outcome. `topScore` is the highest score in the
     /// returned candidate list (`0.0` when empty), `resultCount` is the

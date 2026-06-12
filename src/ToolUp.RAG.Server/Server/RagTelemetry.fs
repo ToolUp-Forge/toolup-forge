@@ -28,6 +28,8 @@ type NoOpRagTelemetry() =
         RetrievalLowScoreMisses = 0
         RetrievalEmpties = 0
         RetrievalAvgTopScore = 0.0
+        RetrievalStageP50Ms = []
+        RetrievalStageP95Ms = []
         ObserverFailureCount = 0
     }
 
@@ -35,6 +37,7 @@ type NoOpRagTelemetry() =
         member _.RecordEmbedding(_, _) = ()
         member _.RecordEnqueue(_, _, _) = ()
         member _.RecordFlush(_, _) = ()
+        member _.RecordRetrievalStages(_) = ()
         member _.RecordRetrieval(_, _, _) = ()
         member _.RecordObserverFailure(_) = ()
         member _.Snapshot() = async.Return zeroSnapshot
@@ -86,6 +89,10 @@ type RollingRagTelemetry(?windowSeconds: int) =
     let embeddingSamples = ConcurrentQueue<TimedSample>()
     let flushSamples = ConcurrentQueue<TimedSample>()
     let retrievalSamples = ConcurrentQueue<RetrievalSample>()
+    // Per-call stage-timing breakdowns (Phase 122). Each entry is one
+    // retrieval call's `(stageName, elapsedMs)` list; the snapshot
+    // flattens, groups by stage, and computes P50/P95 per stage.
+    let stageSamples = ConcurrentQueue<DateTimeOffset * (string * float) list>()
 
     // Queue depth + capacity are point-in-time gauges, not rolling
     // aggregates — the snapshot returns the most recent observation.
@@ -126,6 +133,16 @@ type RollingRagTelemetry(?windowSeconds: int) =
             let idx = max 0 (int (ceil (0.95 * float sorted.Length)) - 1)
             sorted[min idx (sorted.Length - 1)]
 
+    /// Percentile over an already-sorted float sample — same nearest-rank
+    /// convention as `p95` above, generalised so the per-stage breakdown
+    /// can reuse one sort per stage for both P50 and P95.
+    let percentile (p: float) (sorted: float array) =
+        if sorted.Length = 0 then
+            0.0
+        else
+            let idx = max 0 (int (ceil (p * float sorted.Length)) - 1)
+            sorted[min idx (sorted.Length - 1)]
+
     interface IRagTelemetry with
         member _.RecordEmbedding(texts, latencyMs) =
             embeddingSamples.Enqueue {
@@ -150,6 +167,12 @@ type RollingRagTelemetry(?windowSeconds: int) =
                 Score = 0.0
             }
 
+        member _.RecordRetrievalStages(stageTimings) =
+            // Empty breakdowns (permitted-scopes-empty early return) carry
+            // no per-stage signal — recording them would only grow the queue.
+            if not (List.isEmpty stageTimings) then
+                stageSamples.Enqueue(now (), stageTimings)
+
         member _.RecordRetrieval(topScore, resultCount, minScoreThreshold) =
             let outcome =
                 if resultCount = 0 then Empty
@@ -170,6 +193,7 @@ type RollingRagTelemetry(?windowSeconds: int) =
             evict embeddingSamples cutoff _.Timestamp
             evict flushSamples cutoff _.Timestamp
             evict retrievalSamples cutoff _.Timestamp
+            evict stageSamples cutoff fst
             evict queueRejections cutoff id
             evict observerFailures cutoff id
 
@@ -197,6 +221,17 @@ type RollingRagTelemetry(?windowSeconds: int) =
 
             let observerFailureSnapshot = observerFailures.ToArray()
 
+            // Flatten every call's breakdown, group by stage name, sort each
+            // stage's samples once, and read both percentiles off the sorted
+            // array. Sorted by stage name so the serialised snapshot is
+            // deterministic run-to-run.
+            let stageGroups =
+                stageSamples.ToArray()
+                |> Array.collect (snd >> List.toArray)
+                |> Array.groupBy fst
+                |> Array.map (fun (stage, xs) -> stage, (xs |> Array.map snd |> Array.sort))
+                |> Array.sortBy fst
+
             return {
                 EmbeddingCallCount = embeddings.Length
                 EmbeddingTextCount = embeddings |> Array.sumBy _.Magnitude
@@ -213,6 +248,8 @@ type RollingRagTelemetry(?windowSeconds: int) =
                 RetrievalLowScoreMisses = lowScoreMisses.Length
                 RetrievalEmpties = empties.Length
                 RetrievalAvgTopScore = avgTopScore
+                RetrievalStageP50Ms = [ for stage, sorted in stageGroups -> stage, percentile 0.5 sorted ]
+                RetrievalStageP95Ms = [ for stage, sorted in stageGroups -> stage, percentile 0.95 sorted ]
                 ObserverFailureCount = observerFailureSnapshot.Length
             }
         }
