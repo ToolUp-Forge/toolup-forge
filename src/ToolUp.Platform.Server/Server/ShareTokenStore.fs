@@ -165,7 +165,8 @@ let private parseToken (signingKey: byte[]) (token: string) : Result<string * Si
 // secret is absent — operators get share-tokens working immediately
 // without having to pre-provision the key, but rotation remains
 // possible via the secret store's normal Set/Delete flow (operator
-// regenerates, restarts the process, all previously-issued tokens
+// regenerates, every process picks up the new key within the cache
+// TTL below — no restart required; all previously-issued tokens then
 // fail verification — the documented behaviour).
 
 let private resolveSigningKey (secretStore: ISecretStore) : Async<Result<byte[], string>> = async {
@@ -199,25 +200,38 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
 
     let lockObj = obj ()
 
-    // Cached signing key — resolved lazily on first use, then
-    // memoised. ISecretStore reads are cheap but not free; one read
-    // per token operation would be wasteful.
-    let mutable signingKeyCache: byte[] option = None
+    // Cached signing key — resolved lazily on first use, then re-read
+    // from `ISecretStore` once the TTL lapses. ISecretStore reads are
+    // cheap but not free; one read per token operation would be
+    // wasteful — but a process-lifetime memo (the pre-hardening shape,
+    // Gap audit 2026-06-12 Auth G7) meant key rotation needed a
+    // full-fleet restart and staggered restarts yielded split-brain
+    // `InvalidSignature` indefinitely. Mirrors the OIDC JWKS cache:
+    // 10-minute TTL + stale-fallback when the refresh fetch fails
+    // (prefer the stale key over failing during a brief secret-store
+    // outage). Contrast `PeerBearerAuthMiddleware`, which deliberately
+    // re-reads per call.
+    let signingKeyTtl = TimeSpan.FromMinutes 10.0
+    let mutable signingKeyCache: (byte[] * DateTime) option = None
 
     let getSigningKey () = async {
+        let now = DateTime.UtcNow
+
         match signingKeyCache with
-        | Some k -> return Ok k
-        | None ->
+        | Some(k, fetchedAt) when now - fetchedAt < signingKeyTtl -> return Ok k
+        | stale ->
             let! resolved = resolveSigningKey secretStore
 
             match resolved with
             | Ok k ->
-                lock lockObj (fun () ->
-                    if signingKeyCache.IsNone then
-                        signingKeyCache <- Some k)
-
+                lock lockObj (fun () -> signingKeyCache <- Some(k, now))
                 return Ok k
-            | Error e -> return Error(ShareTokenError.StorageFailed e)
+            | Error e ->
+                match stale with
+                | Some(k, _) ->
+                    logger.Warn $"share-token signing-key refresh failed; serving with the stale cached key: {e}"
+                    return Ok k
+                | None -> return Error(ShareTokenError.StorageFailed e)
     }
 
     let writeClaim (claim: ShareTokenClaim) = async {

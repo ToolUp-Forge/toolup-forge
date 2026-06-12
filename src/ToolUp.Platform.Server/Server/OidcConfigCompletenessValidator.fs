@@ -63,7 +63,7 @@ type OidcConfigCompletenessValidator(?timeout: TimeSpan) =
             | Some "oidc", None ->
                 return
                     Error(
-                        "TOOLUP_AUTH_MODE=oidc requires TOOLUP_OIDC_ISSUER. The composition root currently falls back to HeaderAuthProvider when the issuer is unset, which is then refused by the header-auth-mode validator — producing two error messages for one root cause. Set TOOLUP_OIDC_ISSUER to your OIDC provider's discovery URL (examples: https://my.clerk.accounts.dev, https://login.microsoftonline.com/{tenantId}/v2.0, https://your-domain.auth0.com). Optionally set TOOLUP_OIDC_AUDIENCE to your specific app's audience for defence-in-depth. To use HeaderAuthProvider in dev, unset TOOLUP_AUTH_MODE entirely (and set TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE=1 if Mode != Anonymous)."
+                        "TOOLUP_AUTH_MODE=oidc requires TOOLUP_OIDC_ISSUER. `AuthProvider.fromEnv` refuses to start on this combination (Gap audit 2026-06-12 Auth G6); this validator names the root cause for composition roots with hand-written auth dispatch. Set TOOLUP_OIDC_ISSUER to your OIDC provider's discovery URL (examples: https://my.clerk.accounts.dev, https://login.microsoftonline.com/{tenantId}/v2.0, https://your-domain.auth0.com). Optionally set TOOLUP_OIDC_AUDIENCE to your specific app's audience for defence-in-depth. To use HeaderAuthProvider in dev, unset TOOLUP_AUTH_MODE entirely (and set TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE=1 if Mode != Anonymous)."
                     )
             | _ -> return Ok
         }

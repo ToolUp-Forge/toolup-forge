@@ -28,12 +28,17 @@ open ToolUp.Platform.BlobEncryption
 //   2. **TOOLUP_ADMIN_TOKEN fallback**. When the caller does NOT
 //      hold the role, the existing env-var token gate kicks in:
 //      `X-Admin-Token` header must match `TOOLUP_ADMIN_TOKEN`. The
-//      actor is read from the optional `X-Actor-UserId` header
-//      (falls back to "deployment-admin" when absent). Reserved
-//      for emergency / scripted access — the same pattern remains
-//      available for any future deployment-wide admin endpoint that
-//      a Platform Admin may not be able to reach (e.g. recovery
-//      from lockout if the admin list was wiped).
+//      audit actor is the verified identity `"token:deployment-admin"`
+//      — the token authenticates the deployment, not a person. The
+//      optional `X-Actor-UserId` header is self-asserted, so it is
+//      recorded only as a `(claimed: …)` annotation, never as the
+//      actor itself (Gap audit 2026-06-12 Auth G5 — pre-hardening the
+//      header value WAS the actor, giving spoofable attribution on
+//      the most destructive op in the SDK). Reserved for emergency /
+//      scripted access — the same pattern remains available for any
+//      future deployment-wide admin endpoint that a Platform Admin
+//      may not be able to reach (e.g. recovery from lockout if the
+//      admin list was wiped).
 //
 //   * Only `PerScopeKeyResolver` supports per-scope destruction. If
 //     the registered resolver is not a `PerScopeKeyResolver`, the
@@ -67,8 +72,19 @@ let private readHeader (ctx: HttpContext) (name: string) : string option =
         if String.IsNullOrEmpty v then None else Some v
     | _ -> None
 
+/// Resolve the audit actor for the token-gated path. The verified
+/// identity is the deployment token, so the actor is always
+/// `"token:deployment-admin"`; the self-asserted `X-Actor-UserId`
+/// header rides along as a `(claimed: …)` annotation inside the
+/// existing audit field — sanitised so a hostile header can't inject
+/// control characters or path fragments into the audit trail.
 let private resolveActor (ctx: HttpContext) =
-    readHeader ctx ActorHeader |> Option.defaultValue "deployment-admin"
+    match readHeader ctx ActorHeader with
+    | None -> "token:deployment-admin"
+    | Some claimed ->
+        match Auth.IdentitySanitiser.sanitiseScopeId claimed with
+        | Ok v -> $"token:deployment-admin (claimed: {v})"
+        | Error _ -> "token:deployment-admin (claimed: <rejected by sanitiser>)"
 
 /// Constant-time string comparison. Prevents timing side channels
 /// against the admin token.

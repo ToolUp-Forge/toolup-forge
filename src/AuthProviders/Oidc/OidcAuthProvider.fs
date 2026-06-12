@@ -383,13 +383,30 @@ let private buildProvider
     (logger: ILogger option)
     (config: AuthConfig)
     : IAuthProvider =
+    // Gap audit 2026-06-12 Auth G3 — refuse cleartext key-fetch URLs at
+    // construction. An `http://` issuer / JWKS URL sends the discovery +
+    // JWKS fetches over plaintext, where a MITM can substitute the key
+    // set and have forged tokens validate. Loopback hosts are the dev
+    // escape hatch (a local mock IdP without TLS); everything else must
+    // be https. Construction-time, so the misconfiguration surfaces at
+    // startup rather than as silent trust in a poisoned JWKS.
+    let requireHttps (label: string) (url: string) =
+        match Uri.TryCreate(url, UriKind.Absolute) with
+        | true, uri when uri.Scheme = Uri.UriSchemeHttps -> ()
+        | true, uri when uri.Scheme = Uri.UriSchemeHttp && uri.IsLoopback -> ()
+        | true, _ ->
+            invalidArg
+                (nameof config)
+                $"OidcAuthProvider refuses non-https {label} '{url}': discovery/JWKS fetched over cleartext can be MITM-substituted, letting forged tokens validate. Use https (http is permitted for loopback hosts only)."
+        | false, _ -> invalidArg (nameof config) $"OidcAuthProvider {label} '{url}' is not an absolute URL."
+
     match config.KeySource with
     | StaticSecret _ ->
         invalidArg
             (nameof config)
             "OidcAuthProvider requires KeySource = JwksDiscovery _ or JwksExplicit _. Use StaticJwtAuthProvider for StaticSecret."
-    | JwksDiscovery _
-    | JwksExplicit _ -> ()
+    | JwksDiscovery issuer -> requireHttps "issuer" issuer
+    | JwksExplicit url -> requireHttps "JWKS URL" url
 
     let log = logger |> Option.defaultValue noOpLogger
 

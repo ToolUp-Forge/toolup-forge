@@ -29,6 +29,20 @@ let private envVar (name: string) =
     | "" -> None
     | v -> Some v
 
+// Gap audit 2026-06-12 Auth G6 — explicit misconfiguration refuses at
+// startup instead of silently degrading to the spoofable
+// HeaderAuthProvider. A deployment that declared `TOOLUP_AUTH_MODE=oidc`
+// (and may legitimately run `AcceptHeaderAuthWhenAuthRequired` for its
+// mTLS proxy) must not boot in header-trust because of an env-var typo.
+// The dev-default fallback is reserved for genuinely-unset mode (GP 11
+// — refusals fire on explicit misconfiguration, never on unset config).
+
+let private missingIssuerMessage =
+    "TOOLUP_AUTH_MODE=oidc but TOOLUP_OIDC_ISSUER is not set. Refusing to start: falling back to the header-trust dev provider under a declared OIDC intent would silently accept spoofable X-User-Id identities. Set TOOLUP_OIDC_ISSUER to your OIDC provider's discovery URL, or unset TOOLUP_AUTH_MODE entirely to use the dev-only HeaderAuthProvider."
+
+let private unrecognisedModeMessage (other: string) =
+    $"TOOLUP_AUTH_MODE={other} is not recognised. Refusing to start rather than falling back to the dev-only HeaderAuthProvider under a declared auth intent. Valid values: oidc (or unset for the dev-only HeaderAuthProvider)."
+
 /// 0.5.3 — derive `TokenLocation` from the SSE auth mode env var.
 /// `TOOLUP_SSE_AUTH=cookie` (or `cookies` / `cookieonly`) signals that
 /// the deployment serves SSE via EventSource, which the browser can only
@@ -98,28 +112,22 @@ let private buildAuthConfig (issuer: string) (audience: string option) : AuthCon
 ///     (per Phase 6l.A `HeaderAuthProviderModeValidator`).
 ///   - `oidc` — calls the supplied `oidcBuilder` with an `AuthConfig`
 ///     populated from `TOOLUP_OIDC_ISSUER` + optional
-///     `TOOLUP_OIDC_AUDIENCE`. Missing issuer falls back to
-///     `HeaderAuthProvider` with a Warn.
-///   - unrecognised value — falls back to `HeaderAuthProvider` with a
-///     Warn naming the recognised values.
-///
-/// Warning text + behaviour is byte-for-byte identical to the
-/// hand-written dispatch in the reference composition root.
+///     `TOOLUP_OIDC_AUDIENCE`. Missing issuer refuses startup
+///     (`invalidOp`) — explicit OIDC intent must never degrade to
+///     header trust (Gap audit 2026-06-12 Auth G6).
+///   - unrecognised value — refuses startup, naming the recognised
+///     values. Only genuinely-unset mode gets the dev fallback (GP 11).
 ///
 /// Metrics: the constructed provider does not emit auth-pipeline
 /// metrics. Use `fromEnvMetered` to thread an `IMetricsSink` resolved
 /// from the compose-time service collection into the OIDC builder.
 let fromEnv (logger: ILogger) (oidcBuilder: OidcAuthBuilder) : IAuthProvider =
-    let headerAuth = HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
-
     match envVar "TOOLUP_AUTH_MODE" |> Option.map _.ToLowerInvariant() with
     | Some "oidc" ->
         match envVar "TOOLUP_OIDC_ISSUER" with
         | None ->
-            logger.Warn
-                "TOOLUP_AUTH_MODE=oidc but TOOLUP_OIDC_ISSUER not set. Falling back to HeaderAuthProvider (dev default). Authenticated modes will reject all requests until an issuer is configured."
-
-            headerAuth
+            logger.Error(missingIssuerMessage, None)
+            invalidOp missingIssuerMessage
         | Some issuer ->
             let audience = envVar "TOOLUP_OIDC_AUDIENCE"
             let authConfig = buildAuthConfig issuer audience
@@ -128,11 +136,10 @@ let fromEnv (logger: ILogger) (oidcBuilder: OidcAuthBuilder) : IAuthProvider =
 
             oidcBuilder (Some logger) authConfig
     | Some other ->
-        logger.Warn
-            $"TOOLUP_AUTH_MODE={other} not recognised. Valid values: oidc (or unset for dev-only HeaderAuthProvider)."
-
-        headerAuth
-    | None -> headerAuth
+        let message = unrecognisedModeMessage other
+        logger.Error(message, None)
+        invalidOp message
+    | None -> HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
 
 /// Metrics-aware counterpart to `fromEnv`. Threads the resolved
 /// `IMetricsSink option` into `oidcBuilder` so the env-driven OIDC
@@ -141,24 +148,20 @@ let fromEnv (logger: ILogger) (oidcBuilder: OidcAuthBuilder) : IAuthProvider =
 /// compose-time service collection (after `compose` registers
 /// `IMetricsSink` per `MetricsEndpoint`) and pass it here.
 ///
-/// Behaviour is identical to `fromEnv` for `HeaderAuthProvider` /
-/// unrecognised-mode dispatch — metrics only flow when the env vars
-/// resolve to the OIDC branch.
+/// Behaviour is identical to `fromEnv` for unset-mode fallback and
+/// explicit-misconfiguration refusal — metrics only flow when the env
+/// vars resolve to the OIDC branch.
 let fromEnvMetered
     (logger: ILogger)
     (metrics: IMetricsSink option)
     (oidcBuilder: OidcAuthBuilderMetered)
     : IAuthProvider =
-    let headerAuth = HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
-
     match envVar "TOOLUP_AUTH_MODE" |> Option.map _.ToLowerInvariant() with
     | Some "oidc" ->
         match envVar "TOOLUP_OIDC_ISSUER" with
         | None ->
-            logger.Warn
-                "TOOLUP_AUTH_MODE=oidc but TOOLUP_OIDC_ISSUER not set. Falling back to HeaderAuthProvider (dev default). Authenticated modes will reject all requests until an issuer is configured."
-
-            headerAuth
+            logger.Error(missingIssuerMessage, None)
+            invalidOp missingIssuerMessage
         | Some issuer ->
             let audience = envVar "TOOLUP_OIDC_AUDIENCE"
             let authConfig = buildAuthConfig issuer audience
@@ -167,8 +170,7 @@ let fromEnvMetered
 
             oidcBuilder (Some logger) metrics authConfig
     | Some other ->
-        logger.Warn
-            $"TOOLUP_AUTH_MODE={other} not recognised. Valid values: oidc (or unset for dev-only HeaderAuthProvider)."
-
-        headerAuth
-    | None -> headerAuth
+        let message = unrecognisedModeMessage other
+        logger.Error(message, None)
+        invalidOp message
+    | None -> HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider

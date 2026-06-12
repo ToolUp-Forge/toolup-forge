@@ -329,6 +329,32 @@ let private staticJwtTests =
             | Ok _ -> failtest "Expected Error for malformed token"
             | Error _ -> ()
         }
+
+        testCaseAsync "Rejects a correctly-signed token with no sub claim"
+        <| async {
+            let p = provider defaultConfig
+            // Gap audit 2026-06-12 Auth G2 — pre-hardening this
+            // authenticated as the literal "anonymous" sentinel,
+            // landing the caller in the shared anonymous scope.
+            let token = JwtMinter.mint testSecret [ "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for token with no sub claim"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Rejects a token whose sub fails identity sanitisation"
+        <| async {
+            let p = provider defaultConfig
+            // Same sanitiser the OIDC provider applies (Auth G2) — a
+            // path-traversal sub must never reach UserId.
+            let token =
+                JwtMinter.mint testSecret [ "sub", box "../etc/passwd"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "Expected Error for path-traversal sub claim"
+            | Error _ -> ()
+        }
     ]
 
 // ─── OidcAuthProvider ───────────────────────────────────────────────
@@ -1112,6 +1138,123 @@ let private oidcMockIssuerContract =
         ]
     )
 
+// ─── OIDC construction guards (Gap audit 2026-06-12 Auth G3) ────────
+//
+// Cleartext discovery / JWKS URLs are refused at construction — a MITM
+// on an http fetch substitutes the key set and forged tokens validate.
+// Loopback http is the dev escape hatch (local mock IdP without TLS).
+
+let private oidcConstructionTests =
+    let mkConfig (keySource: KeySource) = {
+        Issuer = None
+        Audience = None
+        KeySource = keySource
+        TokenLocation = BearerHeader
+        ClockSkewSeconds = None
+        AcceptedAlgorithms = None
+        PreferOidWhenPresent = None
+    }
+
+    testList "OidcAuthProvider construction" [
+        testCase "refuses an http non-loopback issuer"
+        <| fun () ->
+            Expect.throwsT<ArgumentException>
+                (fun () ->
+                    OidcAuthProvider.fromConfig None (mkConfig (JwksDiscovery "http://idp.example.com"))
+                    |> ignore)
+                "cleartext issuer must be refused at construction"
+
+        testCase "refuses an http non-loopback explicit JWKS URL"
+        <| fun () ->
+            Expect.throwsT<ArgumentException>
+                (fun () ->
+                    OidcAuthProvider.fromConfig None (mkConfig (JwksExplicit "http://idp.example.com/jwks.json"))
+                    |> ignore)
+                "cleartext JWKS URL must be refused at construction"
+
+        testCase "permits an http loopback issuer (dev escape hatch)"
+        <| fun () ->
+            OidcAuthProvider.fromConfig None (mkConfig (JwksDiscovery "http://127.0.0.1:54321"))
+            |> ignore
+
+        testCase "permits an https issuer"
+        <| fun () ->
+            OidcAuthProvider.fromConfig None (mkConfig (JwksDiscovery "https://idp.example.com"))
+            |> ignore
+    ]
+
+// ─── AuthProvider.fromEnv dispatch (Gap audit 2026-06-12 Auth G6) ────
+//
+// Explicit misconfiguration refuses at startup; only genuinely-unset
+// mode gets the dev-only HeaderAuthProvider fallback (GP 11). Env vars
+// are process-global, so the list is sequenced and each case snapshots
+// + restores what it touches.
+
+let private silentLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+let private fromEnvTests =
+    let withEnv (pairs: (string * string option) list) (body: unit -> unit) =
+        let priors =
+            pairs |> List.map (fun (n, _) -> n, Environment.GetEnvironmentVariable n)
+
+        try
+            for n, v in pairs do
+                Environment.SetEnvironmentVariable(n, v |> Option.toObj)
+
+            body ()
+        finally
+            for n, prior in priors do
+                Environment.SetEnvironmentVariable(n, prior)
+
+    let marker =
+        { new IAuthProvider with
+            member _.GetUser _ = async { return AuthenticatedUser.anonymous }
+            member _.ValidateRequest _ = async { return Error "marker" }
+        }
+
+    let oidcStub: AuthProvider.OidcAuthBuilder = fun _ _ -> marker
+
+    testSequenced (
+        testList "AuthProvider.fromEnv" [
+            testCase "unset TOOLUP_AUTH_MODE falls back to the dev HeaderAuthProvider"
+            <| fun () ->
+                withEnv [ "TOOLUP_AUTH_MODE", None; "TOOLUP_OIDC_ISSUER", None ] (fun () ->
+                    let p = AuthProvider.fromEnv silentLogger oidcStub
+                    Expect.isTrue (p :? HeaderAuthProvider.HeaderAuthProvider) "unset mode keeps the dev fallback")
+
+            testCase "oidc mode with an issuer dispatches to the OIDC builder"
+            <| fun () ->
+                withEnv
+                    [
+                        "TOOLUP_AUTH_MODE", Some "oidc"
+                        "TOOLUP_OIDC_ISSUER", Some "https://idp.example.com"
+                    ]
+                    (fun () ->
+                        let p = AuthProvider.fromEnv silentLogger oidcStub
+                        Expect.isTrue (obj.ReferenceEquals(p, marker)) "oidc branch builds via the supplied builder")
+
+            testCase "oidc mode without an issuer refuses startup"
+            <| fun () ->
+                withEnv [ "TOOLUP_AUTH_MODE", Some "oidc"; "TOOLUP_OIDC_ISSUER", None ] (fun () ->
+                    Expect.throwsT<InvalidOperationException>
+                        (fun () -> AuthProvider.fromEnv silentLogger oidcStub |> ignore)
+                        "explicit OIDC intent must never degrade to header trust")
+
+            testCase "unrecognised TOOLUP_AUTH_MODE refuses startup"
+            <| fun () ->
+                withEnv [ "TOOLUP_AUTH_MODE", Some "oidcc"; "TOOLUP_OIDC_ISSUER", None ] (fun () ->
+                    Expect.throwsT<InvalidOperationException>
+                        (fun () -> AuthProvider.fromEnv silentLogger oidcStub |> ignore)
+                        "a typo'd mode must refuse rather than boot in header-trust")
+        ]
+    )
+
 // ─── Aggregated ─────────────────────────────────────────────────────
 
 let tests =
@@ -1119,6 +1262,8 @@ let tests =
         headerAuthTests
         staticJwtTests
         oidcTests
+        oidcConstructionTests
+        fromEnvTests
         oidcMetricsTests
         oidcMockIssuerContract
     ]

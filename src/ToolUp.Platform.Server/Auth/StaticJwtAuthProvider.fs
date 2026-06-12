@@ -194,7 +194,24 @@ let private validateToken (config: StaticJwtConfig) (token: string) : Result<Aut
                 | None -> Error "Missing 'aud' claim"
             | None -> Ok()
 
-        let userId = Jwt.getClaim "sub" doc |> Option.defaultValue "anonymous"
+        // Gap audit 2026-06-12 Auth G2 — `sub` is mandatory and
+        // sanitised. Pre-hardening, a correctly-signed token with no
+        // `sub` authenticated as the literal "anonymous" sentinel
+        // (landing the caller in the shared anonymous scope), and the
+        // claim flowed verbatim into `UserId` with none of the
+        // path-traversal defence the OIDC provider applies. Mirror
+        // `OidcAuthProvider`: same sanitiser, but a missing / empty /
+        // rejected `sub` is a validation Error, never an anonymous
+        // fallback — an "authenticated" caller must carry a real
+        // identity. Sanitiser categories never echo the raw value, so
+        // the reason is safe in a 401 body.
+        let! userId =
+            match Jwt.getClaim "sub" doc with
+            | None -> Error "Missing 'sub' claim"
+            | Some raw ->
+                match IdentitySanitiser.sanitiseScopeId raw with
+                | Result.Ok v -> Ok v
+                | Result.Error reason -> Error $"Invalid 'sub' claim: {reason}"
 
         return {
             UserId = userId
