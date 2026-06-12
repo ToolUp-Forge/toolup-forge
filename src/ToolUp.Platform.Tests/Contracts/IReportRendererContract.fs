@@ -34,7 +34,19 @@ let private mkTemplate (format: TemplateFormat) (body: string) (placeholders: Pl
     Version = 1
 }
 
-let tests (name: string) (factory: unit -> IReportRenderer) (format: TemplateFormat) =
+/// Bind the pack with an explicit output projection. Text-shaped
+/// renderers project with `utf8Decode` (the `tests` overload below);
+/// binary-output renderers (PDF and friends) supply a text
+/// extraction so the substitution / format-hint / determinism
+/// assertions run against the rendered *content* — raw PDF bytes
+/// carry compressed streams + creation-timestamp metadata, so
+/// neither substring search nor byte equality is meaningful there.
+let testsWith
+    (name: string)
+    (factory: unit -> IReportRenderer)
+    (format: TemplateFormat)
+    (projectOutput: byte[] -> string)
+    =
     testList $"{name} — IReportRenderer contract" [
         testCaseAsync "Renderer claims the expected format"
         <| async {
@@ -62,7 +74,7 @@ let tests (name: string) (factory: unit -> IReportRenderer) (format: TemplateFor
             match result with
             | Result.Error e -> failtestf "Expected Ok; got Error: %s" (RenderError.toMessage e)
             | Result.Ok bytes ->
-                let rendered = utf8Decode bytes
+                let rendered = projectOutput bytes
                 Expect.stringContains rendered "World" "value substituted"
                 Expect.isFalse (rendered.Contains "{{name}}") "placeholder consumed"
         }
@@ -133,7 +145,7 @@ let tests (name: string) (factory: unit -> IReportRenderer) (format: TemplateFor
             match result with
             | Result.Error e -> failtestf "Expected Ok; got Error: %s" (RenderError.toMessage e)
             | Result.Ok bytes ->
-                let rendered = utf8Decode bytes
+                let rendered = projectOutput bytes
                 Expect.stringContains rendered "3.14" "format hint applied"
         }
 
@@ -158,7 +170,7 @@ let tests (name: string) (factory: unit -> IReportRenderer) (format: TemplateFor
             match result with
             | Result.Error e -> failtestf "Expected Ok; got Error: %s" (RenderError.toMessage e)
             | Result.Ok bytes ->
-                let rendered = utf8Decode bytes
+                let rendered = projectOutput bytes
                 Expect.stringContains rendered "2026-05-12" "format hint applied"
         }
 
@@ -182,7 +194,7 @@ let tests (name: string) (factory: unit -> IReportRenderer) (format: TemplateFor
             match result with
             | Result.Error e -> failtestf "Expected Ok; got Error: %s" (RenderError.toMessage e)
             | Result.Ok bytes ->
-                let rendered = utf8Decode bytes
+                let rendered = projectOutput bytes
                 Expect.stringContains rendered "Alice" "name substituted"
                 // Unknown token survives — author's signal that
                 // schema/template drifted apart
@@ -215,7 +227,17 @@ let tests (name: string) (factory: unit -> IReportRenderer) (format: TemplateFor
             let! r2 = r.Render(template, values)
 
             match r1, r2 with
-            | Result.Ok b1, Result.Ok b2 -> Expect.equal b1 b2 "deterministic across calls"
+            | Result.Ok b1, Result.Ok b2 ->
+                // Projected-content determinism: byte-identical for
+                // text renderers (utf8Decode is lossless), content-
+                // identical for binary formats whose container embeds
+                // a creation timestamp.
+                Expect.equal (projectOutput b1) (projectOutput b2) "deterministic across calls"
             | _ -> failtest "Both renders should succeed"
         }
     ]
+
+/// Bind the pack for text-shaped renderers (output bytes are UTF-8
+/// text). The original entry point — existing bindings are unchanged.
+let tests (name: string) (factory: unit -> IReportRenderer) (format: TemplateFormat) =
+    testsWith name factory format utf8Decode

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Reporting.HtmlPdf</PackageId>
+        <Description>ToolUp.Reporting HTML→PDF rendering sub-companion — renders HTML report templates (print CSS respected: @page size/margins, page breaks, headers/footers) to paginated PDF via Playwright / headless Chromium, implementing IReportRenderer and registering through the standard RendererRegistry path. Placeholder semantics inherited from the shipped HtmlRenderer. Requires Chromium in the deployment image — see the README.</Description>
+        <PackageTags>fsharp;sdk;server;reporting;pdf;html;print-css;playwright;chromium</PackageTags>
+        <!-- Phase 126 — Reporting sub-companion (the src/Reporting/<Format>/
+             directory convention from Phase 23). GP 1: the headless-browser
+             vendor dependency lives here only — neither
+             ToolUp.Reporting.Core nor ToolUp.Platform.* gains it. GP 13:
+             the browser launches lazily on first render; composing the
+             renderer costs nothing until a PDF is produced. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="ToolUp.Reporting.HtmlPdf.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Playwright" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="PdfRenderOptions.fs" />
+        <Compile Include="BrowserHost.fs" />
+        <Compile Include="HtmlPdfReportRenderer.fs" />
+    </ItemGroup>
+</Project>
