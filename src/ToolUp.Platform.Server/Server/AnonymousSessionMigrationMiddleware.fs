@@ -140,13 +140,40 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
 
             let targetIdOpt = subjectOpt |> Option.bind migrationTargetId
 
+            // Phase 135 — a real (non-NoOp) migrator wired? The browser
+            // binding + migration only matter then; default NoOp
+            // deployments stay byte-for-byte unchanged (no binding cookie,
+            // no migration). GP 11 / GP 13.
+            let realMigrator =
+                match ctx.RequestServices.GetService(typeof<IAnonymousSessionMigrator>) with
+                | :? NoOpAnonymousSessionMigrator -> false
+                | :? IAnonymousSessionMigrator -> true
+                | _ -> false
+
+            // Phase 135 — on an anonymous `/api/*` request, establish the
+            // server-issued, HttpOnly, DataProtection-sealed binding for
+            // this session id. A later authenticated request MUST present
+            // this binding (a browser-bound proof of ownership) to migrate
+            // — the self-asserted, non-secret `X-User-Id` is never trusted
+            // on its own.
+            match isApi, inboundSessionId, subjectOpt with
+            | true, Some sid, Some(AnonymousSession _) when realMigrator ->
+                if not (AnonymousSessionBinding.isBoundTo ctx sid) then
+                    match AnonymousSessionBinding.mint ctx sid with
+                    | Some token -> AnonymousSessionBinding.setCookie ctx token
+                    | None -> ()
+            | _ -> ()
+
             // Trigger preconditions: an `/api/*` request, an inbound
-            // anonymous session id, an authenticated migration target,
-            // and the session id must differ from the user id (otherwise
-            // the `X-User-Id` *is* the auth identity — no separate
-            // anonymous session exists, as under `HeaderAuthProvider`).
+            // anonymous session id, an authenticated migration target, the
+            // session id must differ from the user id (otherwise the
+            // `X-User-Id` *is* the auth identity — no separate anonymous
+            // session exists, as under `HeaderAuthProvider`), AND
+            // (Phase 135) the HttpOnly binding cookie must cryptographically
+            // prove this browser owned the anonymous session — defeating an
+            // attacker who replays a victim's (non-secret) session id.
             match isApi, inboundSessionId, targetIdOpt with
-            | true, Some sid, Some uid when sid <> uid ->
+            | true, Some sid, Some uid when sid <> uid && AnonymousSessionBinding.isBoundTo ctx sid ->
                 match ctx.RequestServices.GetService(typeof<IMemoryCache>) with
                 | :? IMemoryCache as cache ->
                     let lastSeenKey = LastSeenKeyPrefix + uid

@@ -109,6 +109,7 @@ let allTests =
         Ed25519ArtifactSubstrateTests.tests
         ShareTokenStoreTests.tests
         ShareTokenAuthMiddlewareTests.tests
+        AnonymousSessionMigrationTests.tests
         InMemoryPendingInviteStoreTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests

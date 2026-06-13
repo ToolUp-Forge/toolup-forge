@@ -112,10 +112,22 @@ type MigrationError =
 /// tier).
 type IAnonymousSessionMigrator =
     /// Migrate session-scoped data into the authenticated subject's
-    /// scope. Receives the anonymous session id (the pre-sign-in
-    /// `X-User-Id` cookie value) and the resolved authenticated
-    /// `Subject` (an `AuthenticatedUser` or `TeamMember` —
+    /// scope. Receives the anonymous session id and the resolved
+    /// authenticated `Subject` (an `AuthenticatedUser` or `TeamMember` —
     /// `AnonymousSession` and `ClaimBearer` are not valid targets and
     /// implementations may return `Error (NotEligible _)` for them).
+    ///
+    /// **Security (Phase 135).** `anonymousSessionId` is a non-secret,
+    /// client-generated value (it rides the `X-User-Id` header and the
+    /// SSE `?userId=` query string). When invoked by
+    /// `AnonymousSessionMigrationMiddleware`, the id has ALREADY been
+    /// proven to belong to the calling browser via a server-issued,
+    /// HttpOnly, DataProtection-sealed binding cookie
+    /// (`AnonymousSessionBinding`) — the migration does not fire
+    /// otherwise. Implementations that invoke a migrator from any OTHER
+    /// path MUST perform the same ownership check first: treating a
+    /// self-asserted session id as proof of ownership lets a signed-in
+    /// attacker migrate a victim's anonymous-session data into their own
+    /// account (horizontal data theft).
     abstract Migrate:
         anonymousSessionId: string * authenticatedSubject: Subject -> Async<Result<MigrationSummary, MigrationError>>

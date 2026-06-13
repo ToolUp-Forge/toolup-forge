@@ -217,6 +217,7 @@
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
+        <Compile Include="InProcess\AnonymousSessionMigrationTests.fs" />
         <Compile Include="InProcess\InMemoryPendingInviteStoreTests.fs" />
         <!-- Phase 70 — BlobPlatformAIKeyStore over an in-memory ISecretStore.
              Binds the IPlatformAIKeyStoreContract pack to the default impl. -->

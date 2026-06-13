@@ -417,6 +417,7 @@
              session-migration trigger middleware. Registered in the
              pipeline after SurfaceEnforcementMiddleware; depends on
              NoOpAnonymousSessionMigrator (compiled earlier). -->
+        <Compile Include="Server\AnonymousSessionBinding.fs" />
         <Compile Include="Server\AnonymousSessionMigrationMiddleware.fs" />
         <!-- Phase 56 — inbound HTTP rate-limit middleware. Composes
              against `IRateLimitStore` (registered earlier in the build
