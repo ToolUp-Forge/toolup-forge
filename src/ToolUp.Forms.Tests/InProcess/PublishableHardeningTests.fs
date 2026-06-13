@@ -7,6 +7,7 @@ open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.PublishableFormConfigValidator
 open ToolUp.Forms.InMemoryShareTokenRateLimiter
+open ToolUp.Forms.ShareTokenRateLimiterDistributionValidator
 open ToolUp.Forms.Tests.Contracts
 
 // ─── Phase 21e — publishable-forms hardening tests ──────────────────
@@ -213,7 +214,125 @@ let private l2RateLimitTests =
 // ─── Contract pack — InMemoryShareTokenRateLimiter ──────────────────
 
 let private contractTests =
-    IShareTokenRateLimiterContract.tests "InMemoryShareTokenRateLimiter" (fun () -> create ())
+    IShareTokenRateLimiterContract.tests "InMemoryShareTokenRateLimiter" false (fun () -> create ())
+
+// ─── Phase 136 part 2 — rate-limiter distribution validator ─────────
+//
+// The in-memory limiter under a scale-out shape silently grants
+// `N × MaxUses`; the validator refuses (Error) on a declared
+// `ReplicaCount > 1`, warns on an inferred public surface, and stays
+// clean for single-instance / distributed / no-share-token-surface
+// deployments + the explicit escape hatch.
+
+/// Stub distributed limiter — `IsDistributed = true`, `Admit` always
+/// admits (the validator never calls `Admit`).
+let private distributedLimiter =
+    { new IShareTokenRateLimiter with
+        member _.IsDistributed = true
+        member _.Admit(_, _, _) = async { return Ok() }
+    }
+
+let private runDistValidator (config: ServerConfig) (limiter: IShareTokenRateLimiter) = async {
+    let v =
+        ShareTokenRateLimiterDistributionValidator(config, limiter) :> ConfigValidation.IConfigValidator
+
+    return! v.Validate()
+}
+
+let private shareTokenSurface (extra: ServerConfig -> ServerConfig) : ServerConfig =
+    {
+        ServerConfig.defaults with
+            ShareTokenStore = EnabledShareTokenStore
+    }
+    |> extra
+
+let private distributionValidatorTests =
+    testList "Phase 136 part 2 — rate-limiter distribution validator" [
+
+        testCaseAsync "Single-instance in-memory limiter → Ok"
+        <| async {
+            let config = shareTokenSurface id
+            let! result = runDistValidator config (create ())
+
+            match result with
+            | ConfigValidation.Ok -> ()
+            | other -> failwithf "single-instance should be Ok, got %A" other
+        }
+
+        testCaseAsync "ReplicaCount > 1 + in-memory limiter + share-token surface → Error naming the bypass + fix"
+        <| async {
+            let config = shareTokenSurface (fun c -> { c with ReplicaCount = 3 })
+            let! result = runDistValidator config (create ())
+
+            match result with
+            | ConfigValidation.Error msg ->
+                Expect.stringContains msg "3×" "Error names the N× multiplier"
+                Expect.stringContains msg "withShareTokenRateLimiter" "Error names the distributed-limiter fix"
+
+                Expect.stringContains
+                    msg
+                    "AcceptInMemoryShareTokenRateLimiterInMultiInstance"
+                    "Error names the escape hatch"
+            | other -> failwithf "multi-instance in-memory should Error, got %A" other
+        }
+
+        testCaseAsync "ReplicaCount > 1 + escape hatch → Ok"
+        <| async {
+            let config =
+                shareTokenSurface (fun c -> {
+                    c with
+                        ReplicaCount = 3
+                        AcceptInMemoryShareTokenRateLimiterInMultiInstance = true
+                })
+
+            let! result = runDistValidator config (create ())
+
+            match result with
+            | ConfigValidation.Ok -> ()
+            | other -> failwithf "escape hatch should silence to Ok, got %A" other
+        }
+
+        testCaseAsync "ReplicaCount > 1 + distributed limiter → Ok"
+        <| async {
+            let config = shareTokenSurface (fun c -> { c with ReplicaCount = 3 })
+            let! result = runDistValidator config distributedLimiter
+
+            match result with
+            | ConfigValidation.Ok -> ()
+            | other -> failwithf "distributed limiter should be Ok, got %A" other
+        }
+
+        testCaseAsync "PublicBaseUrl set + single instance + in-memory → Warning (inferred scale-out)"
+        <| async {
+            let config =
+                shareTokenSurface (fun c -> {
+                    c with
+                        PublicBaseUrl = Some "https://survey.example"
+                })
+
+            let! result = runDistValidator config (create ())
+
+            match result with
+            | ConfigValidation.Warning _ -> ()
+            | other -> failwithf "inferred scale-out should Warn, got %A" other
+        }
+
+        testCaseAsync "No share-token surface + multi-instance in-memory → Ok"
+        <| async {
+            // Default config: NoShareTokenStore, no claim-bearer surface
+            // — no tokens are issued, so the limiter is never consulted.
+            let config = {
+                ServerConfig.defaults with
+                    ReplicaCount = 3
+            }
+
+            let! result = runDistValidator config (create ())
+
+            match result with
+            | ConfigValidation.Ok -> ()
+            | other -> failwithf "no share-token surface should be Ok, got %A" other
+        }
+    ]
 
 let tests =
     testList "PublishableHardeningTests (Phase 21e)" [
@@ -221,4 +340,5 @@ let tests =
         l1CollapseTests
         l2RateLimitTests
         contractTests
+        distributionValidatorTests
     ]

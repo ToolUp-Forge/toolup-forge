@@ -49,6 +49,12 @@ type InMemoryShareTokenRateLimiter() =
         windows.GetOrAdd(key, fun _ -> ResizeArray<DateTimeOffset>())
 
     interface IShareTokenRateLimiter with
+        // Phase 136 part 2 — per-process window state (see module
+        // header), so the partition guarantee is `false`. A scale-out
+        // deployment that wires this limiter is caught by
+        // `ShareTokenRateLimiterDistributionValidator` at startup.
+        member _.IsDistributed = false
+
         member _.Admit(scopeId, tokenId, rate) = async {
             let key = WindowKey(scopeId, tokenId)
             let window = getWindow key

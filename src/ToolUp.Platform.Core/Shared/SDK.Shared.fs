@@ -2188,6 +2188,27 @@ type ServerConfig = {
     /// the deployment pins OAuth-flow traffic to one replica.
     AcceptInMemoryOAuthStateInMultiInstance: bool
 
+    /// Phase 136 part 2 — explicit operator opt-in to running the
+    /// in-memory `IShareTokenRateLimiter`
+    /// (`InMemoryShareTokenRateLimiter`, the SDK default) in a
+    /// scale-out-shaped deployment. The in-memory limiter keeps each
+    /// per-token sliding window in a process-local dictionary, so with
+    /// `ReplicaCount > 1` a leaked share-token's per-window admission
+    /// cap is silently multiplied by the replica count
+    /// (`N × MaxUses`) — the operator configured a rate limit and gets a
+    /// weaker one than declared.
+    ///
+    /// Default `false` — `ShareTokenRateLimiterDistributionValidator`
+    /// refuses startup when `ReplicaCount > 1`. The fix is wiring a
+    /// distributed companion (Redis / `IRateLimitStore`-backed, Phase
+    /// 56) via `FormsServerApp.withShareTokenRateLimiter`. Set `true`
+    /// (or `TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE=1`)
+    /// only when the deployment pins share-token traffic to one replica,
+    /// or knowingly accepts the `N × MaxUses` burst (the absolute
+    /// persisted `UseLimit` cap still holds). The validator downgrades
+    /// to clean and the override is visible in the preflight output.
+    AcceptInMemoryShareTokenRateLimiterInMultiInstance: bool
+
     /// Explicit operator opt-in for running `PendingInviteStore`
     /// (the email-keyed pre-invite blob backing
     /// `ITeamInviteApi.IssuePendingInviteByEmail`) in a multi-replica
@@ -2652,6 +2673,7 @@ module ServerConfig =
         AcceptSameSiteOnlyCsrfWhenAuthRequired = false
         AcceptUnboundAudienceWhenAuthRequired = false
         AcceptInMemoryOAuthStateInMultiInstance = false
+        AcceptInMemoryShareTokenRateLimiterInMultiInstance = false
         AcceptPendingInviteStoreInMultiInstance = false
         EphemeralStoreEvictionMinutes = 60.0
         MaxSseConnectionsPerScope = Some 10
@@ -2997,6 +3019,8 @@ module ServerConfig =
                 AcceptUnsignedPublishable = envFlag "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE"
                 AcceptQueryParamSseAuthWhenAuthRequired = envFlag "TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE"
                 AcceptSameSiteOnlyCsrfWhenAuthRequired = envFlag "TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE"
+                AcceptInMemoryShareTokenRateLimiterInMultiInstance =
+                    envFlag "TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE"
                 EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
                 RateLimit = parseRateLimit logger
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger

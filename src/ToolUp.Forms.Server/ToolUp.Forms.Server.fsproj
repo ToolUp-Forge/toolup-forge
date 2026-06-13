@@ -39,6 +39,7 @@
         <Compile Include="Server\InMemoryShareTokenRateLimiter.fs" />
         <Compile Include="Server\PublicFormApiHandler.fs" />
         <Compile Include="Server\PublishableFormConfigValidator.fs" />
+        <Compile Include="Server\ShareTokenRateLimiterDistributionValidator.fs" />
         <Compile Include="Server\FormsCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.

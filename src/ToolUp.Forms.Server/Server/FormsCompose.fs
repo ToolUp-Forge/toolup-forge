@@ -555,6 +555,22 @@ module FormsServerApp =
             | Some limiter -> limiter
             | None -> InMemoryShareTokenRateLimiter.create ()
 
+        // Phase 136 part 2 — refuse / warn when the resolved share-token
+        // rate limiter is the in-memory default in a scale-out-shaped
+        // deployment. Reads the limiter's declared `IsDistributed`
+        // capability rather than guessing by type; free at runtime
+        // (registers `Ok` when single-instance / distributed / no
+        // share-token surface). Registered here — after the limiter is
+        // resolved — so it inspects the exact instance DI will serve.
+        let withEntities =
+            withEntities
+            |> ServerApp.withConfigValidator (
+                ShareTokenRateLimiterDistributionValidator.ShareTokenRateLimiterDistributionValidator(
+                    app.Base.Config,
+                    resolvedShareTokenRateLimiter
+                )
+            )
+
         // Capture the explicitly-configured analyser cache (via
         // `withAnalyserCache`) so the DI factory can fall back to
         // an auto-constructed `ResultStoreAnalyserCache` when the

@@ -72,3 +72,20 @@ type IShareTokenRateLimiter =
     /// never invokes `Admit` for them.
     abstract Admit:
         scopeId: string * tokenId: string * rate: ShareTokenRateLimit -> Async<Result<unit, ShareTokenError>>
+
+    /// Phase 136 part 2 — the limiter's partition guarantee, declared as
+    /// data rather than inferred by runtime type (GP 12). `false` ⇒
+    /// window state is per-process (the `InMemoryShareTokenRateLimiter`
+    /// default), so a multi-replica deployment grants `N × MaxUses`
+    /// admissions per window — the declared per-token rate limit is
+    /// silently the *per-replica* limit. `true` ⇒ window state is shared
+    /// across replicas (a Redis / `IRateLimitStore`-backed companion),
+    /// so the limit holds fleet-wide.
+    ///
+    /// `ShareTokenRateLimiterDistributionValidator` reads this at startup
+    /// to refuse / warn on the scale-out misconfiguration, so a
+    /// distributed companion declares its guarantee here instead of
+    /// having to be recognised by the validator by name. The absolute
+    /// persisted `UseLimit` cap (enforced by `IShareTokenStore`) holds
+    /// regardless of this flag — only the per-window rate is affected.
+    abstract IsDistributed: bool

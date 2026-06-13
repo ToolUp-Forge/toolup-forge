@@ -29,8 +29,18 @@ let private mkRate maxUses windowSeconds : ShareTokenRateLimit = {
     Window = TimeSpan.FromSeconds(float windowSeconds)
 }
 
-let tests (label: string) (factory: RateLimiterFactory) =
+let tests (label: string) (expectedDistributed: bool) (factory: RateLimiterFactory) =
     testList (sprintf "IShareTokenRateLimiter contract — %s" label) [
+
+        // Phase 136 part 2 — the partition guarantee is declared as
+        // data; the contract pins each implementation's value so a
+        // distributed companion cannot silently ship with the in-memory
+        // default's `false` (which would defeat the
+        // ShareTokenRateLimiterDistributionValidator startup gate).
+        test "IsDistributed reports the implementation's declared partition guarantee" {
+            let limiter = factory ()
+            Expect.equal limiter.IsDistributed expectedDistributed "IsDistributed matches the declared guarantee"
+        }
 
         testAsync "Admit inside budget returns Ok" {
             let limiter = factory ()
