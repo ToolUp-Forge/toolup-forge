@@ -154,11 +154,7 @@ module GiraffeUtil =
         // compositions the classifiers handle fine (the classifiers
         // reflect with the same flags — see `AuthClassifier`).
         let isRecordImpl =
-            Microsoft.FSharp.Reflection.FSharpType.IsRecord(
-                typeof<'impl>,
-                System.Reflection.BindingFlags.Public
-                ||| System.Reflection.BindingFlags.NonPublic
-            )
+            Microsoft.FSharp.Reflection.FSharpType.IsRecord(typeof<'impl>, AuthClassifier.reflectionFlags)
 
         let seamsRequiringRecord =
             options.AuthContextResolver.IsSome

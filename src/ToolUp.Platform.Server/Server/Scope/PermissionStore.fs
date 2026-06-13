@@ -169,12 +169,8 @@ let private mergeEffective
         userOverrides |> Map.tryFind userId |> Option.defaultValue Map.empty
 
     // Start from defaults, overlay the user's explicit entries.
-    let mutable result = defaults
-
-    for KeyValue(moduleName, perms) in userEntries do
-        result <- result |> Map.add moduleName perms
-
-    result
+    (defaults, userEntries)
+    ||> Map.fold (fun acc moduleName perms -> Map.add moduleName perms acc)
 
 // ─── Blob-backed implementation ──────────────────────────────────────
 

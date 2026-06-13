@@ -43,7 +43,7 @@ open ToolUp.Platform.ConfigValidation
 /// switch, matching `EncryptedSecretStoreModeValidator`'s carve-out).
 /// A raw `FileSecretStore`, or an `EncryptedSecretStore` in plaintext-
 /// passthrough mode, reports `false`.
-let secretStoreProvidesEncryptionAtRest (store: Secrets.ISecretStore) : bool =
+let secretStoreProvidesEncryptionAtRest (store: Secrets.ISecretStore) =
     let cloudKmsBacked =
         match Environment.GetEnvironmentVariable "TOOLUP_SECRET_STORE" with
         | null

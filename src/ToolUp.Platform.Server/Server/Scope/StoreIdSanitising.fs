@@ -54,34 +54,41 @@ let private both (a: Result<unit, string>) (b: Result<unit, string>) : Result<un
     | _, Error e -> Error e
     | Ok(), Ok() -> Ok()
 
+/// Run `inner` only when validation passed; short-circuit the
+/// pre-validated `Error` into the async result otherwise. The explicit
+/// per-method `validate` / `both` call stays at every call site (so it
+/// remains auditable that *every* write is guarded) — only the
+/// duplicated error-arm collapses here.
+let private guard
+    (validation: Result<unit, string>)
+    (inner: unit -> Async<Result<'a, string>>)
+    : Async<Result<'a, string>> =
+    match validation with
+    | Error e -> async { return Error e }
+    | Ok() -> inner ()
+
 /// `ITeamStore` decorator sanitising every id that becomes a blob-key
 /// segment on a write. Reads delegate unchanged.
 type SanitisingTeamStore(inner: ITeamStore) =
     interface ITeamStore with
         member _.CreateTeam(teamId, name) =
-            match validate "teamId" teamId with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.CreateTeam(teamId, name)
+            guard (validate "teamId" teamId) (fun () -> inner.CreateTeam(teamId, name))
 
         member _.AddMember(teamId, userId, role) =
-            match both (validate "teamId" teamId) (validate "userId" userId) with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.AddMember(teamId, userId, role)
+            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+                inner.AddMember(teamId, userId, role))
 
         member _.RemoveMember(teamId, userId) =
-            match both (validate "teamId" teamId) (validate "userId" userId) with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.RemoveMember(teamId, userId)
+            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+                inner.RemoveMember(teamId, userId))
 
         member _.ChangeMemberRole(teamId, userId, newRole) =
-            match both (validate "teamId" teamId) (validate "userId" userId) with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.ChangeMemberRole(teamId, userId, newRole)
+            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+                inner.ChangeMemberRole(teamId, userId, newRole))
 
         member _.SetActiveTeam(userId, teamId) =
-            match both (validate "userId" userId) (validate "teamId" teamId) with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.SetActiveTeam(userId, teamId)
+            guard (both (validate "userId" userId) (validate "teamId" teamId)) (fun () ->
+                inner.SetActiveTeam(userId, teamId))
 
         // Reads delegate unchanged.
         member _.GetTeam(teamId) = inner.GetTeam(teamId)
@@ -96,19 +103,14 @@ type SanitisingTeamStore(inner: ITeamStore) =
 type SanitisingPermissionStore(inner: IPermissionStore) =
     interface IPermissionStore with
         member _.SetTeamPermissions(teamId, permissions) =
-            match validate "teamId" teamId with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.SetTeamPermissions(teamId, permissions)
+            guard (validate "teamId" teamId) (fun () -> inner.SetTeamPermissions(teamId, permissions))
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            match both (validate "teamId" teamId) (validate "userId" userId) with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
+            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+                inner.SetMemberPermissions(teamId, userId, moduleName, permissions))
 
         member _.SetTeamDefaults(teamId, defaults) =
-            match validate "teamId" teamId with
-            | Error e -> async { return Error e }
-            | Ok() -> inner.SetTeamDefaults(teamId, defaults)
+            guard (validate "teamId" teamId) (fun () -> inner.SetTeamDefaults(teamId, defaults))
 
         // Reads delegate unchanged.
         member _.GetTeamPermissions(teamId) = inner.GetTeamPermissions(teamId)

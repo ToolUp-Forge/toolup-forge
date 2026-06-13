@@ -482,16 +482,21 @@ let private callback (flowName: string) : HttpHandler =
                                     // silently exchange without it. A non-
                                     // PKCE flow gets `None` and is unchanged.
                                     let! exchangeResult = async {
-                                        if flow.SupportsPkce && Option.isNone entry.CodeVerifier then
+                                        match flow.SupportsPkce, entry.CodeVerifier with
+                                        | true, None ->
+                                            // Fail closed: a PKCE flow with no stashed
+                                            // verifier cannot be exchanged — an
+                                            // intercepted code is useless without it.
                                             return
                                                 Error(
                                                     OAuthError.OAuthFlowFailed
                                                         "PKCE verifier missing from the state entry; this flow requires PKCE and the code cannot be exchanged without it."
                                                 )
-                                        else
-                                            let codeVerifier = if flow.SupportsPkce then entry.CodeVerifier else None
-
-                                            return! flow.ExchangeCode(flowCtx, code, entry.RedirectUri, codeVerifier)
+                                        | true, (Some _ as verifier) ->
+                                            return! flow.ExchangeCode(flowCtx, code, entry.RedirectUri, verifier)
+                                        | false, _ ->
+                                            // Non-PKCE flow gets `None` and is unchanged.
+                                            return! flow.ExchangeCode(flowCtx, code, entry.RedirectUri, None)
                                     }
 
                                     let logger =

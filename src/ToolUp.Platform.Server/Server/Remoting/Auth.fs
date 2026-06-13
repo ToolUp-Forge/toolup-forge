@@ -124,7 +124,11 @@ module internal AuthClassifier =
     // reports `false` for them and classification silently returns the
     // empty map — which would skip the startup classifier entirely for
     // exactly those records (fail-OPEN). Public records are unaffected.
-    let private reflectionFlags =
+    // Internal (not private): the same `Public ||| NonPublic` flag set is
+    // needed by the seam-composition guard (`Api.fs`) and the dispatcher
+    // record check (`GiraffeAdapter.fs`); they reference this single
+    // binding rather than re-inlining the expression.
+    let reflectionFlags =
         System.Reflection.BindingFlags.Public
         ||| System.Reflection.BindingFlags.NonPublic
 

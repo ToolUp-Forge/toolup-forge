@@ -575,7 +575,7 @@ let teamInvitationApi
                                         // Server has no first-class knowledge of
                                         // its public URL; walk the request's
                                         // Origin / scheme+host headers.
-                                        let originHeader = ctx.Request.Headers.["Origin"].ToString()
+                                        let originHeader = ctx.Request.Headers["Origin"].ToString()
 
                                         if not (System.String.IsNullOrWhiteSpace originHeader) then
                                             originHeader.TrimEnd('/') + "/"

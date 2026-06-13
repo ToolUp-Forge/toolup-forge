@@ -399,11 +399,7 @@ type Api =
         // enforcement for precisely those records (fail-open). Same rule
         // as `AuthClassifier.reflectionFlags`.
         let typeIsRecord =
-            Microsoft.FSharp.Reflection.FSharpType.IsRecord(
-                typeof<'T>,
-                System.Reflection.BindingFlags.Public
-                ||| System.Reflection.BindingFlags.NonPublic
-            )
+            Microsoft.FSharp.Reflection.FSharpType.IsRecord(typeof<'T>, AuthClassifier.reflectionFlags)
 
         let effectiveAuthContext: (HttpContext -> Async<ForgeAuthContext>) option =
             match authContext with
