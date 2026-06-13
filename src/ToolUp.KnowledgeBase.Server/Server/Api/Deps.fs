@@ -81,8 +81,21 @@ type KnowledgeApiDeps = {
     MarkIngestionFailed: string -> string -> string -> Async<unit>
     /// Owner / Admin gate for AI-context writes. Returns `Ok ()` for
     /// non-team modes and for users who can write team config; returns
-    /// `Error <reason>` otherwise.
+    /// `Error <reason>` otherwise. Reused by the destructive document /
+    /// index handlers (`deleteDocument` / `resetIndex`) so a raw API call
+    /// can't wipe a team's KB without owner/admin rights — repairing the
+    /// asymmetry where only `SetAIContext` was gated.
     EnsureContextWriteAllowed: unit -> Async<Result<unit, string>>
+    /// `true` when the request carried a middleware-resolved
+    /// `ToolUp.StorageScope`; `false` when `resolve` synthesised a
+    /// fallback scope. The destructive handlers fail closed when this is
+    /// `false` and `UserId` is the literal `"anonymous"` (the shared
+    /// `user-anonymous` collapse that happens when ScopeResolutionMiddleware
+    /// isn't wired for the path) rather than mutate a container shared
+    /// across every unscoped caller. Benign per-user fallbacks (a real
+    /// user id, no `StorageScope`) keep `false` here but stay tenant-
+    /// isolated, so they pass the guard.
+    ScopeResolvedFromRequest: bool
 }
 
 module KnowledgeApiDeps =
@@ -137,25 +150,47 @@ module KnowledgeApiDeps =
                     member _.Error(_, _) = ()
                 }
 
-        let scope =
+        // Scope resolution. A middleware-resolved `ToolUp.StorageScope`
+        // is the authoritative tenant boundary (GP 4). When it's absent
+        // `resolve` synthesises a fallback — per-user when `ToolUp.UserId`
+        // is present, or the shared `user-anonymous` container when neither
+        // item is set. The shared collapse means ScopeResolutionMiddleware
+        // isn't wired for this path and every unscoped caller lands in one
+        // KB scope: surfaced loudly here, and the destructive handlers fail
+        // closed on it (see `ScopeResolvedFromRequest`).
+        let resolvedScope =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> s
-            | _ ->
-                let userId =
-                    match ctx.Items.TryGetValue "ToolUp.UserId" with
-                    | true, (:? string as id) -> id
-                    | _ -> "anonymous"
+            | true, (:? StorageScope as s) -> Some s
+            | _ -> None
+
+        let scopeResolvedFromRequest = Option.isSome resolvedScope
+
+        let userId =
+            match ctx.Items.TryGetValue "ToolUp.UserId" with
+            | true, (:? string as id) -> id
+            | _ -> "anonymous"
+
+        let scope =
+            match resolvedScope with
+            | Some s -> s
+            | None ->
+                if userId = "anonymous" then
+                    logger.Error(
+                        "[KnowledgeBase] SECURITY: request carried no resolved 'ToolUp.StorageScope' and no 'ToolUp.UserId' — collapsing onto the shared 'user-anonymous' container. ScopeResolutionMiddleware is not wired ahead of this KnowledgeApi route; every unscoped caller would share one KB scope, so destructive operations are refused. Wire the scope-resolution middleware to close this.",
+                        None
+                    )
+                else
+                    logger.Warn(
+                        sprintf
+                            "[KnowledgeBase] No resolved 'ToolUp.StorageScope' for this request; falling back to the per-user container 'user-%s'. Per-user isolation is preserved, but ScopeResolutionMiddleware appears unwired for this path — verify the middleware order."
+                            userId
+                    )
 
                 {
                     ScopeId = userId
                     Container = sprintf "user-%s" userId
                     Persist = true
                 }
-
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
 
         let vectorScope =
             if scope.Container.StartsWith "team-" then
@@ -294,4 +329,21 @@ module KnowledgeApiDeps =
             PublishInventory = publishInventory
             MarkIngestionFailed = markIngestionFailed
             EnsureContextWriteAllowed = ensureContextWriteAllowed
+            ScopeResolvedFromRequest = scopeResolvedFromRequest
         }
+
+    /// Fail-closed guard for destructive KB operations. Returns `Error`
+    /// when scope resolution collapsed onto the shared `user-anonymous`
+    /// container (ScopeResolutionMiddleware unwired — neither
+    /// `ToolUp.StorageScope` nor `ToolUp.UserId` present on the request),
+    /// so a raw API call cannot wipe a container shared across every
+    /// unscoped caller. Benign per-user fallbacks (a real user id, no
+    /// `StorageScope`) pass — they stay tenant-isolated. `resolve`
+    /// already logged the collapse loudly; this is the operation-level
+    /// refusal.
+    let guardResolvedScope (deps: KnowledgeApiDeps) : Result<unit, string> =
+        if not deps.ScopeResolvedFromRequest && deps.UserId = "anonymous" then
+            Error
+                "Storage scope is unresolved for this request (ScopeResolutionMiddleware not wired); refusing the destructive operation to avoid mutating the shared anonymous container."
+        else
+            Ok()

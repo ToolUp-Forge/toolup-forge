@@ -226,7 +226,11 @@ let ingestNarrative
                 return Ok returnedDoc
     }
 
-let resetIndex (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
+/// Wipe body for `resetIndex`. Authorization (owner/admin in Team /
+/// MultiTeam) and the fail-closed unresolved-scope guard are applied by
+/// the `resetIndex` wrapper below, so this private body assumes the
+/// caller is authorised and the scope is the caller's own.
+let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
     // Wipe every blob under `knowledge/` (index + raw uploads +
     // rendered narratives) and drop the in-memory status/progress
     // entries for the docs that lived in this scope. The
@@ -242,14 +246,6 @@ let resetIndex (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
     // cleanup (using the prior KnowledgeDocument's ChunkCount
     // captured before re-ingestion), so by the time we reach this
     // sweep there are no orphan tails left to chase.
-    //
-    // No server-side role gate — `ITeamStore` is in the SDK's
-    // server-only compile context and isn't visible to module
-    // projects. Destructive intent is gated client-side via a
-    // confirm dialog. Phase 4's `IPermissionStore` pathway is
-    // the right home for a future hard gate; until then, a team
-    // member can reset their own team's index, matching today's
-    // unrestricted `DeleteDocument` semantics.
     let lock = acquireContainerLock deps.Scope.Container
     do! lock.WaitAsync() |> Async.AwaitTask
 
@@ -366,4 +362,27 @@ let resetIndex (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
     do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
     do! deps.PublishInventory()
     return Ok()
+}
+
+/// Wipe the caller's KB scope. Gated before any destructive work runs:
+///
+/// 1. Fail closed (item 2) when scope resolution collapsed onto the shared
+///    `user-anonymous` container (ScopeResolutionMiddleware unwired) — a raw
+///    API call must not wipe a container shared across every unscoped caller.
+/// 2. Owner / Admin only (item 1) in Team / MultiTeam modes, reusing the
+///    same gate `SetAIContext` uses (`Ok ()` in Anonymous / Ephemeral /
+///    Individual where the caller only reaches their own scope) — repairing
+///    the asymmetry where a destructive reset was ungated while a standing-
+///    context write was owner/admin-only.
+///
+/// Both guards run before the container lock so a refused caller never
+/// contends for it. The successful-reset audit row is emitted by the
+/// dispatcher's `[<Audit "Custom:KnowledgeIndexReset">]` annotation.
+let resetIndex (deps: KnowledgeApiDeps) : Async<Result<unit, string>> = async {
+    match KnowledgeApiDeps.guardResolvedScope deps with
+    | Error e -> return Error e
+    | Ok() ->
+        match! deps.EnsureContextWriteAllowed() with
+        | Error msg -> return Error msg
+        | Ok() -> return! performReset deps
 }

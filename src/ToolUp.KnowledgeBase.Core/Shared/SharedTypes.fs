@@ -291,7 +291,19 @@ type KnowledgeApi = {
     UploadDocument: byte[] -> string -> Async<KnowledgeDocument>
     [<AllowAnonymous>]
     GetDocuments: unit -> Async<KnowledgeDocument list>
+    /// Delete a single document from the caller's KB scope — removes the
+    /// index entry, raw blob, and embedded vector chunks. Owner / Admin
+    /// only in Team / MultiTeam modes (server-side gate, mirroring
+    /// `SetAIContext`); unrestricted in Anonymous / AuthenticatedEphemeral
+    /// / Individual modes where the caller only reaches their own scope.
+    /// Refused with `Error` when storage scope is unresolved
+    /// (ScopeResolutionMiddleware unwired). Idempotent on an unknown id.
+    /// Stays `[<AllowAnonymous>]` at the dispatcher (anonymous users manage
+    /// their own session-scoped KB); the per-mode owner/admin gate is a
+    /// runtime decision the handler makes. Successful deletes emit a
+    /// `Custom:KnowledgeDocumentDeleted` audit row.
     [<AllowAnonymous>]
+    [<Audit "Custom:KnowledgeDocumentDeleted">]
     DeleteDocument: string -> Async<Result<unit, string>>
     [<AllowAnonymous>]
     GetStatus: string -> Async<IngestionStatus>
@@ -324,8 +336,11 @@ type KnowledgeApi = {
     SetAIContext: string -> Async<Result<AIContextEntry, string>>
     /// Wipe the caller's KB scope: deletes the index, every uploaded blob,
     /// and every embedded vector chunk. Owner / Admin only in Team and
-    /// MultiTeam modes; unrestricted in Anonymous / AuthenticatedEphemeral
-    /// / Individual modes (the user only has access to their own scope).
+    /// MultiTeam modes (server-side gate, mirroring `SetAIContext`);
+    /// unrestricted in Anonymous / AuthenticatedEphemeral / Individual
+    /// modes (the user only has access to their own scope). Refused with
+    /// `Error` when storage scope is unresolved (ScopeResolutionMiddleware
+    /// unwired) so a raw call can't wipe the shared anonymous container.
     /// Idempotent — calling twice on an empty index returns `Ok ()`.
     [<AllowAnonymous>]
     [<Audit "Custom:KnowledgeIndexReset">]

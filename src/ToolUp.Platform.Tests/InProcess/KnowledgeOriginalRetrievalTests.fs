@@ -98,6 +98,7 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         MarkIngestionFailed = fun _ _ _ -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
+        ScopeResolvedFromRequest = true
     }
 
 let private narrativeSource: NarrativeDocSource = {
