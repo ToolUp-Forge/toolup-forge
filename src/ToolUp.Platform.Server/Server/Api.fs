@@ -410,6 +410,32 @@ type Api =
                 else
                     None
 
+        // Phase 132 — un-emittable-role startup warning. The default
+        // `ForgeAuthContext` resolver only ever emits the server-resolved
+        // `"PlatformAdmin"` role (bridged from `IPlatformAdminStore` /
+        // `ToolUp.PlatformRole`); every other role string falls through to
+        // the always-empty `user.Roles` of the first-party providers. So a
+        // `[<RequiresRole "Editor">]` (any non-`PlatformAdmin` role) against
+        // the default resolver is a dead gate — it denies *every* caller
+        // with no compose-time signal, the exact trap Phase 132 closed for
+        // `"PlatformAdmin"`, re-armed for every other role. Warn (don't
+        // refuse — a consumer mid-migration may be about to wire a custom
+        // resolver that emits the role) so the dead gate is visible at
+        // startup rather than as a silent always-deny. Only fires for the
+        // DEFAULT resolver: a consumer-supplied `?authContext` may emit any
+        // role vocabulary, so its role requirements are not second-guessed.
+        if authContext.IsNone && typeIsRecord then
+            let deadRoles =
+                AuthClassifier.unemittableRoles
+                    (fun role -> role = "PlatformAdmin")
+                    (AuthClassifier.classify typeof<'T>)
+
+            if not (List.isEmpty deadRoles) then
+                eprintfn
+                    "[ToolUp.Remoting] WARN: API record '%s' has [<RequiresRole>] requirement(s) for role(s) [%s] that the default auth-context resolver can never emit — only \"PlatformAdmin\" is server-resolved (from IPlatformAdminStore). These gates deny EVERY caller (dead-gate). Supply a custom ?authContext resolver that emits the role, or do not use [<RequiresRole \"<role>\">] as a sole gate against the first-party providers."
+                    typeof<'T>.Name
+                    (String.concat "; " deadRoles)
+
         // Phase 69b.tail / 69l — resolve effective telemetry + gate.
         // The default bridge wires forge's `IMetricsSink` over
         // `IRemotingTelemetry`; Phase 69l pairs it with

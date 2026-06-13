@@ -186,6 +186,22 @@ module GiraffeUtil =
             if not (List.isEmpty unclassified) then
                 raise (AuthClassifier.unclassifiedException typeof<'impl>.Name unclassified)
 
+            // Phase 132 — round-trip assertion (safety net for the
+            // deny-on-miss default below). The per-request auth key is the
+            // trailing path segment of the built route; the classification
+            // map is keyed by field name. If a custom `RouteBuilder` /
+            // casing / alias breaks that equivalence, the per-request
+            // lookup would miss and — now that a miss denies rather than
+            // fails open to `Public` — deny *every* call to that method.
+            // Refuse at startup instead, naming the offending fields, so a
+            // key divergence surfaces at compose time rather than as a
+            // silent always-deny in production.
+            let divergences =
+                AuthClassifier.nonRoundTripping options.RouteBuilder typeof<'impl>.Name classifications
+
+            if not (List.isEmpty divergences) then
+                raise (AuthClassifier.roundTripException typeof<'impl>.Name divergences)
+
         // Phase 69g — cache rate-limit attributes per method at startup.
         // The map is empty for API records that carry no [<RateLimit>]
         // attributes; per-call evaluation skips quickly in that case.
@@ -668,8 +684,17 @@ module GiraffeUtil =
                         match options.AuthContextResolver with
                         | None -> return None
                         | Some resolver ->
+                            // Phase 132 — deny-on-miss. With a resolver armed,
+                            // a classification-map miss defaults to
+                            // `Unclassified` (→ `Deny` in `AuthClassifier.evaluate`)
+                            // rather than `Public`. The round-trip startup
+                            // assertion above guarantees this can only fire for a
+                            // genuinely-unknown method path (no classified field
+                            // maps to it), for which fail-closed is correct.
                             let methodCls =
-                                classifications |> Map.tryFind methodNameForAuth |> Option.defaultValue Public
+                                classifications
+                                |> Map.tryFind methodNameForAuth
+                                |> Option.defaultValue Unclassified
 
                             match methodCls with
                             | Public -> return None
@@ -682,8 +707,13 @@ module GiraffeUtil =
                         match options.AuthContextResolver with
                         | None -> None
                         | Some _ ->
+                            // Phase 132 — deny-on-miss (see the resolver-trigger
+                            // site above). A miss defaults to `Unclassified`,
+                            // which `AuthClassifier.evaluate` denies fail-closed.
                             let methodCls =
-                                classifications |> Map.tryFind methodNameForAuth |> Option.defaultValue Public
+                                classifications
+                                |> Map.tryFind methodNameForAuth
+                                |> Option.defaultValue Unclassified
 
                             let authDecision = AuthClassifier.evaluate methodCls resolvedAuthContextForRequest
 

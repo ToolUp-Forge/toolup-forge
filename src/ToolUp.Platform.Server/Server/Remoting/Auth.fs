@@ -183,6 +183,81 @@ module internal AuthClassifier =
 
         invalidOp msg
 
+    // Phase 132 — extract the runtime authorisation key from a built
+    // route, the SAME way the dispatcher does per request: the trailing
+    // path segment after the last '/'. Kept here next to the round-trip
+    // check so the two derivations can never silently diverge (the whole
+    // point of the assertion is that they agree).
+    let private runtimeKeyOf (route: string) : string =
+        let lastSlash = route.LastIndexOf '/'
+
+        if lastSlash >= 0 then
+            route.Substring(lastSlash + 1)
+        else
+            route
+
+    /// Phase 132 — verify every classified field name round-trips through
+    /// the active `RouteBuilder`: applying the builder to the field name
+    /// then extracting the trailing path segment (the runtime auth key)
+    /// must yield back the field name. The classification map is keyed by
+    /// field name; the dispatcher looks classifications up by runtime key.
+    /// A custom `RouteBuilder` / casing / alias that breaks the round-trip
+    /// makes the per-request lookup miss — and (Phase 132 deny-on-miss)
+    /// deny every call. Returns the `(fieldName, divergentRuntimeKey)`
+    /// pairs that do not round-trip; empty means every key aligns.
+    let nonRoundTripping
+        (routeBuilder: string -> string -> string)
+        (apiTypeName: string)
+        (classifications: Map<string, MethodClassification>)
+        : (string * string) list =
+        classifications
+        |> Map.toList
+        |> List.choose (fun (fieldName, _) ->
+            let runtimeKey = runtimeKeyOf (routeBuilder apiTypeName fieldName)
+
+            if runtimeKey = fieldName then
+                None
+            else
+                Some(fieldName, runtimeKey))
+
+    /// Build a startup-time exception for classified field names whose
+    /// route does not round-trip to the field name (Phase 132).
+    let roundTripException (apiTypeName: string) (divergences: (string * string) list) : exn =
+        let detail =
+            divergences
+            |> List.map (fun (field, runtimeKey) -> sprintf "%s → runtime-key '%s'" field runtimeKey)
+            |> String.concat "; "
+
+        invalidOp (
+            sprintf
+                "ToolUp.Remoting refused to start: API record '%s' has %d classified method(s) whose field name does not round-trip through the active RouteBuilder: [%s]. The dispatcher keys per-request authorisation by the trailing path segment of the built route; when that diverges from the field name the classification lookup misses and (Phase 132 deny-on-miss) denies every call. Use a RouteBuilder whose trailing segment equals the method name."
+                apiTypeName
+                divergences.Length
+                detail
+        )
+
+    /// Phase 132 — given a predicate describing which role strings the
+    /// armed resolver can ever emit, return the distinct role names that
+    /// appear in `[<RequiresRole>]` requirements but can never be emitted.
+    /// Such a role gate denies *every* caller (the dead-gate trap): the
+    /// SDK's first-party providers leave `IAuthContext.HasRole` resolving
+    /// against an always-empty `user.Roles` for every role except the
+    /// server-resolved `"PlatformAdmin"`, so any other required role is a
+    /// silent always-deny. Empty when every required role is emittable.
+    let unemittableRoles (canEmit: string -> bool) (classifications: Map<string, MethodClassification>) : string list =
+        classifications
+        |> Map.toList
+        |> List.collect (fun (_, cls) ->
+            match cls with
+            | RequiresAuth reqs ->
+                reqs
+                |> List.choose (function
+                    | RoleRequired r -> Some r
+                    | _ -> None)
+            | _ -> [])
+        |> List.filter (canEmit >> not)
+        |> List.distinct
+
     /// Evaluate a method's classification against an auth context. The
     /// dispatcher calls this on every successful endpoint lookup.
     let evaluate (classification: MethodClassification) (context: IAuthContext option) : AuthDecision =

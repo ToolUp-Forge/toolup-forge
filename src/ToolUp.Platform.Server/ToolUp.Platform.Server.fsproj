@@ -415,6 +415,12 @@
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
+        <!-- Phase 132 — admin structural backstop. Path-prefix
+             authorisation middleware over the raw `_platform` admin
+             handlers; registered after ScopeResolutionMiddleware (which
+             stamps `ToolUp.PlatformRole`). Depends only on PlatformRole
+             (Core) + HttpContext. -->
+        <Compile Include="Server\PlatformAdminAuthorizationMiddleware.fs" />
         <!-- Phase 66 Stream C.1 (continuation) — anonymous→authenticated
              session-migration trigger middleware. Registered in the
              pipeline after SurfaceEnforcementMiddleware; depends on

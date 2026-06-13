@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.AuthorizationTests
 
 open System
+open System.Threading.Tasks
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
@@ -156,6 +157,148 @@ let tests =
             let! authCtx = ToolUp.Platform.ApiSeams.defaultForgeAuthContextResolver ctx
             Expect.isFalse (authCtx.HasRole "PlatformAdmin") "no PlatformRole stamped → denied"
         }
+
+        // ── Phase 132 — deny-on-miss: a classification-map miss defaults to
+        //    Unclassified (→ Deny), not Public, once a resolver is armed ──
+        test "Phase 132: classification-map miss denies (defaults to Unclassified, not Public)" {
+            let cls = AuthClassifier.classify typeof<ServerAttributedApi>
+
+            // The dispatcher's per-request lookup shape, post-132: a runtime
+            // key with no classified field defaults to Unclassified.
+            let missed =
+                cls |> Map.tryFind "MethodThatDoesNotExist" |> Option.defaultValue Unclassified
+
+            Expect.equal missed Unclassified "a miss must default to Unclassified, not Public"
+
+            expectDeny
+                (AuthClassifier.evaluate missed (Some(authContext [ "PlatformAdmin" ] [] false false)))
+                "a classification-map miss denies even a real admin (fail-closed)"
+        }
+
+        // ── Phase 132 — round-trip startup assertion: every classified field
+        //    name must round-trip through the active RouteBuilder ──
+        test "Phase 132: nonRoundTripping is empty for the default route builder" {
+            let cls = AuthClassifier.classify typeof<ServerAttributedApi>
+            // Api.make's default forge route builder.
+            let divergences =
+                AuthClassifier.nonRoundTripping (sprintf "/api/%s/%s") "ServerAttributedApi" cls
+
+            Expect.isEmpty divergences "default `/api/{type}/{method}` route builder round-trips every field"
+        }
+
+        test "Phase 132: nonRoundTripping is empty for the tenant API's custom route builder" {
+            // The tenant API ships a custom builder (`/api/_platform/tenants/{method}`);
+            // its trailing segment is still the method name, so it round-trips.
+            let cls = AuthClassifier.classify typeof<ToolUp.Platform.IPlatformTenantApi>
+
+            let divergences =
+                AuthClassifier.nonRoundTripping ToolUp.Platform.PlatformTenantApi.routeBuilder "IPlatformTenantApi" cls
+
+            Expect.isEmpty divergences "the tenant custom route builder still round-trips the method name"
+        }
+
+        test "Phase 132: nonRoundTripping flags a route builder whose trailing segment diverges" {
+            let cls = AuthClassifier.classify typeof<ServerAttributedApi>
+            // A builder that suffixes the method name — the runtime key
+            // ("AdminOnly_v2") no longer equals the classification key.
+            let badBuilder = (fun (t: string) (m: string) -> sprintf "/%s/%s_v2" t m)
+
+            let divergences =
+                AuthClassifier.nonRoundTripping badBuilder "ServerAttributedApi" cls
+
+            Expect.isNonEmpty divergences "a non-round-tripping builder must be flagged"
+
+            Expect.isTrue
+                (divergences
+                 |> List.forall (fun (field, runtimeKey) -> runtimeKey = field + "_v2"))
+                "each divergence names the field and its (wrong) runtime key"
+        }
+
+        // ── Phase 132 — un-emittable role warning: a RequiresRole naming a
+        //    role the default resolver can never emit is a dead gate ──
+        test "Phase 132: unemittableRoles names non-PlatformAdmin role gates against the default resolver" {
+            let cls = AuthClassifier.classify typeof<ServerAttributedApi>
+            // `ServerAttributedApi` gates on "Admin" — un-emittable by the
+            // default first-party resolver (only "PlatformAdmin" is server-
+            // resolved).
+            let dead = AuthClassifier.unemittableRoles (fun r -> r = "PlatformAdmin") cls
+            Expect.equal dead [ "Admin" ] "the 'Admin' role gate is dead against the default resolver"
+        }
+
+        test "Phase 132: unemittableRoles is empty when every required role is PlatformAdmin" {
+            // The tenant API gates exclusively on PlatformAdmin — all emittable.
+            let cls = AuthClassifier.classify typeof<ToolUp.Platform.IPlatformTenantApi>
+            let dead = AuthClassifier.unemittableRoles (fun r -> r = "PlatformAdmin") cls
+            Expect.isEmpty dead "PlatformAdmin gates are emittable by the default resolver — no dead gates"
+        }
+
+        // ── Phase 132 — admin structural backstop middleware ──
+        testList "Phase 132 — admin path-prefix backstop" [
+            // Path-matching predicate: which surfaces the backstop guards.
+            test "requiresPlatformAdmin gates the admin / tenant / grant prefixes" {
+                let gate = ToolUp.Platform.PlatformAdminAuthorization.requiresPlatformAdmin
+                Expect.isTrue (gate "GET" (PathString "/api/_platform/admin/ad-units")) "admin prefix gated"
+                Expect.isTrue (gate "POST" (PathString "/api/_platform/admin/ad-units")) "admin write gated"
+                Expect.isTrue (gate "GET" (PathString "/api/_platform/tenants/GetLifecycleSummary")) "tenant gated"
+                Expect.isTrue (gate "POST" (PathString "/api/_platform/users/u1/premium")) "premium grant gated"
+                Expect.isTrue (gate "DELETE" (PathString "/api/_platform/users/u1/premium")) "premium revoke gated"
+            }
+
+            test "requiresPlatformAdmin leaves open surfaces untouched" {
+                let gate = ToolUp.Platform.PlatformAdminAuthorization.requiresPlatformAdmin
+                // Public premium-status read — GET, ends `/premium-status`.
+                Expect.isFalse
+                    (gate "GET" (PathString "/api/_platform/users/me/premium-status"))
+                    "premium-status read is public"
+                // Encryption admin — has its own role-OR-token gate; not ours.
+                Expect.isFalse
+                    (gate "POST" (PathString "/api/_platform/encryption/destroy-scope-key/s1"))
+                    "encryption endpoint keeps its dual-path gate"
+                // Ordinary API.
+                Expect.isFalse (gate "GET" (PathString "/api/data/load")) "ordinary API not gated"
+            }
+
+            // End-to-end middleware: deny non-admin, pass admin, leave open
+            // surfaces alone — even when the downstream handler would (here)
+            // always succeed (modelling a handler that omits its in-line check).
+            let runBackstop (httpMethod: string) (path: string) (stampAdmin: bool) : int * bool =
+                let ctx = DefaultHttpContext() :> HttpContext
+                ctx.Request.Method <- httpMethod
+                ctx.Request.Path <- PathString path
+
+                if stampAdmin then
+                    ctx.Items["ToolUp.PlatformRole"] <- box ToolUp.Platform.PlatformRole.PlatformAdmin
+
+                let mutable reached = false
+
+                let next =
+                    RequestDelegate(fun _ ->
+                        reached <- true
+                        Task.CompletedTask)
+
+                let mw =
+                    ToolUp.Platform.PlatformAdminAuthorization.PlatformAdminAuthorizationMiddleware(next)
+
+                mw.InvokeAsync(ctx).GetAwaiter().GetResult()
+                ctx.Response.StatusCode, reached
+
+            test "non-admin is denied 403 at the backstop, never reaching the handler" {
+                let status, reached = runBackstop "POST" "/api/_platform/admin/ad-units" false
+                Expect.equal status 403 "non-admin denied with 403"
+                Expect.isFalse reached "the handler is never invoked — fail-closed before dispatch"
+            }
+
+            test "a genuine PlatformAdmin passes the backstop to the handler" {
+                let status, reached = runBackstop "POST" "/api/_platform/admin/ad-units" true
+                Expect.isTrue reached "admin request reaches the handler"
+                Expect.notEqual status 403 "admin is not denied by the backstop"
+            }
+
+            test "the backstop is transparent to open surfaces (premium-status read)" {
+                let _, reached = runBackstop "GET" "/api/_platform/users/me/premium-status" false
+                Expect.isTrue reached "public premium-status read passes through untouched"
+            }
+        ]
 
         // ── Classification: server family ──
         test "server-family attributes classify per method" {
