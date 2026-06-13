@@ -79,6 +79,10 @@ let private mkProvider (cache: IMemoryCache) (audit: IAuditLog) (migrator: IAnon
     services.AddSingleton<IMemoryCache>(cache) |> ignore
     services.AddSingleton<IAuditLog>(audit) |> ignore
     services.AddSingleton<IAnonymousSessionMigrator>(migrator) |> ignore
+    // Phase 135 — the migration gate requires a server-issued binding
+    // cookie sealed by DataProtection; register it so `invoke` can mint
+    // a valid binding and exercise the (now secure) migration path.
+    services.AddDataProtection() |> ignore
     services.BuildServiceProvider() :> IServiceProvider
 
 let private newCache () : IMemoryCache =
@@ -99,7 +103,17 @@ let private invoke
     ctx.Request.Path <- PathString path
 
     match xUserId with
-    | Some v -> ctx.Request.Headers["X-User-Id"] <- StringValues v
+    | Some v ->
+        ctx.Request.Headers["X-User-Id"] <- StringValues v
+        // Phase 135 — attach the server-issued HttpOnly binding cookie
+        // proving this browser owned the anonymous session (minted with
+        // the provider's DataProtection key ring). The migration gate
+        // requires it; the no-trigger guard cases still get no migration
+        // because their OTHER preconditions fail (non-target subject,
+        // sid == uid, non-/api path).
+        match AnonymousSessionBinding.mint ctx v with
+        | Some token -> ctx.Request.Headers["Cookie"] <- StringValues(AnonymousSessionBinding.CookieName + "=" + token)
+        | None -> ()
     | None -> ()
 
     match subject with
