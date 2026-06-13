@@ -51,15 +51,9 @@ open ToolUp.AuthProviders.EntraExternalIdConfig
 // point.
 
 // ─── Claim extraction (unsigned re-read of an already-validated JWT) ─
-
-let private base64UrlDecode (s: string) : byte[] =
-    let padded =
-        match s.Length % 4 with
-        | 0 -> s
-        | r -> s + String.replicate (4 - r) "="
-
-    let standard = padded.Replace('-', '+').Replace('_', '/')
-    Convert.FromBase64String standard
+//
+// Base64url decode goes through the shared `ToolUp.Platform.Base64Url`
+// codec (this file already `open`s `ToolUp.Platform`).
 
 let private tryGetString (name: string) (el: JsonElement) : string option =
     match el.TryGetProperty name with
@@ -106,7 +100,7 @@ let private tryReadClaims (metrics: IMetricsSink) (rawToken: string) : EntraClai
             incr AuthMetrics.EntraClaimParseFailed
             emptyClaims
         else
-            let payloadJson = Encoding.UTF8.GetString(base64UrlDecode parts[1])
+            let payloadJson = Encoding.UTF8.GetString(Base64Url.decode parts[1])
             use doc = JsonDocument.Parse payloadJson
             let root = doc.RootElement
 

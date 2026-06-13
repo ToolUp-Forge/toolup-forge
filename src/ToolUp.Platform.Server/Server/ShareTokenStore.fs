@@ -68,35 +68,14 @@ module private Json =
         with _ ->
             None
 
-// ─── Base64url helpers ───────────────────────────────────────────────
-
-let private base64UrlEncode (bytes: byte[]) : string =
-    Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
-
-let private base64UrlDecode (s: string) : byte[] option =
-    try
-        let pad = (4 - s.Length % 4) % 4
-        let padded = s.Replace('-', '+').Replace('_', '/') + String.replicate pad "="
-        Some(Convert.FromBase64String padded)
-    with _ ->
-        None
-
-// ─── HMAC helpers ────────────────────────────────────────────────────
-
-let private hmacSha256 (key: byte[]) (data: byte[]) : byte[] =
-    use h = new HMACSHA256(key)
-    h.ComputeHash(data)
-
-let private constantTimeEquals (a: byte[]) (b: byte[]) : bool =
-    if a.Length <> b.Length then
-        false
-    else
-        let mutable diff = 0
-
-        for i in 0 .. a.Length - 1 do
-            diff <- diff ||| int (a[i] ^^^ b[i])
-
-        diff = 0
+// ─── Base64url + HMAC helpers ─────────────────────────────────────────
+//
+// The base64url codec, HMAC and the (formerly hand-rolled XOR)
+// constant-time compare are the shared SDK primitives in
+// `ToolUp.Platform.Base64Url` / `ToolUp.Platform.JwtCrypto` — the local
+// copies (incl. the one piece of unaudited hand-rolled crypto in the
+// set) are gone in favour of the BCL `CryptographicOperations`-backed
+// `JwtCrypto.fixedTimeEquals`.
 
 // ─── Wire format ─────────────────────────────────────────────────────
 //
@@ -131,8 +110,8 @@ let private encodeToken (signingKey: byte[]) (claim: ShareTokenClaim) : string =
 
     let payloadJson = Json.serializeString payload
     let payloadBytes = Encoding.UTF8.GetBytes payloadJson
-    let signature = hmacSha256 signingKey payloadBytes
-    sprintf "%s.%s.%s" claim.TokenId (base64UrlEncode payloadBytes) (base64UrlEncode signature)
+    let signature = JwtCrypto.computeHmac signingKey payloadBytes
+    sprintf "%s.%s.%s" claim.TokenId (Base64Url.encode payloadBytes) (Base64Url.encode signature)
 
 /// Returns the verified `tokenId` plus the parsed `SignedPayload` on
 /// success, so callers can cross-check the embedded scope/resource
@@ -145,11 +124,11 @@ let private parseToken (signingKey: byte[]) (token: string) : Result<string * Si
     else
         let tokenIdFromPrefix = parts[0]
 
-        match base64UrlDecode parts[1], base64UrlDecode parts[2] with
+        match Base64Url.tryDecode parts[1], Base64Url.tryDecode parts[2] with
         | Some payloadBytes, Some signatureBytes ->
-            let expected = hmacSha256 signingKey payloadBytes
+            let expected = JwtCrypto.computeHmac signingKey payloadBytes
 
-            if not (constantTimeEquals expected signatureBytes) then
+            if not (JwtCrypto.fixedTimeEquals expected signatureBytes) then
                 Error ShareTokenError.InvalidSignature
             else
                 match Json.tryDeserialize<SignedPayload> payloadBytes with
@@ -174,14 +153,14 @@ let private resolveSigningKey (secretStore: ISecretStore) : Async<Result<byte[],
 
     match existing with
     | Some s ->
-        match base64UrlDecode s with
+        match Base64Url.tryDecode s with
         | Some bytes when bytes.Length >= 32 -> return Ok bytes
         | _ -> return Error "share_token_signing_key is malformed (expected base64url-encoded 32+ bytes)"
     | None ->
         let key = Array.zeroCreate<byte> 32
         use rng = RandomNumberGenerator.Create()
         rng.GetBytes(key)
-        let encoded = base64UrlEncode key
+        let encoded = Base64Url.encode key
         let! saveResult = secretStore.SetSecret(platformContainer, signingKeySecretName, encoded)
 
         match saveResult with
@@ -305,7 +284,7 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
                         let bytes = Array.zeroCreate<byte> 16
                         use rng = RandomNumberGenerator.Create()
                         rng.GetBytes(bytes)
-                        base64UrlEncode bytes
+                        Base64Url.encode bytes
 
                     let claim = {
                         TokenId = tokenId

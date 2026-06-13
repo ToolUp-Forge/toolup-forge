@@ -7,18 +7,12 @@ open ToolUp.Platform
 
 // ─── Base64url ───────────────────────────────────────────────────────
 //
-// JWT header, payload, signature, and JWK `n`/`e` are base64url. Differs
-// from standard base64: `+` → `-`, `/` → `_`, trailing `=` padding
-// omitted.
+// JWT header, payload, signature, and JWK `n`/`e` are base64url. The
+// codec itself is the shared SDK primitive `ToolUp.Platform.Base64Url`;
+// this thin re-export keeps the name the JWK parser (`.Jwks.fs`) and
+// test fixtures already bind to.
 
-let base64UrlDecode (s: string) : byte[] =
-    let padded =
-        match s.Length % 4 with
-        | 0 -> s
-        | r -> s + String.replicate (4 - r) "="
-
-    let standard = padded.Replace('-', '+').Replace('_', '/')
-    Convert.FromBase64String standard
+let base64UrlDecode (s: string) : byte[] = Base64Url.decode s
 
 let private base64UrlDecodeString (s: string) : string =
     Encoding.UTF8.GetString(base64UrlDecode s)

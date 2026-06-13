@@ -21,6 +21,7 @@ module ToolUp.AuthProviders.Oidc.OidcIdTokenValidator
 // dependency for the pure validator).
 
 open System
+open ToolUp.Platform
 open ToolUp.AuthProviders.Oidc.OidcTypes
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -56,18 +57,12 @@ type ParsedIdToken = {
 
 // ─── Base64url ───────────────────────────────────────────────────────
 
-/// Decode a base64url string to bytes (`-`→`+`, `_`→`/`, padded to
-/// length % 4). Throws on malformed input; callers wrap in try.
-/// Public to support cross-assembly test fixtures that need to
-/// construct / tamper with synthetic JWTs without re-implementing the
-/// same byte arithmetic.
-let base64UrlDecode (input: string) : byte[] =
-    let withPadding =
-        let s = input.Replace('-', '+').Replace('_', '/')
-        let pad = (4 - s.Length % 4) % 4
-        s + String('=', pad)
-
-    Convert.FromBase64String withPadding
+/// Decode a base64url string to bytes. Throws on malformed input;
+/// callers wrap in try. Thin re-export of the shared Fable-safe
+/// `ToolUp.Platform.Base64Url.decode` — kept public (and named) to
+/// support cross-assembly test fixtures that construct / tamper with
+/// synthetic JWTs without re-implementing the same byte arithmetic.
+let base64UrlDecode (input: string) : byte[] = Base64Url.decode input
 
 // ─── JSON parsing (runtime-split) ─────────────────────────────────────
 

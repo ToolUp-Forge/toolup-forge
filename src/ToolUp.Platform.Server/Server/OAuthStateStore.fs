@@ -24,24 +24,19 @@ open Microsoft.Extensions.Hosting
 /// browser via WebCrypto). Uses BCL `RandomNumberGenerator` —
 /// cryptographically secure on every supported platform.
 module OAuthCrypto =
-    /// Generate `byteCount` random bytes, base64url-encoded. The
-    /// `state` parameter (RFC 6749 §10.12) is conventionally 16
-    /// bytes; the PKCE `code_verifier` (RFC 7636) is 32 bytes.
-    let private base64url (bytes: byte[]) : string =
-        Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=')
-
-    /// 16-byte (~22-character) cryptographically random CSRF state.
+    /// 16-byte (~22-character) cryptographically random CSRF state
+    /// (RFC 6749 §10.12), base64url-encoded via the shared codec.
     let generateState () : string =
         let bytes = Array.zeroCreate<byte> 16
         RandomNumberGenerator.Fill bytes
-        base64url bytes
+        Base64Url.encode bytes
 
     /// 32-byte (~43-character) cryptographically random PKCE
-    /// code verifier.
+    /// code verifier (RFC 7636).
     let generateCodeVerifier () : string =
         let bytes = Array.zeroCreate<byte> 32
         RandomNumberGenerator.Fill bytes
-        base64url bytes
+        Base64Url.encode bytes
 
     /// SHA-256 the verifier, return the digest base64url-encoded.
     /// This is the `code_challenge` value sent to the provider in
@@ -51,7 +46,7 @@ module OAuthCrypto =
         use sha = SHA256.Create()
         let bytes = System.Text.Encoding.UTF8.GetBytes verifier
         let hash = sha.ComputeHash bytes
-        base64url hash
+        Base64Url.encode hash
 
 /// In-memory `IOAuthStateStore`. Single-instance only — flagged for
 /// the Phase 9c half 2 distributed companion (Redis-backed, mirrors

@@ -10,7 +10,13 @@
          the DLL) and Fable client-tier (consumes the source) — both ship
          in the same nupkg. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <!-- Shared\JwtCrypto.fs is BCL-crypto (System.Security.Cryptography)
+             and is NOT Fable-safe — exclude it from the Fable-packed
+             source so a Fable consumer never tries to transpile it. Its
+             only consumers are server-tier (StaticJwt / peer auth /
+             ShareTokenStore), which get it via the Core DLL. The
+             Fable-safe Base64Url codec ships normally. -->
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**;Shared\JwtCrypto.fs" PackagePath="fable\" />
     </ItemGroup>
     <!-- Phase 11.C.2 closure: pack the parent companion's README. All
          four ToolUp.Platform tiers (Core / Server / Client / Build) ship
@@ -39,6 +45,14 @@
              Api.make consumes them via the AuthAttributeBridge at
              composition time. -->
         <Compile Include="Shared\AuthAttributes.fs" />
+        <!-- Wave 19 TIDY-UP — shared JWT/crypto primitives, consolidating
+             the base64url codec + HS256/HMAC helpers hand-copied across
+             every token site. Base64Url is Fable-safe (ships under
+             fable/); JwtCrypto is BCL-crypto and excluded from the Fable
+             pack glob above. Placed early — every later token/auth file
+             references them. -->
+        <Compile Include="Shared\Base64Url.fs" />
+        <Compile Include="Shared\JwtCrypto.fs" />
         <Compile Include="Shared\Interfaces\ILogger.fs" />
         <!-- Phase 57 — static-prerender substrate types lifted out of
              Client/SDK.ClientTypes.fs so ToolUp.Platform.Build can

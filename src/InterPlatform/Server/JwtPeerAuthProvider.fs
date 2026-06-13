@@ -5,9 +5,9 @@ namespace ToolUp.InterPlatform
 
 open System
 open System.Text
-open System.Security.Cryptography
 open System.Text.Json
 open System.Text.Json.Nodes
+open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
 // ─── Layer 4 — default peer auth provider ────────────────────────────
@@ -30,24 +30,13 @@ open ToolUp.Platform.Secrets
 // from `ISecretStore` on every call (GP 12 rule 4) so a rotated key
 // flows through immediately with no cached state.
 
-/// Result computation expression for chaining the synchronous validation
-/// steps (after the async secret lookup has produced the signing key).
-type private PeerResultBuilder() =
-    member _.Bind(m, f) =
-        match m with
-        | Ok x -> f x
-        | Error e -> Error e
-
-    member _.Return(x) = Ok x
-    member _.ReturnFrom(m) = m
-    member _.Zero() = Ok()
-
-/// HS256 JWT helpers (BCL only — no package dependencies). Mirrors the
-/// `StaticJwtAuthProvider` validator, extended with the issue-side encode
-/// path and a constant-time string comparison used for delegation.
+/// HS256 JWT helpers. The base64url codec, HMAC, HS256 alg-check,
+/// fixed-time compare, clock-skew constant and the Result CE are the
+/// shared SDK primitives in `ToolUp.Platform.Base64Url` /
+/// `ToolUp.Platform.JwtCrypto`; only the peer-specific glue (split,
+/// payload decode, claim reads, exp/nbf, audience binding, the
+/// issue-side encode path and the delegation string compare) stays here.
 module private PeerJwt =
-
-    let result = PeerResultBuilder()
 
     /// Reserved SDK-level secret scope (see `ISecretStore`).
     let platformScope = "_platform"
@@ -55,32 +44,12 @@ module private PeerJwt =
     /// Secret-store key holding a peer's symmetric HS256 signing key.
     let signingKeyFor (peerId: string) = $"peers/{peerId}/signing-key"
 
-    let base64UrlEncode (bytes: byte[]) =
-        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
-
-    let base64UrlDecode (input: string) =
-        let s = input.Replace('-', '+').Replace('_', '/')
-
-        let s =
-            match s.Length % 4 with
-            | 2 -> s + "=="
-            | 3 -> s + "="
-            | _ -> s
-
-        Convert.FromBase64String(s)
-
-    let computeHmac (secret: byte[]) (message: byte[]) =
-        use hmac = new HMACSHA256(secret)
-        hmac.ComputeHash(message)
-
     /// Constant-time comparison of two already-encoded strings (UTF-8
-    /// bytes, length-checked first). Used for the delegation signature.
+    /// bytes). Used for the delegation signature; delegates to the shared
+    /// BCL-backed `JwtCrypto.fixedTimeEquals` (which is itself
+    /// length-safe in constant time).
     let constantTimeEquals (expected: string) (actual: string) =
-        let e = Encoding.UTF8.GetBytes expected
-        let a = Encoding.UTF8.GetBytes actual
-
-        e.Length = a.Length
-        && CryptographicOperations.FixedTimeEquals(ReadOnlySpan e, ReadOnlySpan a)
+        JwtCrypto.fixedTimeEquals (Encoding.UTF8.GetBytes expected) (Encoding.UTF8.GetBytes actual)
 
     /// Parse a JWT into its three Base64URL-encoded parts.
     let split (token: string) =
@@ -88,38 +57,13 @@ module private PeerJwt =
         | [| header; payload; signature |] -> Ok(header, payload, signature)
         | _ -> Error "Invalid JWT format"
 
-    /// Refuse anything but `alg: HS256` before touching the signature —
-    /// defence in depth against algorithm-confusion (`alg: none`,
-    /// `alg: RS256` against an HS256 secret, etc.).
-    let checkAlgorithm (header: string) =
-        try
-            let bytes = base64UrlDecode header
-            let json = Encoding.UTF8.GetString(bytes)
-            use doc = JsonDocument.Parse json
-
-            match doc.RootElement.TryGetProperty("alg") with
-            | true, algElem when algElem.ValueKind = JsonValueKind.String ->
-                let alg = algElem.GetString()
-
-                if alg = "HS256" then
-                    Ok()
-                else
-                    Error $"Unsupported JWT algorithm '{alg}' (only HS256 is accepted)"
-            | true, _ -> Error "JWT header 'alg' field is not a string"
-            | false, _ -> Error "JWT header missing 'alg' field"
-        with ex ->
-            Error $"Failed to parse JWT header: {ex.Message}"
-
     /// Verify the HS256 signature in constant time.
     let verifySignature (secret: byte[]) (header: string) (payload: string) (signature: string) =
         let message = Encoding.UTF8.GetBytes($"{header}.{payload}")
-        let expected = computeHmac secret message
-        let actual = base64UrlDecode signature
+        let expected = JwtCrypto.computeHmac secret message
+        let actual = Base64Url.decode signature
 
-        if
-            expected.Length = actual.Length
-            && CryptographicOperations.FixedTimeEquals(ReadOnlySpan expected, ReadOnlySpan actual)
-        then
+        if JwtCrypto.fixedTimeEquals expected actual then
             Ok()
         else
             Error "Invalid signature"
@@ -127,15 +71,11 @@ module private PeerJwt =
     /// Decode the payload into a JsonDocument.
     let decodePayload (payload: string) =
         try
-            let bytes = base64UrlDecode payload
+            let bytes = Base64Url.decode payload
             let json = Encoding.UTF8.GetString(bytes)
             Ok(JsonDocument.Parse(json))
         with ex ->
             Error $"Failed to decode JWT payload: {ex.Message}"
-
-    /// Clock-skew tolerance applied to `exp` / `nbf` — second-precision,
-    /// matching the JWT standard's lower bound (GP 12 rule 6).
-    let clockSkewSeconds = 60L
 
     /// A token with no `exp` is rejected — "no expiry" is never a safe
     /// default for a bearer credential.
@@ -145,7 +85,7 @@ module private PeerJwt =
             let exp = expElem.GetInt64()
             let now = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
 
-            if exp + clockSkewSeconds < now then
+            if exp + JwtCrypto.clockSkewSeconds < now then
                 Error "Token expired"
             else
                 Ok()
@@ -159,7 +99,7 @@ module private PeerJwt =
             let nbf = nbfElem.GetInt64()
             let now = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
 
-            if nbf - clockSkewSeconds > now then
+            if nbf - JwtCrypto.clockSkewSeconds > now then
                 Error "Token not yet valid (nbf)"
             else
                 Ok()
@@ -210,15 +150,15 @@ module private PeerJwt =
         payload["exp"] <- JsonValue.Create(now + 300L)
         payload["nbf"] <- JsonValue.Create(now)
 
-        let encodedHeader = base64UrlEncode (Encoding.UTF8.GetBytes(header.ToJsonString()))
+        let encodedHeader = Base64Url.encode (Encoding.UTF8.GetBytes(header.ToJsonString()))
 
         let encodedPayload =
-            base64UrlEncode (Encoding.UTF8.GetBytes(payload.ToJsonString()))
+            Base64Url.encode (Encoding.UTF8.GetBytes(payload.ToJsonString()))
 
         let signingInput = $"{encodedHeader}.{encodedPayload}"
 
         let signature =
-            base64UrlEncode (computeHmac secret (Encoding.UTF8.GetBytes signingInput))
+            Base64Url.encode (JwtCrypto.computeHmac secret (Encoding.UTF8.GetBytes signingInput))
 
         $"{signingInput}.{signature}"
 
@@ -274,8 +214,8 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
                         | Some secret ->
                             let secretBytes = Encoding.UTF8.GetBytes secret
 
-                            let validated = PeerJwt.result {
-                                do! PeerJwt.checkAlgorithm header
+                            let validated = JwtCrypto.result {
+                                do! JwtCrypto.checkHs256Alg header
                                 do! PeerJwt.verifySignature secretBytes header payload signature
                                 do! PeerJwt.checkExpiry doc
                                 do! PeerJwt.checkNotBefore doc
@@ -317,8 +257,8 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
                     let canonical = PeerJwt.canonicalAssertion assertion
 
                     let expected =
-                        PeerJwt.base64UrlEncode (
-                            PeerJwt.computeHmac (Encoding.UTF8.GetBytes secret) (Encoding.UTF8.GetBytes canonical)
+                        Base64Url.encode (
+                            JwtCrypto.computeHmac (Encoding.UTF8.GetBytes secret) (Encoding.UTF8.GetBytes canonical)
                         )
 
                     if PeerJwt.constantTimeEquals expected assertion.Signature then
