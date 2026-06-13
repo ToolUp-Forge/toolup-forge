@@ -4,20 +4,26 @@ open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 
-// ─── Phase 6l.K — empty SecurityHeaders on internet-facing auth-mode ─
+// ─── Phase 6l.K / 129d — thin SecurityHeaders on internet-facing auth ─
 //
-// `ServerConfig.SecurityHeaders = Map.empty` is the default; the
-// `SecurityHeadersMiddleware` short-circuits and stamps no headers.
-// Correct for local dev. Wrong for an internet-facing authenticated
-// deployment — no HSTS, no CSP, no X-Frame-Options, no nosniff.
+// Phase 129d gave `SecurityHeadersMiddleware` an always-on baseline floor
+// (`X-Frame-Options: DENY` / `nosniff` / `Referrer-Policy`, plus HSTS when
+// `RequireHttps`), so a stock deployment is no longer framable/sniffable
+// by default. This validator's remaining job is to flag the gap the floor
+// deliberately does NOT close: an internet-facing authenticated deployment
+// with neither a `Content-Security-Policy` (the floor ships none — a
+// default CSP breaks real apps) nor the richer `productionDefaults`
+// posture (preload HSTS + `includeSubDomains` + a baseline CSP). The
+// remaining gap exists only when `SecurityHeaders = Map.empty` AND
+// `SecurityHardening = NoSecurityHardening` (otherwise `CspMiddleware`
+// stamps an aggregated CSP, so no warning is warranted).
 //
-// Phase 6l.K emits `Warning` (not `Error`) for two reasons: (1) some
-// deployments serve only API responses (no browser surface) and don't
-// need security headers; (2) SDK consumers might emit headers via a
-// custom middleware ahead of this one. A startup warning surfaces in
-// HealthMonitorUI / `/dev/inspect` so the operator can either set
-// `ServerConfig.SecurityHeaders = SecurityHeaders.productionDefaults`
-// or knowingly ignore.
+// `Warning` (not `Error`): (1) some deployments serve only API responses
+// (no browser surface) and don't need a CSP; (2) SDK consumers might emit
+// a CSP via a custom middleware ahead of this one. The warning surfaces in
+// HealthMonitorUI / `/dev/inspect` so the operator can set
+// `ServerConfig.SecurityHeaders = SecurityHeaders.productionDefaults`,
+// call `withSecurityHardening`, or knowingly ignore.
 //
 // Heuristic for "internet-facing": `Mode != Anonymous` AND
 // (`RequireHttps = true` OR `TrustForwardedHeaders = true`). Mirrors
@@ -26,8 +32,10 @@ open ToolUp.Platform.ConfigValidation
 // keying only on `RequireHttps` missed the most common internet-facing
 // deployment shape.
 
-/// Phase 6l.K — config validator that warns when an authenticated,
-/// HTTPS-required deployment runs with `SecurityHeaders = Map.empty`.
+/// Phase 6l.K / 129d — config validator that warns when an
+/// internet-facing authenticated deployment ships no CSP: empty
+/// `SecurityHeaders` AND `NoSecurityHardening` (the 129d floor covers the
+/// other baseline headers, so this flags only the remaining CSP gap).
 type SecurityHeadersValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -39,12 +47,13 @@ type SecurityHeadersValidator(config: ServerConfig, ?timeout: TimeSpan) =
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
             let internetFacing = DeploymentConfig.isInternetFacing config
             let headersEmpty = config.SecurityHeaders.IsEmpty
+            let noHardening = config.SecurityHardening = NoSecurityHardening
 
-            if requiresAuth && internetFacing && headersEmpty then
+            if requiresAuth && internetFacing && headersEmpty && noHardening then
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + SecurityHeaders = Map.empty. An internet-facing authenticated deployment with no security headers is missing HSTS (first-visit downgrade attacks unprotected), CSP (XSS surface widened), X-Frame-Options (clickjacking surface open), and nosniff (MIME-confusion). Set ServerConfig.SecurityHeaders = SecurityHeaders.productionDefaults for the SDK's recommended baseline (HSTS / nosniff / X-Frame-Options DENY / Referrer-Policy strict-origin-when-cross-origin / baseline CSP), or merge productionDefaults with your own per-deployment overrides. API-only deployments that legitimately don't need browser-targeted headers can ignore this warning."
+                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + SecurityHeaders = Map.empty + SecurityHardening = NoSecurityHardening. Phase 129d auto-stamps a baseline (X-Frame-Options DENY / nosniff / Referrer-Policy strict-origin-when-cross-origin, plus HSTS when RequireHttps), but this deployment still ships no Content-Security-Policy (XSS surface widened) and no preload/includeSubDomains HSTS posture. Set ServerConfig.SecurityHeaders = SecurityHeaders.productionDefaults for the SDK's recommended baseline (preload HSTS / nosniff / X-Frame-Options DENY / Referrer-Policy / baseline CSP), merge productionDefaults with your own per-deployment overrides, or call withSecurityHardening for an auto-generated companion-aware CSP. API-only deployments that legitimately don't need browser-targeted headers can ignore this warning."
                             (DeploymentConfig.surfacesLabel config)
                     )
             else

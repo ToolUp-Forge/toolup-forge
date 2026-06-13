@@ -51,13 +51,13 @@ let private devAdminTests =
         }
     ]
 
-// ── 129c — CSRF off-by-default under cookie auth ──
+// ── 129c/129d — CSRF off-by-default under cookie auth (Error + opt-out) ──
 let private csrfDefaultTests =
     let validator cfg =
         CsrfDefaultModeValidator.CsrfDefaultModeValidator(cfg) :> IConfigValidator
 
-    testList "Phase 129c — CSRF default mode" [
-        test "auth + CookieRequired + NoSecurityHardening → Warning" {
+    testList "Phase 129d — CSRF default mode" [
+        test "auth + CookieRequired + NoSecurityHardening → Error (refuse startup)" {
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
@@ -66,8 +66,27 @@ let private csrfDefaultTests =
             }
 
             match run (validator cfg) with
-            | Warning _ -> ()
-            | other -> failtestf "expected CSRF-exposure Warning, got %A" other
+            | Error msg ->
+                Expect.stringContains
+                    msg
+                    "AcceptSameSiteOnlyCsrfWhenAuthRequired"
+                    "names the typed acknowledged-downgrade escape hatch"
+            | other -> failtestf "expected CSRF-exposure Error, got %A" other
+        }
+
+        test "auth + CookieRequired + NoSecurityHardening + acknowledged → Ok" {
+            let cfg = {
+                ServerConfig.defaults with
+                    Surfaces = Surfaces.individual
+                    SseAuthMode = CookieRequired
+                    SecurityHardening = NoSecurityHardening
+                    AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            }
+
+            Expect.equal
+                (run (validator cfg))
+                Ok
+                "explicit SameSite-only acknowledgement → conscious downgrade, no refusal"
         }
 
         test "auth + CookieRequired + DefaultSecurityHardening → Ok" {
@@ -90,6 +109,17 @@ let private csrfDefaultTests =
             }
 
             Expect.equal (run (validator cfg)) Ok "no cookie auth → no CSRF exposure here"
+        }
+
+        test "anonymous + CookieRequired + NoSecurityHardening → Ok (no auth surface)" {
+            let cfg = {
+                ServerConfig.defaults with
+                    Surfaces = Surfaces.anonymous
+                    SseAuthMode = CookieRequired
+                    SecurityHardening = NoSecurityHardening
+            }
+
+            Expect.equal (run (validator cfg)) Ok "no authenticated surface → gatedAuthValidation short-circuits"
         }
     ]
 

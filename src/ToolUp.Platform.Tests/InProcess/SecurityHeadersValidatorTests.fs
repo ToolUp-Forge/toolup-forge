@@ -93,6 +93,22 @@ let tests =
             Expect.equal result Ok "any non-empty map satisfies the validator"
         }
 
+        test "Individual mode + RequireHttps + empty headers + DefaultSecurityHardening → Ok (CSP via hardening)" {
+            // Phase 129d — when SecurityHardening provides an aggregated
+            // CSP, the empty-SecurityHeaders warning is spurious and must
+            // not fire (the floor + CspMiddleware cover the gap).
+            let hardened = {
+                ServerConfig.defaults with
+                    Surfaces = Surfaces.individual
+                    RequireHttps = true
+                    TrustForwardedHeaders = false
+                    SecurityHeaders = Map.empty
+                    SecurityHardening = DefaultSecurityHardening
+            }
+
+            Expect.equal (validate hardened) Ok "hardening stamps a CSP → no remaining gap"
+        }
+
         test "productionDefaults contains the four critical headers" {
             let defaults = SecurityHeaders.productionDefaults
             Expect.isTrue (defaults.ContainsKey "Strict-Transport-Security") "HSTS"
@@ -108,5 +124,49 @@ let tests =
 
             Expect.equal v.Name "security-headers-mode" "stable identifier"
             Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"
+        }
+    ]
+
+[<Tests>]
+let baselineFloorTests =
+    testList "Phase 129d — SecurityHeaders baseline floor (effective)" [
+
+        test "non-HTTPS bind: floor is the three always-safe headers, no HSTS" {
+            let eff = SecurityHeaders.effective false Map.empty
+            Expect.equal eff.["X-Frame-Options"] "DENY" "clickjacking lockdown by default"
+            Expect.equal eff.["X-Content-Type-Options"] "nosniff" "MIME-sniff lockdown by default"
+            Expect.equal eff.["Referrer-Policy"] "strict-origin-when-cross-origin" "referrer trimmed by default"
+            Expect.isFalse (eff.ContainsKey "Strict-Transport-Security") "no HSTS over a non-HTTPS bind"
+            Expect.isFalse (eff.ContainsKey "Content-Security-Policy") "no default CSP in the floor"
+        }
+
+        test "HTTPS bind: floor adds HSTS" {
+            let eff = SecurityHeaders.effective true Map.empty
+
+            Expect.equal
+                eff.["Strict-Transport-Security"]
+                SecurityHeaders.hstsHeaderValue
+                "HSTS added under RequireHttps"
+
+            Expect.isFalse
+                (eff.["Strict-Transport-Security"].Contains "preload")
+                "baseline HSTS does not assume preload"
+        }
+
+        test "consumer map wins over the floor on a key collision" {
+            let configured = Map.ofList [ "X-Frame-Options", "SAMEORIGIN"; "X-Custom", "v" ]
+            let eff = SecurityHeaders.effective true configured
+
+            Expect.equal
+                eff.["X-Frame-Options"]
+                "SAMEORIGIN"
+                "consumer-set frame header is not overwritten by the floor"
+
+            Expect.equal eff.["X-Custom"] "v" "consumer-only headers pass through"
+            Expect.equal eff.["X-Content-Type-Options"] "nosniff" "untouched floor keys remain"
+        }
+
+        test "empty config on a non-HTTPS bind still yields a non-empty floor" {
+            Expect.isFalse (SecurityHeaders.effective false Map.empty).IsEmpty "stock deployment is never header-less"
         }
     ]

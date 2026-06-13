@@ -844,6 +844,31 @@ type SseAuthMode =
     | QueryParamFallback
     | CookieRequired
 
+/// Phase 133 — whether the server mounts the BFF-style auth-cookie
+/// reflection endpoint (`POST` / `DELETE /api/auth/session`). When the
+/// client posts a freshly-acquired JWT, the server validates it through
+/// the registered `IAuthProvider` and reflects it into an
+/// `HttpOnly; Secure; SameSite=Strict; Path=/` cookie — so the bearer
+/// credential never lives in JS-readable `localStorage` or a JS-readable
+/// `document.cookie`. The browser then sends it automatically for SSE
+/// (`EventSource`) and same-origin XHR, and an XSS cannot dump a usable
+/// token from either store.
+///
+/// `NoAuthCookieIssuance` (default): the endpoint is not mounted; an
+/// existing deployment is byte-for-byte unchanged (GP 11). The legacy
+/// client `document.cookie` + `localStorage` writes remain the only
+/// cookie path (dev EventSource handshake).
+///
+/// `EnabledAuthCookieIssuance`: the endpoint is mounted. Pairs with
+/// `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie` on the
+/// client and an `IAuthProvider` whose `TokenLocation` admits the
+/// bearer header on the reflect call AND the cookie on every later
+/// request — i.e. `BearerOrCookie "toolup-auth-token"`. Override via
+/// `TOOLUP_AUTH_COOKIE_ISSUANCE=enabled|disabled`.
+type AuthCookieIssuanceMode =
+    | NoAuthCookieIssuance
+    | EnabledAuthCookieIssuance
+
 /// Controls whether `VectorScope.Platform` is exposed to RAG
 /// retrieval. The toggle gates READ access; the WRITE side is gated
 /// separately by `AccessContext.canModifyPlatformConfig` and
@@ -1935,6 +1960,16 @@ type ServerConfig = {
     /// Override per-deployment via `TOOLUP_SSE_AUTH=cookie|fallback`.
     SseAuthMode: SseAuthMode
 
+    /// Phase 133 — whether the BFF-style server-set auth-cookie
+    /// reflection endpoint (`POST` / `DELETE /api/auth/session`) is
+    /// mounted. `NoAuthCookieIssuance` (default) leaves an existing
+    /// deployment unchanged; `EnabledAuthCookieIssuance` mounts the
+    /// endpoint so a client on `AuthTokenStorage = ServerSetHttpOnlyCookie`
+    /// can move its JWT out of JS-readable storage into an
+    /// `HttpOnly; Secure; SameSite=Strict` cookie. Override via
+    /// `TOOLUP_AUTH_COOKIE_ISSUANCE=enabled|disabled`.
+    AuthCookieIssuance: AuthCookieIssuanceMode
+
     /// Per-scope concurrent SSE connection cap. Each
     /// browser tab opens roughly one SSE connection per channel
     /// (`/api/notifications` + `/api/ai/events` = up to 2 per tab).
@@ -2105,6 +2140,23 @@ type ServerConfig = {
     /// deployments behind a proxy that strips query strings before
     /// they reach any logging surface.
     AcceptQueryParamSseAuthWhenAuthRequired: bool
+
+    /// Phase 129d — explicit acknowledgement that a cookie-authenticated
+    /// deployment (`SseAuthMode = CookieRequired`) deliberately relies on
+    /// the `SameSite=Strict` cookie alone for CSRF protection, with no
+    /// server-side double-submit check (`SecurityHardening =
+    /// NoSecurityHardening`). Default `false` — `CsrfDefaultModeValidator`
+    /// refuses startup, because `SameSite` is browser-version-dependent
+    /// and subdomain-bypassable, so cookie-authenticated mutations have no
+    /// portable server-side CSRF guard.
+    ///
+    /// Set `true` (or `TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE=1`)
+    /// only when CSRF is managed out of band (a strict same-origin SPA, an
+    /// upstream gateway that enforces origin checks) and the SameSite-only
+    /// posture is a conscious choice. The preferred fix is to enable
+    /// `withSecurityHardening` (which mounts the server-side CSRF check);
+    /// this flag is the documented downgrade for deployments that cannot.
+    AcceptSameSiteOnlyCsrfWhenAuthRequired: bool
 
     /// Explicit opt-in to running an authenticated OIDC mode
     /// (`TOOLUP_AUTH_MODE=oidc`) without an audience binding
@@ -2586,6 +2638,7 @@ module ServerConfig =
         LogLevel = LogLevel.Info
         TraceCategories = Set.empty
         SseAuthMode = QueryParamFallback
+        AuthCookieIssuance = NoAuthCookieIssuance
         AcceptHeaderAuthWhenAuthRequired = false
         AcceptPlaintextSecretsWhenAuthRequired = false
         ReplicaCount = 1
@@ -2596,6 +2649,7 @@ module ServerConfig =
         AcceptNoRateLimitWhenAuthRequired = false
         AcceptUnsignedPublishable = false
         AcceptQueryParamSseAuthWhenAuthRequired = false
+        AcceptSameSiteOnlyCsrfWhenAuthRequired = false
         AcceptUnboundAudienceWhenAuthRequired = false
         AcceptInMemoryOAuthStateInMultiInstance = false
         AcceptPendingInviteStoreInMultiInstance = false
@@ -2942,6 +2996,7 @@ module ServerConfig =
                 AcceptNoRateLimitWhenAuthRequired = envFlag "TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE"
                 AcceptUnsignedPublishable = envFlag "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE"
                 AcceptQueryParamSseAuthWhenAuthRequired = envFlag "TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE"
+                AcceptSameSiteOnlyCsrfWhenAuthRequired = envFlag "TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE"
                 EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
                 RateLimit = parseRateLimit logger
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger

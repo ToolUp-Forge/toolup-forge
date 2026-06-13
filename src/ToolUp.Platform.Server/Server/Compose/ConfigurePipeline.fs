@@ -9,6 +9,7 @@ open Microsoft.Extensions.FileProviders
 open ToolUp.Platform
 open ToolUp.Platform.AnonymousSessionMigration
 open ToolUp.Platform.Middleware
+open ToolUp.Platform.PlatformAdminAuthorization
 open ToolUp.Platform.PeerBearerAuthMiddleware
 open ToolUp.Platform.ShareTokenAuth
 open ToolUp.Platform.SurfaceEnforcement
@@ -104,8 +105,10 @@ let configurePipeline
     // Security headers stamp on every response, including 401 / 429 /
     // 404 short-circuits. Registered before any middleware that might
     // end the response so the `OnStarting` hook is in place for every
-    // code path. The middleware itself no-ops when `SecurityHeaders` is
-    // empty (the default), so registering unconditionally is zero-cost.
+    // code path. Phase 129d — the middleware now stamps an always-on
+    // baseline floor (X-Frame-Options / nosniff / Referrer-Policy, plus
+    // HSTS on HTTPS) even when `SecurityHeaders = Map.empty`, with the
+    // consumer map layered on top; per-route handler headers still win.
     app.UseMiddleware<SecurityHeadersMiddleware>(config) |> ignore
 
     // Phase 9j — aggregated CSP header. Sits immediately after the
@@ -211,6 +214,14 @@ let configurePipeline
     app.UseMiddleware<ShareTokenAuthMiddleware>() |> ignore
 
     app.UseMiddleware<ScopeResolutionMiddleware>(config) |> ignore
+
+    // Phase 132 — admin structural backstop. Sits immediately after
+    // `ScopeResolutionMiddleware` (which stamps `ToolUp.PlatformRole`) and
+    // ahead of the Giraffe router, so a non-`PlatformAdmin` request to the
+    // raw `_platform` admin handlers is denied even if a handler omits its
+    // in-line `canModifyPlatformConfig` check. No-ops for non-admin paths,
+    // so registering unconditionally is cheap (GP 11 — additive).
+    app.UseMiddleware<PlatformAdminAuthorizationMiddleware>() |> ignore
 
     // Peer-bearer-auth middleware. Strip-imports clean: when
     // `PeerRoutePrefixes` is empty the middleware is not registered at
