@@ -50,6 +50,7 @@ let allTests =
         RateLimitTests.tests
         ValidationTests.tests
         IdempotencyTests.tests
+        StreamingTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
         NarrativeElementTests.tests

@@ -29,6 +29,14 @@ open Microsoft.FSharp.Reflection
 
 module internal Streaming =
 
+    // Reflect over public AND non-public records so an internal / private
+    // streaming API record arms the classifier (and the unenforceable-
+    // attribute refusal) exactly like a public one — the same fail-open
+    // hole Phase 69d.tail closed for the auth classifier. Without it a
+    // non-public record's streaming method carrying `[<RequiresRole>]`
+    // would silently start with the requirement UNenforced.
+    let private reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
+
     /// True if `t` is a closed generic `IAsyncEnumerable<'T>`.
     let isAsyncEnumerable (t: Type) : bool =
         t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<IAsyncEnumerable<_>>
@@ -55,10 +63,10 @@ module internal Streaming =
     /// methods; non-streaming methods are absent so per-call lookup is
     /// a fast Map.tryFind miss.
     let classify (apiType: Type) : Map<string, Type * Type> =
-        if not (FSharpType.IsRecord apiType) then
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             Map.empty
         else
-            FSharpType.GetRecordFields apiType
+            FSharpType.GetRecordFields(apiType, reflectionFlags)
             |> Array.choose (fun apiField ->
                 match streamingShape apiField with
                 | Some shape -> Some(apiField.Name, shape)
@@ -78,10 +86,10 @@ module internal Streaming =
     /// requirements only at the level of the auth classifier, not
     /// enforced per-request).
     let streamingMethodsCarryingUnenforceableAttributes (apiType: Type) : (string * string list) list =
-        if not (FSharpType.IsRecord apiType) then
+        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             []
         else
-            FSharpType.GetRecordFields apiType
+            FSharpType.GetRecordFields(apiType, reflectionFlags)
             |> Array.choose (fun apiField ->
                 match streamingShape apiField with
                 | None -> None
