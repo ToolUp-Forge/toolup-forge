@@ -482,6 +482,36 @@ type AuthUIMode =
     /// SDK shouldn't know about.
     | CustomAuthUI of CustomAuthUI
 
+/// Phase 133 — where the client keeps the bearer JWT once acquired.
+///
+/// `ClientCookieAndLocalStorage` (default): the legacy behaviour. The
+/// client writes the JWT to `localStorage` AND mirrors it into a
+/// JS-readable `document.cookie` (which structurally cannot be
+/// `HttpOnly` — only a server `Set-Cookie` can be). Both stores are
+/// reachable by any injected script, so an XSS can exfiltrate a usable
+/// `Authorization: Bearer` token. Acceptable only for dev / the
+/// EventSource-handshake path where no server callback exists, OR for a
+/// SPA-without-server-session that accepts the XSS exposure and ships a
+/// strict CSP (Phase 9j / Phase 129 header baseline) as the mitigation.
+///
+/// `ServerSetHttpOnlyCookie`: the production-shape BFF path. On token
+/// acquisition the client POSTs the JWT once to the server's
+/// `POST /api/auth/session` endpoint, which validates it and reflects it
+/// into an `HttpOnly; Secure; SameSite=Strict` cookie. The JWT never
+/// enters `localStorage` or a JS-readable cookie; it lives only in
+/// transient in-memory JS state (lost on reload, re-acquired via the
+/// bridge), and the durable session credential is the HttpOnly cookie
+/// the browser sends automatically for SSE + same-origin XHR. Requires
+/// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` and an
+/// `IAuthProvider` configured `TokenLocation = BearerOrCookie
+/// "toolup-auth-token"`. Pairs with the `IAuthBridge` refresh model
+/// (Clerk / MSAL / Auth0); the localStorage-based OidcClient PKCE
+/// refresh timer is not compatible with this mode (see the Phase 133
+/// migration doc).
+type AuthTokenStorage =
+    | ClientCookieAndLocalStorage
+    | ServerSetHttpOnlyCookie
+
 /// Branding for the team-configuration admin module. Shown in the
 /// sidebar when the deployment runs in any non-Anonymous mode (Anonymous
 /// has no persistent scope to configure).
@@ -979,6 +1009,14 @@ type ClientConfig = {
     /// `ClerkAuthUI` needs ClerkUI. Default `NoAuthUI` — no SDK-provided
     /// sign-in flow, the app takes responsibility for obtaining tokens.
     AuthUI: AuthUIMode
+    /// Phase 133 — where the client keeps the bearer JWT.
+    /// `ClientCookieAndLocalStorage` (default) preserves the legacy
+    /// `localStorage` + JS-readable `document.cookie` writes;
+    /// `ServerSetHttpOnlyCookie` moves the JWT out of JS-readable storage
+    /// into a server-set `HttpOnly; Secure; SameSite=Strict` cookie via
+    /// `POST /api/auth/session`. Pairs with
+    /// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`.
+    AuthTokenStorage: AuthTokenStorage
     /// Declared subject shapes this deployment supports. Mirrors
     /// `ServerConfig.Surfaces` (the server-side non-empty list of
     /// `SurfaceProfile`). Single-shape deployments declare one entry
@@ -1203,6 +1241,7 @@ module ClientConfig =
         DataSubjectRequestAdmin = NoDataSubjectRequestAdmin
         ToastCentre = DefaultToastCentre
         AuthUI = NoAuthUI
+        AuthTokenStorage = ClientCookieAndLocalStorage
         Surfaces = Surfaces.anonymous
         GridModules = ToolUp.Platform.AgGrid.AgGridModuleConfig.community
         ModuleFilter = None

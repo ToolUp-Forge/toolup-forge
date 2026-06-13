@@ -335,6 +335,22 @@ let buildRouteHandlers
         | NoSecurityHardening -> []
         | _ -> [ Csrf.tokenRoute ]
 
+    // Phase 133 — BFF-style server-set auth-cookie reflection endpoint
+    // (`POST` / `DELETE /api/auth/session`). Mounted only when
+    // `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`; the
+    // default `NoAuthCookieIssuance` produces an empty list so the path
+    // 404s from the Giraffe terminal middleware and an existing
+    // deployment is byte-for-byte unchanged (GP 11). When enabled, a
+    // client on `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie`
+    // posts its freshly-acquired JWT here once; the handler validates it
+    // via the registered `IAuthProvider` and reflects it into an
+    // `HttpOnly; Secure; SameSite=Strict` cookie so the bearer never
+    // lives in JS-readable storage.
+    let authSessionRoutes: HttpHandler list =
+        match config.AuthCookieIssuance with
+        | NoAuthCookieIssuance -> []
+        | EnabledAuthCookieIssuance -> AuthSession.routes
+
     // Phase 9o — post-deploy smoke-test endpoint
     // (`GET /api/_internal/smoke`). Mounted only when
     // `ServerConfig.SmokeTest = EnabledSmokeTest`; the default
@@ -515,6 +531,7 @@ let buildRouteHandlers
             @ metricsRoutes
             @ notificationRoutes
             @ csrfTokenRoutes
+            @ authSessionRoutes
             @ smokeTestRoutes
             @ consentAuditRoutes
             @ adAnalyticsRoutes

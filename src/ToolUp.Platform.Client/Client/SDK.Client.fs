@@ -2515,6 +2515,12 @@ module Client =
         // the local-run X-User-Id matches ServerConfig.AutoBootstrapDevAdmin
         // end-to-end. Existing localStorage values are preserved.
         UserSession.configureDevDefault config.DevDefaultUserId
+        // Phase 133 — auth-token storage strategy. `ServerSetHttpOnlyCookie`
+        // moves the JWT out of JS-readable storage (localStorage + JS
+        // cookie) into a server-set HttpOnly cookie via
+        // `POST /api/auth/session`; `ClientCookieAndLocalStorage` (default)
+        // preserves the legacy behaviour.
+        UserSession.configureAuthTokenStorage config.AuthTokenStorage
 
         // Phase 13a — install the per-request guard with explicit
         // seam thunks (replaces the legacy module-load do block in

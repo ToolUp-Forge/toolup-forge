@@ -86,6 +86,26 @@ let mutable private devDefaultUserId: string option = None
 /// way).
 let configureDevDefault (id: string option) = devDefaultUserId <- id
 
+/// Phase 133 — where the bearer JWT lives once acquired. Set once during
+/// client initialisation by `SDK.Client.run` from
+/// `ClientConfig.AuthTokenStorage`.
+///
+/// `ClientCookieAndLocalStorage` (default): `setAuthToken` writes the JWT
+/// to `localStorage` + a JS-readable `document.cookie` — the legacy path,
+/// XSS-reachable from either store.
+///
+/// `ServerSetHttpOnlyCookie`: `setAuthToken` POSTs the JWT to
+/// `POST /api/auth/session` (the server reflects it into an
+/// `HttpOnly; Secure; SameSite=Strict` cookie) and keeps it only in
+/// transient in-memory state — never in `localStorage`, never in a
+/// JS-readable cookie. Requires
+/// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`.
+let mutable private authTokenStorage = ClientCookieAndLocalStorage
+
+/// Configure the auth-token storage strategy. Idempotent — subsequent
+/// calls overwrite. Called once during client initialisation.
+let configureAuthTokenStorage (storage: AuthTokenStorage) = authTokenStorage <- storage
+
 // ─── JWT decode (sub claim only — server validates signature) ──────
 
 [<Emit("atob($0)")>]
@@ -184,10 +204,19 @@ let private decodeJwtIdentity (token: string) : DecodedIdentity option =
 /// the page is on https — browsers reject `Secure` on plain http,
 /// so dev over `http://localhost` falls back to no `Secure`).
 ///
-/// Not `HttpOnly` — that flag can only be set server-side via
-/// `Set-Cookie`, and the JWT is JS-readable from localStorage anyway.
-/// The cookie is functionally equivalent to localStorage for security
-/// purposes; its only role is making EventSource auth work.
+/// **This cookie is NOT `HttpOnly`** — that flag can only be set
+/// server-side via `Set-Cookie`. So the JWT it carries is fully
+/// JS-readable: any injected script can read it from `document.cookie`
+/// (and from `localStorage`, where the same token also lives on this
+/// path), which means an XSS escalates directly to bearer-token theft
+/// with no HttpOnly barrier. This is the **dev / SPA-without-server-
+/// session** trade-off: acceptable only for the dev EventSource-
+/// handshake path, or for a SPA that accepts the XSS exposure and ships
+/// a strict CSP (Phase 9j / Phase 129 header baseline) as the
+/// mitigation. The production-shape alternative is
+/// `AuthTokenStorage = ServerSetHttpOnlyCookie`, where the server sets
+/// an `HttpOnly` cookie and the JWT never enters JS-readable storage
+/// (Phase 133).
 let private setAuthCookie (token: string) =
     let isHttps =
         try
@@ -205,6 +234,40 @@ let private setAuthCookie (token: string) =
 /// previously-set cookie.
 let private clearAuthCookie () =
     Browser.Dom.document.cookie <- $"{authCookieName}=; Path=/; Max-Age=0; SameSite=Strict"
+
+// ─── Phase 133 — server-set HttpOnly cookie path ───────────────────
+//
+// On the `ServerSetHttpOnlyCookie` path the JWT is never written to
+// `localStorage` or `document.cookie`. It is held only in transient
+// in-memory state (`serverCookieToken`) and reflected into a server-set
+// `HttpOnly; Secure; SameSite=Strict` cookie via `POST /api/auth/session`.
+// `getAuthToken` reads this in-memory value so the OIDC `exp` reader,
+// `onAuthTokenChange`, and the bridge-dedup keep working without the
+// token ever touching JS-readable storage.
+
+/// In-memory bearer token for the `ServerSetHttpOnlyCookie` path. Lost
+/// on reload (the durable credential is the HttpOnly cookie; the bridge
+/// re-populates this on boot). Never persisted.
+let mutable private serverCookieToken: string option = None
+
+/// POST the JWT to the server reflection endpoint. `credentials:
+/// 'same-origin'` so the response `Set-Cookie` is honoured and the CSRF
+/// double-submit cookie rides along; the request-guard attaches the
+/// `X-CSRF-Token` header on this state-changing `/api/*` fetch. The
+/// `Authorization: Bearer` header is set EXPLICITLY here because on this
+/// path `getAuthToken` feeds the request-guard the in-memory token only
+/// after this call — and the guard never overrides a header already
+/// present. Fire-and-forget: a failed reflect leaves the in-memory
+/// token in place (requests still carry the Bearer header) and the next
+/// bridge refresh retries. Never throws.
+[<Emit("fetch('/api/auth/session', { method: 'POST', credentials: 'same-origin', headers: { 'Authorization': 'Bearer ' + $0 } }).catch(function(){})")>]
+let private reflectTokenToServer (token: string) : unit = jsNative
+
+/// DELETE the server-set cookie on sign-out (`Max-Age=0` server-side).
+/// `credentials: 'same-origin'` so the clearing `Set-Cookie` applies.
+/// Never throws.
+[<Emit("fetch('/api/auth/session', { method: 'DELETE', credentials: 'same-origin' }).catch(function(){})")>]
+let private clearServerCookie () : unit = jsNative
 
 // ─── User ID ───────────────────────────────────────────────────────
 
@@ -280,15 +343,22 @@ let getUserId () =
 /// subsequent calls so SSE `?userId=` matches the server-side
 /// auth-resolved userId.
 ///
-/// Phase 6k Workstream A: also writes the token to `document.cookie`
-/// so EventSource handshakes can authenticate when
+/// Phase 6k Workstream A: on the default `ClientCookieAndLocalStorage`
+/// path also writes the token to `localStorage` + `document.cookie` so
+/// EventSource handshakes can authenticate when
 /// `ServerConfig.SseAuthMode = CookieRequired`. The cookie path is
 /// silent overhead in `QueryParamFallback` deployments — the server
 /// just doesn't read it.
+///
+/// Phase 133: on the `ServerSetHttpOnlyCookie` path the JWT is held only
+/// in transient in-memory state and reflected to `POST /api/auth/session`
+/// (the server sets the durable `HttpOnly` cookie). It is NOT written to
+/// `localStorage` or `document.cookie`, so an XSS cannot dump it from
+/// either store. The non-secret identity claims (userId / name / email)
+/// are still persisted on BOTH paths — they drive `getUserId` /
+/// `getDisplayName` and are not the bearer credential.
 let setAuthToken (token: string) =
-    Browser.Dom.window.localStorage.setItem (tokenKey, token)
-    setAuthCookie token
-
+    // Identity claims (non-secret) persist on both paths.
     match decodeJwtIdentity token with
     | Some identity ->
         Browser.Dom.window.localStorage.setItem (tokenUserIdKey, identity.UserId)
@@ -308,16 +378,41 @@ let setAuthToken (token: string) =
         // showing the raw UserId.
         ()
 
+    // The bearer credential itself: storage depends on the configured
+    // strategy.
+    match authTokenStorage with
+    | ClientCookieAndLocalStorage ->
+        serverCookieToken <- None
+        Browser.Dom.window.localStorage.setItem (tokenKey, token)
+        setAuthCookie token
+    | ServerSetHttpOnlyCookie ->
+        // Never touch localStorage / document.cookie for the token.
+        // Hold it in memory only and reflect it into the server-set
+        // HttpOnly cookie.
+        serverCookieToken <- Some token
+        reflectTokenToServer token
+
 /// Clear the auth token (called on sign-out). Also clears the
-/// token-derived userId, display name, email, AND the SSE auth cookie
-/// so the next sign-in resolves a fresh subject and a stale cookie
-/// doesn't outlive the session.
+/// token-derived userId, display name, email, the in-memory token, AND
+/// the auth cookie — both the JS-readable cookie and (on the
+/// `ServerSetHttpOnlyCookie` path) the server-set `HttpOnly` cookie via
+/// `DELETE /api/auth/session` — so the next sign-in resolves a fresh
+/// subject and no usable token survives in either store.
 let clearAuthToken () =
     Browser.Dom.window.localStorage.removeItem tokenKey
     Browser.Dom.window.localStorage.removeItem tokenUserIdKey
     Browser.Dom.window.localStorage.removeItem tokenDisplayNameKey
     Browser.Dom.window.localStorage.removeItem tokenEmailKey
+    // Clear the JS-readable cookie unconditionally (cheap, belt-and-
+    // suspenders) and reset the in-memory token.
     clearAuthCookie ()
+    serverCookieToken <- None
+
+    // On the server-cookie path also clear the HttpOnly cookie the
+    // server set — the client cannot touch it directly.
+    match authTokenStorage with
+    | ClientCookieAndLocalStorage -> ()
+    | ServerSetHttpOnlyCookie -> clearServerCookie ()
 
 /// 0.5.6 — read the token-derived display name (JWT `name` claim).
 /// `None` when no JWT has been persisted, when the JWT didn't carry a
@@ -341,11 +436,20 @@ let getEmail () : string option =
     | email -> Some email
 
 /// Get the current auth token, if any.
+///
+/// Phase 133: on the `ServerSetHttpOnlyCookie` path the token is never
+/// in `localStorage`, so this reads the transient in-memory value. Keeps
+/// the OIDC `exp` reader, `onAuthTokenChange`, and the bridge-dedup
+/// working identically on both paths without the token ever touching
+/// JS-readable storage.
 let getAuthToken () =
-    match Browser.Dom.window.localStorage.getItem tokenKey with
-    | null
-    | "" -> None
-    | token -> Some token
+    match serverCookieToken with
+    | Some _ as t -> t
+    | None ->
+        match Browser.Dom.window.localStorage.getItem tokenKey with
+        | null
+        | "" -> None
+        | token -> Some token
 
 // ─── Auth bridge (Phase 6k Workstream A) ───────────────────────────
 
@@ -428,18 +532,20 @@ let private refreshFromBridgeOnce () = async {
 
             match jwt with
             | Some token ->
-                // Avoid a needless cookie write if the bridge returned
+                // Avoid a needless write/reflect if the bridge returned
                 // the same value we already have. JWT strings are
-                // short — the equality check is cheap.
-                let current = Browser.Dom.window.localStorage.getItem tokenKey
-
-                if current <> token then
-                    setAuthToken token
+                // short — the equality check is cheap. Reads via
+                // `getAuthToken` so the dedup works on both the
+                // localStorage path and the in-memory server-cookie path
+                // (Phase 133).
+                match getAuthToken () with
+                | Some current when current = token -> ()
+                | _ -> setAuthToken token
             | None ->
                 // Bridge says signed out — clear local state if we
                 // were holding any. Idempotent — no-op when already
                 // signed out.
-                if (Browser.Dom.window.localStorage.getItem tokenKey) <> null then
+                if (getAuthToken ()).IsSome then
                     clearAuthToken ()
         with ex ->
             // Bridge errors are non-fatal — leave the cached token in

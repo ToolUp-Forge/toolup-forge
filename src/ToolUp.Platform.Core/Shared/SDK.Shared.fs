@@ -2790,6 +2790,21 @@ module ServerConfig =
 
             QueryParamFallback
 
+    let private parseAuthCookieIssuance (logger: ILogger) =
+        match envVar "TOOLUP_AUTH_COOKIE_ISSUANCE" |> Option.map _.ToLowerInvariant() with
+        | Some "enabled"
+        | Some "on"
+        | Some "1" -> EnabledAuthCookieIssuance
+        | Some "disabled"
+        | Some "off"
+        | Some "0"
+        | None -> NoAuthCookieIssuance
+        | Some other ->
+            logger.Warn
+                $"TOOLUP_AUTH_COOKIE_ISSUANCE={other} not recognised. Valid values: enabled, disabled. Falling back to disabled (default)."
+
+            NoAuthCookieIssuance
+
     let private parseReplicaCount (logger: ILogger) =
         match envVar "TOOLUP_REPLICA_COUNT" with
         | None -> 1
@@ -3011,6 +3026,7 @@ module ServerConfig =
                 LogLevel = logLevel
                 TraceCategories = traceCategories
                 SseAuthMode = parseSseAuthMode logger
+                AuthCookieIssuance = parseAuthCookieIssuance logger
                 AcceptHeaderAuthWhenAuthRequired = envFlag "TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE"
                 AcceptPlaintextSecretsWhenAuthRequired = envFlag "TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE"
                 ReplicaCount = parseReplicaCount logger

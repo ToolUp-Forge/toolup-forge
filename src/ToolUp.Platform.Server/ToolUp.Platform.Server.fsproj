@@ -337,6 +337,13 @@
         <Compile Include="Server\SecurityHeadersMiddleware.fs" />
         <Compile Include="Server\CspMiddleware.fs" />
         <Compile Include="Server\CsrfMiddleware.fs" />
+        <!-- Phase 133 — BFF-style server-set auth-cookie reflection
+             endpoint (POST / DELETE /api/auth/session). Validates the
+             presented bearer via IAuthProvider, then reflects it into an
+             HttpOnly; Secure; SameSite=Strict cookie so the JWT leaves
+             JS-readable storage. Mounted by BuildRouteHandlers when
+             ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance. -->
+        <Compile Include="Server\AuthSessionHandler.fs" />
         <!-- Phase 57 — prerendered-routes middleware. Maps GET /route to
              PublicPath/route.html when the FAKE Prerender target wrote
              one; no-op when the file is absent. Composed ahead of

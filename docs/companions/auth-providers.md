@@ -393,9 +393,16 @@ Module API handlers wrap in `makePermissionGuardedApi` which checks `ModulePermi
 
 SSE has its own auth caveat — `EventSource` can't send custom headers, so OIDC bearer tokens need an alternative path (query string with short-lived tokens, session cookie, or a pre-handshake POST). See [`platform/auth.md`](../platform/auth.md) "SSE auth caveat".
 
+### Where the client keeps the bearer token (Phase 133)
+
+By default (`ClientConfig.AuthTokenStorage = ClientCookieAndLocalStorage`) the client writes the JWT to `localStorage` **and** a `document.cookie`. Neither can be `HttpOnly` — only a server `Set-Cookie` can be — so both stores are reachable by any injected script, and an XSS escalates directly to bearer-token theft. This is acceptable only for dev / the EventSource-handshake path, or for a SPA that accepts the exposure and ships a strict CSP (the Phase 9j generator / Phase 129 header baseline) as the mitigation. **Do not describe the JS cookie as "equivalent to localStorage for security" — name the exposure: a JS-readable bearer is XSS-exfiltratable.**
+
+The production-shape alternative is the **server-set HttpOnly cookie**. Set `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` and `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie`: the client POSTs its freshly-acquired JWT once to `POST /api/auth/session`, the server validates it through the registered `IAuthProvider`, and reflects it into an `HttpOnly; Secure; SameSite=Strict` cookie. The JWT never enters `localStorage` or a JS-readable cookie; the browser sends the cookie automatically for SSE and same-origin XHR. Pair with `TokenLocation = BearerOrCookie "toolup-auth-token"` (the reflect call reads the header; every later request + SSE reads the cookie) and the `IAuthBridge` refresh model. See [`docs/migrations/133-httponly-auth-cookie.md`](../migrations/133-httponly-auth-cookie.md) for the full adoption recipe and the OidcClient-PKCE compatibility caveat.
+
 ## Hardening checklist for production
 
 - Real auth provider (not `HeaderAuthProvider`).
+- `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` + `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie` + `TokenLocation = BearerOrCookie "toolup-auth-token"` — move the JWT out of JS-readable storage into a server-set HttpOnly cookie (Phase 133). For paths that must keep a JS-readable bearer, ship a strict CSP instead.
 - `ServerConfig.RequireHttps = true`.
 - `ServerConfig.TrustForwardedHeaders = true` (default; opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0` only on a direct-bind dev shell).
 - `ServerConfig.SecurityHeaders = StrictSecurityHeaders`.
