@@ -312,10 +312,12 @@ let private authorize (flowName: string) : HttpHandler =
 
                                 // Step 6 — generate state + PKCE
                                 // verifier. Verifier is stamped
-                                // into the state-store entry so
-                                // /callback can pass it forward;
-                                // no provider reads it yet — sub-
-                                // phase B extends the substrate.
+                                // into the state-store entry; the
+                                // SHA-256 challenge derived from it
+                                // rides the authorize URL (Step 8)
+                                // and the verifier itself is replayed
+                                // into ExchangeCode on /callback when
+                                // the flow declares `SupportsPkce`.
                                 let state = OAuthCrypto.generateState ()
                                 let verifier = OAuthCrypto.generateCodeVerifier ()
                                 let redirectUri = redirectUriFor ctx flowName
@@ -348,14 +350,29 @@ let private authorize (flowName: string) : HttpHandler =
                                         return! respondText ctx 500 (sprintf "Failed to persist OAuth state: %s" msg)
                                     | Ok() ->
 
-                                        // Step 8 — provider URL.
+                                        // Step 8 — provider URL. When the
+                                        // flow supports PKCE, derive the
+                                        // S256 challenge from the stashed
+                                        // verifier and hand it over; a
+                                        // non-PKCE flow gets `None` and is
+                                        // byte-for-byte unchanged (GP 11).
                                         let flowCtx: OAuthFlowContext = {
                                             ScopeId = scope.Container
                                             DataSourceId = dataSourceId
                                             Config = Some config
                                         }
 
-                                        let! urlResult = flow.BuildAuthorizeUrl(flowCtx, state, redirectUri)
+                                        let pkceChallenge =
+                                            if flow.SupportsPkce then
+                                                Some {
+                                                    Challenge = OAuthCrypto.codeChallengeFromVerifier verifier
+                                                    Method = "S256"
+                                                }
+                                            else
+                                                None
+
+                                        let! urlResult =
+                                            flow.BuildAuthorizeUrl(flowCtx, state, redirectUri, pkceChallenge)
 
                                         match urlResult with
                                         | Error err ->
@@ -456,8 +473,26 @@ let private callback (flowName: string) : HttpHandler =
                                         Config = configOpt
                                     }
 
-                                    // Step 7 — exchange code.
-                                    let! exchangeResult = flow.ExchangeCode(flowCtx, code, entry.RedirectUri)
+                                    // Step 7 — exchange code. A PKCE-
+                                    // declaring flow is handed the stashed
+                                    // verifier; an intercepted code is
+                                    // useless without it. Fail closed if
+                                    // the flow requires PKCE but the state
+                                    // entry carries no verifier — never
+                                    // silently exchange without it. A non-
+                                    // PKCE flow gets `None` and is unchanged.
+                                    let! exchangeResult = async {
+                                        if flow.SupportsPkce && Option.isNone entry.CodeVerifier then
+                                            return
+                                                Error(
+                                                    OAuthError.OAuthFlowFailed
+                                                        "PKCE verifier missing from the state entry; this flow requires PKCE and the code cannot be exchanged without it."
+                                                )
+                                        else
+                                            let codeVerifier = if flow.SupportsPkce then entry.CodeVerifier else None
+
+                                            return! flow.ExchangeCode(flowCtx, code, entry.RedirectUri, codeVerifier)
+                                    }
 
                                     let logger =
                                         tryGetService<ILogger> ctx

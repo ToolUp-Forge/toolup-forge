@@ -23,6 +23,8 @@ let allTests =
         InMemoryDataSourceTests.tests
         OAuthSubstrateTests.stateStoreTests
         OAuthSubstrateTests.credentialFlowTests
+        OAuthSubstrateTests.pkceCredentialFlowTests
+        OAuthSubstrateTests.pkceFlowTests
         FileSecretStoreTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
@@ -292,6 +294,7 @@ let allTests =
         // RootRequestId across the HTTP boundary).
         PlatformPeerTests.inProcessTests
         PlatformPeerTests.workedExampleTests
+        PlatformPeerTests.audienceBindingTests
         // Giraffe stock-helper DI defaults — the SDK composition registers
         // INegotiationConfig + Json.ISerializer (FableConverters-backed) +
         // Xml.ISerializer so consumer handlers can use RequestErrors.* /

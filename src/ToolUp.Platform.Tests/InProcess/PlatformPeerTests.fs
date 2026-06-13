@@ -282,3 +282,123 @@ let workedExampleTests =
                 "an unauthorized call never reaches dispatch, so no PeerCallCompleted row is emitted"
         }
     ]
+
+// ─── Audience binding (Phase 130) ────────────────────────────────────
+//
+// `ValidatePeerToken` binds an inbound token's `aud` claim to the
+// receiver's own peer id when one is composed. These cases drive the
+// provider directly (no transport) so each claim shape is controlled
+// exactly — including a token with NO `aud`, which `IssuePeerToken`
+// never mints, so the tests hand-roll raw HS256 tokens.
+
+let private base64UrlRaw (bytes: byte[]) =
+    Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+/// Mint a raw HS256 token directly so the test controls exactly which
+/// claims are present. `aud = None` omits the `aud` claim entirely
+/// (exercises the fail-closed missing-audience path).
+let private mintRawToken (signingKey: string) (issuer: string) (aud: string option) =
+    let now = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+
+    let audFragment =
+        match aud with
+        | Some a -> sprintf "\"aud\":\"%s\"," a
+        | None -> ""
+
+    let header = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}"
+
+    let payload =
+        sprintf
+            "{\"iss\":\"%s\",%s\"name\":\"%s\",\"iat\":%d,\"exp\":%d,\"nbf\":%d}"
+            issuer
+            audFragment
+            issuer
+            now
+            (now + 300L)
+            now
+
+    let h = base64UrlRaw (System.Text.Encoding.UTF8.GetBytes header)
+    let p = base64UrlRaw (System.Text.Encoding.UTF8.GetBytes payload)
+    let signingInput = sprintf "%s.%s" h p
+
+    use hmac =
+        new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes signingKey)
+
+    let signature =
+        base64UrlRaw (hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes signingInput))
+
+    sprintf "%s.%s" signingInput signature
+
+let audienceBindingTests =
+    let signingKey = "audience-binding-shared-key-0123456789abcd"
+    let issuer = buyerId.PeerId
+
+    // A receiver secret store seeded with the issuer's signing key, so
+    // the HS256 signature verifies on every case below — isolating the
+    // audience decision from the signature decision.
+    let receiverSecrets () =
+        let s = InMemorySecretStore() :> ISecretStore
+        seedSigningKey s issuer signingKey
+        s
+
+    testList "JwtPeerAuthProvider — audience binding (Phase 130)" [
+
+        // ─── Cross-receiver replay: token for B rejected at C ─────────
+
+        testCaseAsync "a token minted for peer B is rejected by a provider whose local id is C (same issuer key)"
+        <| async {
+            let token = mintRawToken signingKey issuer (Some "peer-b")
+
+            let provider =
+                JwtPeerAuthProvider(receiverSecrets (), "peer-c") :> IPeerAuthProvider
+
+            match! provider.ValidatePeerToken token with
+            | Error(PeerUnauthorized _) -> ()
+            | Error e -> failtestf "Expected PeerUnauthorized, got %A" e
+            | Ok p -> failtestf "Expected rejection — cross-receiver replay accepted as %s" p.Caller.PeerId
+        }
+
+        // ─── Correctly-addressed token accepted ───────────────────────
+
+        testCaseAsync "a token addressed to this receiver (aud = local id) is accepted"
+        <| async {
+            let token = mintRawToken signingKey issuer (Some "peer-c")
+
+            let provider =
+                JwtPeerAuthProvider(receiverSecrets (), "peer-c") :> IPeerAuthProvider
+
+            match! provider.ValidatePeerToken token with
+            | Ok p -> Expect.equal p.Caller.PeerId issuer "the validated caller is the issuer"
+            | Error e -> failtestf "Expected acceptance, got %A" e
+        }
+
+        // ─── Missing aud rejected fail-closed ─────────────────────────
+
+        testCaseAsync "a token with no aud is rejected fail-closed when the receiver has an identity"
+        <| async {
+            let token = mintRawToken signingKey issuer None
+
+            let provider =
+                JwtPeerAuthProvider(receiverSecrets (), "peer-c") :> IPeerAuthProvider
+
+            match! provider.ValidatePeerToken token with
+            | Error(PeerUnauthorized _) -> ()
+            | Error e -> failtestf "Expected PeerUnauthorized, got %A" e
+            | Ok _ -> failtest "Expected fail-closed rejection of a token with no aud claim"
+        }
+
+        // ─── Unbound receiver keeps pre-130 behaviour (GP 11) ─────────
+
+        testCaseAsync "a receiver with no declared identity keeps pre-130 behaviour (audience unbound)"
+        <| async {
+            // No expectedAudience → the audience check is skipped, so a
+            // token addressed to a different peer still validates on
+            // signature alone (byte-for-byte the pre-130 path).
+            let token = mintRawToken signingKey issuer (Some "peer-b")
+            let provider = JwtPeerAuthProvider(receiverSecrets ()) :> IPeerAuthProvider
+
+            match! provider.ValidatePeerToken token with
+            | Ok p -> Expect.equal p.Caller.PeerId issuer "unbound receiver accepts on signature alone"
+            | Error e -> failtestf "Expected acceptance (audience unbound), got %A" e
+        }
+    ]

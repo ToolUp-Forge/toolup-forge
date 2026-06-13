@@ -20,6 +20,16 @@ namespace ToolUp.InterPlatform
 // `alg: none`, missing `exp`, and future `nbf` — there is no "auth
 // disabled" mode that lets an unauthenticated peer through.
 //
+// **Audience binding (Phase 130).** When the receiver has declared its
+// own identity (`PeerServerApp.withLocalPeer`), `ValidatePeerToken`
+// additionally binds the token's `aud` claim to that identity: a token
+// minted *for a different peer* that happens to share the issuer's
+// signing key is rejected, and a token with no `aud` is rejected fail-
+// closed. This closes the confused-deputy / cross-receiver-replay hole
+// in any topology where more than one receiver trusts the same issuer
+// key. A receiver that composed no `LocalPeer` identity cannot bind
+// audience and keeps the pre-130 behaviour (signature + exp + nbf only).
+//
 // Six portability rules (GP 12):
 //   1. Identity by value — tokens are strings; identities are records.
 //   2. Async at every boundary — every method returns `Async<_>`.
@@ -53,8 +63,11 @@ type IPeerAuthProvider =
 
     /// Authenticate an inbound bearer token. Returns the `PeerPrincipal`
     /// the token vouches for on success; `Error (PeerUnauthorized …)`
-    /// for any malformed / expired / not-yet-valid / wrong-audience /
-    /// bad-signature token. Fails closed: there is no path that returns
+    /// for any malformed / expired / not-yet-valid / bad-signature token.
+    /// When the receiver has declared its own identity, the token's `aud`
+    /// claim is bound to it: a token addressed to a different peer (even
+    /// under a shared issuer key) and a token with no `aud` are both
+    /// rejected (Phase 130). Fails closed: there is no path that returns
     /// a principal for an unverified token.
     abstract ValidatePeerToken: token: string -> Async<Result<PeerPrincipal, PeerError>>
 

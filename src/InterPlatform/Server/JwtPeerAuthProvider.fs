@@ -171,6 +171,25 @@ module private PeerJwt =
         | true, elem when elem.ValueKind = JsonValueKind.String -> Some(elem.GetString())
         | _ -> None
 
+    /// Bind the token's `aud` claim to this receiver's own peer id. When
+    /// the receiver has declared an identity (`expectedAudience` non-
+    /// empty — i.e. `withLocalPeer` was composed), every inbound token
+    /// MUST carry an `aud` equal to it, fixed-time compared. A token with
+    /// no `aud`, or one minted *for a different peer* that happens to
+    /// share the issuer's signing key, is rejected — the confused-deputy
+    /// / cross-receiver-replay defence the `aud` claim exists for. An
+    /// `expectedAudience` of "" (no local identity composed) cannot bind
+    /// audience and falls back to the pre-Phase-130 behaviour; the
+    /// migration doc flags composing `LocalPeer` to activate the check.
+    let checkAudience (expectedAudience: string) (doc: JsonDocument) =
+        if String.IsNullOrEmpty expectedAudience then
+            Ok()
+        else
+            match getClaim "aud" doc with
+            | Some aud when constantTimeEquals expectedAudience aud -> Ok()
+            | Some _ -> Error "Token audience does not match this peer"
+            | None -> Error "Missing 'aud' claim"
+
     /// Mint a signed HS256 token. `uctx` carries the serialised
     /// `UserContext` as a string claim (round-tripped through the
     /// universal converter set so the DU survives the wire). Lifetime is
@@ -213,7 +232,18 @@ module private PeerJwt =
 /// BCL-only, fail-closed HS256 implementation of `IPeerAuthProvider`.
 /// Reads the symmetric per-peer signing key from `ISecretStore` on every
 /// call; there is no cached key and no "auth disabled" path.
-type JwtPeerAuthProvider(secrets: ISecretStore) =
+///
+/// `expectedAudience` is this receiver's own peer id (composed via
+/// `PeerServerApp.withLocalPeer`). When non-empty, `ValidatePeerToken`
+/// binds every inbound token's `aud` claim to it (Phase 130 — confused-
+/// deputy / cross-receiver-replay defence). The parameter is optional so
+/// existing call sites that constructed `JwtPeerAuthProvider(secrets)`
+/// keep compiling and keep their pre-Phase-130 behaviour (audience
+/// binding off — GP 11); a receiver that never composed a `LocalPeer`
+/// identity cannot bind audience.
+type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
+    let expectedAudience = defaultArg expectedAudience ""
+
     interface IPeerAuthProvider with
         member _.IssuePeerToken(caller: PeerIdentity, audience: PeerIdentity, user: UserContext) = async {
             let! secretOpt = secrets.GetSecret(PeerJwt.platformScope, PeerJwt.signingKeyFor caller.PeerId)
@@ -249,6 +279,7 @@ type JwtPeerAuthProvider(secrets: ISecretStore) =
                                 do! PeerJwt.verifySignature secretBytes header payload signature
                                 do! PeerJwt.checkExpiry doc
                                 do! PeerJwt.checkNotBefore doc
+                                do! PeerJwt.checkAudience expectedAudience doc
                                 return ()
                             }
 

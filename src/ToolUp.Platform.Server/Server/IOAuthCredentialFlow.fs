@@ -171,6 +171,20 @@ module OAuthError =
         | RevocationUnsupported -> "OAuth revocation unsupported by provider"
         | OAuthFlowFailed msg -> $"OAuth flow failed: {msg}"
 
+/// PKCE challenge (RFC 7636) the substrate hands to `BuildAuthorizeUrl`
+/// when the flow declares `SupportsPkce`. `Challenge` is the base64url
+/// SHA-256 digest of the `code_verifier` the substrate stashed in the
+/// state-store entry (`OAuthCrypto.codeChallengeFromVerifier`); `Method`
+/// is always `"S256"` — the substrate never emits the `plain` method.
+/// A flow that does not support PKCE receives `None` and its authorize
+/// URL is byte-for-byte unchanged from the pre-PKCE substrate (GP 11).
+type PkceChallenge = {
+    /// The `code_challenge` value to send on the authorize URL.
+    Challenge: string
+    /// The `code_challenge_method`. Always `"S256"`.
+    Method: string
+}
+
 type IOAuthCredentialFlow =
     /// Stable name discriminator. Used as the `{flowName}` segment in
     /// `/api/oauth/{flowName}/authorize` + `/api/oauth/{flowName}/callback`,
@@ -184,6 +198,20 @@ type IOAuthCredentialFlow =
     /// Display metadata for admin-UI per-flow plugin rendering.
     abstract Descriptor: OAuthFlowDescriptor
 
+    /// Whether this flow's upstream provider accepts PKCE (RFC 7636).
+    /// When `true`, the substrate computes a `code_challenge` from the
+    /// state entry's `code_verifier` and passes it to `BuildAuthorizeUrl`
+    /// as `Some`, then forwards the matching `code_verifier` to
+    /// `ExchangeCode` as `Some`; the flow MUST append `code_challenge` +
+    /// `code_challenge_method=S256` on the authorize URL and `code_verifier`
+    /// on the token exchange, and treat a `None` at either end as a hard
+    /// error (the substrate never passes `None` to a PKCE-declaring flow).
+    /// When `false`, the substrate passes `None` at both ends and the
+    /// flow's wire output is byte-for-byte unchanged from the pre-PKCE
+    /// substrate (GP 11). Defaults are not provided — every implementer
+    /// states its provider's PKCE support explicitly.
+    abstract SupportsPkce: bool
+
     /// Build the upstream provider's authorize URL for a fresh
     /// consent request. Implementations:
     ///   1. Read `ClientId` from `ISecretStore.GetSecret(ctx.ScopeId, "{flowName}-client-id-{ctx.DataSourceId}")`
@@ -191,12 +219,17 @@ type IOAuthCredentialFlow =
     ///      `client_id`, `redirect_uri = redirectUri`, `state = state`,
     ///      `scope = Descriptor.Scopes`, plus provider-specific
     ///      params (Google: `access_type=offline`, `prompt=consent`).
-    ///   3. Return the absolute URL the substrate will redirect to.
+    ///   3. When `pkce = Some challenge` (the flow declared `SupportsPkce`),
+    ///      append `code_challenge = challenge.Challenge` +
+    ///      `code_challenge_method = challenge.Method` ("S256"). When
+    ///      `pkce = None`, send no PKCE parameters.
+    ///   4. Return the absolute URL the substrate will redirect to.
     /// The substrate generates `state` (CSRF token) and persists it in
     /// the state store before calling this method; flows MUST forward
     /// `state` unchanged.
     abstract BuildAuthorizeUrl:
-        ctx: OAuthFlowContext * state: string * redirectUri: string -> Async<Result<string, OAuthError>>
+        ctx: OAuthFlowContext * state: string * redirectUri: string * pkce: PkceChallenge option ->
+            Async<Result<string, OAuthError>>
 
     /// Exchange an authorization code for credentials. Called by the
     /// substrate's callback handler after CSRF state validation has
@@ -208,10 +241,17 @@ type IOAuthCredentialFlow =
     ///      `redirect_uri = redirectUri` (must match the URI from the
     ///      authorize step exactly — providers validate strict equality),
     ///      `client_id`, `client_secret`, `grant_type=authorization_code`.
-    ///   3. Return `OAuthCredentials` with at least `RefreshToken` set;
+    ///   3. When `codeVerifier = Some verifier` (the flow declared
+    ///      `SupportsPkce`), include `code_verifier = verifier` on the
+    ///      token request — the provider rejects the exchange if the
+    ///      verifier does not hash to the `code_challenge` sent at the
+    ///      authorize step, so an intercepted code is useless without it.
+    ///      When `codeVerifier = None`, send no verifier.
+    ///   4. Return `OAuthCredentials` with at least `RefreshToken` set;
     ///      `AccessToken` / `ExpiresAt` / `IdToken` are best-effort.
     abstract ExchangeCode:
-        ctx: OAuthFlowContext * code: string * redirectUri: string -> Async<Result<OAuthCredentials, OAuthError>>
+        ctx: OAuthFlowContext * code: string * redirectUri: string * codeVerifier: string option ->
+            Async<Result<OAuthCredentials, OAuthError>>
 
     /// Mint an access token from a stored refresh token. Connectors
     /// call this on every API call that needs fresh credentials

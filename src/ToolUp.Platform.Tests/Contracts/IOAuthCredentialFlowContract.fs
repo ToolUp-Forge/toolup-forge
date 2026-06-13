@@ -17,6 +17,8 @@ open ToolUp.Platform
 //   - `Descriptor.DisplayName` and `Descriptor.Scopes` are populated.
 //   - `BuildAuthorizeUrl` returns an absolute HTTPS URL containing
 //     the substrate-supplied `state` and `redirect_uri` parameters.
+//   - When `SupportsPkce`, `BuildAuthorizeUrl` with a `Some` challenge
+//     reflects `code_challenge` + `code_challenge_method=S256` in the URL.
 //   - `ExchangeCode` happy-path returns `OAuthCredentials` with a
 //     non-empty `RefreshToken`.
 //   - `RefreshAccessToken` happy-path returns `OAuthAccessToken` with
@@ -58,7 +60,7 @@ let tests (name: string) (factory: unit -> IOAuthCredentialFlow) =
             let state = "test-state-token"
             let redirect = "https://example.com/api/oauth/test-flow/callback"
 
-            match! flow.BuildAuthorizeUrl(ctx, state, redirect) with
+            match! flow.BuildAuthorizeUrl(ctx, state, redirect, None) with
             | Ok url ->
                 let parsed = Uri url
                 Expect.isTrue parsed.IsAbsoluteUri "URL must be absolute"
@@ -73,11 +75,34 @@ let tests (name: string) (factory: unit -> IOAuthCredentialFlow) =
             let state = "unique-state-9X3pQ"
             let redirect = "https://example.com/api/oauth/test-flow/callback"
 
-            match! flow.BuildAuthorizeUrl(ctx, state, redirect) with
+            match! flow.BuildAuthorizeUrl(ctx, state, redirect, None) with
             | Ok url ->
                 Expect.stringContains url state "URL contains the substrate-supplied state"
                 Expect.stringContains url (Uri.EscapeDataString redirect) "URL contains the URL-encoded redirect_uri"
             | Error err -> failtestf "BuildAuthorizeUrl failed: %s" (OAuthError.toMessage err)
+        }
+
+        testCaseAsync "when SupportsPkce, BuildAuthorizeUrl reflects the code_challenge + S256 method"
+        <| async {
+            let flow = factory ()
+
+            // Only meaningful for PKCE-capable flows; a non-PKCE flow is
+            // exempt (it receives `None` and must not emit PKCE params).
+            if flow.SupportsPkce then
+                let ctx = mkContext ()
+                let state = "pkce-state-token"
+                let redirect = "https://example.com/api/oauth/test-flow/callback"
+
+                let challenge: PkceChallenge = {
+                    Challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+                    Method = "S256"
+                }
+
+                match! flow.BuildAuthorizeUrl(ctx, state, redirect, Some challenge) with
+                | Ok url ->
+                    Expect.stringContains url challenge.Challenge "URL carries the supplied code_challenge"
+                    Expect.stringContains url "S256" "URL carries code_challenge_method=S256"
+                | Error err -> failtestf "BuildAuthorizeUrl failed: %s" (OAuthError.toMessage err)
         }
 
         testCaseAsync "ExchangeCode happy-path returns credentials with a refresh token"
@@ -86,7 +111,11 @@ let tests (name: string) (factory: unit -> IOAuthCredentialFlow) =
             let ctx = mkContext ()
             let redirect = "https://example.com/api/oauth/test-flow/callback"
 
-            match! flow.ExchangeCode(ctx, "valid-test-code", redirect) with
+            // Pass the verifier only when the flow declares PKCE support —
+            // mirrors what the substrate does on /callback.
+            let verifier = if flow.SupportsPkce then Some "the-pkce-verifier" else None
+
+            match! flow.ExchangeCode(ctx, "valid-test-code", redirect, verifier) with
             | Ok creds -> Expect.isNonEmpty creds.RefreshToken "RefreshToken must not be empty"
             | Error err -> failtestf "ExchangeCode failed: %s" (OAuthError.toMessage err)
         }

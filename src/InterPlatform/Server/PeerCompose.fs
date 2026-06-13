@@ -302,7 +302,12 @@ module PeerServerApp =
                     .AddSingleton<IPeerAuthProvider>(
                         System.Func<System.IServiceProvider, IPeerAuthProvider>(fun sp ->
                             let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
-                            JwtPeerAuthProvider(secrets) :> IPeerAuthProvider)
+                            // Phase 130 — bind inbound tokens' `aud` to this
+                            // receiver's own peer id. Empty when no
+                            // `LocalPeer` was composed (host-only-without-
+                            // identity): audience binding stays off, matching
+                            // the pre-130 behaviour (GP 11).
+                            JwtPeerAuthProvider(secrets, localIdentity.PeerId) :> IPeerAuthProvider)
                     )
                     .AddSingleton<IPeerJobResultStore>(
                         System.Func<System.IServiceProvider, IPeerJobResultStore>(fun sp ->
