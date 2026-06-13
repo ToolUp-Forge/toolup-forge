@@ -222,6 +222,7 @@ let securityClassValidatorNames: Set<string> =
         "oauth-state-store-instance" // in-memory OAuth state under multi-instance
         "per-scope-key-resolver-distributed" // crypto-shred key resolver under multi-instance
         "auto-bootstrap-dev-admin-mode" // first sign-in auto-promotes to Platform Admin (privilege-escalation surface) — warning must survive the SkipPreflight bypass lever
+        "csrf-default-mode" // cookie auth without server-side CSRF (Phase 129) — warning must survive SkipPreflight
     ]
 
 let private isSecurityClass (v: IConfigValidator) =

@@ -68,13 +68,22 @@ type OAuthFlowValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Validate() = async {
             match readEnv () with
             | None ->
-                return
-                    Warning(
-                        sprintf
-                            "%s is not set. The OAuth substrate will derive the redirect URI from each request's Scheme + Host, which is correct only when ServerConfig.TrustForwardedHeaders is enabled and a TLS-terminating proxy is supplying X-Forwarded-Proto. Set %s=https://your-deployment.example.com to pin the redirect URI explicitly — eliminates a class of misconfigurations where /authorize and /callback see different scheme/host pairs."
-                            RedirectBaseEnvVar
-                            RedirectBaseEnvVar
-                    )
+                // Phase 129 — in an auth-requiring mode, deriving the
+                // redirect_uri from the request Scheme + Host lets a
+                // spoofed / forwarded Host repoint the OAuth callback
+                // (host-header poisoning). Refuse startup so the operator
+                // pins the public origin. Anonymous / dev modes keep the
+                // low-friction Warning (request-derivation is fine there).
+                let message =
+                    sprintf
+                        "%s is not set. The OAuth substrate will derive the redirect URI from each request's Scheme + Host, which is correct only when ServerConfig.TrustForwardedHeaders is enabled and a TLS-terminating proxy is supplying X-Forwarded-Proto. Set %s=https://your-deployment.example.com to pin the redirect URI explicitly — eliminates a class of misconfigurations where /authorize and /callback see different scheme/host pairs, and closes the host-header-poisoning vector where a spoofed Host repoints the OAuth callback."
+                        RedirectBaseEnvVar
+                        RedirectBaseEnvVar
+
+                if DeploymentConfig.requiresAnyAuth config then
+                    return Error message
+                else
+                    return Warning message
             | Some raw ->
                 if not (isAbsoluteHttpUri raw) then
                     return

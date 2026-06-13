@@ -50,7 +50,8 @@ let registerFirstPartyConfigValidators
     addConfigValidator (OidcConfigCompletenessValidator.OidcConfigCompletenessValidator()) // refuse auth=oidc with unset issuer; ordered before HeaderAuth so its message lands earlier
     addConfigValidator (OidcAudienceBindingValidator.OidcAudienceBindingValidator(config)) // refuse auth=oidc with unbound audience in authenticated modes (token-reuse; escape hatch)
     addConfigValidator (HeaderAuthProviderModeValidator.HeaderAuthProviderModeValidator(config, auth)) // refuse HeaderAuthProvider in authenticated modes (mTLS escape hatch)
-    addConfigValidator (AutoBootstrapDevAdminModeValidator.AutoBootstrapDevAdminModeValidator(config)) // warn AutoBootstrapDevAdmin left set in an auth-requiring mode (first sign-in becomes Platform Admin)
+    addConfigValidator (AutoBootstrapDevAdminModeValidator.AutoBootstrapDevAdminModeValidator(config)) // warn (Error on internet-facing) AutoBootstrapDevAdmin left set in an auth-requiring mode (first sign-in becomes Platform Admin)
+    addConfigValidator (CsrfDefaultModeValidator.CsrfDefaultModeValidator(config)) // warn cookie auth (SseAuthMode=CookieRequired) without server-side CSRF (NoSecurityHardening)
     addConfigValidator (AuditLogModeValidator.AuditLogModeValidator(config)) // warn authenticated mode + NoAuditLog
     addConfigValidator (ServiceStatusBoardDepsValidator.ServiceStatusBoardDepsValidator(config)) // warn ServiceStatusBoard composes only disabled substrates (Phase 9p.A)
 

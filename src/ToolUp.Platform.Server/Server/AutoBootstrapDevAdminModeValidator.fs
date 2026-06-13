@@ -37,13 +37,26 @@ type AutoBootstrapDevAdminModeValidator(config: ServerConfig, ?timeout: TimeSpan
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
 
+            // Phase 129 — an auth-requiring deployment that requires HTTPS
+            // is the production shape where a leaked AutoBootstrapDevAdmin
+            // is a live privilege escalation: refuse startup. A local
+            // auth-dev deployment (RequireHttps = false, the default) keeps
+            // the Warning the field is legitimately used under. (We key on
+            // RequireHttps alone, NOT TrustForwardedHeaders — the latter
+            // defaults to true, so it would mis-flag local dev as
+            // internet-facing and break the field's intended workflow.)
+            let internetFacing = config.RequireHttps
+
             match config.AutoBootstrapDevAdmin with
             | Some uid when requiresAuth && not (String.IsNullOrWhiteSpace uid) ->
-                return
-                    Warning(
-                        sprintf
-                            "ServerConfig.AutoBootstrapDevAdmin = Some \"%s\" in an auth-requiring mode. When the platform-admin list is empty and TOOLUP_INITIAL_PLATFORM_ADMIN is unset, the bootstrap silently grants Platform Admin to the first sign-in — a privilege-escalation vector if this dev-convenience field leaks into a production deployment (HeaderAuthProviderModeValidator does not catch this; it fires only for HeaderAuthProvider). Production deployments MUST leave AutoBootstrapDevAdmin = None and set TOOLUP_INITIAL_PLATFORM_ADMIN instead. Verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
-                            uid
-                    )
+                let message =
+                    sprintf
+                        "ServerConfig.AutoBootstrapDevAdmin = Some \"%s\" in an auth-requiring mode. When the platform-admin list is empty and TOOLUP_INITIAL_PLATFORM_ADMIN is unset, the bootstrap silently grants Platform Admin to the first sign-in — a privilege-escalation vector if this dev-convenience field leaks into a production deployment (HeaderAuthProviderModeValidator does not catch this; it fires only for HeaderAuthProvider). Production deployments MUST leave AutoBootstrapDevAdmin = None and set TOOLUP_INITIAL_PLATFORM_ADMIN instead. Verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                        uid
+
+                if internetFacing then
+                    return Error message
+                else
+                    return Warning message
             | _ -> return Ok
         }
