@@ -361,6 +361,7 @@
         <Compile Include="Server\OAuthFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
+        <Compile Include="Server\Scope\StoreIdSanitising.fs" />
         <!-- Phase 113 — IPermissionStore/tier-backed default for the
              host-neutral IActionAuthorizer seam (default-deny; policy as
              data). After PermissionStore (the backing) + IUserClaims

@@ -110,6 +110,7 @@ let allTests =
         ShareTokenStoreTests.tests
         ShareTokenAuthMiddlewareTests.tests
         AnonymousSessionMigrationTests.tests
+        StoreIdSanitisingTests.tests
         InMemoryPendingInviteStoreTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests

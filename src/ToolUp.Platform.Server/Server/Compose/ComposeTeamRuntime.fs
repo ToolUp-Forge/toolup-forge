@@ -47,7 +47,13 @@ let registerTeamPermissionStores
             None
 
     match teamStoreOpt with
-    | Some ts -> services.AddSingleton<ITeamStore>(ts :> ITeamStore) |> ignore
+    | Some ts ->
+        // Phase 131 — wrap in the id-sanitising decorator so every
+        // team/user id that becomes a blob-key segment is validated on
+        // writes (path-traversal / reserved-scope rejection), including
+        // for a consumer-supplied store.
+        services.AddSingleton<ITeamStore>(StoreIdSanitising.SanitisingTeamStore(ts :> ITeamStore) :> ITeamStore)
+        |> ignore
     | None -> ()
 
     // Phase 5h — register `IPendingInviteStore`. Default
@@ -70,7 +76,11 @@ let registerTeamPermissionStores
     // per-request middleware only populates `ModulePermissions` for
     // Team-scoped requests, so non-Team modes behave as unrestricted
     // (opt-in RBAC).
-    services.AddSingleton<IPermissionStore>(PermissionStore(resolvedBlobStorage, resolvedLogger))
+    // Phase 131 — wrap the permission store in the id-sanitising
+    // decorator (same write-seam rejection as the team store above).
+    services.AddSingleton<IPermissionStore>(
+        StoreIdSanitising.SanitisingPermissionStore(PermissionStore(resolvedBlobStorage, resolvedLogger))
+    )
     |> ignore
 
     teamStoreOpt
