@@ -37,7 +37,7 @@ type SecurityHeadersValidator(config: ServerConfig, ?timeout: TimeSpan) =
 
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
-            let internetFacing = config.RequireHttps || config.TrustForwardedHeaders
+            let internetFacing = DeploymentConfig.isInternetFacing config
             let headersEmpty = config.SecurityHeaders.IsEmpty
 
             if requiresAuth && internetFacing && headersEmpty then

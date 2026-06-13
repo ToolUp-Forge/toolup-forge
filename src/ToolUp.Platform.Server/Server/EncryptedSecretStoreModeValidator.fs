@@ -69,27 +69,16 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
         member _.Name = "encrypted-secret-store-mode"
         member _.Timeout = timeout
 
-        member _.Validate() = async {
-            let requiresAuth = DeploymentConfig.requiresAnyAuth config
-            let escapeHatch = config.AcceptPlaintextSecretsWhenAuthRequired
-            let cloudKms = isCloudKmsBacked ()
-
-            // Detect the no-master-key state. The current SDK uses
-            // EncryptedSecretStore.masterKeyFromEnvironment () in
-            // Server.fs; if the result is None and the registered
-            // ISecretStore is the EncryptedSecretStore wrapper, the
-            // wrapper is in passthrough mode.
-            //
-            // We re-read the env var here rather than reaching into
-            // the wrapper instance because the wrapper is opaque from
-            // the validator's POV. Cost: one Environment.GetEnvironmentVariable
-            // call per startup — negligible.
-            //
-            // Phase 6l parser-tightening: use the detailed resolver so
-            // the validator distinguishes "unset" from "set-but-malformed"
-            // and reports the parse failure verbatim. Without this, an
-            // operator who set TOOLUP_SECRETS_MASTER_KEY=<typo> sees
-            // "is unset" and burns 20 minutes diagnosing.
+        member _.Validate() =
+            // Detect the no-master-key state. We re-read the env var here
+            // (rather than reaching into the opaque EncryptedSecretStore
+            // wrapper) via the detailed resolver, so the validator
+            // distinguishes "unset" from "set-but-malformed" and reports
+            // the parse failure verbatim — without this, an operator who
+            // set TOOLUP_SECRETS_MASTER_KEY=<typo> sees "is unset" and
+            // burns 20 minutes diagnosing. Cost: one env read per startup.
+            // Bound once here so both the predicate (keyAvailable) and the
+            // message (stateDescription) read the same resolution.
             let resolution = EncryptedSecretStore.masterKeyFromEnvironmentDetailed ()
 
             let keyAvailable =
@@ -97,20 +86,23 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
                 | EncryptedSecretStore.Valid _ -> true
                 | _ -> false
 
-            if requiresAuth && not keyAvailable && not escapeHatch && not cloudKms then
-                let stateDescription =
-                    match resolution with
-                    | EncryptedSecretStore.Unset -> "TOOLUP_SECRETS_MASTER_KEY is unset"
-                    | EncryptedSecretStore.Malformed reason -> sprintf "TOOLUP_SECRETS_MASTER_KEY is set but %s" reason
-                    | EncryptedSecretStore.Valid _ -> "TOOLUP_SECRETS_MASTER_KEY parsed cleanly" // unreachable
+            ConfigValidator.gatedAuthValidation
+                config
+                (fun () ->
+                    not keyAvailable
+                    && not config.AcceptPlaintextSecretsWhenAuthRequired
+                    && not (isCloudKmsBacked ()))
+                (fun () ->
+                    let stateDescription =
+                        match resolution with
+                        | EncryptedSecretStore.Unset -> "TOOLUP_SECRETS_MASTER_KEY is unset"
+                        | EncryptedSecretStore.Malformed reason ->
+                            sprintf "TOOLUP_SECRETS_MASTER_KEY is set but %s" reason
+                        | EncryptedSecretStore.Valid _ -> "TOOLUP_SECRETS_MASTER_KEY parsed cleanly" // unreachable
 
-                return
                     Error(
                         sprintf
                             "ServerConfig.Surfaces = %s but %s. EncryptedSecretStore falls back to plaintext writes — every API key, OAuth token, and per-tenant credential will sit unencrypted in blob storage. Resolutions: (1) set TOOLUP_SECRETS_MASTER_KEY to a base64-encoded 32-byte key (call EncryptedSecretStore.generateMasterKey () once during deployment setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager) — Phase 2a/2b companions provide their own at-rest encryption; (3) set ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
                             stateDescription
-                    )
-            else
-                return Ok
-        }
+                    ))

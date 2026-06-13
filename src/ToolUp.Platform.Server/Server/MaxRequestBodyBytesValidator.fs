@@ -44,7 +44,10 @@ type MaxRequestBodyBytesValidator(config: ServerConfig, ?timeout: TimeSpan) =
 
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
-            let internetFacing = config.RequireHttps
+            // Stricter `isHttpsTerminatedHere` (RequireHttps only) rather
+            // than the broad `isInternetFacing` — TrustForwardedHeaders
+            // defaults true and would over-flag local dev.
+            let internetFacing = DeploymentConfig.isHttpsTerminatedHere config
             let hasRateLimit = RateLimitConfig.isEnabled config.RateLimit
 
             let effectiveBytes =

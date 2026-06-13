@@ -52,18 +52,15 @@ type SseAuthModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Name = "sse-auth-mode"
         member _.Timeout = timeout
 
-        member _.Validate() = async {
-            let requiresAuth = DeploymentConfig.requiresAnyAuth config
-            let queryParamFallback = config.SseAuthMode = QueryParamFallback
-            let escapeHatch = config.AcceptQueryParamSseAuthWhenAuthRequired
-
-            if requiresAuth && queryParamFallback && not escapeHatch then
-                return
+        member _.Validate() =
+            ConfigValidator.gatedAuthValidation
+                config
+                (fun () ->
+                    config.SseAuthMode = QueryParamFallback
+                    && not config.AcceptQueryParamSseAuthWhenAuthRequired)
+                (fun () ->
                     Error(
                         sprintf
                             "ServerConfig.Surfaces = %s but SseAuthMode = QueryParamFallback. In this mode any caller who knows a userId can open /api/notifications?userId=<victim> WITHOUT a cookie or JWT and receive that user's live notification stream (membership changes, job completions, system messages) — live stream eavesdropping, not just identifier leakage. The userId also rides in the URL (CDN logs, web-server logs, browser history, Referer headers), so capturing one is cheap. Set TOOLUP_SSE_AUTH=cookie (production default for auth modes — requires the client's IAuthBridge to write the JWT cookie) or set ServerConfig.AcceptQueryParamSseAuthWhenAuthRequired = true (TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE=1) ONLY for dev / CI / behind-query-stripping-proxy deployments where you accept that exposure. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
-                    )
-            else
-                return Ok
-        }
+                    ))

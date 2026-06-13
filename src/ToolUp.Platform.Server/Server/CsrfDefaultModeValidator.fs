@@ -40,18 +40,15 @@ type CsrfDefaultModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Name = "csrf-default-mode"
         member _.Timeout = timeout
 
-        member _.Validate() = async {
-            let requiresAuth = DeploymentConfig.requiresAnyAuth config
-            let cookieAuth = config.SseAuthMode = CookieRequired
-            let noHardening = config.SecurityHardening = NoSecurityHardening
-
-            if requiresAuth && cookieAuth && noHardening then
-                return
+        member _.Validate() =
+            ConfigValidator.gatedAuthValidation
+                config
+                (fun () ->
+                    config.SseAuthMode = CookieRequired
+                    && config.SecurityHardening = NoSecurityHardening)
+                (fun () ->
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s with SseAuthMode = CookieRequired but SecurityHardening = NoSecurityHardening. Cookie-authenticated mutations have NO server-side CSRF check — the only protection is the client cookie's SameSite=Strict, which is browser-version-dependent and subdomain-bypassable. Call withSecurityHardening (DefaultSecurityHardening or StrictSecurityHardening) to enable the server-side double-submit CSRF check. If you deliberately rely on SameSite-only / out-of-band CSRF protection, this warning documents the posture."
+                            "ServerConfig.Surfaces = %s with SseAuthMode = CookieRequired but SecurityHardening = NoSecurityHardening. Cookie-authenticated mutations have NO server-side CSRF check — the only protection is the client cookie's SameSite=Strict, which is browser-version-dependent and subdomain-bypassable. Call withSecurityHardening (DefaultSecurityHardening or StrictSecurityHardening) to enable the server-side double-submit CSRF check. If you deliberately rely on SameSite-only / out-of-band CSRF protection, this warning documents the posture. After enabling hardening, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
-                    )
-            else
-                return Ok
-        }
+                    ))

@@ -41,11 +41,12 @@ type AutoBootstrapDevAdminModeValidator(config: ServerConfig, ?timeout: TimeSpan
             // is the production shape where a leaked AutoBootstrapDevAdmin
             // is a live privilege escalation: refuse startup. A local
             // auth-dev deployment (RequireHttps = false, the default) keeps
-            // the Warning the field is legitimately used under. (We key on
+            // the Warning the field is legitimately used under. (Keys on
             // RequireHttps alone, NOT TrustForwardedHeaders — the latter
             // defaults to true, so it would mis-flag local dev as
-            // internet-facing and break the field's intended workflow.)
-            let internetFacing = config.RequireHttps
+            // internet-facing and break the field's intended workflow. This
+            // is exactly the stricter `isHttpsTerminatedHere` intent.)
+            let internetFacing = DeploymentConfig.isHttpsTerminatedHere config
 
             match config.AutoBootstrapDevAdmin with
             | Some uid when requiresAuth && not (String.IsNullOrWhiteSpace uid) ->

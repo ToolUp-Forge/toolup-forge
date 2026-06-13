@@ -26,6 +26,29 @@ let private blobSentinelKey = "preflight/sentinel.bin"
 [<Literal>]
 let private secretSentinelKey = "_platform_preflight_canary"
 
+/// Shared body for the "gated-refusal" auth validators (`csrf-default-mode`,
+/// `sse-auth-mode`, `header-auth-mode`, `encrypted-secret-store-mode`,
+/// `oauth-secret-encryption-mode`). Each emits its result only when the
+/// deployment requires auth (`DeploymentConfig.requiresAnyAuth`) AND its
+/// own deployment-unsafe condition holds; `Ok` otherwise. Centralises the
+/// `requiresAnyAuth` gate every gated validator repeats, so each
+/// validator's `Validate()` now expresses only its own predicate +
+/// message. `whenUnsafe` is a thunk so a validator can compute message
+/// detail (e.g. the secret-store state description) lazily — only on the
+/// failing path. Validators with extra ctor deps (`authProvider`,
+/// `secretStore`) close over them in the `unsafeCondition` thunk.
+let gatedAuthValidation
+    (config: ServerConfig)
+    (unsafeCondition: unit -> bool)
+    (whenUnsafe: unit -> ValidationResult)
+    : Async<ValidationResult> =
+    async {
+        if DeploymentConfig.requiresAnyAuth config && unsafeCondition () then
+            return whenUnsafe ()
+        else
+            return Ok
+    }
+
 /// Storage preflight: writes a sentinel blob, reads it back byte-for-
 /// byte, and deletes it. Heavier than Phase 9k's `BlobStorageHealthCheck`
 /// (which only calls `Exists`) — preflight runs once at startup so the

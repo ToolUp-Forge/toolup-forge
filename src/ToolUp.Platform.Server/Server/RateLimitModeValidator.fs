@@ -45,7 +45,7 @@ type RateLimitModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
 
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
-            let internetFacing = config.RequireHttps || config.TrustForwardedHeaders
+            let internetFacing = DeploymentConfig.isInternetFacing config
             let rateLimitOff = not (RateLimitConfig.isEnabled config.RateLimit)
             let escapeHatch = config.AcceptNoRateLimitWhenAuthRequired
 

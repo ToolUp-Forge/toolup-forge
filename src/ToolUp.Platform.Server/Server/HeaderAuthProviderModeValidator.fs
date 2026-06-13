@@ -38,21 +38,15 @@ type HeaderAuthProviderModeValidator(config: ServerConfig, authProvider: IAuthPr
         member _.Name = "header-auth-mode"
         member _.Timeout = timeout
 
-        member _.Validate() = async {
-            let requiresAuth = DeploymentConfig.requiresAnyAuth config
-
-            let isHeaderAuth =
-                authProvider.GetType() = typeof<HeaderAuthProvider.HeaderAuthProvider>
-
-            let escapeHatch = config.AcceptHeaderAuthWhenAuthRequired
-
-            if requiresAuth && isHeaderAuth && not escapeHatch then
-                return
+        member _.Validate() =
+            ConfigValidator.gatedAuthValidation
+                config
+                (fun () ->
+                    authProvider.GetType() = typeof<HeaderAuthProvider.HeaderAuthProvider>
+                    && not config.AcceptHeaderAuthWhenAuthRequired)
+                (fun () ->
                     Error(
                         sprintf
                             "ServerConfig.Surfaces = %s requires a verified auth provider, but HeaderAuthProvider is registered. HeaderAuthProvider trusts the X-User-Id header without cryptographic proof — any caller can spoof any user id, breaking per-tenant data isolation. Configure OIDC (TOOLUP_AUTH_MODE=oidc + TOOLUP_OIDC_ISSUER=<your-issuer>) or set ServerConfig.AcceptHeaderAuthWhenAuthRequired = true if your deployment is behind an mTLS proxy that strips and re-injects the header. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
-                    )
-            else
-                return Ok
-        }
+                    ))

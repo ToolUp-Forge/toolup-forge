@@ -2444,6 +2444,28 @@ module DeploymentConfig =
             | SurfaceProfile.Anonymous _ -> false
             | _ -> true)
 
+    /// True when the deployment is reachable over the public internet —
+    /// either it enforces HTTPS itself (`RequireHttps`) or it trusts a
+    /// TLS-terminating proxy's forwarded headers (`TrustForwardedHeaders`).
+    /// The broad "is this exposed?" signal; the rate-limit and
+    /// security-headers preflights use it. Named here (not recomputed at
+    /// each call site) so the four startup validators that reason about
+    /// internet exposure pick an *intent* rather than re-deriving a
+    /// boolean that could silently drift apart — cf. the deliberately
+    /// stricter `isHttpsTerminatedHere`.
+    let isInternetFacing (config: ServerConfig) : bool =
+        config.RequireHttps || config.TrustForwardedHeaders
+
+    /// The stricter "HTTPS is explicitly enforced at this layer"
+    /// (`RequireHttps`) signal — deliberately NOT `isInternetFacing`. The
+    /// auto-bootstrap-dev-admin and max-request-body preflights use this
+    /// narrower check because `TrustForwardedHeaders` defaults to `true`
+    /// (Phase 16d) and would otherwise flag a plain local-dev shell as
+    /// internet-facing. Centralised so the intended divergence from
+    /// `isInternetFacing` is explicit, not buried in per-validator
+    /// comments.
+    let isHttpsTerminatedHere (config: ServerConfig) : bool = config.RequireHttps
+
     /// True iff the deployment supports the `Team` subject shape
     /// (single-team or multi-team UX). Used by team-store wiring +
     /// team-CRUD validators.

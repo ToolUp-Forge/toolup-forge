@@ -72,18 +72,15 @@ type OAuthSecretEncryptionModeValidator(config: ServerConfig, secretStore: Secre
         member _.Name = "oauth-secret-encryption-mode"
         member _.Timeout = timeout
 
-        member _.Validate() = async {
-            let requiresAuth = DeploymentConfig.requiresAnyAuth config
-            let escapeHatch = config.AcceptPlaintextSecretsWhenAuthRequired
-            let encrypted = secretStoreProvidesEncryptionAtRest secretStore
-
-            if requiresAuth && not encrypted && not escapeHatch then
-                return
+        member _.Validate() =
+            ConfigValidator.gatedAuthValidation
+                config
+                (fun () ->
+                    not (secretStoreProvidesEncryptionAtRest secretStore)
+                    && not config.AcceptPlaintextSecretsWhenAuthRequired)
+                (fun () ->
                     Error(
                         sprintf
-                            "ServerConfig.Surfaces = %s and connector OAuth flows are active, but the registered ISecretStore does not encrypt at rest — connector refresh tokens (and cached access tokens) will sit in plaintext blob storage. Resolutions: (1) compose the EncryptedSecretStore decorator with TOOLUP_SECRETS_MASTER_KEY set to a base64-encoded 32-byte key (EncryptedSecretStore.generateMasterKey () once during setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager); (3) set ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. Note: the default SDK secret store is a raw FileSecretStore with no encryption — a master key env var alone does not encrypt it."
+                            "ServerConfig.Surfaces = %s and connector OAuth flows are active, but the registered ISecretStore does not encrypt at rest — connector refresh tokens (and cached access tokens) will sit in plaintext blob storage. Resolutions: (1) compose the EncryptedSecretStore decorator with TOOLUP_SECRETS_MASTER_KEY set to a base64-encoded 32-byte key (EncryptedSecretStore.generateMasterKey () once during setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager); (3) set ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. Note: the default SDK secret store is a raw FileSecretStore with no encryption — a master key env var alone does not encrypt it. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
-                    )
-            else
-                return Ok
-        }
+                    ))
