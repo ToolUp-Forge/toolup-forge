@@ -240,3 +240,31 @@ let pkceFlowTests =
             | Error _ -> ()
         }
     ]
+
+// ─── TIDY-UP (Auth-core) — upstream error-body scrub ────────────────
+
+let refresherScrubTests =
+    testList "OAuth refresher — upstream error-body scrub" [
+        test "redacts a token-shaped run echoed in an upstream error body" {
+            let body =
+                """{"error":"invalid_request","error_description":"bad token abcdef0123456789ABCDEFghijklmnop"}"""
+
+            let scrubbed = InProcessOAuthTokenRefresher.scrubUpstreamBody body
+
+            Expect.isFalse
+                (scrubbed.Contains "abcdef0123456789ABCDEFghijklmnop")
+                "the long token-shaped run is redacted"
+
+            Expect.stringContains scrubbed "<redacted>" "redaction marker present"
+            Expect.stringContains scrubbed "invalid_request" "short error code preserved"
+        }
+
+        test "caps an oversized body" {
+            let scrubbed = InProcessOAuthTokenRefresher.scrubUpstreamBody (String('x', 5000))
+            Expect.isLessThanOrEqual scrubbed.Length 300 "body is truncated to a bounded length"
+        }
+
+        test "empty body → empty string" {
+            Expect.equal (InProcessOAuthTokenRefresher.scrubUpstreamBody "") "" "no body, nothing to scrub"
+        }
+    ]

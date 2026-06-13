@@ -11,6 +11,7 @@ open System.Net.Http
 open System.Text
 open System.Threading.Tasks
 open System.Text.Json
+open System.Text.RegularExpressions
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
@@ -181,6 +182,24 @@ module InProcessOAuthTokenRefresher =
             | _ -> false
         with _ ->
             false
+
+    /// Phase 129/TIDY-UP — scrub an upstream token-endpoint response body
+    /// before it lands in an `OAuthRefreshResult` reason / audit row. Some
+    /// providers reflect request context (incl. the submitted refresh
+    /// token / client_secret) in their `error_description`; redact long
+    /// token-shaped runs and cap length so a secret never reaches the
+    /// durable audit log. The pattern is linear (no nested quantifier — no
+    /// catastrophic backtracking).
+    let internal scrubUpstreamBody (body: string) : string =
+        if String.IsNullOrEmpty body then
+            ""
+        else
+            let redacted = Regex.Replace(body, @"[A-Za-z0-9_\-\.]{20,}", "<redacted>")
+
+            if redacted.Length > 256 then
+                redacted.Substring(0, 256) + "…(truncated)"
+            else
+                redacted
 
     // ─── Implementation ─────────────────────────────────────────
 
@@ -354,11 +373,19 @@ module InProcessOAuthTokenRefresher =
                         elif int resp.StatusCode >= 500 then
                             sw.Stop()
                             recordMetrics descriptor false sw.ElapsedMilliseconds
-                            return TransientError(sprintf "upstream %d: %s" (int resp.StatusCode) respBody)
+
+                            return
+                                TransientError(
+                                    sprintf "upstream %d: %s" (int resp.StatusCode) (scrubUpstreamBody respBody)
+                                )
                         else
                             sw.Stop()
                             recordMetrics descriptor false sw.ElapsedMilliseconds
-                            return PermanentError(sprintf "upstream %d: %s" (int resp.StatusCode) respBody)
+
+                            return
+                                PermanentError(
+                                    sprintf "upstream %d: %s" (int resp.StatusCode) (scrubUpstreamBody respBody)
+                                )
                     with
                     | :? HttpRequestException as ex ->
                         sw.Stop()
