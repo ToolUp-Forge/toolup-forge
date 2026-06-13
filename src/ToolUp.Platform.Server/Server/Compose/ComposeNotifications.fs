@@ -66,6 +66,13 @@ let buildNotificationStack
     (resolvedActivitySink: IActivitySink)
     (logger: ILogger option)
     (transactionalSinks: INotificationSink list)
+    // Phase 114 — deferred `IMetricsSink` accessor for the audit log's
+    // write-failure counter. Deferred (rather than the resolved sink)
+    // because `compose` resolves the metrics sink AFTER this stack is
+    // built; the cell-reader pattern (same as the rate-limiter /
+    // job-scheduler cells) hands the audit log the real sink by the time
+    // any write actually fails at runtime.
+    (metricsSinkLookup: unit -> Metrics.IMetricsSink)
     : NotificationStack =
 
     // Shared SSE transport. Used by the generic notification channel's
@@ -125,7 +132,7 @@ let buildNotificationStack
     let auditLog: IAuditLog =
         match config.AuditLog with
         | NoAuditLog -> AuditLog.NoOpAuditLog() :> _
-        | EnabledAuditLog -> AuditLog.EventStoreAuditLog(eventStore, resolvedLogger) :> _
+        | EnabledAuditLog -> AuditLog.EventStoreAuditLog(eventStore, resolvedLogger, metricsSinkLookup) :> _
 
     // Phase 21b — opt-in share-token substrate. `NoShareTokenStore`
     // (default) leaves `shareTokenStoreInstance = None`, no DI

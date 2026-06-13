@@ -241,6 +241,8 @@
         <Compile Include="InProcess\AuditLogModeValidatorTests.fs" />
         <Compile Include="InProcess\SurfaceCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
+        <Compile Include="InProcess\AuditEventRegistryTests.fs" />
+        <Compile Include="InProcess\AuditWriteFailureMetricTests.fs" />
         <Compile Include="InProcess\NotificationSilentlySkippedTests.fs" />
         <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
         <Compile Include="InProcess\JobSchedulerInstanceValidatorTests.fs" />

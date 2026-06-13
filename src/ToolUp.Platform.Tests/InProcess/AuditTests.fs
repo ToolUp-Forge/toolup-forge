@@ -249,18 +249,23 @@ let tests =
         }
 
         test "platform AuditEvent DU round-trips RemotingMethodAudited through EventStoreAuditLog" {
+            // Phase 114 retired the hand-maintained `serialise` / decode
+            // mirrors in favour of the single `auditEventCodecs` registry;
+            // the case-coverage guarantee these source pins enforced is now
+            // a reflection-based exhaustiveness gate
+            // (`AuditEventRegistryTests`). These pins are kept narrowed to
+            // the registry's encode + decode rows for `RemotingMethodAudited`.
             let auditLog = serverSource [ "AuditLog.fs" ]
 
             Expect.stringContains
                 auditLog
-                "| RemotingMethodAudited p -> toAuditJson p"
-                "serialise must handle the new case — the match is partial and an \
-                 unlisted case throws at emission time, silently losing the row"
+                "EventType = \"RemotingMethodAudited\""
+                "registry must carry an encode/decode row for the case (or it throws at emission, losing the row)"
 
             Expect.stringContains
                 auditLog
-                "\"RemotingMethodAudited\" ->"
-                "decode must round-trip the case for GetAuditTrail read-back"
+                "RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> j)"
+                "registry decode must round-trip the case for GetAuditTrail read-back + replication"
         }
 
         // ── Idempotency-replay suppression (structural pin) ──

@@ -13,17 +13,19 @@ open ToolUp.Platform
 //   * `Record` serialises the `AuditEvent` payload via
 //     `FableConverters`, builds a `ModuleEvent` with
 //     `SourceModule = AuditSourceModule.value`, and calls
-//     `IEventStore.Write`. Failures are logged at `Warn` and
-//     swallowed — audit emission must never fail the primary
-//     operation. Same idiom as the existing audit emission in
+//     `IEventStore.Write`. Failures are logged at `Warn`, counted
+//     against the `toolup.audit.write_failures_total` metric
+//     (Phase 114), and swallowed — audit emission must never fail the
+//     primary operation. Same idiom as the existing audit emission in
 //     `WebhookApiHandler.emitAudit` (`WebhookApiHandler.fs:139`).
 //
 //   * `GetAuditTrail` calls `IEventStore.ReadBySource` (filtered
 //     to the audit module by construction), deserialises each
-//     payload back into the matching `AuditEvent` case, and
-//     applies the optional date and event-type filters in
-//     memory. Cross-scope reads are structurally impossible —
-//     the underlying store is keyed by `scopeId`.
+//     payload back into the matching `AuditEvent` case via the
+//     Phase 114 codec registry, and applies the optional date and
+//     event-type filters in memory. Cross-scope reads are
+//     structurally impossible — the underlying store is keyed by
+//     `scopeId`.
 //
 // `FableConverters` is the canonical STJ converter set for non-Remoting
 // JSON crossing the server/Fable boundary (PascalCase, DU-friendly).
@@ -58,279 +60,932 @@ type private AdSlotConfigAuditPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 114 — audit-write failure metric names. Defined here (rather
+/// than in `MetricsMiddleware.StandardMetrics`, which compiles after
+/// this file) so the failure path can reference the literal; the
+/// matching `MetricDefinition` registration lives in
+/// `StandardMetrics.registrations`.
+module AuditMetrics =
+    /// Counter incremented whenever `EventStoreAuditLog.Record` fails to
+    /// persist an audit event — the event-store write threw, or (the
+    /// exhaustiveness-test-guaranteed-impossible case) the event has no
+    /// codec-registry entry. Promotes the formerly Warn-only loss signal
+    /// to an alertable metric so silent audit loss is dashboard-visible.
+    /// Tagged by `event_type` (the `AuditEvent` case name).
+    [<Literal>]
+    let WriteFailuresTotal = "toolup.audit.write_failures_total"
+
+// ─── Phase 114 — audit-event codec registry ──────────────────────
+//
+// One declarative table mapping every `AuditEvent` union case to its
+// wire `EventType` discriminator + payload encode/decode. This is the
+// single source of truth the three formerly-hand-maintained mirrors all
+// consume:
+//
+//   * `serialiseAuditEvent` (the write path — was `EventStoreAuditLog.serialise`)
+//   * `decodeAuditEvent` (the `GetAuditTrail` read path)
+//   * `AuditReplicator`'s batch decode (was a 21-case inline match that
+//     dropped 59 of ~80 event types into a silent `| _ -> None`)
+//
+// Before this phase the three lists drifted: `serialise` was missing 7
+// cases (every emission threw + was logged-and-lost), `decodeAuditEvent`
+// silently dropped 11, and the replicator dropped 59 from external SIEM
+// sinks with no signal. The reflection-based exhaustiveness test in
+// `ToolUp.Platform.Tests` (`AuditEventRegistryTests`) enumerates the
+// union via `FSharpType.GetUnionCases` and fails the build if any case
+// lacks a registry entry — adding a new `AuditEvent` case without a row
+// here is a test failure, not a runtime loss (GP 6 + GP 9).
+
+/// One row of the audit-event codec registry: the wire `EventType`
+/// discriminator plus the encode/decode pair for that case's payload.
+/// `internal` so the replicator (same assembly) and the test pack
+/// (InternalsVisibleTo) share the one table.
+type internal AuditEventCodec = {
+    /// Wire-format `EventType` discriminator. Matches the DU case name
+    /// returned by `AuditEvent.eventTypeName`.
+    EventType: string
+    /// Serialise THIS case's payload to JSON. Returns `Some json` when
+    /// `audit` is this entry's case, `None` otherwise — the table is
+    /// scanned with `List.tryPick` so the first matching entry wins.
+    TryEncode: AuditEvent -> string option
+    /// Decode a persisted payload JSON back into this entry's
+    /// `AuditEvent` case. May throw on malformed JSON; callers wrap in
+    /// `try/with` so a single corrupt blob never breaks a whole query or
+    /// replication batch.
+    Decode: string -> AuditEvent
+}
+
+/// The registry. Order is irrelevant to correctness (encode scans by
+/// `tryPick`, decode is keyed by `EventType`); kept in `eventTypeName`
+/// order for diff-friendliness against the union definition.
+let internal auditEventCodecs: AuditEventCodec list = [
+    {
+        EventType = "UserLoggedIn"
+        TryEncode =
+            (function
+            | UserLoggedIn p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> UserLoggedIn(fromAuditJson<UserLoggedInPayload> j)
+    }
+    {
+        EventType = "TeamCreated"
+        TryEncode =
+            (function
+            | TeamCreated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamCreated(fromAuditJson<TeamCreatedPayload> j)
+    }
+    {
+        EventType = "MemberAdded"
+        TryEncode =
+            (function
+            | MemberAdded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> MemberAdded(fromAuditJson<MemberAddedPayload> j)
+    }
+    {
+        EventType = "MemberRemoved"
+        TryEncode =
+            (function
+            | MemberRemoved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> MemberRemoved(fromAuditJson<MemberRemovedPayload> j)
+    }
+    {
+        EventType = "MemberRoleChanged"
+        TryEncode =
+            (function
+            | MemberRoleChanged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> MemberRoleChanged(fromAuditJson<MemberRoleChangedPayload> j)
+    }
+    {
+        EventType = "FileUploaded"
+        TryEncode =
+            (function
+            | FileUploaded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FileUploaded(fromAuditJson<FileUploadedPayload> j)
+    }
+    {
+        EventType = "FileDeleted"
+        TryEncode =
+            (function
+            | FileDeleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FileDeleted(fromAuditJson<FileDeletedPayload> j)
+    }
+    {
+        EventType = "FileReprocessed"
+        TryEncode =
+            (function
+            | FileReprocessed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FileReprocessed(fromAuditJson<FileReprocessedPayload> j)
+    }
+    {
+        EventType = "DataStoreReset"
+        TryEncode =
+            (function
+            | DataStoreReset p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DataStoreReset(fromAuditJson<DataStoreResetPayload> j)
+    }
+    {
+        EventType = "AnalysisRun"
+        TryEncode =
+            (function
+            | AnalysisRun p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AnalysisRun(fromAuditJson<AnalysisRunPayload> j)
+    }
+    {
+        EventType = "PermissionChanged"
+        TryEncode =
+            (function
+            | PermissionChanged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PermissionChanged(fromAuditJson<PermissionChangedPayload> j)
+    }
+    {
+        EventType = "NotificationSent"
+        TryEncode =
+            (function
+            | NotificationSent p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> NotificationSent(fromAuditJson<NotificationSentPayload> j)
+    }
+    {
+        EventType = "NotificationDeliveryFailed"
+        TryEncode =
+            (function
+            | NotificationDeliveryFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> NotificationDeliveryFailed(fromAuditJson<NotificationDeliveryFailedPayload> j)
+    }
+    {
+        EventType = "HealthStateChanged"
+        TryEncode =
+            (function
+            | HealthStateChanged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> HealthStateChanged(fromAuditJson<HealthStateChangedPayload> j)
+    }
+    {
+        EventType = "EncryptionKeyCreated"
+        TryEncode =
+            (function
+            | EncryptionKeyCreated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EncryptionKeyCreated(fromAuditJson<EncryptionKeyEventPayload> j)
+    }
+    {
+        EventType = "EncryptionKeyRotated"
+        TryEncode =
+            (function
+            | EncryptionKeyRotated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EncryptionKeyRotated(fromAuditJson<EncryptionKeyEventPayload> j)
+    }
+    {
+        EventType = "EncryptionKeyDestroyed"
+        TryEncode =
+            (function
+            | EncryptionKeyDestroyed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EncryptionKeyDestroyed(fromAuditJson<EncryptionKeyEventPayload> j)
+    }
+    {
+        EventType = "EntityCreated"
+        TryEncode =
+            (function
+            | EntityCreated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EntityCreated(fromAuditJson<EntityLifecycleEventPayload> j)
+    }
+    {
+        EventType = "EntityUpdated"
+        TryEncode =
+            (function
+            | EntityUpdated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EntityUpdated(fromAuditJson<EntityLifecycleEventPayload> j)
+    }
+    {
+        EventType = "EntityDeleted"
+        TryEncode =
+            (function
+            | EntityDeleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EntityDeleted(fromAuditJson<EntityLifecycleEventPayload> j)
+    }
+    {
+        EventType = "FormSubmitted"
+        TryEncode =
+            (function
+            | FormSubmitted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FormSubmitted(fromAuditJson<FormSubmittedPayload> j)
+    }
+    {
+        EventType = "FormSubmissionUpdated"
+        TryEncode =
+            (function
+            | FormSubmissionUpdated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> FormSubmissionUpdated(fromAuditJson<FormSubmissionUpdatedPayload> j)
+    }
+    {
+        EventType = "WorkflowTransitioned"
+        TryEncode =
+            (function
+            | WorkflowTransitioned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> WorkflowTransitioned(fromAuditJson<WorkflowTransitionedPayload> j)
+    }
+    {
+        EventType = "AuditSinkDelivered"
+        TryEncode =
+            (function
+            | AuditSinkDelivered p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AuditSinkDelivered(fromAuditJson<AuditSinkDeliveredPayload> j)
+    }
+    {
+        EventType = "AuditSinkFailed"
+        TryEncode =
+            (function
+            | AuditSinkFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AuditSinkFailed(fromAuditJson<AuditSinkFailedPayload> j)
+    }
+    {
+        EventType = "AuditSinkDeadLettered"
+        TryEncode =
+            (function
+            | AuditSinkDeadLettered p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AuditSinkDeadLettered(fromAuditJson<AuditSinkDeadLetteredPayload> j)
+    }
+    {
+        EventType = "AuditEventDecodeFailed"
+        TryEncode =
+            (function
+            | AuditEventDecodeFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AuditEventDecodeFailed(fromAuditJson<AuditEventDecodeFailedPayload> j)
+    }
+    {
+        EventType = "NotificationSilentlySkipped"
+        TryEncode =
+            (function
+            | NotificationSilentlySkipped p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> NotificationSilentlySkipped(fromAuditJson<NotificationSilentlySkippedPayload> j)
+    }
+    {
+        EventType = "OAuthConnected"
+        TryEncode =
+            (function
+            | OAuthConnected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuthConnected(fromAuditJson<OAuthConnectedPayload> j)
+    }
+    {
+        EventType = "OAuthDisconnected"
+        TryEncode =
+            (function
+            | OAuthDisconnected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuthDisconnected(fromAuditJson<OAuthDisconnectedPayload> j)
+    }
+    {
+        EventType = "OAuthRefreshFailed"
+        TryEncode =
+            (function
+            | OAuthRefreshFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuthRefreshFailed(fromAuditJson<OAuthRefreshFailedPayload> j)
+    }
+    {
+        EventType = "OAuthTokenRefreshed"
+        TryEncode =
+            (function
+            | OAuthTokenRefreshed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuthTokenRefreshed(fromAuditJson<OAuthTokenRefreshedPayload> j)
+    }
+    {
+        EventType = "OAuthTokenRefreshFailed"
+        TryEncode =
+            (function
+            | OAuthTokenRefreshFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuthTokenRefreshFailed(fromAuditJson<OAuthTokenRefreshFailedPayload> j)
+    }
+    {
+        EventType = "OAuthRefreshTokenInvalidated"
+        TryEncode =
+            (function
+            | OAuthRefreshTokenInvalidated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuthRefreshTokenInvalidated(fromAuditJson<OAuthRefreshTokenInvalidatedPayload> j)
+    }
+    {
+        EventType = "OAuthRefreshDeadLettered"
+        TryEncode =
+            (function
+            | OAuthRefreshDeadLettered p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuthRefreshDeadLettered(fromAuditJson<OAuthRefreshDeadLetteredPayload> j)
+    }
+    {
+        EventType = "PlatformAdminAssigned"
+        TryEncode =
+            (function
+            | PlatformAdminAssigned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PlatformAdminAssigned(fromAuditJson<PlatformAdminAssignedPayload> j)
+    }
+    {
+        EventType = "PlatformAdminRevoked"
+        TryEncode =
+            (function
+            | PlatformAdminRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PlatformAdminRevoked(fromAuditJson<PlatformAdminRevokedPayload> j)
+    }
+    {
+        EventType = "PlatformDocumentUploaded"
+        TryEncode =
+            (function
+            | PlatformDocumentUploaded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PlatformDocumentUploaded(fromAuditJson<PlatformDocumentUploadedPayload> j)
+    }
+    {
+        EventType = "PlatformDocumentDeleted"
+        TryEncode =
+            (function
+            | PlatformDocumentDeleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PlatformDocumentDeleted(fromAuditJson<PlatformDocumentDeletedPayload> j)
+    }
+    {
+        EventType = "ShareTokenIssued"
+        TryEncode =
+            (function
+            | ShareTokenIssued p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ShareTokenIssued(fromAuditJson<ShareTokenIssuedPayload> j)
+    }
+    {
+        EventType = "ShareTokenUsed"
+        TryEncode =
+            (function
+            | ShareTokenUsed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ShareTokenUsed(fromAuditJson<ShareTokenUsedPayload> j)
+    }
+    {
+        EventType = "ShareTokenRevoked"
+        TryEncode =
+            (function
+            | ShareTokenRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ShareTokenRevoked(fromAuditJson<ShareTokenRevokedPayload> j)
+    }
+    {
+        EventType = "ConversationExported"
+        TryEncode =
+            (function
+            | ConversationExported p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConversationExported(fromAuditJson<ConversationExportPayload> j)
+    }
+    {
+        EventType = "BeaconRejected"
+        TryEncode =
+            (function
+            | BeaconRejected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> BeaconRejected(fromAuditJson<BeaconRejectedPayload> j)
+    }
+    {
+        EventType = "ConfigDrift"
+        TryEncode =
+            (function
+            | ConfigDrift p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConfigDrift(fromAuditJson<ConfigDriftPayload> j)
+    }
+    {
+        EventType = "DiagnosticBundleAccessed"
+        TryEncode =
+            (function
+            | DiagnosticBundleAccessed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DiagnosticBundleAccessed(fromAuditJson<DiagnosticBundleAccessedPayload> j)
+    }
+    {
+        EventType = "RateLimitWaited"
+        TryEncode =
+            (function
+            | RateLimitWaited p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> RateLimitWaited(fromAuditJson<RateLimitWaitedPayload> j)
+    }
+    {
+        EventType = "RateLimitRefused"
+        TryEncode =
+            (function
+            | RateLimitRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> RateLimitRefused(fromAuditJson<RateLimitRefusedPayload> j)
+    }
+    {
+        EventType = "DataSubjectRequest"
+        TryEncode =
+            (function
+            | DataSubjectRequest p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DataSubjectRequest(fromAuditJson<DataSubjectRequestAuditPayload> j)
+    }
+    {
+        EventType = "ConversationStarted"
+        TryEncode =
+            (function
+            | ConversationStarted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConversationStarted(fromAuditJson<ConversationStartedPayload> j)
+    }
+    {
+        EventType = "ConversationTurnAppended"
+        TryEncode =
+            (function
+            | ConversationTurnAppended p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConversationTurnAppended(fromAuditJson<ConversationTurnAppendedPayload> j)
+    }
+    {
+        EventType = "ConversationCompleted"
+        TryEncode =
+            (function
+            | ConversationCompleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConversationCompleted(fromAuditJson<ConversationCompletedPayload> j)
+    }
+    {
+        EventType = "ConversationErased"
+        TryEncode =
+            (function
+            | ConversationErased p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConversationErased(fromAuditJson<ConversationErasedPayload> j)
+    }
+    {
+        EventType = "ConversationReplayed"
+        TryEncode =
+            (function
+            | ConversationReplayed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConversationReplayed(fromAuditJson<ConversationReplayedPayload> j)
+    }
+    {
+        EventType = "AssetUploaded"
+        TryEncode =
+            (function
+            | AssetUploaded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AssetUploaded(fromAuditJson<AssetUploadedPayload> j)
+    }
+    {
+        EventType = "AssetDeleted"
+        TryEncode =
+            (function
+            | AssetDeleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AssetDeleted(fromAuditJson<AssetDeletedPayload> j)
+    }
+    {
+        EventType = "TeamCreationDenied"
+        TryEncode =
+            (function
+            | TeamCreationDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamCreationDenied(fromAuditJson<TeamCreationDeniedPayload> j)
+    }
+    {
+        EventType = "TeamInviteIssued"
+        TryEncode =
+            (function
+            | TeamInviteIssued p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamInviteIssued(fromAuditJson<TeamInviteIssuedPayload> j)
+    }
+    {
+        EventType = "TeamInviteAccepted"
+        TryEncode =
+            (function
+            | TeamInviteAccepted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamInviteAccepted(fromAuditJson<TeamInviteAcceptedPayload> j)
+    }
+    {
+        EventType = "TeamInviteAcceptedFromPending"
+        TryEncode =
+            (function
+            | TeamInviteAcceptedFromPending p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamInviteAcceptedFromPending(fromAuditJson<TeamInviteAcceptedFromPendingPayload> j)
+    }
+    {
+        EventType = "TeamInviteAcceptedFromPendingFailed"
+        TryEncode =
+            (function
+            | TeamInviteAcceptedFromPendingFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode =
+            fun j -> TeamInviteAcceptedFromPendingFailed(fromAuditJson<TeamInviteAcceptedFromPendingFailedPayload> j)
+    }
+    {
+        EventType = "TeamInviteRevoked"
+        TryEncode =
+            (function
+            | TeamInviteRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamInviteRevoked(fromAuditJson<TeamInviteRevokedPayload> j)
+    }
+    {
+        EventType = "TeamInviteRedeemed"
+        TryEncode =
+            (function
+            | TeamInviteRedeemed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamInviteRedeemed(fromAuditJson<TeamInviteRedeemedPayload> j)
+    }
+    {
+        EventType = "WorkflowActionExecuted"
+        TryEncode =
+            (function
+            | WorkflowActionExecuted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> WorkflowActionExecuted(fromAuditJson<WorkflowActionExecutedPayload> j)
+    }
+    {
+        EventType = "ConsentRecorded"
+        TryEncode =
+            (function
+            | ConsentRecorded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConsentRecorded(fromAuditJson<ConsentEvent> j)
+    }
+    {
+        EventType = "AdImpressionRecorded"
+        TryEncode =
+            (function
+            | AdImpressionRecorded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AdImpressionRecorded(fromAuditJson<AdImpression> j)
+    }
+    {
+        EventType = "AdClickRecorded"
+        TryEncode =
+            (function
+            | AdClickRecorded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AdClickRecorded(fromAuditJson<AdClick> j)
+    }
+    {
+        EventType = "PremiumGranted"
+        TryEncode =
+            (function
+            | PremiumGranted(subjectUserId, grantor, reason, occurredAt) ->
+                Some(
+                    toAuditJson {
+                        SubjectUserId = subjectUserId
+                        Grantor = grantor
+                        Reason = reason
+                        OccurredAt = occurredAt
+                    }
+                )
+            | _ -> None)
+        Decode =
+            fun j ->
+                let p = fromAuditJson<PremiumAuditPayload> j
+                PremiumGranted(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
+    }
+    {
+        EventType = "PremiumRevoked"
+        TryEncode =
+            (function
+            | PremiumRevoked(subjectUserId, grantor, reason, occurredAt) ->
+                Some(
+                    toAuditJson {
+                        SubjectUserId = subjectUserId
+                        Grantor = grantor
+                        Reason = reason
+                        OccurredAt = occurredAt
+                    }
+                )
+            | _ -> None)
+        Decode =
+            fun j ->
+                let p = fromAuditJson<PremiumAuditPayload> j
+                PremiumRevoked(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
+    }
+    {
+        EventType = "AdSlotConfigCreated"
+        TryEncode =
+            (function
+            | AdSlotConfigCreated(slotId, actor, occurredAt) ->
+                Some(
+                    toAuditJson {
+                        SlotId = slotId
+                        Actor = actor
+                        OccurredAt = occurredAt
+                    }
+                )
+            | _ -> None)
+        Decode =
+            fun j ->
+                let p = fromAuditJson<AdSlotConfigAuditPayload> j
+                AdSlotConfigCreated(p.SlotId, p.Actor, p.OccurredAt)
+    }
+    {
+        EventType = "AdSlotConfigUpdated"
+        TryEncode =
+            (function
+            | AdSlotConfigUpdated(slotId, actor, occurredAt) ->
+                Some(
+                    toAuditJson {
+                        SlotId = slotId
+                        Actor = actor
+                        OccurredAt = occurredAt
+                    }
+                )
+            | _ -> None)
+        Decode =
+            fun j ->
+                let p = fromAuditJson<AdSlotConfigAuditPayload> j
+                AdSlotConfigUpdated(p.SlotId, p.Actor, p.OccurredAt)
+    }
+    {
+        EventType = "AdSlotConfigDeleted"
+        TryEncode =
+            (function
+            | AdSlotConfigDeleted(slotId, actor, occurredAt) ->
+                Some(
+                    toAuditJson {
+                        SlotId = slotId
+                        Actor = actor
+                        OccurredAt = occurredAt
+                    }
+                )
+            | _ -> None)
+        Decode =
+            fun j ->
+                let p = fromAuditJson<AdSlotConfigAuditPayload> j
+                AdSlotConfigDeleted(p.SlotId, p.Actor, p.OccurredAt)
+    }
+    {
+        EventType = "AnonymousSessionMigrated"
+        TryEncode =
+            (function
+            | AnonymousSessionMigrated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AnonymousSessionMigrated(fromAuditJson<AnonymousSessionMigratedPayload> j)
+    }
+    {
+        EventType = "AuthScopeResolutionFailed"
+        TryEncode =
+            (function
+            | AuthScopeResolutionFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AuthScopeResolutionFailed(fromAuditJson<ScopeResolutionFailedPayload> j)
+    }
+    {
+        EventType = "SurfaceDenied"
+        TryEncode =
+            (function
+            | SurfaceDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> j)
+    }
+    {
+        EventType = "ArtifactSigned"
+        TryEncode =
+            (function
+            | ArtifactSigned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ArtifactSigned(fromAuditJson<ArtifactSignedPayload> j)
+    }
+    {
+        EventType = "ArtifactVerified"
+        TryEncode =
+            (function
+            | ArtifactVerified p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ArtifactVerified(fromAuditJson<ArtifactVerifiedPayload> j)
+    }
+    {
+        EventType = "ArtifactRejected"
+        TryEncode =
+            (function
+            | ArtifactRejected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ArtifactRejected(fromAuditJson<ArtifactRejectedPayload> j)
+    }
+    {
+        EventType = "SyntheticSampleGenerated"
+        TryEncode =
+            (function
+            | SyntheticSampleGenerated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SyntheticSampleGenerated(fromAuditJson<SyntheticSampleGeneratedPayload> j)
+    }
+    {
+        EventType = "SchemaOnlyAccessAttempted"
+        TryEncode =
+            (function
+            | SchemaOnlyAccessAttempted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SchemaOnlyAccessAttempted(fromAuditJson<SchemaOnlyAccessAttemptedPayload> j)
+    }
+    {
+        EventType = "PeerCallCompleted"
+        TryEncode =
+            (function
+            | PeerCallCompleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> j)
+    }
+    {
+        EventType = "ArtefactSigned"
+        TryEncode =
+            (function
+            | ArtefactSigned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ArtefactSigned(fromAuditJson<ArtefactSignedPayload> j)
+    }
+    {
+        EventType = "SigningKeyRotated"
+        TryEncode =
+            (function
+            | SigningKeyRotated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SigningKeyRotated(fromAuditJson<SigningKeyRotatedPayload> j)
+    }
+    {
+        EventType = "ClassifiedFieldRead"
+        TryEncode =
+            (function
+            | ClassifiedFieldRead p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ClassifiedFieldRead(fromAuditJson<ClassifiedFieldReadPayload> j)
+    }
+    {
+        EventType = "ClassifiedFieldWritten"
+        TryEncode =
+            (function
+            | ClassifiedFieldWritten p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ClassifiedFieldWritten(fromAuditJson<ClassifiedFieldWrittenPayload> j)
+    }
+    {
+        EventType = "TenantProvisioned"
+        TryEncode =
+            (function
+            | TenantProvisioned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantProvisioned(fromAuditJson<TenantProvisionedPayload> j)
+    }
+    {
+        EventType = "TenantDeprovisioned"
+        TryEncode =
+            (function
+            | TenantDeprovisioned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantDeprovisioned(fromAuditJson<TenantDeprovisionedPayload> j)
+    }
+    {
+        EventType = "TenantLifecycleHookFailed"
+        TryEncode =
+            (function
+            | TenantLifecycleHookFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantLifecycleHookFailed(fromAuditJson<TenantLifecycleHookFailedPayload> j)
+    }
+    {
+        EventType = "KnowledgeOriginalRetrieved"
+        TryEncode =
+            (function
+            | KnowledgeOriginalRetrieved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> KnowledgeOriginalRetrieved(fromAuditJson<KnowledgeOriginalRetrievedPayload> j)
+    }
+    {
+        EventType = "KnowledgeOriginalRetrievalDenied"
+        TryEncode =
+            (function
+            | KnowledgeOriginalRetrievalDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> KnowledgeOriginalRetrievalDenied(fromAuditJson<KnowledgeOriginalRetrievalDeniedPayload> j)
+    }
+    {
+        EventType = "RemotingMethodAudited"
+        TryEncode =
+            (function
+            | RemotingMethodAudited p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> j)
+    }
+]
+
+/// Decode lookup keyed by wire `EventType`. Built once at module init.
+let internal auditDecoderByType: Map<string, string -> AuditEvent> =
+    auditEventCodecs |> List.map (fun c -> c.EventType, c.Decode) |> Map.ofList
+
+/// Serialise an `AuditEvent` payload to JSON via the registry. Total
+/// over the union when the `AuditEventRegistryTests` exhaustiveness gate
+/// passes; the `failwithf` is an invariant guard for the unreachable
+/// case where a union case has no registry row. Unlike the pre-114
+/// throw-and-Warn behaviour, this throw lands inside `Record`'s
+/// try/with, so even the impossible case is counted against
+/// `audit_write_failures_total` rather than silently advancing.
+let internal serialiseAuditEvent (audit: AuditEvent) : string =
+    match auditEventCodecs |> List.tryPick (fun c -> c.TryEncode audit) with
+    | Some json -> json
+    | None ->
+        failwithf
+            "AuditEvent case '%s' has no codec-registry entry (Phase 114 — add it to AuditLog.auditEventCodecs)"
+            (AuditEvent.eventTypeName audit)
+
+/// Decode a persisted audit `(eventType, payload)` pair via the
+/// registry, surfacing WHY a decode failed so the replicator can record
+/// it. `Error` covers both an unrecognised / future `eventType` and a
+/// malformed payload for a known type — Phase 114 routes both into the
+/// `AuditEventDecodeFailed` summary row instead of advancing the cursor
+/// silently (Gap C1). Shared by the replicator (same assembly) and the
+/// `GetAuditTrail` read path below.
+let internal tryDecodeAuditEvent (eventType: string) (payload: string) : Result<AuditEvent, string> =
+    match Map.tryFind eventType auditDecoderByType with
+    | None -> Error(sprintf "unknown event type '%s'" eventType)
+    | Some decode ->
+        try
+            Ok(decode payload)
+        with ex ->
+            Error(sprintf "payload decode error: %s" ex.Message)
+
 /// Decode a persisted `ModuleEvent` whose `SourceModule` is
 /// `AuditSourceModule.value` back into an `AuditEvent`. Returns
 /// `None` for unknown `EventType` strings or malformed payloads —
 /// callers filter `None`s out so a single corrupt blob doesn't
 /// break the whole query (audit trails are append-only and the
 /// payload format is owned by the SDK, but defensive decoding
-/// keeps the trail readable across SDK upgrades).
-let private decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
-    try
-        match evt.EventType with
-        | "UserLoggedIn" -> Some(UserLoggedIn(fromAuditJson<UserLoggedInPayload> evt.Payload))
-        | "TeamCreated" -> Some(TeamCreated(fromAuditJson<TeamCreatedPayload> evt.Payload))
-        | "MemberAdded" -> Some(MemberAdded(fromAuditJson<MemberAddedPayload> evt.Payload))
-        | "MemberRemoved" -> Some(MemberRemoved(fromAuditJson<MemberRemovedPayload> evt.Payload))
-        | "MemberRoleChanged" -> Some(MemberRoleChanged(fromAuditJson<MemberRoleChangedPayload> evt.Payload))
-        | "FileUploaded" -> Some(FileUploaded(fromAuditJson<FileUploadedPayload> evt.Payload))
-        | "FileDeleted" -> Some(FileDeleted(fromAuditJson<FileDeletedPayload> evt.Payload))
-        | "AnalysisRun" -> Some(AnalysisRun(fromAuditJson<AnalysisRunPayload> evt.Payload))
-        | "PermissionChanged" -> Some(PermissionChanged(fromAuditJson<PermissionChangedPayload> evt.Payload))
-        | "NotificationSent" -> Some(NotificationSent(fromAuditJson<NotificationSentPayload> evt.Payload))
-        | "NotificationDeliveryFailed" ->
-            Some(NotificationDeliveryFailed(fromAuditJson<NotificationDeliveryFailedPayload> evt.Payload))
-        | "HealthStateChanged" -> Some(HealthStateChanged(fromAuditJson<HealthStateChangedPayload> evt.Payload))
-        | "EncryptionKeyCreated" -> Some(EncryptionKeyCreated(fromAuditJson<EncryptionKeyEventPayload> evt.Payload))
-        | "EncryptionKeyRotated" -> Some(EncryptionKeyRotated(fromAuditJson<EncryptionKeyEventPayload> evt.Payload))
-        | "EncryptionKeyDestroyed" -> Some(EncryptionKeyDestroyed(fromAuditJson<EncryptionKeyEventPayload> evt.Payload))
-        | "EntityCreated" -> Some(EntityCreated(fromAuditJson<EntityLifecycleEventPayload> evt.Payload))
-        | "EntityUpdated" -> Some(EntityUpdated(fromAuditJson<EntityLifecycleEventPayload> evt.Payload))
-        | "EntityDeleted" -> Some(EntityDeleted(fromAuditJson<EntityLifecycleEventPayload> evt.Payload))
-        | "FormSubmitted" -> Some(FormSubmitted(fromAuditJson<FormSubmittedPayload> evt.Payload))
-        | "FormSubmissionUpdated" ->
-            Some(FormSubmissionUpdated(fromAuditJson<FormSubmissionUpdatedPayload> evt.Payload))
-        | "WorkflowTransitioned" -> Some(WorkflowTransitioned(fromAuditJson<WorkflowTransitionedPayload> evt.Payload))
-        | "AuditSinkDelivered" -> Some(AuditSinkDelivered(fromAuditJson<AuditSinkDeliveredPayload> evt.Payload))
-        | "AuditSinkFailed" -> Some(AuditSinkFailed(fromAuditJson<AuditSinkFailedPayload> evt.Payload))
-        | "AuditSinkDeadLettered" ->
-            Some(AuditSinkDeadLettered(fromAuditJson<AuditSinkDeadLetteredPayload> evt.Payload))
-        | "AuditEventDecodeFailed" ->
-            Some(AuditEventDecodeFailed(fromAuditJson<AuditEventDecodeFailedPayload> evt.Payload))
-        | "NotificationSilentlySkipped" ->
-            Some(NotificationSilentlySkipped(fromAuditJson<NotificationSilentlySkippedPayload> evt.Payload))
-        | "OAuthConnected" -> Some(OAuthConnected(fromAuditJson<OAuthConnectedPayload> evt.Payload))
-        | "OAuthDisconnected" -> Some(OAuthDisconnected(fromAuditJson<OAuthDisconnectedPayload> evt.Payload))
-        | "OAuthRefreshFailed" -> Some(OAuthRefreshFailed(fromAuditJson<OAuthRefreshFailedPayload> evt.Payload))
-        | "OAuthTokenRefreshed" -> Some(OAuthTokenRefreshed(fromAuditJson<OAuthTokenRefreshedPayload> evt.Payload))
-        | "OAuthTokenRefreshFailed" ->
-            Some(OAuthTokenRefreshFailed(fromAuditJson<OAuthTokenRefreshFailedPayload> evt.Payload))
-        | "OAuthRefreshTokenInvalidated" ->
-            Some(OAuthRefreshTokenInvalidated(fromAuditJson<OAuthRefreshTokenInvalidatedPayload> evt.Payload))
-        | "OAuthRefreshDeadLettered" ->
-            Some(OAuthRefreshDeadLettered(fromAuditJson<OAuthRefreshDeadLetteredPayload> evt.Payload))
-        | "ShareTokenIssued" -> Some(ShareTokenIssued(fromAuditJson<ShareTokenIssuedPayload> evt.Payload))
-        | "ShareTokenUsed" -> Some(ShareTokenUsed(fromAuditJson<ShareTokenUsedPayload> evt.Payload))
-        | "ShareTokenRevoked" -> Some(ShareTokenRevoked(fromAuditJson<ShareTokenRevokedPayload> evt.Payload))
-        | "PlatformAdminAssigned" ->
-            Some(PlatformAdminAssigned(fromAuditJson<PlatformAdminAssignedPayload> evt.Payload))
-        | "PlatformAdminRevoked" -> Some(PlatformAdminRevoked(fromAuditJson<PlatformAdminRevokedPayload> evt.Payload))
-        | "PlatformDocumentUploaded" ->
-            Some(PlatformDocumentUploaded(fromAuditJson<PlatformDocumentUploadedPayload> evt.Payload))
-        | "PlatformDocumentDeleted" ->
-            Some(PlatformDocumentDeleted(fromAuditJson<PlatformDocumentDeletedPayload> evt.Payload))
-        | "ConversationExported" -> Some(ConversationExported(fromAuditJson<ConversationExportPayload> evt.Payload))
-        | "BeaconRejected" -> Some(BeaconRejected(fromAuditJson<BeaconRejectedPayload> evt.Payload))
-        | "ConfigDrift" -> Some(ConfigDrift(fromAuditJson<ConfigDriftPayload> evt.Payload))
-        | "DiagnosticBundleAccessed" ->
-            Some(DiagnosticBundleAccessed(fromAuditJson<DiagnosticBundleAccessedPayload> evt.Payload))
-        | "RateLimitWaited" -> Some(RateLimitWaited(fromAuditJson<RateLimitWaitedPayload> evt.Payload))
-        | "RateLimitRefused" -> Some(RateLimitRefused(fromAuditJson<RateLimitRefusedPayload> evt.Payload))
-        | "ConversationStarted" -> Some(ConversationStarted(fromAuditJson<ConversationStartedPayload> evt.Payload))
-        | "ConversationTurnAppended" ->
-            Some(ConversationTurnAppended(fromAuditJson<ConversationTurnAppendedPayload> evt.Payload))
-        | "ConversationCompleted" ->
-            Some(ConversationCompleted(fromAuditJson<ConversationCompletedPayload> evt.Payload))
-        | "ConversationErased" -> Some(ConversationErased(fromAuditJson<ConversationErasedPayload> evt.Payload))
-        | "ConversationReplayed" -> Some(ConversationReplayed(fromAuditJson<ConversationReplayedPayload> evt.Payload))
-        | "AssetUploaded" -> Some(AssetUploaded(fromAuditJson<AssetUploadedPayload> evt.Payload))
-        | "AssetDeleted" -> Some(AssetDeleted(fromAuditJson<AssetDeletedPayload> evt.Payload))
-        | "TeamCreationDenied" -> Some(TeamCreationDenied(fromAuditJson<TeamCreationDeniedPayload> evt.Payload))
-        | "TeamInviteIssued" -> Some(TeamInviteIssued(fromAuditJson<TeamInviteIssuedPayload> evt.Payload))
-        | "TeamInviteAccepted" -> Some(TeamInviteAccepted(fromAuditJson<TeamInviteAcceptedPayload> evt.Payload))
-        | "TeamInviteAcceptedFromPending" ->
-            Some(TeamInviteAcceptedFromPending(fromAuditJson<TeamInviteAcceptedFromPendingPayload> evt.Payload))
-        | "TeamInviteRevoked" -> Some(TeamInviteRevoked(fromAuditJson<TeamInviteRevokedPayload> evt.Payload))
-        | "TeamInviteRedeemed" -> Some(TeamInviteRedeemed(fromAuditJson<TeamInviteRedeemedPayload> evt.Payload))
-        | "WorkflowActionExecuted" ->
-            Some(WorkflowActionExecuted(fromAuditJson<WorkflowActionExecutedPayload> evt.Payload))
-        | "ConsentRecorded" -> Some(ConsentRecorded(fromAuditJson<ConsentEvent> evt.Payload))
-        | "AdImpressionRecorded" -> Some(AdImpressionRecorded(fromAuditJson<AdImpression> evt.Payload))
-        | "AdClickRecorded" -> Some(AdClickRecorded(fromAuditJson<AdClick> evt.Payload))
-        | "PremiumGranted" ->
-            let p = fromAuditJson<PremiumAuditPayload> evt.Payload
-            Some(PremiumGranted(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt))
-        | "PremiumRevoked" ->
-            let p = fromAuditJson<PremiumAuditPayload> evt.Payload
-            Some(PremiumRevoked(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt))
-        | "AdSlotConfigCreated" ->
-            let p = fromAuditJson<AdSlotConfigAuditPayload> evt.Payload
-            Some(AdSlotConfigCreated(p.SlotId, p.Actor, p.OccurredAt))
-        | "AdSlotConfigUpdated" ->
-            let p = fromAuditJson<AdSlotConfigAuditPayload> evt.Payload
-            Some(AdSlotConfigUpdated(p.SlotId, p.Actor, p.OccurredAt))
-        | "AdSlotConfigDeleted" ->
-            let p = fromAuditJson<AdSlotConfigAuditPayload> evt.Payload
-            Some(AdSlotConfigDeleted(p.SlotId, p.Actor, p.OccurredAt))
-        | "AnonymousSessionMigrated" ->
-            Some(AnonymousSessionMigrated(fromAuditJson<AnonymousSessionMigratedPayload> evt.Payload))
-        | "ArtifactSigned" -> Some(ArtifactSigned(fromAuditJson<ArtifactSignedPayload> evt.Payload))
-        | "ArtifactVerified" -> Some(ArtifactVerified(fromAuditJson<ArtifactVerifiedPayload> evt.Payload))
-        | "ArtifactRejected" -> Some(ArtifactRejected(fromAuditJson<ArtifactRejectedPayload> evt.Payload))
-        | "SyntheticSampleGenerated" ->
-            Some(SyntheticSampleGenerated(fromAuditJson<SyntheticSampleGeneratedPayload> evt.Payload))
-        | "SchemaOnlyAccessAttempted" ->
-            Some(SchemaOnlyAccessAttempted(fromAuditJson<SchemaOnlyAccessAttemptedPayload> evt.Payload))
-        // Phase 66 auth-observability A1/A2 — paired with the matching
-        // cases in `serialise` so round-trip read-back of denial /
-        // resolution-failure events through `GetAuditTrail` resolves
-        // their typed payloads rather than dropping them as `None`.
-        | "SurfaceDenied" -> Some(SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> evt.Payload))
-        | "AuthScopeResolutionFailed" ->
-            Some(AuthScopeResolutionFailed(fromAuditJson<ScopeResolutionFailedPayload> evt.Payload))
-        | "PeerCallCompleted" -> Some(PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> evt.Payload))
-        | "KnowledgeOriginalRetrieved" ->
-            Some(KnowledgeOriginalRetrieved(fromAuditJson<KnowledgeOriginalRetrievedPayload> evt.Payload))
-        | "KnowledgeOriginalRetrievalDenied" ->
-            Some(KnowledgeOriginalRetrievalDenied(fromAuditJson<KnowledgeOriginalRetrievalDeniedPayload> evt.Payload))
-        | "RemotingMethodAudited" ->
-            Some(RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> evt.Payload))
-        | _ -> None
-    with _ ->
-        None
+/// keeps the trail readable across SDK upgrades). `internal` (was
+/// `private`) per Phase 114 so the replicator shares the one decoder.
+let internal decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
+    match tryDecodeAuditEvent evt.EventType evt.Payload with
+    | Ok audit -> Some audit
+    | Error _ -> None
 
 /// SDK-default `IAuditLog`. Wraps the DI-registered `IEventStore`
 /// so audit events flow through the same retention policy, blob
 /// layout, and webhook hooks as every other platform event.
-type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger) =
+///
+/// Phase 114 — `metricsLookup` is an optional deferred accessor for the
+/// `IMetricsSink` (deferred because the sink is resolved later in
+/// `compose` than this log is constructed — same `*Cell` pattern as the
+/// rate limiter / job scheduler). The failure path reads it lazily, by
+/// which point `compose` has populated the cell with the real sink.
+/// Omitted by test call sites and the replicator's self-audit log, where
+/// it defaults to a no-op sink.
+type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger, ?metricsLookup: unit -> Metrics.IMetricsSink) =
 
-    let serialise (audit: AuditEvent) =
-        match audit with
-        | UserLoggedIn p -> toAuditJson p
-        | TeamCreated p -> toAuditJson p
-        | MemberAdded p -> toAuditJson p
-        | MemberRemoved p -> toAuditJson p
-        | MemberRoleChanged p -> toAuditJson p
-        | FileUploaded p -> toAuditJson p
-        | FileDeleted p -> toAuditJson p
-        | FileReprocessed p -> toAuditJson p
-        | DataStoreReset p -> toAuditJson p
-        | AnalysisRun p -> toAuditJson p
-        | PermissionChanged p -> toAuditJson p
-        | NotificationSent p -> toAuditJson p
-        | NotificationDeliveryFailed p -> toAuditJson p
-        | HealthStateChanged p -> toAuditJson p
-        | EncryptionKeyCreated p -> toAuditJson p
-        | EncryptionKeyRotated p -> toAuditJson p
-        | EncryptionKeyDestroyed p -> toAuditJson p
-        | EntityCreated p -> toAuditJson p
-        | EntityUpdated p -> toAuditJson p
-        | EntityDeleted p -> toAuditJson p
-        | FormSubmitted p -> toAuditJson p
-        | FormSubmissionUpdated p -> toAuditJson p
-        | WorkflowTransitioned p -> toAuditJson p
-        | AuditSinkDelivered p -> toAuditJson p
-        | AuditSinkFailed p -> toAuditJson p
-        | AuditSinkDeadLettered p -> toAuditJson p
-        | AuditEventDecodeFailed p -> toAuditJson p
-        | NotificationSilentlySkipped p -> toAuditJson p
-        | OAuthConnected p -> toAuditJson p
-        | OAuthDisconnected p -> toAuditJson p
-        | OAuthRefreshFailed p -> toAuditJson p
-        | OAuthTokenRefreshed p -> toAuditJson p
-        | OAuthTokenRefreshFailed p -> toAuditJson p
-        | OAuthRefreshTokenInvalidated p -> toAuditJson p
-        | OAuthRefreshDeadLettered p -> toAuditJson p
-        | ShareTokenIssued p -> toAuditJson p
-        | ShareTokenUsed p -> toAuditJson p
-        | ShareTokenRevoked p -> toAuditJson p
-        | PlatformAdminAssigned p -> toAuditJson p
-        | PlatformAdminRevoked p -> toAuditJson p
-        | PlatformDocumentUploaded p -> toAuditJson p
-        | PlatformDocumentDeleted p -> toAuditJson p
-        | ConversationExported p -> toAuditJson p
-        | BeaconRejected p -> toAuditJson p
-        | ConfigDrift p -> toAuditJson p
-        | DiagnosticBundleAccessed p -> toAuditJson p
-        | RateLimitWaited p -> toAuditJson p
-        | RateLimitRefused p -> toAuditJson p
-        | DataSubjectRequest p -> toAuditJson p
-        | ConversationStarted p -> toAuditJson p
-        | ConversationTurnAppended p -> toAuditJson p
-        | ConversationCompleted p -> toAuditJson p
-        | ConversationErased p -> toAuditJson p
-        | ConversationReplayed p -> toAuditJson p
-        | AssetUploaded p -> toAuditJson p
-        | AssetDeleted p -> toAuditJson p
-        | TeamCreationDenied p -> toAuditJson p
-        | TeamInviteIssued p -> toAuditJson p
-        | TeamInviteAccepted p -> toAuditJson p
-        | TeamInviteAcceptedFromPending p -> toAuditJson p
-        | TeamInviteAcceptedFromPendingFailed p -> toAuditJson p
-        | TeamInviteRevoked p -> toAuditJson p
-        | TeamInviteRedeemed p -> toAuditJson p
-        | WorkflowActionExecuted p -> toAuditJson p
-        | ConsentRecorded p -> toAuditJson p
-        | AdImpressionRecorded p -> toAuditJson p
-        | AdClickRecorded p -> toAuditJson p
-        | PremiumGranted(subjectUserId, grantor, reason, occurredAt) ->
-            toAuditJson {
-                SubjectUserId = subjectUserId
-                Grantor = grantor
-                Reason = reason
-                OccurredAt = occurredAt
-            }
-        | PremiumRevoked(subjectUserId, grantor, reason, occurredAt) ->
-            toAuditJson {
-                SubjectUserId = subjectUserId
-                Grantor = grantor
-                Reason = reason
-                OccurredAt = occurredAt
-            }
-        | AdSlotConfigCreated(slotId, actor, occurredAt) ->
-            toAuditJson {
-                SlotId = slotId
-                Actor = actor
-                OccurredAt = occurredAt
-            }
-        | AdSlotConfigUpdated(slotId, actor, occurredAt) ->
-            toAuditJson {
-                SlotId = slotId
-                Actor = actor
-                OccurredAt = occurredAt
-            }
-        | AdSlotConfigDeleted(slotId, actor, occurredAt) ->
-            toAuditJson {
-                SlotId = slotId
-                Actor = actor
-                OccurredAt = occurredAt
-            }
-        | AnonymousSessionMigrated p -> toAuditJson p
-        | ArtifactSigned p -> toAuditJson p
-        | ArtifactVerified p -> toAuditJson p
-        | ArtifactRejected p -> toAuditJson p
-        | SyntheticSampleGenerated p -> toAuditJson p
-        | SchemaOnlyAccessAttempted p -> toAuditJson p
-        // Phase 66 auth-observability A1/A2 cases. Pre-0.5.2 these were
-        // missing here; every emission from `SurfaceEnforcementMiddleware`
-        // / `ScopeResolutionMiddleware` produced an incomplete-pattern-
-        // match exception that the surrounding `try/with` caught and
-        // logged as `[AuditLog] write failed scope=_platform
-        // eventType=SurfaceDenied: The match cases were incomplete`,
-        // killing the structured diagnostic on every denial.
-        | SurfaceDenied p -> toAuditJson p
-        | AuthScopeResolutionFailed p -> toAuditJson p
-        | PeerCallCompleted p -> toAuditJson p
-        // Phase 107 — KB original-document sensitive-read audit. Added to
-        // `serialise` in the same commit as the DU cases: this match is
-        // partial, and an unlisted case throws at emission time (caught
-        // + logged as a write failure, silently losing the audit row).
-        | KnowledgeOriginalRetrieved p -> toAuditJson p
-        | KnowledgeOriginalRetrievalDenied p -> toAuditJson p
-        // Phase 69h.tail — dispatcher-emitted uniform audit rows arriving
-        // through the `Api.make` default `IAuditEmitter` → `IAuditLog`
-        // bridge. Same partial-match rule as the cases above: added in the
-        // same commit as the DU case.
-        | RemotingMethodAudited p -> toAuditJson p
+    let resolveMetrics =
+        defaultArg metricsLookup (fun () -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink)
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {
             try
                 let evt =
-                    Events.create scopeId AuditSourceModule.value (AuditEvent.eventTypeName audit) (serialise audit)
+                    Events.create
+                        scopeId
+                        AuditSourceModule.value
+                        (AuditEvent.eventTypeName audit)
+                        (serialiseAuditEvent audit)
 
                 do! eventStore.Write evt
             with ex ->
+                // Phase 114 — promote the loss signal from Warn-only to an
+                // alertable counter so dropped audit rows are dashboard-
+                // visible. `event_type` tags the case so operators see
+                // WHICH events are being lost (a concentrated spike on one
+                // type points at a store/serialise regression for it).
+                (resolveMetrics ())
+                    .Increment(AuditMetrics.WriteFailuresTotal, Map [ "event_type", AuditEvent.eventTypeName audit ])
+
                 logger.Warn(
                     sprintf
                         "[AuditLog] write failed scope=%s eventType=%s: %s"

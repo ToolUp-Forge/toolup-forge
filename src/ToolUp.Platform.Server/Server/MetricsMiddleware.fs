@@ -140,6 +140,22 @@ module StandardMetrics =
                 Tags = [ "container_class" ]
             }
         }
+        // Phase 114 — audit-write failure counter. Incremented by
+        // `EventStoreAuditLog.Record` when an audit event fails to
+        // persist (event-store write threw). Promotes the formerly
+        // Warn-only loss signal to an alertable metric so silent audit
+        // loss is dashboard-visible. The literal is defined in
+        // `AuditLog.AuditMetrics` (compiles before this file).
+        {
+            Module = None
+            Definition = {
+                Name = ToolUp.Platform.AuditLog.AuditMetrics.WriteFailuresTotal
+                Kind = Counter
+                Description = "Audit events that failed to persist (event-store write threw)"
+                Unit = "1"
+                Tags = [ "event_type" ]
+            }
+        }
     ]
 
 module private RouteClassifier =

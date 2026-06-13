@@ -307,208 +307,34 @@ type AuditReplicator
                         if cmp <> 0 then cmp else a.Id.CompareTo b.Id)
 
                 // Decode each `ModuleEvent` back into an `AuditEvent` for
-                // the sink. Decoder lives in `AuditLog.fs` as a private
-                // helper; we re-derive it from `IAuditLog.GetAuditTrail`'s
-                // shape here. Events that fail to decode (wire format
-                // drift, corrupt blob) are skipped with a Warn — the
-                // replicator preserves the audit trail's append-only
-                // contract by never blocking on a single bad event.
-                //
-                // Gap audit #3 — track decode failures so we can emit an
-                // `AuditEventDecodeFailed` audit row after the loop. Without
-                // this, schema drift / corrupt payloads silently disappear
-                // from the external sink trail; SOC 2 / Article 30 / SOX
-                // compliance assertions become unverifiable.
+                // the sink via the Phase 114 codec registry shared with
+                // `AuditLog` (`AuditLog.tryDecodeAuditEvent`). Pre-114 this
+                // was a hand-maintained 21-case inline match with a silent
+                // `| _ -> None` fallthrough that dropped 59 of ~80 event
+                // types from external SIEM/archive sinks WITHOUT recording
+                // a decode failure — the compliance trail looked complete
+                // while missing every admin grant, denial, and share-token
+                // use (Gap C1). The registry decoder covers every union
+                // case by construction (enforced by the exhaustiveness
+                // test), and BOTH failure modes — unknown/future event
+                // type AND malformed payload — now land in `decodeFailures`
+                // so they surface in the `AuditEventDecodeFailed` summary
+                // row rather than advancing the cursor silently.
                 let decodeFailures = ResizeArray<Guid * string>()
 
                 let decodedPairs =
                     ordered
                     |> List.choose (fun evt ->
-                        // We cannot import the private `decodeAuditEvent`
-                        // from `AuditLog.fs`; instead, recover via
-                        // `IAuditLog.GetAuditTrail` would be wasteful.
-                        // Inline the decode using the same JSON settings.
-                        try
-                            let json = evt.Payload
-                            // Match every known case; defensive on the wire
-                            // format. Mirrors `AuditLog.decodeAuditEvent`.
-                            let decoded: AuditEvent option =
-                                match evt.EventType with
-                                | "UserLoggedIn" ->
-                                    Some(
-                                        UserLoggedIn(
-                                            JsonSerializer.Deserialize<UserLoggedInPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "TeamCreated" ->
-                                    Some(
-                                        TeamCreated(
-                                            JsonSerializer.Deserialize<TeamCreatedPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "MemberAdded" ->
-                                    Some(
-                                        MemberAdded(
-                                            JsonSerializer.Deserialize<MemberAddedPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "MemberRemoved" ->
-                                    Some(
-                                        MemberRemoved(
-                                            JsonSerializer.Deserialize<MemberRemovedPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "MemberRoleChanged" ->
-                                    Some(
-                                        MemberRoleChanged(
-                                            JsonSerializer.Deserialize<MemberRoleChangedPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "FileUploaded" ->
-                                    Some(
-                                        FileUploaded(
-                                            JsonSerializer.Deserialize<FileUploadedPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "FileDeleted" ->
-                                    Some(
-                                        FileDeleted(
-                                            JsonSerializer.Deserialize<FileDeletedPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "AnalysisRun" ->
-                                    Some(
-                                        AnalysisRun(
-                                            JsonSerializer.Deserialize<AnalysisRunPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "PermissionChanged" ->
-                                    Some(
-                                        PermissionChanged(
-                                            JsonSerializer.Deserialize<PermissionChangedPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "NotificationSent" ->
-                                    Some(
-                                        NotificationSent(
-                                            JsonSerializer.Deserialize<NotificationSentPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "NotificationDeliveryFailed" ->
-                                    Some(
-                                        NotificationDeliveryFailed(
-                                            JsonSerializer.Deserialize<NotificationDeliveryFailedPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "HealthStateChanged" ->
-                                    Some(
-                                        HealthStateChanged(
-                                            JsonSerializer.Deserialize<HealthStateChangedPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "EncryptionKeyCreated" ->
-                                    Some(
-                                        EncryptionKeyCreated(
-                                            JsonSerializer.Deserialize<EncryptionKeyEventPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "EncryptionKeyRotated" ->
-                                    Some(
-                                        EncryptionKeyRotated(
-                                            JsonSerializer.Deserialize<EncryptionKeyEventPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "EncryptionKeyDestroyed" ->
-                                    Some(
-                                        EncryptionKeyDestroyed(
-                                            JsonSerializer.Deserialize<EncryptionKeyEventPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "EntityCreated" ->
-                                    Some(
-                                        EntityCreated(
-                                            JsonSerializer.Deserialize<EntityLifecycleEventPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "EntityUpdated" ->
-                                    Some(
-                                        EntityUpdated(
-                                            JsonSerializer.Deserialize<EntityLifecycleEventPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "EntityDeleted" ->
-                                    Some(
-                                        EntityDeleted(
-                                            JsonSerializer.Deserialize<EntityLifecycleEventPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "FormSubmitted" ->
-                                    Some(
-                                        FormSubmitted(
-                                            JsonSerializer.Deserialize<FormSubmittedPayload>(json, cursorJsonOptions)
-                                        )
-                                    )
-                                | "FormSubmissionUpdated" ->
-                                    Some(
-                                        FormSubmissionUpdated(
-                                            JsonSerializer.Deserialize<FormSubmissionUpdatedPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | "WorkflowTransitioned" ->
-                                    Some(
-                                        WorkflowTransitioned(
-                                            JsonSerializer.Deserialize<WorkflowTransitionedPayload>(
-                                                json,
-                                                cursorJsonOptions
-                                            )
-                                        )
-                                    )
-                                | _ -> None
-
-                            decoded |> Option.map (fun audit -> evt, audit)
-                        with _ ->
+                        match AuditLog.tryDecodeAuditEvent evt.EventType evt.Payload with
+                        | Ok audit -> Some(evt, audit)
+                        | Error reason ->
                             logger.Warn(
                                 sprintf
-                                    "[AuditReplicator] decode failed eventId=%O eventType=%s scope=%s — skipping"
+                                    "[AuditReplicator] decode failed eventId=%O eventType=%s scope=%s: %s — skipping"
                                     evt.Id
                                     evt.EventType
                                     evt.ScopeId
+                                    reason
                             )
 
                             decodeFailures.Add((evt.Id, evt.EventType))

@@ -384,6 +384,20 @@ let compose
     let eventStore =
         applyEventStoreDecorators config effectiveInnerEventStore webhookSubsystem jobSchedulerLookup
 
+    // Phase 114 — chicken-and-egg break for the audit-write-failure
+    // metric. The `EventStoreAuditLog` is constructed inside
+    // `buildNotificationStack` (below), but the resolved `IMetricsSink`
+    // is built further down (after `services` exists). Same pattern as
+    // `rateLimiterCell` / `jobSchedulerCell`: hand the audit log a
+    // reader over a cell holding a `NoOpMetricsSink` now; overwrite the
+    // cell with the resolved sink once compose builds it. The audit log
+    // reads the cell lazily and only on the failure path, so by the time
+    // a real write fails at runtime the cell holds the configured sink.
+    let metricsSinkCell: Metrics.IMetricsSink ref =
+        ref (Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink)
+
+    let metricsSinkLookup () = metricsSinkCell.Value
+
     // Build the notification-stack substrate (extracted to
     // `ComposeNotifications.buildNotificationStack`). Pre-DI
     // construction so the Phase 6f transactional dispatcher and the
@@ -401,6 +415,7 @@ let compose
             resolvedActivitySink
             logger
             transactionalSinks
+            metricsSinkLookup
 
     let sseConnectionManager = notificationStack.SseConnectionManager
     let baseNotificationChannel = notificationStack.BaseNotificationChannel
@@ -515,6 +530,12 @@ let compose
             moduleMetricRegistrations
             resolvedActivitySink
             resolvedLogger
+
+    // Phase 114 — populate the deferred metrics cell now that the real
+    // sink is resolved, so the audit log's write-failure counter
+    // (`toolup.audit.write_failures_total`) flows to the configured sink
+    // instead of the bootstrap no-op.
+    metricsSinkCell.Value <- resolvedMetricsSink
 
     // Core SDK singleton registrations (extracted to
     // `ComposeRuntimeServices.registerCoreSdkSingletons`).
