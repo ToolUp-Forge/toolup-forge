@@ -57,6 +57,10 @@
         <Compile Include="Contracts\IArtifactSignerContract.fs" />
         <Compile Include="Contracts\IArtifactVerifierContract.fs" />
         <Compile Include="Contracts\IShareTokenStoreContract.fs" />
+        <!-- Phase 131 — cross-store id-sanitisation conformance bar
+             (team / permission / share-token decorators over a real
+             concrete store, bound twice: in-memory + local-file blob). -->
+        <Compile Include="Contracts\StoreIdSanitisingContract.fs" />
         <Compile Include="Contracts\IPendingInviteStoreContract.fs" />
         <!-- Phase 70 — IPlatformAIKeyStore contract pack. Six portability
              rules + platform-vs-team-scope isolation invariants. -->

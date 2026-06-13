@@ -1,11 +1,15 @@
 module ToolUp.Platform.Tests.InProcess.StoreIdSanitisingTests
 
 open System
+open System.IO
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Secrets
 open ToolUp.Platform.TeamManagement
 open ToolUp.Platform.PermissionStore
 open ToolUp.Platform.StoreIdSanitising
+open ToolUp.Platform.Tests.Contracts
 
 // ─── Phase 131 — store-seam id sanitisation ─────────────────────────
 //
@@ -59,9 +63,52 @@ type private RecordingPermissionStore() =
         member _.GetTeamPermissions _ = failwith "read not exercised"
         member _.GetEffectivePermissions(_, _) = failwith "read not exercised"
 
+// ─── Cross-store contract bindings (real backends) ──────────────────
+//
+// Promote the decorator-level assertions above to the full
+// `StoreIdSanitisingContract` pack bound over a real concrete store +
+// blob backend — once in-memory, once local-file — so the rejection is
+// proven to fire before any blob write/read reaches the store + its
+// blob backend (the gap the decorator-double tests above cannot close).
+
+let private silentLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+let private buildStores (storage: IBlobStorage) : StoreIdSanitisingContract.SanitisedStores =
+    let nc =
+        NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
+
+    let secrets = ShareTokenStoreTests.InMemorySecretStore() :> ISecretStore
+
+    {
+        Team = SanitisingTeamStore(TeamStore(storage, nc) :> ITeamStore) :> ITeamStore
+        Permission = SanitisingPermissionStore(PermissionStore(storage, silentLogger)) :> IPermissionStore
+        ShareToken =
+            SanitisingShareTokenStore(ShareTokenStore.create storage secrets None silentLogger) :> IShareTokenStore
+    }
+
+let private inMemoryBackedContract =
+    StoreIdSanitisingContract.tests "in-memory blob backend" (fun () ->
+        buildStores (InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage))
+
+let private localFileBackedContract =
+    StoreIdSanitisingContract.tests "local-file blob backend" (fun () ->
+        let root =
+            Path.Combine(Path.GetTempPath(), "toolup-storeseam-" + Guid.NewGuid().ToString("N"))
+
+        Directory.CreateDirectory(root) |> ignore
+        buildStores (LocalFileStorage.LocalFileStorage(root) :> IBlobStorage))
+
 [<Tests>]
 let tests =
     testList "Phase 131 — store-seam id sanitisation" [
+        inMemoryBackedContract
+        localFileBackedContract
         testCaseAsync "AddMember rejects a path-traversal teamId before touching the inner store"
         <| async {
             let inner = RecordingTeamStore()

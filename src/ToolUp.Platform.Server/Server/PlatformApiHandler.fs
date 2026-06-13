@@ -211,6 +211,23 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     // `TeamCreationPolicy` gate + emit the same audit shape; the only
     // difference is whose user id ends up on the membership row +
     // the active-team pointer.
+    //
+    // Phase 131 — **membership rows are admin-asserted, not identity
+    // proof.** `ownerUserId` (here) and `memberId` (in `AddTeamMember`
+    // below) are caller-supplied principal ids. They are sanitised at
+    // the `ITeamStore` seam (path-traversal / reserved-scope rejection
+    // via `SanitisingTeamStore`) but the SDK does NOT verify that the id
+    // resolves to a real, provisioned principal — there is no
+    // `IUserDirectory` lookup in the default composition. A team
+    // Owner/Admin can therefore mint a membership row for any
+    // syntactically-valid id, including one that no one has ever signed
+    // in as. Consumers MUST treat `GetTeamMembers` output as
+    // "who an admin asserted belongs to this team", not as verified
+    // identity. A deployment that needs existence-proof wires an
+    // `IUserDirectory`-shaped check at its own composition root (or a
+    // custom `ITeamStore` decorator) and rejects unknown principals
+    // before the row is written; the seam above is the natural place to
+    // add it.
     let createTeamCore (name: string) (ownerUserId: string) = async {
         match teamStore with
         | Some ts ->

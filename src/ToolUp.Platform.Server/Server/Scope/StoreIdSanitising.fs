@@ -117,3 +117,75 @@ type SanitisingPermissionStore(inner: IPermissionStore) =
 
         member _.GetEffectivePermissions(userId, teamId) =
             inner.GetEffectivePermissions(userId, teamId)
+
+// ─── Phase 131 (remainder) — IShareTokenStore resource/scope seam ────
+//
+// `BlobShareTokenStore` interpolates `scopeId` and `tokenId` straight
+// into the persisted-claim key
+// (`_platform/share-tokens/{scopeId}/{tokenId}.json`) and into the
+// `List` prefix the read-seam methods scan. A caller-supplied
+// `scopeId` / `tokenId` of `../../jobs/foo` would let a write land at —
+// or a read enumerate — a chosen `_platform/...` path, exactly the
+// cross-scope sink Phase 131 closes at the team/permission seam above.
+//
+// The same `validate` policy is reused so the share-token seam rejects
+// the identical id shapes (traversal, NUL, control chars, the reserved
+// `_platform` scope, Windows reserved names) the team/permission seam
+// does. `resourceKind` / `resourceId` are NOT validated here: the store
+// SHA-256-hashes `{kind}|{id}` into the path (`resourceHash`)
+// specifically so they may carry arbitrary characters — validating
+// them would reject inputs the store was designed to accept, and they
+// cannot traverse a path once hashed.
+//
+// Unlike the team/permission decorator (writes-only), this one also
+// guards the two `List*` reads: their `scopeId` becomes a `List`
+// prefix, so a traversal `scopeId` is an information-disclosure read,
+// not just a missed point-lookup. A rejected read degrades to an empty
+// result (read-seam defence-in-depth). `Validate(token)` delegates
+// unchanged — its `scopeId` / `tokenId` are re-derived from the
+// HMAC-verified signed payload, never a raw caller string, and were
+// sanitised at `Issue` time.
+type SanitisingShareTokenStore(inner: IShareTokenStore) =
+
+    /// Mutating methods return `Result<_, ShareTokenError>`; a rejected
+    /// id surfaces as `StorageFailed` (there is no dedicated invalid-id
+    /// case, and the categorised reason never echoes the raw value).
+    let guardResult
+        (validation: Result<unit, string>)
+        (run: unit -> Async<Result<'a, ShareTokenError>>)
+        : Async<Result<'a, ShareTokenError>> =
+        match validation with
+        | Error e -> async { return Error(ShareTokenError.StorageFailed e) }
+        | Ok() -> run ()
+
+    /// `List*` reads return a bare `ShareTokenClaim list`; a rejected id
+    /// degrades to an empty result so a traversal `scopeId` can never
+    /// enumerate a chosen `_platform/share-tokens/...` prefix.
+    let guardList
+        (validation: Result<unit, string>)
+        (run: unit -> Async<ShareTokenClaim list>)
+        : Async<ShareTokenClaim list> =
+        match validation with
+        | Error _ -> async { return [] }
+        | Ok() -> run ()
+
+    interface IShareTokenStore with
+        member _.Issue(request) =
+            guardResult (validate "scopeId" request.ScopeId) (fun () -> inner.Issue request)
+
+        member _.MarkUsed(scopeId, tokenId) =
+            guardResult (both (validate "scopeId" scopeId) (validate "tokenId" tokenId)) (fun () ->
+                inner.MarkUsed(scopeId, tokenId))
+
+        member _.Revoke(scopeId, tokenId, actorUserId) =
+            guardResult (both (validate "scopeId" scopeId) (validate "tokenId" tokenId)) (fun () ->
+                inner.Revoke(scopeId, tokenId, actorUserId))
+
+        member _.ListByResource(scopeId, resourceKind, resourceId) =
+            guardList (validate "scopeId" scopeId) (fun () -> inner.ListByResource(scopeId, resourceKind, resourceId))
+
+        member _.ListByIssuer(scopeId, issuerUserId) =
+            guardList (validate "scopeId" scopeId) (fun () -> inner.ListByIssuer(scopeId, issuerUserId))
+
+        // `Validate` re-derives ids from the HMAC-verified payload.
+        member _.Validate(token) = inner.Validate token

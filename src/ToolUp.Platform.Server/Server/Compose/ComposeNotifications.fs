@@ -179,7 +179,22 @@ let buildNotificationStack
         match effectiveShareTokenStore with
         | NoShareTokenStore -> None
         | EnabledShareTokenStore ->
-            Some(ShareTokenStore.create resolvedBlobStorage secretStore (Some auditLog) resolvedLogger)
+            // Phase 131 (remainder) — wrap the blob store in the
+            // id-sanitising decorator so every caller-supplied `scopeId`
+            // / `tokenId` that becomes a
+            // `_platform/share-tokens/{scopeId}/{tokenId}…` path segment
+            // (write) or `List` prefix (read) is validated before it
+            // reaches the key-construction sink. Innermost wrap (mirrors
+            // the team/permission store seam in ComposeTeamRuntime) so
+            // both external calls and any consumer
+            // `withShareTokenStoreDecorator` decorator route through the
+            // guard.
+            Some(
+                StoreIdSanitising.SanitisingShareTokenStore(
+                    ShareTokenStore.create resolvedBlobStorage secretStore (Some auditLog) resolvedLogger
+                )
+                :> IShareTokenStore
+            )
 
     // Phase 6f — transactional dispatcher. Constructed only when at
     // least one `INotificationSink` is registered. Validates duplicate
