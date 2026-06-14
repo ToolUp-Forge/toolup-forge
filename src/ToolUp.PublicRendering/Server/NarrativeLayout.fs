@@ -116,6 +116,106 @@ module NarrativeLayout =
             canonical @ jsonLd @ openGraph @ twitter
         | _ -> []
 
+    // ─── Phase 148 — self-referencing canonical for every body kind ──
+    //
+    // `headTags` above emits a `<link rel="canonical">` only for a
+    // `Narrative` body carrying an explicit `CanonicalUrl`; `Markdown` /
+    // `Html` bodies (and `Narrative` bodies without one) get none. A
+    // self-referencing canonical (`baseUrl` + slug) is the cheapest
+    // defence against duplicate-content dilution from query-string
+    // variants. These helpers build it for ANY body kind; an explicit
+    // canonical always wins (GP 11).
+
+    /// Normalise a base URL for canonical / alternate composition: drop
+    /// any trailing slash so `baseUrl + "/" + slug` never doubles it.
+    /// Mirrors `SitemapGenerator`'s base-URL handling.
+    let internal normaliseBaseUrl (baseUrl: string) = baseUrl.TrimEnd('/')
+
+    /// The absolute self-referencing canonical URL for a page: the
+    /// (trailing-slash-normalised) `baseUrl` joined to the page slug. The
+    /// root / `index` slug canonicalises to `baseUrl/`.
+    let canonicalUrlFor (baseUrl: string) (page: PublicPage) : string =
+        let b = normaliseBaseUrl baseUrl
+        let slug = (Slug.value page.Slug).Trim('/')
+
+        if slug = "" || slug = "index" then
+            b + "/"
+        else
+            b + "/" + slug
+
+    /// A self-referencing `<link rel="canonical">` for any body kind,
+    /// resolving to the page's own absolute URL under `baseUrl`.
+    let canonicalFor (baseUrl: string) (page: PublicPage) : XmlNode =
+        link [ _rel "canonical"; _href (canonicalUrlFor baseUrl page) ]
+
+    /// Whether the page already declares an explicit canonical — a
+    /// `Narrative` `CanonicalUrl`, or a `head:canonical` frontmatter
+    /// envelope (Phase 111). The self-referencing canonical defers to it
+    /// so a page is never double-canonicalised (GP 11).
+    let hasExplicitCanonical (page: PublicPage) : bool =
+        (match page.Body with
+         | Narrative doc -> doc.CanonicalUrl |> Option.isSome
+         | _ -> false)
+        || page.Frontmatter.ContainsKey "head:canonical"
+
+    /// `headTags` with an optional self-referencing canonical for layouts
+    /// that drive their head off this helper and want the Phase 148 tag
+    /// without the compose-level `withSelfCanonical` injection. When
+    /// `selfCanonicalBaseUrl` is `Some b` and the page declares no
+    /// explicit canonical, a self-referencing `<link rel="canonical">`
+    /// (origin `b`) is prepended to the standard `headTags` output;
+    /// otherwise the output is exactly `headTags page` (GP 11).
+    let headTagsWith (selfCanonicalBaseUrl: string option) (page: PublicPage) : XmlNode list =
+        let selfCanonical =
+            match selfCanonicalBaseUrl with
+            | Some b when not (hasExplicitCanonical page) -> [ canonicalFor b page ]
+            | _ -> []
+
+        selfCanonical @ headTags page
+
+    /// Phase 148 — self-referencing canonical injection over the content
+    /// API. `PublicRenderingServerApp.withSelfCanonical` wraps the
+    /// resolved `IPublicContentApi` so every resolved page that declares
+    /// no explicit canonical gains a `head:canonical` frontmatter key (the
+    /// Phase 111 envelope) — which the handler's existing
+    /// `PageHeadInjection` step emits before `</head>`. A self-referencing
+    /// canonical thus reaches the wire WITHOUT editing any layout, for all
+    /// body kinds. The origin is the site's own base URL, so the compose
+    /// passes each satellite's `BaseUrl` (Phase 145) and a page served on
+    /// a satellite host self-canonicalises to that host.
+    module SelfCanonical =
+        /// Add a `head:canonical` frontmatter key to a page that declares
+        /// no explicit canonical; pages already carrying one are returned
+        /// unchanged (explicit wins, GP 11).
+        let enrichPage (baseUrl: string) (page: PublicPage) : PublicPage =
+            if hasExplicitCanonical page then
+                page
+            else
+                {
+                    page with
+                        Frontmatter = page.Frontmatter |> Map.add "head:canonical" (canonicalUrlFor baseUrl page)
+                }
+
+        /// Wrap an `IPublicContentApi` so single-page resolutions carry a
+        /// self-referencing canonical. `ListPages` / `GetCollection` pass
+        /// through unchanged — sitemap / listing surfaces need no per-entry
+        /// canonical and must stay byte-for-byte (GP 11).
+        let wrap (baseUrl: string) (inner: IPublicContentApi) : IPublicContentApi =
+            { new IPublicContentApi with
+                member _.GetPage slug = async {
+                    let! p = inner.GetPage slug
+                    return p |> Option.map (enrichPage baseUrl)
+                }
+
+                member _.ListPages prefix = inner.ListPages prefix
+                member _.GetCollection collectionId = inner.GetCollection collectionId
+
+                member _.GetPageInContext(slug, ctx) = async {
+                    let! p = inner.GetPageInContext(slug, ctx)
+                    return p |> Option.map (enrichPage baseUrl)
+                }
+            }
+
     // ─── Phase 87 — rich-content rendering policy ────────────────────
     //
     // The `Embed` and `Component` narrative blocks (Phase 87) need a

@@ -161,6 +161,14 @@ type PublicRenderingServerApp = {
     /// `RenderCache` is `Some` — the cached path already emits validators.
     /// Set via `withConditionalGet`.
     ConditionalGet: ConditionalGetSettings option
+    /// Phase 148 — opt-in self-referencing canonical. `false` (default) →
+    /// the rendered `<head>` is byte-for-byte the pre-148 output (GP 11);
+    /// `true` wraps the resolved content API so every page that declares no
+    /// explicit canonical (a Narrative `CanonicalUrl` or a `head:canonical`
+    /// envelope) gains a self-referencing `<link rel="canonical">` resolving
+    /// to its own absolute URL — satellite-aware (each site's `BaseUrl`).
+    /// Set via `withSelfCanonical`.
+    SelfCanonical: bool
 }
 
 module PublicRenderingServerApp =
@@ -186,6 +194,7 @@ module PublicRenderingServerApp =
         IndexNow = IndexNowOptions.defaults
         Sites = []
         ConditionalGet = None
+        SelfCanonical = false
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -217,6 +226,7 @@ module PublicRenderingServerApp =
         IndexNow = IndexNowOptions.defaults
         Sites = []
         ConditionalGet = None
+        SelfCanonical = false
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -657,6 +667,23 @@ module PublicRenderingServerApp =
             Sites = app.Sites @ [ site ]
     }
 
+    /// Phase 148 — emit a self-referencing `<link rel="canonical">` for
+    /// every rendered page (all body kinds), not just Narrative pages
+    /// carrying an explicit `CanonicalUrl`. The canonical resolves to the
+    /// page's own absolute URL under the site's base URL (satellite-aware:
+    /// a page served on a `withSite` host self-canonicalises to that host's
+    /// `BaseUrl`). An explicit canonical — a Narrative `CanonicalUrl` or a
+    /// `head:canonical` envelope — always wins, so a page is never
+    /// double-canonicalised.
+    ///
+    /// Implemented by wrapping the resolved `IPublicContentApi` so each
+    /// resolved page gains a `head:canonical` frontmatter key (the Phase
+    /// 111 envelope), which the page handler's existing head-injection step
+    /// emits before `</head>` — so the tag reaches the wire without editing
+    /// any layout. Off by default (GP 11): a pipeline that never calls this
+    /// renders byte-for-byte the pre-148 head output.
+    let withSelfCanonical (app: PublicRenderingServerApp) : PublicRenderingServerApp = { app with SelfCanonical = true }
+
     /// Toggle the dev-mode hot-reload watcher. Defaults to `true`.
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
@@ -714,6 +741,7 @@ module PublicRenderingServerApp =
             let composeRedirects = app.Redirects
             let hotReload = app.HotReload
             let explicitApi = app.ContentApiOverride
+            let selfCanonical = app.SelfCanonical // Phase 148
             let aiPublishEnabled = app.AIPublishEnabled
             let aiPublishAuthoriser = app.AIPublishAuthoriser
             let aiPublishGuardrails = app.AIPublishGuardrails // Phase 91
@@ -834,29 +862,39 @@ module PublicRenderingServerApp =
                     )
                     .AddSingleton<IPublicContentApi>(
                         System.Func<System.IServiceProvider, IPublicContentApi>(fun sp ->
-                            match explicitApi with
-                            | Some api -> api
-                            | None ->
-                                let loader = sp.GetService(typeof<MarkdownContentLoader>) :?> MarkdownContentLoader
+                            let api =
+                                match explicitApi with
+                                | Some api -> api
+                                | None ->
+                                    let loader = sp.GetService(typeof<MarkdownContentLoader>) :?> MarkdownContentLoader
 
-                                let entityStore =
-                                    sp.GetService(typeof<IEntityStore>)
-                                    |> Option.ofObj
-                                    |> Option.map (fun x -> x :?> IEntityStore)
+                                    let entityStore =
+                                        sp.GetService(typeof<IEntityStore>)
+                                        |> Option.ofObj
+                                        |> Option.map (fun x -> x :?> IEntityStore)
 
-                                // Phase 100 — `withTaxonomy` registers the
-                                // tag-index source over a base API (file +
-                                // overlay only, no source-tier recursion),
-                                // so no hand-wired `listPages` thunk is
-                                // needed.
-                                let taxonomySources =
-                                    if taxonomyEnabled then
-                                        let baseApi = PublicContentApiImpl.create loader entityStore []
-                                        [ TaxonomyHandler.tagIndexSourceFromApi baseApi ]
-                                    else
-                                        []
+                                    // Phase 100 — `withTaxonomy` registers the
+                                    // tag-index source over a base API (file +
+                                    // overlay only, no source-tier recursion),
+                                    // so no hand-wired `listPages` thunk is
+                                    // needed.
+                                    let taxonomySources =
+                                        if taxonomyEnabled then
+                                            let baseApi = PublicContentApiImpl.create loader entityStore []
+                                            [ TaxonomyHandler.tagIndexSourceFromApi baseApi ]
+                                        else
+                                            []
 
-                                PublicContentApiImpl.create loader entityStore (contentSources @ taxonomySources))
+                                    PublicContentApiImpl.create loader entityStore (contentSources @ taxonomySources)
+
+                            // Phase 148 — wrap so a self-referencing canonical
+                            // reaches the wire for the default site without
+                            // editing any layout (the wrap adds a
+                            // `head:canonical` envelope the page handler emits).
+                            if selfCanonical then
+                                NarrativeLayout.SelfCanonical.wrap publicBaseUrl api
+                            else
+                                api)
                     )
                     .AddSingleton<ILayoutCatalog>(
                         // Phase 80b — always exposed when public
@@ -1235,7 +1273,17 @@ module PublicRenderingServerApp =
 
             let pageHandler =
                 siteAware
-                    (fun site -> PublicPageHandler.handlerKeyed (Some site.Def.Name) site.Api site.Layouts)
+                    (fun site ->
+                        // Phase 148 — satellite self-canonical resolves to the
+                        // satellite's own `BaseUrl`, so a page served on a
+                        // `withSite` host self-canonicalises to that host.
+                        let siteApi =
+                            if selfCanonical then
+                                NarrativeLayout.SelfCanonical.wrap site.Def.BaseUrl site.Api
+                            else
+                                site.Api
+
+                        PublicPageHandler.handlerKeyed (Some site.Def.Name) siteApi site.Layouts)
                     pageHandler
 
             // Phase 115 — feeds become host-scoped when sites exist:

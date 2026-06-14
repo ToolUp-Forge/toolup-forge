@@ -1328,6 +1328,142 @@ let private renderMetrics153Tests =
             Expect.notEqual ctx.Response.StatusCode 500 "page serves under the NoOp sink (gated metrics path is free)"
     ]
 
+// ─── Phase 148 / 151 / 152 / 154 — head-tag SEO surface ─────────────
+
+let private mkPage (slug: string) (body: ContentBody) (frontmatter: (string * string) list) : PublicPage = {
+    Slug = Slug slug
+    Title = "T"
+    Description = "D"
+    Body = body
+    Layout = LayoutName "page"
+    Frontmatter = Map.ofList frontmatter
+    PublishedAt = None
+    Collection = None
+    Status = Published
+    Audience = PageAudience.Public
+}
+
+let private renderNode (node: XmlNode) : string = RenderView.AsString.htmlNode node
+
+let private renderNodes (nodes: XmlNode list) : string =
+    nodes |> List.map renderNode |> String.concat ""
+
+let private selfCanonicalTests =
+    testList "PublicRendering — Phase 148 self-referencing canonical" [
+
+        testCase "canonicalUrlFor: slug → base/slug, root/index → base/, trailing slash normalised"
+        <| fun _ ->
+            let p s = mkPage s (Markdown "x") []
+            Expect.equal (NarrativeLayout.canonicalUrlFor "https://x.com" (p "about")) "https://x.com/about" "slug"
+
+            Expect.equal
+                (NarrativeLayout.canonicalUrlFor "https://x.com/" (p "about"))
+                "https://x.com/about"
+                "trailing slash on base normalised"
+
+            Expect.equal (NarrativeLayout.canonicalUrlFor "https://x.com" (p "index")) "https://x.com/" "index → base/"
+            Expect.equal (NarrativeLayout.canonicalUrlFor "https://x.com" (p "")) "https://x.com/" "root → base/"
+
+            Expect.equal
+                (NarrativeLayout.canonicalUrlFor "https://x.com" (p "services/consulting"))
+                "https://x.com/services/consulting"
+                "nested slug"
+
+        testCase "canonicalFor emits a <link rel=canonical href=...>"
+        <| fun _ ->
+            let html =
+                renderNode (NarrativeLayout.canonicalFor "https://x.com" (mkPage "about" (Markdown "x") []))
+
+            Expect.stringContains html "rel=\"canonical\"" "rel"
+            Expect.stringContains html "href=\"https://x.com/about\"" "href"
+
+        testCase "hasExplicitCanonical: Narrative CanonicalUrl + head:canonical envelope count; plain false"
+        <| fun _ ->
+            Expect.isFalse
+                (NarrativeLayout.hasExplicitCanonical (mkPage "a" (Markdown "x") []))
+                "plain markdown → no explicit"
+
+            let narr =
+                mkPage "a" (Narrative(Narrative.create "t" |> Narrative.withCanonicalUrl "https://x.com/e")) []
+
+            Expect.isTrue (NarrativeLayout.hasExplicitCanonical narr) "narrative canonical"
+
+            Expect.isTrue
+                (NarrativeLayout.hasExplicitCanonical (
+                    mkPage "a" (Markdown "x") [ "head:canonical", "https://x.com/e" ]
+                ))
+                "head:canonical envelope"
+
+        testCase "enrichPage adds head:canonical for all body kinds when none explicit"
+        <| fun _ ->
+            for body in [ Markdown "x"; Html "<p>x</p>"; Narrative(Narrative.create "t") ] do
+                let enriched =
+                    NarrativeLayout.SelfCanonical.enrichPage "https://x.com" (mkPage "about" body [])
+
+                Expect.equal
+                    (enriched.Frontmatter.TryFind "head:canonical")
+                    (Some "https://x.com/about")
+                    "self-canonical added"
+
+        testCase "enrichPage defers to an explicit canonical (GP 11)"
+        <| fun _ ->
+            let narr =
+                mkPage "about" (Narrative(Narrative.create "t" |> Narrative.withCanonicalUrl "https://x.com/e")) []
+
+            let enriched = NarrativeLayout.SelfCanonical.enrichPage "https://x.com" narr
+            Expect.isFalse (enriched.Frontmatter.ContainsKey "head:canonical") "explicit wins → no envelope added"
+
+        testCase "wrap enriches GetPage / GetPageInContext, passes ListPages through unchanged"
+        <| fun _ ->
+            let wrapped =
+                NarrativeLayout.SelfCanonical.wrap "https://x.com" (mkFixtureApiWith [])
+
+            match wrapped.GetPage "about" |> Async.RunSynchronously with
+            | Some p ->
+                Expect.equal (p.Frontmatter.TryFind "head:canonical") (Some "https://x.com/about") "GetPage enriched"
+            | None -> failtest "fixture 'about' page missing"
+
+            let listed = wrapped.ListPages "" |> Async.RunSynchronously
+
+            Expect.isTrue
+                (listed
+                 |> List.forall (fun p -> not (p.Frontmatter.ContainsKey "head:canonical")))
+                "ListPages not enriched (no per-entry canonical pollution)"
+
+        testCase "enriched page → PageHeadInjection emits the canonical before </head>"
+        <| fun _ ->
+            let enriched =
+                NarrativeLayout.SelfCanonical.enrichPage "https://x.com" (mkPage "about" (Markdown "x") [])
+
+            let doc = "<html><head><title>t</title></head><body>b</body></html>"
+            let injected = PageHeadInjection.injectFromPage enriched doc
+            Expect.stringContains injected "rel=\"canonical\"" "canonical injected"
+            Expect.stringContains injected "https://x.com/about" "href injected"
+
+        testCase "headTagsWith None == headTags (byte-for-byte, GP 11)"
+        <| fun _ ->
+            let p = mkPage "about" (Markdown "x") []
+
+            Expect.equal
+                (renderNodes (NarrativeLayout.headTagsWith None p))
+                (renderNodes (NarrativeLayout.headTags p))
+                "no baseUrl → identical to headTags"
+
+        testCase "headTagsWith (Some base) prepends a self-canonical for a non-Narrative page; explicit wins"
+        <| fun _ ->
+            let html =
+                renderNodes (NarrativeLayout.headTagsWith (Some "https://x.com") (mkPage "about" (Markdown "x") []))
+
+            Expect.stringContains html "href=\"https://x.com/about\"" "self-canonical present"
+
+            let narr =
+                mkPage "about" (Narrative(Narrative.create "t" |> Narrative.withCanonicalUrl "https://x.com/explicit")) []
+
+            let html2 = renderNodes (NarrativeLayout.headTagsWith (Some "https://x.com") narr)
+            Expect.isFalse (html2.Contains "https://x.com/about") "explicit canonical wins; no self-canonical"
+            Expect.stringContains html2 "https://x.com/explicit" "explicit canonical emitted by headTags"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -1341,4 +1477,5 @@ let tests =
         conditionalGetHandlerTests
         renderMetrics153Tests
         getOrRender155Tests
+        selfCanonicalTests
     ]
