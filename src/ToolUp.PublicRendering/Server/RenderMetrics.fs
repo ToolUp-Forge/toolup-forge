@@ -3,6 +3,7 @@
 
 namespace ToolUp.PublicRendering
 
+open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
@@ -48,6 +49,46 @@ module RenderMetrics =
     [<Literal>]
     let SourceResolveMs = "publicrendering.source_resolve_ms"
 
+    // ─── Phase 153 — crawler / SEO observability ─────────────────────
+
+    /// Counter — conditional-GET outcome, tagged `outcome` (`"304"` /
+    /// `"200"`). The `304`-rate (the metric large indexed-site runbooks
+    /// chase) is the ratio of the two.
+    [<Literal>]
+    let ConditionalGet = "publicrendering.conditional_get"
+
+    /// Counter — request count bucketed by a bounded crawler class, tagged
+    /// `agent` (`"googlebot"` / `"bingbot"` / `"other-bot"` / `"human"`).
+    /// Bounded cardinality — the raw User-Agent is never a tag value.
+    [<Literal>]
+    let RequestByAgent = "publicrendering.request_by_agent"
+
+    /// Counter — `PageNotFound` fall-throughs (the `None` return the
+    /// `RedirectMap` / terminal-404 chain then owns). A spike in
+    /// crawler-hit not-found slugs is a soft-404 / stale-link signal.
+    [<Literal>]
+    let PageNotFound = "publicrendering.page_not_found"
+
+    // ─── conditional-GET `outcome` tag values ────────────────────────
+    [<Literal>]
+    let CondGet304 = "304"
+
+    [<Literal>]
+    let CondGet200 = "200"
+
+    // ─── bounded `agent` tag values ──────────────────────────────────
+    [<Literal>]
+    let AgentGooglebot = "googlebot"
+
+    [<Literal>]
+    let AgentBingbot = "bingbot"
+
+    [<Literal>]
+    let AgentOtherBot = "other-bot"
+
+    [<Literal>]
+    let AgentHuman = "human"
+
     // ─── `outcome` tag values ────────────────────────────────────────
     [<Literal>]
     let OutcomeRendered = "rendered"
@@ -90,6 +131,45 @@ module RenderMetrics =
     /// Emit a render-cache outcome (hit / miss / stale).
     let emitCache (metrics: IMetricsSink) (outcome: string) : unit =
         metrics.Increment(RenderCache, Map["outcome", outcome])
+
+    // ─── Phase 153 — crawler / SEO observability emitters ────────────
+
+    /// Classify a request User-Agent into the bounded `agent` set via a
+    /// cheap case-insensitive substring scan. `googlebot` / `bingbot`
+    /// before the generic `bot` / `spider` / `crawl` / `slurp` catch (those
+    /// UAs also contain `"bot"`); an empty / human UA falls to `human`.
+    /// Bounded cardinality by construction — never returns the raw UA.
+    let classifyAgent (userAgent: string) : string =
+        if String.IsNullOrEmpty userAgent then
+            AgentHuman
+        else
+            let ua = userAgent.ToLowerInvariant()
+
+            if ua.Contains "googlebot" then
+                AgentGooglebot
+            elif ua.Contains "bingbot" then
+                AgentBingbot
+            elif
+                ua.Contains "bot"
+                || ua.Contains "spider"
+                || ua.Contains "crawl"
+                || ua.Contains "slurp"
+            then
+                AgentOtherBot
+            else
+                AgentHuman
+
+    /// Emit a conditional-GET outcome (`"304"` / `"200"`).
+    let emitConditionalGet (metrics: IMetricsSink) (outcome: string) : unit =
+        metrics.Increment(ConditionalGet, Map["outcome", outcome])
+
+    /// Emit a request bucketed by bounded crawler class.
+    let emitAgent (metrics: IMetricsSink) (agentClass: string) : unit =
+        metrics.Increment(RequestByAgent, Map["agent", agentClass])
+
+    /// Emit a `PageNotFound` fall-through (soft-404 / stale-link signal).
+    let emitNotFound (metrics: IMetricsSink) : unit =
+        metrics.Increment(PageNotFound, Map.empty)
 
     /// Wrap a content source so each `Resolve` emits its latency under
     /// `source_resolve_ms` tagged `source=label`. Opt-in: a deployment

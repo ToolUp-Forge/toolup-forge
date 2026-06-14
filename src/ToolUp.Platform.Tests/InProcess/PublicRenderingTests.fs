@@ -1219,6 +1219,115 @@ let private conditionalGetHandlerTests =
                 "Last-Modified is stable across renders (content-stable, not wall-clock)"
     ]
 
+// ─── Phase 153 — crawler / SEO observability (RenderMetrics) ────────
+
+let private renderMetrics153Tests =
+    testList "PublicRendering — Phase 153 crawler/SEO observability" [
+
+        testCase "classifyAgent buckets representative UAs into the bounded set"
+        <| fun _ ->
+            Expect.equal
+                (RenderMetrics.classifyAgent "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
+                RenderMetrics.AgentGooglebot
+                "Googlebot UA → googlebot"
+
+            Expect.equal
+                (RenderMetrics.classifyAgent "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)")
+                RenderMetrics.AgentBingbot
+                "bingbot UA → bingbot"
+
+            Expect.equal
+                (RenderMetrics.classifyAgent "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)")
+                RenderMetrics.AgentOtherBot
+                "another bot → other-bot"
+
+            Expect.equal (RenderMetrics.classifyAgent "Slurp") RenderMetrics.AgentOtherBot "slurp → other-bot"
+
+            Expect.equal
+                (RenderMetrics.classifyAgent
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36")
+                RenderMetrics.AgentHuman
+                "a desktop browser → human"
+
+            Expect.equal (RenderMetrics.classifyAgent "") RenderMetrics.AgentHuman "empty UA → human"
+
+        testCase "emit helpers tag conditional_get / request_by_agent / page_not_found"
+        <| fun _ ->
+            let sink = RecordingSink()
+            RenderMetrics.emitConditionalGet sink RenderMetrics.CondGet304
+            RenderMetrics.emitAgent sink RenderMetrics.AgentGooglebot
+            RenderMetrics.emitNotFound sink
+
+            Expect.contains
+                sink.Counters
+                (RenderMetrics.ConditionalGet, Map["outcome", "304"])
+                "conditional_get tagged by outcome"
+
+            Expect.contains
+                sink.Counters
+                (RenderMetrics.RequestByAgent, Map["agent", "googlebot"])
+                "request_by_agent tagged by bounded agent class"
+
+            Expect.contains
+                sink.Counters
+                (RenderMetrics.PageNotFound, Map.empty)
+                "page_not_found is an untagged counter"
+
+        testCase "page handler counts 200 / 304 / agent class / not-found via a live sink"
+        <| fun _ ->
+            let sink = RecordingSink()
+
+            let provider =
+                mkProvider [
+                    typeof<IMetricsSink>, box (sink :> IMetricsSink)
+                    typeof<ConditionalGetSettings>, box ConditionalGetSettings.defaults
+                ]
+
+            // Fresh crawl as Googlebot → 200 + agent class.
+            let first = runPage provider "/about" [ "User-Agent", "Googlebot/2.1" ]
+            let lm = first.Response.Headers["Last-Modified"].ToString()
+
+            // Conditional re-crawl (bare If-Modified-Since) → 304.
+            runPage provider "/about" [ "If-Modified-Since", lm; "User-Agent", "Googlebot/2.1" ]
+            |> ignore
+
+            // Crawler hit on a missing slug → soft-404 counter.
+            runPage provider "/no-such-page" [ "User-Agent", "Googlebot/2.1" ] |> ignore
+
+            Expect.contains
+                sink.Counters
+                (RenderMetrics.ConditionalGet, Map["outcome", "200"])
+                "fresh crawl → conditional_get{outcome=200}"
+
+            Expect.contains
+                sink.Counters
+                (RenderMetrics.ConditionalGet, Map["outcome", "304"])
+                "conditional re-crawl → conditional_get{outcome=304}"
+
+            Expect.contains
+                sink.Counters
+                (RenderMetrics.RequestByAgent, Map["agent", "googlebot"])
+                "requests bucketed by bounded agent class"
+
+            Expect.contains sink.Counters (RenderMetrics.PageNotFound, Map.empty) "missing slug → page_not_found"
+
+        testCase "NoOp sink emits no crawler/SEO counters (GP 13)"
+        <| fun _ ->
+            // With the NoOp sink registered the handler's gated branch is
+            // skipped entirely; the page still serves. (NoOp records nothing
+            // by construction, so the assertion is that serving succeeds and
+            // the emit path is the free one.)
+            let provider =
+                mkProvider [
+                    typeof<IMetricsSink>, box (NoOpMetricsSink() :> IMetricsSink)
+                    typeof<ConditionalGetSettings>, box ConditionalGetSettings.defaults
+                ]
+
+            let ctx = runPage provider "/about" [ "User-Agent", "Googlebot/2.1" ]
+
+            Expect.notEqual ctx.Response.StatusCode 500 "page serves under the NoOp sink (gated metrics path is free)"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -1230,5 +1339,6 @@ let tests =
         staticExportTests
         conditionalGetTests
         conditionalGetHandlerTests
+        renderMetrics153Tests
         getOrRender155Tests
     ]

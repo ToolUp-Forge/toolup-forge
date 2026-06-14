@@ -442,7 +442,26 @@ module PublicPageHandler =
                         | _ -> serveUncached api layouts slugOrIndex accessContext ctx
 
                 sw.Stop()
-                RenderMetrics.emitRender metrics (RenderMetrics.classifyOutcome ctx result) sw.Elapsed.TotalMilliseconds
+                let outcomeTag = RenderMetrics.classifyOutcome ctx result
+                RenderMetrics.emitRender metrics outcomeTag sw.Elapsed.TotalMilliseconds
+
+                // Phase 153 — crawler / SEO observability. Gate the
+                // User-Agent classification + the new emits on a live sink
+                // so the substring scan + UA read are free under the NoOp
+                // sink (GP 13). The conditional-GET counter is emitted only
+                // for a real page response (200 / 304); not-found
+                // fall-throughs increment the soft-404 counter instead.
+                if not (metrics :? NoOpMetricsSink) then
+                    let ua = ctx.Request.Headers.UserAgent.ToString()
+                    RenderMetrics.emitAgent metrics (RenderMetrics.classifyAgent ua)
+
+                    match outcomeTag with
+                    | RenderMetrics.OutcomeNotModified ->
+                        RenderMetrics.emitConditionalGet metrics RenderMetrics.CondGet304
+                    | RenderMetrics.OutcomeRendered -> RenderMetrics.emitConditionalGet metrics RenderMetrics.CondGet200
+                    | RenderMetrics.OutcomeNotFound -> RenderMetrics.emitNotFound metrics
+                    | _ -> ()
+
                 return result
             }
 
