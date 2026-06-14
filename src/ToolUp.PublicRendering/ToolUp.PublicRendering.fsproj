@@ -113,6 +113,12 @@
              Phase 155 `ConditionalGet.cacheable` combinator, so it must
              compile after both. -->
         <Compile Include="Server\SitemapGenerator.fs" />
+        <!-- Phase 157 — static client-search index emitter (RAG-free
+             search index over the same universe SitemapGenerator walks;
+             content-version ETag via IndexNow.computeSignature; serves
+             through the Phase 155 ConditionalGet combinator). After
+             SitemapGenerator + IndexNow + ConditionalGet. -->
+        <Compile Include="Server\SearchIndexEmitter.fs" />
         <Compile Include="Server\StaticExport.fs" />
         <!-- Phase 114/115 — multi-host site registry: PublicSiteDef (incl.
              per-site feeds) + per-site loader/API runtimes + host→site
