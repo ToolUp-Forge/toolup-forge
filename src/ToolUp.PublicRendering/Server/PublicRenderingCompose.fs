@@ -169,6 +169,37 @@ type PublicRenderingServerApp = {
     /// to its own absolute URL — satellite-aware (each site's `BaseUrl`).
     /// Set via `withSelfCanonical`.
     SelfCanonical: bool
+    /// Phase 149 — opt-in sitemap response cache. `false` (default) → the
+    /// `/sitemap.xml` handler rebuilds its XML body per request exactly as
+    /// pre-149 (GP 11 / GP 13). `true` memoises the generated body keyed on
+    /// the universe digest, so repeated crawler polls within a content
+    /// generation skip rebuilding the (potentially large) XML; the body is
+    /// byte-identical either way. The conditional-GET validators
+    /// (`ETag` / `Last-Modified` / `Cache-Control` + `304`) are emitted
+    /// unconditionally — they need no opt-in. Set via
+    /// `withSitemapResponseCache`. Applies to the default site; each
+    /// satellite gets its own cache instance.
+    SitemapResponseCache: bool
+    /// Phase 150 — universal-lastmod fallback. `None` (default) → entries
+    /// with no `PublishedAt` (incl. Phase 95 dynamic slugs) emit no
+    /// `<lastmod>`, byte-for-byte pre-150 (GP 11). `Some date` stamps every
+    /// such entry with `date` (`yyyy-MM-dd`). Set via
+    /// `withSitemapDefaultLastmod`.
+    SitemapDefaultLastmod: System.DateTimeOffset option
+    /// Phase 150 — URL-count threshold above which `sitemap.xml` becomes a
+    /// `<sitemapindex>` + `sitemap-<name>.xml` shard files. Default 50,000
+    /// (the sitemaps.org per-file cap). Set via `withSitemapShardThreshold`.
+    SitemapShardThreshold: int
+    /// Phase 150 — optional cluster key for logical-cluster shards (a
+    /// changed cluster re-fetches only its own child sitemap). `None`
+    /// (default) → deterministic numeric slices past the threshold. Set via
+    /// `withSitemapClusterKey`.
+    SitemapClusterKey: (Slug -> string) option
+    /// Phase 157 — opt-in static client-search index endpoint. `None`
+    /// (default) → no endpoint mounted, byte-for-byte pre-157 (GP 11 /
+    /// GP 13). `Some config` mounts a compact content-versioned JSON index
+    /// over the public universe at `config.Path`. Set via `withSearchIndex`.
+    SearchIndex: SearchIndexConfig option
 }
 
 module PublicRenderingServerApp =
@@ -195,6 +226,11 @@ module PublicRenderingServerApp =
         Sites = []
         ConditionalGet = None
         SelfCanonical = false
+        SitemapResponseCache = false
+        SitemapDefaultLastmod = None
+        SitemapShardThreshold = 50_000
+        SitemapClusterKey = None
+        SearchIndex = None
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -227,6 +263,11 @@ module PublicRenderingServerApp =
         Sites = []
         ConditionalGet = None
         SelfCanonical = false
+        SitemapResponseCache = false
+        SitemapDefaultLastmod = None
+        SitemapShardThreshold = 50_000
+        SitemapClusterKey = None
+        SearchIndex = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -684,6 +725,73 @@ module PublicRenderingServerApp =
     /// renders byte-for-byte the pre-148 head output.
     let withSelfCanonical (app: PublicRenderingServerApp) : PublicRenderingServerApp = { app with SelfCanonical = true }
 
+    /// Phase 149 — opt into the sitemap response cache: the `/sitemap.xml`
+    /// handler memoises its generated XML body keyed on the universe digest,
+    /// so repeated crawler polls within a content generation skip rebuilding
+    /// the (potentially large) body. The conditional-GET validators
+    /// (`ETag` / `Last-Modified` / `Cache-Control` + `304`) are emitted
+    /// unconditionally and need no opt-in; this only adds the body memo.
+    ///
+    /// Off by default (GP 11 / GP 13): a pipeline that never calls this
+    /// rebuilds the body per request, byte-for-byte pre-149. The cached body
+    /// is byte-identical to the uncached one. Applies to the default site;
+    /// each satellite site gets its own cache instance.
+    let withSitemapResponseCache (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            SitemapResponseCache = true
+    }
+
+    /// Phase 150 — give every sitemap URL a `<lastmod>` by stamping any
+    /// entry with no `PublishedAt` (incl. Phase 95 dynamic slugs) with
+    /// `date` (formatted `yyyy-MM-dd`; typically the deploy / content-version
+    /// timestamp). Off by default → signal-less entries emit no `<lastmod>`,
+    /// byte-for-byte pre-150 (GP 11). Applies to the runtime sitemap +
+    /// shards and the static export.
+    let withSitemapDefaultLastmod
+        (date: System.DateTimeOffset)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        {
+            app with
+                SitemapDefaultLastmod = Some date
+        }
+
+    /// Phase 150 — set the URL-count threshold above which `sitemap.xml`
+    /// becomes a `<sitemapindex>` + `sitemap-<name>.xml` shard files.
+    /// Defaults to 50,000 (the sitemaps.org per-file cap). Below the
+    /// threshold the sitemap stays a single `<urlset>`, byte-for-byte
+    /// pre-150.
+    let withSitemapShardThreshold (threshold: int) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            SitemapShardThreshold = threshold
+    }
+
+    /// Phase 150 — supply a cluster key so the sitemap index shards along
+    /// logical content types (a changed cluster re-fetches only its own
+    /// child sitemap) instead of blind numeric slices. `keyOf slug` names
+    /// the shard a slug belongs to (e.g. the first path segment). Only takes
+    /// effect past the threshold.
+    let withSitemapClusterKey (keyOf: Slug -> string) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            SitemapClusterKey = Some keyOf
+    }
+
+    /// Phase 157 — mount the static client-search index endpoint with the
+    /// default config (`/search-index.json` over the file-backed universe).
+    /// Off by default → no endpoint (GP 11 / GP 13). Per-site aware: under a
+    /// `SiteRegistry` each site indexes its own universe.
+    let withSearchIndex (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            SearchIndex = Some SearchIndexConfig.defaults
+    }
+
+    /// Phase 157 — mount the search-index endpoint with an explicit config
+    /// (custom path / `Cache-Control` / consumer `EntrySource`).
+    let withSearchIndexConfig (config: SearchIndexConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            SearchIndex = Some config
+    }
+
     /// Toggle the dev-mode hot-reload watcher. Defaults to `true`.
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
@@ -755,6 +863,17 @@ module PublicRenderingServerApp =
             let conditionalGetSettings = app.ConditionalGet // Phase 147
             let indexNowOptions = app.IndexNow // Phase 109
             let satelliteDefs = app.Sites // Phase 114
+            let sitemapResponseCacheEnabled = app.SitemapResponseCache // Phase 149
+
+            // Phase 150 — the sharding + universal-lastmod knobs, shared by
+            // the runtime sitemap/shard handlers and the static export.
+            let sitemapSharding: SitemapGenerator.SitemapShardingOptions = {
+                Threshold = app.SitemapShardThreshold
+                ClusterKey = app.SitemapClusterKey
+                DefaultLastmod = app.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
+            }
+
+            let searchIndexConfig = app.SearchIndex // Phase 157
 
             // Resolve the slug-purge surface for the publish / CMS
             // invalidation hook (Phase 84). Prefer an explicit
@@ -1128,6 +1247,43 @@ module PublicRenderingServerApp =
             // page (catch-all by slug, default HTML). All resolve
             // `IPublicContentApi` + `MarkdownContentLoader` per-request
             // from `ctx.RequestServices` so the DI singleton is shared.
+            // Phase 149 — conditional-GET sitemap handler options. The
+            // validators (ETag / Last-Modified / Cache-Control + 304) are
+            // always emitted; the response cache is opt-in and gets one
+            // instance per logical site (default site here; satellites get
+            // their own below) so the single-slot memo never thrashes
+            // between sites.
+            let defaultSitemapOptions: SitemapGenerator.SitemapHandlerOptions = {
+                SitemapGenerator.SitemapHandlerOptions.defaults with
+                    ResponseCache =
+                        if sitemapResponseCacheEnabled then
+                            Some(SitemapGenerator.SitemapCache())
+                        else
+                            None
+                    Sharding = sitemapSharding // Phase 150
+            }
+
+            // Phase 150 — per-site base carries the sharding knobs even when
+            // the response cache is off; the per-site map below adds a cache
+            // instance per site when the cache is enabled.
+            let siteSitemapBaseOptions: SitemapGenerator.SitemapHandlerOptions = {
+                SitemapGenerator.SitemapHandlerOptions.defaults with
+                    Sharding = sitemapSharding
+            }
+
+            let siteSitemapOptions: Map<string, SitemapGenerator.SitemapHandlerOptions> =
+                match siteRegistry with
+                | Some registry when sitemapResponseCacheEnabled ->
+                    registry.Sites
+                    |> List.map (fun site ->
+                        site.Def.Name,
+                        {
+                            siteSitemapBaseOptions with
+                                ResponseCache = Some(SitemapGenerator.SitemapCache())
+                        })
+                    |> Map.ofList
+                | _ -> Map.empty
+
             let sitemapHandler: HttpHandler =
                 route "/sitemap.xml"
                 >=> fun next ctx ->
@@ -1139,7 +1295,34 @@ module PublicRenderingServerApp =
                     let enumerate () =
                         ContentSource.enumerateAll contentSources
 
-                    SitemapGenerator.handler publicBaseUrl api enumerate next ctx
+                    SitemapGenerator.handlerWith defaultSitemapOptions publicBaseUrl api enumerate next ctx
+
+            // Phase 150 — shard-file handler (`/sitemap-<name>.xml`). Active
+            // only past the threshold; declines (falls through) otherwise.
+            let sitemapShardHandler: HttpHandler =
+                fun next ctx ->
+                    let api =
+                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                    let enumerate () =
+                        ContentSource.enumerateAll contentSources
+
+                    SitemapGenerator.shardHandler defaultSitemapOptions publicBaseUrl api enumerate next ctx
+
+            // Phase 157 — search-index endpoint. Mounted only when
+            // `withSearchIndex` is composed; declines otherwise (no route).
+            let searchIndexHandler: HttpHandler =
+                match searchIndexConfig with
+                | None -> fun _ _ -> skipPipeline
+                | Some config ->
+                    fun next ctx ->
+                        let api =
+                            ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                        let enumerate () =
+                            ContentSource.enumerateAll contentSources
+
+                        SearchIndexEmitter.handler config publicBaseUrl api enumerate next ctx
 
             let redirectHandler: HttpHandler =
                 fun next ctx ->
@@ -1252,9 +1435,39 @@ module PublicRenderingServerApp =
             let sitemapHandler =
                 siteAware
                     (fun site ->
+                        let opts =
+                            siteSitemapOptions
+                            |> Map.tryFind site.Def.Name
+                            |> Option.defaultValue siteSitemapBaseOptions
+
                         route "/sitemap.xml"
-                        >=> SitemapGenerator.handler site.Def.BaseUrl site.Api (fun () -> async.Return []))
+                        >=> SitemapGenerator.handlerWith opts site.Def.BaseUrl site.Api (fun () -> async.Return []))
                     sitemapHandler
+
+            // Phase 150 — per-site shard handler (host-aware). Each site
+            // shards its own universe past the threshold; the default-site
+            // shard handler serves unmatched hosts.
+            let sitemapShardHandler =
+                siteAware
+                    (fun site ->
+                        let opts =
+                            siteSitemapOptions
+                            |> Map.tryFind site.Def.Name
+                            |> Option.defaultValue siteSitemapBaseOptions
+
+                        SitemapGenerator.shardHandler opts site.Def.BaseUrl site.Api (fun () -> async.Return []))
+                    sitemapShardHandler
+
+            // Phase 157 — per-site search index (host-aware). Each site
+            // indexes its own universe; unmatched hosts serve the default.
+            let searchIndexHandler =
+                match searchIndexConfig with
+                | None -> searchIndexHandler
+                | Some config ->
+                    siteAware
+                        (fun site ->
+                            SearchIndexEmitter.handler config site.Def.BaseUrl site.Api (fun () -> async.Return []))
+                        searchIndexHandler
 
             let redirectHandler =
                 siteAware
@@ -1311,12 +1524,13 @@ module PublicRenderingServerApp =
                             SiteGate.forSite registry site.Def.Name feedRoute))
 
             let publicRenderingHandlers =
-                [ sitemapHandler ]
+                [ sitemapHandler; sitemapShardHandler ] // Phase 150 — shard route after the index
                 @ indexNowHandlers
                 @ [ redirectHandler; exportHandler ]
                 @ feedHandlers
                 @ satelliteFeedHandlers
                 @ searchHandlers
+                @ [ searchIndexHandler ] // Phase 157 — search-index endpoint (declines when not composed)
                 @ [ previewHandler; pageHandler ]
 
             let baseExt = appWithEntity.Extensions
@@ -1371,13 +1585,27 @@ module PublicRenderingServerApp =
     /// the compose-registered redirects (`app.Redirects`) through to the
     /// host-config emitter. `StaticExportOptions.defaults` reproduces the
     /// `exportStatic` single-tree behaviour.
+    /// Phase 150 — the compose-level sitemap sharding + universal-lastmod
+    /// knobs (`withSitemapDefaultLastmod` / `withSitemapShardThreshold` /
+    /// `withSitemapClusterKey`) as a `SitemapShardingOptions`, so the static
+    /// export emits the index + shards on the same rules the runtime handler
+    /// uses.
+    let private appSitemapSharding (app: PublicRenderingServerApp) : SitemapGenerator.SitemapShardingOptions = {
+        Threshold = app.SitemapShardThreshold
+        ClusterKey = app.SitemapClusterKey
+        DefaultLastmod = app.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
+    }
+
     let exportStaticWith
         (options: StaticExportOptions)
         (outputDir: string)
         (app: PublicRenderingServerApp)
         : Async<int> =
         StaticExport.runWith
-            options
+            {
+                options with
+                    SitemapSharding = appSitemapSharding app
+            } // Phase 150
             app.Redirects
             app.Base.Config
             app.Layouts
@@ -1421,7 +1649,18 @@ module PublicRenderingServerApp =
                 let siteDir = System.IO.Path.Combine(outputDir, "sites", site.Name)
 
                 let! n =
-                    StaticExport.runWith options site.Redirects siteConfig siteLayouts None [] app.Base.Logger siteDir
+                    StaticExport.runWith
+                        {
+                            options with
+                                SitemapSharding = appSitemapSharding app
+                        } // Phase 150
+                        site.Redirects
+                        siteConfig
+                        siteLayouts
+                        None
+                        []
+                        app.Base.Logger
+                        siteDir
 
                 sum <- sum + n
 

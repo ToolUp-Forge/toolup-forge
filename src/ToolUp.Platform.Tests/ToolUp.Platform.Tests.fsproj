@@ -307,6 +307,9 @@
              404, rate-limit 429, SSE frame delivery). -->
         <Compile Include="InProcess\LiveSessionHostTests.fs" />
         <Compile Include="InProcess\PublicRenderingTests.fs" />
+        <!-- Phase 149/150/157 — sitemap conditional-GET + index sharding +
+             universal lastmod + static client-search index emitter. -->
+        <Compile Include="InProcess\SitemapSearchIndexTests.fs" />
         <!-- Phase 85 — NarrativeFromData projector output-shape +
              determinism + graceful-degradation tests. -->
         <Compile Include="InProcess\NarrativeFromDataTests.fs" />

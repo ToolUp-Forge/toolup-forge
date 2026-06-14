@@ -167,6 +167,8 @@ let allTests =
         // cap refusal, endpoint integration (404 / 429 / SSE frames).
         LiveSessionHostTests.tests
         PublicRenderingTests.tests
+        // Phase 149/150/157 — sitemap conditional-GET + sharding + search index.
+        SitemapSearchIndexTests.tests
         // Phase 85 — NarrativeFromData analytics → Narrative projectors.
         NarrativeFromDataTests.tests
         NarrativeChartsTests.tests

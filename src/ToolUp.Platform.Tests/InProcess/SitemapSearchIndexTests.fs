@@ -1,0 +1,425 @@
+module ToolUp.Platform.Tests.InProcess.SitemapSearchIndexTests
+
+open System
+open System.IO
+open System.Text.Json
+open Expecto
+open Microsoft.AspNetCore.Http
+open ToolUp.Platform
+open ToolUp.PublicRendering
+
+// ─── Sitemap (Phase 149/150) + search index (Phase 157) ─────────────
+//
+// Self-contained tests over the SitemapGenerator + SearchIndexEmitter
+// surfaces — a minimal in-memory `IPublicContentApi` + a synthetic
+// Giraffe HttpContext, so the handlers + pure generators are exercised
+// without the markdown content-file pipeline.
+
+let private mkPage (slug: string) (lastmod: DateTimeOffset option) : PublicPage = {
+    Slug = Slug slug
+    Title = slug
+    Description = ""
+    Body = Html ""
+    Layout = LayoutName "page"
+    Frontmatter = Map.empty
+    PublishedAt = lastmod
+    Collection = None
+    Status = Published
+    Audience = PageAudience.Public
+}
+
+/// Minimal in-memory `IPublicContentApi` over a fixed page list.
+let private fakeApi (pages: PublicPage list) : IPublicContentApi =
+    { new IPublicContentApi with
+        member _.GetPage(slug: string) = async { return pages |> List.tryFind (fun p -> Slug.value p.Slug = slug) }
+
+        member _.ListPages(_: string) = async { return pages }
+
+        member _.GetCollection(collectionId: string) = async {
+            return pages |> List.filter (fun p -> p.Collection = Some collectionId)
+        }
+
+        member _.GetPageInContext(slug: string, _: AccessContext) = async {
+            return pages |> List.tryFind (fun p -> Slug.value p.Slug = slug)
+        }
+    }
+
+let private noDynamic () : Async<Slug list> = async { return [] }
+
+let private mkCtxWith (headers: (string * string) list) : HttpContext =
+    let ctx = DefaultHttpContext()
+
+    for (k, v) in headers do
+        ctx.Request.Headers[k] <- Microsoft.Extensions.Primitives.StringValues v
+
+    ctx :> HttpContext
+
+/// A context with `Request.Path` set (for `route` / `routef` handlers).
+let private mkCtxPath (path: string) : HttpContext =
+    let ctx = mkCtxWith []
+    ctx.Request.Path <- PathString path
+    ctx
+
+/// Run a handler; returns `(304?, statusCode, captured-body)`.
+let private runHandler (handler: Giraffe.Core.HttpHandler) (ctx: HttpContext) : int * string =
+    use ms = new MemoryStream()
+    ctx.Response.Body <- ms
+
+    let next: Giraffe.Core.HttpFunc =
+        fun c -> System.Threading.Tasks.Task.FromResult(Some c)
+
+    handler next ctx |> Async.AwaitTask |> Async.RunSynchronously |> ignore
+    ms.Position <- 0L
+    use sr = new StreamReader(ms)
+    ctx.Response.StatusCode, sr.ReadToEnd()
+
+// ─── Phase 149 — cacheable, conditional-GET sitemap ─────────────────
+
+let private sitemap149Tests =
+    testList "PublicRendering — Phase 149 cacheable sitemap" [
+
+        testCase "handler emits a weak ETag + Cache-Control; a matching If-None-Match re-poll 304s"
+        <| fun _ ->
+            let api =
+                fakeApi [ mkPage "a" (Some(DateTimeOffset.Parse "2026-05-22")); mkPage "b" None ]
+
+            let handler = SitemapGenerator.handler "https://example.com" api noDynamic
+
+            let ctx1 = mkCtxWith []
+            runHandler handler ctx1 |> ignore
+            let etag = ctx1.Response.Headers["ETag"].ToString()
+
+            Expect.isTrue (etag.StartsWith "W/\"") "weak ETag emitted (W/-prefixed)"
+            Expect.stringContains (ctx1.Response.Headers["Cache-Control"].ToString()) "max-age" "Cache-Control emitted"
+            Expect.notEqual ctx1.Response.StatusCode 304 "first crawl is a full response"
+
+            let ctx2 = mkCtxWith [ "If-None-Match", etag ]
+            let status2, _ = runHandler handler ctx2
+            Expect.equal status2 304 "a matching If-None-Match re-poll 304s"
+
+        testCase "handler 304s a bare If-Modified-Since re-crawl at/after the universe Last-Modified"
+        <| fun _ ->
+            let api = fakeApi [ mkPage "a" (Some(DateTimeOffset.Parse "2026-05-22")) ]
+            let handler = SitemapGenerator.handler "https://example.com" api noDynamic
+            let since = DateTimeOffset(2026, 12, 31, 0, 0, 0, TimeSpan.Zero)
+            let ctx = mkCtxWith [ "If-Modified-Since", since.UtcDateTime.ToString("R") ]
+            let status, _ = runHandler handler ctx
+            Expect.equal status 304 "304 from the If-Modified-Since gate"
+
+        testCase "the sitemap ETag (digest over the universe) rolls on change, stable otherwise"
+        <| fun _ ->
+            let sigOf pages =
+                IndexNow.computeSignature (SitemapGenerator.entries pages [])
+
+            let p1 = mkPage "a" (Some(DateTimeOffset.Parse "2026-01-01"))
+            let sig1 = sigOf [ p1 ]
+            Expect.equal sig1 (sigOf [ mkPage "a" (Some(DateTimeOffset.Parse "2026-01-01")) ]) "stable when unchanged"
+
+            Expect.notEqual
+                sig1
+                (sigOf [ mkPage "a" (Some(DateTimeOffset.Parse "2026-02-02")) ])
+                "rolls on lastmod change"
+
+            Expect.notEqual sig1 (sigOf [ p1; mkPage "b" None ]) "rolls when a slug is added"
+
+        testCase "SitemapCache.GetOrBuild memoises per digest and rebuilds on a digest change"
+        <| fun _ ->
+            let cache = SitemapGenerator.SitemapCache()
+            let mutable builds = 0
+
+            let build v =
+                (fun () ->
+                    builds <- builds + 1
+                    v)
+
+            Expect.equal (cache.GetOrBuild "s1" (build "A")) "A" "built"
+            Expect.equal (cache.GetOrBuild "s1" (build "A")) "A" "memoised"
+            Expect.equal builds 1 "build runs once per digest"
+            Expect.equal (cache.GetOrBuild "s2" (build "B")) "B" "rebuilds on a new digest"
+            Expect.equal builds 2 "rebuilt once on the new digest"
+
+        testCase "sitemap body is byte-identical with and without the response cache"
+        <| fun _ ->
+            let api =
+                fakeApi [ mkPage "a" (Some(DateTimeOffset.Parse "2026-05-22")); mkPage "b" None ]
+
+            let bodyOf (opts: SitemapGenerator.SitemapHandlerOptions) =
+                let _, body =
+                    runHandler (SitemapGenerator.handlerWith opts "https://example.com" api noDynamic) (mkCtxWith [])
+
+                body
+
+            let uncached = bodyOf SitemapGenerator.SitemapHandlerOptions.defaults
+
+            let cached =
+                bodyOf {
+                    SitemapGenerator.SitemapHandlerOptions.defaults with
+                        ResponseCache = Some(SitemapGenerator.SitemapCache())
+                }
+
+            Expect.stringContains uncached "<urlset" "uncached body is a urlset"
+            Expect.equal cached uncached "cached body byte-identical to the uncached body"
+    ]
+
+// ─── Phase 150 — sitemap-index sharding + universal lastmod ─────────
+
+let private mkUniverse (n: int) : (Slug * string option) list = [ for i in 1..n -> Slug(sprintf "p%05d" i), None ]
+
+let private sitemap150Tests =
+    testList "PublicRendering — Phase 150 sitemap sharding + universal lastmod" [
+
+        testCase "below the threshold the handler body is byte-for-byte the pre-150 single urlset"
+        <| fun _ ->
+            let pages = [ mkPage "a" (Some(DateTimeOffset.Parse "2026-05-22")); mkPage "b" None ]
+            let api = fakeApi pages
+            // Default threshold (50k) >> 2 pages → single urlset.
+            let _, body =
+                runHandler (SitemapGenerator.handler "https://example.com" api noDynamic) (mkCtxWith [])
+
+            Expect.equal
+                body
+                (SitemapGenerator.generateWith "https://example.com" pages [])
+                "byte-for-byte generateWith"
+
+        testCase "past the threshold sitemap.xml becomes a <sitemapindex> of N numeric shards, each <= threshold"
+        <| fun _ ->
+            let opts = {
+                SitemapGenerator.SitemapHandlerOptions.defaults with
+                    Sharding = {
+                        SitemapGenerator.SitemapShardingOptions.defaults with
+                            Threshold = 10
+                    }
+            }
+
+            let pages = [ for i in 1..25 -> mkPage (sprintf "p%02d" i) None ]
+            let api = fakeApi pages
+
+            let _, body =
+                runHandler (SitemapGenerator.handlerWith opts "https://example.com" api noDynamic) (mkCtxWith [])
+
+            Expect.stringContains body "<sitemapindex" "emits a sitemapindex past the threshold"
+            Expect.stringContains body "/sitemap-1.xml" "lists shard 1"
+            Expect.stringContains body "/sitemap-3.xml" "lists shard 3 (ceil 25/10 = 3)"
+            Expect.isFalse (body.Contains "/sitemap-4.xml") "exactly ceil(N/threshold) shards"
+
+        testCase "shardUniverse: numeric slices are deterministic + each <= threshold + cover the universe"
+        <| fun _ ->
+            let opts = {
+                SitemapGenerator.SitemapShardingOptions.defaults with
+                    Threshold = 10
+            }
+
+            let universe = mkUniverse 25
+            let run1 = SitemapGenerator.shardUniverse opts universe
+            let run2 = SitemapGenerator.shardUniverse opts universe
+            Expect.equal run1 run2 "stable membership across two runs of the same content"
+            Expect.equal (List.length run1) 3 "ceil(25/10) = 3 shards"
+            Expect.isTrue (run1 |> List.forall (fun (_, e) -> List.length e <= 10)) "each shard <= threshold"
+
+            let allSlugs = run1 |> List.collect snd |> List.map fst |> Set.ofList
+            Expect.equal (Set.count allSlugs) 25 "every URL is covered exactly once"
+
+        testCase "shardUniverse: cluster key groups by logical content type with stable membership"
+        <| fun _ ->
+            let clusterOf (Slug s: Slug) = s.Split('/').[0]
+
+            let opts = {
+                SitemapGenerator.SitemapShardingOptions.defaults with
+                    Threshold = 1000
+                    ClusterKey = Some clusterOf
+            }
+
+            let universe = [
+                Slug "news/a", None
+                Slug "news/b", None
+                Slug "products/x", None
+                Slug "about", None
+            ]
+
+            let shards = SitemapGenerator.shardUniverse opts universe
+            let names = shards |> List.map fst
+            Expect.contains names "news" "a 'news' cluster shard"
+            Expect.contains names "products" "a 'products' cluster shard"
+            Expect.contains names "about" "an 'about' cluster shard"
+            Expect.equal shards (SitemapGenerator.shardUniverse opts universe) "stable membership across runs"
+
+        testCase "applyDefaultLastmod fills only None lastmods when set; identity when unset"
+        <| fun _ ->
+            let universe = [ Slug "a", Some "2026-01-01"; Slug "b", None ]
+            Expect.equal (SitemapGenerator.applyDefaultLastmod None universe) universe "unset → identity (pre-150)"
+
+            let filled = SitemapGenerator.applyDefaultLastmod (Some "2026-06-14") universe
+            Expect.equal (filled |> List.find (fun (Slug s, _) -> s = "a") |> snd) (Some "2026-01-01") "existing kept"
+            Expect.equal (filled |> List.find (fun (Slug s, _) -> s = "b") |> snd) (Some "2026-06-14") "None filled"
+
+        testCase "generateSitemapIndex emits sitemapindex with shard <loc> + <lastmod>"
+        <| fun _ ->
+            let shards = [
+                "news", [ Slug "news/a", Some "2026-05-01"; Slug "news/b", Some "2026-05-22" ]
+            ]
+
+            let xml = SitemapGenerator.generateSitemapIndex "https://example.com" shards
+            Expect.stringContains xml "<sitemapindex" "sitemapindex root"
+            Expect.stringContains xml "https://example.com/sitemap-news.xml" "child sitemap loc"
+            Expect.stringContains xml "<lastmod>2026-05-22</lastmod>" "shard lastmod is the latest entry"
+
+        testCase "shardHandler serves a shard urlset past the threshold and declines below / for unknown shards"
+        <| fun _ ->
+            let opts = {
+                SitemapGenerator.SitemapHandlerOptions.defaults with
+                    Sharding = {
+                        SitemapGenerator.SitemapShardingOptions.defaults with
+                            Threshold = 10
+                    }
+            }
+
+            let pages = [ for i in 1..25 -> mkPage (sprintf "p%02d" i) None ]
+            let api = fakeApi pages
+            let handler = SitemapGenerator.shardHandler opts "https://example.com" api noDynamic
+
+            // Known shard → urlset body.
+            let status1, body1 = runHandler handler (mkCtxPath "/sitemap-1.xml")
+            Expect.equal status1 200 "known shard serves 200"
+            Expect.stringContains body1 "<urlset" "shard body is a urlset"
+
+            // Unknown shard → declines (no body written → not 200-with-urlset).
+            let _, body99 = runHandler handler (mkCtxPath "/sitemap-99.xml")
+            Expect.isFalse (body99.Contains "<urlset") "unknown shard declines (no urlset body)"
+
+        testCase "below the threshold shardHandler declines (no shards exist)"
+        <| fun _ ->
+            let pages = [ mkPage "a" None; mkPage "b" None ]
+            let api = fakeApi pages
+
+            let handler =
+                SitemapGenerator.shardHandler
+                    SitemapGenerator.SitemapHandlerOptions.defaults
+                    "https://example.com"
+                    api
+                    noDynamic
+
+            let _, body = runHandler handler (mkCtxPath "/sitemap-1.xml")
+            Expect.isFalse (body.Contains "<urlset") "no shard served below the threshold"
+    ]
+
+// ─── Phase 157 — static client-search index emitter ─────────────────
+
+let private parseEntries (json: string) : JsonElement[] =
+    // NB: do not dispose the document — the returned JsonElement values are
+    // views into it; disposing would throw ObjectDisposedException on read.
+    let doc = JsonDocument.Parse json
+    doc.RootElement.EnumerateArray() |> Seq.toArray
+
+let private searchIndex157Tests =
+    testList "PublicRendering — Phase 157 search index emitter" [
+
+        testCase "emitter produces valid compact JSON over the file universe"
+        <| fun _ ->
+            let pages = [
+                {
+                    mkPage "news/launch" (Some(DateTimeOffset.Parse "2026-05-22")) with
+                        Title = "Launch"
+                        Collection = Some "news"
+                        Frontmatter = Map.ofList [ "keywords", "product, launch" ]
+                }
+                mkPage "about" None
+            ]
+
+            let entries = SearchIndexEmitter.entriesFromPages "https://example.com" pages []
+            let json = SearchIndexEmitter.toJson entries
+            let parsed = parseEntries json
+            Expect.equal parsed.Length 2 "one JSON object per page"
+
+            let launch =
+                parsed
+                |> Array.find (fun e -> e.GetProperty("url").GetString().EndsWith "/news/launch")
+
+            Expect.equal (launch.GetProperty("title").GetString()) "Launch" "title pulled from the page"
+            Expect.equal (launch.GetProperty("kind").GetString()) "news" "kind from the collection"
+
+            let kw =
+                launch.GetProperty("keywords").EnumerateArray()
+                |> Seq.map (fun e -> e.GetString())
+                |> Seq.toList
+
+            Expect.equal kw [ "product"; "launch" ] "keywords from the frontmatter"
+            Expect.isFalse (json.Contains "\n") "compact JSON — no newlines"
+
+        testCase "a custom EntrySource overrides the file-backed universe"
+        <| fun _ ->
+            let custom =
+                fun () -> async {
+                    return [
+                        {
+                            Url = "https://example.com/x"
+                            Title = "X"
+                            Kind = "doc"
+                            Keywords = [ "k" ]
+                        }
+                    ]
+                }
+
+            let config = SearchIndexConfig.defaults |> SearchIndexConfig.withEntrySource custom
+            let api = fakeApi [ mkPage "ignored" None ]
+            let handler = SearchIndexEmitter.handler config "https://example.com" api noDynamic
+            let ctx = mkCtxWith []
+            ctx.Request.Path <- PathString "/search-index.json"
+            let status, body = runHandler handler ctx
+            Expect.equal status 200 "served"
+            let parsed = parseEntries body
+            Expect.equal parsed.Length 1 "consumer entries, not the file universe"
+            Expect.equal (parsed.[0].GetProperty("title").GetString()) "X" "consumer-supplied entry surfaces"
+
+        testCase "endpoint ETag folds the content version: rolls on change, 304s on a conditional re-fetch"
+        <| fun _ ->
+            let api1 = fakeApi [ mkPage "a" (Some(DateTimeOffset.Parse "2026-01-01")) ]
+
+            let handler1 =
+                SearchIndexEmitter.handler SearchIndexConfig.defaults "https://example.com" api1 noDynamic
+
+            let ctx1 = mkCtxWith []
+            ctx1.Request.Path <- PathString "/search-index.json"
+            runHandler handler1 ctx1 |> ignore
+            let etag1 = ctx1.Response.Headers["ETag"].ToString()
+            Expect.isTrue (etag1.StartsWith "W/\"") "weak ETag emitted"
+
+            // Conditional re-fetch with the same content → 304.
+            let ctx2 = mkCtxWith [ "If-None-Match", etag1 ]
+            ctx2.Request.Path <- PathString "/search-index.json"
+            let status2, _ = runHandler handler1 ctx2
+            Expect.equal status2 304 "304 on a conditional re-fetch of unchanged content"
+
+            // Different universe → different ETag.
+            let api2 = fakeApi [ mkPage "a" (Some(DateTimeOffset.Parse "2026-02-02")) ]
+
+            let handler2 =
+                SearchIndexEmitter.handler SearchIndexConfig.defaults "https://example.com" api2 noDynamic
+
+            let ctx3 = mkCtxWith []
+            ctx3.Request.Path <- PathString "/search-index.json"
+            runHandler handler2 ctx3 |> ignore
+
+            Expect.notEqual
+                (ctx3.Response.Headers["ETag"].ToString())
+                etag1
+                "ETag rolls when the content version changes"
+
+        testCase "the endpoint only answers its configured path"
+        <| fun _ ->
+            let api = fakeApi [ mkPage "a" None ]
+
+            let handler =
+                SearchIndexEmitter.handler SearchIndexConfig.defaults "https://example.com" api noDynamic
+
+            let ctx = mkCtxWith []
+            ctx.Request.Path <- PathString "/not-the-index"
+            let _, body = runHandler handler ctx
+            Expect.isFalse (body.Contains "[") "declines a non-matching path (no JSON body)"
+    ]
+
+let tests =
+    testList "PublicRendering — sitemap & search index (Phase 149/150/157)" [
+        sitemap149Tests
+        sitemap150Tests
+        searchIndex157Tests
+    ]
