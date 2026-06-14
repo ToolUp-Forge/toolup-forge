@@ -279,6 +279,28 @@ NarrativeHtml.RenderOptions.withComponentRenderer "price-widget" (fun props ->
 
 Whole page → `IContentSource` + `ResolvedContent`; embedded block → `Component`. The block seam stays stringly-typed by design (forge `CLAUDE.md` type-erasure boundary #3) and degrades to a safe placeholder for unregistered names.
 
+## Caching a programmatic render outside the page handler (Phase 155)
+
+Everything above hosts a render *through* `PublicPageHandler`. A consumer that instead renders directly from domain data on its own Giraffe route — and just wants the SDK's caching + conditional-GET without the content-file pipeline — reaches for the two handler-agnostic primitives in `ToolUp.PublicRendering`:
+
+- **`RenderCache.getOrRender cache key policy render`** — memoise an expensive deterministic render over any `IRenderCache` (`InMemoryRenderCache` / `BlobRenderCache`), with the same lookup + store + stale-while-revalidate semantics the page handler uses. Key it with `RenderKey.forKey` — `RenderKey.Slug` is an opaque cache discriminator, so the composite is yours to choose (`"report/{tenant}/{quarter}"`), and `RenderKey.ContentVersion` carries your single content-version stamp.
+- **`ConditionalGet.cacheable etag lastModified cacheControl`** — a Giraffe combinator that emits `ETag` / `Last-Modified` / `Cache-Control` and short-circuits a conditional re-request to `304`, wrapping the body handler (`ConditionalGet.cacheable … >=> body`). `ConditionalGet.immutableAsset` is the one-year-`immutable` convenience for fingerprinted assets.
+
+```fsharp
+let reportRoute (tenant: string) (quarter: string) : HttpHandler =
+    fun next ctx ->
+        task {
+            let key = RenderKey.forKey $"report/{tenant}/{quarter}" "public" contentVersion
+            let! page = RenderCache.getOrRender cache key (CachePolicy.Cache(300, true)) (fun () -> async {
+                return renderExpensiveReportHtml tenant quarter
+            })
+            let body: HttpHandler = fun n c -> c.WriteStringAsync page.Html
+            return! (ConditionalGet.cacheable page.ContentHash lastModified "public, max-age=300" >=> body) next ctx
+        }
+```
+
+This is the same caching machinery `PublicPageHandler` uses, exposed for reuse — a programmatic consumer adopts it instead of hand-rolling its own ISR + ETag layer. See [`docs/migrations/155-ssr-cache-primitive.md`](../migrations/155-ssr-cache-primitive.md).
+
 ## Scoping by principal (GP 4)
 
 Every source receives the resolved `AccessContext`. The page handler resolves it from `ctx.RequestServices` (falling back to an unrestricted anonymous context when no auth is wired — the normal case for a public content site). Use it to scope a query structurally:
