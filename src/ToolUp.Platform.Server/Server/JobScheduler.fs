@@ -781,6 +781,13 @@ type InProcessJobScheduler
     interface IJobScheduler with
         member _.RegisterHandler(name, handler) = handlers[name] <- handler
 
+        // In-process registration is a synchronous dictionary write; the
+        // async overload performs the same mutation and reports success.
+        member _.RegisterHandlerAsync(name, handler) = async {
+            handlers[name] <- handler
+            return Ok()
+        }
+
         member _.Schedule(registration) = async {
             match validateRegistration registration with
             | Error e -> return Error e

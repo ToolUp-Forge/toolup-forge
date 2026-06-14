@@ -49,6 +49,25 @@ type IJobScheduler =
     /// request.
     abstract RegisterHandler: name: string * handler: IJobHandler -> unit
 
+    /// Async-boundary companion to `RegisterHandler` (portability rule
+    /// 2). A distributed scheduler companion (Akka / Orleans / Hangfire)
+    /// that registers handlers *over the network* — rather than purely
+    /// at compose time in one process — needs an awaitable, fallible
+    /// registration seam: a synchronous `RegisterHandler` would force it
+    /// either to block (a rule-2 violation) or to break this interface
+    /// later, and retrofitting rule 2 is destructive (see
+    /// `docs/platform/portability-rules.md`). Adding the overload now,
+    /// while the only implementation is in-process, keeps the seam
+    /// available before the first distributed companion needs it.
+    ///
+    /// The in-process default implements this by performing the same
+    /// registration as `RegisterHandler` and returning `Ok ()` —
+    /// compose-time registration stays synchronous and free; nothing is
+    /// forced through the async path that doesn't need it. `Error`
+    /// carries an implementation-specific message (e.g. a cluster
+    /// gossip / quorum timeout).
+    abstract RegisterHandlerAsync: name: string * handler: IJobHandler -> Async<Result<unit, string>>
+
     /// Submit a new job. Returns the assigned `JobId` on success.
     ///
     /// Validation chain (in order):

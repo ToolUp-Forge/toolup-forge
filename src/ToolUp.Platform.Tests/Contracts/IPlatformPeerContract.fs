@@ -85,6 +85,8 @@ type private StubScheduler() =
     interface IJobScheduler with
         member _.RegisterHandler(_name, _handler) = ()
 
+        member _.RegisterHandlerAsync(_name, _handler) = async { return Ok() }
+
         member _.Schedule(_registration) =
             failwith "StubScheduler.Schedule must not be invoked by the contract pack"
 

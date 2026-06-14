@@ -262,6 +262,9 @@ type QuotaGatedJobScheduler(inner: IJobScheduler, quotaPolicy: ITeamQuotaPolicy)
     interface IJobScheduler with
         member _.RegisterHandler(name, handler) = inner.RegisterHandler(name, handler)
 
+        member _.RegisterHandlerAsync(name, handler) =
+            inner.RegisterHandlerAsync(name, handler)
+
         member _.Schedule(registration) = inner.Schedule(registration)
 
         member _.Cancel(scopeId, jobId) = inner.Cancel(scopeId, jobId)

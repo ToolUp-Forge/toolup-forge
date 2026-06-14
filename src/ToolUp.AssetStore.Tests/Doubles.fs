@@ -119,6 +119,11 @@ type ManualJobScheduler() =
     interface IJobScheduler with
         member _.RegisterHandler(name, handler) = handlers[name] <- handler
 
+        member _.RegisterHandlerAsync(name, handler) = async {
+            handlers[name] <- handler
+            return Ok()
+        }
+
         member _.Schedule(registration) = async {
             scheduleCalls <- scheduleCalls + 1
 
