@@ -80,7 +80,6 @@
         <Compile Include="Server\NavLayout.fs" />
         <Compile Include="Server\TaxonomyHandler.fs" />
         <Compile Include="Server\Attribution.fs" />
-        <Compile Include="Server\SitemapGenerator.fs" />
         <!-- Phase 109 — IndexNow push-indexing: ownership-key endpoint +
              resumable batched submission (per-batch success persistence) +
              state-store seam (file/blob) + per-slug publish ping + startup
@@ -108,6 +107,12 @@
              general rate-limit partition). -->
         <Compile Include="Server\SemanticSearchHandler.fs" />
         <Compile Include="Server\ContentPreview.fs" />
+        <!-- Phase 149/150 — sitemap generation moved below ConditionalGet +
+             IndexNow: the conditional-GET sitemap handler derives its weak
+             ETag from `IndexNow.computeSignature` and serves through the
+             Phase 155 `ConditionalGet.cacheable` combinator, so it must
+             compile after both. -->
+        <Compile Include="Server\SitemapGenerator.fs" />
         <Compile Include="Server\StaticExport.fs" />
         <!-- Phase 114/115 — multi-host site registry: PublicSiteDef (incl.
              per-site feeds) + per-site loader/API runtimes + host→site
