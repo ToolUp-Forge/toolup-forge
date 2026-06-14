@@ -315,4 +315,216 @@ let httpPathTests =
         }
     ]
 
-let tests = testList "InProcessOAuthTokenRefresher" [ contractTests; httpPathTests ]
+// ─── Refresh-token rotation hardening (TIDY-UP — write-ordering + single-flight) ──
+//
+// Covers the two substrate-controllable halves of the rotation
+// hardening: (1) the rotated refresh token is persisted FIRST and a
+// failed rotated-refresh write bails before caching the access token /
+// expiry; (2) a per-descriptor single-flight gate serialises concurrent
+// refreshes so the second caller re-reads the freshly-rotated token
+// instead of double-spending it into a false `invalid_grant`.
+
+/// Secret store whose writes to a chosen key can be forced to fail —
+/// drives the write-ordering bail test. Otherwise an in-memory store.
+type ControllableSecretStore() =
+    let store = ConcurrentDictionary<string * string, string>()
+    let failKeys = ConcurrentDictionary<string, byte>()
+
+    member _.FailWritesTo(key: string) = failKeys[key] <- 0uy
+
+    member _.TryGet(scopeId: string, key: string) =
+        match store.TryGetValue((scopeId, key)) with
+        | true, v -> Some v
+        | false, _ -> None
+
+    interface ISecretStore with
+        member _.GetSecret(scopeId, key) = async {
+            match store.TryGetValue((scopeId, key)) with
+            | true, v -> return Some v
+            | false, _ -> return None
+        }
+
+        member _.SetSecret(scopeId, key, value) = async {
+            if failKeys.ContainsKey key then
+                return Error "induced write failure"
+            else
+                store[(scopeId, key)] <- value
+                return Ok()
+        }
+
+        member _.DeleteSecret(scopeId, key) = async {
+            store.TryRemove((scopeId, key)) |> ignore
+            return Ok()
+        }
+
+        member _.ListKeys(scopeId) = async {
+            return
+                store.Keys
+                |> Seq.filter (fun (s, _) -> s = scopeId)
+                |> Seq.map snd
+                |> List.ofSeq
+        }
+
+/// Build a refresher over a caller-supplied secret store + fake upstream.
+let private mkRefresher (secretStore: ISecretStore) (respond: HttpRequestMessage -> HttpResponseMessage) =
+    let scheduler = mkSubstrate ()
+    let auditLog = CapturingAuditLog()
+    let metricsSink = NoOpMetricsSink() :> IMetricsSink
+    let rateLimiter = NoOpRateLimiter() :> IRateLimiter
+    let http = new HttpClient(new FakeHttpHandler(respond))
+
+    InProcessOAuthTokenRefresher.create
+        scheduler
+        secretStore
+        (auditLog :> IAuditLog)
+        metricsSink
+        rateLimiter
+        http
+        silentLogger
+
+let private mkDescriptor (scope: string) =
+    OAuthRefreshDescriptor.withDefaults
+        "ga4"
+        "acct-1"
+        scope
+        "https://example.test/ga4/token"
+        "client-id"
+        "ga4-client-secret-acct-1"
+        "ga4-refresh-acct-1"
+
+let rotationHardeningTests =
+    testList "InProcessOAuthTokenRefresher — rotation hardening" [
+
+        testCaseAsync "rotated-refresh persist failure bails before access/expiry write (write-ordering)"
+        <| async {
+            let store = ControllableSecretStore()
+            let iface = store :> ISecretStore
+            let scope = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+            let descriptor = mkDescriptor scope
+
+            do!
+                iface.SetSecret(scope, descriptor.ClientSecretKey, "supersecret")
+                |> Async.Ignore
+
+            do!
+                iface.SetSecret(scope, descriptor.RefreshTokenKey, "rt-original")
+                |> Async.Ignore
+
+            // From here, writes to the refresh-token key fail.
+            store.FailWritesTo descriptor.RefreshTokenKey
+
+            let respond _ =
+                jsonResponse
+                    HttpStatusCode.OK
+                    """{"access_token":"new-access","expires_in":3600,"refresh_token":"rt-rotated"}"""
+
+            let refresher = mkRefresher iface respond
+            do! (refresher :> IOAuthTokenRefresher).RegisterDescriptor descriptor
+
+            let! result = (refresher :> IOAuthTokenRefresher).RefreshNow(descriptor.Provider, descriptor.ConfigId)
+
+            match result with
+            | TransientError reason ->
+                Expect.stringContains reason "rotated refresh token" "names the rotated-refresh write"
+            | other -> failtestf "Expected TransientError, got %A" other
+
+            // Bail-before-access: neither the access token nor the expiry landed.
+            Expect.isNone
+                (store.TryGet(scope, OAuthRefreshDescriptor.accessTokenKey descriptor))
+                "access token not cached when the rotated-refresh write fails"
+
+            Expect.isNone
+                (store.TryGet(scope, OAuthRefreshDescriptor.accessExpiryKey descriptor))
+                "expiry not cached when the rotated-refresh write fails"
+
+            // Old refresh token still in place — the failed write didn't clobber it.
+            Expect.equal
+                (store.TryGet(scope, descriptor.RefreshTokenKey))
+                (Some "rt-original")
+                "old refresh token preserved on a failed rotation write"
+        }
+
+        testCaseAsync "concurrent refreshes serialise — no double-spend of a rotating token (single-flight)"
+        <| async {
+            let store = InMemorySecretStore()
+            let iface = store :> ISecretStore
+            let scope = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+            let descriptor = mkDescriptor scope
+
+            do!
+                iface.SetSecret(scope, descriptor.ClientSecretKey, "supersecret")
+                |> Async.Ignore
+
+            do!
+                iface.SetSecret(scope, descriptor.RefreshTokenKey, "rt-original")
+                |> Async.Ignore
+
+            // Rotating upstream: accepts only the current valid refresh token,
+            // rotates it on each success, and rejects any other token with
+            // invalid_grant (RFC 6819 reuse rejection). Without the single-flight
+            // gate two near-simultaneous reads would both present "rt-original"
+            // and the loser would get a false invalid_grant.
+            let mutable validToken = "rt-original"
+            let gate = obj ()
+
+            let respond (req: HttpRequestMessage) =
+                let body = req.Content.ReadAsStringAsync().Result
+
+                let presented =
+                    body.Split('&')
+                    |> Array.tryPick (fun kv ->
+                        match kv.Split('=') with
+                        | [| k; v |] when k = "refresh_token" -> Some(WebUtility.UrlDecode v)
+                        | _ -> None)
+                    |> Option.defaultValue ""
+
+                lock gate (fun () ->
+                    if presented = validToken then
+                        let rotated = validToken + "-r"
+                        validToken <- rotated
+
+                        jsonResponse
+                            HttpStatusCode.OK
+                            (sprintf """{"access_token":"at","expires_in":3600,"refresh_token":"%s"}""" rotated)
+                    else
+                        jsonResponse HttpStatusCode.BadRequest """{"error":"invalid_grant"}""")
+
+            let refresher = mkRefresher iface respond
+            let rIface = refresher :> IOAuthTokenRefresher
+            do! rIface.RegisterDescriptor descriptor
+
+            let! results =
+                [
+                    rIface.RefreshNow(descriptor.Provider, descriptor.ConfigId)
+                    rIface.RefreshNow(descriptor.Provider, descriptor.ConfigId)
+                ]
+                |> Async.Parallel
+
+            let invalidated =
+                results
+                |> Array.filter (function
+                    | TokenInvalidatedByProvider -> true
+                    | _ -> false)
+
+            Expect.hasLength invalidated 0 "no refresh double-spends the rotated token into a false invalid_grant"
+
+            let refreshed =
+                results
+                |> Array.filter (function
+                    | Refreshed _ -> true
+                    | _ -> false)
+
+            Expect.hasLength refreshed 2 "both serialised refreshes succeed against the rotating upstream"
+
+            // The store holds the twice-rotated token (each call rotated once, in order).
+            let finalRefresh =
+                store.Snapshot()
+                |> List.tryFind (fun (k, _) -> snd k = descriptor.RefreshTokenKey)
+                |> Option.map snd
+
+            Expect.equal finalRefresh (Some "rt-original-r-r") "store holds the twice-rotated refresh token"
+        }
+    ]
+
+let tests =
+    testList "InProcessOAuthTokenRefresher" [ contractTests; httpPathTests; rotationHardeningTests ]

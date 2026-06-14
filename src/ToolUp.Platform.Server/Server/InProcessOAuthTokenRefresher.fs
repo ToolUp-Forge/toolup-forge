@@ -9,6 +9,7 @@ open System.Diagnostics
 open System.Net
 open System.Net.Http
 open System.Text
+open System.Threading
 open System.Threading.Tasks
 open System.Text.Json
 open System.Text.RegularExpressions
@@ -42,9 +43,28 @@ open ToolUp.Platform.Secrets
 // access token can call `RefreshNow` directly; the substrate runs
 // the HTTP refresh unconditionally regardless of scheduler-window
 // state, persists the new tokens, and returns the outcome.
-// `RefreshNow` is concurrency-safe — `ISecretStore.SetSecret`
-// implementations are last-write-wins, so two near-simultaneous
-// refreshes race for the latest token but never corrupt either key.
+// `RefreshNow` is concurrency-safe via a per-descriptor single-flight
+// gate (`SemaphoreSlim` keyed by `(Provider, ConfigId)`): an
+// interactive refresh and the scheduled refresh job for the *same*
+// descriptor serialise, so the second caller re-reads the freshly-
+// rotated refresh token (the read lives inside the gate) instead of
+// double-spending the token the first caller just rotated. Refreshes
+// for *different* descriptors still run fully in parallel — no
+// cross-shard ordering (portability rule 5). The gate is an in-process
+// optimisation: a distributed `IOAuthTokenRefresher` replaces it with
+// a distributed lock or leans on the scheduler's per-descriptor
+// `Idempotency.Key`; it is not part of the portability contract.
+//
+// **Refresh-token rotation safety (RFC 6819 §5.2.2.3).** On a rotating
+// upstream the substrate persists the new refresh token *first* — it
+// is the only irreplaceable secret (the access token + expiry can
+// always be re-derived from it) — before caching the derived access
+// token + expiry, and bails with a `TransientError` if that write
+// fails rather than masking a stranded connection by caching a soon-
+// to-expire access token. The single-flight gate guarantees the
+// substrate never reuses a spent refresh token of its own accord;
+// provider-signalled reuse of a genuinely-revoked token arrives as
+// `invalid_grant` and is already terminal (`TokenInvalidatedByProvider`).
 //
 // **Statelessness across restarts.** In-memory descriptor registry
 // is purely a read-through cache for admin-UI calls
@@ -226,6 +246,17 @@ module InProcessOAuthTokenRefresher =
 
         let descriptors = ConcurrentDictionary<string, OAuthRefreshDescriptor>()
 
+        // Per-descriptor single-flight gates. Serialise concurrent
+        // refreshes for one `(Provider, ConfigId)` (interactive
+        // `RefreshNow` vs the scheduled job) so the second caller re-reads
+        // the freshly-rotated refresh token instead of double-spending the
+        // one the first caller just rotated — see the file header. Gates
+        // are never removed once created: an unregister→register race that
+        // swapped a descriptor's `SemaphoreSlim` mid-flight would re-open
+        // exactly the double-spend window this closes, and the dictionary
+        // is bounded by the (small) distinct-descriptor set.
+        let refreshGates = ConcurrentDictionary<string, SemaphoreSlim>()
+
         let tagsFor (descriptor: OAuthRefreshDescriptor) : Map<string, string> =
             Map.ofList [ "provider", descriptor.Provider ]
 
@@ -271,16 +302,19 @@ module InProcessOAuthTokenRefresher =
                 }
             )
 
-        /// Run one refresh attempt against the descriptor's
-        /// upstream. Side effect: on `Refreshed` persists the new
-        /// access token + expiry to `ISecretStore`, rotates the
-        /// refresh token when the upstream rotated it, and emits
-        /// the `OAuthTokenRefreshed` audit; on
-        /// `TokenInvalidatedByProvider` emits
-        /// `OAuthRefreshTokenInvalidated`. Per-attempt transient
+        /// Run one refresh attempt against the descriptor's upstream.
+        /// The refresh-token read + rotation-write happen inside this
+        /// body, which the public `attemptRefresh` runs under the
+        /// per-descriptor single-flight gate (so a concurrent caller
+        /// re-reads the rotated token here rather than re-sending a
+        /// spent one). Side effect: on `Refreshed` persists the rotated
+        /// refresh token (when the upstream rotated it) *then* the new
+        /// access token + expiry to `ISecretStore`, and emits the
+        /// `OAuthTokenRefreshed` audit; on `TokenInvalidatedByProvider`
+        /// emits `OAuthRefreshTokenInvalidated`. Per-attempt transient
         /// failures + dead-letter records are the job handler's
         /// responsibility.
-        let attemptRefresh (descriptor: OAuthRefreshDescriptor) : Async<OAuthRefreshResult> = async {
+        let attemptRefreshCore (descriptor: OAuthRefreshDescriptor) : Async<OAuthRefreshResult> = async {
             let sw = Stopwatch.StartNew()
 
             let rateLimitKey: RateLimitKey = {
@@ -323,44 +357,70 @@ module InProcessOAuthTokenRefresher =
                                 let access, expiresIn, rotated = parseRefreshSuccess respBody
                                 let newExpiry = DateTimeOffset.UtcNow.AddSeconds(float expiresIn)
 
-                                let! accessWrite =
-                                    secretStore.SetSecret(
-                                        descriptor.ScopeId,
-                                        OAuthRefreshDescriptor.accessTokenKey descriptor,
-                                        access
-                                    )
-
-                                let! expiryWrite =
-                                    secretStore.SetSecret(
-                                        descriptor.ScopeId,
-                                        OAuthRefreshDescriptor.accessExpiryKey descriptor,
-                                        newExpiry.ToString("o")
-                                    )
-
+                                // Write-ordering: persist the rotated refresh token
+                                // FIRST, before the access token + expiry. The refresh
+                                // token is the only irreplaceable secret — access token
+                                // and expiry can always be re-derived from it, but once
+                                // the upstream rotates the refresh token the old one is
+                                // dead. Writing it last (the pre-hardening order) meant a
+                                // failed rotated-refresh persist *after* a successful
+                                // access/expiry write stranded the connection: the retry
+                                // re-read the dead old token → invalid_grant → dead-letter.
+                                // Only write when the upstream actually returned a
+                                // *different* refresh token (RFC 6749 §6 — the field is
+                                // optional and some providers echo the same value).
                                 let! rotatedWrite =
                                     match rotated with
-                                    | Some r -> secretStore.SetSecret(descriptor.ScopeId, descriptor.RefreshTokenKey, r)
-                                    | None -> async { return Ok() }
+                                    | Some r when r <> rt ->
+                                        secretStore.SetSecret(descriptor.ScopeId, descriptor.RefreshTokenKey, r)
+                                    | _ -> async { return Ok() }
 
-                                sw.Stop()
-                                let elapsedMs = sw.ElapsedMilliseconds
-                                recordMetrics descriptor true elapsedMs
+                                match rotatedWrite with
+                                | Error e ->
+                                    // The irreplaceable secret failed to persist. Bail
+                                    // before writing access/expiry: the upstream has
+                                    // already invalidated the old refresh token, so
+                                    // caching a soon-to-expire access token would only
+                                    // mask a stranded connection. Transient — a retry
+                                    // re-attempts the whole refresh against the (still
+                                    // current) refresh token.
+                                    sw.Stop()
+                                    recordMetrics descriptor false sw.ElapsedMilliseconds
 
-                                match accessWrite, expiryWrite, rotatedWrite with
-                                | Ok(), Ok(), Ok() ->
-                                    do! emitRefreshedAudit descriptor newExpiry elapsedMs
-                                    return Refreshed newExpiry
-                                | Error e, _, _
-                                | _, Error e, _
-                                | _, _, Error e ->
-                                    // Secret-store write failure is transient — the
-                                    // refresh itself succeeded but the persistence
-                                    // path is broken (write-locked, network blip).
-                                    // Retry will re-fetch + re-persist on the next
-                                    // attempt; we deliberately do not emit
-                                    // OAuthTokenRefreshed because the new token never
-                                    // reached the durable store.
-                                    return TransientError(sprintf "secret-store write: %s" e)
+                                    return TransientError(sprintf "secret-store write (rotated refresh token): %s" e)
+                                | Ok() ->
+                                    let! accessWrite =
+                                        secretStore.SetSecret(
+                                            descriptor.ScopeId,
+                                            OAuthRefreshDescriptor.accessTokenKey descriptor,
+                                            access
+                                        )
+
+                                    let! expiryWrite =
+                                        secretStore.SetSecret(
+                                            descriptor.ScopeId,
+                                            OAuthRefreshDescriptor.accessExpiryKey descriptor,
+                                            newExpiry.ToString("o")
+                                        )
+
+                                    sw.Stop()
+                                    let elapsedMs = sw.ElapsedMilliseconds
+
+                                    match accessWrite, expiryWrite with
+                                    | Ok(), Ok() ->
+                                        recordMetrics descriptor true elapsedMs
+                                        do! emitRefreshedAudit descriptor newExpiry elapsedMs
+                                        return Refreshed newExpiry
+                                    | Error e, _
+                                    | _, Error e ->
+                                        // The rotated refresh token (if any) is already
+                                        // durable, so a retry re-reads the fresh refresh
+                                        // token and re-derives the access token cleanly.
+                                        // Transient; we deliberately do not emit
+                                        // OAuthTokenRefreshed because the access-token
+                                        // cache never reached the durable store.
+                                        recordMetrics descriptor false elapsedMs
+                                        return TransientError(sprintf "secret-store write: %s" e)
                             with ex ->
                                 sw.Stop()
                                 recordMetrics descriptor false sw.ElapsedMilliseconds
@@ -399,6 +459,26 @@ module InProcessOAuthTokenRefresher =
                         sw.Stop()
                         recordMetrics descriptor false sw.ElapsedMilliseconds
                         return TransientError(sprintf "unexpected: %s" ex.Message)
+        }
+
+        /// Run a refresh attempt under the per-descriptor single-flight
+        /// gate. Interactive `RefreshNow` and the scheduled refresh job
+        /// for the same `(Provider, ConfigId)` serialise here, so the
+        /// second caller re-reads the freshly-rotated refresh token
+        /// inside `attemptRefreshCore` rather than re-sending the token
+        /// the first caller already rotated (which a rotating upstream
+        /// would reject as `invalid_grant`). Different descriptors run
+        /// in parallel — the gate is keyed per descriptor.
+        let attemptRefresh (descriptor: OAuthRefreshDescriptor) : Async<OAuthRefreshResult> = async {
+            let gate =
+                refreshGates.GetOrAdd(OAuthRefreshDescriptor.key descriptor, (fun _ -> new SemaphoreSlim(1, 1)))
+
+            do! gate.WaitAsync() |> Async.AwaitTask
+
+            try
+                return! attemptRefreshCore descriptor
+            finally
+                gate.Release() |> ignore
         }
 
         /// Schedule (or re-schedule) the cron job for a descriptor.
