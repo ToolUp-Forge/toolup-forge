@@ -250,6 +250,12 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
     // cleanup (using the prior KnowledgeDocument's ChunkCount
     // captured before re-ingestion), so by the time we reach this
     // sweep there are no orphan tails left to chase.
+    // Phase 115 — captured under the lock, emitted as a structured
+    // `KnowledgeScopeErased` audit row after release (GP 6 + GP 9): the
+    // scope's document count and any chunks the fan-out left retrievable.
+    let mutable documentCount = 0
+    let mutable orphanChunkCount = 0
+
     let lock = acquireContainerLock deps.Scope.Container
     do! lock.WaitAsync() |> Async.AwaitTask
 
@@ -261,6 +267,8 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
             with _ ->
                 return []
         }
+
+        documentCount <- priorDocs.Length
 
         try
             let! blobs = deps.Storage.List(deps.Scope.Container, "knowledge/")
@@ -316,6 +324,8 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                             (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise report)
                     )
 
+            orphanChunkCount <- (orphanIds |> List.distinct |> List.length)
+
             if not (List.isEmpty orphanIds) then
                 deps.Logger.Warn(
                     sprintf
@@ -363,6 +373,29 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         lock.Release() |> ignore
 
     KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
+
+    // Phase 115 — structured erasure-outcome audit for the scope wipe.
+    // Complements the dispatcher's generic `Custom:KnowledgeIndexReset`
+    // action row: that records who reset; this records what the fan-out
+    // across the retrieval indexes actually did, and whether it left
+    // anything retrievable (GP 6 + GP 9). `IAuditLog.Record` is
+    // contractually best-effort and swallows its own failures, so an
+    // audit gap never fails the reset. No-op when no `IAuditLog` is
+    // composed (test harness / `NoAuditLog` deployment).
+    match deps.AuditLog with
+    | Some auditLog ->
+        do!
+            auditLog.Record(
+                deps.Scope.ScopeId,
+                KnowledgeScopeErased {
+                    UserId = deps.UserId
+                    ScopeId = deps.Scope.ScopeId
+                    DocumentCount = documentCount
+                    OrphanChunkCount = orphanChunkCount
+                }
+            )
+    | None -> ()
+
     do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
     do! deps.PublishInventory()
     return Ok()

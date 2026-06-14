@@ -156,6 +156,7 @@ let allTests =
         MultimodalAIProviderTests.tests
         CitationNormaliserTests.tests
         InMemoryBM25IndexTests.tests
+        IndexLifecycleTests.tests
         SyntheticClientToolAuthorizerTests.tests
         AIAgentEngineClientResidentAuthorizationTests.tests
         ClientToolDispatchContractBindings.tests
@@ -212,6 +213,7 @@ let allTests =
         // audit, _originalRef chunk stamp + RetrievedSource.OriginalRef
         // projection + neutral SourceLocator mapping + wire backward-compat.
         KnowledgeOriginalRetrievalTests.tests
+        KnowledgeScopeResetAuditTests.tests
         BrandKitTests.tests
         // Phase 92 — BrandKit layout library (seven layouts: a11y
         // baseline, class hooks, optional-slot rule) + Feliz.ViewEngine

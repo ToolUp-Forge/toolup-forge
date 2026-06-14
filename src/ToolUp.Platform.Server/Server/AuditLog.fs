@@ -900,6 +900,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> j)
     }
+    // Phase 115 — KB scope wipe fan-out outcome (append-only registration).
+    {
+        EventType = "KnowledgeScopeErased"
+        TryEncode =
+            (function
+            | KnowledgeScopeErased p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> KnowledgeScopeErased(fromAuditJson<KnowledgeScopeErasedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

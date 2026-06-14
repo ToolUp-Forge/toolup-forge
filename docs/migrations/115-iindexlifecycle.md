@@ -11,6 +11,7 @@
 - **Custom `KnowledgeApiDeps` construction sites** (test fixtures): the record gains `IndexLifecycle: IIndexLifecycle option` — add `IndexLifecycle = None` (or a `DefaultIndexLifecycle` wrapper).
 - **`VectorStoreErasureHandler`**: constructor gains an optional `?sparseIndex` (source-compatible). Deployments that wire the DSR erasure handler manually should switch to `VectorStoreErasureHandler.erasureHandlerHybrid vectorStore embeddingCache sparseIndex` so erasure covers the sparse leg.
 - **Behavioural:** `deleteDocument` now returns `Error` (document still listed) when index deletion partially fails — previously it reported `Ok` and left invisible orphans. `bm25.json` is deleted from blob storage when its scope is deleted.
+- **New audit event (`KnowledgeScopeErased`):** a KB scope wipe via `ResetIndex` now emits a structured `AuditEvent.KnowledgeScopeErased` row (actor, scope, document count, surviving-chunk count) in addition to the dispatcher's generic `Custom:KnowledgeIndexReset` action row — so a half-completed fan-out is loud in the audit trail (GP 6 + GP 9). Additive and registered in the Phase 114 codec registry: stock consumers (and the SDK audit replicator / SIEM sinks that decode via the registry) need nothing. Custom `IAuditSink`s that pattern-match `AuditEvent` exhaustively gain one new case to handle (or fall through their existing default).
 
 ## Diff to apply
 

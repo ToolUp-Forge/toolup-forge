@@ -895,6 +895,32 @@ type KnowledgeOriginalRetrievalDeniedPayload = {
     Reason: string
 }
 
+/// Knowledge Base scope wiped (Phase 115). Emitted by the KB
+/// `ResetIndex` handler after `performReset` has fanned the deletion
+/// out across every retrieval index (vector store + sparse BM25 leg +
+/// persisted snapshots) via `IIndexLifecycle`. Distinct from, and
+/// complementary to, the generic `[<Audit "Custom:KnowledgeIndexReset">]`
+/// action row the dispatcher already emits: that records *who* called
+/// reset; this records the *erasure outcome* — how many documents the
+/// scope held and, critically, whether the fan-out left any chunk
+/// retrievable in the indexes (GP 6 + GP 9 — a half-completed delete is
+/// audit-worthy and must be loud). Identifiers + counts only, no
+/// document content (same PII envelope as the other KB audit events).
+type KnowledgeScopeErasedPayload = {
+    /// User who triggered the scope reset (the caller's resolved `UserId`).
+    UserId: string
+    /// Scope that was wiped (the caller's resolved scope — the structural
+    /// gate guarantees they match, GP 4).
+    ScopeId: string
+    /// Number of `KnowledgeDocument`s the scope held at reset time.
+    DocumentCount: int
+    /// Chunks that survived the fan-out across the retrieval indexes — `0`
+    /// on a clean wipe. A non-zero value means RAG may keep surfacing
+    /// wiped documents, so the audit trail carries the same loud signal
+    /// the operator log does (GP 9).
+    OrphanChunkCount: int
+}
+
 // ─── Share-token audit payloads ───────────────────────────────────────
 
 /// `IShareTokenStore.Issue` succeeded. `UserId` is the issuer (the
@@ -1484,6 +1510,55 @@ type SurfaceDeniedPayload = {
     /// Correlation id (set by `installRequestSeam` client-side or by the
     /// dispatcher's per-request generator).
     CorrelationId: string option
+    OccurredAt: DateTimeOffset
+}
+
+/// Phase 120 — the uniform structured authorization-denial row written by
+/// `IAuthAuditHook` across every denial class on the HTTP surface
+/// (surface-enforcement / RBAC role / share-token / SSE-identity /
+/// module-permission / KB-destructive). Generalises the write side of the
+/// AI tool-allowlist denial stream (Phase 45) to the whole auth surface,
+/// so operators get one queryable trail keyed by route/requirement/scope
+/// instead of scattered per-subsystem metrics and log lines (GP 6).
+///
+/// Reserved `SourceModule = AuditSourceModule.value`; written under the
+/// caller's scope when known (so the `/dev/auth-denials` rollup is
+/// caller-scope-only, GP 4) and under `_platform` for scope-less
+/// (anonymous / pre-scope) denials.
+///
+/// PII envelope: nothing beyond the sanitised `SubjectId` (the same id the
+/// `SurfaceDenied` row already carries) — no request bodies, no headers.
+type AuthorizationDeniedPayload = {
+    /// Request route the denial fired on (method + path, unparameterised).
+    Route: string
+    /// Requirement class that was not satisfied — one of `"surface"` /
+    /// `"role"` / `"share-token"` / `"sse-identity"` /
+    /// `"module-permission"` / `"kb-destructive"`. String at the wire
+    /// boundary so the `AuthDenialRequirement` DU can evolve without
+    /// breaking persisted rows.
+    Requirement: string
+    /// Subject kind at denial time (`anonymous` / `user` / `team` /
+    /// `claim`). Full subject id is in `SubjectId` when not anonymous.
+    SubjectKind: string
+    /// Stable identifier of the denied subject. `None` for anonymous.
+    SubjectId: string option
+    /// Machine-readable verdict / denial code (e.g. `team_required`,
+    /// `revoked_token`, `use_limit_exceeded`, `claim_bearer_not_admitted`).
+    Verdict: string
+    /// Human-readable reason. Bounded + sanitised — carries no PII beyond
+    /// `SubjectId`.
+    Reason: string
+    /// Scope the denial occurred in (`team-…` / `user-…` / claim scope).
+    /// `None` when there was no caller scope (anonymous / pre-scope).
+    ScopeId: string option
+    /// Correlation id stitching this row to the request log + client trace.
+    CorrelationId: string option
+    /// Phase 120 flood guard — how many denials this single row represents.
+    /// `1` for a leading-edge row; `> 1` for a window-rollover summary that
+    /// coalesced a probing burst on the same `(route, subject)` key, so a
+    /// scripted enumeration yields bounded audit volume with an accurate
+    /// total rather than one row per probe.
+    DedupCount: int
     OccurredAt: DateTimeOffset
 }
 
@@ -2211,6 +2286,18 @@ type AuditEvent =
     /// default `IAuditEmitter` bridge `Api.make` composes over the
     /// registered `IAuditLog`. Reserved `SourceModule = "_platform.audit"`.
     | RemotingMethodAudited of RemotingMethodAuditedPayload
+    /// Phase 115 — a Knowledge Base scope was wiped via `ResetIndex`,
+    /// fanning the deletion across every retrieval index. Carries the
+    /// erasure outcome (document count + surviving-chunk count) so a
+    /// half-completed fan-out is loud in the audit trail (GP 6 + GP 9),
+    /// complementing the generic dispatcher action row.
+    | KnowledgeScopeErased of KnowledgeScopeErasedPayload
+    /// Phase 120 — uniform structured authorization-denial row emitted by
+    /// `IAuthAuditHook.RecordDenial` across every HTTP-surface denial class
+    /// (surface / role / share-token / SSE-identity / module-permission /
+    /// KB-destructive). One queryable trail keyed by route/requirement/scope
+    /// (GP 6); coalesced under a per-`(route, subject)` flood guard.
+    | AuthorizationDenied of AuthorizationDeniedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2310,6 +2397,8 @@ module AuditEvent =
         | KnowledgeOriginalRetrieved _ -> "KnowledgeOriginalRetrieved"
         | KnowledgeOriginalRetrievalDenied _ -> "KnowledgeOriginalRetrievalDenied"
         | RemotingMethodAudited _ -> "RemotingMethodAudited"
+        | KnowledgeScopeErased _ -> "KnowledgeScopeErased"
+        | AuthorizationDenied _ -> "AuthorizationDenied"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

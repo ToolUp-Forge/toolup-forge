@@ -294,6 +294,9 @@
              records through FableConverters (save → load round-trip,
              legacy/corrupt blob degradation). -->
         <Compile Include="InProcess\InMemoryBM25IndexTests.fs" />
+        <!-- Phase 115 — IIndexLifecycle deletion / erasure fan-out across
+             vector + sparse + cache, with restart-survival + at-rest checks. -->
+        <Compile Include="InProcess\IndexLifecycleTests.fs" />
         <Compile Include="InProcess\SyntheticClientToolAuthorizerTests.fs" />
         <Compile Include="InProcess\AIAgentEngineClientResidentAuthorizationTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
@@ -357,6 +360,8 @@
              typed refusals, access/denial audit, _originalRef stamp +
              OriginalRef projection + SourceLocator + wire compat. -->
         <Compile Include="InProcess\KnowledgeOriginalRetrievalTests.fs" />
+        <!-- Phase 115 — KnowledgeScopeErased structured reset-audit emission. -->
+        <Compile Include="InProcess\KnowledgeScopeResetAuditTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <!-- Phase 92 — BrandKit layout library render-shape tests (a11y
              baseline + class hooks + optional-slot rule) and the
