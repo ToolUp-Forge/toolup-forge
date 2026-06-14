@@ -595,7 +595,7 @@ module Client =
     /// `ActivePageRoute = None`.
     let private defaultPageRoute (moduleImpl: ErasedModule) =
         match moduleImpl.PageViews with
-        | Some _ -> moduleImpl.Definition.Pages |> List.tryHead |> Option.map (fun p -> p.Route)
+        | Some _ -> moduleImpl.Definition.Pages |> List.tryHead |> Option.map _.Route
         | None -> None
 
     /// Resolve the sidebar-icon path for a module. Single-page modules

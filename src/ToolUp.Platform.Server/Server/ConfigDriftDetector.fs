@@ -77,7 +77,7 @@ let rec private redact (node: JsonNode) : unit =
             let names = obj |> Seq.map (fun kvp -> kvp.Key) |> Seq.toArray
 
             for name in names do
-                let child = obj.[name]
+                let child = obj[name]
 
                 if shouldRedact name then
                     if isNull child then
@@ -87,10 +87,10 @@ let rec private redact (node: JsonNode) : unit =
                         | JsonValueKind.Null -> ()
                         | JsonValueKind.String ->
                             let s = child.GetValue<string>()
-                            obj.[name] <- JsonValue.Create(redactedString s.Length) :> JsonNode
+                            obj[name] <- JsonValue.Create(redactedString s.Length) :> JsonNode
                         | _ ->
                             let serialised = child.ToJsonString()
-                            obj.[name] <- JsonValue.Create(redactedString serialised.Length) :> JsonNode
+                            obj[name] <- JsonValue.Create(redactedString serialised.Length) :> JsonNode
                 else
                     redact child
         | :? JsonArray as arr ->
@@ -143,11 +143,11 @@ let private buildSnapshot (config: ServerConfig) (set: string list) (hash: strin
         companions.Add(JsonValue.Create(s))
 
     let snapshot = JsonObject()
-    snapshot.["schema"] <- JsonValue.Create(snapshotSchema)
-    snapshot.["snapshotTakenAt"] <- JsonValue.Create(now.ToUniversalTime().ToString("o"))
-    snapshot.["companionSet"] <- companions
-    snapshot.["companionSetHash"] <- JsonValue.Create(hash)
-    snapshot.["config"] <- configJson
+    snapshot["schema"] <- JsonValue.Create(snapshotSchema)
+    snapshot["snapshotTakenAt"] <- JsonValue.Create(now.ToUniversalTime().ToString("o"))
+    snapshot["companionSet"] <- companions
+    snapshot["companionSetHash"] <- JsonValue.Create(hash)
+    snapshot["config"] <- configJson
     snapshot
 
 // Render a leaf for the audit-event payload. Objects / arrays are

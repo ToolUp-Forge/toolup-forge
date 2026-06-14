@@ -21,6 +21,10 @@ type internal RingBuffer<'item>(size) =
             yield! items |> Seq.skip ix
             yield! items |> Seq.take ix
 
+            // Grow-by-doubling: the new tail slots are placeholders that
+            // the write head fills before any read head reaches them, so
+            // `Unchecked.defaultof` is never observed as a value — the
+            // standard idiom for pre-sizing a ring buffer's backing array.
             for _ in 0 .. items.Length do
                 yield Unchecked.defaultof<'item>
         }

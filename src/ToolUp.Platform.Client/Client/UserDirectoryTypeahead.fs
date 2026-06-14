@@ -180,7 +180,7 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
             setActiveIndex next
         | "Enter" when isOpen && activeIndex >= 0 && activeIndex < suggestions.Length ->
             e.preventDefault ()
-            handleSelect suggestions.[activeIndex]
+            handleSelect suggestions[activeIndex]
         | "Enter" ->
             e.preventDefault ()
             setIsOpen false

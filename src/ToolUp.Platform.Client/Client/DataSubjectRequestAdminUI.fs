@@ -456,8 +456,7 @@ let private policyRadio (model: Model) (dispatch: Msg -> unit) =
     ]
 
 let private previewPanel (preview: ErasurePreview) (model: Model) (dispatch: Msg -> unit) =
-    let total =
-        preview.PerHandlerCounts.Values |> Seq.sumBy (fun s -> s.RecordsAffected)
+    let total = preview.PerHandlerCounts.Values |> Seq.sumBy _.RecordsAffected
 
     let confirmLabel =
         match model.Busy with

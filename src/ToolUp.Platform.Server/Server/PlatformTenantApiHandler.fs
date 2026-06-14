@@ -71,8 +71,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     // Server-authoritative actor — the authenticated caller, never the
     // wire-supplied id. Empty when no AccessContext resolved (which also
     // fails the admin gate below).
-    let actor =
-        accessContext |> Option.map (fun ac -> ac.UserId) |> Option.defaultValue ""
+    let actor = accessContext |> Option.map _.UserId |> Option.defaultValue ""
 
     let isAdmin =
         accessContext
