@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>ToolUp.Stripe.Server</PackageId>
+    <Description>Giraffe / ASP.NET Core wiring for ToolUp.Stripe.Webhook. Skeleton at v0.1.0-alpha; Routes.stripeWebhook + CustomerPortal + Checkout land in later releases.</Description>
+    <PackageTags>fsharp;stripe;giraffe;aspnetcore;billing</PackageTags>
+    <Version>0.1.0-alpha</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="StripeConfig.fs" />
+    <Compile Include="Routes.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Giraffe" />
+    <ProjectReference Include="..\ToolUp.Stripe.Webhook\ToolUp.Stripe.Webhook.fsproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="WebhookSignerTests.fs" />
+    <Compile Include="TokenTests.fs" />
+    <Compile Include="SmokeTests.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.Stripe.Webhook\ToolUp.Stripe.Webhook.fsproj" />
+    <ProjectReference Include="..\ToolUp.Stripe.TierToken\ToolUp.Stripe.TierToken.fsproj" />
+    <ProjectReference Include="..\ToolUp.Stripe.Server\ToolUp.Stripe.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Expecto" />
+  </ItemGroup>
+</Project>
