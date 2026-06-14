@@ -97,6 +97,11 @@
              render duration / outcome counters + per-source resolve
              latency decorator. Precedes the page handler it instruments. -->
         <Compile Include="Server\RenderMetrics.fs" />
+        <!-- Phase 155 — handler-agnostic conditional-GET combinator
+             (ETag / Last-Modified / Cache-Control + 304), lifted out of
+             PublicPageHandler so any Giraffe route can reuse it. Precedes
+             the page handler (its first caller). -->
+        <Compile Include="Server\ConditionalGet.fs" />
         <Compile Include="Server\PublicPageHandler.fs" />
         <!-- Phase 91 — semantic-search SSR endpoint (/search?q= → retrieval
              → ranked Narrative result list; query-size cap, rides the

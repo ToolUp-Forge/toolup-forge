@@ -27,8 +27,13 @@ open System.Text
 
 /// Cache key. `(Slug, ScopeId, ContentVersion)` per the Phase 84 design.
 ///
-/// - `Slug` — the page slug (path with leading `/` stripped; `"index"`
-///   for the root).
+/// - `Slug` — an **opaque cache discriminator**. For the content-file
+///   page handler it is the page slug (path with leading `/` stripped;
+///   `"index"` for the root). For a programmatic-SSR consumer
+///   ([Phase 155]) it is any composite cache key the consumer chooses
+///   (e.g. `"report/{tenant}/{quarter}"`) — the cache treats it as an
+///   opaque string and never parses it. Use `RenderKey.forKey` to build
+///   one.
 /// - `ScopeId` — the requesting principal's storage scope
 ///   (`"public"` for anonymous; the team/user container otherwise).
 ///   Structural tenant isolation (GP 4): a request derives its
@@ -38,12 +43,33 @@ open System.Text
 ///   versions of the same `(slug, scope)` coexist. The page handler
 ///   uses `""` today (single current version); the field is part of the
 ///   key so a future content-versioned authoring flow can shard the
-///   cache without an interface change.
+///   cache without an interface change. A programmatic consumer
+///   ([Phase 155]) flows its own single content-version stamp (e.g. a
+///   package-version + deploy signature) through here so it drives the
+///   cache sharding alongside the consumer's `Last-Modified` validator.
 type RenderKey = {
     Slug: string
     ScopeId: string
     ContentVersion: string
 }
+
+module RenderKey =
+    /// Phase 155 — smart constructor for a programmatic cache key. `slug`
+    /// is an opaque cache discriminator (a programmatic consumer keys on
+    /// its own composite string); `scopeId` isolates tenants (`"public"`
+    /// for an anonymous / un-scoped resource); `contentVersion` is the
+    /// caller-supplied content-version stamp (`""` = the single current
+    /// version).
+    let forKey (slug: string) (scopeId: string) (contentVersion: string) : RenderKey = {
+        Slug = slug
+        ScopeId = scopeId
+        ContentVersion = contentVersion
+    }
+
+    /// Phase 155 — the common programmatic-consumer shape: a `"public"`-
+    /// scope, single-current-version key over an opaque composite cache
+    /// key.
+    let forPublic (slug: string) : RenderKey = forKey slug "public" ""
 
 /// Per-route cache policy, parsed from a page's `cache:` frontmatter key
 /// (or a content source's metadata; or the compose-level default). The
@@ -214,3 +240,59 @@ type RenderCacheSettings = { DefaultPolicy: CachePolicy }
 
 module RenderCacheSettings =
     let defaults: RenderCacheSettings = { DefaultPolicy = NoCache }
+
+/// Phase 155 — handler-agnostic render memoisation over `IRenderCache`.
+/// Lifted out of `PublicPageHandler` so any handler — not just the
+/// content-file page handler — can memoise an expensive deterministic
+/// render keyed on an arbitrary composite `RenderKey`, with the same
+/// lookup + store + stale-while-revalidate semantics the page handler
+/// uses. The caller supplies its own `render` thunk and key.
+module RenderCache =
+    /// Look up `key`; on a fresh hit return it; on a stale-but-servable
+    /// hit return it immediately and refresh the entry on a detached
+    /// background task (stale-while-revalidate); on a miss run `render`,
+    /// store it under `policy` (a `NoCache` policy stores nothing), and
+    /// return the freshly-rendered page.
+    ///
+    /// `render` must be deterministic for the key — the cache serves a
+    /// memoised copy within the TTL window — and is captured by value, so
+    /// the background refresh is safe to run after the originating request
+    /// has completed. Page-pipeline concerns (audience re-gating, head
+    /// injection) live in `PublicPageHandler`, not here; this helper is
+    /// the pure cache-orchestration core.
+    let getOrRender
+        (cache: IRenderCache)
+        (key: RenderKey)
+        (policy: CachePolicy)
+        (render: unit -> Async<string>)
+        : Async<RenderedPage> =
+        async {
+            let! cached = cache.TryGet key
+
+            match cached with
+            | Some entry ->
+                let stale = DateTimeOffset.UtcNow >= entry.ExpiresAt
+
+                if stale && entry.StaleWhileRevalidate then
+                    Async.Start(
+                        async {
+                            try
+                                let! html = render ()
+                                let refreshed = RenderedPage.forStore html DateTimeOffset.UtcNow
+                                do! cache.Set key refreshed policy
+                            with _ ->
+                                ()
+                        }
+                    )
+
+                return entry
+            | None ->
+                let! html = render ()
+                let rendered = RenderedPage.forStore html DateTimeOffset.UtcNow
+
+                match policy with
+                | NoCache -> ()
+                | Cache _ -> do! cache.Set key rendered policy
+
+                return rendered
+        }

@@ -121,20 +121,11 @@ module PublicPageHandler =
         |> Option.map _.Container
         |> Option.defaultValue "public"
 
-    let private etagOf (hash: string) = "\"" + hash + "\""
-
-    /// True when the request's `If-None-Match` matches the current ETag
-    /// (or is the wildcard `*`). Honours a comma-separated list and an
-    /// unquoted hash for tolerance.
-    let private ifNoneMatchMatches (ctx: HttpContext) (hash: string) : bool =
-        match ctx.Request.Headers.TryGetValue "If-None-Match" with
-        | true, values ->
-            let etag = etagOf hash
-
-            values
-            |> Seq.collect (fun v -> (v: string).Split(',') |> Array.map _.Trim())
-            |> Seq.exists (fun candidate -> candidate = etag || candidate = hash || candidate = "*")
-        | _ -> false
+    // Phase 155 — `etagOf` / the `If-None-Match` gate / the validator-
+    // header emission moved to the handler-agnostic `ConditionalGet`
+    // combinator; the page handler now calls
+    // `ConditionalGet.isNotModified` / `ConditionalGet.setValidators`
+    // inline (see the cached + uncached serve paths below).
 
     let private cacheControlValue (policy: CachePolicy) : string =
         match policy with
@@ -152,11 +143,6 @@ module PublicPageHandler =
         let ttl = (entry.ExpiresAt - entry.RenderedAt).TotalSeconds |> max 0.0 |> int
 
         cacheControlValue (CachePolicy.Cache(ttl, entry.StaleWhileRevalidate))
-
-    let private setCacheHeaders (ctx: HttpContext) (hash: string) (cacheControl: string) (renderedAt: DateTimeOffset) =
-        ctx.Response.Headers["ETag"] <- StringValues(etagOf hash)
-        ctx.Response.Headers["Last-Modified"] <- StringValues(renderedAt.UtcDateTime.ToString("R"))
-        ctx.Response.Headers["Cache-Control"] <- StringValues cacheControl
 
     let private emitCacheMetric (metrics: IMetricsSink) (outcome: string) = RenderMetrics.emitCache metrics outcome
 
@@ -263,12 +249,12 @@ module PublicPageHandler =
                             }
                         )
 
-                    if ifNoneMatchMatches ctx entry.ContentHash then
-                        setCacheHeaders ctx entry.ContentHash (cacheControlForEntry entry) entry.RenderedAt
+                    if ConditionalGet.isNotModified ctx entry.ContentHash entry.RenderedAt then
+                        ConditionalGet.setValidators ctx entry.ContentHash entry.RenderedAt (cacheControlForEntry entry)
                         ctx.Response.StatusCode <- 304
                         return Some ctx
                     else
-                        setCacheHeaders ctx entry.ContentHash (cacheControlForEntry entry) entry.RenderedAt
+                        ConditionalGet.setValidators ctx entry.ContentHash entry.RenderedAt (cacheControlForEntry entry)
                         ctx.Response.ContentType <- "text/html; charset=utf-8"
                         return! ctx.WriteStringAsync entry.Html
 
@@ -295,12 +281,12 @@ module PublicPageHandler =
                     | CachePolicy.NoCache -> ()
                     | CachePolicy.Cache _ -> do! cache.Set key rendered policy
 
-                    if ifNoneMatchMatches ctx rendered.ContentHash then
-                        setCacheHeaders ctx rendered.ContentHash (cacheControlValue policy) renderedAt
+                    if ConditionalGet.isNotModified ctx rendered.ContentHash renderedAt then
+                        ConditionalGet.setValidators ctx rendered.ContentHash renderedAt (cacheControlValue policy)
                         ctx.Response.StatusCode <- 304
                         return Some ctx
                     else
-                        setCacheHeaders ctx rendered.ContentHash (cacheControlValue policy) renderedAt
+                        ConditionalGet.setValidators ctx rendered.ContentHash renderedAt (cacheControlValue policy)
                         ctx.Response.ContentType <- "text/html; charset=utf-8"
                         return! ctx.WriteStringAsync html
                 | NoLayoutRegistered ->

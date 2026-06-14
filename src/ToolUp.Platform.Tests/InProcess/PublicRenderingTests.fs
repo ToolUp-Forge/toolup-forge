@@ -916,6 +916,194 @@ let private staticExportTests =
             Expect.isFalse (File.Exists(Path.Combine(outDir, "staticwebapp.config.json"))) "no host-config by default"
     ]
 
+// ─── Phase 155 — handler-agnostic conditional-GET + render memoisation ─
+//
+// The combinator + `RenderCache.getOrRender` are exercised independently
+// of `PublicPageHandler` (a synthetic Giraffe handler keyed on an
+// arbitrary composite key) to prove a programmatic-SSR consumer can adopt
+// them without routing through the content-file page pipeline. The
+// extraction is also pinned byte-for-byte: Phase 155 emits a *strong* ETag
+// and gates on `If-None-Match` only (Phase 147 hardens both).
+
+let private mkCtxWith (headers: (string * string) list) : HttpContext =
+    let ctx = DefaultHttpContext()
+
+    for (k, v) in headers do
+        ctx.Request.Headers[k] <- Microsoft.Extensions.Primitives.StringValues v
+
+    ctx :> HttpContext
+
+let private runHandler (handler: Giraffe.Core.HttpHandler) (ctx: HttpContext) : bool * HttpContext option =
+    let mutable bodyRan = false
+
+    let next: Giraffe.Core.HttpFunc =
+        fun c ->
+            bodyRan <- true
+            System.Threading.Tasks.Task.FromResult(Some c)
+
+    let result = handler next ctx |> Async.AwaitTask |> Async.RunSynchronously
+    bodyRan, result
+
+let private conditionalGet155Tests =
+    testList "PublicRendering — Phase 155 conditional-GET primitive" [
+
+        testCase "RenderKey.forKey builds an opaque composite key; forPublic uses the public scope"
+        <| fun _ ->
+            let k = RenderKey.forKey "report/acme/q1" "team-acme" "v3"
+            Expect.equal k.Slug "report/acme/q1" "opaque composite slug preserved verbatim"
+            Expect.equal k.ScopeId "team-acme" "scope preserved"
+            Expect.equal k.ContentVersion "v3" "content-version stamp preserved"
+
+            let pub = RenderKey.forPublic "landing"
+            Expect.equal pub.ScopeId "public" "forPublic uses the public scope"
+            Expect.equal pub.ContentVersion "" "forPublic uses the current version"
+
+        testCase "setValidators emits a strong ETag + RFC1123 Last-Modified (Phase 155 byte-for-byte)"
+        <| fun _ ->
+            let ctx = mkCtxWith []
+            let lm = DateTimeOffset(2026, 5, 22, 10, 0, 0, TimeSpan.Zero)
+            ConditionalGet.setValidators ctx "abc123" lm "public, max-age=300"
+
+            Expect.equal
+                (ctx.Response.Headers["ETag"].ToString())
+                "\"abc123\""
+                "strong ETag (quoted, no W/) in Phase 155"
+
+            Expect.equal
+                (ctx.Response.Headers["Last-Modified"].ToString())
+                (lm.UtcDateTime.ToString("R"))
+                "Last-Modified is the RFC1123 'R' format"
+
+            Expect.equal
+                (ctx.Response.Headers["Cache-Control"].ToString())
+                "public, max-age=300"
+                "Cache-Control passed through"
+
+        testCase "cacheable 304s on a matching If-None-Match for an arbitrary composite key"
+        <| fun _ ->
+            let ctx = mkCtxWith [ "If-None-Match", "\"deadbeef\"" ]
+
+            let handler =
+                ConditionalGet.cacheable "deadbeef" DateTimeOffset.UtcNow "public, max-age=60"
+
+            let bodyRan, result = runHandler handler ctx
+
+            Expect.isFalse bodyRan "body handler is short-circuited on a conditional hit"
+            Expect.isSome result "the combinator returns Some ctx (handled)"
+            Expect.equal ctx.Response.StatusCode 304 "status is 304 Not Modified"
+            Expect.equal (ctx.Response.Headers["ETag"].ToString()) "\"deadbeef\"" "ETag still emitted on the 304"
+
+        testCase "cacheable passes through to the body handler on a fresh (non-conditional) request"
+        <| fun _ ->
+            let ctx = mkCtxWith []
+
+            let handler =
+                ConditionalGet.cacheable "feedface" DateTimeOffset.UtcNow "public, max-age=60"
+
+            let bodyRan, result = runHandler handler ctx
+
+            Expect.isTrue bodyRan "body handler runs when there is no matching conditional header"
+            Expect.isSome result "handled"
+            Expect.notEqual ctx.Response.StatusCode 304 "not a 304 — the body is served"
+
+            Expect.equal
+                (ctx.Response.Headers["ETag"].ToString())
+                "\"feedface\""
+                "validators still emitted ahead of the body"
+
+        testCase "cacheable: Phase 155 gate ignores If-Modified-Since (If-None-Match only)"
+        <| fun _ ->
+            // Pin the byte-for-byte extraction: pre-147, only If-None-Match
+            // triggers a 304. A bare If-Modified-Since must fall through to
+            // the body. (Phase 147 flips this to a 304.)
+            let lm = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            let future = DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+            let ctx = mkCtxWith [ "If-Modified-Since", future.UtcDateTime.ToString("R") ]
+            let handler = ConditionalGet.cacheable "cafe" lm "public, max-age=60"
+            let bodyRan, _ = runHandler handler ctx
+
+            Expect.isTrue bodyRan "Phase 155: a bare If-Modified-Since does not 304 (If-None-Match only)"
+            Expect.notEqual ctx.Response.StatusCode 304 "no 304 from If-Modified-Since pre-147"
+
+        testCase "immutableAsset emits a one-year immutable Cache-Control"
+        <| fun _ ->
+            let ctx = mkCtxWith []
+            let handler = ConditionalGet.immutableAsset "fingerprint99" DateTimeOffset.UtcNow
+            runHandler handler ctx |> ignore
+
+            Expect.stringContains
+                (ctx.Response.Headers["Cache-Control"].ToString())
+                "max-age=31536000"
+                "one-year max-age"
+
+            Expect.stringContains (ctx.Response.Headers["Cache-Control"].ToString()) "immutable" "immutable directive"
+    ]
+
+let private getOrRender155Tests =
+    testList "PublicRendering — Phase 155 RenderCache.getOrRender" [
+
+        testCaseAsync "memoises a deterministic render within the TTL window (non-page handler)"
+        <| async {
+            let cache = InMemoryRenderCache.create ()
+            let key = RenderKey.forKey "scale/guitar/major/C/free" "public" "v1"
+            let mutable renderCount = 0
+
+            let render () = async {
+                renderCount <- renderCount + 1
+                return $"<html>render {renderCount}</html>"
+            }
+
+            let! first = RenderCache.getOrRender cache key (CachePolicy.Cache(300, true)) render
+            let! second = RenderCache.getOrRender cache key (CachePolicy.Cache(300, true)) render
+
+            Expect.equal renderCount 1 "second call is a fresh cache hit — render runs once"
+            Expect.equal first.Html "<html>render 1</html>" "first call returns the freshly-rendered html"
+            Expect.equal second.Html first.Html "second call returns the memoised html"
+            Expect.isNotEmpty second.ContentHash "the memoised entry carries a content hash for the ETag"
+        }
+
+        testCaseAsync "serves a stale entry immediately while refreshing in the background (SWR)"
+        <| async {
+            let cache = InMemoryRenderCache.create ()
+            let key = RenderKey.forKey "swr-key" "public" ""
+
+            // Seed an already-expired-but-stale-servable entry: render time
+            // 100s ago with a 10s TTL → ExpiresAt 90s in the past, SWR on.
+            let staleEntry =
+                RenderedPage.forStore "<html>OLD</html>" (DateTimeOffset.UtcNow.AddSeconds -100.0)
+
+            do! cache.Set key staleEntry (CachePolicy.Cache(10, true))
+
+            let render () = async { return "<html>NEW</html>" }
+
+            let! served = RenderCache.getOrRender cache key (CachePolicy.Cache(10, true)) render
+
+            Expect.equal
+                served.Html
+                "<html>OLD</html>"
+                "the stale render is served immediately (stale-while-revalidate)"
+        }
+
+        testCaseAsync "a NoCache policy renders every call and stores nothing"
+        <| async {
+            let cache = InMemoryRenderCache.create ()
+            let key = RenderKey.forKey "nocache-key" "public" ""
+            let mutable renderCount = 0
+
+            let render () = async {
+                renderCount <- renderCount + 1
+                return "<html>x</html>"
+            }
+
+            let! _ = RenderCache.getOrRender cache key CachePolicy.NoCache render
+            let! _ = RenderCache.getOrRender cache key CachePolicy.NoCache render
+
+            Expect.equal renderCount 2 "NoCache → every call re-renders"
+            let! stored = cache.TryGet key
+            Expect.isNone stored "NoCache → nothing is stored"
+        }
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -925,4 +1113,6 @@ let tests =
         contentSourceImplTests
         renderMetricsTests
         staticExportTests
+        conditionalGet155Tests
+        getOrRender155Tests
     ]
