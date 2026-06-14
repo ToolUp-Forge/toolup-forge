@@ -448,6 +448,23 @@ module AIServerApp =
             Base = ServerApp.withNotifications n app.Base
     }
 
+    /// Register an `IUserDirectory` for invite-form typeahead + email-
+    /// address resolution. Delegates to `ServerApp.withUserDirectory` so
+    /// a RAG/AI composition root no longer has to reach into the raw
+    /// `withExtensions` DI seam to register one.
+    let withUserDirectory (directory: IUserDirectory) (app: AIServerApp) : AIServerApp = {
+        app with
+            Base = ServerApp.withUserDirectory directory app.Base
+    }
+
+    /// Register an additional `ICspContributor` (a webfont / CDN / embed
+    /// origin the first-party CSP defaults don't cover). Delegates to
+    /// `ServerApp.withCspContributor`.
+    let withCspContributor (contributor: ICspContributor) (app: AIServerApp) : AIServerApp = {
+        app with
+            Base = ServerApp.withCspContributor contributor app.Base
+    }
+
     /// Phase 6f — register an out-of-band transactional notification
     /// sink. Delegates to `ServerApp.withTransactionalSink`. See that
     /// helper's docstring for the full contract; this mirror exists

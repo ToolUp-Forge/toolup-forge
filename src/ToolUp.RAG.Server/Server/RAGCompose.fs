@@ -1287,6 +1287,22 @@ module RAGServerApp =
             AI = AIServerApp.withNotifications n app.AI
     }
 
+    /// Register an `IUserDirectory` for invite-form typeahead + email-
+    /// address resolution. Delegates through `AIServerApp` to
+    /// `ServerApp.withUserDirectory`.
+    let withUserDirectory (directory: IUserDirectory) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withUserDirectory directory app.AI
+    }
+
+    /// Register an additional `ICspContributor` (a webfont / CDN / embed
+    /// origin the first-party CSP defaults don't cover). Delegates
+    /// through `AIServerApp` to `ServerApp.withCspContributor`.
+    let withCspContributor (contributor: ICspContributor) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withCspContributor contributor app.AI
+    }
+
     /// Phase 6f — register an out-of-band transactional notification
     /// sink. Delegates to `AIServerApp.withTransactionalSink` (which
     /// in turn delegates to `ServerApp.withTransactionalSink`). See
@@ -1377,6 +1393,16 @@ module RAGServerApp =
         app with
             AI = AIServerApp.withExtensions e app.AI
     }
+
+    /// Apply an `AIServerApp -> AIServerApp` transform to the inner AI
+    /// layer. Escape hatch for companion compositions that operate on
+    /// the `AIServerApp` surface but have no dedicated `RAGServerApp`
+    /// delegate — the canonical case is registering a companion's AI
+    /// tools (e.g. `ToolUp.KnowledgeBase.Server.AICompose.register`).
+    /// Prefer a named `with*` helper when one exists; reach for `mapAI`
+    /// only when the transform genuinely lives on a companion, so RAG
+    /// never grows a reverse dependency on that companion's package.
+    let mapAI (f: AIServerApp -> AIServerApp) (app: RAGServerApp) : RAGServerApp = { app with AI = f app.AI }
 
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: RAGServerApp) : RAGServerApp = {
         app with

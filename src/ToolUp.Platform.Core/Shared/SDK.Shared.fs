@@ -2473,6 +2473,17 @@ type ServerConfigOverrides = {
     /// whose modules render no monetary values set `Some false`
     /// to drop the irrelevant `Platform Defaults` admin tab.
     IncludePlatformDefaults: bool option
+    /// Override `ServerConfig.ShareTokenStore`. `None` (default) leaves
+    /// the resolved value at `ServerConfig.defaults.ShareTokenStore`
+    /// (`NoShareTokenStore`); deployments that issue signed share-links
+    /// — publishable forms, magic-login links, public dashboards, or the
+    /// auto-mounted `ITeamInviteApi` (whose impl hard-depends on
+    /// `IShareTokenStore`) — set `Some EnabledShareTokenStore` here
+    /// rather than patching the resolved `ServerConfig` record after
+    /// `fromEnv`. The compose-time `ClaimBearer`-surface auto-promotion
+    /// (`ComposeNotifications`) still applies on top of whatever this
+    /// resolves to.
+    ShareTokenStore: ShareTokenStoreMode option
 }
 
 module ServerConfigOverrides =
@@ -2486,6 +2497,7 @@ module ServerConfigOverrides =
         EnableDevEndpoints = None
         AutoBootstrapDevAdmin = None
         IncludePlatformDefaults = None
+        ShareTokenStore = None
     }
 
     /// Reference-deployment posture — webhooks on, audit on,
@@ -3020,6 +3032,7 @@ module ServerConfig =
                 IncludePlatformDefaults =
                     overrides.IncludePlatformDefaults
                     |> Option.defaultValue defaults.IncludePlatformDefaults
+                ShareTokenStore = overrides.ShareTokenStore |> Option.defaultValue defaults.ShareTokenStore
                 Webhooks = overrides.Webhooks |> Option.defaultValue defaults.Webhooks
                 AuditLog = overrides.AuditLog |> Option.defaultValue defaults.AuditLog
                 SecurityHardening = overrides.SecurityHardening |> Option.defaultValue defaults.SecurityHardening
