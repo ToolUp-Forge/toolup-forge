@@ -1464,6 +1464,135 @@ let private selfCanonicalTests =
             Expect.stringContains html2 "https://x.com/explicit" "explicit canonical emitted by headTags"
     ]
 
+// ─── Phase 151 — structured-data expansion ──────────────────────────
+
+/// Assert the emitted payload is well-formed JSON (parses without throw).
+let private parseOk (label: string) (json: string) =
+    try
+        System.Text.Json.JsonDocument.Parse json |> ignore
+    with ex ->
+        failtestf "%s — not valid JSON: %s\n%s" label ex.Message json
+
+let private structuredData151Tests =
+    testList "PublicRendering — Phase 151 structured-data expansion" [
+
+        testCase "webSite + SearchAction validates for the sitelinks search box"
+        <| fun _ ->
+            let json =
+                StructuredDataHelpers.webSite
+                    "Acme"
+                    "https://x.com"
+                    (Some "https://x.com/search?q={search_term_string}")
+
+            parseOk "webSite" json
+            Expect.stringContains json "\"@type\":\"WebSite\"" "WebSite type"
+            Expect.stringContains json "\"@type\":\"SearchAction\"" "SearchAction potentialAction"
+            Expect.stringContains json "{search_term_string}" "urlTemplate carries the token"
+            Expect.stringContains json "required name=search_term_string" "query-input"
+
+        testCase "webSite omits potentialAction when no search template"
+        <| fun _ ->
+            let json = StructuredDataHelpers.webSite "Acme" "https://x.com" None
+            parseOk "webSite-no-search" json
+            Expect.stringContains json "\"@type\":\"WebSite\"" "WebSite type"
+            Expect.isFalse (json.Contains "SearchAction") "no SearchAction when no template"
+            Expect.isFalse (json.Contains "potentialAction") "no potentialAction key"
+
+        testCase "faqPage emits Question / acceptedAnswer pairs"
+        <| fun _ ->
+            let json = StructuredDataHelpers.faqPage [ "Q1?", "A1."; "Q2?", "A2." ]
+            parseOk "faqPage" json
+            Expect.stringContains json "\"@type\":\"FAQPage\"" "FAQPage type"
+            Expect.stringContains json "\"@type\":\"Question\"" "Question"
+            Expect.stringContains json "\"@type\":\"Answer\"" "Answer"
+            Expect.stringContains json "Q1?" "question text"
+            Expect.stringContains json "A2." "answer text"
+
+        testCase "faqPage with no items is still valid JSON (no throw)"
+        <| fun _ ->
+            let json = StructuredDataHelpers.faqPage []
+            parseOk "faqPage-empty" json
+            Expect.stringContains json "\"@type\":\"FAQPage\"" "FAQPage type"
+
+        testCase "howTo emits ordered HowToStep elements"
+        <| fun _ ->
+            let json = StructuredDataHelpers.howTo "Make tea" [ "Boil water"; "Add bag" ]
+            parseOk "howTo" json
+            Expect.stringContains json "\"@type\":\"HowTo\"" "HowTo type"
+            Expect.stringContains json "\"@type\":\"HowToStep\"" "HowToStep"
+            Expect.stringContains json "\"position\":1" "first step positioned"
+            Expect.stringContains json "Boil water" "step text"
+
+        testCase "course emits provider Organization"
+        <| fun _ ->
+            let json = StructuredDataHelpers.course "F# 101" "Acme Academy" "Learn F#"
+            parseOk "course" json
+            Expect.stringContains json "\"@type\":\"Course\"" "Course type"
+            Expect.stringContains json "\"@type\":\"Organization\"" "provider org"
+            Expect.stringContains json "Acme Academy" "provider name"
+
+        testCase "itemList emits positioned ListItem entries with url"
+        <| fun _ ->
+            let json = StructuredDataHelpers.itemList [ "First", "https://x.com/1"; "Second", "https://x.com/2" ]
+            parseOk "itemList" json
+            Expect.stringContains json "\"@type\":\"ItemList\"" "ItemList type"
+            Expect.stringContains json "\"@type\":\"ListItem\"" "ListItem"
+            Expect.stringContains json "https://x.com/2" "entry url"
+
+        testCase "product includes offers + aggregateRating when supplied"
+        <| fun _ ->
+            let json = StructuredDataHelpers.product "Widget" "A widget" (Some("9.99", "GBP")) (Some("4.5", "120"))
+            parseOk "product-full" json
+            Expect.stringContains json "\"@type\":\"Product\"" "Product type"
+            Expect.stringContains json "\"@type\":\"Offer\"" "Offer"
+            Expect.stringContains json "\"priceCurrency\":\"GBP\"" "currency"
+            Expect.stringContains json "\"@type\":\"AggregateRating\"" "AggregateRating"
+            Expect.stringContains json "\"reviewCount\":\"120\"" "review count"
+
+        testCase "product omits offers / aggregateRating when None"
+        <| fun _ ->
+            let json = StructuredDataHelpers.product "Widget" "A widget" None None
+            parseOk "product-minimal" json
+            Expect.stringContains json "\"@type\":\"Product\"" "Product type"
+            Expect.isFalse (json.Contains "Offer") "no Offer block"
+            Expect.isFalse (json.Contains "AggregateRating") "no AggregateRating block"
+
+        testCase "videoObject emits thumbnail / uploadDate / contentUrl"
+        <| fun _ ->
+            let json =
+                StructuredDataHelpers.videoObject
+                    "Demo"
+                    "A demo"
+                    "https://x.com/thumb.jpg"
+                    "2026-06-14"
+                    "https://x.com/v.mp4"
+
+            parseOk "videoObject" json
+            Expect.stringContains json "\"@type\":\"VideoObject\"" "VideoObject type"
+            Expect.stringContains json "https://x.com/thumb.jpg" "thumbnail"
+            Expect.stringContains json "2026-06-14" "upload date"
+            Expect.stringContains json "https://x.com/v.mp4" "content url"
+
+        testCase "organization gains sameAs when the frontmatter key is present"
+        <| fun _ ->
+            let json =
+                StructuredDataHelpers.organization (
+                    mkPage "about" (Markdown "x") [ "sameAs", "https://x.com/tw, https://x.com/li" ]
+                )
+
+            parseOk "organization-sameAs" json
+            Expect.stringContains json "\"sameAs\"" "sameAs array present"
+            Expect.stringContains json "https://x.com/tw" "first profile"
+            Expect.stringContains json "https://x.com/li" "second profile"
+
+        testCase "organization omits sameAs when the key is absent (GP 11 byte-for-byte)"
+        <| fun _ ->
+            let json = StructuredDataHelpers.organization (mkPage "about" (Markdown "x") [])
+            parseOk "organization-no-sameAs" json
+            Expect.stringContains json "\"@type\":\"Organization\"" "Organization type"
+            Expect.isFalse (json.Contains "sameAs") "no sameAs key when frontmatter absent"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -1478,4 +1607,5 @@ let tests =
         renderMetrics153Tests
         getOrRender155Tests
         selfCanonicalTests
+        structuredData151Tests
     ]
