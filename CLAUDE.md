@@ -28,6 +28,7 @@ toolup-forge/
 │   ├── ToolUp.KnowledgeBase.{Core,Server,Client}/    # document ingestion + extraction
 │   ├── ToolUp.Forms.{Core,Server,Client}/            # schema-driven forms + workflows
 │   ├── ToolUp.Scheduling.{Core,Server}/              # booking + recurrence
+│   ├── ToolUp.Stripe.{Webhook,TierToken,Server}/       # Stripe billing: webhook verify + tier cookies + Giraffe wiring
 │   ├── InterPlatform/                                # opt-in cross-deployment typed peer RPC (server-only)
 │   ├── AIProviders/{Claude,OpenAI}/                  # LLM providers
 │   ├── EmbeddingProviders/{Local,OpenAI}/            # embedding providers
@@ -40,7 +41,7 @@ toolup-forge/
 │   ├── Secrets/AzureKeyVault/                        # ISecretStore companion
 │   ├── AgGridEnterprise/                             # AG Grid Enterprise init shim
 │   ├── ToolUp.Platform.Tests/                        # SDK contract test packs
-│   ├── ToolUp.Forms.Tests/, ToolUp.Scheduling.Tests/ # per-companion test packs
+│   ├── ToolUp.Forms.Tests/, ToolUp.Scheduling.Tests/, ToolUp.Stripe.Tests/ # per-companion test packs
 │   ├── ToolUp.RAG.Evaluation/, ToolUp.RAG.Benchmarks/
 │   └── ToolUp.Sdk/                                   # coordinated-bump meta-manifest
 ├── samples/HelloWorld/                               # runnable end-to-end sample
@@ -97,6 +98,16 @@ Public-form surface adds `IPublicFormApi` (token-gated submit at `/api/public/fo
 ### `ToolUp.Scheduling` — booking + recurrence
 
 `IBookingScheduler` interface (per-resource concurrency lock, conflict detector), `RecurrenceExpander`, `iCalendar` types, `SchedulingApi` ToolUp.Remoting contract, `SchedulingCompose`. Consumers wire it into modules that surface booking-grid UIs.
+
+### `ToolUp.Stripe` — Stripe billing companion
+
+Three independently-versioned packages (`0.1.0-alpha`) for deployments that bill via Stripe, each isolating the Stripe wire format behind a small F# surface (GP 1) — **no `Stripe.net` dependency**; a consumer wanting the richer Stripe client API consumes `Stripe.net` directly alongside these.
+
+- **`ToolUp.Stripe.Webhook`** — pure-F# webhook signature verification (`WebhookSigner.verify` / `verifyWith`: HMAC-SHA256 over `"{timestamp}.{body}"`, constant-time compare, 5-minute freshness window) returning `Result<VerifiedEvent, WebhookError>`. Zero ASP.NET Core / Giraffe deps. The typed `StripeEvent` DU is a planned addition (raw body passed through opaquely today).
+- **`ToolUp.Stripe.TierToken`** — HMAC-signed tier-claim cookie machinery: `Tier` DU (`Anonymous | Free | Personal | Teacher`), `Token.mint` / `Token.validate`, `Cookie.issue` / `clear` / `resolveFromRequest`. Depends only on `Microsoft.AspNetCore.Http`. Single-issuer/-audience by design — swap the signer for a JWT validator without changing the cookie/claim shape when federation lands.
+- **`ToolUp.Stripe.Server`** — Giraffe / ASP.NET Core wiring (`StripeConfig`, `Routes`). Skeleton at `0.1.0-alpha`; the `stripeWebhook` `HttpHandler` + Customer-Portal / Checkout wrappers are planned additions.
+
+Test pack: `src/ToolUp.Stripe.Tests` (Expecto; wired into `dotnet run -- VerifyAll`).
 
 ### `ToolUp.InterPlatform` — cross-deployment peer RPC
 

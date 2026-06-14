@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>ToolUp.Stripe.TierToken</PackageId>
+    <Description>HMAC-signed tier-claim cookie machinery for paid-tier gating. Pure F# + Microsoft.AspNetCore.Http.</Description>
+    <PackageTags>fsharp;stripe;billing;tier;cookie;hmac</PackageTags>
+    <Version>0.1.0-alpha</Version>
+    <!-- Server-only, non-Fable project: Tier.tryParse takes `string | null`,
+         which needs F# 10 nullable reference types. Per forge's nullable
+         rule, server-only projects with no Fable involvement may enable
+         nullness; this one does. -->
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Tier.fs" />
+    <Compile Include="Token.fs" />
+    <Compile Include="Cookie.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>
