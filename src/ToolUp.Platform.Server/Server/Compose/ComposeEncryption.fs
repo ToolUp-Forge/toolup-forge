@@ -1,9 +1,11 @@
 module ToolUp.Platform.ComposeEncryption
 
+open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.DegradedCapabilities
 
 // ─── compose phase: encryption decorator + DI ────────────────────────
 //
@@ -44,6 +46,12 @@ let registerEncryptionResolver
     | Some r -> services.AddSingleton<IBlobEncryptionKeyResolver>(r) |> ignore
     | None -> ()
 
+/// Stable id for the crypto-shred cross-silo cache-eviction capability
+/// in the degraded-capability registry (Phase 118). Referenced by both
+/// the `Register` (failure) and `Clear` (success) paths below.
+[<Literal>]
+let CryptoShredCacheEvictionCapability = "crypto-shred-cache-eviction"
+
 /// Gap audit #1 — wire `PerScopeKeyResolver` to the cross-process
 /// notification channel for multi-instance cache coherence. After
 /// wiring, `DestroyKey` on any silo publishes a
@@ -55,14 +63,51 @@ let registerEncryptionResolver
 /// combination at preflight). Best-effort: `WireToChannel` runs
 /// synchronously here, but a network glitch on subscribe shouldn't
 /// crash compose — the resolver still functions single-instance.
+///
+/// Phase 118 — best-effort is no longer SILENT. A subscribe failure
+/// logs `Error` and registers a `crypto-shred-cache-eviction` degraded
+/// entry naming the single-silo-only consequence (a destroyed key keeps
+/// decrypting on every OTHER silo until restart — a GDPR-erasure hole).
+/// A successful wire clears any stale entry (idempotent no-op on a clean
+/// boot). Operators alert on a non-empty `/health` degraded set.
 let wirePerScopeResolverToNotificationChannel
     (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
     (resolvedNotificationChannel: INotificationChannel)
+    (degradedCapabilities: DegradedCapabilityRegistry)
+    (logger: ILogger)
     : unit =
     match encryptionKeyResolver with
     | Some(:? PerScopeKeyResolver.PerScopeKeyResolver as perScope) ->
         try
             perScope.WireToChannel resolvedNotificationChannel |> Async.RunSynchronously
-        with _ ->
-            ()
+            // Cross-silo eviction is live — clear any degraded entry a
+            // prior failed attempt left behind. No-op on a clean boot.
+            degradedCapabilities.Clear CryptoShredCacheEvictionCapability
+        with ex ->
+            // Best-effort by design (compose must not crash on a subscribe
+            // blip), but the failure is recorded loudly now: Error log +
+            // a degraded-capability entry that survives until a successful
+            // re-subscribe or restart (GP 9).
+            logger.Error(
+                "[ComposeEncryption] event=crypto_shred_subscribe_failed "
+                + "impact=destroyed-key-still-decrypts-on-other-silos-until-restart",
+                Some ex
+            )
+
+            degradedCapabilities.Register {
+                Capability = CryptoShredCacheEvictionCapability
+                DegradedSince = DateTimeOffset.UtcNow
+                Reason =
+                    sprintf
+                        "PerScopeKeyResolver failed to subscribe to the notification channel at compose: %s"
+                        ex.Message
+                Impact =
+                    "A crypto-shredded (destroyed) encryption key keeps decrypting on every OTHER silo "
+                    + "until that silo's process restarts — cross-silo cache eviction is not happening, "
+                    + "defeating the GDPR-erasure guarantee. Single-silo deployments are unaffected."
+                Remediation =
+                    "Check the distributed notification channel (e.g. Redis) connectivity/auth, then "
+                    + "restart this instance to re-subscribe. Verify with a key-destroy on one silo + a "
+                    + "read on another. Single-silo deployments can ignore this entry."
+            }
     | _ -> ()

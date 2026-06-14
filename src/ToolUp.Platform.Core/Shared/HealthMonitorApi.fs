@@ -97,6 +97,35 @@ type JobSchedulerTelemetryView = {
     GeneratedAt: DateTime
 }
 
+/// Phase 118 — a capability that a compose-time or runtime best-effort
+/// site registered as *degraded*: it was supposed to be active but
+/// failed to wire (or is currently down) without crashing startup. The
+/// motivating instance is a failed cross-silo crypto-shred cache-eviction
+/// subscribe — the deployment boots fine, but a destroyed encryption key
+/// keeps decrypting on every other silo until restart, with zero signal.
+/// Surfaced on `/health`, `/dev/inspect`, and this admin API so a
+/// silently-downgraded capability is answerable without log archaeology
+/// (GP 9). Empty set on a healthy deployment (GP 13).
+///
+/// Value-typed (GP 5); identity is `Capability` (the registry key).
+/// Crosses the wire as-is (the HealthMonitorUI panel renders it), so it
+/// lives in Core alongside the other `IHealthMonitorApi` view records.
+type DegradedCapability = {
+    /// Stable machine-readable capability id, e.g.
+    /// `"crypto-shred-cache-eviction"`. Registry key — re-registering the
+    /// same id refreshes reason/impact/remediation but PRESERVES the
+    /// original `DegradedSince` (the first observation of the degradation).
+    Capability: string
+    /// When the capability was first observed degraded (UTC).
+    DegradedSince: DateTimeOffset
+    /// Operator-readable failure cause (what went wrong).
+    Reason: string
+    /// The consequence while degraded (what is broken / unsafe).
+    Impact: string
+    /// What an operator should do to restore the capability.
+    Remediation: string
+}
+
 /// Owner/Admin-gated read-only Fable.Remoting surface. Auto-injected
 /// by `compose` — `Anonymous` mode returns `Error` from both methods;
 /// `Team` / `MultiTeam` require Owner or Admin role; `Individual` /
@@ -133,4 +162,13 @@ type IHealthMonitorApi = {
     /// hits this method on every press without amplifying load.
     [<RequiresRole "PlatformAdmin">]
     GetJobSchedulerTelemetry: unit -> Async<Result<JobSchedulerTelemetryView, string>>
+
+    /// Phase 118 — read the deployment's degraded-capability set:
+    /// compose-time or runtime best-effort wiring that failed without
+    /// crashing startup (e.g. a failed cross-silo crypto-shred cache-
+    /// eviction subscribe). Empty list on a healthy deployment (GP 13).
+    /// Cheap in-memory snapshot (a `ConcurrentDictionary` read), so the
+    /// dedicated refresh hits this on every press without amplifying load.
+    [<RequiresRole "PlatformAdmin">]
+    GetDegradedCapabilities: unit -> Async<Result<DegradedCapability list, string>>
 }

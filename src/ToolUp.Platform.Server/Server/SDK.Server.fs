@@ -485,11 +485,34 @@ let compose
     // `ComposeEncryption.registerEncryptionResolver`).
     registerEncryptionResolver services encryptionKeyResolver
 
+    // Phase 118 — degraded-capability registry. Registered
+    // unconditionally (best-effort sites must be able to register into it)
+    // but zero-cost when empty (GP 13): the `/health` writer skips the
+    // section on `IsEmpty`. The `/dev/inspect` contributor renders the
+    // same set; both gated by their existing endpoint gates.
+    let degradedCapabilities = DegradedCapabilities.DegradedCapabilityRegistry()
+
+    services.AddSingleton<DegradedCapabilities.DegradedCapabilityRegistry>(degradedCapabilities)
+    |> ignore
+
+    services.AddSingleton<IDevDiagnosticsContributor>(
+        DegradedCapabilities.DegradedCapabilitiesDiagnosticsContributor(degradedCapabilities)
+        :> IDevDiagnosticsContributor
+    )
+    |> ignore
+
     // Gap audit #1 — wire `PerScopeKeyResolver` to the cross-process
     // notification channel for multi-instance cache coherence
     // (extracted to
     // `ComposeEncryption.wirePerScopeResolverToNotificationChannel`).
-    wirePerScopeResolverToNotificationChannel encryptionKeyResolver resolvedNotificationChannel
+    // Phase 118 — first adopter: a failed subscribe now logs `Error` and
+    // registers a `crypto-shred-cache-eviction` degraded entry instead of
+    // swallowing the exception silently.
+    wirePerScopeResolverToNotificationChannel
+        encryptionKeyResolver
+        resolvedNotificationChannel
+        degradedCapabilities
+        resolvedLogger
 
     // Phase 19 — entity-store registration (extracted to
     // `ComposeStores.registerEntityStore`). Phase 26 — when

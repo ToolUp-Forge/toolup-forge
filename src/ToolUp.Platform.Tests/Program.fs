@@ -124,6 +124,7 @@ let allTests =
         HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests
         AuditLogHealthCheckTests.tests
+        DegradedCapabilityRegistryTests.tests
         NotificationSilentlySkippedTests.tests
         EncryptedSecretStoreModeValidatorTests.tests
         JobSchedulerInstanceValidatorTests.tests

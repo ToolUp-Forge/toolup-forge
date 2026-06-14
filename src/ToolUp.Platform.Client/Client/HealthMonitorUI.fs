@@ -35,6 +35,10 @@ type Model = {
     /// tab without a second click. `HasScheduler = false` (carried
     /// inside the view) suppresses the inline card.
     SchedulerTelemetry: LoadState<JobSchedulerTelemetryView>
+    /// Phase 118 — degraded-capability set from `GetDegradedCapabilities`.
+    /// Loaded alongside `Live`; empty on a healthy deployment, in which
+    /// case the card is suppressed entirely (GP 13).
+    Degraded: LoadState<DegradedCapability list>
     /// Names of probes whose status changed between the prior and
     /// most recent live snapshot — surfaced via Tailwind
     /// `animate-pulse` for ~1.5s so an admin spotting a freshly-flipped
@@ -50,6 +54,7 @@ type Msg =
     | RefreshPreflight
     | PreflightLoaded of Result<PreflightSnapshotView, string>
     | SchedulerTelemetryLoaded of Result<JobSchedulerTelemetryView, string>
+    | DegradedLoaded of Result<DegradedCapability list, string>
 
 // ─── API proxy ───────────────────────────────────────────────────────
 
@@ -70,16 +75,27 @@ let private loadSchedulerTelemetryCmd () =
     Cmd.OfRemoting.call healthMonitorApi.GetJobSchedulerTelemetry () SchedulerTelemetryLoaded (fun e ->
         SchedulerTelemetryLoaded(Error e.Message))
 
+let private loadDegradedCmd () =
+    Cmd.OfRemoting.call healthMonitorApi.GetDegradedCapabilities () DegradedLoaded (fun e ->
+        DegradedLoaded(Error e.Message))
+
 let init () =
     let model = {
         ActiveTab = LiveHealthTab
         Live = Loading
         Preflight = Loading
         SchedulerTelemetry = Loading
+        Degraded = Loading
         RecentlyFlipped = Set.empty
     }
 
-    model, Cmd.batch [ loadLiveCmd (); loadPreflightCmd (); loadSchedulerTelemetryCmd () ]
+    model,
+    Cmd.batch [
+        loadLiveCmd ()
+        loadPreflightCmd ()
+        loadSchedulerTelemetryCmd ()
+        loadDegradedCmd ()
+    ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -119,8 +135,9 @@ let update (msg: Msg) (model: Model) =
             model with
                 Live = Loading
                 SchedulerTelemetry = Loading
+                Degraded = Loading
         },
-        Cmd.batch [ loadLiveCmd (); loadSchedulerTelemetryCmd () ]
+        Cmd.batch [ loadLiveCmd (); loadSchedulerTelemetryCmd (); loadDegradedCmd () ]
 
     | LiveLoaded(Ok snapshot) ->
         let flipped = flippedNames (currentLiveOpt model) snapshot
@@ -158,6 +175,10 @@ let update (msg: Msg) (model: Model) =
                 SchedulerTelemetry = LoadError msg
         },
         Cmd.none
+
+    | DegradedLoaded(Ok entries) -> { model with Degraded = Loaded entries }, Cmd.none
+
+    | DegradedLoaded(Error msg) -> { model with Degraded = LoadError msg }, Cmd.none
 
 // ─── Status-pill renderers ───────────────────────────────────────────
 
@@ -276,6 +297,78 @@ let private schedulerTelemetryCard (view: JobSchedulerTelemetryView) =
             ]
         ]
 
+// ─── Degraded-capability card (Phase 118) ────────────────────────────
+
+/// Inline card on the Live tab listing capabilities that wired
+/// best-effort and FAILED — the deployment is up but a capability is
+/// silently down (e.g. cross-silo crypto-shred cache eviction). Rendered
+/// ONLY when the set is non-empty (GP 13): a healthy deployment sees
+/// nothing, matching the byte-for-byte-unchanged `/health` payload. The
+/// red border signals this is a security/correctness degradation, not a
+/// transient probe blip.
+let private degradedCapabilitiesCard (entries: DegradedCapability list) =
+    if List.isEmpty entries then
+        Html.none
+    else
+        Html.div [
+            prop.className "border border-red-300 bg-red-50 rounded-lg p-3 mb-4"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-baseline justify-between mb-2"
+                    prop.children [
+                        Html.h3 [
+                            prop.className "text-sm font-semibold text-red-800"
+                            prop.text $"Degraded capabilities ({entries.Length})"
+                        ]
+                    ]
+                ]
+                Html.p [
+                    prop.className "text-xs text-red-700 mb-3"
+                    prop.text
+                        "A capability wired best-effort at startup and failed without crashing the deployment. The server is up, but the listed capability is down until remediated. Alert on a non-empty set."
+                ]
+                Html.div [
+                    prop.className "flex flex-col gap-3"
+                    prop.children (
+                        entries
+                        |> List.map (fun d ->
+                            Html.div [
+                                prop.className "border border-red-200 bg-white rounded p-3"
+                                prop.children [
+                                    Html.div [
+                                        prop.className "flex items-baseline justify-between mb-1"
+                                        prop.children [
+                                            Html.span [
+                                                prop.className "text-sm font-mono font-semibold text-red-800"
+                                                prop.text d.Capability
+                                            ]
+                                            Html.span [
+                                                prop.className "text-xs text-gray-500"
+                                                prop.text $"since {d.DegradedSince}"
+                                            ]
+                                        ]
+                                    ]
+                                    Html.dl [
+                                        prop.className "grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs"
+                                        prop.children [
+                                            Html.dt [ prop.className "text-gray-500 font-medium"; prop.text "Reason" ]
+                                            Html.dd [ prop.className "text-gray-700"; prop.text d.Reason ]
+                                            Html.dt [ prop.className "text-gray-500 font-medium"; prop.text "Impact" ]
+                                            Html.dd [ prop.className "text-gray-700"; prop.text d.Impact ]
+                                            Html.dt [
+                                                prop.className "text-gray-500 font-medium"
+                                                prop.text "Remediation"
+                                            ]
+                                            Html.dd [ prop.className "text-gray-700"; prop.text d.Remediation ]
+                                        ]
+                                    ]
+                                ]
+                            ])
+                    )
+                ]
+            ]
+        ]
+
 let private liveHealthHeader (snapshot: HealthSnapshot) =
     Html.div [
         prop.className "text-xs text-gray-500"
@@ -385,6 +478,13 @@ let private liveHealthTabView (model: Model) (dispatch: Msg -> unit) =
                     refreshButton "Refresh" (fun () -> dispatch RefreshLive) isLoading
                 ]
             ]
+            // Phase 118 — degraded capabilities first (most urgent: a
+            // capability is down). Suppressed when the set is empty or
+            // the load is in flight.
+            match model.Degraded with
+            | Loaded entries -> degradedCapabilitiesCard entries
+            | _ -> Html.none
+
             // Phase 9b.A — surface scheduler drift above the probe
             // table. Suppressed when no scheduler is registered, and
             // when the load is in flight (no point flashing "Loading..."

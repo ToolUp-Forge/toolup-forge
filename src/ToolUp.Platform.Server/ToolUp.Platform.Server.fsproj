@@ -276,6 +276,11 @@
         <Compile Include="Server\AdminTokenValidator.fs" />
         <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />
         <Compile Include="Server\HealthCheck.fs" />
+        <!-- Phase 118 — degraded-capability registry + /dev/inspect
+             contributor. Before HealthCheckResponseWriter (consumes the
+             registry for the /health degraded section) and the compose
+             files that register + adopt it. -->
+        <Compile Include="Server\DegradedCapabilities.fs" />
         <Compile Include="Server\HealthCheckResponseWriter.fs" />
         <Compile Include="Server\HealthCheckAggregator.fs" />
         <Compile Include="Server\HealthCheckRunner.fs" />

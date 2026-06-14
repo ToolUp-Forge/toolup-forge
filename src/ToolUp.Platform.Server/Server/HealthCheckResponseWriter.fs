@@ -42,6 +42,26 @@ type private HealthCheckResponse = {
     checks: HealthCheckEntry list
 }
 
+// Phase 118 — degraded-capability section. Emitted ONLY when the
+// registry is non-empty, so a healthy deployment's `/health` payload
+// stays byte-for-byte identical to pre-Phase-118 (GP 13). Local
+// lowercase DTO so the nested keys match this endpoint's existing
+// lowercase wire style (`status` / `checks`) rather than the Core
+// record's PascalCase.
+type private DegradedEntry = {
+    capability: string
+    degradedSince: DateTimeOffset
+    reason: string
+    impact: string
+    remediation: string
+}
+
+type private HealthCheckResponseWithDegraded = {
+    status: string
+    checks: HealthCheckEntry list
+    degraded: DegradedEntry list
+}
+
 let private jsonOptions =
     let o = FableConverters.create ()
     o.WriteIndented <- true
@@ -82,10 +102,40 @@ let writeResponse (ctx: HttpContext) (report: HealthReport) : Task =
             })
         |> List.ofSeq
 
-    let payload = {
-        status = statusName report.Status
-        checks = entries
-    }
+    // Phase 118 — fold in the degraded-capability set when present.
+    // Resolved best-effort from DI; absent (null) on the rare path where
+    // the registry was not composed (e.g. a hand-rolled host). Empty set
+    // → emit the original payload shape unchanged (GP 13).
+    let degraded =
+        match ctx.RequestServices.GetService(typeof<DegradedCapabilities.DegradedCapabilityRegistry>) with
+        | :? DegradedCapabilities.DegradedCapabilityRegistry as reg when not reg.IsEmpty ->
+            reg.Snapshot()
+            |> List.map (fun d -> {
+                capability = d.Capability
+                degradedSince = d.DegradedSince
+                reason = d.Reason
+                impact = d.Impact
+                remediation = d.Remediation
+            })
+        | _ -> []
 
-    let body = JsonSerializer.Serialize(payload, jsonOptions)
+    let body =
+        if List.isEmpty degraded then
+            JsonSerializer.Serialize(
+                {
+                    status = statusName report.Status
+                    checks = entries
+                },
+                jsonOptions
+            )
+        else
+            JsonSerializer.Serialize(
+                {
+                    status = statusName report.Status
+                    checks = entries
+                    degraded = degraded
+                },
+                jsonOptions
+            )
+
     ctx.Response.WriteAsync body

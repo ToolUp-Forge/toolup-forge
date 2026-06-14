@@ -164,4 +164,14 @@ let healthMonitorApi (ctx: HttpContext) : IHealthMonitorApi =
                                 GeneratedAt = DateTime.UtcNow
                             }
                 })
+
+        GetDegradedCapabilities =
+            fun () ->
+                withGate (fun () -> async {
+                    // Phase 118 — in-memory snapshot of the degraded set.
+                    // Absent registry (hand-rolled host) reads as empty.
+                    match ctx.RequestServices.GetService(typeof<DegradedCapabilities.DegradedCapabilityRegistry>) with
+                    | :? DegradedCapabilities.DegradedCapabilityRegistry as reg -> return Ok(reg.Snapshot())
+                    | _ -> return Ok []
+                })
     }
