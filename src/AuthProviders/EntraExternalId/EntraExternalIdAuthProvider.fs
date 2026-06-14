@@ -252,6 +252,12 @@ let private wrapWithEntraMapping
                     return Ok(applyEntraMapping claims user)
                 | None -> return Ok user
         }
+
+        // Decorator: identity verification is the inner OIDC provider's
+        // responsibility (this wrapper only remaps `oid`/`tid` claims
+        // post-validation). Delegate the capability so the wrapper can't
+        // mask the inner provider's guarantee.
+        member _.IsCryptographicallyVerified = inner.IsCryptographicallyVerified
     }
 
 /// Build an Entra External ID `IAuthProvider` over an explicit

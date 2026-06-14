@@ -41,3 +41,11 @@ type HeaderAuthProvider() =
         member _.ValidateRequest(ctx: RequestContext) = async {
             return Ok(extractUser (RequestContext.value ctx :?> HttpContext))
         }
+
+        // The whole point of this provider: it trusts the X-User-Id
+        // header with no cryptographic proof. Reporting `false` is what
+        // makes the auth-mode validator refuse to boot a production-shaped
+        // deployment on it (unless the operator opts in via the
+        // AcceptHeaderAuthWhenAuthRequired escape hatch behind an mTLS
+        // proxy). NEVER flip this to `true`.
+        member _.IsCryptographicallyVerified = false

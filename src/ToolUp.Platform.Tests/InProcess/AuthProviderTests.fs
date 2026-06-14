@@ -1286,6 +1286,7 @@ let private fromEnvTests =
         { new IAuthProvider with
             member _.GetUser _ = async { return AuthenticatedUser.anonymous }
             member _.ValidateRequest _ = async { return Error "marker" }
+            member _.IsCryptographicallyVerified = true
         }
 
     let oidcStub: AuthProvider.OidcAuthBuilder = fun _ _ -> marker

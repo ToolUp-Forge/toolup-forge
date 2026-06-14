@@ -190,3 +190,7 @@ type StaticJwtAuthProvider(config: StaticJwtConfig) =
                 | Some token -> validateToken config token
                 | None -> Error "No Bearer token provided"
         }
+
+        // HS256 signature validation against the configured shared
+        // secret — identity is cryptographically proven.
+        member _.IsCryptographicallyVerified = true

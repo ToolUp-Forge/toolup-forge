@@ -16,9 +16,10 @@ let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
 let private headerAuthProvider () : IAuthProvider =
     HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
 
-/// Stand-in non-HeaderAuth provider — distinguishable by type. Used to
-/// prove the validator is HeaderAuthProvider-specific rather than
-/// blanket-refusing every IAuthProvider.
+/// Stand-in *verified* non-HeaderAuth provider — StaticJwt reports
+/// `IsCryptographicallyVerified = true`. Used to prove the validator
+/// passes a real verifying provider rather than blanket-refusing every
+/// IAuthProvider.
 let private alternativeAuthProvider () : IAuthProvider =
     let cfg: StaticJwtAuthProvider.StaticJwtConfig = {
         Secret = "test-secret"
@@ -27,6 +28,17 @@ let private alternativeAuthProvider () : IAuthProvider =
     }
 
     StaticJwtAuthProvider.StaticJwtAuthProvider(cfg) :> IAuthProvider
+
+/// An *unverified* provider that is NOT `HeaderAuthProvider` by type — a
+/// hand-rolled header-trusting provider. The old `GetType() =
+/// typeof<HeaderAuthProvider>` gate let this evade refusal; the Wave 19
+/// capability gate (`IsCryptographicallyVerified = false`) must catch it.
+let private unverifiedCustomProvider () : IAuthProvider =
+    { new IAuthProvider with
+        member _.GetUser(_) = async { return AuthenticatedUser.anonymous }
+        member _.ValidateRequest(_) = async { return Result.Ok AuthenticatedUser.anonymous }
+        member _.IsCryptographicallyVerified = false
+    }
 
 let private validate (config: ServerConfig) (auth: IAuthProvider) : ValidationResult =
     let v =
@@ -95,12 +107,32 @@ let tests =
             Expect.equal result Ok "escape hatch passes"
         }
 
-        test "Individual mode + non-HeaderAuth provider → Ok (validator is provider-specific)" {
-            // A deployment running OIDC / StaticJwt / a custom
-            // provider in Individual mode is the production path
-            // we WANT — must not be refused.
+        test "Individual mode + verified provider → Ok (capability passes)" {
+            // A deployment running OIDC / StaticJwt / a custom verifying
+            // provider in Individual mode is the production path we WANT
+            // — IsCryptographicallyVerified = true, must not be refused.
             let result = validate (cfg Surfaces.individual false) (alternativeAuthProvider ())
-            Expect.equal result Ok "non-HeaderAuth providers are not refused"
+            Expect.equal result Ok "verified providers are not refused"
+        }
+
+        test "Individual mode + unverified custom provider (not HeaderAuth type) → Error (capability, not type)" {
+            // Wave 19 anti-evasion: a hand-rolled header-trusting
+            // provider that is NOT HeaderAuthProvider by type used to slip
+            // past the GetType() check. The capability gate catches it.
+            let result = validate (cfg Surfaces.individual false) (unverifiedCustomProvider ())
+
+            match result with
+            | Error msg ->
+                Expect.stringContains msg "IsCryptographicallyVerified" "names the capability that failed"
+                Expect.stringContains msg "Individual" "names the offending Mode"
+            | other -> failtestf "expected Error, got %A" other
+        }
+
+        test "Individual mode + unverified custom provider + escape hatch → Ok" {
+            // The escape hatch covers any unverified provider behind a
+            // verified proxy, not just HeaderAuthProvider.
+            let result = validate (cfg Surfaces.individual true) (unverifiedCustomProvider ())
+            Expect.equal result Ok "escape hatch passes for any unverified provider"
         }
 
         test "Validator name is stable + non-empty" {

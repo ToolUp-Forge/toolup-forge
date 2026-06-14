@@ -128,12 +128,21 @@ type TestSecretStore() =
 /// user; `GetUser` returns it unconditionally, `ValidateRequest`
 /// returns `Ok` of the same user. Pass `AuthenticatedUser.anonymous`
 /// for a "no credentials" deployment shape.
-type TestAuthProvider(user: AuthenticatedUser) =
+///
+/// `isCryptographicallyVerified` defaults to `true` — the fake stands in
+/// for a real verified provider in the common arrange case, so composing
+/// it in an auth-requiring mode does not trip the unverified-provider
+/// startup gate. Pass `false` to model a header-trusting / unverified
+/// provider for tests that exercise that gate.
+type TestAuthProvider(user: AuthenticatedUser, ?isCryptographicallyVerified: bool) =
+    let verified = defaultArg isCryptographicallyVerified true
+
     new() = TestAuthProvider(AuthenticatedUser.anonymous)
 
     interface IAuthProvider with
         member _.GetUser(_) = async { return user }
         member _.ValidateRequest(_) = async { return Ok user }
+        member _.IsCryptographicallyVerified = verified
 
 /// `IStorageScopeResolver` that returns a fixed `StorageScope`. The
 /// real resolvers branch on platform mode + request headers; tests

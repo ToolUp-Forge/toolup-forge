@@ -41,6 +41,7 @@ let private nonHeaderAuth () : IAuthProvider =
         member _.GetUser(_ctx) = async { return user }
 
         member _.ValidateRequest(_ctx) = async { return Result.Ok user }
+        member _.IsCryptographicallyVerified = true
     }
 
 let private cfg (surfaces: SurfaceProfile list) (shareTokenStore: ShareTokenStoreMode) = {

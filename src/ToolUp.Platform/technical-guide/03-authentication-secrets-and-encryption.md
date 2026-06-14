@@ -11,11 +11,14 @@
 
 ```fsharp
 type IAuthProvider =
-    abstract GetUser: obj -> Async<AuthenticatedUser>
-    abstract ValidateRequest: obj -> Async<Result<AuthenticatedUser, string>>
+    abstract GetUser: RequestContext -> Async<AuthenticatedUser>
+    abstract ValidateRequest: RequestContext -> Async<Result<AuthenticatedUser, string>>
+    abstract IsCryptographicallyVerified: bool
 ```
 
-Both methods are async (so provider implementations can make network calls — JWKS discovery, token introspection, external directory lookup — without blocking). `GetUser` is lenient: returns `AuthenticatedUser.anonymous` on any failure. `ValidateRequest` is strict: returns `Error reason` on missing / invalid / expired credentials. The `obj` parameter is boxed `HttpContext`, kept as `obj` so the interface lives in the shared layer without referencing ASP.NET Core.
+Both request methods are async (so provider implementations can make network calls — JWKS discovery, token introspection, external directory lookup — without blocking). `GetUser` is lenient: returns `AuthenticatedUser.anonymous` on any failure. `ValidateRequest` is strict: returns `Error reason` on missing / invalid / expired credentials. The `RequestContext` parameter wraps a boxed `HttpContext`, so the interface lives in the shared (Fable-compatible) layer without referencing ASP.NET Core.
+
+`IsCryptographicallyVerified` (Wave 19) is a fail-closed capability signal: a provider that proves identity cryptographically (verified JWT / OIDC / mTLS) returns `true`; one that trusts an unauthenticated request header (`HeaderAuthProvider`) returns `false`. The `header-auth-mode` startup validator refuses to boot an auth-requiring deployment whose provider reports `false`, unless `ServerConfig.AcceptHeaderAuthWhenAuthRequired` is set (behind-mTLS-proxy escape hatch). The check reads this capability, not the concrete type, so a subclass / wrapper can't evade it.
 
 ### AuthConfig — declarative provider shape
 

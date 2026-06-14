@@ -458,6 +458,11 @@ let private buildProvider
                 log.Warn $"OIDC validate failed: {message}"
                 return Error message
         }
+
+        // RS256 JWT signature validation against OIDC-discovered (or
+        // explicitly configured) JWKS — identity is cryptographically
+        // proven, not header-trusted.
+        member _.IsCryptographicallyVerified = true
     }
 
 /// Construct an OIDC/JWT `IAuthProvider` from a declarative

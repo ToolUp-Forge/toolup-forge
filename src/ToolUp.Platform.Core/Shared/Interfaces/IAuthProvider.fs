@@ -101,3 +101,37 @@ type IAuthProvider =
     ///
     /// See `GetUser` for the `RequestContext` contract.
     abstract ValidateRequest: ctx: RequestContext -> Async<Result<AuthenticatedUser, string>>
+
+    /// Capability signal: does this provider establish identity by
+    /// *cryptographic proof* (a verified JWT signature, a validated OIDC
+    /// token, mTLS, etc.) rather than by trusting an unauthenticated
+    /// request header at face value?
+    ///
+    /// **Fail-closed contract.** The startup auth-mode validator
+    /// (`HeaderAuthProviderModeValidator`, registered as `header-auth-mode`)
+    /// refuses to boot an auth-requiring deployment whose composed provider
+    /// reports `false`, unless the operator sets the
+    /// `ServerConfig.AcceptHeaderAuthWhenAuthRequired` escape hatch
+    /// (intended for behind-mTLS deployments where a verified-identity
+    /// proxy strips and re-injects the identity header). The check reads
+    /// this capability rather than the concrete type, so a subclass /
+    /// wrapper / hand-rolled header-trusting provider can no longer evade
+    /// the gate the way the old `GetType() = typeof<HeaderAuthProvider>`
+    /// check let it (Auth-core audit, Mode-gating Finding 3).
+    ///
+    /// **A new member with no default — every implementer MUST decide.**
+    /// This is deliberate: identity verification is a security property
+    /// no provider should acquire by omission. A provider that genuinely
+    /// proves identity returns `true`; one that trusts ambient request
+    /// data (a header, a query param) returns `false`. A decorator
+    /// delegates to its inner provider's value. The shipped first-party
+    /// providers are wired accordingly (OIDC / Entra / StaticJwt = `true`;
+    /// `HeaderAuthProvider` = `false`).
+    ///
+    /// External `IAuthProvider` implementers: this is a source-breaking
+    /// interface widen — you must add this member. See
+    /// `docs/migrations/wave19-unverified-auth-provider-gate.md`. If your
+    /// provider verifies identity cryptographically, return `true`; if it
+    /// trusts a header, return `false` and run behind a verified proxy
+    /// (with the escape hatch) or migrate to a verifying provider.
+    abstract IsCryptographicallyVerified: bool
