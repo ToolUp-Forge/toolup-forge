@@ -77,8 +77,9 @@ module SitemapGenerator =
 
     /// Build the `<urlset>` body for a precomputed universe + base URL.
     /// Trailing slashes on `baseUrl` are normalised away. Shared by the
-    /// public `generateWith` and (Phase 150) the per-shard generation.
-    let private generateUrlSetFrom (baseUrl: string) (universe: (Slug * string option) list) : string =
+    /// public `generateWith`, the per-shard generation, and the static
+    /// export (Phase 150). `internal` — same-assembly callers only.
+    let internal generateUrlSetFrom (baseUrl: string) (universe: (Slug * string option) list) : string =
         let normalisedBase = baseUrl.TrimEnd('/')
         let sb = StringBuilder()
 
@@ -149,6 +150,141 @@ module SitemapGenerator =
         | [] -> ConditionalGet.deployStamp
         | dates -> List.max dates
 
+    // ─── Phase 150 — sitemap-index sharding + universal lastmod ──────
+
+    /// Sharding + universal-lastmod knobs (Phase 150). `defaults`
+    /// reproduces the pre-150 single-`<urlset>` behaviour for any universe
+    /// below `Threshold`, with no default lastmod (GP 11).
+    type SitemapShardingOptions = {
+        /// URL count above which `sitemap.xml` becomes a `<sitemapindex>`
+        /// and the universe is split into shard files. sitemaps.org caps a
+        /// single file at 50,000 URLs / 50 MB; the default mirrors the URL
+        /// cap.
+        Threshold: int
+        /// Cluster key: groups URLs into logical child sitemaps so a changed
+        /// cluster only re-fetches its own shard. `None` → deterministic
+        /// numeric slices (`sitemap-1.xml` …). `Some f` → `f slug` names the
+        /// shard a slug belongs to (cluster-aware); names are sanitised to
+        /// `[a-z0-9-]` for the `sitemap-<name>.xml` route + over-large
+        /// clusters are sub-sliced numerically.
+        ClusterKey: (Slug -> string) option
+        /// Fallback lastmod (formatted `yyyy-MM-dd`) applied to any entry
+        /// whose own lastmod is `None` — including Phase 95 dynamic slugs.
+        /// `None` (default) → signal-less entries emit no `<lastmod>`,
+        /// exactly as pre-150 (GP 11).
+        DefaultLastmod: string option
+    }
+
+    module SitemapShardingOptions =
+        let defaults: SitemapShardingOptions = {
+            Threshold = 50_000
+            ClusterKey = None
+            DefaultLastmod = None
+        }
+
+    /// Apply a fallback lastmod to entries whose lastmod is `None`
+    /// (Phase 150 universal-lastmod). `None` fallback → identity, so the
+    /// universe is byte-for-byte pre-150 (GP 11).
+    let applyDefaultLastmod
+        (fallback: string option)
+        (universe: (Slug * string option) list)
+        : (Slug * string option) list =
+        match fallback with
+        | None -> universe
+        | Some d ->
+            universe
+            |> List.map (fun (slug, lastmod) -> slug, lastmod |> Option.orElse (Some d))
+
+    /// Sanitise a cluster name into the `[a-z0-9-]` charset the
+    /// `sitemap-<name>.xml` shard route + `<loc>` can carry safely. Any
+    /// other character collapses to `-`; an empty result falls back to
+    /// `shard`.
+    let internal sanitizeShardName (name: string) : string =
+        let mapped =
+            name
+            |> Seq.map (fun c ->
+                let lower = System.Char.ToLowerInvariant c
+
+                if (lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9') || lower = '-' then
+                    lower
+                else
+                    '-')
+            |> Seq.toArray
+            |> System.String
+
+        if System.String.IsNullOrEmpty mapped then
+            "shard"
+        else
+            mapped
+
+    /// Partition the universe into named shards (Phase 150) with stable
+    /// membership for a given content set. Cluster-aware when `ClusterKey`
+    /// is set: groups by `f slug` (cluster order sorted by name; entries
+    /// sorted by slug within), each over-threshold cluster sub-sliced
+    /// numerically (`news-1`, `news-2`). With no cluster key, deterministic
+    /// numeric slices over the slug-sorted universe (`1`, `2`, …). Shard
+    /// names are the `sitemap-<name>.xml` basename suffix.
+    let shardUniverse
+        (options: SitemapShardingOptions)
+        (universe: (Slug * string option) list)
+        : (string * (Slug * string option) list) list =
+        let threshold = max 1 options.Threshold
+
+        match options.ClusterKey with
+        | None ->
+            universe
+            |> List.sortBy (fun (Slug s, _) -> s)
+            |> List.chunkBySize threshold
+            |> List.mapi (fun i chunk -> string (i + 1), chunk)
+        | Some keyOf ->
+            universe
+            |> List.groupBy (fun (slug, _) -> sanitizeShardName (keyOf slug))
+            |> List.sortBy fst
+            |> List.collect (fun (clusterName, items) ->
+                let sorted = items |> List.sortBy (fun (Slug s, _) -> s)
+
+                if List.length sorted <= threshold then
+                    [ clusterName, sorted ]
+                else
+                    sorted
+                    |> List.chunkBySize threshold
+                    |> List.mapi (fun i chunk -> sprintf "%s-%d" clusterName (i + 1), chunk))
+
+    /// The `<lastmod>` for a shard / child sitemap: the latest lastmod
+    /// string among its entries (ISO `yyyy-MM-dd` strings sort
+    /// lexicographically), or `None` when no entry carries one.
+    let internal shardLastmod (shardEntries: (Slug * string option) list) : string option =
+        shardEntries
+        |> List.choose (fun (_, lastmod) -> lastmod)
+        |> function
+            | [] -> None
+            | dates -> Some(List.max dates)
+
+    /// Build a `<sitemapindex>` listing each shard as a child sitemap at
+    /// `baseUrl/sitemap-<name>.xml`, each with the shard's `<lastmod>`
+    /// (Phase 150).
+    let generateSitemapIndex (baseUrl: string) (shards: (string * (Slug * string option) list) list) : string =
+        let normalisedBase = baseUrl.TrimEnd('/')
+        let sb = StringBuilder()
+        sb.AppendLine("""<?xml version="1.0" encoding="UTF-8"?>""") |> ignore
+
+        sb.AppendLine("""<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">""")
+        |> ignore
+
+        for name, shardEntries in shards do
+            let loc = normalisedBase + "/sitemap-" + name + ".xml" |> xmlEscape
+            sb.AppendLine("  <sitemap>") |> ignore
+            sb.AppendLine(sprintf "    <loc>%s</loc>" loc) |> ignore
+
+            match shardLastmod shardEntries with
+            | Some d -> sb.AppendLine(sprintf "    <lastmod>%s</lastmod>" d) |> ignore
+            | None -> ()
+
+            sb.AppendLine("  </sitemap>") |> ignore
+
+        sb.AppendLine("</sitemapindex>") |> ignore
+        sb.ToString()
+
     /// Optional memoisation of the generated sitemap body keyed on the
     /// universe digest (Phase 149). Off by default — composing
     /// `withSitemapResponseCache` constructs one. A re-poll within the
@@ -187,12 +323,17 @@ module SitemapGenerator =
         /// but always revalidated, so re-polls are cheap conditional
         /// `304`s.
         CacheControl: string
+        /// Phase 150 — sharding + universal-lastmod knobs. Defaults below
+        /// the threshold reproduce the single-`<urlset>` behaviour
+        /// byte-for-byte (GP 11).
+        Sharding: SitemapShardingOptions
     }
 
     module SitemapHandlerOptions =
         let defaults: SitemapHandlerOptions = {
             ResponseCache = None
             CacheControl = "public, max-age=0, must-revalidate"
+            Sharding = SitemapShardingOptions.defaults
         }
 
     /// Conditional-GET sitemap handler (Phase 149). Walks the universe,
@@ -210,10 +351,24 @@ module SitemapGenerator =
         fun next (ctx: HttpContext) -> task {
             let! pages = api.ListPages ""
             let! dynamicSlugs = enumerate ()
-            let universe = entries pages dynamicSlugs
+
+            // Phase 150 — apply the universal-lastmod fallback before the
+            // digest so the ETag rolls when the fallback date changes; the
+            // signature + Last-Modified are taken over the post-applied
+            // universe.
+            let universe =
+                applyDefaultLastmod options.Sharding.DefaultLastmod (entries pages dynamicSlugs)
+
             let signature = IndexNow.computeSignature universe
 
-            let buildBody () = generateUrlSetFrom baseUrl universe
+            // Phase 150 — past the threshold, `sitemap.xml` becomes a
+            // `<sitemapindex>` pointing at the shard routes; below it (the
+            // default), a single `<urlset>` byte-for-byte pre-150.
+            let buildBody () =
+                if List.length universe <= options.Sharding.Threshold then
+                    generateUrlSetFrom baseUrl universe
+                else
+                    generateSitemapIndex baseUrl (shardUniverse options.Sharding universe)
 
             let xml =
                 match options.ResponseCache with
@@ -238,3 +393,47 @@ module SitemapGenerator =
     /// `handlerWith` with default options (no response cache).
     let handler (baseUrl: string) (api: IPublicContentApi) (enumerate: unit -> Async<Slug list>) : HttpHandler =
         handlerWith SitemapHandlerOptions.defaults baseUrl api enumerate
+
+    /// Phase 150 — shard-file handler at `routef "/sitemap-%s.xml"`. When
+    /// the universe is over the threshold, serves the requested child
+    /// sitemap (`/sitemap-<name>.xml`) as a `<urlset>` through the Phase 155
+    /// conditional-GET combinator (ETag over the shard's own sub-universe;
+    /// `Last-Modified` = the shard's latest lastmod). Below the threshold,
+    /// or for an unknown shard name, declines (`skipPipeline`) so the
+    /// request falls through to the catch-all page handler (→ 404). Mounted
+    /// alongside `/sitemap.xml`; the two routes are distinct (the shard
+    /// route always carries the `-` infix).
+    let shardHandler
+        (options: SitemapHandlerOptions)
+        (baseUrl: string)
+        (api: IPublicContentApi)
+        (enumerate: unit -> Async<Slug list>)
+        : HttpHandler =
+        routef "/sitemap-%s.xml" (fun shardName ->
+            fun next (ctx: HttpContext) -> task {
+                let! pages = api.ListPages ""
+                let! dynamicSlugs = enumerate ()
+
+                let universe =
+                    applyDefaultLastmod options.Sharding.DefaultLastmod (entries pages dynamicSlugs)
+
+                if List.length universe <= options.Sharding.Threshold then
+                    return! skipPipeline
+                else
+                    let shards = shardUniverse options.Sharding universe
+
+                    match shards |> List.tryFind (fun (name, _) -> name = shardName) with
+                    | None -> return! skipPipeline
+                    | Some(_, shardEntries) ->
+                        let xml = generateUrlSetFrom baseUrl shardEntries
+                        let signature = IndexNow.computeSignature shardEntries
+                        let lastModified = lastModifiedOf shardEntries
+
+                        let body: HttpHandler =
+                            fun _ (c: HttpContext) ->
+                                c.Response.ContentType <- "application/xml; charset=utf-8"
+                                c.WriteStringAsync xml
+
+                        return!
+                            (ConditionalGet.cacheable signature lastModified options.CacheControl >=> body) next ctx
+            })

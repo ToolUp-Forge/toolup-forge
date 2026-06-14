@@ -72,6 +72,12 @@ type StaticExportOptions = {
     /// When `true`, validate internal links + asset refs after writing and
     /// log every dead one. Default `false`.
     CheckLinks: bool
+    /// Phase 150 — sitemap sharding + universal-lastmod knobs applied to
+    /// the emitted `sitemap.xml`. Defaults reproduce the single-`<urlset>`
+    /// export byte-for-byte for any universe below the threshold (GP 11);
+    /// past it, the export writes a `<sitemapindex>` + `sitemap-<name>.xml`
+    /// shard files instead of one oversized file.
+    SitemapSharding: SitemapGenerator.SitemapShardingOptions
 }
 
 module StaticExportOptions =
@@ -80,6 +86,7 @@ module StaticExportOptions =
         HostConfigs = []
         CachePolicy = CachePolicy.NoCache
         CheckLinks = false
+        SitemapSharding = SitemapGenerator.SitemapShardingOptions.defaults
     }
 
     let withLocales (locales: string list) (o: StaticExportOptions) : StaticExportOptions = { o with Locales = locales }
@@ -95,6 +102,15 @@ module StaticExportOptions =
     }
 
     let withLinkCheck (o: StaticExportOptions) : StaticExportOptions = { o with CheckLinks = true }
+
+    /// Phase 150 — set the sitemap sharding + universal-lastmod knobs for
+    /// the export (mirrors the runtime `withSitemapShardThreshold` /
+    /// `withSitemapClusterKey` / `withSitemapDefaultLastmod` compose knobs).
+    let withSitemapSharding
+        (sharding: SitemapGenerator.SitemapShardingOptions)
+        (o: StaticExportOptions)
+        : StaticExportOptions =
+        { o with SitemapSharding = sharding }
 
 /// Pure generators for static-host config files. Each takes the public
 /// redirect map (gated slugs already excluded by the caller) + the
@@ -215,6 +231,7 @@ module StaticExport =
         (dynamicSlugs: Slug list)
         (locale: string)
         (troot: string)
+        (sharding: SitemapGenerator.SitemapShardingOptions)
         (logger: ILogger)
         : Async<int> =
         async {
@@ -261,8 +278,34 @@ module StaticExport =
                 | Some page -> writePage page s
                 | None -> ()
 
-            let sitemapXml = SitemapGenerator.generateWith publicBaseUrl pages dynamicSlugs
-            File.WriteAllText(Path.Combine(troot, "sitemap.xml"), sitemapXml)
+            // Phase 150 — past the threshold, write a `<sitemapindex>` +
+            // `sitemap-<name>.xml` shard files instead of one oversized
+            // file; below it, a single `<urlset>` byte-for-byte pre-150.
+            // The universal-lastmod fallback (when set) applies to either
+            // shape.
+            let sitemapUniverse =
+                SitemapGenerator.applyDefaultLastmod
+                    sharding.DefaultLastmod
+                    (SitemapGenerator.entries pages dynamicSlugs)
+
+            if List.length sitemapUniverse <= sharding.Threshold then
+                File.WriteAllText(
+                    Path.Combine(troot, "sitemap.xml"),
+                    SitemapGenerator.generateUrlSetFrom publicBaseUrl sitemapUniverse
+                )
+            else
+                let shards = SitemapGenerator.shardUniverse sharding sitemapUniverse
+
+                File.WriteAllText(
+                    Path.Combine(troot, "sitemap.xml"),
+                    SitemapGenerator.generateSitemapIndex publicBaseUrl shards
+                )
+
+                for name, shardEntries in shards do
+                    File.WriteAllText(
+                        Path.Combine(troot, sprintf "sitemap-%s.xml" name),
+                        SitemapGenerator.generateUrlSetFrom publicBaseUrl shardEntries
+                    )
 
             if skipped > 0 then
                 logger.Warn(sprintf "StaticExport: skipped %d page(s) with no registered layout in '%s'" skipped troot)
@@ -408,7 +451,18 @@ module StaticExport =
                 let mutable total = 0
 
                 for locale, troot in targets do
-                    let! n = renderTree publicBaseUrl layouts api pages dynamicSlugs locale troot logger
+                    let! n =
+                        renderTree
+                            publicBaseUrl
+                            layouts
+                            api
+                            pages
+                            dynamicSlugs
+                            locale
+                            troot
+                            options.SitemapSharding
+                            logger
+
                     total <- total + n
 
                 if options.CheckLinks then
