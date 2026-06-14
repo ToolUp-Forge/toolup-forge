@@ -100,18 +100,73 @@ module NarrativeLayout =
           ]
         | _ -> []
 
+    // ─── Phase 154 — hreflang / rel=alternate multi-locale head ──────
+    //
+    // A multi-locale site emits `<link rel="alternate" hreflang="…">`
+    // clusters so search engines serve the right-language URL and don't
+    // treat translations as duplicates. These helpers are pure and
+    // resolver-neutral (GP 13): the alternate set is supplied either by a
+    // page frontmatter convention (the `hreflang` key) or computed by the
+    // layout and passed to `alternates` directly — no i18n routing scheme
+    // is baked into the SDK. Reciprocity (every alternate in a cluster
+    // pointing back) is the consumer's responsibility — guidance, not
+    // enforced.
+
+    /// Emit one `<link rel="alternate" hreflang="{lang}" href="{url}">`
+    /// per `(lang, url)` entry. An `x-default` cluster member is simply an
+    /// entry whose lang is `"x-default"`. An empty list emits no tags
+    /// (GP 11). Attribute values are escaped by Giraffe.ViewEngine.
+    let alternates (entries: (string * string) list) : XmlNode list =
+        entries
+        |> List.map (fun (lang, url) -> link [ _rel "alternate"; attr "hreflang" lang; _href url ])
+
+    /// Parse the `hreflang` frontmatter convention into a `(lang, url)`
+    /// list. Format: comma- / semicolon- / newline-separated `lang=url`
+    /// pairs, e.g. `en=https://x/a, fr=https://x/fr/a, x-default=https://x/a`.
+    /// Entries with no `=`, or a blank lang / url, are dropped. Order is
+    /// preserved (the authored order).
+    let parseAlternates (raw: string) : (string * string) list =
+        raw.Split([| ','; ';'; '\n' |])
+        |> Array.map (fun s -> s.Trim())
+        |> Array.filter (fun s -> s <> "")
+        |> Array.choose (fun pair ->
+            let idx = pair.IndexOf '='
+
+            if idx <= 0 then
+                None
+            else
+                let lang = pair.Substring(0, idx).Trim()
+                let url = pair.Substring(idx + 1).Trim()
+                if lang = "" || url = "" then None else Some(lang, url))
+        |> Array.toList
+
+    /// Read the `hreflang` frontmatter convention off a page → `(lang,
+    /// url)` list (`[]` when the key is absent). The resolver-neutral
+    /// source for the alternates cluster: a markdown author writes the
+    /// pairs in frontmatter; a programmatic page sets the same key.
+    let alternatesFromFrontmatter (page: PublicPage) : (string * string) list =
+        match page.Frontmatter.TryFind "hreflang" with
+        | Some raw -> parseAlternates raw
+        | None -> []
+
     /// Build the `<head>` SEO block from a page. For a `Narrative` body:
     /// `<link rel="canonical">`, schema.org Article JSON-LD, and the
     /// OpenGraph + Twitter card meta tags. For ANY body: the per-page
     /// `<meta name="robots">` (Phase 152) when a `robots` frontmatter key is
-    /// present. Returns the list of `XmlNode`s the caller splices into
-    /// `head [ ... ]`. A page with no `robots` key and a non-`Narrative`
-    /// body returns an empty list (byte-for-byte pre-152) so the caller can
-    /// unconditionally `yield! NarrativeLayout.headTags`.
+    /// present, and the `<link rel="alternate" hreflang>` cluster (Phase
+    /// 154) when a `hreflang` frontmatter key is present. Returns the list
+    /// of `XmlNode`s the caller splices into `head [ ... ]`. A page with no
+    /// `robots` / `hreflang` keys and a non-`Narrative` body returns an
+    /// empty list (byte-for-byte pre-152) so the caller can unconditionally
+    /// `yield! NarrativeLayout.headTags`.
     let headTags (page: PublicPage) : XmlNode list =
         // Phase 152 — robots directive applies to every body kind; absent
         // key → no tag (GP 11).
         let robots = robotsMetaTags page
+
+        // Phase 154 — hreflang alternates from the frontmatter convention;
+        // absent key → no tags (GP 11).
+        let alts = alternates (alternatesFromFrontmatter page)
 
         let bodyTags =
             match page.Body with
@@ -137,7 +192,7 @@ module NarrativeLayout =
                 canonical @ jsonLd @ openGraph @ twitter
             | _ -> []
 
-        robots @ bodyTags
+        robots @ alts @ bodyTags
 
     // ─── Phase 148 — self-referencing canonical for every body kind ──
     //

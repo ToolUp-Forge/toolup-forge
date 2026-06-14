@@ -1533,7 +1533,9 @@ let private structuredData151Tests =
 
         testCase "itemList emits positioned ListItem entries with url"
         <| fun _ ->
-            let json = StructuredDataHelpers.itemList [ "First", "https://x.com/1"; "Second", "https://x.com/2" ]
+            let json =
+                StructuredDataHelpers.itemList [ "First", "https://x.com/1"; "Second", "https://x.com/2" ]
+
             parseOk "itemList" json
             Expect.stringContains json "\"@type\":\"ItemList\"" "ItemList type"
             Expect.stringContains json "\"@type\":\"ListItem\"" "ListItem"
@@ -1541,7 +1543,9 @@ let private structuredData151Tests =
 
         testCase "product includes offers + aggregateRating when supplied"
         <| fun _ ->
-            let json = StructuredDataHelpers.product "Widget" "A widget" (Some("9.99", "GBP")) (Some("4.5", "120"))
+            let json =
+                StructuredDataHelpers.product "Widget" "A widget" (Some("9.99", "GBP")) (Some("4.5", "120"))
+
             parseOk "product-full" json
             Expect.stringContains json "\"@type\":\"Product\"" "Product type"
             Expect.stringContains json "\"@type\":\"Offer\"" "Offer"
@@ -1601,7 +1605,9 @@ let private robots152Tests =
         testCase "headTags emits <meta name=robots> from the robots frontmatter key, any body kind"
         <| fun _ ->
             for body in [ Markdown "x"; Html "<p>x</p>"; Narrative(Narrative.create "t") ] do
-                let html = renderNodes (NarrativeLayout.headTags (mkPage "a" body [ "robots", "noindex,nofollow" ]))
+                let html =
+                    renderNodes (NarrativeLayout.headTags (mkPage "a" body [ "robots", "noindex,nofollow" ]))
+
                 Expect.stringContains html "name=\"robots\"" "robots meta name"
                 Expect.stringContains html "content=\"noindex,nofollow\"" "robots directive content"
 
@@ -1631,9 +1637,81 @@ let private robots152Tests =
         testCase "robots meta coexists with Narrative head tags"
         <| fun _ ->
             let doc = Narrative.create "t" |> Narrative.withCanonicalUrl "https://x.com/c"
-            let html = renderNodes (NarrativeLayout.headTags (mkPage "a" (Narrative doc) [ "robots", "noindex" ]))
+
+            let html =
+                renderNodes (NarrativeLayout.headTags (mkPage "a" (Narrative doc) [ "robots", "noindex" ]))
+
             Expect.stringContains html "name=\"robots\"" "robots meta present"
             Expect.stringContains html "rel=\"canonical\"" "Narrative canonical still emitted"
+    ]
+
+// ─── Phase 154 — hreflang / rel=alternate ───────────────────────────
+
+let private hreflang154Tests =
+    testList "PublicRendering — Phase 154 hreflang alternates" [
+
+        testCase "alternates emits one rel=alternate per (lang,url) entry incl. x-default"
+        <| fun _ ->
+            let html =
+                renderNodes (
+                    NarrativeLayout.alternates [
+                        "en", "https://x.com/a"
+                        "fr", "https://x.com/fr/a"
+                        "x-default", "https://x.com/a"
+                    ]
+                )
+
+            Expect.stringContains html "rel=\"alternate\"" "rel=alternate"
+            Expect.stringContains html "hreflang=\"en\"" "en cluster member"
+            Expect.stringContains html "hreflang=\"fr\"" "fr cluster member"
+            Expect.stringContains html "hreflang=\"x-default\"" "x-default member"
+            Expect.stringContains html "href=\"https://x.com/fr/a\"" "fr href"
+
+        testCase "empty alternate set → no tags (GP 11)"
+        <| fun _ -> Expect.isEmpty (NarrativeLayout.alternates []) "no entries → no links"
+
+        testCase "parseAlternates reads the lang=url frontmatter convention, drops malformed"
+        <| fun _ ->
+            let parsed =
+                NarrativeLayout.parseAlternates
+                    "en=https://x.com/a, fr=https://x.com/fr/a; x-default=https://x.com/a, broken, =nourl, lang="
+
+            Expect.equal
+                parsed
+                [
+                    "en", "https://x.com/a"
+                    "fr", "https://x.com/fr/a"
+                    "x-default", "https://x.com/a"
+                ]
+                "well-formed pairs kept in order, malformed dropped"
+
+        testCase "headTags emits the hreflang cluster from the frontmatter convention, any body kind"
+        <| fun _ ->
+            for body in [ Markdown "x"; Html "<p>x</p>"; Narrative(Narrative.create "t") ] do
+                let html =
+                    renderNodes (
+                        NarrativeLayout.headTags (
+                            mkPage "a" body [ "hreflang", "en=https://x.com/a, fr=https://x.com/fr/a" ]
+                        )
+                    )
+
+                Expect.stringContains html "hreflang=\"en\"" "en alternate"
+                Expect.stringContains html "hreflang=\"fr\"" "fr alternate"
+
+        testCase "no hreflang key → headTags unchanged (byte-for-byte GP 11)"
+        <| fun _ ->
+            Expect.isEmpty (NarrativeLayout.alternatesFromFrontmatter (mkPage "a" (Markdown "x") [])) "no alternates"
+
+            Expect.isEmpty
+                (NarrativeLayout.headTags (mkPage "a" (Markdown "x") []))
+                "plain markdown headTags still empty"
+
+        testCase "hreflang lang/href are attribute-escaped"
+        <| fun _ ->
+            let html =
+                renderNodes (NarrativeLayout.alternates [ "en", "https://x.com/a?x=1&y=2" ])
+
+            Expect.stringContains html "&amp;" "ampersand in href escaped"
     ]
 
 let tests =
@@ -1652,4 +1730,5 @@ let tests =
         selfCanonicalTests
         structuredData151Tests
         robots152Tests
+        hreflang154Tests
     ]
