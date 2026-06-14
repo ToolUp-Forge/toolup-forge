@@ -13,130 +13,190 @@ open KnowledgeBase.ServerApiDeps
 
 let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> = async {
     let docId = Guid.NewGuid().ToString()
-    let ext = Path.GetExtension(fileName).ToLowerInvariant().TrimStart('.')
 
-    // Persist the raw blob synchronously so a refresh during extraction
-    // still finds the source file. ChunkCount stays 0 until extraction
-    // completes — the observer reads it from the index, so the chunk
-    // total has to land before the first chunk callback fires (the
-    // background async below stamps it before enqueue).
-    let doc: KnowledgeDocument = {
-        Id = docId
-        FileName = fileName
-        FileType = ext
-        UploadedAt = DateTimeOffset.UtcNow
-        UploadedBy = deps.UserId
-        Status = Queued
-        SizeBytes = int64 bytes.Length
-        ChunkCount = 0
-        Source = UploadedFile
-    }
+    // Phase 119 — server-controlled storage key. `Path.GetFileName` strips
+    // any directory component the caller smuggled in (`../../index.json` →
+    // `index.json`); the docId GUID prefix + a separator-free name then
+    // means the blob key can never escape `knowledge/{docId}/` or reach the
+    // container-root `knowledge/index.json`. `FileNameSanitiser.validate`
+    // rejects whatever survives stripping (control chars, over-length).
+    let safeName = Path.GetFileName fileName
+    let ext = Path.GetExtension(safeName).ToLowerInvariant().TrimStart('.')
+    let policy = deps.UploadPolicy
 
-    let rawBlobName = sprintf "knowledge/%s/%s" docId fileName
-    let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, bytes)
+    // Pure pre-persist policy evaluation (GP 9 — a refusal stores nothing
+    // and is loud). Filename sanitisation runs regardless of policy; the
+    // size cap / allowlist / unsupported-Reject levers fire only when the
+    // deployment composed them via `withUploadPolicy`.
+    let rejectionReason: string option =
+        match FileNameSanitiser.validate safeName with
+        | Error reason -> Some(sprintf "unsafe filename — %s" reason)
+        | Ok() ->
+            match KnowledgeUploadPolicy.exceedsSizeCap (int64 bytes.Length) policy with
+            | Some reason -> Some reason
+            | None ->
+                if not (KnowledgeUploadPolicy.allowsExtension ext policy) then
+                    Some(sprintf "file type '.%s' is not in this deployment's upload allowlist" ext)
+                elif not (isSupportedExtension ext) && policy.OnUnsupportedType = Reject then
+                    Some(
+                        sprintf
+                            "file type '.%s' has no extractor and this deployment's upload policy rejects unsupported types"
+                            ext
+                    )
+                else
+                    None
 
-    // Phase 116 — atomic index RMW so a concurrent upload to the same
-    // container can't clobber this entry (or vice versa). Released before
-    // the background extraction below, which re-acquires the same
-    // container lock via `updateIndexStatus`.
-    do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+    match rejectionReason with
+    | Some reason ->
+        // Nothing is persisted; the returned document carries the typed
+        // rejection so the client can surface the reason. Logged at Warn.
+        deps.Logger.Warn(sprintf "[KnowledgeBase] Upload rejected (%s): %s" reason safeName)
 
-    // Seed initial cache state. The background extractor flips this to
-    // ExtractingText as soon as it starts running.
-    statusCache.AddOrUpdate(docId, Queued, fun _ _ -> Queued) |> ignore
+        return {
+            Id = docId
+            FileName = safeName
+            FileType = ext
+            UploadedAt = DateTimeOffset.UtcNow
+            UploadedBy = deps.UserId
+            Status = UploadRejected reason
+            SizeBytes = int64 bytes.Length
+            ChunkCount = 0
+            Source = UploadedFile
+        }
+    | None ->
 
-    // Spawn extraction off the request path. UploadDocument returns
-    // within the time it takes to persist the raw blob (~hundreds of
-    // ms), not the time it takes to OCR a PDF (~10s). Status flow
-    // mirrors the synchronous predecessor:
-    //   Queued → ExtractingText → Embedding(0, n) → Complete(n) | Failed reason
-    // Errors are caught and routed through `deps.MarkIngestionFailed`
-    // so the user sees a Failed badge rather than a doc stuck in
-    // ExtractingText. Async.Start swallows otherwise-unobserved
-    // exceptions, so the try/with is non-negotiable.
-    let extractAndEnqueue = async {
-        try
-            let extractingStatus = ExtractingText
+        // Persist the raw blob synchronously so a refresh during extraction
+        // still finds the source file. ChunkCount stays 0 until extraction
+        // completes — the observer reads it from the index, so the chunk
+        // total has to land before the first chunk callback fires (the
+        // background async below stamps it before enqueue).
+        let doc: KnowledgeDocument = {
+            Id = docId
+            FileName = safeName
+            FileType = ext
+            UploadedAt = DateTimeOffset.UtcNow
+            UploadedBy = deps.UserId
+            Status = Queued
+            SizeBytes = int64 bytes.Length
+            ChunkCount = 0
+            Source = UploadedFile
+        }
 
-            statusCache.AddOrUpdate(docId, extractingStatus, fun _ _ -> extractingStatus)
-            |> ignore
+        let rawBlobName = sprintf "knowledge/%s/%s" docId safeName
+        let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, bytes)
 
-            do! updateIndexStatus deps.Storage deps.Scope.Container docId extractingStatus
+        // Phase 116 — atomic index RMW so a concurrent upload to the same
+        // container can't clobber this entry (or vice versa). Released before
+        // the background extraction below, which re-acquires the same
+        // container lock via `updateIndexStatus`.
+        do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
-            let! extracted = extractChunks deps.OcrProvider deps.TableExtractor docId fileName bytes
+        // Seed initial cache state. The background extractor flips this to
+        // ExtractingText as soon as it starts running.
+        statusCache.AddOrUpdate(docId, Queued, fun _ _ -> Queued) |> ignore
 
-            // Phase 103 — stamp the structured original-document ref
-            // (+ Phase 106 neutral locator) into each chunk so retrieval
-            // surfaces `RetrievedSource.OriginalRef` without rebuilding
-            // the blob-name convention.
-            let chunks = stampOriginalRefs docId fileName ext (int64 bytes.Length) extracted
+        // Spawn extraction off the request path. UploadDocument returns
+        // within the time it takes to persist the raw blob (~hundreds of
+        // ms), not the time it takes to OCR a PDF (~10s). Status flow
+        // mirrors the synchronous predecessor:
+        //   Queued → ExtractingText → Embedding(0, n) → Complete(n) | Failed reason
+        // Errors are caught and routed through `deps.MarkIngestionFailed`
+        // so the user sees a Failed badge rather than a doc stuck in
+        // ExtractingText. Async.Start swallows otherwise-unobserved
+        // exceptions, so the try/with is non-negotiable.
+        let extractAndEnqueue = async {
+            try
+                let extractingStatus = ExtractingText
 
-            if box deps.Queue <> null && not chunks.IsEmpty then
-                // Stamp ChunkCount BEFORE enqueue: the observer reads
-                // it from the index to compute progress, and the first
-                // chunk callback can fire before this method returns.
-                do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
-
-                let initialStatus = Embedding(0, chunks.Length)
-
-                // Seed the cache; the observer's `AddOrUpdate` won't
-                // overwrite a fresher value (e.g. one already advanced
-                // to Embedding(1, n) by a racing callback).
-                statusCache.AddOrUpdate(
-                    docId,
-                    initialStatus,
-                    fun _ existing ->
-                        match existing with
-                        | Queued
-                        | ExtractingText -> initialStatus
-                        | other -> other
-                )
+                statusCache.AddOrUpdate(docId, extractingStatus, fun _ _ -> extractingStatus)
                 |> ignore
 
-                do! updateIndexStatus deps.Storage deps.Scope.Container docId initialStatus
+                do! updateIndexStatus deps.Storage deps.Scope.Container docId extractingStatus
 
-                let chunkPairs =
-                    chunks |> List.mapi (fun i (chunk, _) -> sprintf "%s:chunk:%d" docId i, chunk)
+                let! extracted = extractChunks deps.OcrProvider deps.TableExtractor docId safeName bytes
 
-                let job: DocumentIngestionJob = {
-                    DocumentId = docId
-                    DocumentName = fileName
-                    Chunks = chunkPairs
-                    Scope = deps.VectorScope
-                    ScopeId = deps.Scope.ScopeId
-                    Container = deps.Scope.Container
-                    OriginatingUserId = Some deps.UserId
-                }
+                // Phase 103 — stamp the structured original-document ref
+                // (+ Phase 106 neutral locator) into each chunk so retrieval
+                // surfaces `RetrievedSource.OriginalRef` without rebuilding
+                // the blob-name convention.
+                let chunks = stampOriginalRefs docId safeName ext (int64 bytes.Length) extracted
 
-                let accepted = deps.Queue.Enqueue(job)
-                deps.RecordEnqueue accepted
+                if box deps.Queue <> null && not chunks.IsEmpty then
+                    // Stamp ChunkCount BEFORE enqueue: the observer reads
+                    // it from the index to compute progress, and the first
+                    // chunk callback can fire before this method returns.
+                    do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
 
-                if not accepted then
-                    let reason =
-                        sprintf
-                            "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                            deps.Queue.Count
-                            deps.Queue.Capacity
+                    let initialStatus = Embedding(0, chunks.Length)
 
-                    do! deps.MarkIngestionFailed docId fileName reason
-            elif chunks.IsEmpty then
-                let terminal = Complete 0
-                statusCache.AddOrUpdate(docId, terminal, fun _ _ -> terminal) |> ignore
-                do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
+                    // Seed the cache; the observer's `AddOrUpdate` won't
+                    // overwrite a fresher value (e.g. one already advanced
+                    // to Embedding(1, n) by a racing callback).
+                    statusCache.AddOrUpdate(
+                        docId,
+                        initialStatus,
+                        fun _ existing ->
+                            match existing with
+                            | Queued
+                            | ExtractingText -> initialStatus
+                            | other -> other
+                    )
+                    |> ignore
 
-            do! deps.PublishInventory()
-        with ex ->
-            deps.Logger.Error(sprintf "[KnowledgeBase] Extraction failed for %s/%s" docId fileName, Some ex)
+                    do! updateIndexStatus deps.Storage deps.Scope.Container docId initialStatus
 
-            let reason = classify fileName ex
-            do! deps.MarkIngestionFailed docId fileName reason
-            do! deps.PublishInventory()
-    }
+                    let chunkPairs =
+                        chunks |> List.mapi (fun i (chunk, _) -> sprintf "%s:chunk:%d" docId i, chunk)
 
-    Async.Start extractAndEnqueue
+                    let job: DocumentIngestionJob = {
+                        DocumentId = docId
+                        DocumentName = safeName
+                        Chunks = chunkPairs
+                        Scope = deps.VectorScope
+                        ScopeId = deps.Scope.ScopeId
+                        Container = deps.Scope.Container
+                        OriginatingUserId = Some deps.UserId
+                    }
 
-    do! deps.PublishInventory()
-    return doc
+                    let accepted = deps.Queue.Enqueue(job)
+                    deps.RecordEnqueue accepted
+
+                    if not accepted then
+                        let reason =
+                            sprintf
+                                "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
+                                deps.Queue.Count
+                                deps.Queue.Capacity
+
+                        do! deps.MarkIngestionFailed docId safeName reason
+                elif chunks.IsEmpty then
+                    // Phase 119 — distinguish "no extractor for this type"
+                    // (stored but never searchable) from a recognised-but-empty
+                    // file. The pre-119 code reported both as `Complete 0`, which
+                    // read as a successful index of an empty document and hid the
+                    // fact that an unsupported upload would never be retrievable.
+                    let terminal =
+                        if isSupportedExtension ext then
+                            Complete 0
+                        else
+                            UnsupportedFormat(sprintf "no extractor for '.%s' — stored but not searchable" ext)
+
+                    statusCache.AddOrUpdate(docId, terminal, fun _ _ -> terminal) |> ignore
+                    do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
+
+                do! deps.PublishInventory()
+            with ex ->
+                deps.Logger.Error(sprintf "[KnowledgeBase] Extraction failed for %s/%s" docId safeName, Some ex)
+
+                let reason = classify safeName ex
+                do! deps.MarkIngestionFailed docId safeName reason
+                do! deps.PublishInventory()
+        }
+
+        Async.Start extractAndEnqueue
+
+        do! deps.PublishInventory()
+        return doc
 }
 
 let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =

@@ -96,6 +96,12 @@ type KnowledgeApiDeps = {
     /// user id, no `StorageScope`) keep `false` here but stay tenant-
     /// isolated, so they pass the guard.
     ScopeResolvedFromRequest: bool
+    /// Phase 119 — compose-time upload policy (size cap, type allowlist,
+    /// unsupported-type handling). Resolved from DI when a deployment
+    /// composed `withUploadPolicy`; otherwise `KnowledgeUploadPolicy.permissive`
+    /// (no caps; pre-119 behaviour modulo always-on filename sanitisation
+    /// and the `UnsupportedFormat` status fix). Enforced by `uploadDocument`.
+    UploadPolicy: KnowledgeUploadPolicy
 }
 
 module KnowledgeApiDeps =
@@ -249,6 +255,13 @@ module KnowledgeApiDeps =
             | :? IAuditLog as a -> Some a
             | _ -> None
 
+        // Phase 119 — upload policy registered by `withUploadPolicy`;
+        // the permissive default when absent (no caps, pre-119 behaviour).
+        let uploadPolicy =
+            match ctx.RequestServices.GetService(typeof<KnowledgeUploadPolicy>) with
+            | :? KnowledgeUploadPolicy as p -> p
+            | _ -> KnowledgeUploadPolicy.permissive
+
         let accessContext =
             match ctx.RequestServices.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
@@ -330,6 +343,7 @@ module KnowledgeApiDeps =
             MarkIngestionFailed = markIngestionFailed
             EnsureContextWriteAllowed = ensureContextWriteAllowed
             ScopeResolvedFromRequest = scopeResolvedFromRequest
+            UploadPolicy = uploadPolicy
         }
 
     /// Fail-closed guard for destructive KB operations. Returns `Error`

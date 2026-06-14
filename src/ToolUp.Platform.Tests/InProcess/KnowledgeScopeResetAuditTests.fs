@@ -106,6 +106,7 @@ let private mkDeps
         MarkIngestionFailed = fun _ _ _ -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
+        UploadPolicy = KnowledgeUploadPolicy.permissive
     }
 
 let tests =

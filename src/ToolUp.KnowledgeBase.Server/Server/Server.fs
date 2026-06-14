@@ -90,6 +90,18 @@ let platformKnowledgeApi = KnowledgeBase.ServerPlatformAdmin.platformKnowledgeAp
 let withOriginalSourceResolver =
     KnowledgeBase.ServerOriginalSourceResolver.withOriginalSourceResolver
 
+/// Phase 119 — compose a Knowledge Base upload policy: a `MaxUploadBytes`
+/// size cap, an `AllowedExtensions` type allowlist, and how to treat an
+/// upload whose type no extractor recognises (`Reject` vs
+/// `AcceptUnindexed`). Filename sanitisation (`../../index.json` →
+/// `index.json` under a server-controlled key) is always applied at the
+/// upload boundary regardless of policy. Defined in `Server/UploadPolicy.fs`;
+/// re-exported here alongside the other compose-time hooks. Apps that
+/// never call this get `KnowledgeUploadPolicy.permissive` (no caps;
+/// pre-119 behaviour modulo sanitisation + the `UnsupportedFormat` status
+/// fix).
+let withUploadPolicy = KnowledgeBase.ServerUploadPolicy.withUploadPolicy
+
 /// Wave 1 Gap #2 — explicit operator-callable recovery hook for the KB
 /// ingestion pipeline. The in-process `IngestionQueue` (in
 /// `ToolUp.RAG.IngestionTypes`) has no durable backing, so a crash

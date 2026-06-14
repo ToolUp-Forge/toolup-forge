@@ -19,6 +19,17 @@ open SharedTypes
 // `NarrativeDocSource.PageRoute`, not a downloadable file). The
 // resolver makes absence explicit and typed (`None`), never a
 // guessed-at missing blob or a thrown exception (GP 9).
+//
+// ── Serving note (Phase 119) ──────────────────────────────────────
+// Consumers that serve `OriginalDocument.Content` over HTTP (a download
+// / preview endpoint) MUST set `Content-Disposition: attachment` for
+// inline-renderable types. KB uploads accept arbitrary user content, and
+// csv / md / html / svg originals carry active markup — served inline
+// (`Content-Disposition: inline`, or no header on a browser-sniffed
+// type) they execute in the deployment's origin: a stored-XSS vector.
+// Force a download (`attachment`) and pin the `Content-Type` from
+// `OriginalDocument.ContentType` rather than letting the browser sniff.
+// See `docs/knowledge-base/concepts.md` (Serving originals safely).
 
 /// Resolve the original document behind a KB index entry, branching on
 /// the entry's `KnowledgeSource`. Returns `None` when the source kind

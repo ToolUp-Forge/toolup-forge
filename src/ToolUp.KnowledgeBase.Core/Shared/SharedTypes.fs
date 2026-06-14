@@ -15,6 +15,19 @@ type IngestionStatus =
     | Embedding of chunksProcessed: int * chunksTotal: int
     | Complete of chunkCount: int
     | Failed of reason: string
+    /// Phase 119 — the upload was refused by the deployment's
+    /// `KnowledgeUploadPolicy` (oversize, disallowed extension, or an
+    /// unsafe filename) *before* anything was persisted. The returned
+    /// `KnowledgeDocument` carries this status purely so the client can
+    /// surface the reason; nothing is stored, so it never appears in
+    /// `GetDocuments` / `GetStatus`.
+    | UploadRejected of reason: string
+    /// Phase 119 — the document was stored (its original stays
+    /// downloadable) but no extractor recognised its type, so it is not
+    /// searchable. Distinct from `Complete 0` (a recognised-but-empty
+    /// file) so the UI badges "stored, not searchable" honestly rather
+    /// than implying a successful index.
+    | UnsupportedFormat of detail: string
 
 // ─── Provenance ───────────────────────────────────────────────────
 
@@ -241,6 +254,77 @@ type KnowledgeBaseError =
     /// The fetch failed for an operational reason (storage error).
     /// Carries the underlying message for diagnostics.
     | OriginalRetrievalFailed of reason: string
+
+// ─── Upload policy (Phase 119) ────────────────────────────────────
+
+/// How an upload whose type no extractor recognises is handled.
+/// `Reject` refuses it outright (a typed `UploadRejected`); `AcceptUnindexed`
+/// stores the original (so it stays downloadable) but flags it
+/// `UnsupportedFormat` — stored, never searchable.
+type UnsupportedUploadHandling =
+    | Reject
+    | AcceptUnindexed
+
+/// Compose-time Knowledge Base upload policy. Every lever is opt-in;
+/// the default (`KnowledgeUploadPolicy.permissive`, what a deployment
+/// that never calls `withUploadPolicy` gets) imposes no size cap and no
+/// type allowlist and stores unrecognised types unindexed — pre-119
+/// behaviour, save for the always-on filename sanitisation and the
+/// `Complete 0` → `UnsupportedFormat` status fix. Value-typed (GP 12),
+/// opt-in (GP 13).
+type KnowledgeUploadPolicy = {
+    /// Hard ceiling on a single upload's byte length, enforced at the KB
+    /// boundary *before* the bytes are persisted. `None` = no KB-level
+    /// cap (the only lever is then Kestrel's `MaxRequestBodySize`, which
+    /// holds the whole `byte[]` in memory through Remoting + extraction).
+    MaxUploadBytes: int64 option
+    /// Extension allowlist — lower-case, no leading dot (e.g.
+    /// `Set.ofList [ "pdf"; "csv" ]`). `None` allows any extension; an
+    /// upload whose extension is absent from a `Some` set is rejected.
+    AllowedExtensions: Set<string> option
+    /// What to do when no extractor recognises the upload's type.
+    OnUnsupportedType: UnsupportedUploadHandling
+    /// Explicit opt-out for the `Team` / `MultiTeam` preflight `Warning`
+    /// that fires when `MaxUploadBytes = None` (an in-memory-DoS lever in
+    /// a shared deployment). Mirrors `AcceptSharedEmbeddingCacheInTeamMode`.
+    /// `false` by default; set `true` to accept unbounded uploads and
+    /// silence the warning.
+    AcceptUnboundedUploads: bool
+}
+
+module KnowledgeUploadPolicy =
+    /// The default policy: no size cap, no allowlist, unrecognised types
+    /// stored-but-unsearchable. Pre-119 behaviour (modulo the always-on
+    /// filename sanitisation and the `UnsupportedFormat` status fix).
+    /// Resolved when a deployment never composes `withUploadPolicy`.
+    let permissive: KnowledgeUploadPolicy = {
+        MaxUploadBytes = None
+        AllowedExtensions = None
+        OnUnsupportedType = AcceptUnindexed
+        AcceptUnboundedUploads = false
+    }
+
+    /// `true` when `ext` (lower-case, no leading dot) is admitted by the
+    /// policy's allowlist (`None` = allow all).
+    let allowsExtension (ext: string) (policy: KnowledgeUploadPolicy) : bool =
+        match policy.AllowedExtensions with
+        | None -> true
+        | Some allowed -> allowed.Contains ext
+
+    /// `Some reason` when `byteLength` exceeds the policy's cap,
+    /// `None` otherwise (no cap, or within it).
+    let exceedsSizeCap (byteLength: int64) (policy: KnowledgeUploadPolicy) : string option =
+        match policy.MaxUploadBytes with
+        | Some max when byteLength > max ->
+            Some(sprintf "file is %d bytes, exceeding the %d-byte upload limit" byteLength max)
+        | _ -> None
+
+    /// `true` when the preflight validator should warn: a `Team` /
+    /// `MultiTeam` deployment (`teamScoped`) left `MaxUploadBytes`
+    /// unset and did not explicitly accept unbounded uploads. The
+    /// uncapped in-memory `byte[]` is then a per-tenant DoS lever.
+    let warnsUncappedInTeamMode (teamScoped: bool) (policy: KnowledgeUploadPolicy) : bool =
+        teamScoped && policy.MaxUploadBytes.IsNone && not policy.AcceptUnboundedUploads
 
 // ─── Note authoring ──────────────────────────────────────────────
 

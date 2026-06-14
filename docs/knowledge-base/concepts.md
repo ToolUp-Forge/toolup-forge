@@ -54,6 +54,31 @@ The post-save hook in `IDataObjectStore` (when registered with `composeWithRAG`)
 
 If extraction fails (corrupted PDF, password-protected DOCX, etc.), the handler emits a `DocumentExtractionFailed` event with the reason; the document's status becomes `Failed`. The user sees a one-line error in the Documents page.
 
+### Upload policy (`withUploadPolicy`)
+
+By default the upload boundary imposes no size cap and no type allowlist, and stores a type it has no extractor for as `UnsupportedFormat` ("stored, not searchable") rather than the misleading `Complete 0`. Compose `KnowledgeBase.Server.withUploadPolicy` to tighten this:
+
+```fsharp
+app
+|> KnowledgeBase.Server.withUploadPolicy {
+    KnowledgeUploadPolicy.permissive with
+        MaxUploadBytes = Some (25L * 1024L * 1024L)        // 25 MB hard cap
+        AllowedExtensions = Some (Set.ofList [ "pdf"; "docx"; "csv" ])
+        OnUnsupportedType = Reject                          // refuse, don't store-unindexed
+}
+```
+
+- **`MaxUploadBytes`** — enforced at the KB boundary *before* the bytes are persisted; an oversize upload is refused with `UploadRejected` and nothing is stored. (`None` leaves only Kestrel's `MaxRequestBodySize` as a lever, which still buffers the whole `byte[]` in memory.)
+- **`AllowedExtensions`** — `None` allows any extension; a `Some` set rejects anything outside it.
+- **`OnUnsupportedType`** — `Reject` refuses an unrecognised type outright; `AcceptUnindexed` (the default) stores the original so it stays downloadable but flags it `UnsupportedFormat`.
+- **`AcceptUnboundedUploads`** — explicit opt-out for the `Team` / `MultiTeam` preflight `Warning` that fires when `MaxUploadBytes = None`.
+
+**Filename sanitisation is always on**, independent of policy: the client-supplied filename is passed through `Path.GetFileName` and validated, so `../../index.json` is stored under a server-controlled `knowledge/{docId}/index.json` key and can never reach the container-root `knowledge/index.json`.
+
+### Serving originals safely
+
+If you wire an HTTP endpoint that serves `OriginalDocument.Content` (a download / preview link), **set `Content-Disposition: attachment`** for inline-renderable types and pin the `Content-Type` from `OriginalDocument.ContentType` rather than letting the browser sniff. KB accepts arbitrary user content; csv / md / html / svg originals carry active markup and, served inline, execute in the deployment's origin — a stored-XSS vector.
+
 ## Multi-format extractors
 
 Shipped extractors:

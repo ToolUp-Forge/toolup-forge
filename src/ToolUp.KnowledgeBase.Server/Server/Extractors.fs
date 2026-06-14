@@ -590,6 +590,20 @@ let stampOriginalRefs
 /// `ITableExtractor` (Phase 14i). Other extractors operate on already
 /// structured formats and stay synchronous, lifted into `async` for a
 /// uniform return type.
+/// Extensions (lower-case, no leading dot) that `extractChunks` has a
+/// real extractor for. The single source of truth for "is this type
+/// searchable?" — Phase 119's upload policy reads it to distinguish an
+/// unrecognised type (stored-but-unsearchable / rejected) from a
+/// recognised-but-empty file (`Complete 0`). Keep in lockstep with the
+/// `match` in `extractChunks`.
+let supportedExtensions: Set<string> =
+    Set.ofList [ "pdf"; "pptx"; "docx"; "xlsx"; "csv"; "txt" ]
+
+/// `true` when an extractor recognises `ext` (lower-case, no leading
+/// dot). Unrecognised types yield `[]` from `extractChunks`.
+let isSupportedExtension (ext: string) : bool =
+    supportedExtensions.Contains(ext.ToLowerInvariant())
+
 let extractChunks
     (ocr: IOcrProvider)
     (tables: ITableExtractor)

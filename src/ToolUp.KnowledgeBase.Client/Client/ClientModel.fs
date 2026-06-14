@@ -141,7 +141,11 @@ let init () =
 let private isTerminal (status: IngestionStatus) =
     match status with
     | IngestionStatus.Complete _
-    | IngestionStatus.Failed _ -> true
+    | IngestionStatus.Failed _
+    // Phase 119 — both are end-states; neither progresses, so the poll
+    // loop must not keep waiting on them.
+    | IngestionStatus.UploadRejected _
+    | IngestionStatus.UnsupportedFormat _ -> true
     | _ -> false
 
 let private hasNonTerminal (docs: KnowledgeDocument list) =
@@ -178,17 +182,29 @@ let update (msg: Msg) (model: Model) =
             UploadCompleted(Finished doc))
 
     | UploadCompleted(Finished doc) ->
-        let docs =
-            model.Documents |> List.filter (fun d -> d.Id <> doc.Id) |> List.append [ doc ]
+        match doc.Status with
+        // Phase 119 — a policy rejection never persisted anything, so it
+        // must NOT join the document list. Surface the reason as an upload
+        // error instead; no poll loop is needed (nothing is ingesting).
+        | IngestionStatus.UploadRejected reason ->
+            {
+                model with
+                    Uploading = false
+                    UploadError = Some reason
+            },
+            Cmd.none
+        | _ ->
+            let docs =
+                model.Documents |> List.filter (fun d -> d.Id <> doc.Id) |> List.append [ doc ]
 
-        // Newly-uploaded doc starts non-terminal — kick the poll loop in case
-        // it had naturally stopped because every prior doc was already terminal.
-        {
-            model with
-                Documents = docs
-                Uploading = false
-        },
-        schedulePoll ()
+            // Newly-uploaded doc starts non-terminal — kick the poll loop in case
+            // it had naturally stopped because every prior doc was already terminal.
+            {
+                model with
+                    Documents = docs
+                    Uploading = false
+            },
+            schedulePoll ()
 
     | UploadCompleted _ ->
         {

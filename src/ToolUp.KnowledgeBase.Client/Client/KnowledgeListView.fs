@@ -48,6 +48,24 @@ module Badges =
                 prop.title reason
                 prop.text "Failed"
             ]
+        // Phase 119 — refused before any storage write (never reaches the
+        // persisted list, but the match must stay exhaustive).
+        | UploadRejected reason ->
+            Html.span [
+                prop.className
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
+                prop.title reason
+                prop.text "Rejected"
+            ]
+        // Phase 119 — stored but no extractor recognised the type, so it
+        // is not searchable. Amber, not green — honest about the gap.
+        | UnsupportedFormat detail ->
+            Html.span [
+                prop.className
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700"
+                prop.title detail
+                prop.text "Stored · not searchable"
+            ]
 
     let sourceBadge (source: KnowledgeSource) =
         match source with
@@ -140,6 +158,8 @@ let private statusKey (status: IngestionStatus) =
     | Embedding _ -> "Embedding"
     | Complete _ -> "Complete"
     | Failed _ -> "Failed"
+    | UploadRejected _ -> "Rejected"
+    | UnsupportedFormat _ -> "Stored · not searchable"
 
 let private monthKey (dt: DateTimeOffset) = dt.ToString("yyyy-MM")
 

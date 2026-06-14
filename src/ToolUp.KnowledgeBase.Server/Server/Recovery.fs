@@ -70,7 +70,12 @@ let recoverStuckDocumentsAtStartup (storage: IBlobStorage) (containers: string l
         | ExtractingText
         | Embedding _ -> true
         | Complete _
-        | Failed _ -> false
+        | Failed _
+        // Phase 119 — both terminal: `UnsupportedFormat` is a stored
+        // end-state, `UploadRejected` is never persisted (so never seen
+        // here), but neither is a restart-stuck document to re-fail.
+        | UploadRejected _
+        | UnsupportedFormat _ -> false
 
     let mutable total = 0
 

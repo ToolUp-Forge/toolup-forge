@@ -363,6 +363,9 @@
         <Compile Include="InProcess\KnowledgeOriginalRetrievalTests.fs" />
         <!-- Phase 115 — KnowledgeScopeErased structured reset-audit emission. -->
         <Compile Include="InProcess\KnowledgeScopeResetAuditTests.fs" />
+        <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
+             filename sanitisation / unsupported-type status). -->
+        <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <!-- Phase 92 — BrandKit layout library render-shape tests (a11y
              baseline + class hooks + optional-slot rule) and the
