@@ -23,48 +23,90 @@ open Microsoft.Extensions.Primitives
 // `setValidators` / `isNotModified` inline on its cached + uncached paths
 // so the 304 logic lives in one place.
 //
-// **Phase 155 is a pure extraction**: the helpers reproduce the
-// pre-extraction `PublicPageHandler` behaviour exactly — a strong ETag and
-// an `If-None-Match`-only gate — so the page handler stays byte-for-byte.
-// [Phase 147] then hardens this single seam (weak ETag, the
-// `If-Modified-Since` union, content-stable `Last-Modified`), and because
-// the page handler routes through it the correctness fixes flow to both
-// callers. The `lastModified` parameter is accepted now (though the 155
-// gate only consults `If-None-Match`) so the 147 hardening is a body-only
-// change with no call-site churn.
+// The combinator was extracted byte-for-byte in [Phase 155]; [Phase 147]
+// hardens this single seam for crawl-budget correctness — and because the
+// page handler routes through it, the fixes flow to both callers:
+//   * **weak ETag** (`W/"…"`) — required under the pipeline's
+//     `UseResponseCompression`, which rewrites the body across content
+//     codings (RFC 7232 §2.1; a strong ETag asserts byte equality).
+//   * the **`If-Modified-Since` union** — Googlebot predominantly
+//     revalidates with `If-Modified-Since`, not `If-None-Match`.
+//   * **second-granularity** `Last-Modified` truncation so the emitted
+//     value round-trips equal against the `If-Modified-Since` echoed back.
+// The caller supplies a *content-stable* `lastModified` (a publish date or
+// the `deployStamp` below) — never a wall-clock render moment — or a
+// deterministic resource can never `304`.
 module ConditionalGet =
 
-    /// Wrap a bare content hash as an ETag wire value. Phase 155 emits a
-    /// strong ETag (`"…"`) — the pre-extraction behaviour. [Phase 147]
-    /// switches this to the weak form (`W/"…"`) required under the
-    /// pipeline's `UseResponseCompression` content-coding negotiation.
-    let etagOf (hash: string) : string = "\"" + hash + "\""
+    /// Wrap a bare content hash as a **weak** ETag wire value (`W/"…"`).
+    /// Weak rather than strong because the SDK pipeline runs
+    /// `UseResponseCompression`: content-coding negotiation (gzip / br /
+    /// identity) rewrites the body, so RFC 7232 requires the weak form
+    /// under transfer/content-coding variance.
+    let etagOf (hash: string) : string = "W/\"" + hash + "\""
+
+    /// Normalise an `If-None-Match` candidate (or our own ETag) to its
+    /// opaque tag for weak comparison (RFC 7232 §2.3.2 — `If-None-Match`
+    /// uses the weak comparison function): strip an optional `W/` weakness
+    /// indicator and the surrounding quotes, leaving the bare hash.
+    let private opaqueTag (candidate: string) : string =
+        let t = candidate.Trim()
+        let t = if t.StartsWith "W/" then t.Substring 2 else t
+        t.Trim('"')
 
     /// True when the request's `If-None-Match` matches the current ETag
-    /// (or is the wildcard `*`). Honours a comma-separated list and an
-    /// unquoted hash for tolerance.
+    /// (weak comparison) or is the wildcard `*`. Honours a comma-separated
+    /// list and an unquoted hash for tolerance.
     let private ifNoneMatchMatches (ctx: HttpContext) (hash: string) : bool =
         match ctx.Request.Headers.TryGetValue "If-None-Match" with
         | true, values ->
-            let etag = etagOf hash
-
             values
             |> Seq.collect (fun v -> (v: string).Split(',') |> Array.map _.Trim())
-            |> Seq.exists (fun candidate -> candidate = etag || candidate = hash || candidate = "*")
+            |> Seq.exists (fun candidate -> candidate.Trim() = "*" || opaqueTag candidate = hash)
         | _ -> false
 
-    /// True when the request's conditional headers permit a `304`. Phase
-    /// 155: `If-None-Match` only (the pre-extraction gate). [Phase 147]
-    /// adds the `If-Modified-Since` union over `lastModified`.
-    let isNotModified (ctx: HttpContext) (hash: string) (_lastModified: DateTimeOffset) : bool =
-        ifNoneMatchMatches ctx hash
+    /// Truncate a timestamp to whole-second precision in UTC. HTTP dates
+    /// (`Last-Modified` / `If-Modified-Since`) carry no sub-second
+    /// component, so a resource's `Last-Modified` must be truncated to
+    /// round-trip equal against the second-granularity `If-Modified-Since`
+    /// a client echoes back.
+    let toHttpSeconds (dt: DateTimeOffset) : DateTimeOffset =
+        let utc = dt.UtcDateTime
+        DateTimeOffset(utc.AddTicks(-(utc.Ticks % TimeSpan.TicksPerSecond)), TimeSpan.Zero)
+
+    /// True when a valid `If-Modified-Since` says the resource is unchanged
+    /// — its `lastModified` (truncated to seconds) is at or before the
+    /// client's `If-Modified-Since` instant (RFC 7232 §3.3, second-
+    /// granularity comparison). A malformed / unparseable header is ignored
+    /// (not-modified = false → full response), never an error.
+    let private ifModifiedSinceSatisfied (ctx: HttpContext) (lastModified: DateTimeOffset) : bool =
+        match ctx.Request.Headers.TryGetValue "If-Modified-Since" with
+        | true, values when values.Count > 0 ->
+            match
+                DateTimeOffset.TryParse(
+                    values[0],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                )
+            with
+            | true, since -> toHttpSeconds lastModified <= since
+            | _ -> false
+        | _ -> false
+
+    /// True when the request's conditional headers permit a `304`: the
+    /// **union** of the gates (RFC 7232) — `If-None-Match` matches the ETag
+    /// (weak comparison) OR `If-Modified-Since` is at/after the resource's
+    /// content-stable `lastModified`.
+    let isNotModified (ctx: HttpContext) (hash: string) (lastModified: DateTimeOffset) : bool =
+        ifNoneMatchMatches ctx hash || ifModifiedSinceSatisfied ctx lastModified
 
     /// Emit the conditional-GET validators + `Cache-Control` on the
-    /// response: an `ETag` over `hash`, a `Last-Modified` from
-    /// `lastModified`, and the supplied `cacheControl`.
+    /// response: a weak `ETag` over `hash`, a second-granularity
+    /// `Last-Modified` from `lastModified`, and the supplied
+    /// `cacheControl`.
     let setValidators (ctx: HttpContext) (hash: string) (lastModified: DateTimeOffset) (cacheControl: string) : unit =
         ctx.Response.Headers["ETag"] <- StringValues(etagOf hash)
-        ctx.Response.Headers["Last-Modified"] <- StringValues(lastModified.UtcDateTime.ToString("R"))
+        ctx.Response.Headers["Last-Modified"] <- StringValues((toHttpSeconds lastModified).UtcDateTime.ToString("R"))
         ctx.Response.Headers["Cache-Control"] <- StringValues cacheControl
 
     /// Handler-agnostic conditional-GET combinator. Emits the validators
@@ -94,3 +136,31 @@ module ConditionalGet =
     /// fingerprint doubles as the ETag content hash.
     let immutableAsset (fingerprint: string) (lastModified: DateTimeOffset) : HttpHandler =
         cacheable fingerprint lastModified "public, max-age=31536000, immutable"
+
+    // ─── Content-version stamp (Phase 147) ───────────────────────────
+
+    /// A process-stable deploy-generation timestamp: the last-write time of
+    /// the entry assembly (truncated to whole seconds). Stable across
+    /// restarts of the same deployed binary and identical across every
+    /// render, so it is a sound content-stable `Last-Modified` fallback for
+    /// a resource that carries no intrinsic publish date — the single
+    /// content-version stamp model. Changes only on redeploy (which
+    /// cold-caches anyway). Falls back to the Unix epoch when the entry
+    /// assembly can't be located (e.g. some test hosts) — still stable
+    /// within the process.
+    let deployStamp: DateTimeOffset =
+        let stamp =
+            try
+                match System.Reflection.Assembly.GetEntryAssembly() with
+                | null -> DateTimeOffset.UnixEpoch
+                | asm ->
+                    let path = asm.Location
+
+                    if String.IsNullOrEmpty path || not (IO.File.Exists path) then
+                        DateTimeOffset.UnixEpoch
+                    else
+                        DateTimeOffset(IO.File.GetLastWriteTimeUtc path, TimeSpan.Zero)
+            with _ ->
+                DateTimeOffset.UnixEpoch
+
+        toHttpSeconds stamp

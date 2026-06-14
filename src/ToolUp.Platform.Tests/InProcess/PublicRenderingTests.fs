@@ -5,6 +5,7 @@ open System.IO
 open Expecto
 open Giraffe.ViewEngine
 open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Narrative
@@ -659,8 +660,8 @@ type private RecordingSink() =
     member _.Records = List.ofSeq records
 
     interface IMetricsSink with
-        member _.Increment(name, tags) = counters.Add(name, tags)
-        member _.Record(name, value, tags) = records.Add(name, value, tags)
+        member _.Increment(name, tags) = counters.Add((name, tags))
+        member _.Record(name, value, tags) = records.Add((name, value, tags))
         member _.SetGauge(_, _, _) = ()
 
 let private renderMetricsTests =
@@ -916,14 +917,14 @@ let private staticExportTests =
             Expect.isFalse (File.Exists(Path.Combine(outDir, "staticwebapp.config.json"))) "no host-config by default"
     ]
 
-// ─── Phase 155 — handler-agnostic conditional-GET + render memoisation ─
+// ─── Phase 155 / 147 — handler-agnostic conditional-GET + memoisation ──
 //
 // The combinator + `RenderCache.getOrRender` are exercised independently
 // of `PublicPageHandler` (a synthetic Giraffe handler keyed on an
 // arbitrary composite key) to prove a programmatic-SSR consumer can adopt
-// them without routing through the content-file page pipeline. The
-// extraction is also pinned byte-for-byte: Phase 155 emits a *strong* ETag
-// and gates on `If-None-Match` only (Phase 147 hardens both).
+// them without routing through the content-file page pipeline. Phase 147
+// hardens the wire format through this same seam: weak ETags, the
+// `If-Modified-Since` union, and second-granularity `Last-Modified`.
 
 let private mkCtxWith (headers: (string * string) list) : HttpContext =
     let ctx = DefaultHttpContext()
@@ -944,8 +945,8 @@ let private runHandler (handler: Giraffe.Core.HttpHandler) (ctx: HttpContext) : 
     let result = handler next ctx |> Async.AwaitTask |> Async.RunSynchronously
     bodyRan, result
 
-let private conditionalGet155Tests =
-    testList "PublicRendering — Phase 155 conditional-GET primitive" [
+let private conditionalGetTests =
+    testList "PublicRendering — conditional-GET primitive (Phase 155 + 147)" [
 
         testCase "RenderKey.forKey builds an opaque composite key; forPublic uses the public scope"
         <| fun _ ->
@@ -958,29 +959,32 @@ let private conditionalGet155Tests =
             Expect.equal pub.ScopeId "public" "forPublic uses the public scope"
             Expect.equal pub.ContentVersion "" "forPublic uses the current version"
 
-        testCase "setValidators emits a strong ETag + RFC1123 Last-Modified (Phase 155 byte-for-byte)"
+        testCase "setValidators emits a weak ETag + second-granularity RFC1123 Last-Modified (Phase 147)"
         <| fun _ ->
             let ctx = mkCtxWith []
-            let lm = DateTimeOffset(2026, 5, 22, 10, 0, 0, TimeSpan.Zero)
+            // Sub-second component must be truncated away on the wire.
+            let lm = DateTimeOffset(2026, 5, 22, 10, 0, 0, 750, TimeSpan.Zero)
             ConditionalGet.setValidators ctx "abc123" lm "public, max-age=300"
 
             Expect.equal
                 (ctx.Response.Headers["ETag"].ToString())
-                "\"abc123\""
-                "strong ETag (quoted, no W/) in Phase 155"
+                "W/\"abc123\""
+                "weak ETag (W/-prefixed) under UseResponseCompression"
 
             Expect.equal
                 (ctx.Response.Headers["Last-Modified"].ToString())
-                (lm.UtcDateTime.ToString("R"))
-                "Last-Modified is the RFC1123 'R' format"
+                (DateTimeOffset(2026, 5, 22, 10, 0, 0, TimeSpan.Zero).UtcDateTime.ToString("R"))
+                "Last-Modified is RFC1123 'R', truncated to whole seconds"
 
             Expect.equal
                 (ctx.Response.Headers["Cache-Control"].ToString())
                 "public, max-age=300"
                 "Cache-Control passed through"
 
-        testCase "cacheable 304s on a matching If-None-Match for an arbitrary composite key"
+        testCase "cacheable 304s on a matching If-None-Match (weak comparison) for an arbitrary composite key"
         <| fun _ ->
+            // A strong-form candidate must still match our weak ETag under
+            // the weak comparison function (the W/ and quotes are stripped).
             let ctx = mkCtxWith [ "If-None-Match", "\"deadbeef\"" ]
 
             let handler =
@@ -991,7 +995,7 @@ let private conditionalGet155Tests =
             Expect.isFalse bodyRan "body handler is short-circuited on a conditional hit"
             Expect.isSome result "the combinator returns Some ctx (handled)"
             Expect.equal ctx.Response.StatusCode 304 "status is 304 Not Modified"
-            Expect.equal (ctx.Response.Headers["ETag"].ToString()) "\"deadbeef\"" "ETag still emitted on the 304"
+            Expect.equal (ctx.Response.Headers["ETag"].ToString()) "W/\"deadbeef\"" "weak ETag still emitted on the 304"
 
         testCase "cacheable passes through to the body handler on a fresh (non-conditional) request"
         <| fun _ ->
@@ -1008,22 +1012,43 @@ let private conditionalGet155Tests =
 
             Expect.equal
                 (ctx.Response.Headers["ETag"].ToString())
-                "\"feedface\""
+                "W/\"feedface\""
                 "validators still emitted ahead of the body"
 
-        testCase "cacheable: Phase 155 gate ignores If-Modified-Since (If-None-Match only)"
+        testCase "cacheable 304s on a bare If-Modified-Since re-crawl (Phase 147 union)"
         <| fun _ ->
-            // Pin the byte-for-byte extraction: pre-147, only If-None-Match
-            // triggers a 304. A bare If-Modified-Since must fall through to
-            // the body. (Phase 147 flips this to a 304.)
+            // Googlebot's predominant revalidation header. The resource's
+            // Last-Modified is at/before the client's If-Modified-Since →
+            // 304 even with no If-None-Match present.
             let lm = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
-            let future = DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
-            let ctx = mkCtxWith [ "If-Modified-Since", future.UtcDateTime.ToString("R") ]
+            let since = DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+            let ctx = mkCtxWith [ "If-Modified-Since", since.UtcDateTime.ToString("R") ]
             let handler = ConditionalGet.cacheable "cafe" lm "public, max-age=60"
             let bodyRan, _ = runHandler handler ctx
 
-            Expect.isTrue bodyRan "Phase 155: a bare If-Modified-Since does not 304 (If-None-Match only)"
-            Expect.notEqual ctx.Response.StatusCode 304 "no 304 from If-Modified-Since pre-147"
+            Expect.isFalse bodyRan "a bare If-Modified-Since at/after Last-Modified short-circuits"
+            Expect.equal ctx.Response.StatusCode 304 "304 from the If-Modified-Since gate"
+
+        testCase "cacheable serves the body when If-Modified-Since predates Last-Modified"
+        <| fun _ ->
+            // Resource changed after the client's copy → full response.
+            let lm = DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+            let since = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            let ctx = mkCtxWith [ "If-Modified-Since", since.UtcDateTime.ToString("R") ]
+            let handler = ConditionalGet.cacheable "cafe" lm "public, max-age=60"
+            let bodyRan, _ = runHandler handler ctx
+
+            Expect.isTrue bodyRan "a stale client copy gets the full body, not a 304"
+            Expect.notEqual ctx.Response.StatusCode 304 "no 304 when the resource is newer"
+
+        testCase "cacheable ignores a malformed If-Modified-Since (full response, not an error)"
+        <| fun _ ->
+            let lm = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            let ctx = mkCtxWith [ "If-Modified-Since", "not-a-date" ]
+            let handler = ConditionalGet.cacheable "cafe" lm "public, max-age=60"
+            let bodyRan, _ = runHandler handler ctx
+
+            Expect.isTrue bodyRan "a malformed conditional header is ignored → full response"
 
         testCase "immutableAsset emits a one-year immutable Cache-Control"
         <| fun _ ->
@@ -1104,6 +1129,96 @@ let private getOrRender155Tests =
         }
     ]
 
+// ─── Phase 147 — cache-independent conditional-GET on the page handler ──
+//
+// Exercise the *uncached* serve path end to end through the public
+// `PublicPageHandler.handler` with a real DI container, proving the
+// `withConditionalGet` opt-in (a `ConditionalGetSettings` in DI) emits
+// validators + 304s without a render cache — and that without it the path
+// is byte-for-byte the pre-147 no-validator path (GP 11).
+
+let private mkProvider (services: (System.Type * obj) list) : System.IServiceProvider =
+    let sc = ServiceCollection()
+
+    for (t, impl) in services do
+        sc.AddSingleton(t, impl) |> ignore
+
+    sc.BuildServiceProvider() :> System.IServiceProvider
+
+let private pageLayouts: Map<LayoutName, PublicPage -> XmlNode> =
+    Map[(LayoutName "page", (fun (p: PublicPage) -> html [] [ body [] [ str p.Title ] ]))]
+
+let private runPage (provider: System.IServiceProvider) (path: string) (headers: (string * string) list) : HttpContext =
+    let api = mkFixtureApiWith []
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- provider
+    ctx.Request.Path <- PathString path
+
+    for (k, v) in headers do
+        ctx.Request.Headers[k] <- Microsoft.Extensions.Primitives.StringValues v
+
+    let next: Giraffe.Core.HttpFunc =
+        fun c -> System.Threading.Tasks.Task.FromResult(Some c)
+
+    PublicPageHandler.handler api pageLayouts next ctx
+    |> Async.AwaitTask
+    |> Async.RunSynchronously
+    |> ignore
+
+    ctx :> HttpContext
+
+let private conditionalGetHandlerTests =
+    testList "PublicRendering — Phase 147 page-handler conditional-GET" [
+
+        testCase "without withConditionalGet, the uncached path emits no validators (pre-147 byte-for-byte)"
+        <| fun _ ->
+            let ctx = runPage (mkProvider []) "/about" []
+
+            Expect.isFalse (ctx.Response.Headers.ContainsKey "ETag") "no ETag on the pre-147 uncached path"
+
+            Expect.isFalse
+                (ctx.Response.Headers.ContainsKey "Last-Modified")
+                "no Last-Modified on the pre-147 uncached path"
+
+        testCase "withConditionalGet emits a weak ETag + content-stable Last-Modified on the uncached path"
+        <| fun _ ->
+            let provider =
+                mkProvider [ typeof<ConditionalGetSettings>, box ConditionalGetSettings.defaults ]
+
+            let ctx = runPage provider "/about" []
+
+            Expect.stringStarts
+                (ctx.Response.Headers["ETag"].ToString())
+                "W/\""
+                "weak ETag emitted on the uncached conditional path"
+
+            Expect.isNotEmpty (ctx.Response.Headers["Last-Modified"].ToString()) "Last-Modified emitted"
+
+            Expect.stringContains
+                (ctx.Response.Headers["Cache-Control"].ToString())
+                "must-revalidate"
+                "default conditional-GET Cache-Control is revalidate-on-every-hit"
+
+        testCase "withConditionalGet: a bare If-Modified-Since re-crawl 304s, Last-Modified stable across renders"
+        <| fun _ ->
+            let provider =
+                mkProvider [ typeof<ConditionalGetSettings>, box ConditionalGetSettings.defaults ]
+
+            // First crawl establishes the content-stable Last-Modified.
+            let first = runPage provider "/about" []
+            let lm = first.Response.Headers["Last-Modified"].ToString()
+
+            // Second crawl echoes it back via If-Modified-Since → 304.
+            let second = runPage provider "/about" [ "If-Modified-Since", lm ]
+
+            Expect.equal second.Response.StatusCode 304 "a bare If-Modified-Since re-crawl 304s"
+
+            Expect.equal
+                (second.Response.Headers["Last-Modified"].ToString())
+                lm
+                "Last-Modified is stable across renders (content-stable, not wall-clock)"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -1113,6 +1228,7 @@ let tests =
         contentSourceImplTests
         renderMetricsTests
         staticExportTests
-        conditionalGet155Tests
+        conditionalGetTests
+        conditionalGetHandlerTests
         getOrRender155Tests
     ]

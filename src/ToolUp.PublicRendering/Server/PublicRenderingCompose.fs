@@ -152,6 +152,15 @@ type PublicRenderingServerApp = {
     /// and AI publish remain default-site surfaces (Atom feeds went
     /// per-site in Phase 115 via `PublicSiteDef.Feeds`).
     Sites: PublicSiteDef list
+    /// Phase 147 — opt-in cache-independent conditional-GET emission. `None`
+    /// (default) → the uncached serve path is byte-for-byte the pre-147 path
+    /// (no validators); `Some settings` makes a deterministic SSR site emit
+    /// `ETag` / content-stable `Last-Modified` / `Cache-Control` and `304`
+    /// on conditional re-requests WITHOUT a render cache (crawl-budget
+    /// revalidation is orthogonal to ISR caching). Ignored when
+    /// `RenderCache` is `Some` — the cached path already emits validators.
+    /// Set via `withConditionalGet`.
+    ConditionalGet: ConditionalGetSettings option
 }
 
 module PublicRenderingServerApp =
@@ -176,6 +185,7 @@ module PublicRenderingServerApp =
         AIPublishGuardrails = NarrativePublishGuardrails.defaults
         IndexNow = IndexNowOptions.defaults
         Sites = []
+        ConditionalGet = None
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -206,6 +216,7 @@ module PublicRenderingServerApp =
         AIPublishGuardrails = NarrativePublishGuardrails.defaults
         IndexNow = IndexNowOptions.defaults
         Sites = []
+        ConditionalGet = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -567,6 +578,37 @@ module PublicRenderingServerApp =
                 RenderCacheInvalidation = Some invalidator
         }
 
+    /// Phase 147 — opt into cache-independent conditional-GET emission.
+    /// Makes a deterministic SSR site emit `ETag` (weak, content-hash) +
+    /// content-stable `Last-Modified` + `Cache-Control` on the *uncached*
+    /// serve path and honour `If-None-Match` / `If-Modified-Since` with a
+    /// `304` — WITHOUT a render cache. Crawl-budget revalidation is
+    /// orthogonal to ISR caching: a large deterministic catalog gets edge-
+    /// cacheability + cheap re-crawls without paying for an ISR tier.
+    ///
+    /// Off by default (GP 11 / GP 13): a pipeline that never calls this has
+    /// the pre-147 uncached path (no validators), byte-for-byte. No effect
+    /// when `withRenderCache` is also composed — the cached path already
+    /// emits validators. Uses `ConditionalGetSettings.defaults`
+    /// (`Cache-Control: public, max-age=0, must-revalidate`); use
+    /// `withConditionalGetCacheControl` for a custom `Cache-Control`.
+    let withConditionalGet (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            ConditionalGet = Some ConditionalGetSettings.defaults
+    }
+
+    /// Phase 147 — `withConditionalGet` with an explicit `Cache-Control`
+    /// for the uncached conditional path (e.g. `"public, max-age=300"` to
+    /// let edges hold the page for 5 minutes between revalidations).
+    let withConditionalGetCacheControl
+        (cacheControl: string)
+        (app: PublicRenderingServerApp)
+        : PublicRenderingServerApp =
+        {
+            app with
+                ConditionalGet = Some { CacheControl = cacheControl }
+        }
+
     /// Phase 109 — opt into IndexNow push-indexing. Registers an
     /// ownership-key endpoint at `/{key}.txt`, an `IIndexNowService` in DI
     /// (the manual / ops resubmit entry point + the per-slug publish ping),
@@ -682,6 +724,7 @@ module PublicRenderingServerApp =
             let semanticSearch = app.SemanticSearch // Phase 91
             let renderCache = app.RenderCache
             let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
+            let conditionalGetSettings = app.ConditionalGet // Phase 147
             let indexNowOptions = app.IndexNow // Phase 109
             let satelliteDefs = app.Sites // Phase 114
 
@@ -895,6 +938,15 @@ module PublicRenderingServerApp =
                         match renderCacheInvalidator with
                         | Some inv -> s.AddSingleton<IRenderCacheInvalidation>(inv)
                         | None -> s
+                |> fun s ->
+                    // Phase 147 — cache-independent conditional-GET. When
+                    // `withConditionalGet` is composed (and no render cache is
+                    // registered), the page handler's uncached path emits
+                    // validators + honours 304 on seeing this in DI. Absent →
+                    // the uncached path is byte-for-byte pre-147 (GP 11 / 13).
+                    match conditionalGetSettings with
+                    | Some cg -> s.AddSingleton<ConditionalGetSettings>(cg)
+                    | None -> s
                 |> fun s ->
                     // Phase 109 — IndexNow registrations. When active,
                     // register the `IIndexNowService` (the publish-ping +

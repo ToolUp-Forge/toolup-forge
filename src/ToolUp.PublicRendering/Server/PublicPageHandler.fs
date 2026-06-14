@@ -127,6 +127,30 @@ module PublicPageHandler =
     // `ConditionalGet.isNotModified` / `ConditionalGet.setValidators`
     // inline (see the cached + uncached serve paths below).
 
+    /// Phase 147 — the content-stable `Last-Modified` for a page: its
+    /// explicit `PublishedAt` when present, otherwise the deploy-generation
+    /// stamp — NOT the wall-clock render moment. Truncated to whole seconds
+    /// so the emitted header round-trips equal against the
+    /// `If-Modified-Since` a crawler echoes back, and coherent with the
+    /// sitemap `<lastmod>` (which also derives from `PublishedAt`). A
+    /// deterministic page must present the same `Last-Modified` across
+    /// refreshes / restarts or `If-Modified-Since` can never `304`.
+    let private contentStableLastModified (page: PublicPage) : DateTimeOffset =
+        page.PublishedAt
+        |> Option.defaultValue ConditionalGet.deployStamp
+        |> ConditionalGet.toHttpSeconds
+
+    /// Phase 147 — the `Last-Modified` a stored entry presents: the
+    /// content-stable value persisted with it. Entries written before
+    /// Phase 147 deserialise `LastModified` to the default (pre-epoch);
+    /// fall back to `RenderedAt` for those so an upgraded deployment's
+    /// pre-existing cache entries still emit a sane header.
+    let private entryLastModified (entry: RenderedPage) : DateTimeOffset =
+        if entry.LastModified < DateTimeOffset.UnixEpoch then
+            entry.RenderedAt
+        else
+            entry.LastModified
+
     let private cacheControlValue (policy: CachePolicy) : string =
         match policy with
         | CachePolicy.NoCache -> "no-cache"
@@ -185,8 +209,50 @@ module PublicPageHandler =
             | PageNotFound -> return None
         }
 
+    /// Phase 147 — the cache-independent conditional-GET path: resolve,
+    /// filter, render, then emit the conditional-GET validators (weak
+    /// `ETag` + content-stable `Last-Modified` + `Cache-Control`) and
+    /// honour `If-None-Match` / `If-Modified-Since` with a `304` — with NO
+    /// render cache registered. Active only when the deployment composed
+    /// `withConditionalGet` (a `ConditionalGetSettings` is in DI); without
+    /// it, the handler runs `serveUncached`, byte-for-byte the pre-147 path
+    /// (GP 11). Crawl-budget revalidation is orthogonal to ISR caching and
+    /// available without it.
+    let private serveUncachedConditional
+        (api: IPublicContentApi)
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        (settings: ConditionalGetSettings)
+        (slug: string)
+        (accessContext: AccessContext)
+        (ctx: HttpContext)
+        : System.Threading.Tasks.Task<HttpContext option> =
+        task {
+            let! outcome = resolveAndRender api layouts slug accessContext
+
+            match outcome with
+            | Rendered(html, page) ->
+                let hash = RenderedPage.hash html
+                let lastModified = contentStableLastModified page
+
+                if ConditionalGet.isNotModified ctx hash lastModified then
+                    ConditionalGet.setValidators ctx hash lastModified settings.CacheControl
+                    ctx.Response.StatusCode <- 304
+                    return Some ctx
+                else
+                    ConditionalGet.setValidators ctx hash lastModified settings.CacheControl
+                    ctx.Response.ContentType <- "text/html; charset=utf-8"
+                    return! ctx.WriteStringAsync html
+            | NoLayoutRegistered ->
+                ctx.Response.StatusCode <- 500
+                return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+            | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
+            | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
+            | PageNotFound -> return None
+        }
+
     /// The Phase 84 cached path: cache lookup, stale-while-revalidate,
-    /// HTTP cache headers, and `If-None-Match` → `304`.
+    /// HTTP cache headers, and `If-None-Match` / `If-Modified-Since` →
+    /// `304`.
     let private serveCached
         (api: IPublicContentApi)
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)
@@ -237,9 +303,14 @@ module PublicPageHandler =
                                 try
                                     match! resolveAndRender api layouts slug accessContext with
                                     | Rendered(html, page) ->
+                                        // Phase 147 — the refresh recomputes the same
+                                        // content-stable `Last-Modified` for the page, so
+                                        // a stale-while-revalidate refresh never churns
+                                        // the validator.
                                         let refreshed = {
                                             RenderedPage.forStore html DateTimeOffset.UtcNow with
                                                 Audience = page.Audience
+                                                LastModified = contentStableLastModified page
                                         }
 
                                         do! cache.Set key refreshed (policyForPage settings page)
@@ -249,12 +320,14 @@ module PublicPageHandler =
                             }
                         )
 
-                    if ConditionalGet.isNotModified ctx entry.ContentHash entry.RenderedAt then
-                        ConditionalGet.setValidators ctx entry.ContentHash entry.RenderedAt (cacheControlForEntry entry)
+                    let entryLm = entryLastModified entry
+
+                    if ConditionalGet.isNotModified ctx entry.ContentHash entryLm then
+                        ConditionalGet.setValidators ctx entry.ContentHash entryLm (cacheControlForEntry entry)
                         ctx.Response.StatusCode <- 304
                         return Some ctx
                     else
-                        ConditionalGet.setValidators ctx entry.ContentHash entry.RenderedAt (cacheControlForEntry entry)
+                        ConditionalGet.setValidators ctx entry.ContentHash entryLm (cacheControlForEntry entry)
                         ctx.Response.ContentType <- "text/html; charset=utf-8"
                         return! ctx.WriteStringAsync entry.Html
 
@@ -269,9 +342,15 @@ module PublicPageHandler =
 
                     // Phase 86 — carry the page's audience into the stored
                     // entry so a cache hit can re-gate without re-resolving.
+                    // Phase 147 — stamp the content-stable `Last-Modified`
+                    // so a later cache hit reproduces this render's exact
+                    // validator (and a SWR refresh never churns it).
+                    let lastModified = contentStableLastModified page
+
                     let rendered = {
                         RenderedPage.forStore html renderedAt with
                             Audience = page.Audience
+                            LastModified = lastModified
                     }
 
                     // Store only when the policy opts in (Set is a no-op
@@ -281,12 +360,12 @@ module PublicPageHandler =
                     | CachePolicy.NoCache -> ()
                     | CachePolicy.Cache _ -> do! cache.Set key rendered policy
 
-                    if ConditionalGet.isNotModified ctx rendered.ContentHash renderedAt then
-                        ConditionalGet.setValidators ctx rendered.ContentHash renderedAt (cacheControlValue policy)
+                    if ConditionalGet.isNotModified ctx rendered.ContentHash lastModified then
+                        ConditionalGet.setValidators ctx rendered.ContentHash lastModified (cacheControlValue policy)
                         ctx.Response.StatusCode <- 304
                         return Some ctx
                     else
-                        ConditionalGet.setValidators ctx rendered.ContentHash renderedAt (cacheControlValue policy)
+                        ConditionalGet.setValidators ctx rendered.ContentHash lastModified (cacheControlValue policy)
                         ctx.Response.ContentType <- "text/html; charset=utf-8"
                         return! ctx.WriteStringAsync html
                 | NoLayoutRegistered ->
@@ -351,7 +430,16 @@ module PublicPageHandler =
                             | _ -> RenderCacheSettings.defaults
 
                         serveCached api layouts cache settings metrics cacheKeySlug slugOrIndex accessContext ctx
-                    | _ -> serveUncached api layouts slugOrIndex accessContext ctx
+                    | _ ->
+                        // Phase 147 — no render cache, but the deployment may
+                        // have opted into cache-independent conditional-GET
+                        // (`withConditionalGet`). When a `ConditionalGetSettings`
+                        // is in DI, emit validators + honour 304 on the uncached
+                        // path; otherwise the pre-147 path runs unchanged (GP 11).
+                        match ctx.RequestServices.GetService(typeof<ConditionalGetSettings>) with
+                        | :? ConditionalGetSettings as cgSettings ->
+                            serveUncachedConditional api layouts cgSettings slugOrIndex accessContext ctx
+                        | _ -> serveUncached api layouts slugOrIndex accessContext ctx
 
                 sw.Stop()
                 RenderMetrics.emitRender metrics (RenderMetrics.classifyOutcome ctx result) sw.Elapsed.TotalMilliseconds

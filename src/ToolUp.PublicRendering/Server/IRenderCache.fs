@@ -141,8 +141,19 @@ type RenderedPage = {
     /// Strong-ETag content hash over `Html` (no surrounding quotes; the
     /// handler wraps it for the wire).
     ContentHash: string
-    /// When the HTML was rendered. Drives the `Last-Modified` header.
+    /// When the HTML was rendered (wall-clock). Drives `ExpiresAt`
+    /// derivation and the stale-while-revalidate window.
     RenderedAt: DateTimeOffset
+    /// Phase 147 — the **content-stable** `Last-Modified` signal for the
+    /// HTTP validator: a publish date or a deploy-generation stamp, NOT the
+    /// wall-clock render moment. A deterministic page must present the same
+    /// `Last-Modified` across refreshes / restarts, or `If-Modified-Since`
+    /// can never `304`; storing it on the entry lets a cache hit (and a
+    /// stale-while-revalidate refresh) reproduce exactly what the original
+    /// render emitted. `RenderedPage.forStore` defaults it to `RenderedAt`
+    /// (the pre-147 meaning); the page handler overrides it with the
+    /// content-stable value.
+    LastModified: DateTimeOffset
     /// When the entry stops being fresh. Derived by `Set` from
     /// `RenderedAt + policy.ttlSeconds`.
     ExpiresAt: DateTimeOffset
@@ -174,6 +185,9 @@ module RenderedPage =
         Html = html
         ContentHash = hash html
         RenderedAt = renderedAt
+        // Phase 147 — defaults to the render moment (the pre-147 meaning);
+        // the page handler overrides it with a content-stable signal.
+        LastModified = renderedAt
         ExpiresAt = renderedAt
         StaleWhileRevalidate = false
         Audience = PageAudience.Public
@@ -240,6 +254,28 @@ type RenderCacheSettings = { DefaultPolicy: CachePolicy }
 
 module RenderCacheSettings =
     let defaults: RenderCacheSettings = { DefaultPolicy = NoCache }
+
+/// Phase 147 — cache-independent conditional-GET emission settings. When a
+/// deployment composes `withConditionalGet` (but NOT `withRenderCache`),
+/// the page handler's uncached serve path emits the conditional-GET
+/// validators (weak `ETag` + content-stable `Last-Modified` +
+/// `Cache-Control`) and honours `If-None-Match` / `If-Modified-Since` with
+/// a `304` — so a deterministic SSR site without an ISR cache still gets
+/// crawl-budget revalidation. Registered in DI only when composed; absent
+/// → the uncached path is byte-for-byte the pre-147 path (no headers),
+/// GP 11 / GP 13.
+type ConditionalGetSettings = {
+    /// The `Cache-Control` emitted on the uncached conditional-GET path.
+    /// Defaults to `"public, max-age=0, must-revalidate"` — edge/CDN- and
+    /// browser-cacheable but always revalidated, so a crawler's next hit is
+    /// a cheap conditional request the handler can `304`.
+    CacheControl: string
+}
+
+module ConditionalGetSettings =
+    let defaults: ConditionalGetSettings = {
+        CacheControl = "public, max-age=0, must-revalidate"
+    }
 
 /// Phase 155 — handler-agnostic render memoisation over `IRenderCache`.
 /// Lifted out of `PublicPageHandler` so any handler — not just the
