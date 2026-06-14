@@ -1,5 +1,7 @@
 # Migration — multi-host site registry (`withSite`)
 
+_Roadmap phase 145 (renumbered from 114 on the 2026-06-14 sync — 114/115 were claimed upstream by the audit-event-registry / index-lifecycle phases; the implementing forge commit subject still reads "Phase 114")._
+
 ## What changes
 
 `ToolUp.PublicRendering` gains an opt-in multi-site tier: one instance can

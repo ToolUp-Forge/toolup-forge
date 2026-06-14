@@ -1,5 +1,7 @@
 # Migration — multi-host SEO + export surfaces (per-site IndexNow / static export / feeds)
 
+_Roadmap phase 146 (renumbered from 115 on the 2026-06-14 sync — 114/115 were claimed upstream by the audit-event-registry / index-lifecycle phases; the implementing forge commit subjects still read "Phase 115")._
+
 ## What changes
 
 The multi-site tier (`withSite`) gains the outbound / build-time surfaces:
