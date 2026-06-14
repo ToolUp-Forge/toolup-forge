@@ -185,6 +185,8 @@ let buildRouteHandlers
         if config.EnableDevEndpoints then
             DevDiagnosticsHandler.routes config capture
             @ [ DiagnosticBundleHandler.route config capture ]
+            // Phase 120 — /dev/auth-denials rollup under the same gate.
+            @ [ AuthDenialsDiagnosticsHandler.route ]
         else
             []
 

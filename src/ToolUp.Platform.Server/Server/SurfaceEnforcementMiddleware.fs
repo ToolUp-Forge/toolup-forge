@@ -409,6 +409,37 @@ let private emitDenialAudit
     with _ ->
         ()
 
+/// Phase 120 — emit the uniform `AuthorizationDenied` row via
+/// `IAuthAuditHook` alongside the legacy `SurfaceDenied` row. The hook
+/// coalesces probing bursts (the per-`(route, subject)` flood guard) and
+/// feeds the generic `/dev/auth-denials` rollup. Best-effort: a missing
+/// hook or a hook failure never stalls the response.
+let private emitAuthDenial (ctx: HttpContext) (subject: Subject) (errorCode: string) : unit =
+    try
+        match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
+        | :? IAuthAuditHook as hook ->
+            // Caller scope, when resolved, so the denial is readable in the
+            // caller-scoped `/dev/auth-denials` rollup; `None` (→ `_platform`)
+            // for anonymous / pre-scope denials.
+            let scopeId =
+                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+                | true, (:? StorageScope as s) -> Some s.ScopeId
+                | _ -> None
+
+            hook.RecordDenial {
+                Route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
+                Subject = subject
+                Requirement = SurfaceDenialRequirement
+                Verdict = errorCode
+                Reason = sprintf "surface-enforcement denied %s" (string ctx.Request.Path)
+                ScopeId = scopeId
+                CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+            }
+            |> Async.Start
+        | _ -> ()
+    with _ ->
+        ()
+
 let private writeRejection
     (ctx: HttpContext)
     (subject: Subject)
@@ -421,6 +452,8 @@ let private writeRejection
         // event order in the audit trail matches the wire-order observable
         // from the client.
         emitDenialAudit ctx subject statusCode errorCode hint
+        // Phase 120 — uniform structured denial row alongside SurfaceDenied.
+        emitAuthDenial ctx subject errorCode
 
         ctx.Response.StatusCode <- statusCode
         ctx.Response.ContentType <- "application/json"

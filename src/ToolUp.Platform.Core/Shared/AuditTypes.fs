@@ -2540,3 +2540,106 @@ type IAuditLog =
     /// matching `IEventStore.ReadAll`.
     abstract GetAuditTrail:
         scopeId: string * dateRange: (DateTime * DateTime) option * eventType: string option -> Async<AuditEvent list>
+
+// ─── Phase 120 — IAuthAuditHook (structured authz-denial trail) ──────
+//
+// A single write-side seam every authorization-denial emission point
+// calls, so the whole HTTP auth surface produces one uniform
+// `AuthorizationDenied` audit row instead of scattered per-subsystem
+// metrics + log lines. Generalises the AI tool-allowlist denial stream
+// (Phase 45) to surface-enforcement / RBAC / share-token / SSE-identity
+// / module-permission / KB-destructive denials.
+//
+// The default implementation (`AuthAuditHook`, Server tier) writes an
+// `AuthorizationDenied` event through the registered `IAuditLog` and
+// coalesces probing bursts via a per-`(route, subject)` dedup window, so
+// a scripted enumeration produces bounded audit volume with an accurate
+// count (GP 6 + GP 13 — no new infrastructure; the hook's backing store
+// is the existing audit log).
+
+/// The requirement class that was not satisfied at a denial. A DU (not a
+/// bare string) so every emission call site is exhaustiveness-checked and
+/// the read-side rollup can cut by typed requirement; serialised to its
+/// `requirementString` form on the persisted `AuthorizationDeniedPayload`.
+type AuthDenialRequirement =
+    /// `SurfaceEnforcementMiddleware` route-surface matrix denial.
+    | SurfaceDenialRequirement
+    /// RBAC role / platform-admin gate denial.
+    | RoleDenialRequirement
+    /// Share-token validation failure (signature / revoked / expired /
+    /// use-limit / rate-limit).
+    | ShareTokenDenialRequirement
+    /// SSE `?userId=` / principal-mismatch denial (the emission point lands
+    /// when identity-aware SSE lifecycle ships; the case exists now so that
+    /// wiring emits through the same uniform seam).
+    | SseIdentityDenialRequirement
+    /// Module-permission denial (e.g. a `SchemaOnly` caller reaching a
+    /// real-row path).
+    | ModulePermissionDenialRequirement
+    /// Knowledge-Base destructive-op authorization denial.
+    | KbDestructiveDenialRequirement
+
+module AuthDenialRequirement =
+    /// Stable wire string for the persisted payload's `Requirement` field.
+    let toString =
+        function
+        | SurfaceDenialRequirement -> "surface"
+        | RoleDenialRequirement -> "role"
+        | ShareTokenDenialRequirement -> "share-token"
+        | SseIdentityDenialRequirement -> "sse-identity"
+        | ModulePermissionDenialRequirement -> "module-permission"
+        | KbDestructiveDenialRequirement -> "kb-destructive"
+
+/// Value-typed denial record handed to `IAuthAuditHook.RecordDenial`.
+/// Carries the resolved `Subject` so emission sites stay terse; the hook
+/// sanitises it to `(kind, id)` when it writes the audit row (no PII
+/// beyond the subject id reaches the trail). Six-rule rule 1 (identity by
+/// value): every field is a value — `Subject` is a value DU, no live
+/// handles.
+type AuthDenial = {
+    /// Route the denial fired on (method + path, unparameterised).
+    Route: string
+    /// Resolved subject at denial time. Sanitised to kind + id by the hook.
+    Subject: Subject
+    /// Requirement class that was not satisfied.
+    Requirement: AuthDenialRequirement
+    /// Machine-readable verdict / denial code (mirrors the response body's
+    /// `error` field where one exists).
+    Verdict: string
+    /// Human-readable reason. Callers keep this PII-free beyond the subject.
+    Reason: string
+    /// Scope the denial occurred in; `None` for scope-less (anonymous)
+    /// denials. Determines the audit write scope (caller-scope when present,
+    /// `_platform` otherwise) so the read-side rollup is caller-scoped (GP 4).
+    ScopeId: string option
+    /// Correlation id stitching to the request log.
+    CorrelationId: string option
+}
+
+/// Write-side hook for authorization denials. SDK-wide DI singleton; the
+/// default implementation writes an `AuthorizationDenied` audit event.
+///
+/// **Best-effort, never blocking** — same contract as `IAuditLog.Record`:
+/// a hook failure on the denial path MUST NOT stall the response. Emission
+/// sites wrap the call defensively.
+///
+/// Six-rule portability audit:
+///   1. Identity by value      — `AuthDenial` is all values (`Subject` is a
+///                                 value DU). No live handles.
+///   2. Async                  — `RecordDenial : AuthDenial -> Async<unit>`.
+///   3. Retry as data          — none; emission is best-effort fire-and-
+///                                 forget, matching `IAuditLog`.
+///   4. Stateless handlers     — the contract carries all state per call;
+///                                 the default impl's dedup window is an
+///                                 in-process optimisation, documented
+///                                 single-instance (a distributed impl can
+///                                 no-op the coalescing and emit per call).
+///   5. No cross-shard ordering — denial rows are independent; no ordering
+///                                 promise across routes/subjects.
+///   6. Precision lower bound   — the dedup window is a coarse `TimeSpan`;
+///                                 no sub-second promise.
+type IAuthAuditHook =
+    /// Record an authorization denial. Best-effort; failures are swallowed
+    /// by the implementation. The default impl coalesces probing bursts on
+    /// the same `(route, subject)` key within its dedup window.
+    abstract RecordDenial: denial: AuthDenial -> Async<unit>

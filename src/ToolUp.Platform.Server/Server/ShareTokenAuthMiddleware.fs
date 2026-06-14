@@ -104,6 +104,33 @@ let internal classifyError (err: ShareTokenError) : string * string =
     | ShareTokenError.RateLimited -> "rate_limited", "Token's rate limit has been exceeded."
     | ShareTokenError.StorageFailed _ -> "storage_error", "Token validation could not complete."
 
+/// Phase 120 — emit a uniform `AuthorizationDenied` row via
+/// `IAuthAuditHook` for a share-token validation failure, alongside the
+/// 401 the middleware writes. The denial carries the anonymous subject
+/// (a failed token never resolves to a `ClaimBearer`) and the classified
+/// error code as the verdict, so an enumeration of guessed tokens shows
+/// up in the `/dev/auth-denials` rollup keyed by route. Best-effort.
+let private emitShareTokenDenial (ctx: HttpContext) (errorCode: string) (description: string) : unit =
+    try
+        match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
+        | :? IAuthAuditHook as hook ->
+            hook.RecordDenial {
+                Route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
+                // A rejected token never resolves to a subject — attribute
+                // the denial to an anonymous probe (no PII to leak).
+                Subject = AnonymousSession "anonymous"
+                Requirement = ShareTokenDenialRequirement
+                Verdict = errorCode
+                Reason = description
+                // No caller scope on a failed token — written under `_platform`.
+                ScopeId = None
+                CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+            }
+            |> Async.Start
+        | _ -> ()
+    with _ ->
+        ()
+
 /// ASP.NET Core middleware that validates an inbound share-token and
 /// stashes the resolved `ShareTokenClaim` on `HttpContext.Items`. See
 /// the module preamble for the pass-through / MarkUsed / additive-
@@ -147,6 +174,8 @@ type ShareTokenAuthMiddleware(next: RequestDelegate) =
                     // protocol-level token failure — surface as 401
                     // with the same shape so the operator's logs
                     // record the attempt.
+                    emitShareTokenDenial ctx "share_token_not_supported" "This deployment does not accept share tokens."
+
                     do!
                         writeUnauthorized
                             ctx
@@ -161,6 +190,8 @@ type ShareTokenAuthMiddleware(next: RequestDelegate) =
                         do! next.Invoke(ctx)
                     | Error err ->
                         let code, description = classifyError err
+                        // Phase 120 — uniform denial row alongside the 401.
+                        emitShareTokenDenial ctx code description
                         do! writeUnauthorized ctx code description
         }
         :> System.Threading.Tasks.Task

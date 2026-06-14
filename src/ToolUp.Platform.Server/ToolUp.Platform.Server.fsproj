@@ -216,6 +216,11 @@
         <Compile Include="Server\EncryptedBlobStorage.fs" />
         <Compile Include="Server\SingleKeyResolver.fs" />
         <Compile Include="Server\AuditLog.fs" />
+        <!-- Phase 120 — default IAuthAuditHook (writes AuthorizationDenied
+             via IAuditLog + per-(route,subject) flood guard). After
+             AuditLog.fs (uses the audit registry); before the emission
+             middlewares + the /dev/auth-denials read handler. -->
+        <Compile Include="Server\AuthAuditHook.fs" />
         <!-- Phase 30a — signed module artefact substrate (canonical-bytes
              encoder, signer/verifier interfaces + Ed25519 defaults,
              blob-backed trusted-publisher key store). Crypto via
@@ -429,6 +434,11 @@
         <Compile Include="Server\HealthStateTracker.fs" />
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
+        <!-- Phase 120 — /dev/auth-denials rollup (reads AuthorizationDenied
+             via IAuditLog, caller-scope only; flushes the AuthAuditHook
+             flood-guard tail). After AuthAuditHook.fs + DevDiagnosticsHandler;
+             before BuildRouteHandlers (which mounts the route). -->
+        <Compile Include="Server\AuthDenialsDiagnosticsHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
         <!-- Phase 132 — admin structural backstop. Path-prefix
              authorisation middleware over the raw `_platform` admin

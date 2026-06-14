@@ -252,6 +252,7 @@
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />
         <Compile Include="InProcess\AuditWriteFailureMetricTests.fs" />
         <Compile Include="InProcess\DegradedCapabilityRegistryTests.fs" />
+        <Compile Include="InProcess\AuthAuditHookTests.fs" />
         <Compile Include="InProcess\NotificationSilentlySkippedTests.fs" />
         <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />

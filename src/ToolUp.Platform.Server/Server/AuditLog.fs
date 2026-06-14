@@ -909,6 +909,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> KnowledgeScopeErased(fromAuditJson<KnowledgeScopeErasedPayload> j)
     }
+    // Phase 120 — uniform structured authz-denial row (append-only registration).
+    {
+        EventType = "AuthorizationDenied"
+        TryEncode =
+            (function
+            | AuthorizationDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> AuthorizationDenied(fromAuditJson<AuthorizationDeniedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

@@ -125,6 +125,7 @@ let allTests =
         AuditLogModeValidatorTests.tests
         AuditLogHealthCheckTests.tests
         DegradedCapabilityRegistryTests.tests
+        AuthAuditHookTests.tests
         NotificationSilentlySkippedTests.tests
         EncryptedSecretStoreModeValidatorTests.tests
         JobSchedulerInstanceValidatorTests.tests

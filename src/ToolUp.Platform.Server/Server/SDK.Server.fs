@@ -501,6 +501,15 @@ let compose
     )
     |> ignore
 
+    // Phase 120 — default IAuthAuditHook over the resolved IAuditLog.
+    // Every authorization-denial emission point (surface enforcement,
+    // share-token validation, …) resolves this from DI and writes a
+    // uniform AuthorizationDenied row; the default coalesces probing
+    // bursts via its per-(route,subject) flood guard. GP 13 — the backing
+    // store is the existing audit log, no new infrastructure.
+    services.AddSingleton<IAuthAuditHook>(AuthAuditHook.AuthAuditHook(auditLog, resolvedLogger) :> IAuthAuditHook)
+    |> ignore
+
     // Gap audit #1 — wire `PerScopeKeyResolver` to the cross-process
     // notification channel for multi-instance cache coherence
     // (extracted to
