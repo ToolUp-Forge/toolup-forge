@@ -185,6 +185,16 @@ The point: anonymous-shape audit volume should not constrain the authenticated-s
 
 The validator is a deploy-time gate, not a runtime check. A deployment whose composition root produces a coherent state at startup stays coherent across the process lifetime — `Surfaces`, `SurfaceRequirementRegistry`, and the decorator chain are all immutable post-compose.
 
+#### Share-token signing key is an operator-managed secret
+
+`BlobShareTokenStore` signs every share token with an HMAC-SHA256 key resolved from `ISecretStore` under `_platform / share_token_signing_key`. If the key is **absent** at first use the store generates a 32-byte CSPRNG key and persists it — a convenience for dev / single-instance, **not** a production posture. Treat the key as an operator-managed secret:
+
+- **Pre-provision it** before first boot in any production / multi-instance deployment. Set `share_token_signing_key` (in the `_platform` container of whatever `ISecretStore` is composed) to a base64url-encoded 32+ byte random value. A key the operator never set is invisible to backup and rotation governance; and across N replicas booting against an empty store, the authoritative key is whichever replica wins the first-write race.
+- **Back it up** with the rest of the secret store. If it is lost / the store is re-provisioned, every previously-issued share token fails verification.
+- **Rotation procedure.** Overwrite `share_token_signing_key` with a new value. Every process picks up the new key within the signing-key cache TTL (no restart needed); **all outstanding tokens then fail verification** — this is the expected, intended effect of rotation, so rotate on a cadence aligned to your token lifetimes (or deliberately, to revoke all live tokens at once).
+
+The `share-token-signing-key-provenance` preflight validator emits a startup **Warning** when the share-token surface is live, the deployment is production / multi-instance shaped (`ReplicaCount > 1` or `PublicBaseUrl` set), and the key is still absent — surfacing the unmanaged-key gap before it becomes a backup/rotation blind spot. A single-instance, non-public deployment, or one where the key is already provisioned, is silent.
+
 ## Vulnerability disclosure
 
 Security defects in the SDK itself are reported via the process documented in [`SECURITY.md`](../../SECURITY.md) at the repo root. Deployment-time hardening defects (a `SurfaceCoherenceValidator` rule that should fire and does not, a per-shape rate-limit partition that the documented partitioning model does not match, an audit envelope shape that breaks a downstream sink) are reported the same way — they are SDK defects, not operator-tuning concerns.

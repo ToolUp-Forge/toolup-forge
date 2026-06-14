@@ -88,6 +88,10 @@ let registerFirstPartyConfigValidators
         PerScopeKeyResolverDistributedValidator.PerScopeKeyResolverDistributedValidator(encryptionKeyResolver)
     ) // refuse per-scope key resolver + in-proc channel under multi-instance
 
+    addConfigValidator (
+        ShareTokenSigningKeyProvenanceValidator.ShareTokenSigningKeyProvenanceValidator(config, secretStore)
+    ) // warn share-token signing key would auto-generate (unmanaged) in a production/multi-instance share-token deployment (Wave 19; self-gates to Ok otherwise)
+
     // Companion-contributed `IConfigValidator` instances (OIDC, Redis,
     // SMTP), wired through `ServerApp.withConfigValidator`. Registered
     // after the first-party set so their preflight messages follow.

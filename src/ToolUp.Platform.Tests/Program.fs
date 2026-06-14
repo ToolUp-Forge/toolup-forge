@@ -27,6 +27,7 @@ let allTests =
         OAuthSubstrateTests.pkceFlowTests
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
+        ShareTokenSigningKeyProvenanceValidatorTests.tests
         FileSecretStoreTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests

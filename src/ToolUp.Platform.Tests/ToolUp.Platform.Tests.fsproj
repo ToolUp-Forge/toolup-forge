@@ -254,6 +254,7 @@
         <Compile Include="InProcess\NotificationSilentlySkippedTests.fs" />
         <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
+        <Compile Include="InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" />
         <Compile Include="InProcess\JobSchedulerInstanceValidatorTests.fs" />
         <!-- Phase 9b.B — pins the compose-time `registerScheduledJobDeclarations`
              helper: NoJobScheduler warn-and-skip, single declaration

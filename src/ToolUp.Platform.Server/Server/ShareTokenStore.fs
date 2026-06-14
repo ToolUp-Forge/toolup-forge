@@ -26,11 +26,15 @@ open ToolUp.Platform.Secrets
 // and avoid path-incompatible characters in user-supplied
 // `resourceKind` / `resourceId` values.
 
+// Public (not `private`) so the Wave 19 share-token-signing-key
+// provenance preflight validator can probe the key's presence in the
+// same container / secret-name without duplicating the constants
+// (single source of truth — no drift).
 [<Literal>]
-let private platformContainer = "_platform"
+let platformContainer = "_platform"
 
 [<Literal>]
-let private signingKeySecretName = "share_token_signing_key"
+let signingKeySecretName = "share_token_signing_key"
 
 let private tokenBlob (scopeId: string) (tokenId: string) =
     $"share-tokens/{scopeId}/{tokenId}.json"
