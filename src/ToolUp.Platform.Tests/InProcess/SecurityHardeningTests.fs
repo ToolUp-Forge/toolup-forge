@@ -1,7 +1,10 @@
 module ToolUp.Platform.Tests.InProcess.SecurityHardeningTests
 
 open Expecto
+open System.IO
+open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.Http.Features
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.SurfaceEnforcement
@@ -10,6 +13,54 @@ let private contributor (sources: CspSourceDirective list) =
     { new ICspContributor with
         member _.RequiredSources = sources
     }
+
+/// Phase 156 — a minimal `IHttpResponseFeature` that records `OnStarting`
+/// callbacks so a test can fire them and inspect the headers
+/// `CspMiddleware` stamps (the default `DefaultHttpContext` response
+/// feature drops `OnStarting` callbacks, so the middleware's header work
+/// would otherwise be untestable in-process).
+type private RecordingResponseFeature() =
+    let mutable status = 200
+    let mutable body: Stream = new MemoryStream() :> Stream
+    let headers: IHeaderDictionary = HeaderDictionary()
+    let callbacks = System.Collections.Generic.List<unit -> Task>()
+
+    member _.FireOnStarting() =
+        for cb in callbacks do
+            cb().GetAwaiter().GetResult()
+
+    interface IHttpResponseFeature with
+        member _.StatusCode
+            with get () = status
+            and set v = status <- v
+
+        member _.ReasonPhrase
+            with get () = null
+            and set _ = ()
+
+        member _.Headers
+            with get () = headers
+            and set _ = ()
+
+        member _.Body
+            with get () = body
+            and set v = body <- v
+
+        member _.HasStarted = false
+
+        member _.OnStarting(callback, state) =
+            callbacks.Add(fun () -> callback.Invoke state)
+
+        member _.OnCompleted(_callback, _state) = ()
+
+let private nonceCtx (statusCode: int) =
+    let ctx = DefaultHttpContext()
+    let resp = RecordingResponseFeature()
+    ctx.Features.Set<IHttpResponseFeature>(resp)
+    ctx.Response.StatusCode <- statusCode
+    ctx, resp
+
+let private noOpNext = RequestDelegate(fun _ -> Task.CompletedTask)
 
 let private ctxFor (method: string) (path: string) =
     let c = DefaultHttpContext()
@@ -131,6 +182,117 @@ let tests =
 
         test "ResolvedCspPolicy.empty is the empty header" {
             Expect.equal SecurityHardening.ResolvedCspPolicy.empty.Header "" "empty header"
+            Expect.isFalse SecurityHardening.ResolvedCspPolicy.empty.NonceMode "empty policy is not nonce mode"
+        }
+
+        // ── Phase 156 — CSP source modes (nonce / hash / static) ──────
+
+        test "Phase 156 — buildPolicyWith with empty extras == buildPolicy (GP 11 byte-for-byte)" {
+            let contributed = [ ConnectSrc "https://a.example"; ScriptSrc "https://b.example" ]
+
+            Expect.equal
+                (SecurityHardening.buildPolicyWith DefaultSecurityHardening contributed [] [])
+                (SecurityHardening.buildPolicy DefaultSecurityHardening contributed)
+                "no extra sources → byte-for-byte the static header"
+        }
+
+        test "Phase 156 — inlineScriptHash is deterministic base64 of the sha256 (32 bytes → 44 chars)" {
+            let h1 = SecurityHardening.inlineScriptHash "console.log('x')"
+            let h2 = SecurityHardening.inlineScriptHash "console.log('x')"
+            Expect.equal h1 h2 "same input → same hash"
+            Expect.equal h1.Length 44 "base64 of 32 bytes is 44 chars"
+
+            Expect.notEqual
+                h1
+                (SecurityHardening.inlineScriptHash "console.log('y')")
+                "different inline bodies hash differently"
+        }
+
+        test "Phase 156 — aggregate with no source mode registered is byte-for-byte pre-156 (StaticCsp default)" {
+            let services = ServiceCollection()
+
+            services.AddSingleton<ICspContributor>(contributor [ ConnectSrc "https://issuer.example" ])
+            |> ignore
+
+            let resolved =
+                SecurityHardening.aggregate services {
+                    ServerConfig.defaults with
+                        SecurityHardening = DefaultSecurityHardening
+                }
+
+            Expect.equal
+                resolved.Header
+                (SecurityHardening.buildPolicy DefaultSecurityHardening [ ConnectSrc "https://issuer.example" ])
+                "absent CspSourceMode → the pre-156 static header"
+
+            Expect.isFalse resolved.NonceMode "static mode does not flag NonceMode"
+        }
+
+        test "Phase 156 — NonceCsp bakes the nonce placeholder into script-src AND style-src" {
+            let services = ServiceCollection()
+
+            services.AddSingleton<SecurityHardening.CspSourceMode>(SecurityHardening.NonceCsp)
+            |> ignore
+
+            let resolved =
+                SecurityHardening.aggregate services {
+                    ServerConfig.defaults with
+                        SecurityHardening = DefaultSecurityHardening
+                }
+
+            Expect.isTrue resolved.NonceMode "nonce mode flagged for CspMiddleware substitution"
+            let token = sprintf "'nonce-%s'" SecurityHardening.noncePlaceholder
+
+            Expect.stringContains
+                resolved.Header
+                (sprintf "script-src 'self' %s" token)
+                "script-src carries the nonce placeholder"
+
+            Expect.notEqual
+                (resolved.Header.IndexOf token)
+                (resolved.Header.LastIndexOf token)
+                "the nonce placeholder appears in both script-src and style-src"
+        }
+
+        test "Phase 156 — HashCsp folds sha256 sources into script-src and the header is byte-stable" {
+            let services = ServiceCollection()
+            let inlineBody = "console.log('hello')"
+
+            services.AddSingleton<SecurityHardening.CspSourceMode>(SecurityHardening.HashCsp [ inlineBody ])
+            |> ignore
+
+            let cfg = {
+                ServerConfig.defaults with
+                    SecurityHardening = DefaultSecurityHardening
+            }
+
+            let r1 = SecurityHardening.aggregate services cfg
+            let r2 = SecurityHardening.aggregate services cfg
+
+            Expect.isFalse r1.NonceMode "hash mode is byte-stable, not nonce mode"
+            Expect.equal r1.Header r2.Header "hash header is identical across requests (survives caching + 304)"
+            let expected = sprintf "'sha256-%s'" (SecurityHardening.inlineScriptHash inlineBody)
+
+            Expect.stringContains
+                r1.Header
+                (sprintf "script-src 'self' %s" expected)
+                "declared inline-script hash folded into script-src"
+        }
+
+        test "Phase 156 — NoSecurityHardening short-circuits regardless of source mode" {
+            let services = ServiceCollection()
+
+            services.AddSingleton<SecurityHardening.CspSourceMode>(SecurityHardening.NonceCsp)
+            |> ignore
+
+            let resolved =
+                SecurityHardening.aggregate services {
+                    ServerConfig.defaults with
+                        SecurityHardening = NoSecurityHardening
+                }
+
+            Expect.equal resolved.Header "" "no hardening → no header even in nonce mode"
+            Expect.isFalse resolved.NonceMode "no hardening → not nonce mode"
         }
 
         test "CSRF gate: state-changing /api/* requires a token in auth-requiring deployments" {
@@ -211,5 +373,98 @@ let tests =
             Expect.isFalse
                 (Csrf.requiresValidation registry (ctxFor "DELETE" "/api/peer/echo"))
                 "the bearer IS the authentication, not cookie/session"
+        }
+    ]
+
+[<Tests>]
+let cspMiddlewareTests =
+    testList "Phase 156 — CspMiddleware nonce / hash source modes" [
+
+        test "nonce mode: stamps a real nonce header + stashes the same nonce for layouts, unique per request" {
+            let policy = {
+                SecurityHardening.ResolvedCspPolicy.empty with
+                    Header = sprintf "script-src 'self' 'nonce-%s'" SecurityHardening.noncePlaceholder
+                    NonceMode = true
+            }
+
+            let run () =
+                let ctx, resp = nonceCtx 200
+                let mw = CspMiddleware(noOpNext, policy)
+                mw.InvokeAsync(ctx).GetAwaiter().GetResult()
+                resp.FireOnStarting()
+                Csp.requestNonce ctx, ctx.Response.Headers.["Content-Security-Policy"].ToString()
+
+            let n1, h1 = run ()
+            let n2, _ = run ()
+
+            Expect.isSome n1 "nonce stashed on HttpContext.Items for the layout accessor"
+
+            Expect.stringContains
+                h1
+                (sprintf "'nonce-%s'" n1.Value)
+                "the header carries the SAME nonce the layout reads"
+
+            Expect.isFalse (h1.Contains SecurityHardening.noncePlaceholder) "the placeholder is fully substituted"
+            Expect.isFalse (h1.Contains "'unsafe-inline'") "the nonce policy carries no 'unsafe-inline'"
+            Expect.notEqual n1 n2 "a fresh, unique nonce per request"
+        }
+
+        test "nonce mode: suppresses the CSP header on a 304 (the cached body's nonce stays authoritative)" {
+            let policy = {
+                SecurityHardening.ResolvedCspPolicy.empty with
+                    Header = sprintf "script-src 'self' 'nonce-%s'" SecurityHardening.noncePlaceholder
+                    NonceMode = true
+            }
+
+            let ctx, resp = nonceCtx 304
+            let mw = CspMiddleware(noOpNext, policy)
+            mw.InvokeAsync(ctx).GetAwaiter().GetResult()
+            resp.FireOnStarting()
+
+            Expect.isFalse
+                (ctx.Response.Headers.ContainsKey "Content-Security-Policy")
+                "no fresh-nonce header stamped on a 304 — it would mismatch the cached body's nonce"
+        }
+
+        test "static / hash mode: byte-stable header is stamped, and is safe even on a 304" {
+            let policy = {
+                SecurityHardening.ResolvedCspPolicy.empty with
+                    Header = "script-src 'self' 'sha256-abc'"
+                    NonceMode = false
+            }
+
+            let ctx, resp = nonceCtx 304
+            let mw = CspMiddleware(noOpNext, policy)
+            mw.InvokeAsync(ctx).GetAwaiter().GetResult()
+            resp.FireOnStarting()
+
+            Expect.equal
+                (ctx.Response.Headers.["Content-Security-Policy"].ToString())
+                "script-src 'self' 'sha256-abc'"
+                "static/hash header is byte-stable and safe to stamp on every status code"
+
+            Expect.isNone (Csp.requestNonce ctx) "no per-request nonce work in static / hash mode (GP 13)"
+        }
+
+        test "per-route override wins: a handler-set CSP is not overwritten" {
+            let policy = {
+                SecurityHardening.ResolvedCspPolicy.empty with
+                    Header = "script-src 'self' 'sha256-abc'"
+                    NonceMode = false
+            }
+
+            let ctx, resp = nonceCtx 200
+
+            ctx.Response.Headers.["Content-Security-Policy"] <-
+                Microsoft.Extensions.Primitives.StringValues "default-src 'none'"
+
+            let mw = CspMiddleware(noOpNext, policy)
+            mw.InvokeAsync(ctx).GetAwaiter().GetResult()
+            resp.FireOnStarting()
+
+            Expect.equal
+                (ctx.Response.Headers.["Content-Security-Policy"].ToString())
+                "default-src 'none'"
+                "an already-present CSP header wins (per-route override preserved)"
         }
     ]

@@ -316,9 +316,11 @@
         <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />
-        <Compile Include="Server\SecurityHeadersValidator.fs" />
         <Compile Include="Server\ICspContributor.fs" />
         <Compile Include="Server\SecurityHardening.fs" />
+        <!-- Phase 156 — SecurityHeadersValidator moved after SecurityHardening:
+             its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
+        <Compile Include="Server\SecurityHeadersValidator.fs" />
         <Compile Include="Server\ForwardedHeadersTrustValidator.fs" />
         <Compile Include="Server\CsrfHardeningValidator.fs" />
         <Compile Include="Server\StaticPathBehaviourValidator.fs" />

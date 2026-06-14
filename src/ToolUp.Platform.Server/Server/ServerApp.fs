@@ -1003,6 +1003,41 @@ module ServerApp =
                 }
         }
 
+    /// Phase 156 — opt into a CSP source mode so the aggregated
+    /// `Content-Security-Policy` can cover the deployment's own SSR-emitted
+    /// inline `<script>` / `<style>` without `'unsafe-inline'`:
+    ///
+    ///   * `SecurityHardening.NonceCsp` — a per-request random nonce in
+    ///     `script-src` / `style-src`, read by layouts via
+    ///     `Csp.requestNonce` to stamp inline `<script nonce="…">`. For
+    ///     DYNAMIC responses; not cache-safe (see the nonce↔cache
+    ///     validator — pair it with `withRenderCache` and startup warns).
+    ///   * `SecurityHardening.HashCsp inlineScripts` — `'sha256-…'` source
+    ///     hashes over the declared inline-script bodies. Byte-stable
+    ///     header, so it survives render-cache hits + `304`s. For CACHED /
+    ///     DETERMINISTIC responses.
+    ///
+    /// Threads the singleton registration through the shared
+    /// `ComposeExtensions.ServiceConfig` (like `withCspContributor`), so
+    /// `aggregate` reads it and `AIServerApp` / `RAGServerApp` inherit it.
+    /// Only meaningful alongside `withSecurityHardening` (the source mode
+    /// shapes the hardening CSP that `CspMiddleware` stamps). Omitting this
+    /// call leaves the resolved header byte-for-byte pre-156 (GP 11).
+    let withCspSourceMode (mode: SecurityHardening.CspSourceMode) (app: ServerApp) : ServerApp =
+        let register (s: IServiceCollection) =
+            s.AddSingleton<SecurityHardening.CspSourceMode>(mode)
+
+        {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        ServiceConfig =
+                            match app.Extensions.ServiceConfig with
+                            | None -> Some register
+                            | Some baseFn -> Some(fun s -> register (baseFn s))
+                }
+        }
+
     /// Phase 22 — opt into AES-GCM envelope encryption for the
     /// registered `IBlobStorage`. The resolver determines the
     /// security model:

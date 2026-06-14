@@ -74,6 +74,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (RateLimiterInstanceValidator.RateLimiterInstanceValidator(config)) // warn in-process/in-memory rate limiters under multi-instance (effective limit is N×)
     addConfigValidator (SseAuthModeValidator.SseAuthModeValidator(config)) // refuse SseAuthMode = QueryParamFallback in authenticated modes
     addConfigValidator (SecurityHeadersValidator.SecurityHeadersValidator(config)) // warn internet-facing auth-mode deployment with no security headers
+    addConfigValidator (SecurityHeadersValidator.CspNonceCacheValidator(services)) // Phase 156 — warn nonce CSP source mode composed with a registered IRenderCache (stale-nonce-on-cache-hit)
     addConfigValidator (StaticPathBehaviourValidator.StaticPathBehaviourValidator(config)) // warn dev StaticPathBehaviour in a production-shaped deployment
     addConfigValidator (PeerBearerConfigValidator.PeerBearerConfigValidator(config, secretStore)) // warn PeerRoutePrefixes set but no peer bearer secrets seeded
     addConfigValidator (MaxRequestBodyBytesValidator.MaxRequestBodyBytesValidator(config)) // warn high request-body cap + no rate-limit (memory-DoS surface)

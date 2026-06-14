@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.SecurityHeadersValidatorTests
 
 open Expecto
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 
@@ -123,6 +124,87 @@ let tests =
                 :> IConfigValidator
 
             Expect.equal v.Name "security-headers-mode" "stable identifier"
+            Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"
+        }
+    ]
+
+// ── Phase 156 — CSP nonce source mode ↔ render-cache validator ─────────
+
+/// A do-nothing `IRenderCache` so a test can register the exact
+/// `ToolUp.PublicRendering.IRenderCache` service type the validator
+/// detects by full type name.
+let private fakeRenderCache () =
+    { new ToolUp.PublicRendering.IRenderCache with
+        member _.TryGet _ = async { return None }
+        member _.Set _ _ _ = async { return () }
+        member _.Invalidate _ = async { return () }
+    }
+
+let private nonceCacheResult (configure: IServiceCollection -> unit) : ValidationResult =
+    let services = ServiceCollection()
+    configure services
+
+    let v =
+        SecurityHeadersValidator.CspNonceCacheValidator(services) :> IConfigValidator
+
+    v.Validate() |> Async.RunSynchronously
+
+[<Tests>]
+let cspNonceCacheValidatorTests =
+    testList "Phase 156 — CSP nonce ↔ render-cache validator" [
+
+        test "NonceCsp + registered IRenderCache → Warning (stale nonce on cache hit)" {
+            let result =
+                nonceCacheResult (fun s ->
+                    s.AddSingleton<SecurityHardening.CspSourceMode>(SecurityHardening.NonceCsp)
+                    |> ignore
+
+                    s.AddSingleton<ToolUp.PublicRendering.IRenderCache>(fakeRenderCache ())
+                    |> ignore)
+
+            match result with
+            | Warning msg ->
+                Expect.stringContains msg "NonceCsp" "names the offending source mode"
+                Expect.stringContains msg "IRenderCache" "names the conflicting substrate"
+                Expect.stringContains msg "HashCsp" "steers the operator to hash mode"
+            | other -> failtestf "expected Warning, got %A" other
+        }
+
+        test "NonceCsp + no render cache → Ok (nonce mode is fine for dynamic responses)" {
+            let result =
+                nonceCacheResult (fun s ->
+                    s.AddSingleton<SecurityHardening.CspSourceMode>(SecurityHardening.NonceCsp)
+                    |> ignore)
+
+            Expect.equal result Ok "nonce mode without a cache has no hazard"
+        }
+
+        test "HashCsp + registered IRenderCache → Ok (hash mode is the cache-safe combo)" {
+            let result =
+                nonceCacheResult (fun s ->
+                    s.AddSingleton<SecurityHardening.CspSourceMode>(SecurityHardening.HashCsp [ "console.log('x')" ])
+                    |> ignore
+
+                    s.AddSingleton<ToolUp.PublicRendering.IRenderCache>(fakeRenderCache ())
+                    |> ignore)
+
+            Expect.equal result Ok "hash mode + cache is the recommended pairing"
+        }
+
+        test "default (no source mode registered) + render cache → Ok (static CSP is unaffected)" {
+            let result =
+                nonceCacheResult (fun s ->
+                    s.AddSingleton<ToolUp.PublicRendering.IRenderCache>(fakeRenderCache ())
+                    |> ignore)
+
+            Expect.equal result Ok "static mode (the default) carries no nonce, so a cache is fine"
+        }
+
+        test "Validator metadata is well-formed" {
+            let v =
+                SecurityHeadersValidator.CspNonceCacheValidator(ServiceCollection()) :> IConfigValidator
+
+            Expect.equal v.Name "csp-nonce-render-cache" "stable identifier"
             Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"
         }
     ]
