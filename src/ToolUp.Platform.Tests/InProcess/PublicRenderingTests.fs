@@ -1593,6 +1593,49 @@ let private structuredData151Tests =
             Expect.isFalse (json.Contains "sameAs") "no sameAs key when frontmatter absent"
     ]
 
+// ─── Phase 152 — per-page robots <meta> (head half) ─────────────────
+
+let private robots152Tests =
+    testList "PublicRendering — Phase 152 per-page robots meta" [
+
+        testCase "headTags emits <meta name=robots> from the robots frontmatter key, any body kind"
+        <| fun _ ->
+            for body in [ Markdown "x"; Html "<p>x</p>"; Narrative(Narrative.create "t") ] do
+                let html = renderNodes (NarrativeLayout.headTags (mkPage "a" body [ "robots", "noindex,nofollow" ]))
+                Expect.stringContains html "name=\"robots\"" "robots meta name"
+                Expect.stringContains html "content=\"noindex,nofollow\"" "robots directive content"
+
+        testCase "robots value is trimmed"
+        <| fun _ ->
+            let html =
+                renderNodes (NarrativeLayout.robotsMetaTags (mkPage "a" (Markdown "x") [ "robots", "  noarchive  " ]))
+
+            Expect.stringContains html "content=\"noarchive\"" "trimmed directive"
+
+        testCase "absent robots key → no robots meta (GP 11 byte-for-byte)"
+        <| fun _ ->
+            // A plain Markdown page with no robots key still produces an
+            // empty headTags list — pre-152 behaviour.
+            Expect.isEmpty (NarrativeLayout.robotsMetaTags (mkPage "a" (Markdown "x") [])) "no robots tags"
+
+            Expect.isEmpty
+                (NarrativeLayout.headTags (mkPage "a" (Markdown "x") []))
+                "headTags unchanged for plain markdown"
+
+        testCase "blank robots value → no robots meta"
+        <| fun _ ->
+            Expect.isEmpty
+                (NarrativeLayout.robotsMetaTags (mkPage "a" (Markdown "x") [ "robots", "   " ]))
+                "whitespace-only robots value emits nothing"
+
+        testCase "robots meta coexists with Narrative head tags"
+        <| fun _ ->
+            let doc = Narrative.create "t" |> Narrative.withCanonicalUrl "https://x.com/c"
+            let html = renderNodes (NarrativeLayout.headTags (mkPage "a" (Narrative doc) [ "robots", "noindex" ]))
+            Expect.stringContains html "name=\"robots\"" "robots meta present"
+            Expect.stringContains html "rel=\"canonical\"" "Narrative canonical still emitted"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -1608,4 +1651,5 @@ let tests =
         getOrRender155Tests
         selfCanonicalTests
         structuredData151Tests
+        robots152Tests
     ]

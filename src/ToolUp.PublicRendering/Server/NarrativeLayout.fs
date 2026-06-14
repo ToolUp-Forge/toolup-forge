@@ -85,36 +85,59 @@ module NarrativeLayout =
         | Narrative doc -> Some(rawText (NarrativeHtml.tableOfContents includeHeadings doc))
         | _ -> None
 
-    /// Build the `<head>` SEO block from a Narrative-bodied page:
-    /// `<link rel="canonical">`, `<html lang="...">`-ready `Lang`
-    /// override (caller applies to `<html>`), schema.org Article
-    /// JSON-LD, and the OpenGraph + Twitter card meta tags.
-    /// Returns the list of `XmlNode`s the caller splices into
-    /// `head [ ... ]`. Non-Narrative bodies return an empty list so
-    /// the caller can unconditionally `yield! NarrativeLayout.headTags`.
-    let headTags (page: PublicPage) : XmlNode list =
-        match page.Body with
-        | Narrative doc ->
-            let canonical =
-                match doc.CanonicalUrl with
-                | Some url -> [ link [ _rel "canonical"; _href url ] ]
-                | None -> []
-
-            let jsonLd =
-                match StructuredDataHelpers.articleFromNarrative page doc with
-                | Some payload -> [ script [ _type "application/ld+json" ] [ rawText payload ] ]
-                | None -> []
-
-            let openGraph =
-                StructuredDataHelpers.openGraphFromNarrative page doc
-                |> List.map (fun (property, content) -> meta [ _property property; _content content ])
-
-            let twitter =
-                StructuredDataHelpers.twitterCardFromNarrative page doc
-                |> List.map (fun (name, content) -> meta [ _name name; _content content ])
-
-            canonical @ jsonLd @ openGraph @ twitter
+    /// Phase 152 — the per-page `<meta name="robots">` tag, read from the
+    /// `robots` frontmatter key (e.g. `noindex`, `noindex,nofollow`,
+    /// `noarchive`). `[]` when the key is absent or blank, so a page that
+    /// declares nothing is byte-for-byte pre-152 (GP 11). This is the
+    /// `<head>` half of the per-page robots directive; the `X-Robots-Tag`
+    /// response header (the crawler-honoured, non-HTML-covering half) is set
+    /// by the page handler. Audience-denied responses keep their
+    /// unconditional `noindex` regardless of this key (GP 4).
+    let robotsMetaTags (page: PublicPage) : XmlNode list =
+        match page.Frontmatter.TryFind "robots" with
+        | Some value when not (System.String.IsNullOrWhiteSpace value) -> [
+            meta [ _name "robots"; _content (value.Trim()) ]
+          ]
         | _ -> []
+
+    /// Build the `<head>` SEO block from a page. For a `Narrative` body:
+    /// `<link rel="canonical">`, schema.org Article JSON-LD, and the
+    /// OpenGraph + Twitter card meta tags. For ANY body: the per-page
+    /// `<meta name="robots">` (Phase 152) when a `robots` frontmatter key is
+    /// present. Returns the list of `XmlNode`s the caller splices into
+    /// `head [ ... ]`. A page with no `robots` key and a non-`Narrative`
+    /// body returns an empty list (byte-for-byte pre-152) so the caller can
+    /// unconditionally `yield! NarrativeLayout.headTags`.
+    let headTags (page: PublicPage) : XmlNode list =
+        // Phase 152 — robots directive applies to every body kind; absent
+        // key → no tag (GP 11).
+        let robots = robotsMetaTags page
+
+        let bodyTags =
+            match page.Body with
+            | Narrative doc ->
+                let canonical =
+                    match doc.CanonicalUrl with
+                    | Some url -> [ link [ _rel "canonical"; _href url ] ]
+                    | None -> []
+
+                let jsonLd =
+                    match StructuredDataHelpers.articleFromNarrative page doc with
+                    | Some payload -> [ script [ _type "application/ld+json" ] [ rawText payload ] ]
+                    | None -> []
+
+                let openGraph =
+                    StructuredDataHelpers.openGraphFromNarrative page doc
+                    |> List.map (fun (property, content) -> meta [ _property property; _content content ])
+
+                let twitter =
+                    StructuredDataHelpers.twitterCardFromNarrative page doc
+                    |> List.map (fun (name, content) -> meta [ _name name; _content content ])
+
+                canonical @ jsonLd @ openGraph @ twitter
+            | _ -> []
+
+        robots @ bodyTags
 
     // ─── Phase 148 — self-referencing canonical for every body kind ──
     //
