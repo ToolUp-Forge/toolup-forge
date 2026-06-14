@@ -54,7 +54,7 @@ let private silentLogger =
 // module, so wrapping the same `storage` twice yields stores that share
 // state — exactly the production semantic.
 let private pendingStore (storage: IBlobStorage) : IPendingInviteStore =
-    ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage) :> IPendingInviteStore
+    ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
 
 let private freshShareTokenStore () =
     let storage = InMemoryBlobStorage() :> IBlobStorage

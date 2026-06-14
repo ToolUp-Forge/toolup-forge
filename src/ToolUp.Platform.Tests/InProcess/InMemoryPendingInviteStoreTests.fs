@@ -23,6 +23,14 @@ open ToolUp.Platform.Tests.Support
 // from its own binding file (against a unique blob path per test) once
 // Phase 9c half-2's `IBlobStorage.UploadWithETag` substrate ships.
 
+let private silentLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
 let tests =
     let factory () =
         // Drop the module-level cache so the previous test's reads
@@ -30,6 +38,6 @@ let tests =
         CacheReset.invalidateAll () |> Async.RunSynchronously
 
         let storage = InMemoryBlobStorage() :> IBlobStorage
-        InMemoryPendingInviteStore(storage) :> IPendingInviteStore
+        InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
 
     testSequenced (IPendingInviteStoreContract.tests "InMemoryPendingInviteStore" factory)

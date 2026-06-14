@@ -67,7 +67,8 @@ let registerTeamPermissionStores
     let resolvedPendingInviteStore: IPendingInviteStore =
         pendingInviteStoreOverride
         |> Option.defaultWith (fun () ->
-            ToolUp.Platform.Teams.InMemoryPendingInviteStore(resolvedBlobStorage) :> IPendingInviteStore)
+            ToolUp.Platform.Teams.InMemoryPendingInviteStore(resolvedBlobStorage, resolvedLogger)
+            :> IPendingInviteStore)
 
     services.AddSingleton<IPendingInviteStore>(resolvedPendingInviteStore) |> ignore
 

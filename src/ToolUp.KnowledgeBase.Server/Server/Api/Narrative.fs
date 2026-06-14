@@ -161,10 +161,14 @@ let ingestNarrative
                 let rawBlobName = sprintf "knowledge/%s/%s" docId fileName
                 let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes fullMarkdown)
 
-                let updated =
-                    existing |> List.filter (fun d -> d.Id <> docId) |> List.append [ doc ]
-
-                do! saveIndex deps.Storage deps.Scope.Container updated
+                // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                // Released before the enqueue block below (which can route
+                // through `MarkIngestionFailed` → `updateIndexStatus`). The
+                // provenance duplicate-check above still reads outside the
+                // lock; concurrent same-provenance commits remain a
+                // last-writer race (residual, addressed by the deferred
+                // ETag CAS), but neither write is lost from the index.
+                do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
                 let mutable returnedDoc = doc
 

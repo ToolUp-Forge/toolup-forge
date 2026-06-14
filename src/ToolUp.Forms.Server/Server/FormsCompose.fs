@@ -775,7 +775,9 @@ module FormsServerApp =
                     let rateLimiter =
                         ctx.RequestServices.GetService(typeof<IShareTokenRateLimiter>) :?> IShareTokenRateLimiter
 
-                    publicFormApi shareTokenStore formStore validators auditLog rateLimiter ctx),
+                    let logger = ctx.RequestServices.GetService(typeof<ILogger>) :?> ILogger
+
+                    publicFormApi shareTokenStore formStore validators auditLog rateLimiter logger ctx),
                 routeBuilder = PublicFormApi.routeBuilder
             )
 

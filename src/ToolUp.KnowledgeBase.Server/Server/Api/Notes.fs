@@ -59,12 +59,11 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
             let rawBlobName = sprintf "knowledge/%s/note.md" docId
             let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body)
 
-            let! existing = loadIndex deps.Storage deps.Scope.Container
-
-            let updated =
-                existing |> List.filter (fun d -> d.Id <> docId) |> List.append [ doc ]
-
-            do! saveIndex deps.Storage deps.Scope.Container updated
+            // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+            // Released before the enqueue block below, which can route
+            // through `MarkIngestionFailed` → `updateIndexStatus` and
+            // re-acquire the same container lock.
+            do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
             let mutable returnedDoc = doc
 
@@ -179,12 +178,13 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                     let rawBlobName = sprintf "knowledge/%s/note.md" req.DocId
                     let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body)
 
-                    let updated =
-                        existing
-                        |> List.filter (fun d -> d.Id <> req.DocId)
-                        |> List.append [ updatedDoc ]
-
-                    do! saveIndex deps.Storage deps.Scope.Container updated
+                    // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                    // `updatedDoc.Id = req.DocId`, so the helper's
+                    // filter-by-id replaces the prior entry in place. The
+                    // existence check above still reads outside the lock —
+                    // that only governs last-writer-wins on *this* doc, not
+                    // the cross-document loss the lock prevents.
+                    do! upsertIndexEntry deps.Storage deps.Scope.Container updatedDoc
 
                     progressCache.TryRemove(req.DocId) |> ignore
 

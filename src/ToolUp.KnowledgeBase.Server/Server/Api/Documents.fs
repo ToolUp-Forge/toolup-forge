@@ -35,12 +35,11 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
     let rawBlobName = sprintf "knowledge/%s/%s" docId fileName
     let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, bytes)
 
-    let! existing = loadIndex deps.Storage deps.Scope.Container
-
-    let updated =
-        existing |> List.filter (fun d -> d.Id <> docId) |> List.append [ doc ]
-
-    do! saveIndex deps.Storage deps.Scope.Container updated
+    // Phase 116 — atomic index RMW so a concurrent upload to the same
+    // container can't clobber this entry (or vice versa). Released before
+    // the background extraction below, which re-acquires the same
+    // container lock via `updateIndexStatus`.
+    do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
     // Seed initial cache state. The background extractor flips this to
     // ExtractingText as soon as it starts running.

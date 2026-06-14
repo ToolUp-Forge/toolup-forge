@@ -48,6 +48,16 @@ open ToolUp.Platform.BlobStorage
 // `PendingInviteStore.upsert` / `.remove` / etc. compile unchanged
 // until they migrate to the interface seam.
 
+/// Phase 116 — raised by the load path when the persisted
+/// `pending-invites.json` blob is present but fails to decode. Carries
+/// the path the corrupt bytes were quarantined (renamed) to plus the
+/// decode reason. `InMemoryPendingInviteStore` catches it to emit a
+/// structured `logger.Error` and surfaces it to callers as
+/// `StorageFailed`. Existence (vs. an empty/missing blob) is the load
+/// path's signal to fail closed rather than write back a map derived
+/// from a failed decode (GP 9).
+exception PendingInvitesBlobCorrupt of quarantinePath: string * reason: string
+
 /// Backward-compat shim — module-functions surface preserved verbatim
 /// from the pre-Phase-5h shape. New code should resolve
 /// `IPendingInviteStore` from DI and call its methods; this surface
@@ -79,9 +89,17 @@ module PendingInviteStore =
     let private encodeMap (map: Map<string, PendingInviteByEmail>) : byte[] =
         JsonSerializer.Serialize(map, jsonOptions) |> Encoding.UTF8.GetBytes
 
-    let private decodeMap (bytes: byte[]) : Map<string, PendingInviteByEmail> =
+    /// Decode the persisted blob. An empty / missing blob is the
+    /// legitimate zero-state (`Ok Map.empty`); a present-but-unparseable
+    /// blob is `Error reason` so the load path can fail closed rather
+    /// than silently treating corruption as zero invites (Phase 116 /
+    /// GP 9). Previously this collapsed every failure to `Map.empty`,
+    /// which — combined with the full-blob-overwrite write path — meant
+    /// one corrupt blob irreversibly erased every pending invite on the
+    /// next `upsert`.
+    let private decodeMap (bytes: byte[]) : Result<Map<string, PendingInviteByEmail>, string> =
         if isNull bytes || bytes.Length = 0 then
-            Map.empty
+            Ok Map.empty
         else
             let json = Encoding.UTF8.GetString bytes
 
@@ -93,14 +111,34 @@ module PendingInviteStore =
                     JsonSerializer.Deserialize<Map<string, PendingInviteByEmail>>(json, jsonOptions)
                     |> box
                 with
-                | null -> Map.empty
-                | _ as o -> o :?> Map<string, PendingInviteByEmail>
-            with _ ->
-                Map.empty
+                | null -> Error "deserialiser returned null for a non-empty pending-invites blob"
+                | o -> Ok(o :?> Map<string, PendingInviteByEmail>)
+            with ex ->
+                Error(sprintf "pending-invites blob failed to deserialise: %s" ex.Message)
+
+    /// Quarantine path for a corrupt blob — a timestamped sibling of the
+    /// canonical blob name so an operator can find and recover it. The
+    /// canonical name is then freed (renamed-aside) so the store
+    /// self-heals to empty on the next read instead of erroring forever.
+    let private quarantineBlobName () =
+        sprintf "%s.corrupt-%s" blobName (DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffZ"))
 
     let private loadFromStore (storage: IBlobStorage) : Async<Map<string, PendingInviteByEmail>> = async {
         match! storage.Download(platformContainer, blobName) with
-        | Ok bytes -> return decodeMap bytes
+        | Ok bytes ->
+            match decodeMap bytes with
+            | Ok map -> return map
+            | Error reason ->
+                // Fail closed (GP 9). Rename the corrupt blob aside so the
+                // bytes survive for forensic recovery, then raise so the
+                // triggering operation fails WITHOUT writing — a
+                // full-blob-overwrite store that proceeded from `Map.empty`
+                // here would persist empty-plus-one and erase every other
+                // pending invite irreversibly.
+                let target = quarantineBlobName ()
+                let! _ = storage.Upload(platformContainer, target, bytes)
+                let! _ = storage.Delete(platformContainer, blobName)
+                return raise (PendingInvitesBlobCorrupt(target, reason))
         | Error _ -> return Map.empty
     }
 
@@ -257,14 +295,39 @@ module PendingInviteStore =
 /// `SemaphoreSlim` serialisation is conflict-free by construction.
 /// `Remove` returns `Error NotFound` when no entry was present (the
 /// module-function `remove` collapses this to `Ok ()`).
-type InMemoryPendingInviteStore(storage: IBlobStorage) =
+///
+/// Phase 116 — takes an `ILogger` so a quarantined-corrupt-blob event
+/// (raised as `PendingInvitesBlobCorrupt` by the load path) is surfaced
+/// at `Error` level rather than disappearing into a generic
+/// `StorageFailed` string.
+type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger) =
+
+    /// Map a load-path failure onto the interface's error shape. A
+    /// `PendingInvitesBlobCorrupt` is logged at `Error` (operator must
+    /// recover the quarantined blob); every other exception collapses to
+    /// `StorageFailed ex.Message` as before.
+    let toStorageError (op: string) (ex: exn) : PendingInviteStoreError =
+        match ex with
+        | PendingInvitesBlobCorrupt(path, reason) ->
+            logger.Error(
+                sprintf
+                    "[PendingInviteStore] %s aborted: pending-invites blob was corrupt and has been quarantined to %s (%s). No invites were overwritten; the store self-heals to empty on the next read."
+                    op
+                    path
+                    reason,
+                None
+            )
+
+            PendingInviteStoreError.StorageFailed(sprintf "pending-invites blob was corrupt (quarantined to %s)" path)
+        | _ -> PendingInviteStoreError.StorageFailed ex.Message
+
     interface IPendingInviteStore with
         member _.Upsert(email, pending) = async {
             try
                 do! PendingInviteStore.upsert storage email pending
                 return Ok()
             with ex ->
-                return Error(PendingInviteStoreError.StorageFailed ex.Message)
+                return Error(toStorageError "Upsert" ex)
         }
 
         member _.Remove(email) = async {
@@ -276,7 +339,7 @@ type InMemoryPendingInviteStore(storage: IBlobStorage) =
                 else
                     return Error PendingInviteStoreError.NotFound
             with ex ->
-                return Error(PendingInviteStoreError.StorageFailed ex.Message)
+                return Error(toStorageError "Remove" ex)
         }
 
         member _.TryConsumeForEmail(email) = async {
@@ -284,7 +347,7 @@ type InMemoryPendingInviteStore(storage: IBlobStorage) =
                 let! result = PendingInviteStore.tryConsumeForEmail storage email
                 return Ok result
             with ex ->
-                return Error(PendingInviteStoreError.StorageFailed ex.Message)
+                return Error(toStorageError "TryConsumeForEmail" ex)
         }
 
         member _.ListAll() = async {
@@ -292,7 +355,7 @@ type InMemoryPendingInviteStore(storage: IBlobStorage) =
                 let! entries = PendingInviteStore.listAll storage
                 return Ok entries
             with ex ->
-                return Error(PendingInviteStoreError.StorageFailed ex.Message)
+                return Error(toStorageError "ListAll" ex)
         }
 
         member _.SweepExpired() = async {
@@ -300,5 +363,5 @@ type InMemoryPendingInviteStore(storage: IBlobStorage) =
                 let! removed = PendingInviteStore.sweepExpired storage
                 return Ok removed
             with ex ->
-                return Error(PendingInviteStoreError.StorageFailed ex.Message)
+                return Error(toStorageError "SweepExpired" ex)
         }

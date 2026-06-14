@@ -84,6 +84,7 @@ let publicFormApi
     (validatorRegistry: CustomValidatorRegistry)
     (auditLog: IAuditLog)
     (rateLimiter: IShareTokenRateLimiter)
+    (logger: ILogger)
     (_ctx: HttpContext)
     : IPublicFormApi =
 
@@ -138,25 +139,45 @@ let publicFormApi
                             | Error err -> return Error err
                             | Ok saved ->
                                 // Bump the use count AFTER successful persist.
-                                // Failure here is non-fatal — the submission is
-                                // already durable; logging happens via the
-                                // share-token store's audit emission.
-                                let! _ = shareTokenStore.MarkUsed(claim.ScopeId, claim.TokenId)
+                                // Phase 116 — the result was previously
+                                // discarded (`let! _ = ...`), so a storage
+                                // failure, a token revoked between validation
+                                // and now, or a use-limit lost to a concurrent
+                                // submitter all returned success silently —
+                                // letting a `UseLimit = 1` token be consumed
+                                // more than once. Surface it instead: the
+                                // submission is already durable, but the
+                                // response is an error so the caller and the
+                                // use-count invariant both see the truth.
+                                match! shareTokenStore.MarkUsed(claim.ScopeId, claim.TokenId) with
+                                | Error markErr ->
+                                    logger.Error(
+                                        sprintf
+                                            "[PublicFormApi] submission %s persisted for form %s but MarkUsed failed (token %s, scope %s): %A"
+                                            saved.Id
+                                            saved.FormId
+                                            claim.TokenId
+                                            claim.ScopeId
+                                            markErr,
+                                        None
+                                    )
 
-                                // FormSubmitted audit carries the synthesised
-                                // respondent identity (`respondent:{tokenId}`)
-                                // — never the raw email.
-                                let payload: FormSubmittedPayload = {
-                                    UserId = "respondent:" + claim.TokenId
-                                    FormId = saved.FormId
-                                    SubmissionId = saved.Id
-                                    SchemaVersion = saved.SchemaVersion
-                                    FieldCount = saved.Values.Count
-                                    WorkflowId = None
-                                    InitialState = SubmissionState.toIndexValue saved.State
-                                }
+                                    return Error(toFormError markErr)
+                                | Ok() ->
+                                    // FormSubmitted audit carries the synthesised
+                                    // respondent identity (`respondent:{tokenId}`)
+                                    // — never the raw email.
+                                    let payload: FormSubmittedPayload = {
+                                        UserId = "respondent:" + claim.TokenId
+                                        FormId = saved.FormId
+                                        SubmissionId = saved.Id
+                                        SchemaVersion = saved.SchemaVersion
+                                        FieldCount = saved.Values.Count
+                                        WorkflowId = None
+                                        InitialState = SubmissionState.toIndexValue saved.State
+                                    }
 
-                                do! auditLog.Record(claim.ScopeId, AuditEvent.FormSubmitted payload)
-                                return Ok saved
+                                    do! auditLog.Record(claim.ScopeId, AuditEvent.FormSubmitted payload)
+                                    return Ok saved
             }
     }

@@ -48,6 +48,39 @@ let private containerLocks = ConcurrentDictionary<string, SemaphoreSlim>()
 let acquireContainerLock (container: string) =
     containerLocks.GetOrAdd(container, fun _ -> new SemaphoreSlim(1, 1))
 
+/// Phase 116 — atomic add-or-replace of a single document in the index,
+/// under the container lock. Loads, drops any existing entry with the
+/// same `Id`, appends `doc`, and saves — all while holding the lock so
+/// two concurrent additive writers (upload / addNote / updateNote /
+/// narrative) cannot each load the same index, append their own document,
+/// and have the second save clobber the first (one document silently
+/// lost from the index while its blob + chunks persist orphaned).
+///
+/// This is the *interim single-instance* guard, matching
+/// `updateIndexStatus` / `updateIndexChunkCount` above: it serialises
+/// within one process but not across replicas. The cross-replica fix is
+/// ETag-conditional-write CAS on the index blob (Phase 9c half-2 /
+/// Phase 116 ETag-gated tasks), deferred.
+///
+/// **Do not call from inside another `acquireContainerLock` critical
+/// section** — the semaphore is non-reentrant. Callers acquire it only
+/// around the index RMW and release before any background / enqueue work
+/// that itself routes through `updateIndexStatus` / `MarkIngestionFailed`.
+let upsertIndexEntry (storage: IBlobStorage) (container: string) (doc: KnowledgeDocument) = async {
+    let lock = acquireContainerLock container
+    do! lock.WaitAsync() |> Async.AwaitTask
+
+    try
+        let! existing = loadIndex storage container
+
+        let updated =
+            existing |> List.filter (fun d -> d.Id <> doc.Id) |> List.append [ doc ]
+
+        do! saveIndex storage container updated
+    finally
+        lock.Release() |> ignore
+}
+
 /// Update the persisted status of a single document in the index. Acquires
 /// the container lock, loads, mutates the matching doc, and saves. No-op
 /// if the document is not present (deleted between writes).

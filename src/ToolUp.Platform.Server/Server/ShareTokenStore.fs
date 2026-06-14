@@ -4,6 +4,7 @@ open System
 open System.Security.Cryptography
 open System.Text
 open System.Text.Json
+open System.Threading
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -179,6 +180,18 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
 
     let lockObj = obj ()
 
+    // Phase 116 — serialise the claim read-modify-write paths
+    // (`MarkUsed`, `Revoke`) within this process. Without it, N concurrent
+    // `MarkUsed` calls all read `UsedCount = k` and all write `k + 1`, so a
+    // `UseLimit = 1` token admits every concurrent submitter. This is the
+    // *interim single-instance* guard: it holds the use-count invariant on
+    // one node but NOT across replicas (two processes each hold their own
+    // semaphore). The multi-replica fix is ETag-conditional-write CAS on
+    // `IBlobStorage.UploadWithETag` (Phase 9c half-2), deferred — see the
+    // Phase 116 ETag-gated tasks. A non-reentrant `SemaphoreSlim`: no
+    // locked path calls another locked path.
+    let claimWriteLock = new SemaphoreSlim(1, 1)
+
     // Cached signing key — resolved lazily on first use, then re-read
     // from `ISecretStore` once the TTL lapses. ISecretStore reads are
     // cheap but not free; one read per token operation would be
@@ -233,6 +246,15 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
         | Error e -> return Error(ShareTokenError.StorageFailed e)
     }
 
+    // Phase 116 audit (fail-closed decode): this read already fails
+    // closed — a present-but-unparseable claim blob returns
+    // `StorageFailed`, never a default/empty claim. Every mutating path
+    // (`MarkUsed`, `Revoke`) routes through `readClaim` and short-circuits
+    // on that `Error` before any `writeClaim`, so a corrupt claim is never
+    // overwritten with a record derived from a failed decode. No change
+    // needed here; unlike the pending-invites store, claims are
+    // one-blob-per-token (not a single full-blob-overwrite map), so a
+    // corrupt blob can only break its own token, not erase its siblings.
     let readClaim (scopeId: string) (tokenId: string) = async {
         let! result = storage.Download(platformContainer, tokenBlob scopeId tokenId)
 
@@ -359,62 +381,78 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
         }
 
         member _.MarkUsed(scopeId, tokenId) = async {
-            let! claimResult = readClaim scopeId tokenId
+            // Serialise the read → increment → write so concurrent uses of
+            // a `UseLimit = N` token cannot all observe the same `UsedCount`
+            // and each write `count + 1` (Phase 116). Interim single-
+            // instance guard; multi-replica needs ETag CAS (deferred).
+            do! claimWriteLock.WaitAsync() |> Async.AwaitTask
 
-            match claimResult with
-            | Error err -> return Error err
-            | Ok claim ->
-                if claim.Revoked then
-                    return Error ShareTokenError.RevokedToken
-                else
-                    match claim.UseLimit with
-                    | Some limit when claim.UsedCount >= limit -> return Error ShareTokenError.UseLimitExceeded
-                    | _ ->
-                        let updated = {
-                            claim with
-                                UsedCount = claim.UsedCount + 1
-                        }
+            try
+                let! claimResult = readClaim scopeId tokenId
 
-                        match! writeClaim updated with
-                        | Error e -> return Error e
-                        | Ok() ->
-                            recordAudit
-                                scopeId
-                                (AuditEvent.ShareTokenUsed {
-                                    TokenId = tokenId
-                                    ResourceKind = claim.ResourceKind
-                                    ResourceId = claim.ResourceId
-                                    AttributedHandle = claim.AttributedHandle
-                                })
+                match claimResult with
+                | Error err -> return Error err
+                | Ok claim ->
+                    if claim.Revoked then
+                        return Error ShareTokenError.RevokedToken
+                    else
+                        match claim.UseLimit with
+                        | Some limit when claim.UsedCount >= limit -> return Error ShareTokenError.UseLimitExceeded
+                        | _ ->
+                            let updated = {
+                                claim with
+                                    UsedCount = claim.UsedCount + 1
+                            }
 
-                            return Ok()
+                            match! writeClaim updated with
+                            | Error e -> return Error e
+                            | Ok() ->
+                                recordAudit
+                                    scopeId
+                                    (AuditEvent.ShareTokenUsed {
+                                        TokenId = tokenId
+                                        ResourceKind = claim.ResourceKind
+                                        ResourceId = claim.ResourceId
+                                        AttributedHandle = claim.AttributedHandle
+                                    })
+
+                                return Ok()
+            finally
+                claimWriteLock.Release() |> ignore
         }
 
         member _.Revoke(scopeId, tokenId, actorUserId) = async {
-            let! claimResult = readClaim scopeId tokenId
+            // Same RMW serialisation as `MarkUsed` — a revoke racing a use
+            // must not be lost to a stale-read overwrite (Phase 116).
+            do! claimWriteLock.WaitAsync() |> Async.AwaitTask
 
-            match claimResult with
-            | Error ShareTokenError.NotFound -> return Error ShareTokenError.NotFound
-            | Error err -> return Error err
-            | Ok claim when claim.Revoked ->
-                // Idempotent — already revoked, no audit re-emission.
-                return Ok()
-            | Ok claim ->
-                let updated = { claim with Revoked = true }
+            try
+                let! claimResult = readClaim scopeId tokenId
 
-                match! writeClaim updated with
-                | Error e -> return Error e
-                | Ok() ->
-                    recordAudit
-                        scopeId
-                        (AuditEvent.ShareTokenRevoked {
-                            UserId = actorUserId
-                            TokenId = tokenId
-                            ResourceKind = claim.ResourceKind
-                            ResourceId = claim.ResourceId
-                        })
-
+                match claimResult with
+                | Error ShareTokenError.NotFound -> return Error ShareTokenError.NotFound
+                | Error err -> return Error err
+                | Ok claim when claim.Revoked ->
+                    // Idempotent — already revoked, no audit re-emission.
                     return Ok()
+                | Ok claim ->
+                    let updated = { claim with Revoked = true }
+
+                    match! writeClaim updated with
+                    | Error e -> return Error e
+                    | Ok() ->
+                        recordAudit
+                            scopeId
+                            (AuditEvent.ShareTokenRevoked {
+                                UserId = actorUserId
+                                TokenId = tokenId
+                                ResourceKind = claim.ResourceKind
+                                ResourceId = claim.ResourceId
+                            })
+
+                        return Ok()
+            finally
+                claimWriteLock.Release() |> ignore
         }
 
         member _.ListByResource(scopeId, resourceKind, resourceId) = async {
