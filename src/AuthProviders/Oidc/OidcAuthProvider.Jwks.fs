@@ -211,6 +211,18 @@ let private fetchJwks (httpClient: HttpClient) (url: string) : Async<Result<Map<
 /// bypasses the TTL check and is used on `kid` miss. A failed refresh
 /// falls back to the stale entry if one exists — prefer stale over
 /// nothing during brief provider outages.
+///
+/// Bounded-staleness security note (Auth-core audit, by-design): the
+/// stale-fallback below means a key the issuer *revoked* (e.g. after a
+/// signing-key compromise) keeps validating tokens here until a
+/// refresh fetch succeeds. The staleness window is bounded only by
+/// provider availability, not by `jwksTtl` — once a fetch is failing,
+/// the cooldown branch above also keeps serving the cached keys. This
+/// is a deliberate availability-over-strict-revocation trade-off
+/// (matching how mainstream OIDC libraries behave); a deployment that
+/// needs hard revocation must front this with a provider that supports
+/// it (token introspection / short-lived access tokens). No behaviour
+/// change is implied by this note.
 let getJwks
     (httpClient: HttpClient)
     (logger: ILogger)
@@ -259,7 +271,11 @@ let getJwks
                         cached with
                             LastRefreshAttemptAt = now
                     }
-                    // Prefer stale cache over failing during a provider outage.
+                    // Prefer stale cache over failing during a provider
+                    // outage. See the function docstring's bounded-
+                    // staleness note: a revoked key keeps validating
+                    // until a fetch succeeds — deliberate availability
+                    // trade-off, not a gap to "fix" by failing closed here.
                     return Ok cached.Keys
                 | _ -> return Error e
     }

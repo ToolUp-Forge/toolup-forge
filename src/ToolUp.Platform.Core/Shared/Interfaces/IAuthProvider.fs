@@ -46,6 +46,21 @@ type AuthenticatedUser = {
     UserId: string
     DisplayName: string
     Email: string option
+    /// Optional provider-supplied tenant id.
+    ///
+    /// **Reserved / unpopulated by every first-party provider.** The
+    /// shipped providers (OIDC, Header, StaticJwt, Clerk) all leave this
+    /// `None`; tenant/team isolation is carried by the SDK's
+    /// `StorageScope` resolver keyed off `UserId` + team membership, not
+    /// off this field (GP 4). Do **not** treat `TenantId` as an
+    /// isolation boundary in a consumer — a downstream check that
+    /// branches on it as a tenant key fails *open* against first-party
+    /// providers (the field is always `None`, so the "wrong tenant"
+    /// branch is never taken). A custom provider that genuinely carries
+    /// a verified tenant claim may populate it, but the SDK's own
+    /// isolation never reads it. (Auth-core audit, Scope-isolation
+    /// Finding 5 — documented rather than populated, since populating it
+    /// would imply an isolation guarantee the SDK does not enforce here.)
     TenantId: string option
     Roles: string list
 }

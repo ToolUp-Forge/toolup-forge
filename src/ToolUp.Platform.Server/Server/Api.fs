@@ -231,6 +231,18 @@ module internal ApiSeams =
                     // The `RequiresAuth` evaluation already denies anonymous
                     // callers before claims are consulted, so presence of a
                     // non-anonymous subject IS the scope claim.
+                    //
+                    // ⚠ NOT a per-scope / per-tenant binding. Reviewers
+                    // must not read `[<RequiresClaim "scope">]` as "the
+                    // caller owns *this* scope/tenant" — `HasClaim("scope",
+                    // None)` resolves to exactly `not isAnonymousUser`, i.e.
+                    // "any authenticated subject, including a share-token
+                    // `ClaimBearer`". Tenant/scope ownership is enforced
+                    // structurally by the `StorageScope` resolver (GP 4),
+                    // never by this claim. A method that needs real
+                    // per-tenant binding uses `[<TenantScoped>]`, not
+                    // `[<RequiresClaim "scope">]`. (Auth-core audit, Authz
+                    // Finding 6 — doc clarification, no behaviour change.)
                     match claim, value with
                     | "email", Some v -> user.Email = Some v
                     | "email", None -> user.Email.IsSome
