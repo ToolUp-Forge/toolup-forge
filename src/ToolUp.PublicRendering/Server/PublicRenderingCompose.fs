@@ -801,6 +801,55 @@ module PublicRenderingServerApp =
             HotReload = enabled
     }
 
+    // ─── Preflight validators (Investigate-gaps #5 + #8) ───────────────
+
+    /// Warn when an in-process `InMemoryRenderCache` is composed on a
+    /// declared multi-instance deployment (`ReplicaCount > 1`). The
+    /// cache dict is process-local, so each replica caches and
+    /// invalidates SSR pages independently — one replica can serve stale
+    /// HTML while another serves fresh, and a CMS slug-purge only clears
+    /// the replica that handled it. Warning (not Error): a deployment may
+    /// knowingly run a per-replica cache. Compose
+    /// `BlobRenderCache.create storage` to share the cache across replicas.
+    type private RenderCacheInstanceValidator(usingInMemory: bool, replicaCount: int) =
+        interface ConfigValidation.IConfigValidator with
+            member _.Name = "public-rendering-render-cache-instance"
+            member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+            member _.Validate() = async {
+                if usingInMemory && replicaCount > 1 then
+                    return
+                        ConfigValidation.Warning(
+                            sprintf
+                                "PublicRendering is composed with the in-process InMemoryRenderCache and ServerConfig.ReplicaCount = %d. The cache is process-local: each replica caches and invalidates SSR pages independently — one replica can serve stale HTML while another serves fresh, and a CMS slug-purge only clears the replica that handled it. Compose BlobRenderCache.create storage (shared across replicas) for multi-instance deployments."
+                                replicaCount
+                        )
+                else
+                    return ConfigValidation.Ok
+            }
+
+    /// Reject a non-positive sitemap shard threshold at startup. A
+    /// `withSitemapShardThreshold 0` (or negative) is silently accepted
+    /// at compose and only defensively clamped (`max 1`) at request time,
+    /// so the misconfiguration is invisible until a crawler hits
+    /// `/sitemap.xml`. Error: a non-positive threshold is never intended.
+    type private SitemapShardThresholdValidator(threshold: int) =
+        interface ConfigValidation.IConfigValidator with
+            member _.Name = "public-rendering-sitemap-shard-threshold"
+            member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+            member _.Validate() = async {
+                if threshold <= 0 then
+                    return
+                        ConfigValidation.Error(
+                            sprintf
+                                "PublicRenderingServerApp.withSitemapShardThreshold was set to %d. The shard threshold is the URL count above which sitemap.xml becomes a sitemap-index; it must be a positive integer (the sitemaps.org per-file cap is 50,000). Set a positive value or leave the default."
+                                threshold
+                        )
+                else
+                    return ConfigValidation.Ok
+            }
+
     /// Phase 80c composition seam — apply every public-rendering-specific
     /// contribution (DI registrations, sitemap + redirect + export +
     /// feed + page handlers, `PublicPageEntity` registration, optional
@@ -844,6 +893,29 @@ module PublicRenderingServerApp =
             // composition would otherwise surface deep inside
             // `compose` or at first request.
             ServerApp.ensureCompanionNotAlreadyComposed "ToolUp.PublicRendering" app.Base
+
+            // Preflight validators (Investigate-gaps #5 + #8). Registered
+            // before the rest of compose so they ride the standard
+            // startup aggregator: the render-cache one warns on a
+            // process-local cache under declared multi-instance, the
+            // sitemap one fails closed on a non-positive shard threshold.
+            let usingInMemoryRenderCache =
+                match app.RenderCache with
+                | Some cache ->
+                    match box cache with
+                    | :? InMemoryRenderCache -> true
+                    | _ -> false
+                | None -> false
+
+            let app =
+                app
+                |> withConfigValidator (
+                    RenderCacheInstanceValidator(usingInMemoryRenderCache, app.Base.Config.ReplicaCount)
+                    :> ConfigValidation.IConfigValidator
+                )
+                |> withConfigValidator (
+                    SitemapShardThresholdValidator(app.SitemapShardThreshold) :> ConfigValidation.IConfigValidator
+                )
 
             let layouts = app.Layouts
             let composeRedirects = app.Redirects
