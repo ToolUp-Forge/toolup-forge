@@ -248,14 +248,18 @@ let registerConfigQueryAndFlagStores
 /// skips every registration — the deploy plane costs zero runtime when
 /// unused (GP 13).
 ///
-/// **Resolution-time validation.** The factories check for the required
-/// dependencies (`IJobScheduler` for the orchestrator;
-/// `IContainerScheduler` for the pipeline and fleet) and raise at
-/// first-resolve with a clear remediation message rather than letting
-/// DI return `null`. Composition-time gating would require either
-/// re-ordering the compose pipeline or adding a Phase 9m
-/// `IConfigValidator`; the first-resolve check is the lighter lift and
-/// the failure mode is just as loud.
+/// **Resolution-time validation (defense-in-depth).** The factories
+/// check for the required dependencies (`IJobScheduler` for the
+/// orchestrator; `IContainerScheduler` for the pipeline and fleet;
+/// `IEntityStore` for the fleet) and raise at first-resolve with a clear
+/// remediation message rather than letting DI return `null`. These
+/// first-resolve guards are now backstopped by `DeployPlaneDepsValidator`
+/// (registered in `ComposeConfigValidators`), which surfaces the same
+/// missing-dependency conditions at compose-time preflight as a `Warning`
+/// — so a misconfigured deploy plane is visible at startup rather than
+/// only at the first request that 500s. It is a Warning (not an abort)
+/// because these services are lazy factories and a deployment may use only
+/// a subset; the `failwith`s here remain the usage-accurate hard gate.
 let registerDeployPlane
     (services: IServiceCollection)
     (config: ServerConfig)

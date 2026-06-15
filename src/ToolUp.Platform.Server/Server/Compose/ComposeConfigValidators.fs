@@ -67,6 +67,8 @@ let registerFirstPartyConfigValidators
 
     addConfigValidator (EncryptedSecretStoreModeValidator.EncryptedSecretStoreModeValidator(config, secretStore)) // refuse plaintext secrets in authenticated modes (KMS/FDE escape hatch)
     addConfigValidator (JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(config)) // refuse InProcessJobScheduler in multi-instance deployments
+    addConfigValidator (DeployPlaneDepsValidator.DeployPlaneDepsValidator(config, services)) // warn SingleNodeDeployPlane with IJobScheduler / IEntityStore / IContainerScheduler unregistered (else first-request 500 when the affected service resolves)
+    addConfigValidator (PublicBaseUrlFormatValidator.PublicBaseUrlFormatValidator(config)) // warn PublicBaseUrl set to a non-absolute-http(s) URL (breaks sitemap loc / canonical / share-token redirects)
     addConfigValidator (NotificationChannelInstanceValidator.NotificationChannelInstanceValidator(config)) // warn in-memory notification channel under multi-instance
     addConfigValidator (RateLimitModeValidator.RateLimitModeValidator(config)) // warn internet-facing authenticated deployment with no rate-limiting
     addConfigValidator (RateLimitModeValidator.AdAnalyticsRateLimitValidator(config)) // warn anonymous ad-analytics ingest enabled without an IRateLimitStore
