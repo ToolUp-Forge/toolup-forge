@@ -73,6 +73,16 @@ type StripeEvent =
 ///     and a billing consumer keys off the ids it finds. A field that
 ///     IS present but structurally wrong for its slot (e.g. a string
 ///     where an integer amount is expected) surfaces as `Error`.
+///
+///     Forward-compat trade-off (the cost of the leniency above): if
+///     Stripe later adds a field to a *catalogued* event type, this
+///     decoder reads it as the empty/zero default rather than surfacing
+///     it — i.e. a genuinely-new field is silently dropped from the
+///     typed payload. A consumer that must act on a newly-added field
+///     should not wait for the catalogue to grow it; verify the webhook
+///     signature, then read the field from the raw body directly (the
+///     same bytes the HMAC covered, also available verbatim on the
+///     `Unknown` case's `rawJson`).
 module StripeEvent =
     /// Read a string property; empty string when the object is absent,
     /// the property is absent / null, or it's a non-string kind. Never
