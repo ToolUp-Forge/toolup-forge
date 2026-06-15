@@ -17,18 +17,33 @@ type WebhookOptions = {
     /// `InMemoryIdempotencyStore`; a multi-instance deployment supplies
     /// a durable store.
     Store: IWebhookIdempotencyStore
+    /// Optional tier-token sink. When supplied, it is invoked after a
+    /// successful handler on a tier-changing event (before the `200`).
+    /// `None` by default — a deployment that doesn't bill on tiers pays
+    /// nothing.
+    TierTokenSink: ITierTokenSink option
 }
 
 module WebhookOptions =
     /// Fresh default options — a NEW in-memory idempotency store each
     /// call (a function, not a shared value, so two mounted handlers
-    /// don't silently share dedup state).
-    let create () : WebhookOptions = { Store = InMemoryIdempotencyStore() }
+    /// don't silently share dedup state), no tier-token sink.
+    let create () : WebhookOptions = {
+        Store = InMemoryIdempotencyStore()
+        TierTokenSink = None
+    }
 
     /// Replace the idempotency store.
     let withStore (store: IWebhookIdempotencyStore) (options: WebhookOptions) : WebhookOptions = {
         options with
             Store = store
+    }
+
+    /// Supply a tier-token sink, invoked after a successful handler on a
+    /// tier-changing event.
+    let withTierTokenSink (sink: ITierTokenSink) (options: WebhookOptions) : WebhookOptions = {
+        options with
+            TierTokenSink = Some sink
     }
 
 /// Giraffe / ASP.NET Core webhook wiring.
@@ -132,7 +147,16 @@ module Routes =
                     let! result = handler verified ctx
 
                     match result with
-                    | Ok() -> return! finish 200 "ok" next ctx
+                    | Ok() ->
+                        // Fire the tier-token sink (if supplied) after a
+                        // successful handler, only on tier-changing events,
+                        // before the 200.
+                        match options.TierTokenSink with
+                        | Some sink when TierTokenSink.isTierChanging verified.Event ->
+                            do! sink.OnBillingEvent verified ctx
+                        | _ -> ()
+
+                        return! finish 200 "ok" next ctx
                     | Error message ->
                         logger.LogError("Stripe webhook handler error: {Error}", message)
                         return! finish 500 "handler error" next ctx

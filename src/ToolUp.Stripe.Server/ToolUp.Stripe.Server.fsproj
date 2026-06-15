@@ -12,6 +12,7 @@
     <Compile Include="StripeConfig.fs" />
     <Compile Include="Idempotency.fs" />
     <Compile Include="DurableIdempotencyStore.fs" />
+    <Compile Include="TierTokenSink.fs" />
     <Compile Include="Routes.fs" />
   </ItemGroup>
   <ItemGroup>
