@@ -7,6 +7,7 @@ open System.Net.Http
 open System.Net.Http.Headers
 open Microsoft.AspNetCore.Builder
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
@@ -393,19 +394,36 @@ module PeerServerApp =
                     // substrate is enabled; absent, the `IPlatformPeer`
                     // factory resolves `None` and long-running methods
                     // report "not enabled" (GP 13 — zero cost when unused).
-                    if schedulerEnabled then
-                        s.AddSingleton<PeerJobFusion>(
-                            System.Func<System.IServiceProvider, PeerJobFusion>(fun sp ->
-                                let scheduler = sp.GetService(typeof<IJobScheduler>) :?> IJobScheduler
-                                let resultStore = sp.GetService(typeof<IPeerJobResultStore>) :?> IPeerJobResultStore
+                    let withFusion =
+                        if schedulerEnabled then
+                            s.AddSingleton<PeerJobFusion>(
+                                System.Func<System.IServiceProvider, PeerJobFusion>(fun sp ->
+                                    let scheduler = sp.GetService(typeof<IJobScheduler>) :?> IJobScheduler
 
-                                {
-                                    Scheduler = scheduler
-                                    ResultStore = resultStore
-                                })
-                        )
-                    else
-                        s
+                                    let resultStore =
+                                        sp.GetService(typeof<IPeerJobResultStore>) :?> IPeerJobResultStore
+
+                                    {
+                                        Scheduler = scheduler
+                                        ResultStore = resultStore
+                                    })
+                            )
+                        else
+                            s
+
+                    // Phase 18c — federation orchestration seams (`IPeerFanout`
+                    // scatter + `IPeerCascade` next-hop bookkeeping) and Phase
+                    // 18b — clean-room privacy-gate broker (`ICleanRoomBroker`).
+                    // Stateless default singletons. `TryAdd` so a deployment
+                    // that registers its own implementation via the base
+                    // `ServerApp`'s ServiceConfig (which runs first) keeps it —
+                    // the SDK default only fills the gap when nothing else is
+                    // registered. Present only when the peer substrate is
+                    // enabled; a singleton allocation is the whole cost (GP 13).
+                    withFusion.TryAddSingleton<IPeerFanout>(DefaultPeerFanout() :> IPeerFanout)
+                    withFusion.TryAddSingleton<IPeerCascade>(DefaultPeerCascade() :> IPeerCascade)
+                    withFusion.TryAddSingleton<ICleanRoomBroker>(DefaultCleanRoomBroker() :> ICleanRoomBroker)
+                    withFusion
 
             let baseExt = app.Base.Extensions
 
