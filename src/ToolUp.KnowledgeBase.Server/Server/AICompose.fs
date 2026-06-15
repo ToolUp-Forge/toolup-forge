@@ -210,10 +210,44 @@ let private builtInTools: (AIToolDefinition * (HttpContext -> string -> Async<st
 ///     |> (fun rag -> {
 ///         rag with AI = ToolUp.KnowledgeBase.Server.AICompose.register rag.AI
 ///     })
-let register (app: AIServerApp) : AIServerApp = {
-    app with
-        Base = {
-            app.Base with
-                AITools = app.Base.AITools @ builtInTools
+/// Warn when the Knowledge Base is composed on a declared multi-instance
+/// deployment (`ReplicaCount > 1`). KB index read-modify-write
+/// (`upsertIndexEntry` / `updateIndexStatus` / `updateIndexChunkCount` in
+/// `IndexStorage`) is serialised by a per-process `SemaphoreSlim` — it
+/// serialises within one process but NOT across replicas, so two pods
+/// ingesting concurrently can lose an index entry or mismatch chunk
+/// counts (the blob + chunks persist, but the `index.json` write is
+/// clobbered). The cross-replica fix is ETag-conditional-write CAS on the
+/// index blob (deferred). `Warning`, not `Error`: many KB deployments
+/// funnel ingestion through a single writer in practice.
+type private KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig) =
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "knowledge-base:index-instance"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            if serverConfig.ReplicaCount > 1 then
+                return
+                    ConfigValidation.ValidationResult.Warning(
+                        sprintf
+                            "Knowledge Base is composed with ServerConfig.ReplicaCount = %d. KB index read-modify-write (upsertIndexEntry / updateIndexStatus / updateIndexChunkCount) is serialised by a per-process lock only — two replicas ingesting concurrently can lose an index entry or mismatch chunk counts (the blob + chunks persist, but the index.json write is clobbered). Until cross-replica ETag-CAS lands, funnel ingestion through a single writer replica for multi-instance KB deployments."
+                            serverConfig.ReplicaCount
+                    )
+            else
+                return ConfigValidation.ValidationResult.Ok
         }
-}
+
+let register (app: AIServerApp) : AIServerApp =
+    let baseWithTools = {
+        app.Base with
+            AITools = app.Base.AITools @ builtInTools
+    }
+
+    // Investigate-gaps #4 — surface the per-process index-lock hazard at
+    // startup on a declared multi-instance KB deployment.
+    let baseWithValidator =
+        ServerApp.withConfigValidator
+            (KnowledgeBaseIndexInstanceValidator(baseWithTools.Config) :> ConfigValidation.IConfigValidator)
+            baseWithTools
+
+    { app with Base = baseWithValidator }
