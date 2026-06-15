@@ -373,6 +373,24 @@ let private searchIndex157Tests =
             Expect.stringContains joined "\"keywords\":\"alpha beta\"" "joined emits one string"
             Expect.isFalse (joined.Contains "[\"alpha\"") "no array in joined form"
 
+        testCase "non-ASCII title passes through unescaped (relaxed encoder)"
+        <| fun _ ->
+            // A musical sharp in a title must stay UTF-8, not become ♯ —
+            // so the emitter is byte-compatible with a minimal hand-rolled
+            // escaper.
+            let entries = [
+                {
+                    Url = "https://example.com/x"
+                    Title = "C♯ major on Piano"
+                    Kind = "scale"
+                    Keywords = []
+                }
+            ]
+
+            let json = SearchIndexEmitter.toJson entries
+            Expect.stringContains json "C♯ major" "sharp passes through verbatim"
+            Expect.isFalse (json.Contains "\\u266f" || json.Contains "\\u266F") "no escaped sharp"
+
         testCase "handler honours config.KeywordFormat"
         <| fun _ ->
             let custom =

@@ -20,7 +20,9 @@ The Wave 21 SSR/SEO primitives (Phases 147–157) are designed handler-agnostic 
 
 **Gap:** `toJson` always emitted `"keywords":[…]` (a JSON array). A consumer whose client tokenises a single joined keyword string couldn't adopt the projection.
 
-**Change:** `SearchIndexConfig` gains `KeywordFormat : SearchIndexKeywordFormat` (`KeywordsArray` — **the default, byte-for-byte the original output**; or `KeywordsJoined of separator`). New `SearchIndexEmitter.toJsonWith format entries`; `toJson` is now `toJsonWith KeywordsArray`. `handler` honours `config.KeywordFormat`. Opt in with `SearchIndexConfig.withKeywordFormat (KeywordsJoined " ")`.
+**Change:** `SearchIndexConfig` gains `KeywordFormat : SearchIndexKeywordFormat` (`KeywordsArray` — or `KeywordsJoined of separator`). New `SearchIndexEmitter.toJsonWith format entries`; `toJson` is now `toJsonWith KeywordsArray`. `handler` honours `config.KeywordFormat`. Opt in with `SearchIndexConfig.withKeywordFormat (KeywordsJoined " ")`.
+
+Also: the index JSON now serialises with `UnsafeRelaxedJsonEscaping` (the document is a standalone `application/json` response, never embedded in HTML, so no `</`-guard is needed). A non-ASCII title (`"C♯ major"`) stays UTF-8 instead of `♯`, matching a minimal hand-rolled escaper byte-for-byte. **Byte-shift** for any non-ASCII title/keyword (same class as §1; valid JSON, no API break). The `KeywordsArray` default keyword *shape* is still byte-for-byte the original; only the escaping of non-ASCII content changes.
 
 ## 3. `ConditionalGet.cacheableWithMetrics` — 153 metrics from the combinator
 

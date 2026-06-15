@@ -1,7 +1,9 @@
 namespace ToolUp.PublicRendering
 
 open System
+open System.Text.Json
 open System.Text.Json.Nodes
+open System.Text.Encodings.Web
 open Giraffe
 open Microsoft.AspNetCore.Http
 
@@ -105,6 +107,13 @@ module SearchIndexConfig =
 /// Emitter + endpoint handler for the client-search index.
 module SearchIndexEmitter =
 
+    /// Relaxed JSON escaping for the index document — pass UTF-8 + the
+    /// HTML-significant set through verbatim (the index is a standalone
+    /// `application/json` response, never embedded in HTML), so a non-ASCII
+    /// title is byte-for-byte a minimal hand-rolled escaper's output.
+    let private searchIndexJsonOptions =
+        JsonSerializerOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
+
     /// The page's search keywords: the `keywords` frontmatter key
     /// (comma-separated, trimmed, empties dropped), falling back to the
     /// page's `tags`. `[]` when neither is present.
@@ -181,7 +190,13 @@ module SearchIndexEmitter =
 
             arr.Add o
 
-        arr.ToJsonString()
+        // Served as a standalone `application/json` document (not embedded in
+        // an HTML `<script>`), so it needs only relaxed escaping — pass UTF-8
+        // + `<`/`>`/`&` through verbatim rather than `\uXXXX`-escaping every
+        // non-ASCII rune. Matches a minimal hand-rolled escaper byte-for-byte
+        // (titles like `"C♯ major"` stay `C♯`, not `C♯`); there is no
+        // `<script>` breakout vector here, so no `</`-rewrite is applied.
+        arr.ToJsonString(searchIndexJsonOptions)
 
     /// Serialise the entries with the default `keywords` JSON-array shape —
     /// byte-for-byte the original 157 output (GP 11).
