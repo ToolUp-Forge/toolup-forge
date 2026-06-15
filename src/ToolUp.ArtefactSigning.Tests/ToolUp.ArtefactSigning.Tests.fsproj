@@ -9,6 +9,7 @@
         <Compile Include="Support\InMemoryStores.fs" />
         <Compile Include="Contracts\IArtefactSignerContract.fs" />
         <Compile Include="InProcess\DefaultArtefactSignerTests.fs" />
+        <Compile Include="InProcess\JwsBuilderTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

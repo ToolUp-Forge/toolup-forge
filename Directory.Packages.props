@@ -33,6 +33,11 @@
     <PackageVersion Include="Azure.Data.Tables" Version="12.10.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11" />
+    <!-- Phase 22a — Azure Key Vault-backed IBlobEncryptionKeyResolver
+         (envelope encryption: a local AES-256 DEK wrapped/unwrapped by a
+         Key Vault KEK via CryptographyClient). Lockstep with the
+         KeyVault.Secrets 4.11 line. -->
+    <PackageVersion Include="Azure.Security.KeyVault.Keys" Version="4.10.0" />
     <!-- Phase 16c — Azure Monitor OTel distro for the
          ToolUp.Cloud.Azure umbrella. First-party Microsoft-published
          all-in-one Azure Monitor exporter; bundles metric + trace
@@ -123,6 +128,11 @@
          SDK core never references the GCP Secret Manager SDK; only the
          opt-in companion package pulls it in. -->
     <PackageVersion Include="Google.Cloud.SecretManager.V1" Version="2.7.0" />
+    <!-- Phase 22a — GCP Cloud KMS-backed IBlobEncryptionKeyResolver
+         (envelope encryption: a local AES-256 DEK Encrypt/Decrypt'd by a
+         KMS CryptoKey). Companion-only dep (GP 1); pulls Grpc + Protobuf
+         transitively. -->
+    <PackageVersion Include="Google.Cloud.Kms.V1" Version="3.24.0" />
     <PackageVersion Include="Google.Cloud.Storage.V1" Version="4.14" />
     <PackageVersion Include="HNSW" Version="26.4.177" />
     <PackageVersion Include="MailKit" Version="4.16" />

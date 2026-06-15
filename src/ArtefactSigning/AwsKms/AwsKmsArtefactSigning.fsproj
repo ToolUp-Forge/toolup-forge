@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.ArtefactSigning.AwsKms</PackageId>
+    <AssemblyName>ToolUp.ArtefactSigning.AwsKms</AssemblyName>
+    <Description>AWS KMS-backed IArtefactSigner for ToolUp.ArtefactSigning — ECDSA P-256 detached-JWS artefact signing where the private key never leaves AWS KMS (the signer hashes locally and calls KMS Sign over the digest). Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;signing;jws;ecdsa;kms;aws;compliance;non-repudiation</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 40 / 22a — KMS-signing flavour. Mirrors src/Encryption/AwsKms/
+       packaging. Server-only: IArtefactSigner is a server-tier interface.
+       GP 1 — the AWS SDK dependency is isolated to this companion; it
+       never reaches ToolUp.ArtefactSigning. -->
+  <ItemGroup>
+    <Compile Include="AwsKmsArtefactSigner.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.ArtefactSigning\ArtefactSigning.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="AWSSDK.KeyManagementService" />
+  </ItemGroup>
+</Project>
