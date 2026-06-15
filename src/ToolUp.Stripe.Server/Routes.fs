@@ -119,8 +119,32 @@ module Routes =
         (config: StripeConfig)
         (handler: VerifiedEvent -> HttpContext -> Task<Result<unit, string>>)
         : HttpHandler =
+        // Surface the single-instance idempotency default loudly. The
+        // default `InMemoryIdempotencyStore` dedups per-process only;
+        // under N replicas each instance claims the same event
+        // independently and the consumer handler fires N times
+        // (duplicate billing). The Stripe companion is not
+        // `ServerConfig`-integrated, so we cannot read `ReplicaCount`
+        // here to fail closed the way `JobSchedulerInstanceValidator`
+        // does — instead we warn once on first use. A multi-instance
+        // deployment composes a durable store via `WebhookOptions.withStore`.
+        let usingInMemoryStore =
+            match box options.Store with
+            | :? InMemoryIdempotencyStore -> true
+            | _ -> false
+
+        let warnedInMemory = ref false
+
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
             let logger = ctx.GetLogger "ToolUp.Stripe.Server.Routes"
+
+            if usingInMemoryStore && not warnedInMemory.Value then
+                warnedInMemory.Value <- true
+
+                logger.LogWarning(
+                    "Stripe webhook is using the in-process InMemoryIdempotencyStore (dev default). Event-id deduplication is per-process and is lost on restart — under multiple replicas the same event is processed once per instance (e.g. duplicate billing operations). Compose a durable store via WebhookOptions.withStore for any multi-instance deployment."
+                )
+
             let! body = readRawBody ctx
 
             let header =
@@ -138,7 +162,15 @@ module Routes =
                 let! claimed =
                     match tryEventId body with
                     | Some eventId -> options.Store.TryClaim eventId |> Async.StartImmediateAsTask
-                    | None -> Task.FromResult true
+                    | None ->
+                        // Silent-path observability: an event with no usable
+                        // `id` is processed WITHOUT dedup. A Stripe redelivery
+                        // of the same event would then be processed again.
+                        logger.LogWarning(
+                            "Stripe webhook event has no usable 'id' field — processing WITHOUT idempotency dedup. A redelivery of this event will be processed again."
+                        )
+
+                        Task.FromResult true
 
                 if not claimed then
                     logger.LogInformation("Stripe webhook replay ignored — short-circuit 200")
