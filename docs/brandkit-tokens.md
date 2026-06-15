@@ -103,8 +103,6 @@ A minimal consumer stylesheet wiring the variables + a few hook rules:
 ```
 
 Worked examples of the variable + class shape in practice live in:
-- ScaleMastery's `wwwroot/css/brand-tokens.css` + `brand.css` (per-app hand-rolled equivalent that pre-dates this package)
-- Ella-MAe's `src/Ella-MAe-Client/index.css` (Phase 10 design-system tokens; consumer of this package via the upcoming Wave 13 adoption)
 - The Phase 82 worked sample at `samples/PublicSiteWithModules/` (canonical in-tree reference)
 
 ## Inline-style references

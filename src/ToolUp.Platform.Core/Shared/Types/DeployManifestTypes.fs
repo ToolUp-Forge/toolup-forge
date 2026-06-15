@@ -12,7 +12,7 @@ open System
 // identity + runtime image + secrets + domains + modules +
 // dependencies) without binding to a specific on-disk format. TOML /
 // YAML / JSON / F# DSL serialisers live in the operator's CLI
-// (`diametrical#26.C` task 26.C.2), not in this substrate; the typed
+// (operator-owned tooling), not in this substrate; the typed
 // surface stays format-agnostic so consumers can drive it from
 // whichever source they prefer.
 //
@@ -66,8 +66,8 @@ type DeployManifestHealthcheck = {
     /// Maximum wallclock the deploy plane allows for the first
     /// successful probe before declaring the container failed. The
     /// substrate does not enforce a lower bound; operator policy
-    /// applies (ToolUp Cloud caps at 5 minutes per `diametrical#26.C`
-    /// sub-phase 26.C.8).
+    /// applies (e.g. a hosted operator might cap the wait at 5
+    /// minutes).
     InitialDelay: TimeSpan
     /// Interval between probes once `InitialDelay` has elapsed.
     Interval: TimeSpan

@@ -30,9 +30,8 @@ open ToolUp.Platform
 // dispatch.
 //
 // **State lives in memory.** Single-process; loses state on restart.
-// Distributed companions ([diametrical#26.A](../../../../ToolUp-Diametrical/diametrical-roadmap/phases/26-A-akka-net-cluster-control-plane-companion.md)
-// — Akka-cluster-sharded build orchestrator) replace the singleton
-// entirely and persist via Akka.Persistence.
+// A distributed companion (an Akka-cluster-sharded build orchestrator)
+// replaces the singleton entirely and persists via Akka.Persistence.
 //
 // **Per-`AppSlug` serialisation.** A `SemaphoreSlim` per `AppSlug`
 // enforces the substrate's no-cross-shard-ordering rule (Phase 9c rule

@@ -22,8 +22,8 @@ open ToolUp.AI.DefaultAIProviderFactory
 // ─── Forms-side substrate ─────────────────────────────────────────
 
 /// Minimal Form schema (no fields — the sample exists to demonstrate
-/// composition, not validation). Real recipes carry a real `Fields`
-/// list per the cookbook + `docs/forms/`.
+/// composition, not validation). Real apps carry a real `Fields`
+/// list — see `docs/forms/`.
 let private demoSchema: FormSchema = FormSchema.create "demo-form" "Demo form" []
 
 /// Minimal workflow with one transition `new` --submit--> `submitted`.

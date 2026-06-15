@@ -17,7 +17,7 @@ open System.Collections.Generic
 /// implementation owns.
 ///
 /// Six-rule portability audit (GP 12) — fully expanded in
-/// [Phase 142](../../../ToolUp-Diametrical/roadmap/phases/142-stripe-webhook-idempotency-store.md):
+/// [Phase 142](../../docs/migrations/142-webhook-idempotency-store.md):
 ///   1. Identity by value      — the event id is a `string`.
 ///   2. Async at every boundary — `TryClaim` returns `Async<bool>`.
 ///   3. Retry/supervision as data — no callbacks; the bool is the result.
@@ -38,7 +38,7 @@ type IWebhookIdempotencyStore =
 /// default. Dedup state lives in this process only: it is lost on
 /// restart and does not span instances. A multi-instance deployment
 /// composes a durable store (see
-/// [Phase 142](../../../ToolUp-Diametrical/roadmap/phases/142-stripe-webhook-idempotency-store.md)'s
+/// [Phase 142](../../docs/migrations/142-webhook-idempotency-store.md)'s
 /// `DurableIdempotencyStore`) instead.
 ///
 /// Bounded to `capacity` entries (default 10,000); the oldest claim is

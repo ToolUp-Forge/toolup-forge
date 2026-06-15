@@ -87,8 +87,8 @@ module TenantStatus =
 /// stores use `Id` as their `scopeId`.
 ///
 /// **Free-form fields.** `Region` and `Tier` are operator-defined
-/// strings — the substrate does not enumerate them. ToolUp Cloud
-/// recognises specific regions / tiers per `diametrical#26.C`; a
+/// strings — the substrate does not enumerate them. A hosted
+/// operator may recognise specific regions / tiers; a
 /// self-hosted operator picks their own vocabulary.
 type Tenant = {
     /// Required by `IEntityStore`. Equals `TenantId`.

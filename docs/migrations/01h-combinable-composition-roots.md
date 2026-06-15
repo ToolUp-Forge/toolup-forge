@@ -62,10 +62,8 @@ follow-up items now ship alongside this doc:
   "Combining companions on one pipeline (Phase 1h)" section.
 
 The remaining `withRAG` work is still gated on the `composeWithRAG`
-→ `composeAI` lift described above; the cookbook recipe refresh for
-`client-job-tracker` / `lead-capture-pipeline` /
-`expense-receipt-tracker` is deferred to a dedicated `Update
-Cookbook` pass.
+→ `composeAI` lift described above and is deferred to a follow-up
+pass.
 
 ---
 

@@ -5,9 +5,9 @@ open Giraffe.ViewEngine
 /// Wordmark — the single most important primitive for brand-prominent
 /// identity. The construction is: italic-stem + upright-emphasis-
 /// substring + optional italic-tail. Every brand using this primitive
-/// composes its identity from these three parts (e.g. "Ella-" italic +
-/// "MA" upright bluebell + "e" italic; "Scale" italic + "Mastery"
-/// upright; "Concord" italic + "&" upright; etc.).
+/// composes its identity from these three parts (e.g. "Acme-" italic +
+/// "Co" upright + "rp" italic; "Bright" italic + "Spark" upright;
+/// etc.).
 ///
 /// Display font + emphasis colour come from the consumer's CSS vars +
 /// the per-call `EmphasisColour` field (the spec takes the colour

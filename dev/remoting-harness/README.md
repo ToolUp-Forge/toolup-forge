@@ -6,7 +6,7 @@ The harness is **private** — `<IsPackable>false</IsPackable>`, not in `ToolUp.
 
 ## Why this exists
 
-The 9-phase ToolUp.Remoting follow-on cluster (Phases 69 / 69a / 69b / 69c / 69d / 69e / 69f / 69g / 69h / 69i / 69j / 69k — see [`application-plans/toolup-remoting.md`](../../../ToolUp-Diametrical/application-plans/toolup-remoting.md)) needs an integration testbed that:
+The 9-phase ToolUp.Remoting follow-on cluster (Phases 69 / 69a / 69b / 69c / 69d / 69e / 69f / 69g / 69h / 69i / 69j / 69k) needs an integration testbed that:
 
 1. **Is iterable** — change a converter, change a dispatcher option, change a middleware seam, see the effect in <30s with `dotnet run`.
 2. **Mirrors forge's actual integration shape** — same `Api.make` wrapper pattern, same Giraffe middleware pipeline, same error-handler signature. Tests written here become the regression gate for the eventual SDK flip.
@@ -53,5 +53,5 @@ Pre-Phase 69 the harness consumed via `ProjectReference` to the fork sibling. Th
 ## What's not here
 
 - **Unit tests of the converters / dispatcher internals** — those live in the fork's own test suites (`Fable.Remoting.Json.Tests` etc., 704 tests). The harness is *integration*-shaped, not internal-unit-shaped.
-- **A Fable client.** The harness uses `HttpClient` directly to drive the server, asserting wire shape byte-for-byte. A Fable client would test the upstream `Fable.Remoting.Client` proxy behaviour — that's not the regression we're guarding. (The eventual `ToolUp.Remoting.Client` plugin question stays deferred per [Phase 69](../../../ToolUp-Diametrical/roadmap/phases/69-toolup-remoting-repackage-from-fable-remoting-fork.md)'s Out-of-Scope.)
+- **A Fable client.** The harness uses `HttpClient` directly to drive the server, asserting wire shape byte-for-byte. A Fable client would test the upstream `Fable.Remoting.Client` proxy behaviour — that's not the regression we're guarding. (The eventual `ToolUp.Remoting.Client` plugin question stays deferred per Phase 69's Out-of-Scope.)
 - **Build pipeline / CI integration.** This is a dev-only harness today; no CI gate. When Phase 69a is ready to ship, the harness joins the forge build's verification chain.

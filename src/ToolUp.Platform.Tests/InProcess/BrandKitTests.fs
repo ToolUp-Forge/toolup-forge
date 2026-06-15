@@ -115,8 +115,8 @@ let tests =
         testCase "personaAvatar emits an img with class hook, sizing attributes, and object-position crop"
         <| fun _ ->
             let spec: Persona.PersonaSpec = {
-                ImageUrl = "/ella-persona.png"
-                AltText = "Ella-MAe"
+                ImageUrl = "/persona.png"
+                AltText = "Acme Co"
                 Size = 56
                 Treatment = Persona.AvatarTreatment.Circle
                 RingColour = Some "#D9C4A4"
@@ -124,8 +124,8 @@ let tests =
 
             let html = Persona.personaAvatar spec |> render
             Expect.stringContains html "bk-persona bk-persona-circle" "class hook + treatment modifier"
-            Expect.stringContains html "src=\"/ella-persona.png\"" "image URL emitted"
-            Expect.stringContains html "alt=\"Ella-MAe\"" "alt text emitted"
+            Expect.stringContains html "src=\"/persona.png\"" "image URL emitted"
+            Expect.stringContains html "alt=\"Acme Co\"" "alt text emitted"
             Expect.stringContains html "width=\"56\"" "sizing emitted"
             Expect.stringContains html "object-fit:cover" "face-crop convention applied inline"
             Expect.stringContains html "border:2px solid #D9C4A4" "ring colour applied inline"

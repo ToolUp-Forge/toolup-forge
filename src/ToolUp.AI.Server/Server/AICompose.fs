@@ -95,7 +95,7 @@ type AIServerApp = {
     ///
     /// The field shape is also the seat for a future `composeAI`-
     /// internal factory construction (deferred — no consumer migration
-    /// target has surfaced; F.3 cookbook recipes use the existing
+    /// target has surfaced; downstream consumers use the existing
     /// pattern unchanged). When that refactor lands, this field becomes
     /// the input to `DefaultAIProviderFactory.create` rather than the
     /// validator's reference set.

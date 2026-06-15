@@ -394,8 +394,8 @@ let registerTargets (config: BuildConfig) =
         // paket.lock walker now that CPM owns dependency resolution.
         // Auto-discover the solution file at repo root. The Phase 11.A
         // shape hardcoded "ToolUpApplication.sln" which only worked for
-        // the original consumer app — every other consumer (forge itself,
-        // Concord, Xcelsys, every cookbook-app) names its sln differently
+        // the original consumer app — every other consumer (forge itself
+        // and any downstream app) names its sln differently
         // and the target failed. One `.sln` at the working directory is
         // the contract; multiple is ambiguous, none is a usage error.
         let slnFile =

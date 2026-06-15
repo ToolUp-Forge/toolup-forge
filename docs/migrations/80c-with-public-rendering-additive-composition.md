@@ -4,7 +4,7 @@
 
 ## What changes
 
-`ToolUp.PublicRendering` gains additive-composition surface mirroring the [Phase 1h](../../ToolUp-Diametrical/roadmap/phases/01h-combinable-companion-composition-roots.md) `withForms` / `withAI` pattern. Before this phase, `PublicRenderingServerApp.run` and `ServerApp.run` (or `AIServerApp.run`, etc.) were mutually-exclusive termini — an app could not host a public-rendering SSR surface *alongside* a base `ServerApp` carrying its own modules + Fable client. With Phase 80c, both compose on one pipeline.
+`ToolUp.PublicRendering` gains additive-composition surface mirroring the [Phase 1h](01h-combinable-composition-roots.md) `withForms` / `withAI` pattern. Before this phase, `PublicRenderingServerApp.run` and `ServerApp.run` (or `AIServerApp.run`, etc.) were mutually-exclusive termini — an app could not host a public-rendering SSR surface *alongside* a base `ServerApp` carrying its own modules + Fable client. With Phase 80c, both compose on one pipeline.
 
 **Three new public surfaces, all additive (no breaking change):**
 

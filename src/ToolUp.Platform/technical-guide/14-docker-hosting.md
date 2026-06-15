@@ -50,7 +50,7 @@ Without `tini` (or another init replacement), `docker stop` waits the grace peri
 `tini` solves this with two responsibilities:
 
 1. **Signal forwarding.** `tini` registers handlers for `SIGTERM` / `SIGINT` / `SIGHUP` and re-delivers them to the child `dotnet` process. The SDK then runs its normal shutdown sequence.
-2. **Zombie reaping.** Child processes re-parented to PID 1 need a PID-1 reaper to `wait()` on them. No SDK component spawns subprocesses today, but [Phase 9b](../../../../ToolUp-Diametrical/roadmap/phases/09b-background-job-scheduler-infrastructure.md) background workers may grow this. `TINI_SUBREAPER=1` makes `tini` the subreaper.
+2. **Zombie reaping.** Child processes re-parented to PID 1 need a PID-1 reaper to `wait()` on them. No SDK component spawns subprocesses today, but Phase 9b background workers may grow this. `TINI_SUBREAPER=1` makes `tini` the subreaper.
 
 If you choose to drop `tini`, the alternative is `--init` on `docker run` (Docker injects its own init shim) or `terminationGracePeriodSeconds: 60+` on Kubernetes plus an application-side `SIGTERM` handler that calls `IHostApplicationLifetime.StopApplication()`. Both are heavier than baking `tini` into the image.
 
@@ -83,7 +83,7 @@ Liveness vs Readiness: Phase 9k registers both probes at `/health` (Liveness) an
 
 ## `ProcessProfile` interaction — one image, env-var-driven role
 
-The image runs every `ServerConfig.ProcessProfile` ([chapter 13](13-deployment-shapes.md), [Phase 16a](../../../../ToolUp-Diametrical/roadmap/phases/16a-process-model-split-serverconfig-processprofile.md)) — set the value at container start:
+The image runs every `ServerConfig.ProcessProfile` ([chapter 13](13-deployment-shapes.md), Phase 16a) — set the value at container start:
 
 ```bash
 docker run -e TOOLUP_PROCESS_PROFILE=AllInOne       myapp:dev
@@ -247,5 +247,5 @@ A consumer's repo with even modest node_modules / bin / obj baggage typically pu
 - [`ToolUp.Hosts.Docker` README](../../Hosts/Docker/README.md) — package overview and `dotnet new platformsdk-docker` walkthrough.
 - [Chapter 12 — Hosting Models](12-hosting-models.md) — serverless host adapters (Azure Functions / AWS Lambda / GCF) and the hybrid serverless + Kestrel worker silo.
 - [Chapter 13 — Deployment Shapes](13-deployment-shapes.md) — pure-Kestrel single-process / web+worker / web+worker+dispatcher partitioning via `ProcessProfile`.
-- [Phase 16b](../../../../ToolUp-Diametrical/roadmap/phases/16b-container-companion-toolup-platform-hosts-docker.md) — the roadmap phase that authored this companion.
+- Phase 16b — the phase that authored this companion.
 - [Phase 16d migration doc](../../../docs/migrations/16d-forwarded-headers-default-on.md) — forwarded-headers default-flip rationale.
