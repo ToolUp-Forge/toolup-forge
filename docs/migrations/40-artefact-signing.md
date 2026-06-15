@@ -57,8 +57,38 @@ Remove the `PackageReference`, the DI registration, and the
 keys in `ISecretStore` (`_platform/signing/{keyId}`), which can be left in
 place or deleted.
 
-## KMS-backed signing
+## KMS-backed signing (shipped — Wave 8 close-out)
 
 For keys that must never enter process memory, swap the in-process signer
-for the KMS-backed signing flavour (Phase 22a) — the `IArtefactSigner`
-contract is identical, so the composition-root change is one line.
+for the KMS-backed flavour `ToolUp.ArtefactSigning.AwsKms` — the
+`IArtefactSigner` contract is identical, so the composition-root change is
+one line:
+
+```fsharp
+open Amazon.KeyManagementService
+open ToolUp.ArtefactSigning.AwsKms
+
+let kms = new AmazonKeyManagementServiceClient()
+let signer = AwsKmsArtefactSigner.create kms "arn:aws:kms:...:key/<ecc-nist-p256-key>"
+// verifier unchanged: DefaultArtefactVerifier.create secrets (public key
+// served from KMS GetPublicKey via signer.VerifyKey, or seeded to the
+// signing-key store).
+```
+
+The signer hashes the JWS signing input locally (SHA-256) and calls KMS
+`Sign` over the digest; the DER signature KMS returns is converted to the
+JWS raw-r‖s shape by the new public **`JwsBuilder`** surface
+(`JwsBuilder.derEcdsaToP1363` / `assembleDetachedJws` /
+`protectedHeaderEncoded` / `signingInput`). The produced detached JWS is
+byte-identical to the in-process signer's, so `DefaultArtefactVerifier`
+validates it unchanged.
+
+**ECDSA P-256 only** — AWS KMS asymmetric signing does not offer Ed25519;
+the `EdDSA` flavour stays in-process. The KMS key must be
+`ECC_NIST_P256` / `SIGN_VERIFY`.
+
+`JwsBuilder` (in `ToolUp.ArtefactSigning`) is now public so any
+HSM/KMS-fronted signer can assemble a verifier-compatible JWS. Its pure
+helpers (DER→P1363, JWS assembly) are unit-tested offline in
+`ToolUp.ArtefactSigning.Tests`; the live KMS arm is env-gated (no
+emulator).

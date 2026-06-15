@@ -7,7 +7,7 @@ open Expecto
 open ToolUp.Platform.DataSubject.Tests.InProcess
 
 let allTests =
-    testList "ToolUp.Platform.DataSubject.Tests" [ BackgroundExportStoreTests.tests ]
+    testList "ToolUp.Platform.DataSubject.Tests" [ BackgroundExportStoreTests.tests; AsyncExportApiTests.tests ]
 
 [<EntryPoint>]
 let main argv = runTestsWithCLIArgs [] argv allTests

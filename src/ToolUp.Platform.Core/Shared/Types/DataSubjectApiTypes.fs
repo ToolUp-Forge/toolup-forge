@@ -78,6 +78,21 @@ type ErasureRunResult =
     | NotImplemented of detail: string
     | Refused of detail: string
 
+/// Phase 9h.A — notification contract for background-export progress.
+/// The `DSRExportJobHandler` publishes a `CustomNotification` under this
+/// key on every ticket state transition (Preparing → Ready / Failed /
+/// Cancelled) via `INotificationChannel`; an SSE consumer or the admin
+/// UI can observe ticket progress without polling. The payload is a JSON
+/// object `{ "ticket": "<ticket>", "status": "<ExportStatus.name>" }`.
+///
+/// The key is a Core literal (not a `Notification` builder) because the
+/// `Notification` DU is compiled after this file; the publish sites
+/// (server-only) construct `CustomNotification(ExportProgressKey, json)`
+/// directly.
+module DsrNotifications =
+    [<Literal>]
+    let ExportProgressKey = "_sdk.DataSubjectRequests.ExportProgress"
+
 /// Fable.Remoting contract surface — every method returns
 /// `Async<Result<_, string>>` per the SDK convention. Owner / Admin
 /// gated upstream.
@@ -108,4 +123,37 @@ type IDataSubjectRequestApi = {
     [<AllowAnonymous>]
     [<Audit "Custom:DataErased">]
     ConfirmErasure: DataSubjectRequestId -> Async<Result<ErasureRunResult, string>>
+
+    /// Phase 9h.A — background-job export. Returns an `ExportTicket`
+    /// immediately (no envelope assembly on the request thread); the
+    /// export runs on `IJobScheduler` and the client polls
+    /// `GetExportStatus` then `DownloadExport`. Returns `Error` when the
+    /// deployment did not enable async DSR
+    /// (`DataSubjectRequestConfig.Async = false`) or no
+    /// `IJobScheduler` / `IBackgroundExportStore` is composed.
+    [<AllowAnonymous>]
+    [<Audit "DataExported">]
+    RequestExportAsync: ExportRequestInput -> Async<Result<ExportTicket, string>>
+
+    /// Phase 9h.A — poll a background export ticket's status.
+    /// `Preparing` while the job runs; `Ready sizeBytes` when the
+    /// envelope is downloadable; `Failed` / `Cancelled` / `Expired` /
+    /// `Unknown` terminally.
+    [<AllowAnonymous>]
+    GetExportStatus: ExportTicket -> Async<Result<ExportStatus, string>>
+
+    /// Phase 9h.A — download a `Ready` background-export envelope. The
+    /// payload is byte-identical to the synchronous `RequestExport`
+    /// shape. `Error` carries the non-`Ready` status name when the
+    /// ticket isn't downloadable yet.
+    [<AllowAnonymous>]
+    [<Audit "DataExported">]
+    DownloadExport: ExportTicket -> Async<Result<byte[], string>>
+
+    /// Phase 9h.A — cancel an in-flight background export. Flips the
+    /// ticket to `Cancelled`; the background job observes the cancelled
+    /// ticket before `Complete` and skips writing the envelope, so the
+    /// system stays consistent (the partial envelope TTL-expires).
+    [<AllowAnonymous>]
+    CancelExport: ExportTicket -> Async<Result<unit, string>>
 }

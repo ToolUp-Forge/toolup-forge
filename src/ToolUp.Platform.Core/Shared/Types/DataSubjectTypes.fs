@@ -64,6 +64,35 @@ type ErasurePolicy =
     /// (e.g. financial-services SR 11-7 audit obligations).
     | RetainPerCompliance
 
+/// Configuration carried by `DataSubjectRequestMode.Enabled`. Holds the
+/// deployment's default `ErasurePolicy` plus the Phase 9h.A `Async`
+/// switch.
+type DataSubjectRequestConfig = {
+    /// Default erasure policy for requests that don't override it.
+    Policy: ErasurePolicy
+    /// Phase 9h.A — when `true`, `RequestExportAsync` runs the export on
+    /// `IJobScheduler` via `IBackgroundExportStore` (ticket + poll +
+    /// download) instead of synchronously on the HTTP request thread.
+    /// Large-tenant Article 15 exports (gigabytes across KB + RAG +
+    /// EventStore + …) need this to avoid HTTP-timeout failures. The
+    /// synchronous `RequestExport` path is always available; this only
+    /// adds the async surface. Default `false` preserves the Phase 9h
+    /// MVP behaviour byte-for-byte (GP 11).
+    Async: bool
+}
+
+module DataSubjectRequestConfig =
+    /// Synchronous (Phase 9h MVP) configuration for `policy` —
+    /// `Async = false`. The ergonomic default when a deployment only
+    /// needs the on-thread `RequestExport`.
+    let sync (policy: ErasurePolicy) : DataSubjectRequestConfig = { Policy = policy; Async = false }
+
+    /// Background-job configuration for `policy` — `Async = true`. Pairs
+    /// with `JobScheduler = InProcessJobScheduler` (or a distributed
+    /// scheduler companion); a `Disabled` scheduler falls back to the
+    /// synchronous path with a compose-time warning.
+    let background (policy: ErasurePolicy) : DataSubjectRequestConfig = { Policy = policy; Async = true }
+
 /// Per-deployment opt-in for the data-subject-request substrate.
 /// Defaults to `Disabled` — apps that don't need DSR endpoints pay
 /// nothing (no admin module auto-injection, no API endpoint
@@ -71,7 +100,57 @@ type ErasurePolicy =
 [<RequireQualifiedAccess>]
 type DataSubjectRequestMode =
     | Disabled
-    | Enabled of policy: ErasurePolicy
+    | Enabled of config: DataSubjectRequestConfig
+
+// ─── Phase 9h.A — background-export ticket + status (moved to Core) ───
+//
+// `ExportTicket` + `ExportStatus` live in Core (not the server-side
+// `IBackgroundExportStore.fs`) so the `IDataSubjectRequestApi` contract —
+// which crosses the Fable client/server boundary — can name them. The
+// server `IBackgroundExportStore` interface references the same types.
+
+/// Opaque, value-typed handle for a background export. Encodes the scope
+/// it belongs to so every store method needs only the ticket (no
+/// out-of-band scope threading). Treat as opaque — construct only via
+/// `IBackgroundExportStore.BeginExport`.
+type ExportTicket = string
+
+/// Lifecycle status of a background export ticket.
+///
+/// `[<RequireQualifiedAccess>]` because the case names (`Failed`,
+/// `Cancelled`, `Expired`, `Ready`, `Unknown`, `Preparing`) are generic
+/// enough to collide with other DUs in the widely-opened `ToolUp.Platform`
+/// namespace (`SignedUrlError.Expired`, `JobStatus<'T>.Failed`/`.Cancelled`,
+/// …). Qualified access keeps the cases out of unqualified scope so an
+/// `open ToolUp.Platform` elsewhere can't have its own `Expired`/`Failed`
+/// silently shadowed.
+[<RequireQualifiedAccess>]
+type ExportStatus =
+    /// The envelope is being assembled by the background job.
+    | Preparing
+    /// The envelope is assembled and downloadable; `sizeBytes` is its
+    /// length.
+    | Ready of sizeBytes: int64
+    /// The export job failed terminally; `reason` is operator-readable.
+    | Failed of reason: string
+    /// The ticket was cancelled mid-run (`IJobScheduler.Cancel`).
+    | Cancelled
+    /// The ticket outlived its TTL; the envelope has been (or will be)
+    /// garbage-collected and is no longer downloadable.
+    | Expired
+    /// No ticket with this id exists (never issued, or GC'd past TTL).
+    | Unknown
+
+module ExportStatus =
+    /// Stable case-name string for status sidecar persistence + audit.
+    let name =
+        function
+        | ExportStatus.Preparing -> "Preparing"
+        | ExportStatus.Ready _ -> "Ready"
+        | ExportStatus.Failed _ -> "Failed"
+        | ExportStatus.Cancelled -> "Cancelled"
+        | ExportStatus.Expired -> "Expired"
+        | ExportStatus.Unknown -> "Unknown"
 
 /// One data-subject request. Created by an admin via the API
 /// handler; persisted as an audit event before any work begins

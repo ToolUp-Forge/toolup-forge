@@ -14,6 +14,7 @@
     <Compile Include="Shared\SigningTypes.fs" />
     <Compile Include="Server\IArtefactSigner.fs" />
     <Compile Include="Server\IArtefactVerifier.fs" />
+    <Compile Include="Server\JwsBuilder.fs" />
     <Compile Include="Server\SigningInternals.fs" />
     <Compile Include="Server\DefaultArtefactSigner.fs" />
     <Compile Include="Server\DefaultArtefactVerifier.fs" />

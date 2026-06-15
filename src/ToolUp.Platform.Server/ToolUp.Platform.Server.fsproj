@@ -243,11 +243,15 @@
         <Compile Include="Server\InProcessRateLimiter.fs" />
         <Compile Include="Server\IDataExporter.fs" />
         <Compile Include="Server\ErasurePipeline.fs" />
+        <!-- Phase 9h.A — IBackgroundExportStore interface ahead of the
+             API handler: the async `RequestExportAsync` surface
+             (DsrAsyncDeps) names it. The interface depends only on Core
+             types (DataSubjectRequest + ExportTicket/ExportStatus). -->
+        <Compile Include="Server\IBackgroundExportStore.fs" />
         <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
         <!-- Phase 9h.A — IJobScheduler-backed DSR export/erasure substrate.
              After DataSubjectRequestApiHandler (reuses serialiseSegments +
              the AuditOnDsr seam) + ErasurePipeline + IDataExporter. -->
-        <Compile Include="Server\IBackgroundExportStore.fs" />
         <Compile Include="Server\BlobBackedBackgroundExportStore.fs" />
         <Compile Include="Server\DSRExportJobHandler.fs" />
         <Compile Include="Server\DSRErasureJobHandler.fs" />

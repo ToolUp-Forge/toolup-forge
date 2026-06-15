@@ -3,6 +3,7 @@ module ToolUp.Platform.ComposeJobs
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.IDataExporter
 open ToolUp.Platform.Tracing
 open ToolUp.Platform.WebhookDispatcher
 
@@ -500,3 +501,81 @@ let registerScheduledJobDeclarations
                                 scopeId
                                 err
                         )
+
+/// Phase 9h.A — register the background DSR export/erasure substrate.
+/// Gated on `DataSubjectRequests = Enabled { Async = true }`:
+///   * registers `IBackgroundExportStore` (blob-backed default) as a
+///     singleton so the per-request API mount can resolve it;
+///   * registers the `DSRExportJobHandler` + `DSRErasureJobHandler` on
+///     the scheduler at startup (via an `IHostedService` so the
+///     registered `IDataExporter` / `IErasureHandler` lists are
+///     resolvable from the built provider). `RegisterHandler` is
+///     idempotent and export jobs are only scheduled at request time
+///     (post-startup), so startup registration is race-free.
+///
+/// `DataSubjectRequests = Enabled { Async = true }` with
+/// `JobScheduler = NoJobScheduler` is a config mismatch — logged at
+/// `Warn`; `RequestExportAsync` then returns `Error` (the synchronous
+/// `RequestExport` path is unaffected).
+let registerDataSubjectRequestJobs
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (resolvedBlobStorage: IBlobStorage)
+    (jobSchedulerInstance: IJobScheduler option)
+    (auditLog: IAuditLog)
+    (notificationChannel: INotificationChannel)
+    (resolvedLogger: ILogger)
+    : unit =
+    match config.DataSubjectRequests with
+    | DataSubjectRequestMode.Enabled cfg when cfg.Async ->
+        match jobSchedulerInstance with
+        | None ->
+            resolvedLogger.Warn(
+                "[Phase 9h.A] DataSubjectRequests = Enabled { Async = true } but JobScheduler = NoJobScheduler — background export not registered; RequestExportAsync will return Error. Pair with JobScheduler = InProcessJobScheduler (or a distributed scheduler companion)."
+            )
+        | Some scheduler ->
+            let store = BlobBackedBackgroundExportStore.create resolvedBlobStorage
+            services.AddSingleton<IBackgroundExportStore>(store) |> ignore
+
+            let audit = DataSubjectRequestApiHandler.auditToLog auditLog
+
+            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                { new Microsoft.Extensions.Hosting.IHostedService with
+                    member _.StartAsync(_ct) =
+                        let exporters =
+                            sp.GetServices(typeof<IDataExporter>) |> Seq.cast<IDataExporter> |> List.ofSeq
+
+                        let handlers =
+                            sp.GetServices(typeof<IErasureHandler>)
+                            |> Seq.cast<IErasureHandler>
+                            |> List.ofSeq
+
+                        scheduler.RegisterHandler(
+                            DataSubjectRequestApiHandler.DsrJobs.ExportHandler,
+                            DSRExportJobHandler.createWithNotifications
+                                store
+                                exporters
+                                audit
+                                (Some notificationChannel)
+                                resolvedLogger
+                        )
+
+                        scheduler.RegisterHandler(
+                            DataSubjectRequestApiHandler.DsrJobs.ErasureHandler,
+                            DSRErasureJobHandler.create handlers audit resolvedLogger
+                        )
+
+                        resolvedLogger.Info(
+                            sprintf
+                                "[Phase 9h.A] Registered DSR background export/erasure job handlers (%d exporter(s), %d erasure handler(s))."
+                                exporters.Length
+                                handlers.Length
+                        )
+
+                        System.Threading.Tasks.Task.CompletedTask
+
+                    member _.StopAsync(_ct) =
+                        System.Threading.Tasks.Task.CompletedTask
+                })
+            |> ignore
+    | _ -> ()

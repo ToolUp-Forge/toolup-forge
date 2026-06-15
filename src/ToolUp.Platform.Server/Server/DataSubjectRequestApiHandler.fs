@@ -4,6 +4,7 @@ open System
 open System.Collections.Concurrent
 open System.Text
 open System.Text.Json
+open System.Text.Json.Nodes
 open ToolUp.Platform
 open ToolUp.Platform.IDataExporter
 open ToolUp.Platform.ErasurePipeline
@@ -78,6 +79,132 @@ let serialiseSegments (segments: ExportSegment list) : byte[] =
     let json = JsonSerializer.Serialize payload
     Encoding.UTF8.GetBytes json
 
+// ─── Phase 9h.A — DSR background-job names + payload (moved up) ─────────
+//
+// `DsrJobs` + `DsrJobPayload` live here (rather than in
+// `DSRExportJobHandler.fs`) so the async `RequestExportAsync` path below
+// can serialise the job payload + name the handler. `DSRExportJobHandler`
+// (compiled later) consumes them via `open DataSubjectRequestApiHandler`.
+
+/// Reserved `IJobScheduler` handler names for the DSR background jobs.
+module DsrJobs =
+    [<Literal>]
+    let ExportHandler = "_platform.datasubject.export"
+
+    [<Literal>]
+    let ErasureHandler = "_platform.datasubject.erasure"
+
+/// The job payload carried in `JobContext.Payload`: the export/erasure
+/// ticket plus the originating `DataSubjectRequest`. Serialised as a
+/// flat JSON object (DU cases → stable case-name strings) so it survives
+/// `IJobStore` round-trips without a converter dependency.
+module DsrJobPayload =
+
+    let private kindName =
+        function
+        | DataSubjectRequestKind.Export -> "Export"
+        | DataSubjectRequestKind.Erase -> "Erase"
+        | DataSubjectRequestKind.Rectify -> "Rectify"
+
+    let private parseKind =
+        function
+        | "Export" -> DataSubjectRequestKind.Export
+        | "Erase" -> DataSubjectRequestKind.Erase
+        | _ -> DataSubjectRequestKind.Rectify
+
+    let private policyName =
+        function
+        | ErasurePolicy.HardDelete -> "HardDelete"
+        | ErasurePolicy.Tombstone -> "Tombstone"
+        | ErasurePolicy.RetainPerCompliance -> "RetainPerCompliance"
+
+    let private parsePolicy =
+        function
+        | "HardDelete" -> ErasurePolicy.HardDelete
+        | "RetainPerCompliance" -> ErasurePolicy.RetainPerCompliance
+        | _ -> ErasurePolicy.Tombstone
+
+    /// Serialise `(ticket, request)` to the job payload string. `ticket`
+    /// is empty for the erasure path (no downloadable artefact).
+    let serialise (ticket: string) (request: DataSubjectRequest) : string =
+        let o = JsonObject()
+        o["ticket"] <- JsonValue.Create ticket
+        o["id"] <- JsonValue.Create request.Id
+        o["kind"] <- JsonValue.Create(kindName request.Kind)
+        o["subjectUserId"] <- JsonValue.Create request.SubjectUserId
+
+        o["teamId"] <-
+            (request.TeamId
+             |> Option.map JsonValue.Create
+             |> Option.map (fun v -> v :> JsonNode)
+             |> Option.toObj)
+
+        o["requestedBy"] <- JsonValue.Create request.RequestedBy
+        o["requestedAt"] <- JsonValue.Create(request.RequestedAt.ToString("O"))
+        o["reason"] <- JsonValue.Create request.Reason
+        o["policy"] <- JsonValue.Create(policyName request.Policy)
+        o.ToJsonString()
+
+    /// Parse the job payload back to `(ticket, request)`.
+    let parse (payload: string) : Result<string * DataSubjectRequest, string> =
+        try
+            let node = JsonNode.Parse payload
+            let ticket = node["ticket"].GetValue<string>()
+
+            let teamId =
+                match node["teamId"] with
+                | null -> None
+                | n -> Some(n.GetValue<string>())
+
+            let request = {
+                Id = node["id"].GetValue<string>()
+                Kind = parseKind (node["kind"].GetValue<string>())
+                SubjectUserId = node["subjectUserId"].GetValue<string>()
+                TeamId = teamId
+                RequestedBy = node["requestedBy"].GetValue<string>()
+                RequestedAt = DateTimeOffset.Parse(node["requestedAt"].GetValue<string>())
+                Reason = node["reason"].GetValue<string>()
+                Policy = parsePolicy (node["policy"].GetValue<string>())
+            }
+
+            Ok(ticket, request)
+        with ex ->
+            Error ex.Message
+
+/// Map an `AuditOnDsr` event onto an `IAuditLog.Record` call. Shared by
+/// the request-time API mount (`BuildRouteHandlers`) and the background
+/// job-handler registration (`ComposeJobs`) so both write the same
+/// `AuditEvent.DataSubjectRequest` shape under the event's scope.
+let auditToLog (auditLog: IAuditLog) : AuditOnDsr =
+    fun ev ->
+        let payload: DataSubjectRequestAuditPayload = {
+            RequestId = ev.RequestId
+            Kind =
+                match ev.Kind with
+                | RequestStarted -> "RequestStarted"
+                | PreviewCompleted -> "PreviewCompleted"
+                | ErasureCompleted -> "ErasureCompleted"
+                | ErasureFailed -> "ErasureFailed"
+                | ExportCompleted -> "ExportCompleted"
+            SubjectUserId = ev.SubjectUserId
+            Actor = ev.Actor
+            Reason = ev.Reason
+            Properties = ev.Properties
+        }
+
+        auditLog.Record(ev.ScopeId, AuditEvent.DataSubjectRequest payload)
+
+/// Phase 9h.A — substrate the async export methods route through. Built
+/// per-request by the compose mount when
+/// `DataSubjectRequestConfig.Async = true` and both an
+/// `IBackgroundExportStore` and `IJobScheduler` are composed. `Notify`
+/// publishes a progress signal (no-op when no `INotificationChannel`).
+type DsrAsyncDeps = {
+    Store: IBackgroundExportStore
+    Scheduler: IJobScheduler
+    Notify: ExportTicket -> ExportStatus -> Async<unit>
+}
+
 /// Build a scoped `IDataSubjectRequestApi`. Caller supplies the
 /// registered exporter / erasure-handler lists, the deployment
 /// policy default, the scope id resolved upstream, the admin actor
@@ -89,6 +216,7 @@ let create
     (scopeId: string)
     (actorUserId: string)
     (audit: AuditOnDsr)
+    (asyncDeps: DsrAsyncDeps option)
     : IDataSubjectRequestApi =
     // Per-handler-instance preview cache. Process-local; admin re-
     // previews after process restart. Acceptable for MVP since
@@ -222,6 +350,89 @@ let create
                         return Result.Ok(Completed outcome)
                     with ex ->
                         return Result.Error ex.Message
+            }
+
+        // ─── Phase 9h.A — async export surface ─────────────────────────
+        RequestExportAsync =
+            fun input -> async {
+                match asyncDeps with
+                | None ->
+                    return
+                        Result.Error
+                            "Async DSR export is not enabled — set DataSubjectRequests = Enabled { Async = true } and compose an IJobScheduler."
+                | Some deps ->
+                    let request =
+                        mkRequest
+                            DataSubjectRequestKind.Export
+                            input.SubjectUserId
+                            input.TeamId
+                            input.Reason
+                            defaultPolicy
+
+                    do! emitAudit RequestStarted request Map.empty
+
+                    try
+                        let! ticket = deps.Store.BeginExport(scopeId, request)
+                        do! deps.Notify ticket ExportStatus.Preparing
+
+                        let registration: JobRegistration = {
+                            ScopeId = scopeId
+                            Handler = DsrJobs.ExportHandler
+                            Payload = DsrJobPayload.serialise ticket request
+                            Trigger = Manual
+                            Idempotency =
+                                Some {
+                                    Key = $"dsr-export-{request.Id}"
+                                    TtlSeconds = 60 * 60 * 24
+                                }
+                            RetryPolicy = JobRetryPolicy.defaults
+                            ShardKey = None
+                            Precision = Minute
+                            CreatedBy = actorUserId
+                            Tags = Map [ "source", "dsr-export"; "ticket", ticket ]
+                        }
+
+                        match! deps.Scheduler.Schedule registration with
+                        | Result.Error err ->
+                            do! deps.Store.Fail(ticket, $"schedule failed: {err}")
+                            return Result.Error $"Failed to schedule export job: {err}"
+                        | Result.Ok jobId ->
+                            // Fire immediately (Manual trigger) so the
+                            // export does not wait for the next scheduler
+                            // tick. TriggerOnce enqueues the attempt now.
+                            let! _ = deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId)
+                            return Result.Ok ticket
+                    with ex ->
+                        return Result.Error ex.Message
+            }
+
+        GetExportStatus =
+            fun ticket -> async {
+                match asyncDeps with
+                | None -> return Result.Error "Async DSR export is not enabled."
+                | Some deps ->
+                    let! status = deps.Store.GetStatus ticket
+                    return Result.Ok status
+            }
+
+        DownloadExport =
+            fun ticket -> async {
+                match asyncDeps with
+                | None -> return Result.Error "Async DSR export is not enabled."
+                | Some deps ->
+                    match! deps.Store.Download ticket with
+                    | Result.Ok bytes -> return Result.Ok bytes
+                    | Result.Error status -> return Result.Error $"Export not downloadable: {ExportStatus.name status}"
+            }
+
+        CancelExport =
+            fun ticket -> async {
+                match asyncDeps with
+                | None -> return Result.Error "Async DSR export is not enabled."
+                | Some deps ->
+                    do! deps.Store.Cancel ticket
+                    do! deps.Notify ticket ExportStatus.Cancelled
+                    return Result.Ok()
             }
     }
 

@@ -46,7 +46,50 @@ practically mockable, so verification is against a live CMK:
 Swap the resolver back to `SingleKeyResolver` / `PerScopeKeyResolver`.
 Blobs written under a KMS DEK stay readable only while the CMK is live.
 
-## Deferred arms
+## Azure Key Vault + GCP KMS arms (shipped — Wave 8 close-out)
 
-Azure Key Vault + GCP KMS mirror resolvers and the Phase 40 KMS-signing
-flavour are drop-ins against the same contracts — see the phase doc.
+Two more `IBlobEncryptionKeyResolver` companions ship alongside the AWS
+arm, same envelope-encryption shape, same error contract:
+
+`ToolUp.Encryption.AzureKeyVault` — the DEK is wrapped/unwrapped by a Key
+Vault KEK via `CryptographyClient` (Key Vault exposes wrap/unwrap, not
+KMS-side data-key minting, so the DEK is generated locally):
+
+```fsharp
+open Azure.Identity
+open ToolUp.Encryption.AzureKeyVault
+
+let resolver =
+    AzureKeyVaultKeyResolver.create
+        (DefaultAzureCredential())
+        "https://my-vault.vault.azure.net/keys/blob-kek/<version>"
+```
+
+`ToolUp.Encryption.GoogleCloudKms` — the DEK is `Encrypt`/`Decrypt`'d
+under a KMS symmetric CryptoKey:
+
+```fsharp
+open Google.Cloud.Kms.V1
+open ToolUp.Encryption.GoogleCloudKms
+
+let resolver =
+    GoogleCloudKmsKeyResolver.create
+        (KeyManagementServiceClient.Create())
+        "projects/p/locations/l/keyRings/r/cryptoKeys/kek"
+```
+
+Both stamp the KEK identifier into the `KeyId` (Azure/GCP ciphertext
+doesn't self-describe its KEK the way an AWS KMS blob does), map
+404/NotFound → `KeyNotFound`, disabled/forbidden → `KeyDestroyed`, and
+support `createPerScope` for per-tenant key custody. Live verification is
+env-gated (no offline emulator), mirroring the AWS arm.
+
+## Phase 40 KMS-signing flavour (shipped — Wave 8 close-out)
+
+`ToolUp.ArtefactSigning.AwsKms` provides an `IArtefactSigner` backed by an
+AWS KMS asymmetric **ECC_NIST_P256** key — the private key never enters
+process memory (the signer hashes locally and calls KMS `Sign` over the
+digest, then converts the DER signature to JWS-shaped raw r‖s via the new
+public `JwsBuilder` surface). Output is byte-identical to the in-process
+signer, so `DefaultArtefactVerifier` validates it. See
+[`40-artefact-signing.md`](40-artefact-signing.md).
