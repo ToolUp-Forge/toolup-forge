@@ -89,7 +89,18 @@ module WebhookSigner =
                         (Encoding.UTF8.GetBytes expectedHex)
 
                 if sigOk then
-                    Ok { Body = body; Timestamp = timestamp }
+                    // Signature is good — decode the body into the typed
+                    // event catalogue. A decode failure (unparseable JSON)
+                    // surfaces as BodyParseError; an unknown `type` decodes
+                    // to StripeEvent.Unknown (never an error).
+                    match StripeEvent.decode body with
+                    | Ok ev ->
+                        Ok {
+                            Body = body
+                            Timestamp = timestamp
+                            Event = ev
+                        }
+                    | Error msg -> Error(BodyParseError msg)
                 else
                     Error SignatureMismatch
 

@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="WebhookError.fs" />
+    <Compile Include="StripeEvent.fs" />
     <Compile Include="VerifiedEvent.fs" />
     <Compile Include="WebhookSigner.fs" />
   </ItemGroup>
