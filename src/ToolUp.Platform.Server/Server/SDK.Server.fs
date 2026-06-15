@@ -690,6 +690,20 @@ let compose
     // list under `NoJobScheduler` emits one `Warn` and skips.
     registerScheduledJobDeclarations jobSchedulerInstance scheduledJobDeclarations resolvedLogger
 
+    // Phase 9h.A — opt-in background DSR export/erasure substrate. Gated
+    // on `DataSubjectRequests = Enabled { Async = true }`; registers the
+    // blob-backed `IBackgroundExportStore` + the two job handlers so
+    // `RequestExportAsync` runs large-tenant Article 15 exports off the
+    // HTTP thread. No-op when async DSR is not enabled.
+    registerDataSubjectRequestJobs
+        services
+        config
+        resolvedBlobStorage
+        jobSchedulerInstance
+        auditLog
+        resolvedNotificationChannel
+        resolvedLogger
+
     // Phase 9 / 9k / 9o — first-party + companion health checks +
     // opt-in smoke tests (extracted to
     // `ComposeHealthSmoke.registerHealthChecks` /

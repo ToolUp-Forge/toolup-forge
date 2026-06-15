@@ -12,6 +12,7 @@
         <Compile Include="Support\Doubles.fs" />
         <Compile Include="Contracts\IBackgroundExportStoreContract.fs" />
         <Compile Include="InProcess\BackgroundExportStoreTests.fs" />
+        <Compile Include="InProcess\AsyncExportApiTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

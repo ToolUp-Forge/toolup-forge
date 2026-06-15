@@ -443,7 +443,7 @@ let buildRouteHandlers
     let dataSubjectRequestApiHandler: HttpHandler list =
         match config.DataSubjectRequests with
         | DataSubjectRequestMode.Disabled -> []
-        | DataSubjectRequestMode.Enabled defaultPolicy -> [
+        | DataSubjectRequestMode.Enabled dsrConfig -> [
             makeApi (fun (ctx: HttpContext) ->
                 // `IEnumerable<T>` resolution is built into MS DI — zero
                 // registered impls yields an empty enumerable, not null.
@@ -467,27 +467,60 @@ let buildRouteHandlers
                     |> Option.defaultValue accessContext.UserId
 
                 let auditLog = ctx.RequestServices.GetService(typeof<IAuditLog>) :?> IAuditLog
+                let audit = DataSubjectRequestApiHandler.auditToLog auditLog
 
-                let audit: AuditOnDsr =
-                    fun ev ->
-                        let payload: DataSubjectRequestAuditPayload = {
-                            RequestId = ev.RequestId
-                            Kind =
-                                match ev.Kind with
-                                | RequestStarted -> "RequestStarted"
-                                | PreviewCompleted -> "PreviewCompleted"
-                                | ErasureCompleted -> "ErasureCompleted"
-                                | ErasureFailed -> "ErasureFailed"
-                                | ExportCompleted -> "ExportCompleted"
-                            SubjectUserId = ev.SubjectUserId
-                            Actor = ev.Actor
-                            Reason = ev.Reason
-                            Properties = ev.Properties
-                        }
+                // Phase 9h.A — async export deps. Wired only when the
+                // deployment opted into `Async` AND both an
+                // `IBackgroundExportStore` (registered by
+                // `ComposeJobs.registerDataSubjectRequestJobs`) and an
+                // `IJobScheduler` are composed. Absent either, the async
+                // methods return `Error`; the synchronous `RequestExport`
+                // is unaffected.
+                let asyncDeps =
+                    if dsrConfig.Async then
+                        match
+                            ctx.RequestServices.GetService(typeof<IBackgroundExportStore>),
+                            ctx.RequestServices.GetService(typeof<IJobScheduler>)
+                        with
+                        | (:? IBackgroundExportStore as store), (:? IJobScheduler as scheduler) ->
+                            let channel =
+                                match ctx.RequestServices.GetService(typeof<INotificationChannel>) with
+                                | :? INotificationChannel as ch -> Some ch
+                                | _ -> None
 
-                        auditLog.Record(ev.ScopeId, AuditEvent.DataSubjectRequest payload)
+                            let notify (ticket: ExportTicket) (status: ExportStatus) : Async<unit> = async {
+                                match channel with
+                                | None -> return ()
+                                | Some ch ->
+                                    let json = $"{{\"ticket\":\"{ticket}\",\"status\":\"{ExportStatus.name status}\"}}"
 
-                DataSubjectRequestApiHandler.create exporters handlers defaultPolicy scopeId accessContext.UserId audit)
+                                    try
+                                        do!
+                                            ch.Publish(
+                                                scopeId,
+                                                CustomNotification(DsrNotifications.ExportProgressKey, json)
+                                            )
+                                    with _ ->
+                                        return ()
+                            }
+
+                            Some {
+                                DataSubjectRequestApiHandler.DsrAsyncDeps.Store = store
+                                Scheduler = scheduler
+                                Notify = notify
+                            }
+                        | _ -> None
+                    else
+                        None
+
+                DataSubjectRequestApiHandler.create
+                    exporters
+                    handlers
+                    dsrConfig.Policy
+                    scopeId
+                    accessContext.UserId
+                    audit
+                    asyncDeps)
           ]
 
     // Phase 54 — IPlatformTenantApi mount. Gated on

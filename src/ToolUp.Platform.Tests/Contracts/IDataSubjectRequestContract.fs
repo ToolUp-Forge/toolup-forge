@@ -75,7 +75,14 @@ let private mkApi (exporters: IDataExporter list) (handlers: IErasureHandler lis
         fun e -> async { lock auditEvents (fun () -> auditEvents.Add e) }
 
     let api =
-        DataSubjectRequestApiHandler.create exporters handlers ErasurePolicy.Tombstone "team-test" "admin-actor" audit
+        DataSubjectRequestApiHandler.create
+            exporters
+            handlers
+            ErasurePolicy.Tombstone
+            "team-test"
+            "admin-actor"
+            audit
+            None // Phase 9h.A — synchronous-only; no async export deps in this contract.
 
     api, auditEvents
 

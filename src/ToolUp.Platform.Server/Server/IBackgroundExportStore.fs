@@ -17,48 +17,10 @@ namespace ToolUp.Platform
 // (identity-by-value), so the store holds nothing in memory and survives
 // process restarts (GP 12 rule 4).
 
-/// Opaque, value-typed handle for a background export. Encodes the scope
-/// it belongs to so every store method needs only the ticket (no
-/// out-of-band scope threading). Treat as opaque — construct only via
-/// `IBackgroundExportStore.BeginExport`.
-type ExportTicket = string
-
-/// Lifecycle status of a background export ticket.
-///
-/// `[<RequireQualifiedAccess>]` because the case names (`Failed`,
-/// `Cancelled`, `Expired`, `Ready`, `Unknown`, `Preparing`) are generic
-/// enough to collide with other DUs in the widely-opened `ToolUp.Platform`
-/// namespace (`SignedUrlError.Expired`, `JobStatus<'T>.Failed`/`.Cancelled`,
-/// …). Qualified access keeps the cases out of unqualified scope so an
-/// `open ToolUp.Platform` elsewhere can't have its own `Expired`/`Failed`
-/// silently shadowed.
-[<RequireQualifiedAccess>]
-type ExportStatus =
-    /// The envelope is being assembled by the background job.
-    | Preparing
-    /// The envelope is assembled and downloadable; `sizeBytes` is its
-    /// length.
-    | Ready of sizeBytes: int64
-    /// The export job failed terminally; `reason` is operator-readable.
-    | Failed of reason: string
-    /// The ticket was cancelled mid-run (`IJobScheduler.Cancel`).
-    | Cancelled
-    /// The ticket outlived its TTL; the envelope has been (or will be)
-    /// garbage-collected and is no longer downloadable.
-    | Expired
-    /// No ticket with this id exists (never issued, or GC'd past TTL).
-    | Unknown
-
-module ExportStatus =
-    /// Stable case-name string for status sidecar persistence + audit.
-    let name =
-        function
-        | ExportStatus.Preparing -> "Preparing"
-        | ExportStatus.Ready _ -> "Ready"
-        | ExportStatus.Failed _ -> "Failed"
-        | ExportStatus.Cancelled -> "Cancelled"
-        | ExportStatus.Expired -> "Expired"
-        | ExportStatus.Unknown -> "Unknown"
+// `ExportTicket` + `ExportStatus` (+ the `ExportStatus.name` helper) moved
+// to Core (`Shared/Types/DataSubjectTypes.fs`) in Phase 9h.A so the
+// Fable-crossing `IDataSubjectRequestApi` contract can name them. They
+// resolve here unqualified via `namespace ToolUp.Platform`.
 
 /// Blob-backed store for background DSR export envelopes. The default
 /// implementation is `BlobBackedBackgroundExportStore`; a distributed

@@ -72,6 +72,16 @@ type Model = {
     /// Latest confirmed-erasure summary. Persisted so the admin can
     /// inspect per-handler counts after confirmation lands.
     LastRunSummary: ErasureRunSummary option
+    /// Phase 9h.A — when true, the Export tab submits through the async
+    /// background-job path (`RequestExportAsync` → poll `GetExportStatus`
+    /// → `DownloadExport`) so large-tenant exports don't hit the HTTP
+    /// timeout. Requires `DataSubjectRequests = Enabled { Async = true }`
+    /// server-side; if disabled there, the first call returns an inline
+    /// error in the banner.
+    AsyncMode: bool
+    /// In-flight background-export ticket + its last polled status.
+    ActiveTicket: ExportTicket option
+    TicketStatus: ExportStatus option
     Busy: Busy
     Banner: Banner
 }
@@ -84,6 +94,13 @@ type Msg =
     | SetOverridePolicy of ErasurePolicy option
     | SubmitExport
     | ExportResolved of Result<byte[], string>
+    | SetAsyncMode of bool
+    | AsyncExportStarted of Result<ExportTicket, string>
+    | PollTicket
+    | TicketStatusResolved of Result<ExportStatus, string>
+    | DownloadResolved of Result<byte[], string>
+    | CancelAsyncExport
+    | CancelResolved of Result<unit, string>
     | SubmitPreview
     | PreviewResolved of Result<ErasurePreview, string>
     | CancelPreview
@@ -149,11 +166,19 @@ let init () : Model * Cmd<Msg> =
         OverridePolicy = None
         PendingPreview = None
         LastRunSummary = None
+        AsyncMode = false
+        ActiveTicket = None
+        TicketStatus = None
         Busy = Idle
         Banner = NoBanner
     }
 
     model, Cmd.none
+
+/// Phase 9h.A — re-poll the active background-export ticket after a short
+/// delay. The loop runs while a ticket stays `Preparing`.
+let private pollDelay: Cmd<Msg> =
+    Cmd.OfAsync.perform (fun () -> Async.Sleep 1500) () (fun _ -> PollTicket)
 
 let private exportInput (model: Model) : ExportRequestInput = {
     SubjectUserId = model.SubjectInput.Trim()
@@ -200,6 +225,19 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | SubmitExport ->
         match validateForm model with
         | Some err -> { model with Banner = ErrorBanner err }, Cmd.none
+        | None when model.AsyncMode ->
+            let cmd =
+                Cmd.OfRemoting.call dsrApi.RequestExportAsync (exportInput model) AsyncExportStarted (fun ex ->
+                    AsyncExportStarted(Result.Error ex.Message))
+
+            {
+                model with
+                    Busy = RunningExport
+                    Banner = NoBanner
+                    ActiveTicket = None
+                    TicketStatus = None
+            },
+            cmd
         | None ->
             let cmd =
                 Cmd.OfRemoting.call dsrApi.RequestExport (exportInput model) ExportResolved (fun ex ->
@@ -211,6 +249,143 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Banner = NoBanner
             },
             cmd
+
+    | SetAsyncMode value -> { model with AsyncMode = value }, Cmd.none
+
+    | AsyncExportStarted(Ok ticket) ->
+        {
+            model with
+                Busy = RunningExport
+                ActiveTicket = Some ticket
+                TicketStatus = Some ExportStatus.Preparing
+                Banner = OkBanner "Background export queued — assembling segments…"
+        },
+        pollDelay
+
+    | AsyncExportStarted(Result.Error err) ->
+        {
+            model with
+                Busy = Idle
+                Banner = ErrorBanner err
+        },
+        Cmd.none
+
+    | PollTicket ->
+        match model.ActiveTicket with
+        | None -> model, Cmd.none
+        | Some ticket ->
+            let cmd =
+                Cmd.OfRemoting.call dsrApi.GetExportStatus ticket TicketStatusResolved (fun ex ->
+                    TicketStatusResolved(Result.Error ex.Message))
+
+            model, cmd
+
+    | TicketStatusResolved(Ok status) ->
+        match status with
+        | ExportStatus.Ready _ ->
+            match model.ActiveTicket with
+            | Some ticket ->
+                let cmd =
+                    Cmd.OfRemoting.call dsrApi.DownloadExport ticket DownloadResolved (fun ex ->
+                        DownloadResolved(Result.Error ex.Message))
+
+                {
+                    model with
+                        TicketStatus = Some status
+                },
+                cmd
+            | None ->
+                {
+                    model with
+                        TicketStatus = Some status
+                },
+                Cmd.none
+        | ExportStatus.Preparing ->
+            {
+                model with
+                    TicketStatus = Some status
+            },
+            pollDelay
+        | ExportStatus.Failed reason ->
+            {
+                model with
+                    Busy = Idle
+                    ActiveTicket = None
+                    TicketStatus = Some status
+                    Banner = ErrorBanner $"Export failed: {reason}"
+            },
+            Cmd.none
+        | ExportStatus.Cancelled ->
+            {
+                model with
+                    Busy = Idle
+                    ActiveTicket = None
+                    TicketStatus = Some status
+                    Banner = OkBanner "Export cancelled."
+            },
+            Cmd.none
+        | ExportStatus.Expired
+        | ExportStatus.Unknown ->
+            {
+                model with
+                    Busy = Idle
+                    ActiveTicket = None
+                    TicketStatus = Some status
+                    Banner = ErrorBanner "Export ticket expired or unknown — re-submit."
+            },
+            Cmd.none
+
+    | TicketStatusResolved(Result.Error err) ->
+        {
+            model with
+                Busy = Idle
+                ActiveTicket = None
+                Banner = ErrorBanner err
+        },
+        Cmd.none
+
+    | DownloadResolved(Ok bytes) ->
+        downloadExport (model.SubjectInput.Trim()) bytes
+
+        {
+            model with
+                Busy = Idle
+                ActiveTicket = None
+                TicketStatus = None
+                Banner = OkBanner $"Background export ready — {bytes.Length} bytes downloaded."
+        },
+        Cmd.none
+
+    | DownloadResolved(Result.Error err) ->
+        {
+            model with
+                Busy = Idle
+                ActiveTicket = None
+                Banner = ErrorBanner err
+        },
+        Cmd.none
+
+    | CancelAsyncExport ->
+        match model.ActiveTicket with
+        | None -> model, Cmd.none
+        | Some ticket ->
+            let cmd =
+                Cmd.OfRemoting.call dsrApi.CancelExport ticket CancelResolved (fun ex ->
+                    CancelResolved(Result.Error ex.Message))
+
+            model, cmd
+
+    | CancelResolved(Ok()) ->
+        {
+            model with
+                Busy = Idle
+                ActiveTicket = None
+                TicketStatus = Some ExportStatus.Cancelled
+                Banner = OkBanner "Export cancelled."
+        },
+        Cmd.none
+
+    | CancelResolved(Result.Error err) -> { model with Banner = ErrorBanner err }, Cmd.none
 
     | ExportResolved(Ok bytes) ->
         downloadExport (model.SubjectInput.Trim()) bytes
@@ -379,6 +554,46 @@ let private subjectFormRows (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
+let private ticketStatusLabel =
+    function
+    | ExportStatus.Preparing -> "Preparing — assembling segments…"
+    | ExportStatus.Ready size -> $"Ready — {size} bytes; downloading…"
+    | ExportStatus.Failed reason -> $"Failed — {reason}"
+    | ExportStatus.Cancelled -> "Cancelled"
+    | ExportStatus.Expired -> "Expired"
+    | ExportStatus.Unknown -> "Unknown"
+
+/// Phase 9h.A — in-flight background-export panel. Shows the active
+/// ticket's status (auto-polled) with a cancel control. Download happens
+/// automatically when the ticket flips to `Ready`.
+let private activeTicketPanel (model: Model) (dispatch: Msg -> unit) =
+    match model.ActiveTicket, model.TicketStatus with
+    | Some ticket, Some status ->
+        Html.div [
+            prop.className "mt-4 p-3 border border-border rounded bg-gray-50"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.div [ prop.className "text-sm font-medium"; prop.text "Background export" ]
+                                Html.div [
+                                    prop.className "text-xs text-muted"
+                                    prop.text $"Ticket {ticket} • {ticketStatusLabel status}"
+                                ]
+                            ]
+                        ]
+                        match status with
+                        | ExportStatus.Preparing ->
+                            Forms.Button.secondary "Cancel" (fun () -> dispatch CancelAsyncExport)
+                        | _ -> Html.none
+                    ]
+                ]
+            ]
+        ]
+    | _ -> Html.none
+
 let private exportTabView (model: Model) (dispatch: Msg -> unit) =
     let submitLabel =
         match model.Busy with
@@ -392,6 +607,20 @@ let private exportTabView (model: Model) (dispatch: Msg -> unit) =
                 "Streams every record across every registered exporter that names the subject. Scope-isolated when a Team id is supplied."
         ]
         subjectFormRows model dispatch
+        Html.label [
+            prop.className "mt-3 flex items-center gap-2 text-sm cursor-pointer"
+            prop.children [
+                Html.input [
+                    prop.type' "checkbox"
+                    prop.isChecked model.AsyncMode
+                    prop.onChange (fun (v: bool) -> dispatch (SetAsyncMode v))
+                ]
+                Html.span [
+                    prop.text
+                        "Run as a background job (large exports — returns a ticket, polls until ready, then downloads). Requires async DSR enabled server-side."
+                ]
+            ]
+        ]
         Html.div [
             prop.className "mt-4 flex items-center gap-3"
             prop.children [
@@ -403,6 +632,7 @@ let private exportTabView (model: Model) (dispatch: Msg -> unit) =
                     ]
             ]
         ]
+        activeTicketPanel model dispatch
     ]
 
 let private policyRadio (model: Model) (dispatch: Msg -> unit) =
