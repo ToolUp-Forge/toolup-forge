@@ -36,6 +36,12 @@
     <Compile Include="Server\JsonRpcPeerClient.fs" />
     <Compile Include="Server\JsonRpcPeerHost.fs" />
     <Compile Include="Server\PeerAuditContractHost.fs" />
+    <!-- Phase 18c — federation orchestration (fan-out + cascade) over the
+         peer foundation. Phase 18b — clean-room privacy-gate broker.
+         Neutral substrate; aggregation + domain privacy policy stay out. -->
+    <Compile Include="Server\PeerFanout.fs" />
+    <Compile Include="Server\PeerCascade.fs" />
+    <Compile Include="Server\CleanRoomBroker.fs" />
     <Compile Include="Server\PeerCompose.fs" />
   </ItemGroup>
   <ItemGroup>

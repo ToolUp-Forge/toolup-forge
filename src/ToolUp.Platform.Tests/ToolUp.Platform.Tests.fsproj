@@ -525,6 +525,11 @@
              TestServer worked example (identity validation, audit
              emission, matching RootRequestId across the HTTP boundary). -->
         <Compile Include="InProcess\PlatformPeerTests.fs" />
+        <!-- Phase 18c — federation primitives (IPeerFanout scatter +
+             IPeerCascade next-hop bookkeeping) and Phase 18b — clean-room
+             privacy-gate broker. Pure orchestration; no TestServer. -->
+        <Compile Include="InProcess\PeerFederationTests.fs" />
+        <Compile Include="InProcess\CleanRoomBrokerTests.fs" />
         <!-- Giraffe stock-helper DI defaults — RequestErrors.* / negotiate /
              json resolve INegotiationConfig + Json.ISerializer from DI;
              ComposeBootstrap.registerGiraffeDefaults registers them

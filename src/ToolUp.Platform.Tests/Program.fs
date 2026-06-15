@@ -315,6 +315,15 @@ let allTests =
         PlatformPeerTests.inProcessTests
         PlatformPeerTests.workedExampleTests
         PlatformPeerTests.audienceBindingTests
+        // Phase 18c — federation primitives: IPeerFanout (scatter to N
+        // peers, total result map under timeout / quorum / first-success)
+        // + IPeerCascade (next-hop Route / HopsRemaining bookkeeping with
+        // caller-side loop / budget guards).
+        PeerFederationTests.fanoutTests
+        PeerFederationTests.cascadeTests
+        // Phase 18b — clean-room privacy-gate broker: surface enforcement,
+        // gate composition (tighten-only), per-cell suppression, k-floor.
+        CleanRoomBrokerTests.tests
         // Giraffe stock-helper DI defaults — the SDK composition registers
         // INegotiationConfig + Json.ISerializer (FableConverters-backed) +
         // Xml.ISerializer so consumer handlers can use RequestErrors.* /
