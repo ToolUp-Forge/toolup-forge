@@ -1128,9 +1128,9 @@ type MediaLibraryMode =
 /// tenant catalog). A future config validator may enforce; for now the
 /// composition root raises at construction time if either is missing.
 ///
-/// Distributed companions (Akka-cluster-sharded build orchestrator per
-/// `diametrical#26.A`) replace the singletons via DI and add new cases
-/// here without changing existing consumers.
+/// A distributed companion (an Akka-cluster-sharded build orchestrator)
+/// replaces the singletons via DI and adds new cases here without
+/// changing existing consumers.
 type DeployPlaneMode =
     /// No deploy-plane infrastructure registered. Default — keeps the
     /// SDK lean for deployments not running the Layer 3 deploy plane.
