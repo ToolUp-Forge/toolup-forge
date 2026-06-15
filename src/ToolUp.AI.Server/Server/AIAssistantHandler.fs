@@ -2,6 +2,7 @@ module ToolUp.AI.AIAssistantHandler
 
 open System
 open System.Text
+open System.Collections.Generic
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -278,16 +279,50 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
 
     bgCtx, scope
 
+// ─── Phase 69c.tail A — typed streaming surface ──────────────────
+//
+// Server-only companion to `AIAssistantApi`. A streaming method returns
+// `IAsyncEnumerable<'T>`, which the ToolUp.Remoting dispatcher auto-frames
+// as Server-Sent Events (Phase 69c substrate). This record is deliberately
+// NOT in `ToolUp.AI.Core` (Fable-shared): `IAsyncEnumerable` has no Fable
+// client representation, so the typed-streaming wire is consumed as a plain
+// SSE source (fetch / NotificationClient), not via the Fable.Remoting proxy.
+// Streaming methods may carry only `[<AllowAnonymous>]` / `[<PublicEndpoint>]`
+// (the dispatcher refuses to start if a streaming method carries an
+// unenforceable pre-flight attribute); the turn is gated inside the handler
+// exactly as the legacy SSE path is.
+
+/// Phase 69c.tail A — typed streaming chat surface. `StreamChatV2` is the
+/// versioned typed analogue of the legacy `SubmitMessage` + `/api/ai/events`
+/// SSE pair; the legacy path stays mounted unchanged.
+type AIStreamingApi = {
+    [<AllowAnonymous>]
+    StreamChatV2: AIMessageRequest -> IAsyncEnumerable<AIStreamEvent>
+}
+
+/// Phase 69c.tail A — terminal-event predicate for the typed chat stream:
+/// the turn ends when its task reaches a terminal status. Used by the
+/// `AsyncStream.fromCallback` bridge to close the stream after the terminal
+/// `TaskStatusChanged` is yielded.
+let private isTerminalStreamEvent =
+    function
+    | TaskStatusChanged(_, AITaskCompleted)
+    | TaskStatusChanged(_, AITaskFailed _) -> true
+    | _ -> false
+
 // ─── API implementation ──────────────────────────────────────────
 
-/// Build the AIAssistantApi Fable.Remoting handler.
+/// Build the AIAssistantApi Fable.Remoting handler + its typed streaming
+/// companion (Phase 69c.tail A). Both records are built in one closure so
+/// the streaming method reuses the legacy `SubmitMessage` turn machinery
+/// via the per-turn `typedSink` indirection.
 /// Mirrors the pattern from fileManagementApi in FileManagement.fs.
 let aiAssistantApi
     (config: SystemPromptBuilder.AIAssistantServerConfig option)
     (moduleContexts: Map<string, ModuleAIContext>)
     (sseManager: SSEConnectionManager)
     (ctx: HttpContext)
-    : AIAssistantApi =
+    : AIAssistantApi * AIStreamingApi =
     let providerFactory =
         ctx.RequestServices.GetService(typeof<IAIProviderFactory>) :?> IAIProviderFactory
 
@@ -504,7 +539,22 @@ let aiAssistantApi
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 
-    {
+    // Phase 69c.tail A — per-turn event-sink indirection. The turn machinery
+    // (SubmitMessage's bgWork) emits through `emit`. When `typedSink` is unset
+    // (the legacy `SubmitMessage` + `/api/ai/events` path) `emit` broadcasts to
+    // the SSE manager exactly as before — byte-for-byte unchanged. When the
+    // typed streaming endpoint (`StreamChatV2`) arms the sink, the SAME turn's
+    // events route to its in-memory channel instead, with no SSE broadcast.
+    // The closure is built per request, so the sink is request-scoped: the
+    // legacy endpoint never arms it, the streaming endpoint always does.
+    let typedSink: (AIStreamEvent -> unit) option ref = ref None
+
+    let emit (e: AIStreamEvent) =
+        match typedSink.Value with
+        | Some sink -> sink e
+        | None -> sendEvent sseManager userId e
+
+    let assistantApi: AIAssistantApi = {
         SubmitMessage =
             fun (request: AIMessageRequest) -> async {
                 let conversationId = request.ConversationId
@@ -661,20 +711,19 @@ let aiAssistantApi
                             // SubmitMessage call already returned the
                             // queued task; the failure event flips it
                             // to AITaskFailed client-side.
-                            sendEvent
-                                sseManager
-                                userId
-                                (TaskStatusChanged(
+                            emit (
+                                TaskStatusChanged(
                                     taskId,
                                     AITaskFailed
                                         "Conversation does not belong to the current user — refusing to append."
-                                ))
+                                )
+                            )
 
                             bgScope.Dispose()
                             return ()
                         | Ok() -> ()
 
-                        sendEvent sseManager userId (TaskStatusChanged(taskId, InProgress))
+                        emit (TaskStatusChanged(taskId, InProgress))
 
                         // Resolve the provider once per user message. The
                         // agent loop may make several SendMessage calls
@@ -866,7 +915,7 @@ let aiAssistantApi
                                     cancelToken
                                     allProviderMessages
                                     systemPrompt
-                                    (fun evt -> sendEvent sseManager userId (evt))
+                                    (fun evt -> emit evt)
 
                         // Persist the full round-trippable history first —
                         // this is what the next turn will load to maintain
@@ -1012,7 +1061,7 @@ let aiAssistantApi
 
                         do! convMarkStatus scope.ScopeId conversationId ConversationStatus.Completed
 
-                        sendEvent sseManager userId (TaskStatusChanged(taskId, AITaskCompleted))
+                        emit (TaskStatusChanged(taskId, AITaskCompleted))
 
                         // Phase 6h: free the cancellation entry on
                         // natural completion. The cancel POST handler
@@ -1041,14 +1090,14 @@ let aiAssistantApi
                         convMarkStatus scope.ScopeId conversationId ConversationStatus.Cancelled
                         |> Async.Start
 
-                        sendEvent sseManager userId (TaskStatusChanged(taskId, AITaskCompleted))
+                        emit (TaskStatusChanged(taskId, AITaskCompleted))
                         cancellationRegistry.Unregister(taskId)
                         bgScope.Dispose()
                     | ex ->
                         convMarkStatus scope.ScopeId conversationId (ConversationStatus.Errored ex.Message)
                         |> Async.Start
 
-                        sendEvent sseManager userId (TaskStatusChanged(taskId, AITaskFailed ex.Message))
+                        emit (TaskStatusChanged(taskId, AITaskFailed ex.Message))
                         cancellationRegistry.Unregister(taskId)
                         bgScope.Dispose()
                 }
@@ -1137,3 +1186,23 @@ let aiAssistantApi
                     return Error ex.Message
             }
     }
+
+    // Phase 69c.tail A — typed streaming companion. Reuses the legacy
+    // `SubmitMessage` turn machinery: arm the per-turn sink so the turn's
+    // events route to the typed channel (no SSE broadcast), fire the turn,
+    // and yield events until the terminal `TaskStatusChanged`. The legacy
+    // `SubmitMessage` + `/api/ai/events` SSE pair is untouched.
+    let streamingApi: AIStreamingApi = {
+        StreamChatV2 =
+            fun (request: AIMessageRequest) ->
+                ToolUp.Remoting.Server.AsyncStream.fromCallback isTerminalStreamEvent (fun emitTyped ->
+                    // Arm the per-turn sink so THIS turn's events route to the
+                    // stream's channel instead of the SSE broadcast, then fire
+                    // the turn. SubmitMessage's foreground returns once the
+                    // agent loop is kicked off; the loop emits the terminal
+                    // event that ends the stream.
+                    typedSink.Value <- Some emitTyped
+                    assistantApi.SubmitMessage request |> Async.Ignore)
+    }
+
+    assistantApi, streamingApi

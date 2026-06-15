@@ -5,6 +5,8 @@ open System.Collections.Generic
 open System.Reflection
 open System.Text
 open System.Text.Json
+open System.Threading.Channels
+open System.Threading.Tasks
 open Microsoft.FSharp.Reflection
 
 // =============================================================================
@@ -26,6 +28,79 @@ open Microsoft.FSharp.Reflection
 // Method shape is NON-async outer (`'arg -> IAsyncEnumerable<'T>`) to keep
 // the reflection path simple; an Async<IAsyncEnumerable> shape is a
 // follow-up that adds the `Async.StartAsTask` reflection bridge.
+
+/// Phase 69c.tail — public helpers for *producing* the `IAsyncEnumerable<'T>`
+/// a streaming method returns. The dispatcher (internal `Streaming` module
+/// below) handles classification + SSE framing; this module gives consumers
+/// a ready-made bridge for the common case where the value source is a
+/// callback / sink (an agent loop, a progress reporter, any push-based
+/// producer) rather than a natural pull-based sequence.
+[<RequireQualifiedAccess>]
+module AsyncStream =
+
+    /// Bridge a push-based producer to an `IAsyncEnumerable<'T>`.
+    ///
+    /// `runProducer emit` runs the producer, calling `emit` for each value.
+    /// Each emitted value is yielded to the consumer. The stream ends after
+    /// the first value for which `isTerminal` returns `true` (that terminal
+    /// value IS yielded first), or when `runProducer` faults (the exception
+    /// completes the stream, which the dispatcher frames as `event: error`).
+    ///
+    /// `runProducer` is started detached at enumeration time, so a producer
+    /// that *outlives* its synchronous entry point — e.g. an agent turn whose
+    /// foreground returns once the background loop is kicked off, and whose
+    /// `emit` keeps firing afterwards — works correctly: the stream stays
+    /// open until a terminal value is emitted (not until `runProducer`
+    /// returns).
+    ///
+    /// **Contract:** `runProducer` MUST emit a value satisfying `isTerminal`
+    /// (or fault) to end the stream. A producer that returns without ever
+    /// emitting a terminal value and never faults leaves the stream open —
+    /// by design, since the detached-tail case can't distinguish "foreground
+    /// done" from "production done". Producers that are fully synchronous
+    /// simply emit their terminal value last.
+    let fromCallback (isTerminal: 'T -> bool) (runProducer: ('T -> unit) -> Async<unit>) : IAsyncEnumerable<'T> =
+        { new IAsyncEnumerable<'T> with
+            member _.GetAsyncEnumerator(ct: System.Threading.CancellationToken) =
+                let channel = Channel.CreateUnbounded<'T>()
+
+                Async.Start(
+                    async {
+                        try
+                            do! runProducer (fun v -> channel.Writer.TryWrite v |> ignore)
+                        with ex ->
+                            // Foreground fault before any terminal was emitted —
+                            // surface it as the stream's terminal so the consumer
+                            // never hangs (the dispatcher frames `event: error`).
+                            channel.Writer.TryComplete ex |> ignore
+                    },
+                    ct
+                )
+
+                let inner = channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator ct
+
+                { new IAsyncEnumerator<'T> with
+                    member _.Current = inner.Current
+
+                    member _.MoveNextAsync() =
+                        ValueTask<bool>(
+                            task {
+                                let! moved = inner.MoveNextAsync()
+
+                                if moved && isTerminal inner.Current then
+                                    // Terminal value yielded — close the writer so
+                                    // the reader drains and the next move ends.
+                                    channel.Writer.TryComplete() |> ignore
+
+                                return moved
+                            }
+                        )
+
+                    member _.DisposeAsync() =
+                        channel.Writer.TryComplete() |> ignore
+                        inner.DisposeAsync()
+                }
+        }
 
 module internal Streaming =
 

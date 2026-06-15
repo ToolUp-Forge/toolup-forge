@@ -256,7 +256,12 @@ let composeAI (app: AIServerApp) : ServerApp =
 
     let aiHandlers =
         [
-            makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx)
+            makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> fst)
+            // Phase 69c.tail A — typed streaming companion (StreamChatV2).
+            // Same per-request closure; the dispatcher auto-frames its
+            // IAsyncEnumerable<AIStreamEvent> method as SSE. Legacy
+            // SubmitMessage + /api/ai/events (below) stay mounted unchanged.
+            makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> snd)
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
             // Phase 70 — Platform Admin AI keys API. Every method
             // is gated server-side on canModifyPlatformConfig; the
