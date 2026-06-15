@@ -98,6 +98,27 @@ let evictExpired (now: DateTime) : int =
 
     removed
 
+/// Evict any discovery-cache entries that resolved to `url`. Driven from
+/// the JWKS fetch-failure path: when a fetch against a discovered
+/// `jwks_uri` fails, the most likely non-transient cause is the issuer
+/// having rotated its `jwks_uri` — but the 24h discovery TTL would
+/// otherwise keep returning the stale URL, pinning every login to the
+/// dead endpoint until the TTL expires (a silent login-outage window).
+/// Evicting forces the next call to re-run OIDC metadata discovery and
+/// pick up the rotated endpoint. A merely transient fetch blip costs one
+/// extra metadata fetch on the next call (discovery re-resolves to the
+/// same URL), which is cheap and self-correcting. Returns the number of
+/// entries removed.
+let private evictDiscoveryForUrl (url: string) : int =
+    let mutable removed = 0
+
+    for kvp in discoveryCache do
+        if kvp.Value.JwksUrl = url then
+            if discoveryCache.TryRemove(kvp.Key) |> fst then
+                removed <- removed + 1
+
+    removed
+
 let private rsaParamsFromJwk (n: string) (e: string) : RSAParameters =
     RSAParameters(Modulus = base64UrlDecode n, Exponent = base64UrlDecode e)
 
@@ -264,6 +285,17 @@ let getJwks
                 return Ok keys
             | Error e ->
                 logger.Warn $"OIDC JWKS fetch failed: url={url} reason={JwtValidationError.toMessage e}"
+                // Endpoint-rotation recovery: drop any discovery-cache
+                // entry that resolved to this (now-failing) URL so the
+                // next request re-resolves `jwks_uri` from OIDC metadata
+                // instead of waiting out the 24h discovery TTL. Self-
+                // correcting on a transient blip (re-resolves to the same
+                // URL). See `evictDiscoveryForUrl`.
+                let rotatedIssuers = evictDiscoveryForUrl url
+
+                if rotatedIssuers > 0 then
+                    logger.Warn
+                        $"OIDC discovery cache evicted for {rotatedIssuers} issuer(s) pointing at the failing jwks_uri {url}; the next request will re-resolve jwks_uri from metadata (picks up an endpoint rotation without waiting out the discovery TTL)"
                 // Record attempt so cooldown applies next time.
                 match jwksCache.TryGetValue url with
                 | true, cached ->
