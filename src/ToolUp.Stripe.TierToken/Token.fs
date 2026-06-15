@@ -106,5 +106,7 @@ module Token =
                         | "anonymous"
                         | "free"
                         | "personal"
-                        | "teacher" -> Ok(Tier.tryParse tierStr)
+                        | "teacher"
+                        | "pro"
+                        | "enterprise" -> Ok(Tier.tryParse tierStr)
                         | _ -> Error UnknownTier

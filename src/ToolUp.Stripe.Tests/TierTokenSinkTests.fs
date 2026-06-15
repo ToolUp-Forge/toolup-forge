@@ -1,5 +1,9 @@
 module ToolUp.Stripe.Server.Tests.TierTokenSinkTests
 
+// FS0044: the WebHostBuilder-based TestServer ctor is deprecated in
+// .NET 10 but remains the standard minimal Giraffe test-host pattern.
+#nowarn "44"
+
 open System
 open System.Net
 open System.Net.Http
