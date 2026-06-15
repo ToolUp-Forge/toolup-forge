@@ -55,6 +55,19 @@ open ToolUp.Platform.Secrets
 // a distributed lock or leans on the scheduler's per-descriptor
 // `Idempotency.Key`; it is not part of the portability contract.
 //
+// **Multi-instance caveat (operator guidance).** The gate is
+// per-process: under N replicas it serialises within each pod but NOT
+// across them, so two pods can refresh the *same* descriptor
+// concurrently and the second rotation can strand the first pod's token.
+// This is observable without extra instrumentation — the existing
+// per-provider refresh metrics (`MetricAttemptedTotal` /
+// `MetricSucceededTotal`) and the `OAuthTokenRefreshed` audit event fire
+// once per attempt, so two near-simultaneous attempts for one descriptor
+// across pods show up as the cross-pod double-refresh symptom. A
+// multi-instance deployment that sees this should register a distributed
+// `IOAuthTokenRefresher` (distributed lock) or route all refreshes
+// through the scheduler's per-descriptor `Idempotency.Key`.
+//
 // **Refresh-token rotation safety (RFC 6819 §5.2.2.3).** On a rotating
 // upstream the substrate persists the new refresh token *first* — it
 // is the only irreplaceable secret (the access token + expiry can
