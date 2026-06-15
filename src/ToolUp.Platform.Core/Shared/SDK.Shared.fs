@@ -2938,6 +2938,48 @@ module ServerConfig =
 
         level, categories
 
+    /// Phase 71.A.3 — `SERVER_PORT` read inside the `fromEnv` seam so a
+    /// `/dev/inspect` config snapshot reflects the actually-bound port
+    /// (previously `Port` stayed at `defaults.Port` because the only
+    /// read lived in `SDK.Server.compose`). Non-integer / out-of-range
+    /// → fail loud, mirroring the compose-time guard. Unset → default.
+    let private parseServerPort () : int =
+        match envVar "SERVER_PORT" with
+        | None -> defaults.Port
+        | Some raw ->
+            match Int32.TryParse raw with
+            | true, p when p >= 1 && p <= 65535 -> p
+            | _ ->
+                failwithf
+                    "SERVER_PORT=%s is not a valid TCP port. Expected an integer in 1-65535 (unset SERVER_PORT to use the default %d)."
+                    raw
+                    defaults.Port
+
+    /// Phase 71.A.4 — `TOOLUP_PUBLIC_BASE_URL` runtime resolution. Empty
+    /// / whitespace is ambiguous → warn + fall back to `None`. A trailing
+    /// slash is stripped (idempotent) because token issuers append their
+    /// own `/r/{token}`-style segment and a pasted `https://x/` otherwise
+    /// produces a double slash. Unset → `defaults.PublicBaseUrl` (`None`).
+    let private parsePublicBaseUrl (logger: ILogger) : string option =
+        match envVar "TOOLUP_PUBLIC_BASE_URL" with
+        | None -> defaults.PublicBaseUrl
+        | Some raw ->
+            let trimmed = raw.Trim()
+
+            if trimmed = "" then
+                logger.Warn
+                    "TOOLUP_PUBLIC_BASE_URL is set but empty/whitespace; the ambiguous empty value is ignored. Unset the variable or give it a value. Falling back to no public base URL."
+
+                defaults.PublicBaseUrl
+            else
+                let noTrailing = trimmed.TrimEnd('/')
+
+                if noTrailing <> trimmed then
+                    logger.Warn
+                        $"TOOLUP_PUBLIC_BASE_URL={raw} had a trailing slash; stripped to {noTrailing} (token issuers append their own path segment)."
+
+                Some noTrailing
+
     /// Build a `ServerConfig` from `TOOLUP_*` env vars + a curated
     /// overrides record. Every env-var read, warning message, and
     /// fallback semantics is byte-for-byte identical to the
@@ -3050,6 +3092,20 @@ module ServerConfig =
                 AcceptSameSiteOnlyCsrfWhenAuthRequired = envFlag "TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE"
                 AcceptInMemoryShareTokenRateLimiterInMultiInstance =
                     envFlag "TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE"
+                // Phase 71.A.2 — six `Accept*` flags whose documented env
+                // vars `fromEnv` never read (audit §7). Each preserves
+                // GP 11: unset → `false`, and the matching validator still
+                // refuses startup unless the operator opts in.
+                AcceptInProcessIngestionInMultiInstance = envFlag "TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE"
+                AcceptSharedEmbeddingCacheInTeamMode = envFlag "TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE"
+                AcceptStickyRoutedAiInMultiInstance = envFlag "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE"
+                AcceptUnboundAudienceWhenAuthRequired = envFlag "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE"
+                AcceptInMemoryOAuthStateInMultiInstance = envFlag "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE"
+                AcceptPendingInviteStoreInMultiInstance = envFlag "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE"
+                // Phase 71.A.3 / 71.A.4 — Port + PublicBaseUrl now resolve
+                // inside the `fromEnv` seam (were compose-only / unread).
+                Port = parseServerPort ()
+                PublicBaseUrl = parsePublicBaseUrl logger
                 EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
                 RateLimit = parseRateLimit logger
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger

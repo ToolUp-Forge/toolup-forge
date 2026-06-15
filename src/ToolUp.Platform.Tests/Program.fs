@@ -33,6 +33,7 @@ let allTests =
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests
         StorageScopeResolverTests.tests
+        ServerConfigFromEnvTests.tests
         AuthProviderTests.tests
         AzureBlobStorageTests.tests
         AwsS3StorageTests.tests

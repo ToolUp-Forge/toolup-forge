@@ -447,6 +447,9 @@
              sweep. Includes the anonymous-only regression pin (AnonymousKind
              always pass-through in the auth-UI gate). -->
         <Compile Include="InProcess\SubjectKindClientFlowTests.fs" />
+        <!-- Phase 71.A — ServerConfig.fromEnv runtime-config lifts
+             (Surfaces precedence + six Accept* reads + Port + PublicBaseUrl). -->
+        <Compile Include="InProcess\ServerConfigFromEnvTests.fs" />
         <!-- Phase 66 Stream D.8 — RevokeOnIssuerRemoved integration tests.
              End-to-end exercise of the C.5 share-token decorator over a
              real BlobShareTokenStore: subscribe → react to
