@@ -11,11 +11,14 @@
   <ItemGroup>
     <Compile Include="StripeConfig.fs" />
     <Compile Include="Idempotency.fs" />
+    <Compile Include="DurableIdempotencyStore.fs" />
     <Compile Include="Routes.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Giraffe" />
     <ProjectReference Include="..\ToolUp.Stripe.Webhook\ToolUp.Stripe.Webhook.fsproj" />
+    <!-- IBlobStorage for the durable idempotency store (Phase 142). -->
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
   </ItemGroup>
 </Project>
