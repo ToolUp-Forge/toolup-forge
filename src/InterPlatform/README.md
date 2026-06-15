@@ -141,6 +141,8 @@ let! report = PeerJobHandle.resolve handle
 
 A peer-side `PeerError` surfaces on the caller as a raised `PeerInvocationException` — the typed API presents `Async<'T>`, not `Async<Result<_, _>>`.
 
+`HopBudget` is the maximum forward depth a call may reach in a multi-hop cascade (`8` above is a generous default, not a per-topology recommendation). Size it to your federation graph — see [`docs/migrations/18c-federation-hop-budget.md`](../../docs/migrations/18c-federation-hop-budget.md). An under-sized budget rejects a legitimate forward with `PeerHopLimitExceeded`.
+
 ## Audit transparency (Phase 18a)
 
 The substrate records one `PeerCallCompleted` audit row per inbound call, keyed by the *validated* caller. Audit transparency lets a calling peer read back the receiver's record of **its own** calls — to reconcile what it asked for against what the counterpart logged ("I asked for k≥50 and got 47 rows — confirm the gate suppressed three").
