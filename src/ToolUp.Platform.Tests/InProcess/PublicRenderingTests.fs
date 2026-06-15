@@ -945,6 +945,19 @@ let private runHandler (handler: Giraffe.Core.HttpHandler) (ctx: HttpContext) : 
     let result = handler next ctx |> Async.AwaitTask |> Async.RunSynchronously
     bodyRan, result
 
+/// `IMetricsSink` recording every `Increment(name, tags)` — for the
+/// `cacheableWithMetrics` (Phase 153 reachability) assertions.
+type private RecordingMetricsSink() =
+    let increments =
+        System.Collections.Concurrent.ConcurrentBag<string * Map<string, string>>()
+
+    member _.Increments = increments |> List.ofSeq
+
+    interface IMetricsSink with
+        member _.Record(_n, _v, _t) = ()
+        member _.Increment(name, tags) = increments.Add(name, tags)
+        member _.SetGauge(_n, _v, _t) = ()
+
 let private conditionalGetTests =
     testList "PublicRendering — conditional-GET primitive (Phase 155 + 147)" [
 
@@ -1062,6 +1075,83 @@ let private conditionalGetTests =
                 "one-year max-age"
 
             Expect.stringContains (ctx.Response.Headers["Cache-Control"].ToString()) "immutable" "immutable directive"
+
+        testCase "cacheableWithMetrics emits conditional_get=304 + request_by_agent on a 304"
+        <| fun _ ->
+            let sink = RecordingMetricsSink()
+
+            let ctx =
+                mkCtxWith [
+                    "If-None-Match", "W/\"deadbeef\""
+                    "User-Agent", "Mozilla/5.0 (compatible; Googlebot/2.1)"
+                ]
+
+            let handler =
+                ConditionalGet.cacheableWithMetrics sink "deadbeef" DateTimeOffset.UtcNow "public, max-age=60"
+
+            let bodyRan, _ = runHandler handler ctx
+            Expect.isFalse bodyRan "304 short-circuits the body"
+            Expect.equal ctx.Response.StatusCode 304 "304 status"
+
+            let names = sink.Increments |> List.map fst
+            Expect.contains names "publicrendering.conditional_get" "conditional_get counter emitted"
+            Expect.contains names "publicrendering.request_by_agent" "request_by_agent counter emitted"
+
+            let condTags =
+                sink.Increments
+                |> List.tryFind (fun (n, _) -> n = "publicrendering.conditional_get")
+                |> Option.map snd
+
+            Expect.equal (condTags |> Option.bind (Map.tryFind "outcome")) (Some "304") "outcome tag = 304"
+
+            let agentTags =
+                sink.Increments
+                |> List.tryFind (fun (n, _) -> n = "publicrendering.request_by_agent")
+                |> Option.map snd
+
+            Expect.equal
+                (agentTags |> Option.bind (Map.tryFind "agent"))
+                (Some "googlebot")
+                "agent classified googlebot"
+
+        testCase "cacheableWithMetrics emits conditional_get=200 on a fresh request; wire identical to cacheable"
+        <| fun _ ->
+            let sink = RecordingMetricsSink()
+            let lm = DateTimeOffset(2026, 5, 22, 10, 0, 0, TimeSpan.Zero)
+
+            // Bare cacheable and the metrics variant must emit byte-identical
+            // validators (the metrics are pure side-effects).
+            let plainCtx = mkCtxWith []
+
+            ConditionalGet.cacheable "cafe" lm "public, max-age=60"
+            |> fun h -> runHandler h plainCtx |> ignore
+
+            let metricCtx = mkCtxWith []
+
+            let mBodyRan, _ =
+                runHandler (ConditionalGet.cacheableWithMetrics sink "cafe" lm "public, max-age=60") metricCtx
+
+            Expect.isTrue mBodyRan "fresh request runs the body"
+
+            Expect.equal
+                (metricCtx.Response.Headers["ETag"].ToString())
+                (plainCtx.Response.Headers["ETag"].ToString())
+                "ETag identical to bare cacheable"
+
+            Expect.equal
+                (metricCtx.Response.Headers["Last-Modified"].ToString())
+                (plainCtx.Response.Headers["Last-Modified"].ToString())
+                "Last-Modified identical to bare cacheable"
+
+            let condTags =
+                sink.Increments
+                |> List.tryFind (fun (n, _) -> n = "publicrendering.conditional_get")
+                |> Option.map snd
+
+            Expect.equal
+                (condTags |> Option.bind (Map.tryFind "outcome"))
+                (Some "200")
+                "outcome tag = 200 on the served path"
     ]
 
 let private getOrRender155Tests =
@@ -1595,6 +1685,58 @@ let private structuredData151Tests =
             parseOk "organization-no-sameAs" json
             Expect.stringContains json "\"@type\":\"Organization\"" "Organization type"
             Expect.isFalse (json.Contains "sameAs") "no sameAs key when frontmatter absent"
+
+        // ─── escaping: relaxed (UTF-8-through) + `</` breakout guard ─────
+        testCase "serialise passes non-ASCII + & / < / > through unescaped (relaxed encoder)"
+        <| fun _ ->
+            // Real-world content a hand-rolled emitter leaves as UTF-8: a
+            // degree sign, an arrow, an ampersand. The default STJ encoder
+            // would emit ° / → / & — the relaxed encoder must
+            // pass them through verbatim so the emitter is byte-compatible
+            // with a minimal hand-rolled escaper.
+            let json =
+                StructuredDataHelpers.faqPage [ "What is vii°?", "Use IV→V→I & a strong cadence." ]
+
+            parseOk "faq-unicode" json
+            Expect.stringContains json "vii°" "degree sign passes through (not \\u00B0)"
+            Expect.stringContains json "IV→V→I" "arrow passes through (not \\u2192)"
+            Expect.stringContains json "&" "ampersand passes through (not \\u0026)"
+            Expect.isFalse (json.Contains "\\u00b0" || json.Contains "\\u00B0") "no escaped degree sign"
+            Expect.isFalse (json.Contains "\\u2192") "no escaped arrow"
+
+        testCase "serialise rewrites </ to <\\/ so an embedded </script> cannot break out"
+        <| fun _ ->
+            // The one escape that still matters under the relaxed encoder:
+            // a literal `</script>` inside a string value must be neutralised
+            // or it terminates the surrounding <script type=ld+json> block.
+            let json =
+                StructuredDataHelpers.faqPage [ "Inject", "</script><script>alert(1)</script>" ]
+
+            parseOk "faq-breakout" json
+            Expect.isFalse (json.Contains "</script>") "no raw </script> survives in the JSON-LD"
+            Expect.stringContains json "<\\/script>" "</ rewritten to <\\/ (breakout-safe)"
+
+        testCase "learningResource emits the beginner-reference defaults"
+        <| fun _ ->
+            let json =
+                StructuredDataHelpers.learningResource "C Major on Piano" "A reference page." "Major scale"
+
+            parseOk "learningResource" json
+            Expect.stringContains json "\"@type\":\"LearningResource\"" "LearningResource type"
+            Expect.stringContains json "\"learningResourceType\":\"Reference\"" "default type Reference"
+            Expect.stringContains json "\"educationalLevel\":\"Beginner\"" "default level Beginner"
+            Expect.stringContains json "\"teaches\":\"Major scale\"" "teaches"
+            Expect.stringContains json "\"inLanguage\":\"en\"" "default language en"
+
+        testCase "learningResourceWith honours explicit type / level / language"
+        <| fun _ ->
+            let json =
+                StructuredDataHelpers.learningResourceWith "Adv" "d" "Topic" "Quiz" "Advanced" "fr"
+
+            parseOk "learningResource-with" json
+            Expect.stringContains json "\"learningResourceType\":\"Quiz\"" "explicit type"
+            Expect.stringContains json "\"educationalLevel\":\"Advanced\"" "explicit level"
+            Expect.stringContains json "\"inLanguage\":\"fr\"" "explicit language"
     ]
 
 // ─── Phase 152 — per-page robots <meta> (head half) ─────────────────

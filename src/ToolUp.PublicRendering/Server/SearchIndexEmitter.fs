@@ -43,6 +43,18 @@ type SearchIndexEntry = {
     Keywords: string list
 }
 
+/// How the `keywords` field is serialised per entry (Phase 157 follow-up).
+/// The default `KeywordsArray` preserves the original wire shape; a consumer
+/// whose client expects a single space- (or other-) joined token string opts
+/// into `KeywordsJoined`.
+type SearchIndexKeywordFormat =
+    /// `"keywords":["a","b"]` — the default, byte-for-byte the original 157
+    /// output (GP 11).
+    | KeywordsArray
+    /// `"keywords":"a b"` — the per-entry keyword list joined by `separator`
+    /// into one string, for clients that tokenise a flat keyword string.
+    | KeywordsJoined of separator: string
+
 /// Compose-time config for the search-index endpoint (Phase 157).
 /// `defaults` serves the file-backed universe at `/search-index.json`.
 type SearchIndexConfig = {
@@ -57,6 +69,9 @@ type SearchIndexConfig = {
     /// `public, max-age=300, stale-while-revalidate=86400` — cache for five
     /// minutes, serve stale up to a day while revalidating.
     CacheControl: string
+    /// `keywords` field shape. Default `KeywordsArray` → byte-for-byte the
+    /// original 157 wire output (GP 11).
+    KeywordFormat: SearchIndexKeywordFormat
 }
 
 module SearchIndexConfig =
@@ -64,9 +79,18 @@ module SearchIndexConfig =
         Path = "/search-index.json"
         EntrySource = None
         CacheControl = "public, max-age=300, stale-while-revalidate=86400"
+        KeywordFormat = KeywordsArray
     }
 
     let withPath (path: string) (c: SearchIndexConfig) : SearchIndexConfig = { c with Path = path }
+
+    /// Serialise `keywords` as a joined string (e.g. `withKeywordsJoined " "`
+    /// for a space-separated token string a client tokenises), instead of the
+    /// default JSON array.
+    let withKeywordFormat (format: SearchIndexKeywordFormat) (c: SearchIndexConfig) : SearchIndexConfig = {
+        c with
+            KeywordFormat = format
+    }
 
     let withEntrySource (source: unit -> Async<SearchIndexEntry list>) (c: SearchIndexConfig) : SearchIndexConfig = {
         c with
@@ -134,8 +158,9 @@ module SearchIndexEmitter =
 
     /// Serialise the entries to a compact JSON array (escaped, minimal
     /// whitespace) — pure BCL `System.Text.Json` (GP 1). Fields:
-    /// `url` / `title` / `kind` / `keywords`.
-    let toJson (entries: SearchIndexEntry list) : string =
+    /// `url` / `title` / `kind` / `keywords`. `keywordFormat` selects the
+    /// `keywords` shape (array vs joined string).
+    let toJsonWith (keywordFormat: SearchIndexKeywordFormat) (entries: SearchIndexEntry list) : string =
         let arr = JsonArray()
 
         for entry in entries do
@@ -143,15 +168,24 @@ module SearchIndexEmitter =
             o["url"] <- JsonValue.Create entry.Url
             o["title"] <- JsonValue.Create entry.Title
             o["kind"] <- JsonValue.Create entry.Kind
-            let kw = JsonArray()
 
-            for k in entry.Keywords do
-                kw.Add(JsonValue.Create k)
+            match keywordFormat with
+            | KeywordsArray ->
+                let kw = JsonArray()
 
-            o["keywords"] <- kw
+                for k in entry.Keywords do
+                    kw.Add(JsonValue.Create k)
+
+                o["keywords"] <- kw
+            | KeywordsJoined separator -> o["keywords"] <- JsonValue.Create(String.concat separator entry.Keywords)
+
             arr.Add o
 
         arr.ToJsonString()
+
+    /// Serialise the entries with the default `keywords` JSON-array shape —
+    /// byte-for-byte the original 157 output (GP 11).
+    let toJson (entries: SearchIndexEntry list) : string = toJsonWith KeywordsArray entries
 
     /// Giraffe handler for the search-index endpoint (Phase 157). Mounts at
     /// `config.Path`, emits a compact content-versioned JSON index over the
@@ -189,7 +223,7 @@ module SearchIndexEmitter =
                         SitemapGenerator.lastModifiedOf universe
             }
 
-            let json = toJson entries
+            let json = toJsonWith config.KeywordFormat entries
 
             let body: HttpHandler =
                 fun _ (c: HttpContext) ->

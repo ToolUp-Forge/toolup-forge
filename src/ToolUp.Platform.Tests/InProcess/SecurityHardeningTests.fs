@@ -467,4 +467,46 @@ let cspMiddlewareTests =
                 "default-src 'none'"
                 "an already-present CSP header wins (per-route override preserved)"
         }
+
+        // ─── standalone Csp.applyNonceCsp (no middleware / no DI) ───────
+        // A consumer running its own pipeline calls the helper directly with
+        // its own template + placeholder — the source-mode behaviour
+        // (substitution + stash + 304-skip) without ServerApp.
+
+        test "applyNonceCsp standalone: substitutes the consumer's placeholder + stashes the same nonce" {
+            let ctx, resp = nonceCtx 200
+            let template = "script-src 'self' 'nonce-{NONCE}'"
+            let nonce = Csp.applyNonceCsp ctx template "{NONCE}"
+            resp.FireOnStarting()
+
+            Expect.equal (Csp.requestNonce ctx) (Some nonce) "the layout reads the same nonce the helper minted"
+            let header = ctx.Response.Headers.["Content-Security-Policy"].ToString()
+            Expect.stringContains header (sprintf "'nonce-%s'" nonce) "header carries the minted nonce"
+            Expect.isFalse (header.Contains "{NONCE}") "the consumer placeholder is fully substituted"
+        }
+
+        test "applyNonceCsp standalone: suppresses the header on a 304" {
+            let ctx, resp = nonceCtx 304
+            Csp.applyNonceCsp ctx "script-src 'self' 'nonce-{NONCE}'" "{NONCE}" |> ignore
+            resp.FireOnStarting()
+
+            Expect.isFalse
+                (ctx.Response.Headers.ContainsKey "Content-Security-Policy")
+                "no fresh-nonce header on a 304 (cached body's nonce stays authoritative)"
+        }
+
+        test "applyNonceCsp standalone: a per-route override is not overwritten" {
+            let ctx, resp = nonceCtx 200
+
+            ctx.Response.Headers.["Content-Security-Policy"] <-
+                Microsoft.Extensions.Primitives.StringValues "default-src 'none'"
+
+            Csp.applyNonceCsp ctx "script-src 'self' 'nonce-{NONCE}'" "{NONCE}" |> ignore
+            resp.FireOnStarting()
+
+            Expect.equal
+                (ctx.Response.Headers.["Content-Security-Policy"].ToString())
+                "default-src 'none'"
+                "an already-present CSP header wins"
+        }
     ]

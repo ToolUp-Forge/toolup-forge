@@ -81,37 +81,60 @@ module Csp =
         | true, (:? string as n) -> Some n
         | _ -> None
 
+    /// Phase 156 follow-up — the full per-request nonce-mode flow as a
+    /// standalone helper, so a consumer running its OWN Giraffe / ASP.NET
+    /// pipeline (not the SDK composition root / `ServerApp.withCspSourceMode`)
+    /// can adopt the source-mode behaviour — substitution + the load-bearing
+    /// 304-skip — without `CspMiddleware` or the `ResolvedCspPolicy` DI
+    /// singleton. `CspMiddleware` is itself a thin wrapper over this.
+    ///
+    /// Synchronously (so a layout can read it via `requestNonce` while the
+    /// body renders): mints a per-request nonce, stashes it on
+    /// `HttpContext.Items`, substitutes `placeholder` in `template`, and
+    /// registers an `OnStarting` that stamps the resulting
+    /// `Content-Security-Policy` header — UNLESS the response is a `304`
+    /// (whose revalidated body carries the ORIGINAL nonce; stamping a fresh
+    /// one would mismatch it) or a CSP header is already present (a per-route
+    /// override wins). Returns the minted nonce.
+    let applyNonceCsp (ctx: HttpContext) (template: string) (placeholder: string) : string =
+        let nonce = generateNonce ()
+        ctx.Items[nonceItemKey] <- box nonce
+        let headerValue = template.Replace(placeholder, nonce)
+
+        ctx.Response.OnStarting(fun () ->
+            // Nonce-mode 304 skip — see the type-level note above.
+            let suppressForNonce304 = ctx.Response.StatusCode = 304
+
+            if
+                not suppressForNonce304
+                && not (ctx.Response.Headers.ContainsKey "Content-Security-Policy")
+            then
+                ctx.Response.Headers["Content-Security-Policy"] <-
+                    Microsoft.Extensions.Primitives.StringValues headerValue
+
+            System.Threading.Tasks.Task.CompletedTask)
+
+        nonce
+
 type CspMiddleware(next: RequestDelegate, policy: SecurityHardening.ResolvedCspPolicy) =
     member _.InvokeAsync(ctx: HttpContext) = task {
         if policy.Header <> "" then
-            // Nonce mode: mint the per-request nonce up front (so the
-            // layout can read it while rendering) and resolve the header
-            // value it will be stamped with. Static / hash mode: the
-            // header is byte-stable, stamped verbatim — no per-request
-            // work (GP 13).
-            let headerValue =
-                if policy.NonceMode then
-                    let nonce = Csp.generateNonce ()
-                    ctx.Items[Csp.nonceItemKey] <- box nonce
-                    policy.Header.Replace(SecurityHardening.noncePlaceholder, nonce)
-                else
-                    policy.Header
+            if policy.NonceMode then
+                // Nonce mode: the full mint + substitute + stash + 304-skip
+                // flow now lives in `Csp.applyNonceCsp` (a standalone helper a
+                // self-pipeline consumer can call directly); this middleware is
+                // a thin wrapper over it. Behaviour is byte-for-byte identical
+                // to the pre-extraction inline version.
+                Csp.applyNonceCsp ctx policy.Header SecurityHardening.noncePlaceholder |> ignore
+            else
+                // Static / hash mode: the header is byte-stable, stamped
+                // verbatim — no per-request work (GP 13), no 304-skip.
+                ctx.Response.OnStarting(fun () ->
+                    if not (ctx.Response.Headers.ContainsKey "Content-Security-Policy") then
+                        ctx.Response.Headers["Content-Security-Policy"] <-
+                            Microsoft.Extensions.Primitives.StringValues policy.Header
 
-            ctx.Response.OnStarting(fun () ->
-                // Nonce-mode 304 skip: a revalidated body keeps the header
-                // (and nonce) the browser already cached; stamping a fresh
-                // nonce here would mismatch that body. Static / hash mode
-                // is byte-stable, so the header is always safe to stamp.
-                let suppressForNonce304 = policy.NonceMode && ctx.Response.StatusCode = 304
-
-                if
-                    not suppressForNonce304
-                    && not (ctx.Response.Headers.ContainsKey "Content-Security-Policy")
-                then
-                    ctx.Response.Headers["Content-Security-Policy"] <-
-                        Microsoft.Extensions.Primitives.StringValues headerValue
-
-                System.Threading.Tasks.Task.CompletedTask)
+                    System.Threading.Tasks.Task.CompletedTask)
 
         do! next.Invoke(ctx)
     }

@@ -7,6 +7,7 @@ open System
 open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
+open ToolUp.Platform.Metrics
 
 // ─── Phase 155 — handler-agnostic HTTP conditional-GET primitive ─────
 //
@@ -136,6 +137,44 @@ module ConditionalGet =
     /// fingerprint doubles as the ETag content hash.
     let immutableAsset (fingerprint: string) (lastModified: DateTimeOffset) : HttpHandler =
         cacheable fingerprint lastModified "public, max-age=31536000, immutable"
+
+    /// `cacheable` plus the Phase 153 crawler-observability emits, so a
+    /// programmatic-SSR consumer that adopts this combinator (rather than
+    /// composing `PublicPageHandler`) still gets the SEO metrics for free:
+    /// `publicrendering.conditional_get{outcome=304|200}` (the Googlebot
+    /// 304-rate large indexed-site runbooks chase) and
+    /// `publicrendering.request_by_agent{agent=…}` (bounded crawler-class
+    /// buckets via a cheap UA substring scan; the raw UA is never a tag).
+    ///
+    /// Wire behaviour is byte-for-byte identical to `cacheable` — the emits
+    /// are side-effects on the supplied `IMetricsSink`. Pass a real sink to
+    /// opt in; a `NoOpMetricsSink` makes every emit an empty method body, so
+    /// this is the same zero-cost-when-unused shape `cacheable` has
+    /// (GP 13) — there is no behavioural reason to keep using the bare
+    /// `cacheable` once a sink is available.
+    let cacheableWithMetrics
+        (metrics: IMetricsSink)
+        (etag: string)
+        (lastModified: DateTimeOffset)
+        (cacheControl: string)
+        : HttpHandler =
+        fun (next: HttpFunc) (ctx: HttpContext) ->
+            setValidators ctx etag lastModified cacheControl
+
+            let userAgent =
+                match ctx.Request.Headers.TryGetValue "User-Agent" with
+                | true, v -> v.ToString()
+                | _ -> ""
+
+            RenderMetrics.emitAgent metrics (RenderMetrics.classifyAgent userAgent)
+
+            if isNotModified ctx etag lastModified then
+                ctx.Response.StatusCode <- 304
+                RenderMetrics.emitConditionalGet metrics RenderMetrics.CondGet304
+                earlyReturn ctx
+            else
+                RenderMetrics.emitConditionalGet metrics RenderMetrics.CondGet200
+                next ctx
 
     // ─── Content-version stamp (Phase 147) ───────────────────────────
 

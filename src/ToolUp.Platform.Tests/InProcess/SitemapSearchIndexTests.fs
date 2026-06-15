@@ -345,6 +345,61 @@ let private searchIndex157Tests =
             Expect.equal kw [ "product"; "launch" ] "keywords from the frontmatter"
             Expect.isFalse (json.Contains "\n") "compact JSON — no newlines"
 
+        testCase "KeywordFormat: default array is unchanged; KeywordsJoined flattens to a string"
+        <| fun _ ->
+            let entries = [
+                {
+                    Url = "https://example.com/x"
+                    Title = "X"
+                    Kind = "doc"
+                    Keywords = [ "alpha"; "beta" ]
+                }
+            ]
+
+            // Default (array) — byte-for-byte the original 157 shape (GP 11).
+            Expect.equal
+                (SearchIndexEmitter.toJson entries)
+                (SearchIndexEmitter.toJsonWith KeywordsArray entries)
+                "toJson == array default"
+
+            Expect.stringContains
+                (SearchIndexEmitter.toJson entries)
+                "\"keywords\":[\"alpha\",\"beta\"]"
+                "default emits a JSON array"
+
+            // Joined — a single space-separated keyword string for clients
+            // that tokenise a flat string.
+            let joined = SearchIndexEmitter.toJsonWith (KeywordsJoined " ") entries
+            Expect.stringContains joined "\"keywords\":\"alpha beta\"" "joined emits one string"
+            Expect.isFalse (joined.Contains "[\"alpha\"") "no array in joined form"
+
+        testCase "handler honours config.KeywordFormat"
+        <| fun _ ->
+            let custom =
+                fun () -> async {
+                    return [
+                        {
+                            Url = "https://example.com/x"
+                            Title = "X"
+                            Kind = "doc"
+                            Keywords = [ "alpha"; "beta" ]
+                        }
+                    ]
+                }
+
+            let config =
+                SearchIndexConfig.defaults
+                |> SearchIndexConfig.withEntrySource custom
+                |> SearchIndexConfig.withKeywordFormat (KeywordsJoined " ")
+
+            let api = fakeApi [ mkPage "ignored" None ]
+            let handler = SearchIndexEmitter.handler config "https://example.com" api noDynamic
+            let ctx = mkCtxWith []
+            ctx.Request.Path <- PathString "/search-index.json"
+            let status, body = runHandler handler ctx
+            Expect.equal status 200 "served"
+            Expect.stringContains body "\"keywords\":\"alpha beta\"" "endpoint emits the joined keyword string"
+
         testCase "a custom EntrySource overrides the file-backed universe"
         <| fun _ ->
             let custom =

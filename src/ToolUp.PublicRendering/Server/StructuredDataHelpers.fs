@@ -1,6 +1,7 @@
 namespace ToolUp.PublicRendering
 
 open System.Text.Json
+open System.Text.Encodings.Web
 open ToolUp.Platform.Narrative
 
 /// JSON-LD emitters for the five most common schema.org types on
@@ -16,8 +17,23 @@ open ToolUp.Platform.Narrative
 module StructuredDataHelpers =
     let private opt = Option.defaultValue ""
 
+    // JSON-LD is embedded verbatim in a `<script type="application/ld+json">`
+    // block. STJ's default `JavaScriptEncoder` is ASCII-safe but escapes every
+    // non-ASCII rune and the HTML-significant set (`<`, `>`, `&`, `+`, `'`) to
+    // `\uXXXX` — valid JSON, but it bloats human-authored content (a `°`, an
+    // arrow, an `&` in prose) into noise and diverges byte-for-byte from the
+    // minimal escaping a hand-rolled emitter produces. Use
+    // `UnsafeRelaxedJsonEscaping` (passes UTF-8 + `<`/`>`/`&` through) and then
+    // re-apply the ONE escape that matters for `<script>` embedding: rewrite
+    // `</` → `<\/` so a literal `</script>` inside a string value cannot
+    // terminate the surrounding block (the relaxed encoder would otherwise emit
+    // it verbatim — an XSS breakout). The `</`-rewrite only ever matches inside
+    // string values; JSON structure contains no `</`.
+    let private serialiseOptions =
+        JsonSerializerOptions(WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
+
     let private serialise (payload: obj) : string =
-        JsonSerializer.Serialize(payload, JsonSerializerOptions(WriteIndented = false))
+        JsonSerializer.Serialize(payload, serialiseOptions).Replace("</", "<\\/")
 
     /// `Article` schema — news posts, blog entries, long-form pages.
     /// Frontmatter keys read: `author`, `og:image`, `description`,
@@ -359,6 +375,49 @@ module StructuredDataHelpers =
                 "@type", box "HowTo"
                 "name", box name
                 "step", box stepElements
+            ]
+        )
+
+    /// `LearningResource` schema — the SERP `LearningResource` rich result for
+    /// an educational reference page. `name` / `description` / `teaches` are
+    /// the caller's; `learningResourceType` / `educationalLevel` / `inLanguage`
+    /// carry the common reference-page defaults (`"Reference"` / `"Beginner"` /
+    /// `"en"`) — pass the richer overload when a page needs other values.
+    let learningResource (name: string) (description: string) (teaches: string) : string =
+        serialise (
+            dict [
+                "@context", box "https://schema.org"
+                "@type", box "LearningResource"
+                "name", box name
+                "description", box description
+                "learningResourceType", box "Reference"
+                "educationalLevel", box "Beginner"
+                "teaches", box teaches
+                "inLanguage", box "en"
+            ]
+        )
+
+    /// `LearningResource` schema with explicit `learningResourceType` /
+    /// `educationalLevel` / `inLanguage` — for pages that aren't the
+    /// beginner-reference default the 3-arg `learningResource` assumes.
+    let learningResourceWith
+        (name: string)
+        (description: string)
+        (teaches: string)
+        (learningResourceType: string)
+        (educationalLevel: string)
+        (inLanguage: string)
+        : string =
+        serialise (
+            dict [
+                "@context", box "https://schema.org"
+                "@type", box "LearningResource"
+                "name", box name
+                "description", box description
+                "learningResourceType", box learningResourceType
+                "educationalLevel", box educationalLevel
+                "teaches", box teaches
+                "inLanguage", box inLanguage
             ]
         )
 
