@@ -10,6 +10,7 @@
     <Compile Include="StripeEventTests.fs" />
     <Compile Include="TokenTests.fs" />
     <Compile Include="SmokeTests.fs" />
+    <Compile Include="StripeWebhookHandlerTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
@@ -18,7 +19,10 @@
     <ProjectReference Include="..\ToolUp.Stripe.Server\ToolUp.Stripe.Server.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Expecto" />
+    <!-- TestHost only in the test pack — never the shipped package. -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
   </ItemGroup>
 </Project>
