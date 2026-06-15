@@ -786,7 +786,12 @@ module GiraffeUtil =
                                             member _.CorrelationId = Some correlationId
                                         }
 
-                                    return Validation.evaluate validationContext inputT inputValue
+                                    return
+                                        Validation.evaluate
+                                            options.ValidationMessages
+                                            validationContext
+                                            inputT
+                                            inputValue
                                 | None -> return []
                             | _ -> return []
                         }

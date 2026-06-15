@@ -41,15 +41,24 @@ type TeamAIKeyStatus = {
 /// dispatcher's audit snapshot redacts it.
 type SetPlatformAIKeyRequest = {
     [<PiiSafe>]
+    [<NotEmpty>]
     ProviderId: string
+    // Phase 69e.H — the dispatcher rejects a blank / whitespace-only key
+    // with a structured validation envelope. The handler's own
+    // empty-key guard is retained as defence-in-depth for direct callers
+    // (the attribute fires on the HTTP path only).
+    [<NotEmpty>]
     ApiKey: string
 }
 
 type SetTeamAIKeyRequest = {
     [<PiiSafe>]
+    [<NotEmpty>]
     TeamId: string
     [<PiiSafe>]
+    [<NotEmpty>]
     ProviderId: string
+    [<NotEmpty>]
     ApiKey: string
 }
 

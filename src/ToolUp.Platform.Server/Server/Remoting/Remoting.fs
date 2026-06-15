@@ -40,6 +40,7 @@ module Remoting =
         RequireAuditOnRoleGated = false
         IdempotencyStore = None
         IdempotencyTtl = System.TimeSpan.FromHours 1.0
+        ValidationMessages = None
         SchemaVersion = 1
         MaxMultipartSectionBytes = 16L * 1024L * 1024L // 16 MiB
         MaxMultipartSections = 64
@@ -216,6 +217,20 @@ module Remoting =
     let withAuditRequiredOnRoleGated (options: RemotingOptions<'t, 'implementation>) = {
         options with
             RequireAuditOnRoleGated = true
+    }
+
+    /// Phase 69e.C — compose a validation-message resolver. The dispatcher
+    /// hands every typed-validation violation through `messages.Resolve`,
+    /// which returns `Some localised` to override the built-in English
+    /// message or `None` to keep it. Build one from a `ViolationCode ->
+    /// template` map with `ValidationMessages.fromTemplates`, or implement
+    /// `IValidationMessages` directly for fully programmatic resolution.
+    ///
+    /// Default: not composed; the built-in English messages ship on the
+    /// wire and the seam costs nothing per request (GP 13).
+    let withValidationMessages (messages: IValidationMessages) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            ValidationMessages = Some messages
     }
 
     /// Phase 69f — compose an `IIdempotencyStore` against which

@@ -126,11 +126,17 @@ type EmailInvitation = {
 /// the embed URL), `{{displayName}}` (optional, falls back to the
 /// recipient's email address).
 type DispatchInvitationsRequest = {
+    // Phase 69e.H — required identifiers / message body are rejected
+    // up-front when blank (an empty schema id misses the schema lookup;
+    // an empty subject / body produces a broken invitation email).
+    [<NotEmpty>]
     SchemaId: FormSchemaId
     Invitations: EmailInvitation list
     ExpiresAt: DateTimeOffset option
     UseLimit: int option option
+    [<NotEmpty>]
     Subject: string
+    [<NotEmpty>]
     BodyTemplate: string
 }
 

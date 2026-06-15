@@ -1,6 +1,6 @@
 # Phase 69e — end-to-end typed validation on input records (consumer migration)
 
-> **Substrate status: complete.** The v0 (top-level, server-tier-only) engine has been extended to the full planned surface: **nested-record / list-element / option-of-record traversal**, the **`[<Custom>]` `IFieldValidator`** escape hatch with `IValidationContext`, the `[<MinValue>]` / `[<MaxValue>]` / `[<Uri>]` attributes, **family-agnostic recognition** of the Fable-safe `ToolUp.Platform.*` mirrors, and the **Forms-schema integration** bridge. (A localisable message catalogue remains a future addition — violation messages are the built-in English ones today.)
+> **Substrate status: complete.** The v0 (top-level, server-tier-only) engine has been extended to the full planned surface: **nested-record / list-element / option-of-record traversal**, the **`[<Custom>]` `IFieldValidator`** escape hatch with `IValidationContext`, the `[<MinValue>]` / `[<MaxValue>]` / `[<Uri>]` attributes, **family-agnostic recognition** of the Fable-safe `ToolUp.Platform.*` mirrors, the **Forms-schema integration** bridge, and (Phase 69e.C) a **localisable / overridable message seam** (`IValidationMessages`). Forge SDK companion API records are now annotated where validation is unambiguous (Phase 69e.H).
 
 ## What changes
 
@@ -50,6 +50,28 @@ type UniqueWithinTenant() =
             None // Some "message" to reject
 ```
 
+### Localising / overriding messages (Phase 69e.C)
+
+By default each violation carries the attribute's built-in **English** message. To localise (or otherwise customise) the wording, compose an `IValidationMessages` resolver — the dispatcher hands every violation through it before building the envelope:
+
+```fsharp
+// A ViolationCode -> template map. Templates reference the violation's
+// structured args ({min}/{max}/{actual}/{pattern}) and the field {path}.
+let messages =
+    ValidationMessages.fromTemplates (
+        Map [
+            "MinLength", "{path} doit comporter au moins {min} caractères (reçu {actual})"
+            "Email",     "{path} n'est pas une adresse e-mail valide"
+            "Range",     "{path} hors plage [{min}, {max}]"
+        ]
+    )
+
+// Compose through the Api.make `customOptions` escape hatch:
+Api.make (myApi, customOptions = Remoting.withValidationMessages messages)
+```
+
+A code absent from the map (or a resolver returning `None`) falls through to the built-in English message, so partial catalogues are fine. `ValidationMessages.englishTemplates` is the documented baseline a localiser copies + translates. The seam is **zero-cost when unused** (GP 13) — composing nothing keeps the built-in messages on the wire and pays nothing per request. The wire shape is unchanged either way: `FieldViolation` stays `{ Path; Code; Message }`; only the `Message` text differs.
+
 ### Forms integration (Phase 21)
 
 When an input record is shared between the transport and a Form, `ToolUp.Forms.Server.ValidationAttributeBridge.fieldsFromRecord recordType` produces a `FieldSchema list` from the same attributes — `[<MinLength 3>]` → `LengthRange(Some 3, None)`, `[<Range(18, 120)>]` → a `NumberField` bound + `NumberRange` validator, `[<Email>]` → a tagged `Regex`, `[<NotEmpty>]` → `Required = true`. Client-side form rendering then matches server-side transport enforcement from one attribute set.
@@ -63,7 +85,13 @@ When an input record is shared between the transport and a Form, `ToolUp.Forms.S
 
 ## Adoption note
 
-The substrate, the family-agnostic recognition, and the Forms bridge ship ready. Annotating the **existing** forge SDK input records is left **adoption-incremental on purpose**: adding a validator newly *rejects* inputs a handler previously accepted, so each record is annotated together with removing its matching handler-internal check (per the diff above) rather than swept blind — a behaviour change, not a mechanical rename. New input records should be born annotated.
+The substrate, the family-agnostic recognition, the Forms bridge, and the message seam ship ready.
+
+**Forge SDK records (Phase 69e.H).** The forge SDK companion API records have now been annotated where validation is **unambiguous** — a blank required identifier / routing key / token, or a non-positive count, can only fail downstream, so the dispatcher rejects it up-front with a structured `ErrorCategory.Validation` envelope instead of an opaque later failure. Records covered: `ModuleQueryRequest` (`TargetModule` / `QueryKey`), `SetPlatformAIKeyRequest` / `SetTeamAIKeyRequest` (`ProviderId` / `TeamId` / `ApiKey`), `SlotSearchRequest` (`ResourceId` + `SlotDurationMinutes ≥ 1`), `DispatchInvitationsRequest` (`SchemaId` / `Subject` / `BodyTemplate`), `SubmitWithTokenRequest` (`Token`). The genuine annotatable surface is small by design — most forge API methods take primitives / typed-id aliases / tuples (the dispatcher validates the first **record** argument only) or already funnel input errors through a typed domain `Result`/error DU, where a transport-400 would *fragment* a clean error channel rather than improve it.
+
+**Defence-in-depth, not replacement.** Validation runs in the **dispatcher** (HTTP path), so a pre-existing in-handler guard (e.g. the AI-keys empty-key check) is **retained** as defence-in-depth for direct in-process callers — the attribute is the primary transport-boundary guard, the handler check still protects non-HTTP invocation. (The earlier "delete the handler check" guidance applies only to ad-hoc checks fully subsumed on every call path; a guard that also covers direct callers stays.)
+
+**New records are born annotated.** A new input record carrying a required string id / count adds the attribute at the declaration site from the start — that is the cheapest point to make "what shape is acceptable here" visible and machine-enforced.
 
 ## Rollback
 

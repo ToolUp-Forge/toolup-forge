@@ -48,6 +48,11 @@ let ResourceKind = "forms.publishable"
 /// and the entity-reflection fields from the resolved claim and
 /// the schema's current state.
 type SubmitWithTokenRequest = {
+    // Phase 69e.H — a blank token can only fail share-token resolution;
+    // reject it with a structured validation envelope up-front. (Token
+    // authenticity / expiry / use-count are still enforced server-side
+    // per call against `IShareTokenStore`.)
+    [<NotEmpty>]
     Token: string
     /// Field values keyed by `FieldSchema.Key`. Validated server-side.
     Values: Map<string, FieldValue>

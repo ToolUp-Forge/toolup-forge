@@ -13,9 +13,14 @@ type ModuleQueryRequest = {
     /// Name of the recipient module (matches `ServerModule.Name` /
     /// `ClientModule.Definition.Id`). Callers pass this as a plain
     /// string — the SDK never hard-codes a module name.
+    // Phase 69e.H — a blank routing key is a malformed request (it can
+    // only ever miss the bus router); the dispatcher rejects it with a
+    // structured validation envelope rather than a downstream NoHandler.
+    [<ToolUp.Platform.NotEmpty>]
     TargetModule: string
     /// Module-declared discriminator (e.g. `"latest-analysis"`). The
     /// bus routes `(TargetModule, QueryKey)` to exactly one handler.
+    [<ToolUp.Platform.NotEmpty>]
     QueryKey: string
     /// Serialised `'TRequest` payload. Empty string when the query
     /// takes no input.

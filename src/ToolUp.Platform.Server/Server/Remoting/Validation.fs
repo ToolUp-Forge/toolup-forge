@@ -221,6 +221,56 @@ module ValidationContext =
             member _.CorrelationId = None
         }
 
+// -----------------------------------------------------------------------------
+
+/// Phase 69e.C — message-catalogue helpers. The built-in English message
+/// already lives on each attribute; this module turns a `ViolationCode ->
+/// template` map into an `IValidationMessages` so a deployment can supply
+/// localised templates (or override the wording) without writing an
+/// interface implementation by hand.
+[<RequireQualifiedAccess>]
+module ValidationMessages =
+
+    /// Substitute `{token}` placeholders in `template` from `args`, plus
+    /// the special `{path}` token. Unknown tokens are left verbatim so a
+    /// typo in a template is visible rather than silently blanked.
+    let internal applyTemplate (path: string) (args: Map<string, string>) (template: string) : string =
+        let withPath = template.Replace("{path}", path)
+
+        args
+        |> Map.fold (fun (acc: string) k v -> acc.Replace("{" + k + "}", v)) withPath
+
+    /// Build an `IValidationMessages` from a `ViolationCode -> template`
+    /// map. A template may reference the violation's structured args by
+    /// `{name}` (`{min}`, `{max}`, `{actual}`, `{pattern}`) and the field
+    /// `{path}`. A code absent from the map falls through to the built-in
+    /// English message (the resolver returns `None`).
+    let fromTemplates (templates: Map<string, string>) : IValidationMessages =
+        { new IValidationMessages with
+            member _.Resolve request =
+                templates
+                |> Map.tryFind request.Code
+                |> Option.map (applyTemplate request.Path request.Args)
+        }
+
+    /// The default English template set, keyed by violation code. Supplied
+    /// as the documented starting point a localiser copies + translates;
+    /// passing it to `fromTemplates` reproduces (close to) the built-in
+    /// wording, so a deployment can diff its overrides against a known
+    /// baseline.
+    let englishTemplates: Map<string, string> =
+        Map [
+            "MinLength", "string length {actual} below minimum {min}"
+            "MaxLength", "string length {actual} above maximum {max}"
+            "NotEmpty", "value is required (non-empty after trim)"
+            "Regex", "value did not match pattern '{pattern}'"
+            "Email", "value is not a syntactically valid email"
+            "Uri", "value is not a valid absolute URI"
+            "Range", "value {actual} outside allowed range [{min}, {max}]"
+            "MinValue", "value {actual} below minimum {min}"
+            "MaxValue", "value {actual} above maximum {max}"
+        ]
+
 module internal Validation =
 
     // Reflect over public AND non-public records — input DTOs are usually
@@ -395,14 +445,79 @@ module internal Validation =
             let case, fields = FSharpValue.GetUnionFields(value, optionType)
             if case.Name = "Some" then Some fields.[0] else None
 
+    /// Phase 69e.C — structured args for a built-in attribute violation,
+    /// so an `IValidationMessages` resolver can rebuild a localised message
+    /// without parsing the English default. Keys mirror the `{token}`
+    /// placeholders the default templates use (`min`, `max`, `actual`,
+    /// `pattern`). `actual` is the offending value formatted the same way
+    /// the built-in message formats it (string length as an integer,
+    /// numerics via `%g`); `[<Custom>]` validators own their message and
+    /// carry no structured args.
+    let private buildArgs (attr: ValidationAttribute) (value: obj) : Map<string, string> =
+        let strLen =
+            match value with
+            | :? string as s when not (isNull s) -> Some s.Length
+            | _ -> None
+
+        let withActualLen pairs =
+            match strLen with
+            | Some l -> ("actual", string l) :: pairs
+            | None -> pairs
+
+        let withActualNum pairs =
+            match Numeric.asFloat value with
+            | Some v -> ("actual", sprintf "%g" v) :: pairs
+            | None -> pairs
+
+        match attr with
+        | :? MinLengthAttribute as a -> Map.ofList (withActualLen [ "min", string a.MinLength ])
+        | :? MaxLengthAttribute as a -> Map.ofList (withActualLen [ "max", string a.MaxLength ])
+        | :? RegexAttribute as a -> Map.ofList [ "pattern", a.Pattern ]
+        | :? RangeAttribute as a -> Map.ofList (withActualNum [ "min", sprintf "%g" a.Min; "max", sprintf "%g" a.Max ])
+        | :? MinValueAttribute as a -> Map.ofList (withActualNum [ "min", sprintf "%g" a.MinValue ])
+        | :? MaxValueAttribute as a -> Map.ofList (withActualNum [ "max", sprintf "%g" a.MaxValue ])
+        | _ -> Map.empty // NotEmpty / Email / Uri carry no structured params
+
+    /// Phase 69e.C — apply the optional message resolver to one violation.
+    /// `None` (no seam composed) or a resolver returning `None` falls back
+    /// to the attribute's built-in English message, so the wire shape is
+    /// unchanged by default (GP 11 / GP 13).
+    let private resolveMessage
+        (messages: IValidationMessages option)
+        (code: string)
+        (path: string)
+        (args: Map<string, string>)
+        (defaultMessage: string)
+        : string =
+        match messages with
+        | None -> defaultMessage
+        | Some m ->
+            match
+                m.Resolve {
+                    Code = code
+                    Path = path
+                    Args = args
+                    DefaultMessage = defaultMessage
+                }
+            with
+            | Some localised -> localised
+            | None -> defaultMessage
+
     /// Evaluate every validation attribute across the input record's
     /// fields AND recursively into nested records, list / array / seq
     /// elements, and option-wrapped records. Violations carry a dotted /
     /// indexed path (`Address.Postcode`, `Lines[2].Sku`). Collect-then-
     /// emit: every violation from one bad input is reported in a single
     /// pass (no short-circuit). `context` is handed to any `[<Custom>]`
-    /// `IFieldValidator`.
-    let evaluate (context: IValidationContext) (inputType: Type) (inputValue: obj) : FieldViolation list =
+    /// `IFieldValidator`. `messages` (Phase 69e.C) optionally localises /
+    /// overrides each violation's message; `None` keeps the built-in
+    /// English text.
+    let evaluate
+        (messages: IValidationMessages option)
+        (context: IValidationContext)
+        (inputType: Type)
+        (inputValue: obj)
+        : FieldViolation list =
         let violations = ResizeArray<FieldViolation>()
 
         let rec walk (prefix: string) (recordType: Type) (recordValue: obj) =
@@ -424,17 +539,19 @@ module internal Validation =
                                     violations.Add {
                                         Path = path
                                         Code = "Custom"
-                                        Message = message
+                                        Message = resolveMessage messages "Custom" path Map.empty message
                                     }
                                 | None -> ()
                             | None -> ()
                         | Some attr ->
                             match attr.Validate value with
                             | Some message ->
+                                let code = attr.GetType().Name.Replace("Attribute", "")
+
                                 violations.Add {
                                     Path = path
-                                    Code = attr.GetType().Name.Replace("Attribute", "")
-                                    Message = message
+                                    Code = code
+                                    Message = resolveMessage messages code path (buildArgs attr value) message
                                 }
                             | None -> ()
                         | None -> ()

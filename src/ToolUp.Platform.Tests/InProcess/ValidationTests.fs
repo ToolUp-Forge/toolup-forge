@@ -92,7 +92,9 @@ let tests =
                 Billing = None
             }
 
-            let violations = Validation.evaluate ValidationContext.none typeof<OrderInput> input
+            let violations =
+                Validation.evaluate None ValidationContext.none typeof<OrderInput> input
+
             Expect.equal (paths violations) [ "Name" ] "only the too-short Name violates"
             Expect.equal violations.Head.Code "MinLength" "code is the attribute name minus suffix"
         }
@@ -106,11 +108,19 @@ let tests =
                 Billing = Some { Postcode = "TOOLONGPOSTCODE" } // MaxLength 8
             }
 
-            let violations = Validation.evaluate ValidationContext.none typeof<OrderInput> input
+            let violations =
+                Validation.evaluate None ValidationContext.none typeof<OrderInput> input
 
             Expect.equal
                 (paths violations)
-                [ "Address.Postcode"; "Billing.Postcode"; "Contact"; "Lines[0].Qty"; "Lines[0].Sku"; "Name" ]
+                [
+                    "Address.Postcode"
+                    "Billing.Postcode"
+                    "Contact"
+                    "Lines[0].Qty"
+                    "Lines[0].Sku"
+                    "Name"
+                ]
                 "nested record (Address.Postcode), list element (Lines[0].*), option record (Billing.Postcode), and \
                  top-level fields all surface in one collect-then-emit pass"
         }
@@ -124,7 +134,9 @@ let tests =
                 Billing = None
             }
 
-            let violations = Validation.evaluate ValidationContext.none typeof<OrderInput> input
+            let violations =
+                Validation.evaluate None ValidationContext.none typeof<OrderInput> input
+
             Expect.equal (paths violations) [ "Lines[1].Qty"; "Lines[1].Sku" ] "only the second line element violates"
         }
 
@@ -134,30 +146,44 @@ let tests =
             Expect.isFalse (cls.ContainsKey "NoValidation") "an int-input method has none"
 
             let nested = Validation.classify typeof<NestedOnlyApi>
-            Expect.isTrue (nested.ContainsKey "Go") "Go's input validates only through its nested Address — must still classify"
+
+            Expect.isTrue
+                (nested.ContainsKey "Go")
+                "Go's input validates only through its nested Address — must still classify"
         }
 
         test "mirror-family attributes are recognised identically (the dead-mirror fix)" {
             let bad = { Field = "x" } // too short AND not an email
-            let violations = Validation.evaluate ValidationContext.none typeof<MirrorInput> bad
+
+            let violations =
+                Validation.evaluate None ValidationContext.none typeof<MirrorInput> bad
 
             Expect.equal (paths violations) [ "Field"; "Field" ] "both the MinLength and Email mirrors fire"
-            Expect.isTrue (violations |> List.exists (fun v -> v.Code = "MinLength")) "the mirror MinLength normalised to the server-tier rule"
-            Expect.isTrue (violations |> List.exists (fun v -> v.Code = "Email")) "the mirror Email normalised to the server-tier rule"
+
+            Expect.isTrue
+                (violations |> List.exists (fun v -> v.Code = "MinLength"))
+                "the mirror MinLength normalised to the server-tier rule"
+
+            Expect.isTrue
+                (violations |> List.exists (fun v -> v.Code = "Email"))
+                "the mirror Email normalised to the server-tier rule"
         }
 
         test "[<Custom>] IFieldValidator runs with the request context" {
             let ctx =
                 { new IValidationContext with
                     member _.SubjectId = "user:bob"
-                    member _.CorrelationId = Some "corr-1" }
+                    member _.CorrelationId = Some "corr-1"
+                }
 
-            let violations = Validation.evaluate ctx typeof<CustomInput> { Greeting = "bye" }
+            let violations =
+                Validation.evaluate None ctx typeof<CustomInput> { Greeting = "bye" }
+
             Expect.equal (paths violations) [ "Greeting" ] "the custom validator rejects"
             Expect.equal violations.Head.Code "Custom" "code is Custom"
             Expect.stringContains violations.Head.Message "user:bob" "the validator saw the subject id from the context"
 
-            let ok = Validation.evaluate ctx typeof<CustomInput> { Greeting = "hi" }
+            let ok = Validation.evaluate None ctx typeof<CustomInput> { Greeting = "hi" }
             Expect.isEmpty ok "a passing custom validator yields no violation"
         }
 
@@ -170,5 +196,112 @@ let tests =
             Expect.isNone (RangeAttribute(1.0, 5.0).Validate(box 3)) "3 is within [1,5]"
             Expect.isSome (UriAttribute().Validate(box "not a uri")) "plain text is not an absolute URI"
             Expect.isNone (UriAttribute().Validate(box "https://example.com/x")) "an absolute URL passes"
+        }
+
+        // ── Phase 69e.C — IValidationMessages localisation seam ──────────
+
+        test "no resolver composed: violations carry the built-in English message (default wire shape)" {
+            let input = {
+                Name = "ab"
+                Contact = "ok@example.com"
+                Address = { Postcode = "AB1 2CD" }
+                Lines = []
+                Billing = None
+            }
+
+            let violations =
+                Validation.evaluate None ValidationContext.none typeof<OrderInput> input
+
+            Expect.equal
+                violations.Head.Message
+                "string length 2 below minimum 3"
+                "default English message unchanged when no seam is composed"
+        }
+
+        test "fromTemplates localises by code with structured args ({min}/{max}/{actual}/{pattern}/{path})" {
+            let messages =
+                ValidationMessages.fromTemplates (
+                    Map [
+                        "MinLength", "{path} trop court : {actual} < {min}"
+                        "Range", "{path} hors plage [{min}, {max}] (reçu {actual})"
+                    ]
+                )
+
+            let order = {
+                Name = "ab" // MinLength 3, actual length 2
+                Contact = "ok@example.com"
+                Address = { Postcode = "AB1 2CD" }
+                Lines = []
+                Billing = None
+            }
+
+            let violations =
+                Validation.evaluate (Some messages) ValidationContext.none typeof<OrderInput> order
+
+            Expect.equal
+                violations.Head.Message
+                "Name trop court : 2 < 3"
+                "the MinLength template substitutes path + structured args"
+
+            Expect.equal violations.Head.Code "MinLength" "the code is unchanged — only the message is localised"
+        }
+
+        test "a code absent from the template map falls through to the built-in English message" {
+            // Only MinLength is templated; the Email violation must keep its default.
+            let messages = ValidationMessages.fromTemplates (Map [ "MinLength", "too short" ])
+
+            let order = {
+                Name = "valid"
+                Contact = "nope" // Email violation — not templated
+                Address = { Postcode = "AB1 2CD" }
+                Lines = []
+                Billing = None
+            }
+
+            let violations =
+                Validation.evaluate (Some messages) ValidationContext.none typeof<OrderInput> order
+
+            Expect.equal (paths violations) [ "Contact" ] "only the email violates"
+
+            Expect.equal
+                violations.Head.Message
+                "value is not a syntactically valid email"
+                "an untemplated code keeps the built-in message"
+        }
+
+        test "englishTemplates round-trips a Range violation close to the built-in wording" {
+            let messages = ValidationMessages.fromTemplates ValidationMessages.englishTemplates
+
+            // RangeAttribute message: "value %g outside allowed range [%g, %g]"
+            let req: ValidationMessageRequest = {
+                Code = "Range"
+                Path = "Score"
+                Args = Map [ "min", "1"; "max", "5"; "actual", "9" ]
+                DefaultMessage = "ignored"
+            }
+
+            Expect.equal
+                (messages.Resolve req)
+                (Some "value 9 outside allowed range [1, 5]")
+                "the English template reconstructs the built-in Range wording from structured args"
+        }
+
+        test "custom validator messages are routed through the resolver too" {
+            let ctx =
+                { new IValidationContext with
+                    member _.SubjectId = "user:bob"
+                    member _.CorrelationId = None
+                }
+
+            let messages =
+                ValidationMessages.fromTemplates (Map [ "Custom", "rejected at {path}" ])
+
+            let violations =
+                Validation.evaluate (Some messages) ctx typeof<CustomInput> { Greeting = "bye" }
+
+            Expect.equal
+                violations.Head.Message
+                "rejected at Greeting"
+                "the Custom code is resolvable; {path} substitutes"
         }
     ]

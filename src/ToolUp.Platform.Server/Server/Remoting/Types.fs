@@ -360,6 +360,36 @@ type IIdempotencyStore =
     abstract TryGet: key: string * scope: string -> Async<MemoisedResponse option>
     abstract Store: key: string * scope: string * response: MemoisedResponse * ttl: System.TimeSpan -> Async<unit>
 
+/// Phase 69e.C — structured information about a single field validation
+/// violation, handed to an `IValidationMessages` resolver so it can
+/// produce a localised (or otherwise customised) message. `Code` is the
+/// stable violation code (`MinLength`, `Range`, `Custom`, …); `Path` is
+/// the dotted/indexed field path; `Args` carries the violation's
+/// structured parameters so a localised template can be fully
+/// reconstructed without parsing the English `DefaultMessage` — e.g.
+/// `MinLength` carries `["min", "3"; "actual", "2"]`, `Range` carries
+/// `["min"; "max"; "actual"]`. `DefaultMessage` is the built-in English
+/// message the attribute emitted; a resolver that returns `None` (or
+/// isn't composed at all) falls back to it, so the wire shape is
+/// unchanged by default.
+type ValidationMessageRequest = {
+    Code: string
+    Path: string
+    Args: Map<string, string>
+    DefaultMessage: string
+}
+
+/// Phase 69e.C — localisation / message-customisation seam. Composed via
+/// `Remoting.withValidationMessages`; default is unset, in which case the
+/// engine emits each attribute's built-in English message and pays
+/// nothing (GP 13 — zero cost when the seam isn't used). `Resolve`
+/// returns `Some localised` to override the message for one violation,
+/// or `None` to fall through to `DefaultMessage`. Implementations must be
+/// pure + stateless (the engine may call `Resolve` concurrently across
+/// requests).
+type IValidationMessages =
+    abstract Resolve: request: ValidationMessageRequest -> string option
+
 /// Phase 69i — typed handle to a long-running operation. The phantom
 /// type parameter `'T` carries the eventual result type through to the
 /// `JobStatus<'T>.Succeeded` arm at the call site, so a client polling
@@ -523,6 +553,13 @@ type RemotingOptions<'context, 'serverImpl> = {
     RequireAuditOnRoleGated: bool
     IdempotencyStore: IIdempotencyStore option
     IdempotencyTtl: System.TimeSpan
+    /// Phase 69e.C — optional validation-message resolver. When `Some`,
+    /// the dispatcher hands each typed-validation violation through it to
+    /// localise / override the built-in English message before building
+    /// the `ErrorCategory.Validation` envelope. Default `None` — the
+    /// built-in messages ship on the wire and the seam pays nothing per
+    /// request (GP 13). Compose via `Remoting.withValidationMessages`.
+    ValidationMessages: IValidationMessages option
     /// Phase 69j — `__schema_version` field stamped on every
     /// dispatcher-emitted envelope. Default `1` matches the post-69b.E
     /// shape (categorised errors). Future wire-format evolutions

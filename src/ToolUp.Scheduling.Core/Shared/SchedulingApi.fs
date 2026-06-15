@@ -30,8 +30,14 @@ type RescheduleRequest = {
 /// `ListAvailableSlots` request payload — `Window` is the candidate
 /// window, `SlotDurationMinutes` is the requested slot length.
 type SlotSearchRequest = {
+    // Phase 69e.H — ResourceId is a string alias; a blank id can only
+    // miss the resource lookup, so the dispatcher rejects it up-front.
+    [<NotEmpty>]
     ResourceId: ResourceId
     Window: DateRange
+    // A zero / negative slot length is malformed — no schedule can
+    // satisfy it. Rejected before the slot search runs.
+    [<MinValue 1.0>]
     SlotDurationMinutes: int
 }
 
