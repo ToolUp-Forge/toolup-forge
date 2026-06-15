@@ -950,14 +950,42 @@ module GiraffeUtil =
 
                                 return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                             elif cachedResponse.IsSome then
-                                // Cache hit — replay verbatim, skip handler + every
-                                // downstream step (rate-limit, telemetry, audit, store).
+                                // Cache hit — replay verbatim, skip handler + the
+                                // downstream rate-limit / telemetry / store steps AND the
+                                // method's OWN audit (the first call's audit row is the
+                                // system of record; the replay must not double-emit it).
                                 let response = cachedResponse.Value
                                 ctx.Response.StatusCode <- response.StatusCode
                                 ctx.Response.ContentType <- response.ContentType
 
                                 ctx.Response.Headers["x-idempotency-replay"] <-
                                     Microsoft.Extensions.Primitives.StringValues "true"
+
+                                // Phase 69f.E — positive replay audit. Distinct from the
+                                // method's own `[<Audit>]` event (suppressed above): this
+                                // marks that a replay occurred and cites the original via
+                                // the shared idempotency key. Dispatcher-emitted like
+                                // `RateLimitExceeded`, so a replay is auditable even when
+                                // the method carries no `[<Audit>]`. Fire only when an
+                                // emitter is composed (GP 13 — zero cost otherwise).
+                                match options.AuditEmitter with
+                                | Some emitter ->
+                                    let replaySubjectId =
+                                        match resolvedAuthContextForRequest with
+                                        | Some authCtx -> authCtx.SubjectId
+                                        | None -> "anonymous"
+
+                                    do!
+                                        emitter.Emit {
+                                            Kind = AuditKind.IdempotencyReplay
+                                            MethodName = methodNameForAuth
+                                            SubjectId = replaySubjectId
+                                            CorrelationId = Some correlationId
+                                            Timestamp = System.DateTimeOffset.UtcNow
+                                            Payload = Map [ "idempotencyKey", idempotencyKey.Value ]
+                                        }
+                                        |> Async.StartAsTask
+                                | None -> ()
 
                                 do! ctx.Response.Body.WriteAsync(response.Body, 0, response.Body.Length)
                                 return! next ctx

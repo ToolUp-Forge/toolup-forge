@@ -43,6 +43,7 @@ type AuditAttribute(kindName: string) =
             | "TenantCreated" -> AuditKind.TenantCreated
             | "TenantDeleted" -> AuditKind.TenantDeleted
             | "RateLimitExceeded" -> AuditKind.RateLimitExceeded
+            | "IdempotencyReplay" -> AuditKind.IdempotencyReplay
             | other -> AuditKind.Custom other
 
 /// Phase 69h — opts a record field (the input-record's, or a nested
@@ -74,6 +75,7 @@ module internal Audit =
             | "TenantCreated" -> AuditKind.TenantCreated
             | "TenantDeleted" -> AuditKind.TenantDeleted
             | "RateLimitExceeded" -> AuditKind.RateLimitExceeded
+            | "IdempotencyReplay" -> AuditKind.IdempotencyReplay
             | other -> AuditKind.Custom other
 
     // Phase 69d.tail / 69h.tail — like the auth classifier, audit

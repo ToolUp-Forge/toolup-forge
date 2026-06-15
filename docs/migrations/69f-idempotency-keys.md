@@ -46,7 +46,7 @@ Clients attach the header per call (one UUID per logical operation, reused acros
 
 1. `dotnet build` — clean.
 2. First call with header `K`: handler runs, response returned, normal audit/telemetry.
-3. Second call with header `K`, same body, same subject: identical response bytes, handler **not** invoked.
+3. Second call with header `K`, same body, same subject: identical response bytes, handler **not** invoked. The method's own `[<Audit>]` event does **not** re-emit (the first call's row stands); when an `IAuditEmitter` is composed the replay emits one `IdempotencyReplay` audit event citing the original via `Payload["idempotencyKey"]` (Phase 69f.E). Verified end-to-end by `InProcess/IdempotencyReplayAuditTests.fs` (dispatcher-over-TestServer: handler runs once, one `PolicyChanged` on the first call, one `IdempotencyReplay` on the replay).
 4. Same header `K` but a different body: `409 Conflict` with a `User`-categorised envelope.
 5. Call to an `[<Idempotent>]` method with **no** header (store composed): refused with a `User`-categorised envelope.
 6. Unmarked methods ignore the header entirely.

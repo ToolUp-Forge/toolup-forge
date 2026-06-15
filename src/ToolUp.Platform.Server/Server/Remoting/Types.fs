@@ -276,6 +276,15 @@ type AuditKind =
     /// is emitted by the dispatcher's rate-limit pre-flight on denial,
     /// regardless of whether the method also carries `[<Audit>]`.
     | RateLimitExceeded
+    /// Phase 69f.E — emitted by the dispatcher's idempotency pre-flight
+    /// when an `[<Idempotent>]` method's call is served from the cache
+    /// (a replay). The original call's audit row is the system of record;
+    /// this event marks that a replay occurred and cites the original via
+    /// the shared idempotency key in its payload (`idempotencyKey`). Like
+    /// `RateLimitExceeded`, it is dispatcher-emitted rather than ridden on
+    /// an `[<Audit>]` annotation — so the replay is auditable even when
+    /// the method itself carries no `[<Audit>]`.
+    | IdempotencyReplay
     | Custom of string
 
 /// Phase 69h — audit event emitted on every successful invocation of
