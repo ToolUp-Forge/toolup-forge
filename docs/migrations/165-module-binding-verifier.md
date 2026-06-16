@@ -1,6 +1,6 @@
 # Phase 165 — `IModuleBindingVerifier`: opt-in module-binding gate
 
-**Forge commit:** `6fc5b0e`
+**Forge commit:** `463f346`
 
 ## What changes
 
