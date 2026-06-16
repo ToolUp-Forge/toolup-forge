@@ -10,11 +10,28 @@ Single-source reference for the environment variables `ServerConfig.fromEnv` (an
 |---|---|---|---|
 | `SERVER_PORT` | `Port` | `5000` | Positive integer 1–65535; out-of-range / non-integer → fail loud. |
 | `TOOLUP_PUBLIC_BASE_URL` | `PublicBaseUrl` | `None` | Non-empty origin; trailing slash stripped + warn; empty/whitespace → `None` + warn. |
-| `TOOLUP_PUBLIC_PATH` | `PublicPath` | `deploy/public` | _(planned — 71.A.5)_ |
+| `TOOLUP_PUBLIC_PATH` | `PublicPath` | `deploy/public` | Any path string; env wins over the override-record value. |
 | `TOOLUP_PLATFORM_SURFACES` | `Surfaces` | `anonymous` | Comma/semicolon/space-separated tokens: `anonymous`, `anonymous_persistent`, `trial`, `individual`, `team`, `multi_team`, `claim_bearer`. Wins over the override-record value. Unrecognised → warn + fall back. |
 | `TOOLUP_MODULE` | `ModuleFilter` | `None` | Single module key. |
 | `TOOLUP_LOG_LEVEL` | `LogLevel` | `Info` | `Trace`/`Debug`/`Info`/`Warn`/`Error` (case-insensitive). |
 | `TOOLUP_TRACE_CATEGORIES` | `TraceCategories` | _(empty)_ | Comma/semicolon/space-separated category names. |
+
+## Boolean / scalar bundle (Phase 71.A.6) + string lists (71.A.8)
+
+All additive and backward-compatible — unset preserves the prior `defaults.X`.
+
+| Variable | Field | Default | Parse contract |
+|---|---|---|---|
+| `TOOLUP_INCLUDE_PLATFORM_DEFAULTS` | `IncludePlatformDefaults` | `true` | `1`/`true`/`yes`/`on` ↔ `0`/`false`/`no`/`off`; wins over override; unrecognised → fail loud. |
+| `TOOLUP_ENABLE_DEV_ENDPOINTS` | `EnableDevEndpoints` | `false` | Same; env wins over override. |
+| `TOOLUP_BACKFILL_MISSED_TICKS` | `BackfillMissedTicks` | `false` | Boolean flag. |
+| `TOOLUP_SKIP_PREFLIGHT` | `SkipPreflight` | `false` | Boolean flag. |
+| `TOOLUP_HEALTH_STATE_TRACKING` | `HealthStateTracking` | `false` | Boolean flag. |
+| `TOOLUP_ENABLE_CITATION_DEV_ENDPOINT` | `EnableCitationDevEndpoint` | _(unset)_ | Optional boolean: set → `Some`, unset → `None`. |
+| `TOOLUP_MAX_REQUEST_BODY_BYTES` | `MaxRequestBodyBytes` | _(unset)_ | Positive int64 → `Some`; `none`/`0`/unset → `None`; garbage → `None` + warn. |
+| `TOOLUP_SLOW_RATE_LIMIT_MS` | `SlowRateLimitThreshold` | `5000` | Positive integer milliseconds; garbage → default + warn. |
+| `TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS` | `WebhookUrlAllowedHosts` | _(empty)_ | Comma/semicolon/space-separated host list. |
+| `TOOLUP_PEER_ROUTE_PREFIXES` | `PeerRoutePrefixes` | _(empty)_ | Comma/semicolon/space-separated prefix list. |
 
 ## Transport / security
 

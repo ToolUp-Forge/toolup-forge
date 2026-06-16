@@ -2980,6 +2980,80 @@ module ServerConfig =
 
                 Some noTrailing
 
+    /// Phase 71.A.5 — `TOOLUP_PUBLIC_PATH`. Canonical precedence:
+    /// env var > override-record value > `defaults.PublicPath`.
+    let private resolvePublicPath (overrides: ServerConfigOverrides) : string =
+        envVar "TOOLUP_PUBLIC_PATH"
+        |> Option.orElse overrides.PublicPath
+        |> Option.defaultValue defaults.PublicPath
+
+    /// Phase 71.A.6 — boolean env var with an override-record middle tier:
+    /// env (fail loud on garbage) > override > fallback. Needed for fields
+    /// like `IncludePlatformDefaults` (default `true`) where a plain
+    /// `envFlag` (false-when-unset) would wrongly flip an unset var off.
+    let private envFlagTri (name: string) (overrideVal: bool option) (fallback: bool) : bool =
+        match envVar name |> Option.map _.ToLowerInvariant() with
+        | Some("1" | "true" | "yes" | "on") -> true
+        | Some("0" | "false" | "no" | "off") -> false
+        | Some other ->
+            failwithf
+                "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to use the configured value."
+                name
+                other
+        | None -> overrideVal |> Option.defaultValue fallback
+
+    /// Phase 71.A.6 — optional boolean: `Some` when set (fail loud on
+    /// garbage), `None` when unset (preserves a `bool option` default).
+    let private envFlagOpt (name: string) : bool option =
+        match envVar name |> Option.map _.ToLowerInvariant() with
+        | None -> None
+        | Some("1" | "true" | "yes" | "on") -> Some true
+        | Some("0" | "false" | "no" | "off") -> Some false
+        | Some other ->
+            failwithf
+                "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to leave it unset."
+                name
+                other
+
+    /// Phase 71.A.6 — optional positive int64: parse when set, warn + `None`
+    /// on garbage, `None` (or `none`/`0`) when unset.
+    let private envInt64Opt (logger: ILogger) (name: string) : int64 option =
+        match envVar name with
+        | None
+        | Some "none"
+        | Some "0" -> None
+        | Some raw ->
+            match Int64.TryParse raw with
+            | true, n when n > 0L -> Some n
+            | _ ->
+                logger.Warn $"{name}={raw} not a positive integer or 'none'. Leaving unset."
+                None
+
+    /// Phase 71.A.6 — positive-millisecond `TimeSpan` with a fallback;
+    /// warn + fallback on garbage.
+    let private envTimeSpanMs (logger: ILogger) (name: string) (fallback: TimeSpan) : TimeSpan =
+        match envVar name with
+        | None -> fallback
+        | Some raw ->
+            match Int32.TryParse raw with
+            | true, n when n > 0 -> TimeSpan.FromMilliseconds(float n)
+            | _ ->
+                logger.Warn
+                    $"{name}={raw} not a positive integer (milliseconds). Using default {fallback.TotalMilliseconds}ms."
+
+                fallback
+
+    /// Phase 71.A.8 — comma / semicolon / space-separated string list
+    /// (the Surfaces-parser tokenisation, reused). Empty / whitespace → `[]`.
+    let private parseStringList (name: string) : string list =
+        match envVar name with
+        | None -> []
+        | Some raw ->
+            raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
+            |> Array.map _.Trim()
+            |> Array.filter (fun s -> s <> "")
+            |> Array.toList
+
     /// Build a `ServerConfig` from `TOOLUP_*` env vars + a curated
     /// overrides record. Every env-var read, warning message, and
     /// fallback semantics is byte-for-byte identical to the
@@ -3060,7 +3134,7 @@ module ServerConfig =
 
         {
             defaults with
-                PublicPath = overrides.PublicPath |> Option.defaultValue defaults.PublicPath
+                PublicPath = resolvePublicPath overrides // Phase 71.A.5
                 Surfaces = surfaces
                 ModuleFilter = envVar "TOOLUP_MODULE"
                 RequireHttps = envFlag "TOOLUP_REQUIRE_HTTPS"
@@ -3069,11 +3143,15 @@ module ServerConfig =
                 SlowRequestThresholdOverrides =
                     overrides.SlowRequestThresholdOverrides
                     |> Option.defaultValue defaults.SlowRequestThresholdOverrides
-                EnableDevEndpoints = overrides.EnableDevEndpoints |> Option.defaultValue defaults.EnableDevEndpoints
+                // Phase 71.A.6 — env wins over override-record value, else fallback.
+                EnableDevEndpoints =
+                    envFlagTri "TOOLUP_ENABLE_DEV_ENDPOINTS" overrides.EnableDevEndpoints defaults.EnableDevEndpoints
                 AutoBootstrapDevAdmin = overrides.AutoBootstrapDevAdmin
                 IncludePlatformDefaults =
-                    overrides.IncludePlatformDefaults
-                    |> Option.defaultValue defaults.IncludePlatformDefaults
+                    envFlagTri
+                        "TOOLUP_INCLUDE_PLATFORM_DEFAULTS"
+                        overrides.IncludePlatformDefaults
+                        defaults.IncludePlatformDefaults
                 ShareTokenStore = overrides.ShareTokenStore |> Option.defaultValue defaults.ShareTokenStore
                 Webhooks = overrides.Webhooks |> Option.defaultValue defaults.Webhooks
                 AuditLog = overrides.AuditLog |> Option.defaultValue defaults.AuditLog
@@ -3106,6 +3184,18 @@ module ServerConfig =
                 // inside the `fromEnv` seam (were compose-only / unread).
                 Port = parseServerPort ()
                 PublicBaseUrl = parsePublicBaseUrl logger
+                // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
+                // preserves GP 11: unset → the prior `defaults.X` value.
+                BackfillMissedTicks = envFlag "TOOLUP_BACKFILL_MISSED_TICKS"
+                SkipPreflight = envFlag "TOOLUP_SKIP_PREFLIGHT"
+                HealthStateTracking = envFlag "TOOLUP_HEALTH_STATE_TRACKING"
+                EnableCitationDevEndpoint = envFlagOpt "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT"
+                MaxRequestBodyBytes = envInt64Opt logger "TOOLUP_MAX_REQUEST_BODY_BYTES"
+                SlowRateLimitThreshold =
+                    envTimeSpanMs logger "TOOLUP_SLOW_RATE_LIMIT_MS" defaults.SlowRateLimitThreshold
+                // Phase 71.A.8 — server string lists.
+                WebhookUrlAllowedHosts = parseStringList "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS"
+                PeerRoutePrefixes = parseStringList "TOOLUP_PEER_ROUTE_PREFIXES"
                 EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
                 RateLimit = parseRateLimit logger
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger

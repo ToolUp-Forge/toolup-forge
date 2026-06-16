@@ -137,5 +137,139 @@ let tests =
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                     Expect.isNone cfg.PublicBaseUrl "unset must preserve the None default")
             }
+
+            // ── 71.A.5 — PublicPath ──
+            test "PublicPath: TOOLUP_PUBLIC_PATH wins over the override-record value" {
+                withEnv [ "TOOLUP_PUBLIC_PATH", Some "/srv/static" ] (fun () ->
+                    let overrides = {
+                        ServerConfigOverrides.empty with
+                            PublicPath = Some "override-path"
+                    }
+
+                    let cfg = ServerConfig.fromEnv silentLogger overrides
+                    Expect.equal cfg.PublicPath "/srv/static" "env var must win over the override")
+            }
+
+            test "PublicPath: unset falls back to the override, then the default" {
+                withEnv [ "TOOLUP_PUBLIC_PATH", None ] (fun () ->
+                    let withOverride =
+                        ServerConfig.fromEnv silentLogger {
+                            ServerConfigOverrides.empty with
+                                PublicPath = Some "override-path"
+                        }
+
+                    Expect.equal withOverride.PublicPath "override-path" "override wins when env unset"
+
+                    let noOverride = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal noOverride.PublicPath "deploy/public" "default when neither set")
+            }
+
+            // ── 71.A.6 — boolean / scalar bundle ──
+            test "IncludePlatformDefaults: default true is preserved when the env var is unset" {
+                withEnv [ "TOOLUP_INCLUDE_PLATFORM_DEFAULTS", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+
+                    Expect.isTrue
+                        cfg.IncludePlatformDefaults
+                        "unset must keep the default true (plain envFlag would wrongly flip it false)")
+            }
+
+            test "IncludePlatformDefaults: TOOLUP_INCLUDE_PLATFORM_DEFAULTS=0 turns it off" {
+                withEnv [ "TOOLUP_INCLUDE_PLATFORM_DEFAULTS", Some "0" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.isFalse cfg.IncludePlatformDefaults "explicit 0 must turn it off")
+            }
+
+            test "EnableDevEndpoints: env var wins over the override-record value" {
+                withEnv [ "TOOLUP_ENABLE_DEV_ENDPOINTS", Some "1" ] (fun () ->
+                    let overrides = {
+                        ServerConfigOverrides.empty with
+                            EnableDevEndpoints = Some false
+                    }
+
+                    let cfg = ServerConfig.fromEnv silentLogger overrides
+                    Expect.isTrue cfg.EnableDevEndpoints "env=1 must win over override=false")
+            }
+
+            test "Boolean bundle: BackfillMissedTicks / SkipPreflight / HealthStateTracking" {
+                withEnv
+                    [
+                        "TOOLUP_BACKFILL_MISSED_TICKS", Some "true"
+                        "TOOLUP_SKIP_PREFLIGHT", Some "yes"
+                        "TOOLUP_HEALTH_STATE_TRACKING", Some "on"
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.isTrue cfg.BackfillMissedTicks "BackfillMissedTicks"
+                        Expect.isTrue cfg.SkipPreflight "SkipPreflight"
+                        Expect.isTrue cfg.HealthStateTracking "HealthStateTracking")
+            }
+
+            test "Boolean bundle: unset stays at the false default (GP 11)" {
+                withEnv
+                    [
+                        "TOOLUP_BACKFILL_MISSED_TICKS", None
+                        "TOOLUP_SKIP_PREFLIGHT", None
+                        "TOOLUP_HEALTH_STATE_TRACKING", None
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.isFalse cfg.BackfillMissedTicks "BackfillMissedTicks default"
+                        Expect.isFalse cfg.SkipPreflight "SkipPreflight default"
+                        Expect.isFalse cfg.HealthStateTracking "HealthStateTracking default")
+            }
+
+            test "EnableCitationDevEndpoint: optional bool — set → Some, unset → None" {
+                withEnv [ "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT", Some "true" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.EnableCitationDevEndpoint (Some true) "set must resolve Some true")
+
+                withEnv [ "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.isNone cfg.EnableCitationDevEndpoint "unset must stay None")
+            }
+
+            test "MaxRequestBodyBytes: positive int → Some, unset → None, garbage → None" {
+                withEnv [ "TOOLUP_MAX_REQUEST_BODY_BYTES", Some "1048576" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.MaxRequestBodyBytes (Some 1048576L) "positive int → Some")
+
+                withEnv [ "TOOLUP_MAX_REQUEST_BODY_BYTES", Some "nonsense" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.isNone cfg.MaxRequestBodyBytes "garbage → None (warn)")
+            }
+
+            test "SlowRateLimitThreshold: ms value → TimeSpan, unset → 5s default" {
+                withEnv [ "TOOLUP_SLOW_RATE_LIMIT_MS", Some "2500" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.SlowRateLimitThreshold (TimeSpan.FromMilliseconds 2500.0) "2500ms")
+
+                withEnv [ "TOOLUP_SLOW_RATE_LIMIT_MS", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.SlowRateLimitThreshold (TimeSpan.FromSeconds 5.0) "unset → 5s default")
+            }
+
+            // ── 71.A.8 — server string lists ──
+            test "String lists: WebhookUrlAllowedHosts + PeerRoutePrefixes split, unset → []" {
+                withEnv
+                    [
+                        "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS", Some "a.example.com, b.example.com ;c.example.com"
+                        "TOOLUP_PEER_ROUTE_PREFIXES", Some "/peer /api/peer"
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+
+                        Expect.equal
+                            cfg.WebhookUrlAllowedHosts
+                            [ "a.example.com"; "b.example.com"; "c.example.com" ]
+                            "comma/semicolon/space split"
+
+                        Expect.equal cfg.PeerRoutePrefixes [ "/peer"; "/api/peer" ] "space split")
+
+                withEnv [ "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS", None; "TOOLUP_PEER_ROUTE_PREFIXES", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.isEmpty cfg.WebhookUrlAllowedHosts "unset → []"
+                    Expect.isEmpty cfg.PeerRoutePrefixes "unset → []")
+            }
         ]
     )
