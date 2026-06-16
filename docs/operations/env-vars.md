@@ -33,9 +33,9 @@ All additive and backward-compatible — unset preserves the prior `defaults.X`.
 | `TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS` | `WebhookUrlAllowedHosts` | _(empty)_ | Comma/semicolon/space-separated host list. |
 | `TOOLUP_PEER_ROUTE_PREFIXES` | `PeerRoutePrefixes` | _(empty)_ | Comma/semicolon/space-separated prefix list. |
 
-## Flat-case subsystem toggles (Phase 71.A.7, batch 1)
+## Flat-case subsystem toggles (Phase 71.A.7)
 
-Each selects a payload-free DU case; unset → the prior `defaults.X`. Binary toggles accept `enabled`/`on`/`yes` and `no`/`off`/`disabled` (case-insensitive); an unrecognised token warns and keeps the default.
+Each selects a payload-free DU case; unset → the prior `defaults.X`. Binary toggles accept `enabled`/`on`/`yes` and `no`/`off`/`disabled` (case-insensitive); an unrecognised token warns and keeps the default. The override-bearing toggles (`Webhooks` / `AuditLog` / `SecurityHardening` / `ShareTokenStore`) resolve env > override > default.
 
 | Variable | Field | Tokens |
 |---|---|---|
@@ -55,8 +55,11 @@ Each selects a payload-free DU case; unset → the prior `defaults.X`. Binary to
 | `TOOLUP_AD_ANALYTICS` | `AdAnalytics` | binary |
 | `TOOLUP_SERVERLESS_HOST` | `ServerlessHost` | `kestrel` / `serverless` |
 | `TOOLUP_PROCESS_PROFILE` | `ProcessProfile` | `allinone` / `web` / `worker` / `dispatcher` |
-
-_Batch 2 (the override-bearing toggles `Webhooks` / `AuditLog` / `SecurityHardening` / `ShareTokenStore` and `TeamCreationPolicy`) lands next — those flip an existing override-record precedence, so they ship separately._
+| `TOOLUP_WEBHOOKS` | `Webhooks` | binary (env > override > default) |
+| `TOOLUP_AUDIT_LOG` | `AuditLog` | binary (env > override > default) |
+| `TOOLUP_SHARE_TOKEN_STORE` | `ShareTokenStore` | binary (env > override > default) |
+| `TOOLUP_SECURITY_HARDENING` | `SecurityHardening` | `no` / `default` / `strict` (env > override > default) |
+| `TOOLUP_TEAM_CREATION_POLICY` | `TeamCreationPolicy` | `admin` (PlatformAdminOnly) / `any` (AnyAuthenticatedUser) |
 
 ## Transport / security
 

@@ -338,5 +338,67 @@ let tests =
                     Expect.equal cfg.ProcessProfile AllInOne "garbage → default"
                     Expect.isTrue (warnings |> Seq.exists (fun w -> w.Contains "TOOLUP_PROCESS_PROFILE")) "must warn")
             }
+
+            // ── 71.A.7 (batch 2) — override-bearing toggles + TeamCreationPolicy ──
+            test "Batch 2: env wins over the override-record value" {
+                withEnv
+                    [
+                        "TOOLUP_WEBHOOKS", Some "disabled"
+                        "TOOLUP_AUDIT_LOG", Some "enabled"
+                        "TOOLUP_SECURITY_HARDENING", Some "strict"
+                    ]
+                    (fun () ->
+                        let overrides = {
+                            ServerConfigOverrides.empty with
+                                Webhooks = Some EnabledWebhooks
+                                SecurityHardening = Some DefaultSecurityHardening
+                        }
+
+                        let cfg = ServerConfig.fromEnv silentLogger overrides
+                        Expect.equal cfg.Webhooks NoWebhooks "env=disabled wins over override=Enabled"
+                        Expect.equal cfg.AuditLog EnabledAuditLog "env=enabled (no override)"
+
+                        Expect.equal
+                            cfg.SecurityHardening
+                            StrictSecurityHardening
+                            "env=strict wins over override=Default")
+            }
+
+            test "Batch 2: unset → override wins over default" {
+                withEnv [ "TOOLUP_WEBHOOKS", None; "TOOLUP_SECURITY_HARDENING", None ] (fun () ->
+                    let overrides = {
+                        ServerConfigOverrides.empty with
+                            Webhooks = Some EnabledWebhooks
+                            SecurityHardening = Some StrictSecurityHardening
+                    }
+
+                    let cfg = ServerConfig.fromEnv silentLogger overrides
+                    Expect.equal cfg.Webhooks EnabledWebhooks "override wins when env unset"
+                    Expect.equal cfg.SecurityHardening StrictSecurityHardening "override wins when env unset")
+            }
+
+            test "Batch 2: unset + no override → default" {
+                withEnv
+                    [
+                        "TOOLUP_WEBHOOKS", None
+                        "TOOLUP_AUDIT_LOG", None
+                        "TOOLUP_SHARE_TOKEN_STORE", None
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.equal cfg.Webhooks NoWebhooks "default"
+                        Expect.equal cfg.AuditLog NoAuditLog "default"
+                        Expect.equal cfg.ShareTokenStore NoShareTokenStore "default")
+            }
+
+            test "TeamCreationPolicy: env token flips it; unset → PlatformAdminOnly default" {
+                withEnv [ "TOOLUP_TEAM_CREATION_POLICY", Some "any" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.TeamCreationPolicy AnyAuthenticatedUser "env=any → AnyAuthenticatedUser")
+
+                withEnv [ "TOOLUP_TEAM_CREATION_POLICY", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.TeamCreationPolicy PlatformAdminOnly "unset → PlatformAdminOnly default")
+            }
         ]
     )

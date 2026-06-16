@@ -3080,6 +3080,15 @@ module ServerConfig =
 
     /// Phase 71.A.7 — the common `No* | Enabled*` binary shape. Accepts
     /// `no`/`off`/`disabled` and `enabled`/`on`/`yes` (case-insensitive).
+    let private enabledDisabledTokens (disabledVal: 'T) (enabledVal: 'T) : (string * 'T) list = [
+        "no", disabledVal
+        "off", disabledVal
+        "disabled", disabledVal
+        "enabled", enabledVal
+        "on", enabledVal
+        "yes", enabledVal
+    ]
+
     let private parseEnabledDisabled
         (logger: ILogger)
         (name: string)
@@ -3087,19 +3096,20 @@ module ServerConfig =
         (enabledVal: 'T)
         (fallback: 'T)
         : 'T =
-        parseFlatDuCase
-            logger
-            name
-            [
-                "no", disabledVal
-                "off", disabledVal
-                "disabled", disabledVal
-                "enabled", enabledVal
-                "on", enabledVal
-                "yes", enabledVal
-            ]
-            None
-            fallback
+        parseFlatDuCase logger name (enabledDisabledTokens disabledVal enabledVal) None fallback
+
+    /// Phase 71.A.7 batch 2 — `parseEnabledDisabled` with an override-record
+    /// middle tier (env > override > fallback) for binary toggles that ship
+    /// a `ServerConfigOverrides` member.
+    let private parseEnabledDisabledWith
+        (logger: ILogger)
+        (name: string)
+        (overrideVal: 'T option)
+        (disabledVal: 'T)
+        (enabledVal: 'T)
+        (fallback: 'T)
+        : 'T =
+        parseFlatDuCase logger name (enabledDisabledTokens disabledVal enabledVal) overrideVal fallback
 
     /// Build a `ServerConfig` from `TOOLUP_*` env vars + a curated
     /// overrides record. Every env-var read, warning message, and
@@ -3199,10 +3209,45 @@ module ServerConfig =
                         "TOOLUP_INCLUDE_PLATFORM_DEFAULTS"
                         overrides.IncludePlatformDefaults
                         defaults.IncludePlatformDefaults
-                ShareTokenStore = overrides.ShareTokenStore |> Option.defaultValue defaults.ShareTokenStore
-                Webhooks = overrides.Webhooks |> Option.defaultValue defaults.Webhooks
-                AuditLog = overrides.AuditLog |> Option.defaultValue defaults.AuditLog
-                SecurityHardening = overrides.SecurityHardening |> Option.defaultValue defaults.SecurityHardening
+                // Phase 71.A.7 batch 2 — override-bearing toggles: env > override > default.
+                ShareTokenStore =
+                    parseEnabledDisabledWith
+                        logger
+                        "TOOLUP_SHARE_TOKEN_STORE"
+                        overrides.ShareTokenStore
+                        NoShareTokenStore
+                        EnabledShareTokenStore
+                        defaults.ShareTokenStore
+                Webhooks =
+                    parseEnabledDisabledWith
+                        logger
+                        "TOOLUP_WEBHOOKS"
+                        overrides.Webhooks
+                        NoWebhooks
+                        EnabledWebhooks
+                        defaults.Webhooks
+                AuditLog =
+                    parseEnabledDisabledWith
+                        logger
+                        "TOOLUP_AUDIT_LOG"
+                        overrides.AuditLog
+                        NoAuditLog
+                        EnabledAuditLog
+                        defaults.AuditLog
+                SecurityHardening =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_SECURITY_HARDENING"
+                        [
+                            "no", NoSecurityHardening
+                            "off", NoSecurityHardening
+                            "disabled", NoSecurityHardening
+                            "default", DefaultSecurityHardening
+                            "on", DefaultSecurityHardening
+                            "strict", StrictSecurityHardening
+                        ]
+                        overrides.SecurityHardening
+                        defaults.SecurityHardening
                 LogLevel = logLevel
                 TraceCategories = traceCategories
                 SseAuthMode = parseSseAuthMode logger
@@ -3356,6 +3401,21 @@ module ServerConfig =
                         ]
                         None
                         defaults.ProcessProfile
+                // Phase 71.A.7 batch 2 — TeamCreationPolicy (no override member).
+                TeamCreationPolicy =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_TEAM_CREATION_POLICY"
+                        [
+                            "platformadminonly", PlatformAdminOnly
+                            "platform-admin-only", PlatformAdminOnly
+                            "admin", PlatformAdminOnly
+                            "anyauthenticateduser", AnyAuthenticatedUser
+                            "any", AnyAuthenticatedUser
+                            "authenticated", AnyAuthenticatedUser
+                        ]
+                        None
+                        defaults.TeamCreationPolicy
                 EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
                 RateLimit = parseRateLimit logger
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger
