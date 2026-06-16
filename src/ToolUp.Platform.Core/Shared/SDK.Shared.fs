@@ -3054,6 +3054,53 @@ module ServerConfig =
             |> Array.filter (fun s -> s <> "")
             |> Array.toList
 
+    /// Phase 71.A.7 — generic flat-case-DU env reader. `cases` maps
+    /// lowercase tokens → the (payload-free) DU value; precedence is
+    /// env > override > fallback. An unrecognised token warns (naming
+    /// the valid tokens) and falls through to the configured value, so
+    /// a typo never silently flips a subsystem on/off.
+    let private parseFlatDuCase
+        (logger: ILogger)
+        (name: string)
+        (cases: (string * 'T) list)
+        (overrideVal: 'T option)
+        (fallback: 'T)
+        : 'T =
+        let configured = overrideVal |> Option.defaultValue fallback
+
+        match envVar name |> Option.map _.ToLowerInvariant() with
+        | None -> configured
+        | Some raw ->
+            match cases |> List.tryFind (fun (tok, _) -> tok = raw) with
+            | Some(_, v) -> v
+            | None ->
+                let valid = cases |> List.map fst |> String.concat ", "
+                logger.Warn $"{name}={raw} not recognised. Valid: {valid}. Using the configured value."
+                configured
+
+    /// Phase 71.A.7 — the common `No* | Enabled*` binary shape. Accepts
+    /// `no`/`off`/`disabled` and `enabled`/`on`/`yes` (case-insensitive).
+    let private parseEnabledDisabled
+        (logger: ILogger)
+        (name: string)
+        (disabledVal: 'T)
+        (enabledVal: 'T)
+        (fallback: 'T)
+        : 'T =
+        parseFlatDuCase
+            logger
+            name
+            [
+                "no", disabledVal
+                "off", disabledVal
+                "disabled", disabledVal
+                "enabled", enabledVal
+                "on", enabledVal
+                "yes", enabledVal
+            ]
+            None
+            fallback
+
     /// Build a `ServerConfig` from `TOOLUP_*` env vars + a curated
     /// overrides record. Every env-var read, warning message, and
     /// fallback semantics is byte-for-byte identical to the
@@ -3196,6 +3243,119 @@ module ServerConfig =
                 // Phase 71.A.8 — server string lists.
                 WebhookUrlAllowedHosts = parseStringList "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS"
                 PeerRoutePrefixes = parseStringList "TOOLUP_PEER_ROUTE_PREFIXES"
+                // Phase 71.A.7 (batch 1) — flat-case DU lifts (no override
+                // member, no payload). Additive: unset → `defaults.X`.
+                ResultStore =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_RESULT_STORE"
+                        [
+                            "no", NoResultStore
+                            "inmemory", InMemoryResultStore
+                            "in-memory", InMemoryResultStore
+                            "persistent", PersistentResultStore
+                        ]
+                        None
+                        defaults.ResultStore
+                Lineage =
+                    parseEnabledDisabled logger "TOOLUP_LINEAGE" NoLineageStore EnabledLineageStore defaults.Lineage
+                DataIngestion =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_DATA_INGESTION"
+                        NoDataIngestion
+                        EnabledDataIngestion
+                        defaults.DataIngestion
+                OAuthRefresher =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_OAUTH_REFRESHER"
+                        NoOAuthRefresher
+                        EnabledOAuthRefresher
+                        defaults.OAuthRefresher
+                EntityStore =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_ENTITY_STORE"
+                        NoEntityStore
+                        EnabledEntityStore
+                        defaults.EntityStore
+                UsageMetering =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_USAGE_METERING"
+                        NoUsageMetering
+                        EnabledUsageMetering
+                        defaults.UsageMetering
+                MetricsEndpoint =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_METRICS_ENDPOINT"
+                        NoMetricsEndpoint
+                        EnabledMetricsEndpoint
+                        defaults.MetricsEndpoint
+                PlatformKnowledgeBase =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_PLATFORM_KNOWLEDGE_BASE"
+                        NoPlatformKnowledgeBase
+                        EnabledPlatformKnowledgeBase
+                        defaults.PlatformKnowledgeBase
+                ConfigDriftDetection =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_CONFIG_DRIFT_DETECTION"
+                        NoConfigDriftDetection
+                        EnabledConfigDriftDetection
+                        defaults.ConfigDriftDetection
+                RateLimiter =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_RATE_LIMITER"
+                        NoRateLimiter
+                        EnabledRateLimiter
+                        defaults.RateLimiter
+                SmokeTest =
+                    parseEnabledDisabled logger "TOOLUP_SMOKE_TEST" NoSmokeTest EnabledSmokeTest defaults.SmokeTest
+                AssetStore =
+                    parseEnabledDisabled logger "TOOLUP_ASSET_STORE" NoAssetStore EnabledAssetStore defaults.AssetStore
+                ConsentAudit =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_CONSENT_AUDIT"
+                        NoConsentAudit
+                        EnabledConsentAudit
+                        defaults.ConsentAudit
+                AdAnalytics =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_AD_ANALYTICS"
+                        NoAdAnalytics
+                        EnabledAdAnalytics
+                        defaults.AdAnalytics
+                ServerlessHost =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_SERVERLESS_HOST"
+                        [ "kestrel", KestrelHost; "serverless", ServerlessHost ]
+                        None
+                        defaults.ServerlessHost
+                ProcessProfile =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_PROCESS_PROFILE"
+                        [
+                            "allinone", AllInOne
+                            "all-in-one", AllInOne
+                            "web", WebOnly
+                            "webonly", WebOnly
+                            "worker", WorkerOnly
+                            "workeronly", WorkerOnly
+                            "dispatcher", DispatcherOnly
+                            "dispatcheronly", DispatcherOnly
+                        ]
+                        None
+                        defaults.ProcessProfile
                 EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
                 RateLimit = parseRateLimit logger
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger

@@ -33,6 +33,31 @@ All additive and backward-compatible — unset preserves the prior `defaults.X`.
 | `TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS` | `WebhookUrlAllowedHosts` | _(empty)_ | Comma/semicolon/space-separated host list. |
 | `TOOLUP_PEER_ROUTE_PREFIXES` | `PeerRoutePrefixes` | _(empty)_ | Comma/semicolon/space-separated prefix list. |
 
+## Flat-case subsystem toggles (Phase 71.A.7, batch 1)
+
+Each selects a payload-free DU case; unset → the prior `defaults.X`. Binary toggles accept `enabled`/`on`/`yes` and `no`/`off`/`disabled` (case-insensitive); an unrecognised token warns and keeps the default.
+
+| Variable | Field | Tokens |
+|---|---|---|
+| `TOOLUP_RESULT_STORE` | `ResultStore` | `no` / `inmemory` / `persistent` |
+| `TOOLUP_LINEAGE` | `Lineage` | binary |
+| `TOOLUP_DATA_INGESTION` | `DataIngestion` | binary |
+| `TOOLUP_OAUTH_REFRESHER` | `OAuthRefresher` | binary |
+| `TOOLUP_ENTITY_STORE` | `EntityStore` | binary |
+| `TOOLUP_USAGE_METERING` | `UsageMetering` | binary |
+| `TOOLUP_METRICS_ENDPOINT` | `MetricsEndpoint` | binary |
+| `TOOLUP_PLATFORM_KNOWLEDGE_BASE` | `PlatformKnowledgeBase` | binary |
+| `TOOLUP_CONFIG_DRIFT_DETECTION` | `ConfigDriftDetection` | binary |
+| `TOOLUP_RATE_LIMITER` | `RateLimiter` | binary |
+| `TOOLUP_SMOKE_TEST` | `SmokeTest` | binary |
+| `TOOLUP_ASSET_STORE` | `AssetStore` | binary |
+| `TOOLUP_CONSENT_AUDIT` | `ConsentAudit` | binary |
+| `TOOLUP_AD_ANALYTICS` | `AdAnalytics` | binary |
+| `TOOLUP_SERVERLESS_HOST` | `ServerlessHost` | `kestrel` / `serverless` |
+| `TOOLUP_PROCESS_PROFILE` | `ProcessProfile` | `allinone` / `web` / `worker` / `dispatcher` |
+
+_Batch 2 (the override-bearing toggles `Webhooks` / `AuditLog` / `SecurityHardening` / `ShareTokenStore` and `TeamCreationPolicy`) lands next — those flip an existing override-record precedence, so they ship separately._
+
 ## Transport / security
 
 | Variable | Field | Default |

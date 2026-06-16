@@ -271,5 +271,72 @@ let tests =
                     Expect.isEmpty cfg.WebhookUrlAllowedHosts "unset → []"
                     Expect.isEmpty cfg.PeerRoutePrefixes "unset → []")
             }
+
+            // ── 71.A.7 (batch 1) — flat-case DU lifts ──
+            test "Flat DUs: each env token flips the field off its default case" {
+                withEnv
+                    [
+                        "TOOLUP_RESULT_STORE", Some "persistent"
+                        "TOOLUP_LINEAGE", Some "enabled"
+                        "TOOLUP_DATA_INGESTION", Some "on"
+                        "TOOLUP_OAUTH_REFRESHER", Some "yes"
+                        "TOOLUP_ENTITY_STORE", Some "enabled"
+                        "TOOLUP_USAGE_METERING", Some "enabled"
+                        "TOOLUP_METRICS_ENDPOINT", Some "enabled"
+                        "TOOLUP_PLATFORM_KNOWLEDGE_BASE", Some "enabled"
+                        "TOOLUP_CONFIG_DRIFT_DETECTION", Some "enabled"
+                        "TOOLUP_RATE_LIMITER", Some "enabled"
+                        "TOOLUP_SMOKE_TEST", Some "enabled"
+                        "TOOLUP_ASSET_STORE", Some "enabled"
+                        "TOOLUP_CONSENT_AUDIT", Some "enabled"
+                        "TOOLUP_AD_ANALYTICS", Some "enabled"
+                        "TOOLUP_SERVERLESS_HOST", Some "serverless"
+                        "TOOLUP_PROCESS_PROFILE", Some "workeronly"
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.equal cfg.ResultStore PersistentResultStore "ResultStore"
+                        Expect.equal cfg.Lineage EnabledLineageStore "Lineage"
+                        Expect.equal cfg.DataIngestion EnabledDataIngestion "DataIngestion"
+                        Expect.equal cfg.OAuthRefresher EnabledOAuthRefresher "OAuthRefresher"
+                        Expect.equal cfg.EntityStore EnabledEntityStore "EntityStore"
+                        Expect.equal cfg.UsageMetering EnabledUsageMetering "UsageMetering"
+                        Expect.equal cfg.MetricsEndpoint EnabledMetricsEndpoint "MetricsEndpoint"
+                        Expect.equal cfg.PlatformKnowledgeBase EnabledPlatformKnowledgeBase "PlatformKnowledgeBase"
+                        Expect.equal cfg.ConfigDriftDetection EnabledConfigDriftDetection "ConfigDriftDetection"
+                        Expect.equal cfg.RateLimiter EnabledRateLimiter "RateLimiter"
+                        Expect.equal cfg.SmokeTest EnabledSmokeTest "SmokeTest"
+                        Expect.equal cfg.AssetStore EnabledAssetStore "AssetStore"
+                        Expect.equal cfg.ConsentAudit EnabledConsentAudit "ConsentAudit"
+                        Expect.equal cfg.AdAnalytics EnabledAdAnalytics "AdAnalytics"
+                        Expect.equal cfg.ServerlessHost ServerlessHost "ServerlessHost"
+                        Expect.equal cfg.ProcessProfile WorkerOnly "ProcessProfile")
+            }
+
+            test "Flat DUs: unset preserves every default case (GP 11)" {
+                withEnv
+                    [
+                        "TOOLUP_RESULT_STORE", None
+                        "TOOLUP_LINEAGE", None
+                        "TOOLUP_ENTITY_STORE", None
+                        "TOOLUP_SERVERLESS_HOST", None
+                        "TOOLUP_PROCESS_PROFILE", None
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.equal cfg.ResultStore NoResultStore "ResultStore default"
+                        Expect.equal cfg.Lineage NoLineageStore "Lineage default"
+                        Expect.equal cfg.EntityStore NoEntityStore "EntityStore default"
+                        Expect.equal cfg.ServerlessHost KestrelHost "ServerlessHost default"
+                        Expect.equal cfg.ProcessProfile AllInOne "ProcessProfile default")
+            }
+
+            test "Flat DUs: an unrecognised token warns and keeps the default" {
+                withEnv [ "TOOLUP_PROCESS_PROFILE", Some "nonsense" ] (fun () ->
+                    let logger, warnings = capturingLogger ()
+                    let cfg = ServerConfig.fromEnv logger ServerConfigOverrides.empty
+                    Expect.equal cfg.ProcessProfile AllInOne "garbage → default"
+                    Expect.isTrue (warnings |> Seq.exists (fun w -> w.Contains "TOOLUP_PROCESS_PROFILE")) "must warn")
+            }
         ]
     )

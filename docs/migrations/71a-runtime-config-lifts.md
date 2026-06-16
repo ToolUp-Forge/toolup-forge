@@ -42,6 +42,13 @@ Revert the `fromEnv` edits in `SDK.Shared.fs`. The Surfaces precedence inversion
 
 All backward-compatible (unset → prior `defaults.X`). New shared helpers in `SDK.Shared.fs`: `resolvePublicPath`, `envFlagTri`, `envFlagOpt`, `envInt64Opt`, `envTimeSpanMs`, `parseStringList`. Verified by 11 added cases in `ServerConfigFromEnvTests.fs`. See [the full env-var table](../operations/env-vars.md).
 
+## Increment 3 (71.A.7 batch 1 — server flat-case DU toggles)
+
+Sixteen payload-free server mode DUs now resolve from `TOOLUP_*` env vars via two new shared helpers (`parseFlatDuCase` + the `No*`/`Enabled*` shorthand `parseEnabledDisabled`): `ResultStore`, `Lineage`, `DataIngestion`, `OAuthRefresher`, `EntityStore`, `UsageMetering`, `MetricsEndpoint`, `PlatformKnowledgeBase`, `ConfigDriftDetection`, `RateLimiter`, `SmokeTest`, `AssetStore`, `ConsentAudit`, `AdAnalytics`, `ServerlessHost`, `ProcessProfile`. All additive — unset → the prior `defaults.X` (GP 11); an unrecognised token warns and keeps the default. See [the env-var table](../operations/env-vars.md#flat-case-subsystem-toggles-phase-71a7-batch-1). Verified by 3 added cases in `ServerConfigFromEnvTests.fs`.
+
 ## Not yet (Phase 71.A checklist, ride forward)
 
-The flat-case DU bundles server/client (71.A.7 / 71.A.9 — ~21 + ~11 fields via a shared `parseFlatDuCase` helper, land in batches), client brand-string lifts (71.A.10), hybrid case-flips (71.A.11), and the `PublicBaseUrl`-needs-a-token-issuer preflight `Warn` validator. See the phase body for the full ship order.
+- **71.A.7 batch 2** — the five override-bearing / precedence-flipping toggles (`Webhooks`, `AuditLog`, `SecurityHardening`, `ShareTokenStore`, `TeamCreationPolicy`); they change an existing override-record read, so they ship as a separate reviewable batch.
+- **71.A.9 / 71.A.10** — client-side flat-DU + brand-string lifts via Vite defines + `BundleConstants` accessors (need a Fable verification pass).
+- **71.A.11** — hybrid case-flips.
+- The `PublicBaseUrl`-needs-a-token-issuer preflight `Warn` validator. See the phase body for the full ship order.
