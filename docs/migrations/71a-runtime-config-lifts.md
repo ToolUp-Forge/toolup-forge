@@ -50,8 +50,12 @@ Sixteen payload-free server mode DUs now resolve from `TOOLUP_*` env vars via tw
 
 The five remaining flat-DU toggles. `Webhooks`, `AuditLog`, `SecurityHardening`, and `ShareTokenStore` already had an override-record read; their precedence is now **env > override > default** (via the new override-aware `parseEnabledDisabledWith`, and `parseFlatDuCase` for the 3-way `SecurityHardening`). `TeamCreationPolicy` (no override member) is a new `env > default` read. The `parseEnabledDisabled` helper was refactored to share an `enabledDisabledTokens` list with the override-aware sibling. Backward-compatible: a consumer setting none of these env vars resolves exactly as before (override → default). Verified by 4 added cases. **With this, 71.A.7 (all 21 server flat-DU fields) is complete.**
 
+## Increment 5 (71.A.10 — client brand-string lifts)
+
+Six client brand/dev primitives now resolve from Vite `define`s with **Vite > override > default** precedence: `AppName` (`__TOOLUP_APP_NAME__`), `AppLogo` (`__TOOLUP_APP_LOGO__`), `ActiveModule` (`__TOOLUP_ACTIVE_MODULE__`), `DevDefaultUserId` (`__TOOLUP_DEV_DEFAULT_USER_ID__`), `EnableElmishConsoleTrace` (`__TOOLUP_ENABLE_ELMISH_TRACE__`), `ShowDebugOnlyModules` (`__TOOLUP_SHOW_DEBUG_MODULES__`). Six new `BundleConstants` accessors (Phase 16e `string option` / new `bool option` shape) + a pure, unit-tested `ClientConfigDefaults.foldBrandConstants` fold wired into `fromBundleConstants`. `fromBundleConstantValues`' signature is **unchanged** (non-breaking) — emit-in-doubt consumers keep passing brand values via overrides. See [the client-define table](../operations/env-vars.md#client-side-vite-defines-phase-71a10). Verified by 3 Expecto cases + a clean `samples/MinimalClient` Fable transpile (the new defines emit for Vite substitution).
+
 ## Not yet (Phase 71.A checklist, ride forward)
 
-- **71.A.9 / 71.A.10** — client-side flat-DU + brand-string lifts via Vite defines + `BundleConstants` accessors (need a Fable verification pass).
+- **71.A.9** — client admin-module flat-DU case-flips (`TeamManager`, `TeamConfig`, `PlatformAdmin`, `PermissionsAdmin`, `HealthMonitor`, `ServiceStatusBoard`, `DataSubjectRequestAdmin`, `ToastCentre`, `PremiumModel`, `PlatformAdminProfile`, `InputsPaneWidth`) via Vite defines — the `Custom`-carrying cases stay compile-time, only the case-flip lifts.
 - **71.A.11** — hybrid case-flips.
 - The `PublicBaseUrl`-needs-a-token-issuer preflight `Warn` validator. See the phase body for the full ship order.

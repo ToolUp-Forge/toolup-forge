@@ -234,16 +234,62 @@ let fromBundleConstantValues
                 |> applyOption ClientConfig.defaults.DataIngestionAdmin
     }
 
+/// Phase 71.A.10 — fold the brand-string Vite-define values into the
+/// overrides record with Vite-define > override > default precedence
+/// (the bundle constant, when present, wins over the library-default
+/// override-record value, mirroring the server-side `fromEnv` brand
+/// lifts). Pure / explicit-values form so it's unit-testable without
+/// the `jsNative` `BundleConstants` reads. A `None` constant leaves the
+/// override-record value untouched, so the eventual
+/// `fromBundleConstantValues` resolution still applies override > default.
+let foldBrandConstants
+    (appName: string option)
+    (appLogo: string option)
+    (activeModule: string option)
+    (devDefaultUserId: string option)
+    (enableElmishConsoleTrace: bool option)
+    (showDebugOnlyModules: bool option)
+    (overrides: ClientConfigOverrides)
+    : ClientConfigOverrides =
+    {
+        overrides with
+            AppName = appName |> Option.orElse overrides.AppName
+            AppLogo = appLogo |> Option.orElse overrides.AppLogo
+            ActiveModule = activeModule |> Option.orElse overrides.ActiveModule
+            DevDefaultUserId = devDefaultUserId |> Option.orElse overrides.DevDefaultUserId
+            EnableElmishConsoleTrace = enableElmishConsoleTrace |> Option.orElse overrides.EnableElmishConsoleTrace
+            ShowDebugOnlyModules = showDebugOnlyModules |> Option.orElse overrides.ShowDebugOnlyModules
+    }
+
 /// Read the Vite-injected bundle constants via `BundleConstants`
 /// and call `fromBundleConstantValues`. Preferred form when Fable's
 /// `[<Emit>]` propagation across project references works (the default
 /// expectation — verified by `MinimalApp` in this phase's acceptance
 /// pass). Consumers unsure should reach for `fromBundleConstantValues` and
 /// pass the Vite values explicitly from their own `[<Emit>]` reads.
+///
+/// Phase 71.A.10 — the brand-string Vite defines (`__TOOLUP_APP_NAME__`,
+/// `__TOOLUP_APP_LOGO__`, `__TOOLUP_ACTIVE_MODULE__`,
+/// `__TOOLUP_DEV_DEFAULT_USER_ID__`, `__TOOLUP_ENABLE_ELMISH_TRACE__`,
+/// `__TOOLUP_SHOW_DEBUG_MODULES__`) are folded in here with
+/// Vite > override > default precedence, so a container-deploy re-brands
+/// without a Fable recompile. The `fromBundleConstantValues` signature is
+/// deliberately left unchanged (emit-in-doubt consumers keep passing
+/// brand values via their own overrides).
 let fromBundleConstants (overrides: ClientConfigOverrides) : ClientConfig =
+    let withBrandLifts =
+        foldBrandConstants
+            BundleConstants.appName
+            BundleConstants.appLogo
+            BundleConstants.activeModule
+            BundleConstants.devDefaultUserId
+            BundleConstants.enableElmishConsoleTrace
+            BundleConstants.showDebugOnlyModules
+            overrides
+
     fromBundleConstantValues
         BundleConstants.moduleFilter
         BundleConstants.agGridLicense
         BundleConstants.clerkPublishableKey
         BundleConstants.platformSurfaces
-        overrides
+        withBrandLifts

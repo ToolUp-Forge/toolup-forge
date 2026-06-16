@@ -95,3 +95,18 @@ Each is `false` by default; setting it to `1`/`true`/`yes`/`on` opts the deploym
 | `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | `AcceptPendingInviteStoreInMultiInstance` |
 
 _Other already-honoured scalars (`TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES`, `TOOLUP_STORE_EVICTION_MINUTES`, `TOOLUP_RATE_LIMIT_*`) are documented at their field definitions in `SDK.Shared.fs`; they move into this table as the later Phase 71.A increments consolidate the parsers._
+
+## Client-side Vite `define`s (Phase 71.A.10)
+
+The client tier reads **build-time Vite `define`s** (`__TOOLUP_*__`), not runtime env vars — they're substituted into the Fable bundle at `vite build`. Wire them in `vite.config.mts` `define: { ... }` (typically from `process.env`), then `ClientConfig.fromBundleConstants` folds them in with **Vite-define > override-record > default** precedence. A define left unset leaves the override/default untouched.
+
+| Vite define | `ClientConfig` field | Type |
+|---|---|---|
+| `__TOOLUP_APP_NAME__` | `AppName` | string |
+| `__TOOLUP_APP_LOGO__` | `AppLogo` | string |
+| `__TOOLUP_ACTIVE_MODULE__` | `ActiveModule` | string |
+| `__TOOLUP_DEV_DEFAULT_USER_ID__` | `DevDefaultUserId` | string |
+| `__TOOLUP_ENABLE_ELMISH_TRACE__` | `EnableElmishConsoleTrace` | bool (`true`/`false` or JS boolean) |
+| `__TOOLUP_SHOW_DEBUG_MODULES__` | `ShowDebugOnlyModules` | bool |
+
+_(The pre-existing `__TOOLUP_MODULE__`, `__TOOLUP_PLATFORM_SURFACES__`, `__AG_GRID_LICENSE__`, `__CLERK_PUBLISHABLE_KEY__`, `__ENTRA_*__`, `__OIDC_*__` defines are unchanged.) The client admin-module mode DUs (`TeamManager`, `PlatformAdmin`, …) land in a later 71.A.9 batch._

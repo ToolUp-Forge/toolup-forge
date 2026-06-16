@@ -125,3 +125,56 @@ let oidcIssuerOverride: string option = toOption oidcIssuerOverrideRaw
 /// access-token audience needs to differ from the OIDC client id
 /// (multi-audience deployments, federated APIs).
 let oidcAudienceOverride: string option = toOption oidcAudienceOverrideRaw
+
+// Phase 71.A.10 — client brand-string lifts. Same `string option`
+// shape as the Phase 16e set: `None` covers unset / empty / the literal
+// `'undefined'` / the un-substituted placeholder. A container-deploy can
+// re-brand (`AppName` / `AppLogo`), re-home the landing module
+// (`ActiveModule`), or flip the dev-only knobs without a Fable recompile.
+// These fold into `ClientConfigDefaults.fromBundleConstants` with
+// Vite-define > override-record > default precedence.
+
+[<Emit("(typeof __TOOLUP_APP_NAME__ === 'string' && __TOOLUP_APP_NAME__ !== '' && __TOOLUP_APP_NAME__ !== 'undefined' && __TOOLUP_APP_NAME__ !== '__TOOLUP_APP_NAME__' ? __TOOLUP_APP_NAME__ : '')")>]
+let private appNameRaw: string = jsNative
+
+[<Emit("(typeof __TOOLUP_APP_LOGO__ === 'string' && __TOOLUP_APP_LOGO__ !== '' && __TOOLUP_APP_LOGO__ !== 'undefined' && __TOOLUP_APP_LOGO__ !== '__TOOLUP_APP_LOGO__' ? __TOOLUP_APP_LOGO__ : '')")>]
+let private appLogoRaw: string = jsNative
+
+[<Emit("(typeof __TOOLUP_ACTIVE_MODULE__ === 'string' && __TOOLUP_ACTIVE_MODULE__ !== '' && __TOOLUP_ACTIVE_MODULE__ !== 'undefined' && __TOOLUP_ACTIVE_MODULE__ !== '__TOOLUP_ACTIVE_MODULE__' ? __TOOLUP_ACTIVE_MODULE__ : '')")>]
+let private activeModuleRaw: string = jsNative
+
+[<Emit("(typeof __TOOLUP_DEV_DEFAULT_USER_ID__ === 'string' && __TOOLUP_DEV_DEFAULT_USER_ID__ !== '' && __TOOLUP_DEV_DEFAULT_USER_ID__ !== 'undefined' && __TOOLUP_DEV_DEFAULT_USER_ID__ !== '__TOOLUP_DEV_DEFAULT_USER_ID__' ? __TOOLUP_DEV_DEFAULT_USER_ID__ : '')")>]
+let private devDefaultUserIdRaw: string = jsNative
+
+// Boolean defines: Vite may inject a real JS boolean or a string; both
+// are normalised to a token string here, then to `bool option` below.
+[<Emit("(typeof __TOOLUP_ENABLE_ELMISH_TRACE__ === 'boolean' ? (__TOOLUP_ENABLE_ELMISH_TRACE__ ? 'true' : 'false') : (typeof __TOOLUP_ENABLE_ELMISH_TRACE__ === 'string' ? __TOOLUP_ENABLE_ELMISH_TRACE__ : ''))")>]
+let private enableElmishTraceRaw: string = jsNative
+
+[<Emit("(typeof __TOOLUP_SHOW_DEBUG_MODULES__ === 'boolean' ? (__TOOLUP_SHOW_DEBUG_MODULES__ ? 'true' : 'false') : (typeof __TOOLUP_SHOW_DEBUG_MODULES__ === 'string' ? __TOOLUP_SHOW_DEBUG_MODULES__ : ''))")>]
+let private showDebugModulesRaw: string = jsNative
+
+let private toBoolOption (raw: string) : bool option =
+    match (if isNull raw then "" else raw.ToLowerInvariant()) with
+    | "true"
+    | "1"
+    | "yes"
+    | "on" -> Some true
+    | "false"
+    | "0"
+    | "no"
+    | "off" -> Some false
+    | _ -> None
+
+/// `__TOOLUP_APP_NAME__` Vite define — `None` when unset.
+let appName: string option = toOption appNameRaw
+/// `__TOOLUP_APP_LOGO__` Vite define — `None` when unset.
+let appLogo: string option = toOption appLogoRaw
+/// `__TOOLUP_ACTIVE_MODULE__` Vite define — `None` when unset.
+let activeModule: string option = toOption activeModuleRaw
+/// `__TOOLUP_DEV_DEFAULT_USER_ID__` Vite define — `None` when unset.
+let devDefaultUserId: string option = toOption devDefaultUserIdRaw
+/// `__TOOLUP_ENABLE_ELMISH_TRACE__` Vite define — `None` when unset.
+let enableElmishConsoleTrace: bool option = toBoolOption enableElmishTraceRaw
+/// `__TOOLUP_SHOW_DEBUG_MODULES__` Vite define — `None` when unset.
+let showDebugOnlyModules: bool option = toBoolOption showDebugModulesRaw
