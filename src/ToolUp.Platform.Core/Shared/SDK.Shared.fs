@@ -3111,6 +3111,32 @@ module ServerConfig =
         : 'T =
         parseFlatDuCase logger name (enabledDisabledTokens disabledVal enabledVal) overrideVal fallback
 
+    /// Phase 71.A.11 — select a hybrid DU case from an env var. `cases`
+    /// maps a token to either `Ok value` (a case that's constructible
+    /// from a default / curated factory — e.g. the nilary disabled case,
+    /// or `PersistentBlobBacked EventRetentionPolicy.ninetyDays`) or
+    /// `Error why` (the case carries a payload that can't be expressed via
+    /// a single env var — `EnabledPublicRendering` needs a `ContentRoot`
+    /// path; enabling DSR needs an explicit `ErasurePolicy`). An `Error`
+    /// token **fails loud** naming how to supply the payload; unset /
+    /// unrecognised → the configured value (GP 11).
+    let private parseHybridCase
+        (logger: ILogger)
+        (name: string)
+        (cases: (string * Result<'T, string>) list)
+        (fallback: 'T)
+        : 'T =
+        match envVar name |> Option.map _.ToLowerInvariant() with
+        | None -> fallback
+        | Some raw ->
+            match cases |> List.tryFind (fun (tok, _) -> tok = raw) with
+            | Some(_, Ok v) -> v
+            | Some(_, Error why) -> failwithf "%s=%s cannot be selected via env var: %s" name raw why
+            | None ->
+                let valid = cases |> List.map fst |> String.concat ", "
+                logger.Warn $"{name}={raw} not recognised. Valid: {valid}. Using the configured value."
+                fallback
+
     /// Build a `ServerConfig` from `TOOLUP_*` env vars + a curated
     /// overrides record. Every env-var read, warning message, and
     /// fallback semantics is byte-for-byte identical to the
@@ -3416,6 +3442,81 @@ module ServerConfig =
                         ]
                         None
                         defaults.TeamCreationPolicy
+                // Phase 71.A.11 — fully-nilary DUs the audit grouped as HY
+                // (the in-tree DU carries no payload): pure flat lifts.
+                JobScheduler =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_JOB_SCHEDULER"
+                        NoJobScheduler
+                        InProcessJobScheduler
+                        defaults.JobScheduler
+                RateLimitStore =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_RATE_LIMIT_STORE"
+                        [
+                            "no", NoRateLimitStore
+                            "off", NoRateLimitStore
+                            "disabled", NoRateLimitStore
+                            "inmemory", InMemoryRateLimitStore
+                            "in-memory", InMemoryRateLimitStore
+                            "external", ExternalRateLimitStore
+                        ]
+                        None
+                        defaults.RateLimitStore
+                // Phase 71.A.11 — hybrid case-flips: nilary / curated-default
+                // cases select; payload-bearing cases fail loud (the payload
+                // must be supplied via overrides / a `defaults with` literal).
+                EventStore =
+                    parseHybridCase
+                        logger
+                        "TOOLUP_EVENT_STORE"
+                        [
+                            "inmemory", Ok InMemoryOnly
+                            "in-memory", Ok InMemoryOnly
+                            "persistent", Ok(PersistentBlobBacked EventRetentionPolicy.ninetyDays)
+                        ]
+                        defaults.EventStore
+                ConversationStore =
+                    parseHybridCase
+                        logger
+                        "TOOLUP_CONVERSATION_STORE"
+                        [
+                            "no", Ok NoConversationStore
+                            "off", Ok NoConversationStore
+                            "disabled", Ok NoConversationStore
+                            "enabled",
+                            Error
+                                "EnabledConversationStore requires a retentionDays value; set ServerConfig.ConversationStore via overrides or a `{ defaults with ... }` literal"
+                        ]
+                        defaults.ConversationStore
+                PublicRendering =
+                    parseHybridCase
+                        logger
+                        "TOOLUP_PUBLIC_RENDERING"
+                        [
+                            "no", Ok NoPublicRendering
+                            "off", Ok NoPublicRendering
+                            "disabled", Ok NoPublicRendering
+                            "enabled",
+                            Error
+                                "EnabledPublicRendering requires a ContentRoot path; set ServerConfig.PublicRendering via overrides"
+                        ]
+                        defaults.PublicRendering
+                DataSubjectRequests =
+                    parseHybridCase
+                        logger
+                        "TOOLUP_DATA_SUBJECT_REQUESTS"
+                        [
+                            "disabled", Ok DataSubjectRequestMode.Disabled
+                            "no", Ok DataSubjectRequestMode.Disabled
+                            "off", Ok DataSubjectRequestMode.Disabled
+                            "enabled",
+                            Error
+                                "Enabling DSR requires an explicit ErasurePolicy (a compliance decision, not defaulted); set ServerConfig.DataSubjectRequests via overrides"
+                        ]
+                        defaults.DataSubjectRequests
                 EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
                 RateLimit = parseRateLimit logger
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger

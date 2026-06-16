@@ -61,6 +61,26 @@ Each selects a payload-free DU case; unset → the prior `defaults.X`. Binary to
 | `TOOLUP_SECURITY_HARDENING` | `SecurityHardening` | `no` / `default` / `strict` (env > override > default) |
 | `TOOLUP_TEAM_CREATION_POLICY` | `TeamCreationPolicy` | `admin` (PlatformAdminOnly) / `any` (AnyAuthenticatedUser) |
 
+## Hybrid subsystem toggles (Phase 71.A.11)
+
+Server DUs whose enabled case carries a payload. The env var selects the **case**; a payload-free / curated-default case is constructed directly, a payload-bearing case **fails loud** at startup naming how to supply the payload (overrides / a `{ defaults with ... }` literal) — it is never silently defaulted. Unset → the configured value.
+
+| Variable | Field | Tokens |
+|---|---|---|
+| `TOOLUP_JOB_SCHEDULER` | `JobScheduler` | `no` / `enabled` (both nilary — full lift) |
+| `TOOLUP_RATE_LIMIT_STORE` | `RateLimitStore` | `no` / `inmemory` / `external` (all nilary) |
+| `TOOLUP_EVENT_STORE` | `EventStore` | `inmemory` / `persistent` (persistent → 90-day retention default) |
+| `TOOLUP_CONVERSATION_STORE` | `ConversationStore` | `no` (off); `enabled` → **fail-loud** (needs `retentionDays`) |
+| `TOOLUP_PUBLIC_RENDERING` | `PublicRendering` | `no` (off); `enabled` → **fail-loud** (needs a `ContentRoot` path) |
+| `TOOLUP_DATA_SUBJECT_REQUESTS` | `DataSubjectRequests` | `disabled` (off); `enabled` → **fail-loud** (DSR needs an explicit `ErasurePolicy` — a compliance decision) |
+
+Client (Vite defines) — **off-direction only**; enabling carries a structured config (`AdPanelConfig`) or id that must be set in code, so a non-`no` token leaves the config value as-is:
+
+| Vite define | `ClientConfig` field | Tokens |
+|---|---|---|
+| `__TOOLUP_AD_PANEL__` | `AdPanel` | `no` / `off` / `disabled` |
+| `__TOOLUP_CONSENT_PROVIDER__` | `ConsentProvider` | `no` / `off` / `disabled` |
+
 ## Transport / security
 
 | Variable | Field | Default |

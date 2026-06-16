@@ -215,3 +215,13 @@ let platformAdminProfile: string = jsNative
 
 [<Emit("(typeof __TOOLUP_INPUTS_PANE_WIDTH__ === 'string' ? __TOOLUP_INPUTS_PANE_WIDTH__ : '')")>]
 let inputsPaneWidth: string = jsNative
+
+// Phase 71.A.11 — hybrid client toggles. Only the nilary `No*` case is
+// env-selectable (`no`/`off`/`disabled`); the `Enabled*` cases carry a
+// structured config (`AdPanelConfig`) / id string that must be supplied
+// in code, so a non-off token leaves the config's existing value as-is.
+[<Emit("(typeof __TOOLUP_AD_PANEL__ === 'string' ? __TOOLUP_AD_PANEL__ : '')")>]
+let adPanel: string = jsNative
+
+[<Emit("(typeof __TOOLUP_CONSENT_PROVIDER__ === 'string' ? __TOOLUP_CONSENT_PROVIDER__ : '')")>]
+let consentProvider: string = jsNative

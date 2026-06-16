@@ -400,5 +400,67 @@ let tests =
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                     Expect.equal cfg.TeamCreationPolicy PlatformAdminOnly "unset → PlatformAdminOnly default")
             }
+
+            // ── 71.A.11 — hybrid case-flips + nilary HY DUs ──
+            test "Nilary HY DUs: JobScheduler + RateLimitStore lift fully" {
+                withEnv
+                    [
+                        "TOOLUP_JOB_SCHEDULER", Some "enabled"
+                        "TOOLUP_RATE_LIMIT_STORE", Some "external"
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.equal cfg.JobScheduler InProcessJobScheduler "JobScheduler=enabled → InProcess"
+                        Expect.equal cfg.RateLimitStore ExternalRateLimitStore "RateLimitStore=external")
+
+                withEnv [ "TOOLUP_JOB_SCHEDULER", None; "TOOLUP_RATE_LIMIT_STORE", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.JobScheduler NoJobScheduler "JobScheduler default"
+                    Expect.equal cfg.RateLimitStore NoRateLimitStore "RateLimitStore default")
+            }
+
+            test "EventStore: inmemory / persistent both selectable (persistent → 90-day retention)" {
+                withEnv [ "TOOLUP_EVENT_STORE", Some "persistent" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+
+                    Expect.equal
+                        cfg.EventStore
+                        (PersistentBlobBacked EventRetentionPolicy.ninetyDays)
+                        "persistent → PersistentBlobBacked(ninetyDays)")
+
+                withEnv [ "TOOLUP_EVENT_STORE", Some "inmemory" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.EventStore InMemoryOnly "inmemory → InMemoryOnly")
+            }
+
+            test "Hybrid disable direction: 'no' selects the nilary case; unset → default" {
+                withEnv
+                    [
+                        "TOOLUP_PUBLIC_RENDERING", Some "no"
+                        "TOOLUP_DATA_SUBJECT_REQUESTS", Some "disabled"
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.equal cfg.PublicRendering NoPublicRendering "PublicRendering=no"
+                        Expect.equal cfg.DataSubjectRequests DataSubjectRequestMode.Disabled "DSR=disabled")
+
+                withEnv [ "TOOLUP_PUBLIC_RENDERING", None; "TOOLUP_CONVERSATION_STORE", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.PublicRendering ServerConfig.defaults.PublicRendering "unset → default"
+                    Expect.equal cfg.ConversationStore ServerConfig.defaults.ConversationStore "unset → default")
+            }
+
+            test "Hybrid enable direction with a payload-bearing case fails loud" {
+                for envName in
+                    [
+                        "TOOLUP_PUBLIC_RENDERING"
+                        "TOOLUP_CONVERSATION_STORE"
+                        "TOOLUP_DATA_SUBJECT_REQUESTS"
+                    ] do
+                    withEnv [ envName, Some "enabled" ] (fun () ->
+                        Expect.throws
+                            (fun () -> ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty |> ignore)
+                            $"{envName}=enabled must fail loud (payload not env-expressible)")
+            }
         ]
     )

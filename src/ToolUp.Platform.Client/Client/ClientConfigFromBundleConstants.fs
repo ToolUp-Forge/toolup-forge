@@ -341,6 +341,29 @@ let applyAdminModuleConstants
                 |> Option.defaultValue config.InputsPaneWidth
     }
 
+/// Phase 71.A.11 — fold the hybrid client toggles onto an already-built
+/// `ClientConfig`. Only the nilary `No*` case is env-selectable
+/// (`no`/`off`/`disabled`); the `EnabledAdPanel` / `FundingChoicesConsent`
+/// / `CustomConsentProvider` cases carry a structured config / id string
+/// that must be supplied in code, so any non-off token leaves the
+/// config's existing value untouched. Pure / explicit-values form.
+let applyHybridClientConstants (adPanel: string) (consentProvider: string) (config: ClientConfig) : ClientConfig =
+    let offTokensAdPanel = [ "no", NoAdPanel; "off", NoAdPanel; "disabled", NoAdPanel ]
+
+    let offTokensConsent = [
+        "no", NoConsentProvider
+        "off", NoConsentProvider
+        "disabled", NoConsentProvider
+    ]
+
+    {
+        config with
+            AdPanel = parseCaseToken adPanel offTokensAdPanel |> Option.defaultValue config.AdPanel
+            ConsentProvider =
+                parseCaseToken consentProvider offTokensConsent
+                |> Option.defaultValue config.ConsentProvider
+    }
+
 /// Read the Vite-injected bundle constants via `BundleConstants`
 /// and call `fromBundleConstantValues`. Preferred form when Fable's
 /// `[<Emit>]` propagation across project references works (the default
@@ -386,3 +409,5 @@ let fromBundleConstants (overrides: ClientConfigOverrides) : ClientConfig =
         BundleConstants.toastCentre
         BundleConstants.platformAdminProfile
         BundleConstants.inputsPaneWidth
+    // Phase 71.A.11 — hybrid client toggles (off-direction only).
+    |> applyHybridClientConstants BundleConstants.adPanel BundleConstants.consentProvider
