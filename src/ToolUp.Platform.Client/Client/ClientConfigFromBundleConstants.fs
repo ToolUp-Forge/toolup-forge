@@ -261,6 +261,86 @@ let foldBrandConstants
             ShowDebugOnlyModules = showDebugOnlyModules |> Option.orElse overrides.ShowDebugOnlyModules
     }
 
+/// Phase 71.A.9 — parse a `No*` / `Default*` admin-module case-flip.
+/// `no`/`off`/`disabled`/`none` → the disabled case; `default`/`on`/
+/// `enabled` → the default case; anything else (unset / unrecognised /
+/// a `Configured`/`External`-shaped token) → `None`, so the caller keeps
+/// the config's existing value.
+let parseNoDefault (raw: string) (noVal: 'T) (defaultVal: 'T) : 'T option =
+    match (if isNull raw then "" else raw.ToLowerInvariant()) with
+    | "no"
+    | "off"
+    | "disabled"
+    | "none" -> Some noVal
+    | "default"
+    | "on"
+    | "enabled" -> Some defaultVal
+    | _ -> None
+
+/// Phase 71.A.9 — parse a flat nilary DU from an explicit token map.
+let parseCaseToken (raw: string) (cases: (string * 'T) list) : 'T option =
+    let r = if isNull raw then "" else raw.ToLowerInvariant()
+    cases |> List.tryPick (fun (tok, v) -> if tok = r then Some v else None)
+
+/// Phase 71.A.9 — fold the client admin-module / profile Vite-define
+/// values onto an already-built `ClientConfig` (Vite > default; these
+/// fields carry no override-record member). Only the payload-free
+/// case-flip lifts — `Configured*` / `External*` / `Custom*` cases carry
+/// function values and stay compile-time, so an empty / unrecognised
+/// define leaves the config's existing value untouched. Pure /
+/// explicit-values form so it's unit-testable without the `jsNative`
+/// `BundleConstants` reads.
+let applyAdminModuleConstants
+    (teamManager: string)
+    (teamConfig: string)
+    (platformAdmin: string)
+    (permissionsAdmin: string)
+    (healthMonitor: string)
+    (serviceStatusBoard: string)
+    (dataSubjectRequestAdmin: string)
+    (toastCentre: string)
+    (platformAdminProfile: string)
+    (inputsPaneWidth: string)
+    (config: ClientConfig)
+    : ClientConfig =
+    {
+        config with
+            TeamManager =
+                parseNoDefault teamManager NoTeamManager DefaultTeamManager
+                |> Option.defaultValue config.TeamManager
+            TeamConfig =
+                parseNoDefault teamConfig NoTeamConfig DefaultTeamConfig
+                |> Option.defaultValue config.TeamConfig
+            PlatformAdmin =
+                parseNoDefault platformAdmin NoPlatformAdmin DefaultPlatformAdmin
+                |> Option.defaultValue config.PlatformAdmin
+            PermissionsAdmin =
+                parseNoDefault permissionsAdmin NoPermissionsAdmin DefaultPermissionsAdmin
+                |> Option.defaultValue config.PermissionsAdmin
+            HealthMonitor =
+                parseNoDefault healthMonitor NoHealthMonitor DefaultHealthMonitor
+                |> Option.defaultValue config.HealthMonitor
+            ServiceStatusBoard =
+                parseNoDefault serviceStatusBoard NoServiceStatusBoard DefaultServiceStatusBoard
+                |> Option.defaultValue config.ServiceStatusBoard
+            DataSubjectRequestAdmin =
+                parseNoDefault dataSubjectRequestAdmin NoDataSubjectRequestAdmin DefaultDataSubjectRequestAdmin
+                |> Option.defaultValue config.DataSubjectRequestAdmin
+            ToastCentre =
+                parseNoDefault toastCentre NoToastCentre DefaultToastCentre
+                |> Option.defaultValue config.ToastCentre
+            PlatformAdminProfile =
+                parseCaseToken platformAdminProfile [
+                    "standard", StandardPlatformAdminProfile
+                    "publicutility", PublicUtilityPlatformAdminProfile
+                    "public-utility", PublicUtilityPlatformAdminProfile
+                ]
+                |> Option.defaultValue config.PlatformAdminProfile
+            InputsPaneWidth =
+                parseCaseToken inputsPaneWidth [ "narrow", Narrow; "wide", Wide; "auto", Auto ]
+                |> Option.defaultValue config.InputsPaneWidth
+    }
+
 /// Read the Vite-injected bundle constants via `BundleConstants`
 /// and call `fromBundleConstantValues`. Preferred form when Fable's
 /// `[<Emit>]` propagation across project references works (the default
@@ -293,3 +373,16 @@ let fromBundleConstants (overrides: ClientConfigOverrides) : ClientConfig =
         BundleConstants.clerkPublishableKey
         BundleConstants.platformSurfaces
         withBrandLifts
+    // Phase 71.A.9 — fold the admin-module / profile flat-case toggles
+    // on top (Vite > default; no override-record member for these).
+    |> applyAdminModuleConstants
+        BundleConstants.teamManager
+        BundleConstants.teamConfig
+        BundleConstants.platformAdmin
+        BundleConstants.permissionsAdmin
+        BundleConstants.healthMonitor
+        BundleConstants.serviceStatusBoard
+        BundleConstants.dataSubjectRequestAdmin
+        BundleConstants.toastCentre
+        BundleConstants.platformAdminProfile
+        BundleConstants.inputsPaneWidth

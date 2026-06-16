@@ -109,4 +109,23 @@ The client tier reads **build-time Vite `define`s** (`__TOOLUP_*__`), not runtim
 | `__TOOLUP_ENABLE_ELMISH_TRACE__` | `EnableElmishConsoleTrace` | bool (`true`/`false` or JS boolean) |
 | `__TOOLUP_SHOW_DEBUG_MODULES__` | `ShowDebugOnlyModules` | bool |
 
-_(The pre-existing `__TOOLUP_MODULE__`, `__TOOLUP_PLATFORM_SURFACES__`, `__AG_GRID_LICENSE__`, `__CLERK_PUBLISHABLE_KEY__`, `__ENTRA_*__`, `__OIDC_*__` defines are unchanged.) The client admin-module mode DUs (`TeamManager`, `PlatformAdmin`, …) land in a later 71.A.9 batch._
+_(The pre-existing `__TOOLUP_MODULE__`, `__TOOLUP_PLATFORM_SURFACES__`, `__AG_GRID_LICENSE__`, `__CLERK_PUBLISHABLE_KEY__`, `__ENTRA_*__`, `__OIDC_*__` defines are unchanged.)_
+
+### Client admin-module / profile toggles (Phase 71.A.9)
+
+The admin-module mode DUs are **hybrid**: their `No*` / `Default*` case-flip lifts, but the `Configured*` / `External*` / `Custom*` cases carry function values and stay compile-time. A define of `no`/`off`/`disabled` selects the disabled case, `default`/`on`/`enabled` the default case; an unset / unrecognised value leaves the config's existing value untouched (so a `Configured`/`External` posture set in code is never clobbered). `PlatformAdminProfile` and `InputsPaneWidth` are fully nilary.
+
+| Vite define | `ClientConfig` field | Tokens |
+|---|---|---|
+| `__TOOLUP_TEAM_MANAGER__` | `TeamManager` | `no` / `default` |
+| `__TOOLUP_TEAM_CONFIG__` | `TeamConfig` | `no` / `default` |
+| `__TOOLUP_PLATFORM_ADMIN__` | `PlatformAdmin` | `no` / `default` |
+| `__TOOLUP_PERMISSIONS_ADMIN__` | `PermissionsAdmin` | `no` / `default` |
+| `__TOOLUP_HEALTH_MONITOR__` | `HealthMonitor` | `no` / `default` |
+| `__TOOLUP_SERVICE_STATUS_BOARD__` | `ServiceStatusBoard` | `no` / `default` |
+| `__TOOLUP_DATA_SUBJECT_REQUEST_ADMIN__` | `DataSubjectRequestAdmin` | `no` / `default` |
+| `__TOOLUP_TOAST_CENTRE__` | `ToastCentre` | `no` / `default` |
+| `__TOOLUP_PLATFORM_ADMIN_PROFILE__` | `PlatformAdminProfile` | `standard` / `publicutility` |
+| `__TOOLUP_INPUTS_PANE_WIDTH__` | `InputsPaneWidth` | `narrow` / `wide` / `auto` |
+
+_(`PremiumModel` is a single-case DU today — nothing to select — so it has no define.)_

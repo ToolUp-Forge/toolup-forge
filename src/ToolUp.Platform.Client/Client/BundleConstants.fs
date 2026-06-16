@@ -178,3 +178,40 @@ let devDefaultUserId: string option = toOption devDefaultUserIdRaw
 let enableElmishConsoleTrace: bool option = toBoolOption enableElmishTraceRaw
 /// `__TOOLUP_SHOW_DEBUG_MODULES__` Vite define — `None` when unset.
 let showDebugOnlyModules: bool option = toBoolOption showDebugModulesRaw
+
+// Phase 71.A.9 — client admin-module / profile flat-case toggles. Empty
+// string when the define isn't wired; the resolver in
+// `ClientConfigDefaults` maps `no`/`default` (and the profile / pane-width
+// tokens) onto the payload-free DU cases. The `Configured*` / `External*`
+// / `Custom*` cases carry function values and stay compile-time — an
+// empty / unrecognised define leaves the config's existing value as-is.
+
+[<Emit("(typeof __TOOLUP_TEAM_MANAGER__ === 'string' ? __TOOLUP_TEAM_MANAGER__ : '')")>]
+let teamManager: string = jsNative
+
+[<Emit("(typeof __TOOLUP_TEAM_CONFIG__ === 'string' ? __TOOLUP_TEAM_CONFIG__ : '')")>]
+let teamConfig: string = jsNative
+
+[<Emit("(typeof __TOOLUP_PLATFORM_ADMIN__ === 'string' ? __TOOLUP_PLATFORM_ADMIN__ : '')")>]
+let platformAdmin: string = jsNative
+
+[<Emit("(typeof __TOOLUP_PERMISSIONS_ADMIN__ === 'string' ? __TOOLUP_PERMISSIONS_ADMIN__ : '')")>]
+let permissionsAdmin: string = jsNative
+
+[<Emit("(typeof __TOOLUP_HEALTH_MONITOR__ === 'string' ? __TOOLUP_HEALTH_MONITOR__ : '')")>]
+let healthMonitor: string = jsNative
+
+[<Emit("(typeof __TOOLUP_SERVICE_STATUS_BOARD__ === 'string' ? __TOOLUP_SERVICE_STATUS_BOARD__ : '')")>]
+let serviceStatusBoard: string = jsNative
+
+[<Emit("(typeof __TOOLUP_DATA_SUBJECT_REQUEST_ADMIN__ === 'string' ? __TOOLUP_DATA_SUBJECT_REQUEST_ADMIN__ : '')")>]
+let dataSubjectRequestAdmin: string = jsNative
+
+[<Emit("(typeof __TOOLUP_TOAST_CENTRE__ === 'string' ? __TOOLUP_TOAST_CENTRE__ : '')")>]
+let toastCentre: string = jsNative
+
+[<Emit("(typeof __TOOLUP_PLATFORM_ADMIN_PROFILE__ === 'string' ? __TOOLUP_PLATFORM_ADMIN_PROFILE__ : '')")>]
+let platformAdminProfile: string = jsNative
+
+[<Emit("(typeof __TOOLUP_INPUTS_PANE_WIDTH__ === 'string' ? __TOOLUP_INPUTS_PANE_WIDTH__ : '')")>]
+let inputsPaneWidth: string = jsNative
