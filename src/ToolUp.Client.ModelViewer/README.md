@@ -85,12 +85,18 @@ any static route. Two operational notes:
 `ICspContributor` aggregation in `ToolUp.Platform.Server`):
 
 - `img-src` already carries `data: blob:` in the SDK baseline — no change needed.
-- **`worker-src blob:` is required** and the SDK baseline currently emits no
-  `worker-src` directive, so workers fall back to `default-src 'self'` and the
-  blob worker is blocked. Until the CSP contributor surface grows a worker-src
-  lever, deployments composing this companion must add
-  `worker-src 'self' blob:` (plus `child-src blob:` for older Safari) to their
-  policy override.
+- **`worker-src blob:` is required** (the SDK baseline emits no `worker-src`
+  directive, so workers would otherwise fall back to `default-src 'self'` and the
+  blob worker is blocked). Register the first-party `BlobWorkerCspContributor`
+  on the server composition to widen the policy to `worker-src 'self' blob:`:
+
+  ```fsharp
+  app |> ServerApp.withCspContributor (BlobWorkerCspContributor())
+  ```
+
+  Older Safari (no `worker-src` support) additionally needs `child-src blob:`,
+  which has no SDK lever — add it via a policy override only when targeting those
+  browsers.
 - Models served from another origin additionally need that origin in
   `connect-src` (the `ICspContributor` `ConnectSrc` case covers this).
 

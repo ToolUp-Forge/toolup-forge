@@ -157,6 +157,11 @@ let buildPolicyWith
                 | FrameSrc u -> Some u
                 | _ -> None)
 
+        let worker =
+            pick (function
+                | WorkerSrc u -> Some u
+                | _ -> None)
+
         let directive name (tokens: string list) = name + " " + String.concat " " tokens
 
         let styleBaseline =
@@ -179,6 +184,11 @@ let buildPolicyWith
             directive "img-src" ([ "'self'"; "data:"; "blob:" ] @ img)
             directive "font-src" ([ "'self'"; "data:" ] @ font)
             directive "connect-src" ("'self'" :: connect)
+            // No contributed worker origins → omit `worker-src` entirely so
+            // workers inherit `default-src 'self'` (pre-lever baseline, GP 11).
+            // A contributed origin promotes it off the fallback with `'self'`.
+            if not (List.isEmpty worker) then
+                directive "worker-src" ("'self'" :: worker)
             frameDirective
             "frame-ancestors 'none'"
             "form-action 'self'"

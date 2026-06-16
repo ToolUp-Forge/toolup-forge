@@ -51,6 +51,15 @@ type CspSourceDirective =
     /// Added to `frame-src` — embeddable child-frame origins
     /// (hosted checkout, embedded auth widget).
     | FrameSrc of url: string
+    /// Added to `worker-src` — Worker / SharedWorker / ServiceWorker
+    /// script origins (a client library that spawns Web Workers from a
+    /// `blob:` URL, e.g. `<model-viewer>`). When NO contributor supplies
+    /// a `worker-src`, the aggregator emits no `worker-src` directive at
+    /// all and workers fall back to `default-src 'self'` — the baseline
+    /// policy stays byte-for-byte unchanged (GP 11). When any contributor
+    /// supplies one, the aggregator promotes `worker-src` off the fallback
+    /// with `'self'` seeded ahead of the contributed source(s).
+    | WorkerSrc of source: string
 
 /// A subsystem or companion that needs the deployment CSP widened.
 /// Registered as a DI singleton; aggregated at compose time. The
@@ -132,3 +141,18 @@ type AiProviderCspContributor() =
 type AgGridCdnCspContributor() =
     interface ICspContributor with
         member _.RequiredSources = [ ScriptSrc "https://cdn.jsdelivr.net"; StyleSrc "https://cdn.jsdelivr.net" ]
+
+/// `blob:` Web Workers → `worker-src`. Client libraries that spawn
+/// Workers from a `blob:` URL (Google's `<model-viewer>` web component
+/// is the canonical case) are blocked under the hardened policy because
+/// the SDK baseline emits no `worker-src` directive, so workers fall back
+/// to `default-src 'self'`. A deployment composing such a companion
+/// registers this contributor — `ServerApp.withCspContributor
+/// (BlobWorkerCspContributor())` — to widen the policy to
+/// `worker-src 'self' blob:`. Opt-in (NOT auto-registered): a deployment
+/// that runs no blob-worker library contributes nothing and the baseline
+/// stays unchanged (GP 11). `img-src` already carries `blob:` in the SDK
+/// baseline, so no `ImgSrc` widening is needed here.
+type BlobWorkerCspContributor() =
+    interface ICspContributor with
+        member _.RequiredSources = [ WorkerSrc "blob:" ]

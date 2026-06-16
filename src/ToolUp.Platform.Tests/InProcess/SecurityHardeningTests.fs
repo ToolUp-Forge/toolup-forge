@@ -111,6 +111,32 @@ let tests =
             Expect.stringContains p "frame-src 'self' https://embed.example.com" "frame host promotes off 'none'"
         }
 
+        test "No WorkerSrc contributor → no worker-src directive (baseline unchanged)" {
+            let p = SecurityHardening.buildPolicy DefaultSecurityHardening []
+            Expect.isFalse (p.Contains "worker-src") "worker-src omitted when no contributor supplies one"
+
+            // GP 11 — the lever's presence does not perturb the contributed-source
+            // path either: a policy with only non-worker sources stays worker-free.
+            let withOthers =
+                SecurityHardening.buildPolicy DefaultSecurityHardening [ ConnectSrc "https://issuer.example" ]
+
+            Expect.isFalse (withOthers.Contains "worker-src") "unrelated contributors don't emit worker-src"
+        }
+
+        test "WorkerSrc contributor promotes worker-src off the default-src fallback" {
+            let p = SecurityHardening.buildPolicy DefaultSecurityHardening [ WorkerSrc "blob:" ]
+
+            Expect.stringContains
+                p
+                "worker-src 'self' blob:"
+                "blob: worker origin folds into worker-src with 'self' seeded"
+        }
+
+        test "BlobWorkerCspContributor contributes worker-src blob:" {
+            let v = BlobWorkerCspContributor() :> ICspContributor
+            Expect.equal v.RequiredSources [ WorkerSrc "blob:" ] "blob: worker-src widening"
+        }
+
         test "Duplicate contributed origins are deduped" {
             let p =
                 SecurityHardening.buildPolicy DefaultSecurityHardening [
