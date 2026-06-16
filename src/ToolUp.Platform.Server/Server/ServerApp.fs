@@ -120,6 +120,14 @@ type ServerModule = {
     /// declaring jobs in an unscheduled deployment is a config mismatch,
     /// not a crash.
     JobHandlers: ScheduledJobDeclaration list
+    /// Phase 165 — optional opt-in module-binding stamp this module
+    /// presents to the `addModule` gate. `None` (the default) is an
+    /// unstamped module: it loads unchanged unless a deployment-level
+    /// policy requires stamps. A `Some` stamp must verify under a
+    /// configured `IModuleBindingVerifier`'s trust anchors, else the
+    /// module is dropped. Populated by a deploy-time stamper; forge only
+    /// reads it here.
+    BindingStamp: ModuleBindingStamp option
 }
 
 module ServerModule =
@@ -137,6 +145,7 @@ module ServerModule =
         RoutePrefixes = []
         RouteSurfaceRequirements = []
         JobHandlers = []
+        BindingStamp = None
     }
 
     /// Attach a permission-guarded Fable.Remoting api factory. Uses the
@@ -319,6 +328,17 @@ module ServerModule =
     let withScheduledJob (declaration: ScheduledJobDeclaration) (m: ServerModule) : ServerModule = {
         m with
             JobHandlers = m.JobHandlers @ [ declaration ]
+    }
+
+    /// Phase 165 — attach an opt-in module-binding stamp. The stamp is
+    /// checked at `addModule` time against the deployment's configured
+    /// `IModuleBindingVerifier` (see `ServerApp.withModuleBindingVerifier`):
+    /// a stamp that verifies under a trust anchor loads the module, an
+    /// unverifiable stamp drops it. Modules without a stamp leave this
+    /// `None` and are unaffected.
+    let withBindingStamp (stamp: ModuleBindingStamp) (m: ServerModule) : ServerModule = {
+        m with
+            BindingStamp = Some stamp
     }
 
 // ─── ServerApp — record form of the `compose` arguments ──────────────
@@ -609,6 +629,16 @@ type ServerApp = {
     /// `ensureCompanionNotAlreadyComposed` at entry and
     /// `withCompanionMarker` before returning.
     ComposedCompanions: string list
+    /// Phase 165 — optional opt-in module-binding verifier. When `Some`,
+    /// `addModule` consults it as a second gate after the module-name
+    /// filter: a module presenting a `BindingStamp` is dropped unless the
+    /// stamp verifies under one of the verifier's trust anchors, and a
+    /// stamped module is fail-closed (dropped) even when this is `None`.
+    /// `None` (the default) with unstamped modules is byte-identical to
+    /// the pre-165 pipeline (GP 13). Wired via
+    /// `ServerApp.withModuleBindingVerifier` (e.g.
+    /// `DefaultModuleBindingVerifier.create` from `ToolUp.ArtefactSigning`).
+    ModuleBindingVerifier: IModuleBindingVerifier option
 }
 
 module ServerApp =
@@ -651,6 +681,7 @@ module ServerApp =
         ScheduledJobs = []
         UserDirectory = None
         ComposedCompanions = []
+        ModuleBindingVerifier = None
     }
 
     /// Phase 1h companion-conflict validator. Companion compose seams
@@ -686,6 +717,17 @@ module ServerApp =
 
     let withConfig (c: ServerConfig) (app: ServerApp) : ServerApp = { app with Config = c }
     let withAuth (a: IAuthProvider) (app: ServerApp) : ServerApp = { app with Auth = Some a }
+
+    /// Phase 165 — opt into the module-binding gate. Once a verifier is
+    /// configured, `addModule` drops any module whose `BindingStamp` does
+    /// not verify under one of the verifier's trust anchors. Compose with
+    /// `DefaultModuleBindingVerifier.create anchors` from
+    /// `ToolUp.ArtefactSigning`, or any custom `IModuleBindingVerifier`.
+    let withModuleBindingVerifier (verifier: IModuleBindingVerifier) (app: ServerApp) : ServerApp = {
+        app with
+            ModuleBindingVerifier = Some verifier
+    }
+
     let withLogger (l: ILogger) (app: ServerApp) : ServerApp = { app with Logger = Some l }
     let withStorage (s: IBlobStorage) (app: ServerApp) : ServerApp = { app with Storage = Some s }
 
@@ -1253,65 +1295,91 @@ module ServerApp =
         if not (ModuleFilter.matches app.Config.ModuleFilter m.Name) then
             app
         else
-            let moduleConfigs =
-                match m.ConfigSchema with
-                | None -> app.ModuleConfigs
-                | Some schema ->
-                    app.ModuleConfigs
-                    @ [
-                        {
-                            ModuleKey = m.Name
-                            DisplayName = m.Name
-                            Schema = schema
+            // Phase 165 — opt-in module-binding gate, the second check after
+            // the name filter. The common case (no verifier configured AND
+            // no stamp present) is a single cheap match arm → byte-identical
+            // to the pre-165 pipeline (GP 13). A present stamp fails closed
+            // even when no verifier is configured: a stamped module is
+            // self-protecting on any deployment lacking the matching anchor.
+            let bindingOutcome =
+                match app.ModuleBindingVerifier, m.BindingStamp with
+                | None, None -> Allowed
+                | Some verifier, stamp -> verifier.Verify(m.Name, stamp)
+                | None, Some _ ->
+                    Rejected
+                        "module presents a binding stamp but this deployment has no module-binding verifier configured"
+
+            let bindingRejected =
+                match bindingOutcome with
+                | Rejected _ -> true
+                | Allowed -> false
+
+            // Drop a module that failed the binding gate. (Phase 169 will
+            // emit a module-load startup event here when it ships; for now
+            // the drop is silent, matching the name-filter skip above.)
+            if bindingRejected then
+                app
+            else
+
+                let moduleConfigs =
+                    match m.ConfigSchema with
+                    | None -> app.ModuleConfigs
+                    | Some schema ->
+                        app.ModuleConfigs
+                        @ [
+                            {
+                                ModuleKey = m.Name
+                                DisplayName = m.Name
+                                Schema = schema
+                            }
+                        ]
+
+                let queryRegistrations = m.QueryHandlers |> List.map (fun h -> m.Name, h)
+                let dataTypeRegistrations = m.DataTypes |> List.map (fun dt -> m.Name, dt)
+
+                let metricRegistrations: Metrics.MetricRegistration list =
+                    m.MetricDefinitions
+                    |> List.map (fun d -> { Module = Some m.Name; Definition = d })
+
+                let mergedSlowRequestOverrides =
+                    m.SlowRequestThresholdOverrides
+                    |> Map.fold (fun acc k v -> Map.add k v acc) app.Config.SlowRequestThresholdOverrides
+
+                // Phase 66 Stream B.3 — fan a module's surface-requirement
+                // declarations into the app-level accumulators. A module
+                // with no `RoutePrefixes` contributes nothing to the
+                // `ModulePrefixes` registry (its `DefaultSurfaceRequirement`
+                // value is moot without a prefix to apply it to), so
+                // pre-B.3 modules — which declare neither field — stay
+                // byte-identical: `app.ModuleSurfaceDefaults` and
+                // `app.RouteSurfaceOverrides` accumulate empty contributions.
+                let surfaceDefaultsForModule =
+                    m.RoutePrefixes |> List.map (fun prefix -> prefix, m.DefaultSurfaceRequirement)
+
+                {
+                    app with
+                        Handlers = app.Handlers @ m.Handlers
+                        DataTypes = app.DataTypes @ m.DataTypes
+                        VectorisationHandlers = app.VectorisationHandlers @ m.VectorisationHandlers
+                        ModuleNames = app.ModuleNames @ [ m.Name ]
+                        ModuleConfigs = moduleConfigs
+                        QueryHandlerRegistrations = app.QueryHandlerRegistrations @ queryRegistrations
+                        DataTypeRegistrations = app.DataTypeRegistrations @ dataTypeRegistrations
+                        AITools = app.AITools @ m.AITools
+                        MetricRegistrations = app.MetricRegistrations @ metricRegistrations
+                        ModuleSurfaceDefaults = app.ModuleSurfaceDefaults @ surfaceDefaultsForModule
+                        RouteSurfaceOverrides = app.RouteSurfaceOverrides @ m.RouteSurfaceRequirements
+                        // Phase 9b.B — fan module-level job declarations
+                        // onto the app's accumulator. Modules pre-9b.B
+                        // declare no `JobHandlers`, so their contribution
+                        // is the empty list and behaviour stays byte-
+                        // identical.
+                        ScheduledJobs = app.ScheduledJobs @ m.JobHandlers
+                        Config = {
+                            app.Config with
+                                SlowRequestThresholdOverrides = mergedSlowRequestOverrides
                         }
-                    ]
-
-            let queryRegistrations = m.QueryHandlers |> List.map (fun h -> m.Name, h)
-            let dataTypeRegistrations = m.DataTypes |> List.map (fun dt -> m.Name, dt)
-
-            let metricRegistrations: Metrics.MetricRegistration list =
-                m.MetricDefinitions
-                |> List.map (fun d -> { Module = Some m.Name; Definition = d })
-
-            let mergedSlowRequestOverrides =
-                m.SlowRequestThresholdOverrides
-                |> Map.fold (fun acc k v -> Map.add k v acc) app.Config.SlowRequestThresholdOverrides
-
-            // Phase 66 Stream B.3 — fan a module's surface-requirement
-            // declarations into the app-level accumulators. A module
-            // with no `RoutePrefixes` contributes nothing to the
-            // `ModulePrefixes` registry (its `DefaultSurfaceRequirement`
-            // value is moot without a prefix to apply it to), so
-            // pre-B.3 modules — which declare neither field — stay
-            // byte-identical: `app.ModuleSurfaceDefaults` and
-            // `app.RouteSurfaceOverrides` accumulate empty contributions.
-            let surfaceDefaultsForModule =
-                m.RoutePrefixes |> List.map (fun prefix -> prefix, m.DefaultSurfaceRequirement)
-
-            {
-                app with
-                    Handlers = app.Handlers @ m.Handlers
-                    DataTypes = app.DataTypes @ m.DataTypes
-                    VectorisationHandlers = app.VectorisationHandlers @ m.VectorisationHandlers
-                    ModuleNames = app.ModuleNames @ [ m.Name ]
-                    ModuleConfigs = moduleConfigs
-                    QueryHandlerRegistrations = app.QueryHandlerRegistrations @ queryRegistrations
-                    DataTypeRegistrations = app.DataTypeRegistrations @ dataTypeRegistrations
-                    AITools = app.AITools @ m.AITools
-                    MetricRegistrations = app.MetricRegistrations @ metricRegistrations
-                    ModuleSurfaceDefaults = app.ModuleSurfaceDefaults @ surfaceDefaultsForModule
-                    RouteSurfaceOverrides = app.RouteSurfaceOverrides @ m.RouteSurfaceRequirements
-                    // Phase 9b.B — fan module-level job declarations
-                    // onto the app's accumulator. Modules pre-9b.B
-                    // declare no `JobHandlers`, so their contribution
-                    // is the empty list and behaviour stays byte-
-                    // identical.
-                    ScheduledJobs = app.ScheduledJobs @ m.JobHandlers
-                    Config = {
-                        app.Config with
-                            SlowRequestThresholdOverrides = mergedSlowRequestOverrides
-                    }
-            }
+                }
 
     let addModules (modules: ServerModule list) (app: ServerApp) : ServerApp =
         modules |> List.fold (fun a m -> addModule m a) app

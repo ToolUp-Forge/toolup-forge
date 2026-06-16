@@ -7,7 +7,11 @@ open Expecto
 open ToolUp.ArtefactSigning.Tests.InProcess
 
 let allTests =
-    testList "ToolUp.ArtefactSigning.Tests" [ DefaultArtefactSignerTests.tests; JwsBuilderTests.tests ]
+    testList "ToolUp.ArtefactSigning.Tests" [
+        DefaultArtefactSignerTests.tests
+        JwsBuilderTests.tests
+        ModuleBindingVerifierTests.tests
+    ]
 
 [<EntryPoint>]
 let main argv = runTestsWithCLIArgs [] argv allTests

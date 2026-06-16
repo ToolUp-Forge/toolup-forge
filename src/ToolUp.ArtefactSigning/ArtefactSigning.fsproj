@@ -18,6 +18,11 @@
     <Compile Include="Server\SigningInternals.fs" />
     <Compile Include="Server\DefaultArtefactSigner.fs" />
     <Compile Include="Server\DefaultArtefactVerifier.fs" />
+    <!-- Phase 165 — default IModuleBindingVerifier (declared in
+         ToolUp.Platform.Core). Lives here so it can reuse the internal
+         Jws verify primitives + BouncyCastle without widening any public
+         surface, and so the crypto stays off the Fable client tier. -->
+    <Compile Include="Server\DefaultModuleBindingVerifier.fs" />
     <Compile Include="Server\SigningKeyHandler.fs" />
     <Compile Include="Server\Helpers.fs" />
   </ItemGroup>
