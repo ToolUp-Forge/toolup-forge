@@ -89,3 +89,45 @@ type IResultStore =
     /// without modification — possible but rare).
     abstract CompareVersions:
         scopeId: string * objectId: string * v1: int * v2: int -> Async<Result<ResultDiff, DataObjectError>>
+
+    /// Eviction surface (Phase 158). `DeleteResult` removes every
+    /// version of the result identified by `(moduleName, resultType)`;
+    /// `DeleteByPrefix` removes every result under `moduleName` whose
+    /// `resultType` starts with `resultTypePrefix`. Both are an
+    /// explicit, audited eviction — not in-place mutation (GP 5) — for
+    /// callers that own the result's lifecycle (e.g. a cache layer
+    /// that persists analyser outputs and needs to hard-delete stale
+    /// versions rather than let them accumulate behind overwrite-on-
+    /// next-write). The persistent default routes through
+    /// `IDataObjectStore.Evict`, which bypasses the `StrictlyVersioned`
+    /// retention guard the store applies on `SaveResult`; in-memory
+    /// drops the dictionary slot. Audit-tracked deployments that must
+    /// never evict a result simply do not call these methods.
+    ///
+    /// **Idempotent.** Deleting an absent result — or a prefix that
+    /// matches nothing — returns `Ok ()`. A distributed implementation
+    /// satisfies the same contract by making its underlying delete
+    /// idempotent (delete-absent is success, not error).
+    ///
+    /// Six-rule portability audit (GP 12) on this surface:
+    ///  1. **Identity by value** — keys are `string` scope / module /
+    ///     resultType, never a live handle.
+    ///  2. **Async at the boundary** — both return `Async<Result<_,_>>`.
+    ///  3. **Failure / retry as data** — errors surface as
+    ///     `DataObjectError` values; no `OnFailure` callback. A caller
+    ///     retries by re-issuing the (idempotent) call.
+    ///  4. **Stateless between calls** — every input is on the
+    ///     parameter list; no eviction state is held across calls.
+    ///  5. **No cross-shard ordering** — each `(scopeId, objectId)` is
+    ///     its own shard; `DeleteByPrefix` makes no ordering promise
+    ///     across the objects it spans.
+    ///  6. **Precision** — N/A (no timing surface).
+    abstract DeleteResult:
+        scopeId: string * moduleName: string * resultType: string -> Async<Result<unit, DataObjectError>>
+
+    /// Remove every result under `moduleName` whose `resultType`
+    /// starts with `resultTypePrefix`. Idempotent — a prefix matching
+    /// no results returns `Ok ()`. See `DeleteResult` for the full
+    /// eviction-surface contract + portability audit.
+    abstract DeleteByPrefix:
+        scopeId: string * moduleName: string * resultTypePrefix: string -> Async<Result<unit, DataObjectError>>

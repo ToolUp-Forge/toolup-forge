@@ -101,6 +101,28 @@ type IDataObjectStore =
     /// longer referenced by any other object in the scope.
     abstract Delete: scopeId: string * objectId: string -> Async<Result<unit, DataObjectError>>
 
+    /// Evict all versions of `objectId` in `scopeId`, **bypassing the
+    /// `StrictlyVersioned` delete protection that `Delete` enforces.**
+    /// Unlike `Delete` (which refuses `StrictlyVersioned`), `Evict` is
+    /// an explicit single-object lifecycle operation for callers that
+    /// own the object's retention — e.g. a cache layer over
+    /// `IResultStore` that has decided the audit-retention guarantee
+    /// does not apply to its entries. This is the same deliberate-
+    /// operator-choice reasoning that lets `Purge` (scope-wide) and
+    /// `Erase HardDelete` (subject-wide) override the same guard; this
+    /// completes the set with the per-object axis. Idempotent —
+    /// evicting an absent object returns `Ok ()`. Garbage-collects any
+    /// `_content/{hash}.data` blobs no longer referenced by any other
+    /// object in the scope.
+    ///
+    /// Portability audit (GP 12): identity by value (string `scopeId`
+    /// + `objectId`), async at the boundary, failure as
+    /// `DataObjectError` data (no callback), stateless between calls,
+    /// single-scope (no cross-shard ordering claim), no precision
+    /// surface. Callers that require strict immutability simply do not
+    /// call `Evict` — the `Delete` guard remains the default.
+    abstract Evict: scopeId: string * objectId: string -> Async<Result<unit, DataObjectError>>
+
     /// Remove every object and dedup blob under `scopeId`. Used by
     /// `SessionFileStore`'s ephemeral-scope eviction path. Idempotent.
     /// Bypasses `StrictlyVersioned` delete protection — eviction is a

@@ -56,6 +56,12 @@ type private InMemoryObjectStore() =
 
         member _.Recover(_, _, _, _) = async { return Error NotFound }
         member _.Delete(_, _) = async { return Ok() }
+
+        member _.Evict(scopeId, objectId) = async {
+            store.TryRemove((scopeId, objectId)) |> ignore
+            return Ok()
+        }
+
         member _.Purge(_) = async { return Ok() }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {

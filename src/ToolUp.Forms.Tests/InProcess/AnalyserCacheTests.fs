@@ -36,11 +36,11 @@ type private InMemoryAnalyserCache() =
         }
 
         member _.MarkStale(schemaId, schemaVersion) = async {
-            // Test stub: the in-memory cache actually evicts on
-            // `MarkStale` so subsequent `TryLookup` calls miss. The
-            // production `ResultStoreAnalyserCache` only returns the
-            // would-be-cleared count and relies on overwrite-on-write
-            // for eviction (no delete-by-key on `IResultStore`).
+            // Test stub: the in-memory cache evicts on `MarkStale` so
+            // subsequent `TryLookup` calls miss. Since Phase 158 the
+            // production `ResultStoreAnalyserCache` evicts for real too
+            // (via the `IResultStore` delete surface) — see
+            // `resultStoreEvictionTests` below for that integration.
             let matching =
                 store.Keys
                 |> Seq.filter (fun k ->
@@ -423,5 +423,119 @@ let private wiringTests =
         }
     ]
 
+// ─── Phase 158 — ResultStoreAnalyserCache real-eviction tests ───────
+//
+// The hermetic `InMemoryAnalyserCache` above proves the `MarkStale`
+// *contract*. These bind the production `ResultStoreAnalyserCache`
+// over an in-memory `IResultStore` and assert that `MarkStale` now
+// hard-deletes the persisted entries (and their accumulated versions)
+// — closing the Phase 21c gap where it was a no-op count-reporter.
+
+let private resultStoreEvictionTests =
+    let newCache () =
+        let store =
+            ToolUp.Platform.ResultStore.InMemoryResultStore() :> ToolUp.Platform.IResultStore
+
+        let scopeId = "team-" + System.Guid.NewGuid().ToString("N").Substring(0, 8)
+        ResultStoreAnalyserCache(store, (fun () -> scopeId)) :> IAnalyserCache, store, scopeId
+
+    testList "ResultStoreAnalyserCache — MarkStale hard-evicts (Phase 158)" [
+        testCaseAsync "MarkStale(schemaId, Some v) removes prior versions; TryLookup then misses"
+        <| async {
+            let cache, _store, _scope = newCache ()
+
+            let key = {
+                SchemaId = "schema-1"
+                AnalyserName = "sentiment"
+                SchemaVersion = 1
+            }
+
+            // Two writes accumulate two versions of the same entry.
+            let! _ = cache.Store(key, sampleOutputs)
+            let! _ = cache.Store(key, sampleOutputs)
+
+            let! before = cache.TryLookup key
+            Expect.isSome before "entry present before eviction"
+
+            let! cleared = cache.MarkStale("schema-1", Some 1)
+            Expect.equal cleared 1 "one distinct entry evicted"
+
+            let! after = cache.TryLookup key
+            Expect.equal after None "entry gone after eviction (all versions removed)"
+        }
+
+        testCaseAsync "MarkStale(schemaId, Some v) only evicts the matching version"
+        <| async {
+            let cache, _store, _scope = newCache ()
+
+            let v1 = {
+                SchemaId = "schema-1"
+                AnalyserName = "sentiment"
+                SchemaVersion = 1
+            }
+
+            let v2 = { v1 with SchemaVersion = 2 }
+
+            let! _ = cache.Store(v1, sampleOutputs)
+            let! _ = cache.Store(v2, sampleOutputs)
+
+            let! cleared = cache.MarkStale("schema-1", Some 1)
+            Expect.equal cleared 1 "only v1 evicted"
+
+            let! gone = cache.TryLookup v1
+            let! kept = cache.TryLookup v2
+            Expect.equal gone None "v1 evicted"
+            Expect.isSome kept "v2 preserved"
+        }
+
+        testCaseAsync "MarkStale(schemaId, None) evicts every analyser and version for the schema"
+        <| async {
+            let cache, _store, _scope = newCache ()
+
+            let store (analyser: string) (version: int) = async {
+                let key = {
+                    SchemaId = "schema-1"
+                    AnalyserName = analyser
+                    SchemaVersion = version
+                }
+
+                let! _ = cache.Store(key, sampleOutputs)
+                return ()
+            }
+
+            do! store "sentiment" 1
+            do! store "topic" 1
+            do! store "sentiment" 2
+
+            // A different schema must survive.
+            let other = {
+                SchemaId = "schema-other"
+                AnalyserName = "sentiment"
+                SchemaVersion = 1
+            }
+
+            let! _ = cache.Store(other, sampleOutputs)
+
+            let! cleared = cache.MarkStale("schema-1", None)
+            Expect.equal cleared 3 "all three schema-1 entries evicted"
+
+            let! kept = cache.TryLookup other
+            Expect.isSome kept "other schema preserved"
+        }
+
+        testCaseAsync "MarkStale on a schema with no entries is a zero-count no-op"
+        <| async {
+            let cache, _store, _scope = newCache ()
+            let! cleared = cache.MarkStale("nothing-here", None)
+            Expect.equal cleared 0 "nothing to evict"
+        }
+    ]
+
 let tests =
-    testList "AnalyserCache (Phase 21c)" [ noOpTests; readThroughTests; invalidationTests; wiringTests ]
+    testList "AnalyserCache (Phase 21c)" [
+        noOpTests
+        readThroughTests
+        invalidationTests
+        wiringTests
+        resultStoreEvictionTests
+    ]

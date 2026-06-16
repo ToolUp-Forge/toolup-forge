@@ -22,18 +22,19 @@ open ToolUp.Forms.AggregationTypes
 //     trivial; the next `RebuildAnalyserOutputs` flags stragglers
 //     via `MarkStale`).
 //   - New submission → `MarkStale` is called for that schema at
-//     the current schema version. The next miss-path compute
-//     overwrites the entry, evicting the stale payload.
+//     the current schema version. The matching entries are hard-
+//     deleted; the next miss-path compute repopulates them.
 //   - `RebuildAnalyserOutputs schemaId` → `MarkStale schemaId None`
-//     flags every entry for that schema (all versions, all
+//     evicts every entry for that schema (all versions, all
 //     analyser names); the next read recomputes.
 //
-// `IResultStore` has no delete-by-key surface today, so `MarkStale`
-// takes no action and returns the count of would-be-cleared entries
-// as a telemetry proxy. The actual eviction path is the submission-
-// write hook's compute-then-store overwrite. See
-// `FUTURE-STRATEGIC-GAPS.md` for the substrate gap a real
-// `Invalidate` would require.
+// Phase 158 gave `IResultStore` a delete surface (`DeleteResult` /
+// `DeleteByPrefix`), so `MarkStale` now hard-deletes the matching
+// entries — and all their accumulated versions — rather than
+// reporting a would-be-cleared count and leaning on overwrite-on-
+// next-write (which left dead versions accumulating in the
+// underlying store). It returns the count of distinct entries
+// evicted.
 //
 // **No-op default.** Deployments without `withAnalyserCache` use
 // `NoOpAnalyserCache` — every `tryLookup` returns `None`, every
@@ -66,15 +67,16 @@ type IAnalyserCache =
     /// "overwrite latest".
     abstract Store: AnalyserCacheKey * AnalyserOutput list -> Async<Result<unit, string>>
 
-    /// Mark every cached entry whose `SchemaId` matches and (optionally)
-    /// whose `SchemaVersion` matches as stale. Used by the submission-
-    /// write hook (passes the current version) and by
-    /// `RebuildAnalyserOutputs` (passes `None` to flag every version).
-    /// Returns the count of entries that *would* be cleared given a
-    /// delete-by-key surface — `IResultStore` has no such surface today
-    /// (see FUTURE-STRATEGIC-GAPS), so the count is a telemetry proxy
-    /// and the actual eviction happens on the next overwrite via the
-    /// submission-write hook's compute-then-store path.
+    /// Evict every cached entry whose `SchemaId` matches and
+    /// (optionally) whose `SchemaVersion` matches. Used by the
+    /// submission-write hook (passes the current version) and by
+    /// `RebuildAnalyserOutputs` (passes `None` to evict every version).
+    /// Since Phase 158 this hard-deletes the matching entries through
+    /// the `IResultStore` delete surface — and all their accumulated
+    /// versions — returning the count of distinct entries evicted.
+    /// Eviction is best-effort: a transient delete failure leaves
+    /// stale entries that the next compute-and-store path overwrites,
+    /// so it never faults the caller.
     abstract MarkStale: schemaId: FormSchemaId * schemaVersion: int option -> Async<int>
 
 /// Default `IAnalyserCache` for deployments that haven't opted in
@@ -171,27 +173,49 @@ type ResultStoreAnalyserCache(resultStore: IResultStore, scopeIdResolver: unit -
 
         member _.MarkStale(schemaId, schemaVersion) = async {
             let scopeId = scopeIdResolver ()
-            let! entries = resultStore.ListResults(scopeId, CacheModuleName, None)
-
             let prefix = sprintf "%s|" schemaId
 
-            let versionMatches (resultType: string) =
-                match schemaVersion with
-                | None -> true
-                | Some v -> resultType.EndsWith(sprintf "|%d" v)
+            // Phase 158 — `IResultStore` now exposes a delete surface,
+            // so `MarkStale` hard-deletes the matching entries (and all
+            // their accumulated versions) rather than reporting a
+            // would-be-cleared count and relying on overwrite-on-next-
+            // write. Eviction is best-effort: a transient delete
+            // failure leaves stale entries that the next compute-and-
+            // store path overwrites anyway, so it must not fault the
+            // caller. The returned count is the number of distinct
+            // cache entries evicted.
+            match schemaVersion with
+            | None ->
+                // Every analyser, every version for this schema — all
+                // cache `resultType`s start with "{schemaId}|", so a
+                // single prefix delete covers them.
+                let! entries = resultStore.ListResults(scopeId, CacheModuleName, None)
 
-            // `IResultStore` doesn't currently expose a delete-by-key surface
-            // (the design assumes results are versioned forwards — see
-            // `FUTURE-STRATEGIC-GAPS.md` for the substrate gap). Marking-as-
-            // stale therefore takes no action; the count of would-be-cleared
-            // entries is returned as a telemetry proxy. The submission-write
-            // hook in FormApiHandler achieves correct read semantics by
-            // writing a fresh version on the next `GetAggregations` miss
-            // path, which overwrites the stale entry's latest pointer.
-            return
-                entries
-                |> List.filter (fun obj -> obj.DataType.StartsWith prefix && versionMatches obj.DataType)
-                |> List.length
+                let count =
+                    entries
+                    |> List.filter (fun obj -> obj.DataType.StartsWith prefix)
+                    |> List.distinctBy _.DataType
+                    |> List.length
+
+                let! _ = resultStore.DeleteByPrefix(scopeId, CacheModuleName, prefix)
+                return count
+            | Some v ->
+                // resultType = "{schemaId}|{analyser}|{v}" — the
+                // trailing version can't be expressed as a prefix, so
+                // list, precise-filter, and delete each distinct entry.
+                let suffix = sprintf "|%d" v
+                let! entries = resultStore.ListResults(scopeId, CacheModuleName, None)
+
+                let matching =
+                    entries
+                    |> List.filter (fun obj -> obj.DataType.StartsWith prefix && obj.DataType.EndsWith suffix)
+                    |> List.distinctBy _.DataType
+
+                for obj in matching do
+                    let! _ = resultStore.DeleteResult(scopeId, CacheModuleName, obj.DataType)
+                    ()
+
+                return matching.Length
         }
 
 // ─── Module-level helpers ────────────────────────────────────────────

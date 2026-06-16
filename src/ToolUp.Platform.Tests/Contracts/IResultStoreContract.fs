@@ -206,4 +206,120 @@ let tests (name: string) (factory: unit -> IResultStore * string * string) =
             Expect.equal diff.Changes.Length 1 "one nested change"
             Expect.equal diff.Changes[0].Path "summary.revenue" "dotted path"
         }
+
+        // ─── Delete surface (Phase 158) ──────────────────────────────
+
+        testCaseAsync "DeleteResult removes every version; GetLatest then NotFound and ListResults empty"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let! _ = store.SaveResult(scopeA, "M", "T", bytesOf "{\"v\":1}", "u", [])
+            let! _ = store.SaveResult(scopeA, "M", "T", bytesOf "{\"v\":2}", "u", [])
+            let! _ = store.SaveResult(scopeA, "M", "T", bytesOf "{\"v\":3}", "u", [])
+
+            let! deleted = store.DeleteResult(scopeA, "M", "T")
+            okOrFail "DeleteResult" deleted
+
+            match! store.GetLatest(scopeA, "M", "T") with
+            | Error NotFound -> ()
+            | other -> failtestf "Expected NotFound after delete; got %A" other
+
+            let! remaining = store.ListResults(scopeA, "M", None)
+            Expect.equal remaining.Length 0 "no versions remain after delete"
+        }
+
+        testCaseAsync "DeleteResult on an absent result is Ok (idempotent)"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let! first = store.DeleteResult(scopeA, "Ghost", "Nope")
+            okOrFail "DeleteResult absent" first
+
+            // Deleting an existing result twice is also Ok the second time.
+            let! _ = store.SaveResult(scopeA, "M", "T", bytesOf "{}", "u", [])
+            let! once = store.DeleteResult(scopeA, "M", "T")
+            okOrFail "DeleteResult first" once
+            let! twice = store.DeleteResult(scopeA, "M", "T")
+            okOrFail "DeleteResult repeat" twice
+        }
+
+        testCaseAsync "DeleteResult isolates by module — deleting ModuleA/T leaves ModuleB/T"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let! _ = store.SaveResult(scopeA, "ModuleA", "T", bytesOf "{\"a\":1}", "u", [])
+            let! _ = store.SaveResult(scopeA, "ModuleB", "T", bytesOf "{\"b\":1}", "u", [])
+
+            let! deleted = store.DeleteResult(scopeA, "ModuleA", "T")
+            okOrFail "DeleteResult ModuleA" deleted
+
+            match! store.GetLatest(scopeA, "ModuleA", "T") with
+            | Error NotFound -> ()
+            | other -> failtestf "Expected ModuleA/T gone; got %A" other
+
+            let _ =
+                okOrFail "ModuleB survives" (store.GetLatest(scopeA, "ModuleB", "T") |> Async.RunSynchronously)
+
+            ()
+        }
+
+        testCaseAsync "DeleteByPrefix removes matching results and leaves non-matching"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let! _ = store.SaveResult(scopeA, "M", "q1-sales", bytesOf "{}", "u", [])
+            let! _ = store.SaveResult(scopeA, "M", "q1-costs", bytesOf "{}", "u", [])
+            let! _ = store.SaveResult(scopeA, "M", "q2-sales", bytesOf "{}", "u", [])
+
+            let! deleted = store.DeleteByPrefix(scopeA, "M", "q1-")
+            okOrFail "DeleteByPrefix" deleted
+
+            match! store.GetLatest(scopeA, "M", "q1-sales") with
+            | Error NotFound -> ()
+            | other -> failtestf "Expected q1-sales gone; got %A" other
+
+            match! store.GetLatest(scopeA, "M", "q1-costs") with
+            | Error NotFound -> ()
+            | other -> failtestf "Expected q1-costs gone; got %A" other
+
+            let _ =
+                okOrFail "q2-sales survives" (store.GetLatest(scopeA, "M", "q2-sales") |> Async.RunSynchronously)
+
+            ()
+        }
+
+        testCaseAsync "DeleteByPrefix on a prefix matching nothing is Ok (idempotent)"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = store.SaveResult(scopeA, "M", "keep", bytesOf "{}", "u", [])
+
+            let! deleted = store.DeleteByPrefix(scopeA, "M", "nomatch-")
+            okOrFail "DeleteByPrefix no match" deleted
+
+            let _ =
+                okOrFail "unrelated survives" (store.GetLatest(scopeA, "M", "keep") |> Async.RunSynchronously)
+
+            ()
+        }
+
+        testCaseAsync "DeleteByPrefix isolates by scope — scopeA delete leaves scopeB intact"
+        <| async {
+            let store, scopeA, scopeB = factory ()
+
+            let! _ = store.SaveResult(scopeA, "M", "T", bytesOf "{}", "u", [])
+            let! _ = store.SaveResult(scopeB, "M", "T", bytesOf "{}", "u", [])
+
+            // Empty prefix matches every resultType under the module.
+            let! deleted = store.DeleteByPrefix(scopeA, "M", "")
+            okOrFail "DeleteByPrefix scopeA" deleted
+
+            match! store.GetLatest(scopeA, "M", "T") with
+            | Error NotFound -> ()
+            | other -> failtestf "Expected scopeA/M/T gone; got %A" other
+
+            let _ =
+                okOrFail "scopeB survives" (store.GetLatest(scopeB, "M", "T") |> Async.RunSynchronously)
+
+            ()
+        }
     ]

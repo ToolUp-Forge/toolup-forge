@@ -310,6 +310,27 @@ type InMemoryResultStore(?eventStore: IEventStore, ?lineageStore: ILineageStore)
                         return Error(StorageFailure $"diff requires JSON content: {ex.Message}")
         }
 
+        member _.DeleteResult(scopeId, moduleName, resultType) = async {
+            let objectId = ResultObjectId.make moduleName resultType
+            // Idempotent: TryRemove on an absent key is a no-op.
+            entries.TryRemove((scopeId, objectId)) |> ignore
+            return Ok()
+        }
+
+        member _.DeleteByPrefix(scopeId, moduleName, resultTypePrefix) = async {
+            let objectPrefix = ResultObjectId.make moduleName resultTypePrefix
+
+            let toRemove =
+                entries.Keys
+                |> Seq.filter (fun (scope, objectId) -> scope = scopeId && objectId.StartsWith(objectPrefix))
+                |> Seq.toList
+
+            for key in toRemove do
+                entries.TryRemove(key) |> ignore
+
+            return Ok()
+        }
+
 // ─── Persistent implementation ──────────────────────────────────
 
 /// Wraps `IDataObjectStore` with a Phase 8-shaped surface:
@@ -395,4 +416,36 @@ type PersistentResultStore(objectStore: IDataObjectStore, ?eventStore: IEventSto
                         }
                 with :? System.Text.Json.JsonException as ex ->
                     return Error(StorageFailure $"diff requires JSON content: {ex.Message}")
+        }
+
+        member _.DeleteResult(scopeId, moduleName, resultType) =
+            let objectId = ResultObjectId.make moduleName resultType
+            // `Evict` bypasses the `StrictlyVersioned` guard the store
+            // applies on `SaveResult` — see `IResultStore` /
+            // `IDataObjectStore.Evict` doc-comments. Idempotent.
+            objectStore.Evict(scopeId, objectId)
+
+        member _.DeleteByPrefix(scopeId, moduleName, resultTypePrefix) = async {
+            let objectPrefix = ResultObjectId.make moduleName resultTypePrefix
+
+            let! allObjects = objectStore.ListObjects scopeId
+
+            let matching =
+                allObjects |> List.filter (fun obj -> obj.ObjectId.StartsWith(objectPrefix))
+
+            let! results =
+                matching
+                |> List.map (fun obj -> objectStore.Evict(scopeId, obj.ObjectId))
+                |> Async.Parallel
+
+            // First error wins; all-Ok (or empty) is Ok.
+            return
+                match
+                    results
+                    |> Array.tryPick (function
+                        | Error e -> Some e
+                        | Ok _ -> None)
+                with
+                | Some err -> Error err
+                | None -> Ok()
         }

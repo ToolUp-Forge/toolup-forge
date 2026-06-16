@@ -497,6 +497,27 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                 return Ok()
         }
 
+        member _.Evict(scopeId, objectId) = async {
+            // Same blob-removal path as `Delete`, but with no
+            // `StrictlyVersioned` guard — eviction is an explicit
+            // lifecycle choice by a caller that owns the object's
+            // retention (see the interface doc-comment). Idempotent:
+            // no version blobs means nothing to evict.
+            let container = containerFor scopeId
+            let! versions = listVersionBlobs blobStorage container objectId
+
+            match versions with
+            | [] -> return Ok()
+            | _ ->
+                let! _ =
+                    versions
+                    |> List.map (fun (_, name) -> blobStorage.Delete(container, name))
+                    |> Async.Parallel
+
+                let! _orphaned = collectOrphanedContent container
+                return Ok()
+        }
+
         member _.Purge(scopeId) = async {
             let container = containerFor scopeId
             let! names = blobStorage.List(container, objectsRoot)
