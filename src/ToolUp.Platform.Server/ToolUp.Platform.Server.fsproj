@@ -436,6 +436,8 @@
         <Compile Include="Server\Compose\ProcessProfileGate.fs" />
         <Compile Include="Server\DevDiagnosticsHandler.fs" />
         <Compile Include="Server\HealthMonitorApiHandler.fs" />
+        <!-- Phase 171 — Home / Overview landing aggregation handler. -->
+        <Compile Include="Server\HomeOverviewApiHandler.fs" />
         <Compile Include="Server\ServiceStatusBoardApiHandler.fs" />
         <Compile Include="Server\HealthStateTracker.fs" />
         <Compile Include="Server\ConfigDriftDetector.fs" />

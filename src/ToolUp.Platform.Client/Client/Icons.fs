@@ -43,6 +43,11 @@ let private settingsSvg: obj = importDefault "./icons/settings.svg?react"
 
 let settings: ReactElement = Icon.ofImport settingsSvg
 
+// Phase 171 — Home / Overview landing module.
+let private homeSvg: obj = importDefault "./icons/home.svg?react"
+
+let home: ReactElement = Icon.ofImport homeSvg
+
 let private targetSvg: obj = importDefault "./icons/target.svg?react"
 
 let target: ReactElement = Icon.ofImport targetSvg

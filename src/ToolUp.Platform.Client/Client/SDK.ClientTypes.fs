@@ -657,6 +657,38 @@ type UsageDashboardMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalUsageDashboard of ErasedModule
 
+/// Branding for the built-in Home / Overview landing module (Phase
+/// 171).
+type HomeModuleConfig = { Name: string; Icon: ReactElement }
+
+/// Controls the optional built-in Home / Overview landing module
+/// (Phase 171). When enabled, the module is injected at the very top
+/// of the sidebar and — unless `ClientConfig.ActiveModule` names a
+/// specific module — becomes the default landing surface (the place
+/// to start, instead of the first registered module). It summarises
+/// the deployment: the data-producing tools with their per-tool
+/// record counts (scoped to the caller), the active AI provider/model,
+/// and light deployment context, via the `IHomeOverviewApi` surface.
+///
+/// **Off by default (GP 13).** Unlike the admin built-ins (Health
+/// Monitor / Usage Dashboard, which default to `Default*` in any
+/// non-Anonymous mode), the Home module defaults to `NoHomeModule` so
+/// an existing deployment that upgrades is byte-for-byte unchanged
+/// until it opts in. The `IHomeOverviewApi` route is auto-mounted
+/// server-side but is never called unless the module is enabled.
+type HomeModuleMode =
+    /// No Home module; the landing surface stays the first registered
+    /// module (the prior behaviour). The default.
+    | NoHomeModule
+    /// SDK built-in Home / Overview landing module.
+    | EnabledHomeModule
+    /// SDK built-in with custom name/icon.
+    | ConfiguredHomeModule of HomeModuleConfig
+    /// Deployment-provided custom module in place of the SDK default
+    /// (still injected at the head of the sidebar + used as the default
+    /// landing surface).
+    | ExternalHomeModule of ErasedModule
+
 /// Branding for the data-ingestion admin module (Phase 10b). Auto-
 /// injected in any non-Anonymous mode unless `NoDataIngestionAdmin`.
 type DataIngestionAdminConfig = { Name: string; Icon: ReactElement }
@@ -985,6 +1017,13 @@ type ClientConfig = {
     /// EnabledUsageMetering` server-side — the dashboard renders empty
     /// otherwise.
     UsageDashboard: UsageDashboardMode
+    /// Controls the optional Home / Overview landing module (Phase 171).
+    /// **Default: `NoHomeModule`** (off — unlike the admin built-ins) so
+    /// existing deployments are unchanged until they opt in (GP 13).
+    /// When `EnabledHomeModule`, the module is injected at the head of
+    /// the sidebar and becomes the default landing surface unless
+    /// `ActiveModule` names a specific module.
+    HomeModule: HomeModuleMode
     /// Controls the data-ingestion admin (Phase 10b). Active in every
     /// non-Anonymous mode; `NoDataIngestionAdmin` opts out explicitly.
     /// Default: SDK built-in. Pair with `ServerConfig.DataIngestion =
@@ -1237,6 +1276,9 @@ module ClientConfig =
         HealthMonitor = DefaultHealthMonitor
         ServiceStatusBoard = DefaultServiceStatusBoard
         UsageDashboard = DefaultUsageDashboard
+        // Phase 171 — off by default (GP 13); existing deployments
+        // keep their first-registered module as the landing surface.
+        HomeModule = NoHomeModule
         DataIngestionAdmin = DefaultDataIngestionAdmin
         DataSubjectRequestAdmin = NoDataSubjectRequestAdmin
         ToastCentre = DefaultToastCentre

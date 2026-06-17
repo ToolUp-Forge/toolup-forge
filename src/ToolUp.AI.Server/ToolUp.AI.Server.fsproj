@@ -53,6 +53,8 @@
         <Compile Include="Server\AIModelEnvValidator.fs" />
         <Compile Include="Server\AIProviderProbeValidator.fs" />
         <Compile Include="Server\LegacyAIConfigProviderProfile.fs" />
+        <!-- Phase 171 — IActiveAiProbe seam for the platform Home overview. -->
+        <Compile Include="Server\ActiveAiProbe.fs" />
         <Compile Include="Server\AICompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server

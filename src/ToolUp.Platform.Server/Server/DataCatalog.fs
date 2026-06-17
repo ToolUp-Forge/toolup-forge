@@ -72,6 +72,17 @@ type DataCatalog(registrations: DataTypeRegistration list, objectStore: IDataObj
             return all |> List.filter (fun obj -> obj.DataType = typeId)
         }
 
+        member _.CountObjects(scopeId, typeId) = async {
+            // Native fast-path when the store can count without
+            // enumerating (GP 12); otherwise list-and-count — the same
+            // result, paid for in full materialisation.
+            match box objectStore with
+            | :? IObjectCounter as counter -> return! counter.CountObjects(scopeId, typeId)
+            | _ ->
+                let! all = objectStore.ListObjects scopeId
+                return all |> List.filter (fun obj -> obj.DataType = typeId) |> List.length
+        }
+
         member _.GetSyntheticSample(typeId, count, seed) = async {
             // Schema lookup mirrors GetSchema's path — picks the first
             // registered schema for `typeId` across producers (catalog

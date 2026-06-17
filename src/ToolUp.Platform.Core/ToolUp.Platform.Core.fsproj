@@ -210,6 +210,9 @@
         <Compile Include="Shared\PlatformAdminApi.fs" />
         <Compile Include="Shared\UsageTypes.fs" />
         <Compile Include="Shared\UsageQueryApi.fs" />
+        <!-- Phase 171 — Home / Overview landing API (contract + view
+             types + optional IActiveAiProbe DI seam). -->
+        <Compile Include="Shared\HomeOverviewApi.fs" />
         <Compile Include="Shared\MetricsTypes.fs" />
         <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
         <Compile Include="Shared\Interfaces\IProviderProfile.fs" />

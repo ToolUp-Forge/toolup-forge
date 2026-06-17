@@ -310,6 +310,10 @@ let composeAI (app: AIServerApp) : ServerApp =
                     AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
                 )
                 .AddSingleton<IProviderProfile>(providerProfile)
+                // Phase 171 — expose the active AI provider/model to the
+                // platform-tier Home overview via the Core IActiveAiProbe
+                // seam (GP 1: Platform.Server stays AI-dependency-free).
+                .AddSingleton<IActiveAiProbe>(ActiveAiProbe.create aiProviderFactory)
                 // Phase 70 — register the Platform-Admin-managed AI key
                 // store. When the consumer passed `withPlatformAIKeyStore`
                 // explicitly, register that instance directly. When

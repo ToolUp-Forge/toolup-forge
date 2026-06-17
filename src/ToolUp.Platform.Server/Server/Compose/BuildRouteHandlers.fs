@@ -283,6 +283,18 @@ let buildRouteHandlers
         Api.make (UsageQueryApiHandler.usageQueryApi, routeBuilder = UsageQueryApi.routeBuilder)
     ]
 
+    // Phase 171 — Home / Overview landing route. Auto-injected
+    // unconditionally so the client Home module's `IHomeOverviewApi`
+    // proxy never 404s; the module itself is opt-in client-side
+    // (`ClientConfig.HomeModule = EnabledHomeModule`), so a deployment
+    // that doesn't enable it simply never calls this route (GP 13).
+    // Scope + `RequiresClaim "scope"` gating is enforced by the
+    // dispatcher + handler. Route shape: `/api/_platform/home/*` via
+    // the shared `HomeOverviewApi.routeBuilder`.
+    let homeOverviewApiHandler: HttpHandler list = [
+        Api.make (HomeOverviewApiHandler.homeOverviewApi, routeBuilder = HomeOverviewApi.routeBuilder)
+    ]
+
     // /metrics route. Mounted only when EnabledMetricsEndpoint.
     // NoMetricsEndpoint produces an empty list so the route does not
     // exist on the routing table; deployments without metrics enabled
@@ -562,6 +574,7 @@ let buildRouteHandlers
             @ healthMonitorApiHandler
             @ serviceStatusBoardApiHandler
             @ usageQueryApiHandler
+            @ homeOverviewApiHandler
             @ encryptionAdminHandler
             @ metricsRoutes
             @ notificationRoutes

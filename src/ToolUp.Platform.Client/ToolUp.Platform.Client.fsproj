@@ -171,6 +171,8 @@
         <Compile Include="Client\PlatformAdminUI.fs" />
         <Compile Include="Client\PermissionsAdminUI.fs" />
         <Compile Include="Client\UsageDashboard.fs" />
+        <!-- Phase 171 — Home / Overview landing module. -->
+        <Compile Include="Client\Home.fs" />
         <Compile Include="Client\DataSourceCredentialUI.fs" />
         <Compile Include="Client\DataIngestionUI.fs" />
         <Compile Include="Client\DataSubjectRequestAdminUI.fs" />

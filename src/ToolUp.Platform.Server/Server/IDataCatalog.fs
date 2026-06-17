@@ -50,6 +50,15 @@ type IDataCatalog =
     /// no objects exist or the type id is unknown.
     abstract ListObjects: scopeId: string * typeId: DataTypeId -> Async<DataObject list>
 
+    /// Phase 171 — number of stored objects whose `DataType` matches
+    /// `typeId`, scoped to the caller's scope. Equivalent to
+    /// `(ListObjects (scopeId, typeId)).Length`, but uses a native
+    /// count when the underlying `IDataObjectStore` also implements
+    /// `IObjectCounter` — so a Home/overview summary doesn't
+    /// materialise every object just to count it (GP 12). Returns 0
+    /// when the type id is unknown or no objects exist.
+    abstract CountObjects: scopeId: string * typeId: DataTypeId -> Async<int>
+
     /// Phase 30d — generate `count` synthetic rows for `typeId` from
     /// its `DataTypeSchema`, seeded deterministically by `seed`.
     /// Returns the metadata `DataObject` describing the synthetic
