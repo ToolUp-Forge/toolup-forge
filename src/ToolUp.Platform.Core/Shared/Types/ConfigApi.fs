@@ -61,6 +61,17 @@ type IConfigApi = {
     /// or when the key is not registered.
     [<AllowAnonymous>]
     GetModuleConfig: string -> Async<Result<ModuleConfigView, string>>
+    /// Boot-path batch read: the persisted per-field map for EVERY
+    /// registered module (including the reserved `_platform` entry) in
+    /// one round-trip, keyed by `ModuleKey`. Replaces the client's
+    /// `ListModules` + per-module `GetModuleConfig` fan-out on shell
+    /// init (schemas for the admin UI still come from `ListModules`).
+    /// A module with no persisted document maps to an empty value map.
+    /// A caller with no config scope (Anonymous mode) gets `Map.empty`
+    /// — the same empty-config result the per-module path produced, not
+    /// an error, so the shell boot doesn't surface a degradation banner.
+    [<AllowAnonymous>]
+    GetAllModuleConfigs: unit -> Async<Map<string, Map<string, string>>>
     /// Replace the persisted map for one module. Validated against
     /// the schema server-side. Team mode: Owner/Admin only.
     [<RequiresClaim "scope">]

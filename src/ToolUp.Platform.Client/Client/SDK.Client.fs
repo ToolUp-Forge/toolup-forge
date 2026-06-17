@@ -381,33 +381,18 @@ module Client =
         return! loader
     }
 
-    /// Fetch every registered module's config (including the reserved
-    /// `_platform` entry). Failures per module degrade to an empty
-    /// entry so the shell can still render — `Anonymous` mode, for
-    /// example, rejects every read because no scope resolves. Phase
-    /// 121 — a total failure of `ListModules` now throws (routed to
-    /// `BootLoadFailed`, whose handler applies the empty map AND flips
-    /// the prefetch gate so `init` still finishes without blocking).
-    let private loadAllConfigs = async {
-        let! entries = configApi.ListModules()
-
-        let! pairs =
-            entries
-            |> List.map (fun entry -> async {
-                try
-                    let! result = configApi.GetModuleConfig entry.ModuleKey
-
-                    return
-                        match result with
-                        | Ok view -> Some(view.ModuleKey, view.Values)
-                        | Error _ -> None
-                with _ ->
-                    return None
-            })
-            |> Async.Parallel
-
-        return pairs |> Array.choose id |> Map.ofArray
-    }
+    /// Fetch every registered module's persisted config map (including
+    /// the reserved `_platform` entry) in one batch round-trip via
+    /// `GetAllModuleConfigs`, replacing the boot-time `ListModules` +
+    /// per-module `GetModuleConfig` fan-out (the config N+1). The server
+    /// reads the same set in a single server-side fan-out and returns
+    /// `Map.empty` for a no-scope caller (`Anonymous` mode) — the same
+    /// empty-config result the per-module path produced. A total failure
+    /// throws (routed to `BootLoadFailed`, whose handler applies the
+    /// empty map AND flips the prefetch gate so `init` still finishes
+    /// without blocking). The admin Config UI keeps using `ListModules`
+    /// / `GetModuleConfig` for schema-bearing per-module views.
+    let private loadAllConfigs = async { return! configApi.GetAllModuleConfigs() }
 
     /// Fetch the resolved feature-flag map for the caller. The prefetch
     /// is best-effort: on failure (routed to `BootLoadFailed`, Phase
@@ -2062,6 +2047,19 @@ module Client =
 
         let allDataTypeDisplays = modules |> List.collect _.DataTypes
 
+        // Phase 171 — optional Home / Overview landing module. Prepended
+        // ahead of `leading` so it becomes `modules[0]` — the shell's
+        // `init` lands on `modules[0]` when `ActiveModule = None`, so
+        // enabling Home makes it the default start surface for free (an
+        // explicit `ActiveModule` still wins). Off by default
+        // (`NoHomeModule`) so existing deployments are unchanged (GP 13).
+        let home =
+            match config.HomeModule with
+            | NoHomeModule -> []
+            | EnabledHomeModule -> [ Home.create None ]
+            | ConfiguredHomeModule cfg -> [ Home.create (Some cfg) ]
+            | ExternalHomeModule custom -> [ custom ]
+
         // Leading SDK module — DataManager (Knowledge group). Prepended
         // so the "add data" entry sits near the top of the sidebar.
         let leading =
@@ -2069,6 +2067,8 @@ module Client =
             | NoDataManager -> []
             | DefaultDataManager -> [ FileManagerUI.create allDataTypeDisplays None ]
             | ConfiguredDataManager dmConfig -> [ FileManagerUI.create allDataTypeDisplays (Some dmConfig) ]
+            | MappingDataManager -> [ MappingDataManagerUI.create allDataTypeDisplays None ]
+            | ConfiguredMappingDataManager dmConfig -> [ MappingDataManagerUI.create allDataTypeDisplays (Some dmConfig) ]
             | ExternalDataManager custom -> [ custom ]
 
         // Trailing SDK modules — Admin-grouped built-ins. Appended after
@@ -2263,7 +2263,7 @@ module Client =
             @ serviceStatusBoard
             @ dataSubjectRequestAdmin
 
-        leading @ workApp @ trailing @ debugApp
+        home @ leading @ workApp @ trailing @ debugApp
 
     /// Aggregate every module's `ClientQueryHandlers` into the per-module
     /// registry of the shared `ClientModuleQueryBus`. Modules are keyed by

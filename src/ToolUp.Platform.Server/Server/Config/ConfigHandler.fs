@@ -113,6 +113,30 @@ let configApi (entries: ModuleConfigEntry list) (ctx: HttpContext) : IConfigApi 
                             }
                 })
 
+        GetAllModuleConfigs =
+            fun () -> async {
+                // Boot-path batch: one round-trip for every module's
+                // persisted map instead of the client's ListModules +
+                // per-module GetModuleConfig fan-out. No config scope
+                // (Anonymous) yields an empty map — the same empty-config
+                // result the per-module path produced, never an error.
+                // The per-key reads run in parallel; on a remote
+                // IConfigStore (one blob per scope/module) that keeps the
+                // server-side cost a single fan-out, not a serial walk.
+                match scopeOpt with
+                | None -> return Map.empty
+                | Some scope ->
+                    let! pairs =
+                        entries
+                        |> List.map (fun entry -> async {
+                            let! values = store.GetRaw(scope, entry.ModuleKey)
+                            return entry.ModuleKey, values
+                        })
+                        |> Async.Parallel
+
+                    return Map.ofArray pairs
+            }
+
         SaveModuleConfig =
             fun (moduleKey, values) ->
                 withWriteScope (fun scope -> async {
