@@ -128,21 +128,22 @@ module Layout =
             ]
         | Custom el -> el
 
+    /// Gray-100 + `animate-pulse` placeholder block — the shared "data is
+    /// arriving" idiom (also used by `HealthMonitorUI` /
+    /// `ServiceStatusBoardUI`). Sized by the caller via `cls`.
+    let private pulseBlock (cls: string) : ReactElement =
+        Html.div [ prop.className (sprintf "bg-gray-100 rounded animate-pulse %s" cls) ]
+
     /// 0.5.16 — content-area skeleton placeholder rendered by the shell
     /// during its `Prefetching` lifecycle phase (`Client.InitPhase`).
     /// Wrapped by the shell into `PageContent.Custom` so
     /// `renderPageContent` emits it verbatim. Matches the visual rhythm of
     /// `SplitPanel` — narrow inputs column + wide results pane — so the
     /// layout doesn't reflow when the active module mounts on promotion
-    /// to `Ready`. Gray-100 + `animate-pulse` is the same idiom already
-    /// used by `HealthMonitorUI` / `ServiceStatusBoardUI` for "data is
-    /// arriving" affordances. `role="status"` + `aria-label="Loading"`
-    /// surfaces the placeholder to assistive tech without announcing
-    /// every block individually.
+    /// to `Ready`. `role="status"` + `aria-label="Loading"` surfaces the
+    /// placeholder to assistive tech without announcing every block
+    /// individually.
     let loadingSkeleton () : ReactElement =
-        let pulse cls =
-            Html.div [ prop.className (sprintf "bg-gray-100 rounded animate-pulse %s" cls) ]
-
         Html.div [
             prop.role "status"
             prop.ariaLabel "Loading"
@@ -150,37 +151,75 @@ module Layout =
             prop.children [
                 Html.div [
                     prop.className "w-96 shrink-0 space-y-3"
-                    prop.children [ pulse "h-8 w-3/4"; pulse "h-32 w-full"; pulse "h-10 w-1/2" ]
+                    prop.children [ pulseBlock "h-8 w-3/4"; pulseBlock "h-32 w-full"; pulseBlock "h-10 w-1/2" ]
                 ]
                 Html.div [
                     prop.className "flex-1 min-w-0 space-y-3"
-                    prop.children [ pulse "h-8 w-1/4"; pulse "h-96 w-full" ]
+                    prop.children [ pulseBlock "h-8 w-1/4"; pulseBlock "h-96 w-full" ]
                 ]
             ]
         ]
 
-    /// Centre a loading icon in the content area. `svgSizeClasses` carries
-    /// the Tailwind arbitrary-variant sizing (`[&>svg]:w-16` etc.) the icon
-    /// SVG inherits; the brand mark is self-coloured (gradient) while the
-    /// spinner picks up `text-*` via `currentColor`.
-    let private centredLoader (svgSizeClasses: string) (icon: ReactElement) : ReactElement =
+    /// Centre a loading icon. `wrapperClasses` controls the surrounding
+    /// flex box + height behaviour (the shell's full-area variant uses
+    /// `min-h-full`, the in-content variant a fixed vertical pad);
+    /// `svgSizeClasses` carries the Tailwind arbitrary-variant sizing
+    /// (`[&>svg]:w-16` etc.) the icon SVG inherits — the brand mark is
+    /// self-coloured (gradient) while the spinner picks up `text-*` via
+    /// `currentColor`.
+    let private centredLoader (wrapperClasses: string) (svgSizeClasses: string) (icon: ReactElement) : ReactElement =
         Html.div [
             prop.role "status"
             prop.ariaLabel "Loading"
-            prop.className "flex items-center justify-center min-h-full p-6"
+            prop.className wrapperClasses
             prop.children [ Html.div [ prop.className svgSizeClasses; prop.children [ icon ] ] ]
         ]
 
-    /// Resolve a `LoadingIndicatorMode` to the content-area element the
-    /// shell renders during its `Prefetching` phase. `SkeletonLoader`
+    /// Resolve a `LoadingIndicatorMode` to the full-content-area element
+    /// the shell renders during its `Prefetching` phase. `SkeletonLoader`
     /// keeps the 0.5.16 gray-pulse skeleton; `BrandMarkLoader` /
     /// `SpinnerLoader` centre the matching icon; `CustomLoader` defers to
     /// the consumer-supplied thunk.
     let loadingIndicator (mode: LoadingIndicatorMode) : ReactElement =
         match mode with
         | SkeletonLoader -> loadingSkeleton ()
-        | BrandMarkLoader -> centredLoader "[&>svg]:w-16 [&>svg]:h-16" ToolUp.Platform.Icons.dataLoading
-        | SpinnerLoader -> centredLoader "[&>svg]:w-10 [&>svg]:h-10 text-brand" ToolUp.Platform.Icons.spinner
+        | BrandMarkLoader ->
+            centredLoader
+                "flex items-center justify-center min-h-full p-6"
+                "[&>svg]:w-16 [&>svg]:h-16"
+                ToolUp.Platform.Icons.dataLoading
+        | SpinnerLoader ->
+            centredLoader
+                "flex items-center justify-center min-h-full p-6"
+                "[&>svg]:w-10 [&>svg]:h-10 text-brand"
+                ToolUp.Platform.Icons.spinner
+        | CustomLoader render -> render ()
+
+    /// In-content variant of `loadingIndicator` for a module / panel
+    /// loading state — the shell's full-area two-column skeleton is too
+    /// large inside a panel. `SkeletonLoader` degrades to a compact
+    /// stacked-pulse placeholder; `BrandMarkLoader` / `SpinnerLoader`
+    /// centre the matching icon at a smaller size; `CustomLoader` defers
+    /// to the consumer-supplied thunk.
+    let loadingIndicatorInline (mode: LoadingIndicatorMode) : ReactElement =
+        match mode with
+        | SkeletonLoader ->
+            Html.div [
+                prop.role "status"
+                prop.ariaLabel "Loading"
+                prop.className "space-y-3 py-8"
+                prop.children [ pulseBlock "h-5 w-1/3"; pulseBlock "h-24 w-full"; pulseBlock "h-5 w-1/4" ]
+            ]
+        | BrandMarkLoader ->
+            centredLoader
+                "flex items-center justify-center py-10"
+                "[&>svg]:w-12 [&>svg]:h-12"
+                ToolUp.Platform.Icons.dataLoading
+        | SpinnerLoader ->
+            centredLoader
+                "flex items-center justify-center py-10"
+                "[&>svg]:w-8 [&>svg]:h-8 text-brand"
+                ToolUp.Platform.Icons.spinner
         | CustomLoader render -> render ()
 
     /// Application shell - combines sidebar, header, main content, and optional side panel.

@@ -135,6 +135,7 @@
         <Compile Include="Client\FeatureFlags.fs" />
         <Compile Include="Client\I18n.fs" />
         <Compile Include="Client\ProcessedDataContext.fs" />
+        <Compile Include="Client\LoadingIndicatorContext.fs" />
         <Compile Include="Client\GeneralUITypes.fs" />
         <Compile Include="Client\Consent\IConsentProvider.fs" />
         <Compile Include="Client\Consent\NoOpConsentProvider.fs" />

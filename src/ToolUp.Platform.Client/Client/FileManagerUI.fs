@@ -20,6 +20,11 @@ type Model = {
     CurrentUpload: RemoteData<UploadedFileInfo>
     ProcessedData: ProcessedFileEntry list
     ErrorMessage: string option
+    /// True while the initial (or post-delete refresh) `ListFiles` call
+    /// is in flight. Drives the configured loading indicator in the
+    /// "Uploaded Files" panel so an in-flight fetch is visually distinct
+    /// from a genuinely-empty scope (both have `UploadedFiles = empty`).
+    FilesLoading: bool
 }
 
 type Msg =
@@ -63,6 +68,7 @@ let init () =
         CurrentUpload = NotStarted
         ProcessedData = []
         ErrorMessage = None
+        FilesLoading = true
     },
     Cmd.ofMsg (LoadFiles(Start()))
 
@@ -130,7 +136,8 @@ let update msg model =
                 Cmd.none
 
     | LoadFiles(Start()) ->
-        model, Cmd.OfRemoting.call fileApi.ListFiles () (Finished >> LoadFiles) (fun ex -> ApiError ex.Message)
+        { model with FilesLoading = true },
+        Cmd.OfRemoting.call fileApi.ListFiles () (Finished >> LoadFiles) (fun ex -> ApiError ex.Message)
 
     | LoadFiles(Finished snapshot) ->
         // Server is the source of truth — both the file list and the
@@ -144,6 +151,7 @@ let update msg model =
             model with
                 UploadedFiles = grouped
                 ProcessedData = snapshot.Processed
+                FilesLoading = false
         },
         Cmd.none
 
@@ -215,12 +223,21 @@ let update msg model =
             model with
                 CurrentUpload = NotStarted
                 ErrorMessage = Some errorMsg
+                FilesLoading = false
         },
         Cmd.none
 
     | DismissError -> { model with ErrorMessage = None }, Cmd.none
 
 // ─── View ─────────────────────────────────────────────────────────
+
+/// Renders the deployment's configured loading indicator
+/// (`ClientConfig.LoadingIndicator`) read from context. A
+/// `[<ReactComponent>]` because `useIndicator` is a hook and must run in
+/// a component body; mounted in the "Uploaded Files" panel while the
+/// initial `ListFiles` is in flight.
+[<ReactComponent>]
+let private LoadingSlot () = LoadingIndicatorContext.useIndicator ()
 
 type private UploadedFileRow = {
     DataType: DataTypeId
@@ -332,6 +349,7 @@ let private view (displays: DataTypeDisplay list) model dispatch =
 
         Layout.Panel.panel "Uploaded Files" [
             match allFiles with
+            | [||] when model.FilesLoading -> LoadingSlot()
             | [||] -> Html.p [ prop.className "text-gray-500"; prop.text "No files uploaded yet." ]
             | rows ->
                 Html.div [

@@ -1983,9 +1983,16 @@ module Client =
         let withProcessedData =
             ProcessedDataContext.Context.Provider(model.ProcessedData, flagged)
 
+        // Wrap in the loading-indicator provider — surfaces the configured
+        // `ClientConfig.LoadingIndicator` to module views (e.g. the
+        // built-in Data Manager renders it while its file list loads) via
+        // the `LoadingIndicatorContext.useIndicator` hook.
+        let withLoadingIndicator =
+            LoadingIndicatorContext.provider config.LoadingIndicator withProcessedData
+
         // Wrap in AgGridProvider — supplies AG Grid modules and optional license key
         // to all grid instances in the React tree via context.
-        ToolUp.Platform.AgGrid.provider config.GridModules [ withProcessedData ]
+        ToolUp.Platform.AgGrid.provider config.GridModules [ withLoadingIndicator ]
 
     /// Wrap the rendered shell with the auth UI handler registered
     /// for the configured `AuthUIMode`. `AnonymousKind` / `ClaimBearerKind`
