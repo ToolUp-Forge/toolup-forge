@@ -29,8 +29,8 @@ let columnMappingApi (ctx: HttpContext) : IColumnMappingApi =
     let scopeId = resolveScopeId ctx
 
     {
-        GetMapping = fun fingerprint -> store.Get(scopeId, fingerprint)
+        GetMappings = fun fingerprint -> store.GetByFingerprint(scopeId, fingerprint)
         ListMappings = fun () -> store.List scopeId
         SaveMapping = fun mapping -> store.Save(scopeId, mapping)
-        DeleteMapping = fun fingerprint -> store.Delete(scopeId, fingerprint)
+        DeleteMapping = fun (fingerprint, targetTypeId) -> store.Delete(scopeId, fingerprint, targetTypeId)
     }

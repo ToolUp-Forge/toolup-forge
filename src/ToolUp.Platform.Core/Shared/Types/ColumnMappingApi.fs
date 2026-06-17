@@ -17,23 +17,27 @@ module ColumnMappingApi
 // `namespace ToolUp.Platform` (AuthAttributes.fs); this is a top-level
 // module, so open it explicitly.
 open ToolUp.Platform
+open DataManagementTypes
 open ColumnMappingTypes
 
 type IColumnMappingApi = {
-    /// Look up a saved mapping by source-CSV fingerprint. `None` when no
-    /// mapping exists for that column-structure in this scope.
+    /// All saved mappings for a source-CSV fingerprint (a column-structure
+    /// can carry several — one per target type — so a single file can
+    /// spawn multiple data objects on re-upload). Empty when none exist.
     [<AllowAnonymous>]
-    GetMapping: string -> Async<ColumnMapping option>
+    GetMappings: string -> Async<ColumnMapping list>
     /// Every mapping saved in this scope (admin / review surface).
     [<AllowAnonymous>]
     ListMappings: unit -> Async<ColumnMapping list>
-    /// Persist (create or overwrite) a mapping, keyed by its
-    /// `Fingerprint`.
+    /// Persist a mapping, keyed by its `(Fingerprint, TargetTypeId)` —
+    /// additive: saving a mapping to a new target type for an existing
+    /// fingerprint does not overwrite the others.
     [<AllowAnonymous>]
     [<Audit "Custom:ColumnMappingSaved">]
     SaveMapping: ColumnMapping -> Async<Result<unit, string>>
-    /// Forget a saved mapping by fingerprint.
+    /// Forget one saved mapping, identified by its fingerprint + target
+    /// type.
     [<AllowAnonymous>]
     [<Audit "Custom:ColumnMappingDeleted">]
-    DeleteMapping: string -> Async<Result<unit, string>>
+    DeleteMapping: string * DataTypeId -> Async<Result<unit, string>>
 }

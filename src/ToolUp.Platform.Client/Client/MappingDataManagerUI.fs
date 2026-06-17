@@ -51,10 +51,29 @@ type Wizard = {
     Saving: bool
 }
 
+/// The CSV currently in hand. Retained across imports so the user can
+/// spawn additional data objects from the same file via "Make additional
+/// mapping" without re-uploading.
+type HeldFile = {
+    FileName: string
+    RawContents: string
+    Headers: string list
+    Samples: Map<string, string list>
+    Fingerprint: string
+}
+
 type Model = {
     UploadedFiles: UploadedFileInfo list
     ProcessedData: ProcessedFileEntry list
+    /// The file currently being worked (present from upload until the
+    /// user dismisses the import result).
+    Held: HeldFile option
     Wizard: Wizard option
+    /// Target-type ids just imported (drives the result card + the
+    /// "Make additional mapping" affordance). `None` when not showing a
+    /// result.
+    LastImport: DataTypeId list option
+    Busy: bool
     Error: string option
 }
 
@@ -63,14 +82,16 @@ type Msg =
     | FilesLoaded of FileListSnapshot
     | SelectFile of Browser.Types.File
     | FileChosen of fileName: string * contents: string
-    | SavedMappingFetched of Wizard * ColumnMapping option
+    | MappingsFetched of ColumnMapping list
+    | NativeUploaded of FileUploadResult
+    | ImportFinished of Result<DataTypeId list, string>
+    | MakeAdditionalMapping
+    | DismissImport
     | SelectTarget of DataTypeId
     | ChangeFormat
     | OverrideColumn of field: string * column: string option
     | CancelWizard
     | ConfirmMapping
-    | UploadRewritten of DataFileUpload
-    | UploadDone
     | DeleteFile of string
     | ReprocessFile of string
     | Reprocessed of Result<ProcessedFileEntry, string>
@@ -116,13 +137,90 @@ let private unresolvedRequired (w: Wizard) : string list =
         |> List.filter (fun f -> f.Field.Required && (chosenColumn w f).IsNone)
         |> List.map (fun f -> f.Field.Name)
 
+/// A fresh wizard at the target-picker step for a held file.
+let private wizardFor (held: HeldFile) : Wizard = {
+    FileName = held.FileName
+    RawContents = held.RawContents
+    Headers = held.Headers
+    Samples = held.Samples
+    Fingerprint = held.Fingerprint
+    Step = PickTarget
+    TargetTypeId = None
+    Suggestion = None
+    Overrides = Map.empty
+    ReusedSaved = false
+    Saving = false
+}
+
+/// Disambiguate the uploaded file name per target type so several mapped
+/// imports of one source file land as distinct data objects rather than
+/// overwriting each other (`AddFile` keys by file name). `data.csv` +
+/// `SalesData` → `data__SalesData.csv`.
+let private importedFileName (baseName: string) (typeId: DataTypeId) : string =
+    let dot = baseName.LastIndexOf '.'
+
+    if dot > 0 then
+        baseName.Substring(0, dot) + "__" + typeId + baseName.Substring dot
+    else
+        baseName + "__" + typeId
+
+/// Rewrite + upload each mapping as its own data object. Returns the
+/// target-type ids imported, or the first error. Mappings whose target
+/// type is no longer registered are skipped.
+let private importMappings
+    (displays: DataTypeDisplay list)
+    (held: HeldFile)
+    (mappings: ColumnMapping list)
+    : Async<Result<DataTypeId list, string>> =
+    async {
+        let mutable err = None
+        let mutable imported = []
+
+        for m in mappings do
+            if err.IsNone then
+                match schemaFor displays m.TargetTypeId with
+                | Some schema ->
+                    let rewritten = ColumnMapping.rewriteCsv schema m.FieldToColumn held.RawContents
+
+                    let upload = {
+                        filename = importedFileName held.FileName m.TargetTypeId
+                        contents = rewritten
+                        dataType = m.TargetTypeId
+                    }
+
+                    match! fileApi.UploadFile { File = upload } with
+                    | Ok _ -> imported <- imported @ [ m.TargetTypeId ]
+                    | Error e -> err <- Some e
+                | None -> ()
+
+        match err with
+        | Some e -> return Error e
+        | None -> return Ok imported
+    }
+
+/// Persist a freshly-confirmed mapping, then import it as its own data
+/// object.
+let private saveAndImport
+    (displays: DataTypeDisplay list)
+    (held: HeldFile)
+    (mapping: ColumnMapping)
+    : Async<Result<DataTypeId list, string>> =
+    async {
+        match! mappingApi.SaveMapping mapping with
+        | Error e -> return Error e
+        | Ok() -> return! importMappings displays held [ mapping ]
+    }
+
 // ─── Update ───────────────────────────────────────────────────────
 
 let init () =
     {
         UploadedFiles = []
         ProcessedData = []
+        Held = None
         Wizard = None
+        LastImport = None
+        Busy = false
         Error = None
     },
     Cmd.ofMsg LoadFiles
@@ -157,55 +255,128 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         let headers, samples = ColumnMapping.parsePreview 20 contents
         let fingerprint = ColumnMapping.Fingerprint.ofHeaders headers
 
-        let wizard = {
+        let held = {
             FileName = fileName
             RawContents = contents
             Headers = headers
             Samples = samples
             Fingerprint = fingerprint
-            Step = PickTarget
-            TargetTypeId = None
-            Suggestion = None
-            Overrides = Map.empty
-            ReusedSaved = false
-            Saving = false
         }
 
         {
             model with
-                Wizard = Some wizard
+                Held = Some held
+                Wizard = None
+                LastImport = None
+                Busy = true
                 Error = None
         },
-        Cmd.OfRemoting.call
-            mappingApi.GetMapping
-            fingerprint
-            (fun saved -> SavedMappingFetched(wizard, saved))
-            (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call mappingApi.GetMappings fingerprint MappingsFetched (fun ex -> ApiError ex.Message)
 
-    | SavedMappingFetched(wizard, saved) ->
-        match saved with
-        | Some m ->
-            // Re-apply the saved mapping: seed overrides from it and
-            // recompute the suggestion (purely so the review grid can
-            // still show per-field type/confidence badges against the
-            // current CSV's sample values).
-            let suggestion =
-                schemaFor displays m.TargetTypeId
-                |> Option.map (fun schema -> ColumnMapping.suggest m.TargetTypeId schema wizard.Headers wizard.Samples)
+    | MappingsFetched saved ->
+        match model.Held with
+        | None -> { model with Busy = false }, Cmd.none
+        | Some held ->
+            // Frictionless re-import when the structure is already known:
+            // apply every saved mapping (skipping ones whose target type
+            // is no longer registered). With none usable, let the server
+            // attempt native detection of the file as-is.
+            let importable =
+                saved |> List.filter (fun m -> (schemaFor displays m.TargetTypeId).IsSome)
 
-            let overrides = m.FieldToColumn |> Map.map (fun _ v -> Some v)
+            if not importable.IsEmpty then
+                model,
+                Cmd.OfAsync.either (importMappings displays held) importable ImportFinished (fun ex ->
+                    ApiError ex.Message)
+            else
+                let upload = {
+                    filename = held.FileName
+                    contents = held.RawContents
+                    dataType = "UnrecognisedData"
+                }
 
-            let w = {
-                wizard with
-                    Step = ReviewMapping
-                    TargetTypeId = Some m.TargetTypeId
-                    Suggestion = suggestion
-                    Overrides = overrides
-                    ReusedSaved = true
-            }
+                model,
+                Cmd.OfRemoting.call fileApi.UploadFile { File = upload } NativeUploaded (fun ex -> ApiError ex.Message)
 
-            { model with Wizard = Some w }, Cmd.none
-        | None -> { model with Wizard = Some wizard }, Cmd.none
+    | NativeUploaded result ->
+        match result with
+        | Ok resp when resp.Processed.DataType <> "UnrecognisedData" && resp.Processed.Error.IsNone ->
+            // The file natively matched a registered type — frictionless
+            // import done; nothing to map.
+            {
+                model with
+                    Busy = false
+                    LastImport = Some [ resp.Processed.DataType ]
+            },
+            Cmd.ofMsg LoadFiles
+        | Ok resp ->
+            // Not recognised: drop the stray `UnrecognisedData` upload and
+            // open the mapping wizard for manual mapping.
+            let stray = resp.FileInfo.FileName
+
+            let wizard = model.Held |> Option.map wizardFor
+
+            {
+                model with
+                    Busy = false
+                    Wizard = wizard
+                    LastImport = None
+            },
+            Cmd.OfRemoting.call fileApi.DeleteFile stray (fun _ -> LoadFiles) (fun ex -> ApiError ex.Message)
+        | Error e ->
+            {
+                model with
+                    Busy = false
+                    Error = Some e
+            },
+            Cmd.none
+
+    | ImportFinished(Ok labels) ->
+        if labels.IsEmpty then
+            // Nothing imported (e.g. every saved mapping went stale) — fall
+            // back to the wizard.
+            {
+                model with
+                    Busy = false
+                    Wizard = model.Held |> Option.map wizardFor
+            },
+            Cmd.none
+        else
+            {
+                model with
+                    Busy = false
+                    Wizard = None
+                    LastImport = Some labels
+            },
+            Cmd.ofMsg LoadFiles
+
+    | ImportFinished(Error msg) ->
+        {
+            model with
+                Busy = false
+                Wizard = model.Wizard |> Option.map (fun w -> { w with Saving = false })
+                Error = Some msg
+        },
+        Cmd.none
+
+    | MakeAdditionalMapping ->
+        match model.Held with
+        | Some held ->
+            {
+                model with
+                    Wizard = Some(wizardFor held)
+                    LastImport = None
+            },
+            Cmd.none
+        | None -> model, Cmd.none
+
+    | DismissImport ->
+        {
+            model with
+                Held = None
+                LastImport = None
+        },
+        Cmd.none
 
     | SelectTarget typeId ->
         match model.Wizard with
@@ -264,39 +435,37 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             Cmd.none
         | None -> model, Cmd.none
 
-    | CancelWizard -> { model with Wizard = None }, Cmd.none
+    | CancelWizard ->
+        {
+            model with
+                Wizard = None
+                Held = None
+        },
+        Cmd.none
 
     | ConfirmMapping ->
-        match model.Wizard with
-        | Some w when w.TargetTypeId.IsSome ->
+        match model.Wizard, model.Held with
+        | Some w, Some held when w.TargetTypeId.IsSome ->
             let typeId = w.TargetTypeId.Value
 
             match schemaFor displays typeId with
-            | Some schema ->
-                let mapping = effectiveMapping w
-                let rewritten = ColumnMapping.rewriteCsv schema mapping w.RawContents
-
+            | Some _ ->
                 let record = {
                     Fingerprint = w.Fingerprint
                     TargetTypeId = typeId
-                    FieldToColumn = mapping
+                    FieldToColumn = effectiveMapping w
                     SourceHeaders = w.Headers
                     CreatedBy = ""
                     CreatedAt = System.DateTime.UtcNow
                 }
 
-                let upload = {
-                    filename = w.FileName
-                    contents = rewritten
-                    dataType = typeId
-                }
-
+                // Save the mapping (additive — keyed by fingerprint+type),
+                // then import this one as its own data object.
                 {
                     model with
                         Wizard = Some { w with Saving = true }
                 },
-                Cmd.OfRemoting.call mappingApi.SaveMapping record (fun _ -> UploadRewritten upload) (fun ex ->
-                    ApiError ex.Message)
+                Cmd.OfAsync.either (saveAndImport displays held) record ImportFinished (fun ex -> ApiError ex.Message)
             | None ->
                 {
                     model with
@@ -304,19 +473,6 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 },
                 Cmd.none
         | _ -> model, Cmd.none
-
-    | UploadRewritten upload ->
-        model,
-        Cmd.OfRemoting.call
-            fileApi.UploadFile
-            { File = upload }
-            (fun result ->
-                match result with
-                | Ok _ -> UploadDone
-                | Error e -> ApiError e)
-            (fun ex -> ApiError ex.Message)
-
-    | UploadDone -> { model with Wizard = None }, Cmd.ofMsg LoadFiles
 
     | DeleteFile fileName ->
         model, Cmd.OfRemoting.call fileApi.DeleteFile fileName (fun _ -> LoadFiles) (fun ex -> ApiError ex.Message)
@@ -366,6 +522,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         {
             model with
                 Wizard = wizard
+                Busy = false
                 Error = Some errorMsg
         },
         Cmd.none
@@ -788,6 +945,51 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
             ]
         ]
 
+/// Result card shown after a frictionless (saved-mapping or native)
+/// import — confirms what landed and offers to spawn another data object
+/// from the same file.
+let private importResultCard (displays: DataTypeDisplay list) (labels: DataTypeId list) (canAddMore: bool) dispatch =
+    Layout.Panel.panel "Imported" [
+        Html.div [
+            prop.className "space-y-3"
+            prop.children [
+                Html.div [
+                    prop.className "p-3 rounded border border-green-200 bg-green-50 text-sm text-green-800"
+                    prop.text (
+                        sprintf "✓ Imported as %s." (labels |> List.map (labelFor displays) |> String.concat ", ")
+                    )
+                ]
+                Html.div [
+                    prop.className "text-sm text-gray-600"
+                    prop.text
+                        "A single file can map to several formats — add another mapping to spawn an additional data object from the same file."
+                ]
+                Html.div [
+                    prop.className "flex items-center gap-3"
+                    prop.children [
+                        if canAddMore then
+                            Html.button [
+                                prop.className [
+                                    Tokens.Colours.brand
+                                    Tokens.Colours.brandText
+                                    "px-4 py-2 rounded-lg text-sm cursor-pointer hover:bg-brand-dark transition-colors"
+                                    Tokens.Typography.buttonText
+                                ]
+                                prop.text "Make additional mapping"
+                                prop.onClick (fun _ -> dispatch MakeAdditionalMapping)
+                            ]
+                        Html.button [
+                            prop.className
+                                "text-sm px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                            prop.text "Done"
+                            prop.onClick (fun _ -> dispatch DismissImport)
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
 let private view (displays: DataTypeDisplay list) (model: Model) dispatch =
     let inputPanel =
         Layout.Panel.panel "Import CSV" [
@@ -819,7 +1021,12 @@ let private view (displays: DataTypeDisplay list) (model: Model) dispatch =
                         )
                         Html.span [
                             prop.className "text-base text-gray-500"
-                            prop.text "Upload any CSV, then map its columns to a data format."
+                            prop.text (
+                                if model.Busy then
+                                    "Checking for a known structure…"
+                                else
+                                    "Upload any CSV. Known structures re-import automatically; new ones open the mapper."
+                            )
                         ]
                     ]
                 ]
@@ -831,7 +1038,12 @@ let private view (displays: DataTypeDisplay list) (model: Model) dispatch =
             prop.children [
                 match model.Wizard with
                 | Some w -> wizardView displays w dispatch
-                | None -> Layout.Panel.panel "Imported Files" [ filesView displays model dispatch ]
+                | None ->
+                    match model.LastImport with
+                    | Some labels -> importResultCard displays labels model.Held.IsSome dispatch
+                    | None -> ()
+
+                    Layout.Panel.panel "Imported Files" [ filesView displays model dispatch ]
 
                 match model.Error with
                 | Some msg ->

@@ -14,9 +14,21 @@ columns falls through to `"UnrecognisedData"`. The mapping manager lets the user
 4. confirm; the CSV is rewritten into the schema's canonical header shape and
    ingested as the target type.
 
-The confirmed mapping is persisted per storage scope, keyed by the source CSV's
-**column-structure fingerprint** (order-/case-independent header set), and
-auto-applied on the next upload of the same shape.
+**Frictionless re-import.** On upload the manager first checks whether the file's
+structure is already known: if one or more **saved mappings** exist for its
+column-structure fingerprint they are applied automatically (no wizard); otherwise
+the file is offered to the server's native `DataType.Detect` and, if recognised,
+ingested as-is. The mapping wizard only opens when the structure is genuinely new.
+
+**One file → several data objects.** A column-structure persists **multiple**
+mappings (one per target type), so a wide CSV can spawn several data objects. After
+any import the result card offers **"Make additional mapping"**, which re-opens the
+wizard on the same in-hand file to add another target; each mapped object is
+uploaded under a type-suffixed name (`data__SalesData.csv`) so they don't collide.
+
+Saved mappings are persisted per storage scope, keyed by `(fingerprint,
+targetType)` — `fingerprint` being the order-/case-independent header set — and
+re-applied on the next upload of the same shape.
 
 **Two opt-ins (both default off — `GP 11`/`GP 13`, zero cost when unused):**
 

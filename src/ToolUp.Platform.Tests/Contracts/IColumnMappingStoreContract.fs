@@ -88,30 +88,44 @@ let private newStore () : IColumnMappingStore =
 
 let tests =
     testList "IColumnMappingStore contract" [
-        testCaseAsync "Save then Get round-trips the mapping"
+        testCaseAsync "Save then GetByFingerprint round-trips the mapping"
         <| async {
             let s = newStore ()
             let m = mk "region|sales" "SalesData" [ "Region", "Area"; "Sales", "Turnover" ]
             let! saved = s.Save("scope-a", m)
             Expect.isOk saved "save ok"
-            let! got = s.Get("scope-a", "region|sales")
-            Expect.equal got (Some m) "round-trips"
+            let! got = s.GetByFingerprint("scope-a", "region|sales")
+            Expect.equal got [ m ] "round-trips"
         }
 
-        testCaseAsync "Get of an unknown fingerprint returns None"
+        testCaseAsync "GetByFingerprint of an unknown fingerprint is empty"
         <| async {
             let s = newStore ()
-            let! got = s.Get("scope-a", "nope")
-            Expect.isNone got "absent"
+            let! got = s.GetByFingerprint("scope-a", "nope")
+            Expect.isEmpty got "absent"
         }
 
-        testCaseAsync "Save overwrites an existing fingerprint"
+        testCaseAsync "one fingerprint holds several mappings — one per target type"
+        <| async {
+            let s = newStore ()
+            do! s.Save("scope-a", mk "fp" "SalesData" [ "Amount", "Turnover" ]) |> Async.Ignore
+            do! s.Save("scope-a", mk "fp" "RegionData" [ "Region", "Area" ]) |> Async.Ignore
+            let! got = s.GetByFingerprint("scope-a", "fp")
+            let types = got |> List.map _.TargetTypeId |> List.sort
+            Expect.equal types [ "RegionData"; "SalesData" ] "both targets kept (additive)"
+        }
+
+        testCaseAsync "Save overwrites only the same (fingerprint, target type)"
         <| async {
             let s = newStore ()
             do! s.Save("scope-a", mk "fp" "T1" [ "A", "a" ]) |> Async.Ignore
-            do! s.Save("scope-a", mk "fp" "T2" [ "A", "b" ]) |> Async.Ignore
-            let! got = s.Get("scope-a", "fp")
-            Expect.equal (got |> Option.map _.TargetTypeId) (Some "T2") "latest wins"
+            do! s.Save("scope-a", mk "fp" "T1" [ "A", "b" ]) |> Async.Ignore // re-save same key
+            do! s.Save("scope-a", mk "fp" "T2" [ "A", "c" ]) |> Async.Ignore
+            let! got = s.GetByFingerprint("scope-a", "fp")
+            Expect.equal (List.length got) 2 "T1 overwritten in place, T2 added"
+
+            let t1 = got |> List.find (fun m -> m.TargetTypeId = "T1")
+            Expect.equal (t1.FieldToColumn |> Map.find "A") "b" "T1 is the latest save"
         }
 
         testCaseAsync "List returns every mapping saved in the scope"
@@ -124,15 +138,16 @@ let tests =
             Expect.equal fingerprints [ "fp1"; "fp2" ] "both listed"
         }
 
-        testCaseAsync "Delete removes the mapping and is idempotent"
+        testCaseAsync "Delete removes one (fingerprint, type) and is idempotent"
         <| async {
             let s = newStore ()
-            do! s.Save("scope-a", mk "fp" "T" [ "A", "a" ]) |> Async.Ignore
-            let! d1 = s.Delete("scope-a", "fp")
+            do! s.Save("scope-a", mk "fp" "T1" [ "A", "a" ]) |> Async.Ignore
+            do! s.Save("scope-a", mk "fp" "T2" [ "A", "a" ]) |> Async.Ignore
+            let! d1 = s.Delete("scope-a", "fp", "T1")
             Expect.isOk d1 "delete ok"
-            let! got = s.Get("scope-a", "fp")
-            Expect.isNone got "gone"
-            let! d2 = s.Delete("scope-a", "fp")
+            let! got = s.GetByFingerprint("scope-a", "fp")
+            Expect.equal (got |> List.map _.TargetTypeId) [ "T2" ] "only T1 gone"
+            let! d2 = s.Delete("scope-a", "fp", "T1")
             Expect.isOk d2 "second delete idempotent"
         }
 
@@ -140,8 +155,8 @@ let tests =
         <| async {
             let s = newStore ()
             do! s.Save("scope-a", mk "fp" "T" [ "A", "a" ]) |> Async.Ignore
-            let! crossGet = s.Get("scope-b", "fp")
-            Expect.isNone crossGet "no cross-scope read"
+            let! crossGet = s.GetByFingerprint("scope-b", "fp")
+            Expect.isEmpty crossGet "no cross-scope read"
             let! bList = s.List "scope-b"
             Expect.isEmpty bList "no cross-scope list"
         }
