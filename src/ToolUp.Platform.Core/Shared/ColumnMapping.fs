@@ -186,6 +186,329 @@ let private typeAcceptable (expected: ColumnType) (cells: string list) : bool =
     | _ when not hasValues -> true
     | e -> e = inferred
 
+// ─── Data-quality remediation ─────────────────────────────────────
+
+let private currencySymbols = [ "$"; "£"; "€"; "¥"; "₹"; "₩"; "₪" ]
+
+let private defaultNullMarkers = [ "n/a"; "na"; "null"; "none"; "nil"; "-"; "--"; "#n/a" ]
+
+let private isNullMarker (s: string) =
+    defaultNullMarkers |> List.contains (s.Trim().ToLower())
+
+let private tryInt (s: string) : int option =
+    match System.Int32.TryParse(s.Trim()) with
+    | true, v -> Some v
+    | _ -> None
+
+let private expandYear (y: int) =
+    if y >= 100 then y
+    elif y >= 70 then 1900 + y
+    else 2000 + y
+
+let private daysInMonth (y: int) (m: int) =
+    match m with
+    | 1
+    | 3
+    | 5
+    | 7
+    | 8
+    | 10
+    | 12 -> 31
+    | 4
+    | 6
+    | 9
+    | 11 -> 30
+    | 2 ->
+        if (y % 4 = 0 && y % 100 <> 0) || y % 400 = 0 then
+            29
+        else
+            28
+    | _ -> 0
+
+let private threeParts (s: string) : (int * int * int) option =
+    let parts =
+        s.Trim().Split([| '/'; '-'; '.' |], StringSplitOptions.RemoveEmptyEntries)
+
+    if parts.Length = 3 then
+        match tryInt parts[0], tryInt parts[1], tryInt parts[2] with
+        | Some a, Some b, Some c -> Some(a, b, c)
+        | _ -> None
+    else
+        None
+
+/// Parse a 3-part date under `order` → ISO `yyyy-MM-dd`. `None` when the
+/// parts don't form a valid date (used both to apply the transform and,
+/// during profiling, to decide whether an order is forced or ambiguous).
+let toIsoDate (order: DateOrder) (s: string) : string option =
+    match threeParts s with
+    | None -> None
+    | Some(a, b, c) ->
+        let parts = [| a; b; c |]
+        let fourDigit = [ 0; 1; 2 ] |> List.tryFind (fun i -> parts[i] >= 1000)
+
+        // (yearIdx, firstOther, secondOther) in source order
+        let layout =
+            match fourDigit with
+            | Some 0 -> Some(0, 1, 2)
+            | Some 1 -> Some(1, 0, 2)
+            | Some 2 -> Some(2, 0, 1)
+            | _ ->
+                match order with
+                | YearFirst -> Some(0, 1, 2)
+                | _ -> Some(2, 0, 1) // 2-digit year assumed last
+
+        match layout with
+        | None -> None
+        | Some(yi, i1, i2) ->
+            let year = expandYear parts[yi]
+            let v1 = parts[i1]
+            let v2 = parts[i2]
+
+            let month, day =
+                match order with
+                | MonthFirst -> v1, v2
+                | DayFirst -> v2, v1
+                | YearFirst -> v1, v2 // ISO: year, month, day
+
+            if month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth year month then
+                Some(sprintf "%04d-%02d-%02d" year month day)
+            else
+                None
+
+let private stripThousands (s: string) : string =
+    let chars = s.ToCharArray()
+    let sb = System.Text.StringBuilder()
+
+    for i in 0 .. chars.Length - 1 do
+        let c = chars[i]
+
+        let isThousandsSep =
+            c = ','
+            && i > 0
+            && i < chars.Length - 1
+            && System.Char.IsDigit chars[i - 1]
+            && System.Char.IsDigit chars[i + 1]
+
+        if not isThousandsSep then
+            sb.Append c |> ignore
+
+    sb.ToString()
+
+/// Apply one transform to one cell value.
+let applyTransform (t: CellTransform) (s: string) : string =
+    match t with
+    | Trim -> s.Trim()
+    | StripThousandsSeparators -> stripThousands s
+    | StripCurrency _ ->
+        let mutable r = s.Trim()
+
+        for sym in currencySymbols do
+            r <- r.Replace(sym, "")
+
+        r.Trim()
+    | StripPercent -> s.Replace("%", "").Trim()
+    | DecimalCommaToDot -> s.Replace(".", "").Replace(",", ".")
+    | StripLeadingApostrophe -> if s.StartsWith "'" then s.Substring 1 else s
+    | BlankNullMarkers markers ->
+        let v = s.Trim().ToLower()
+
+        if markers |> List.exists (fun m -> m.Trim().ToLower() = v) then
+            ""
+        else
+            s
+    | NormaliseBoolean ->
+        match s.Trim().ToLower() with
+        | "y"
+        | "yes"
+        | "true"
+        | "t"
+        | "1" -> "true"
+        | "n"
+        | "no"
+        | "false"
+        | "f"
+        | "0" -> "false"
+        | _ -> s
+    | ParseDateToIso order -> toIsoDate order s |> Option.defaultValue s
+
+/// Apply an ordered list of transforms to one cell value.
+let applyTransforms (ts: CellTransform list) (s: string) : string =
+    ts |> List.fold (fun acc t -> applyTransform t acc) s
+
+[<Literal>]
+let private DqThreshold = 0.8
+
+let private examplesOf (xs: string list) = xs |> List.distinct |> List.truncate 3
+
+/// Scan one source column's sample values for data-quality problems and
+/// propose remediation. Pure — the wizard's "Review data" step renders
+/// the result; the chosen transforms ride into the saved `ColumnMapping`.
+let profileColumn (header: string) (cells: string list) : ColumnProfile =
+    let nonBlank =
+        cells |> List.map (fun c -> c.Trim()) |> List.filter (fun c -> c <> "")
+
+    let realValues = nonBlank |> List.filter (isNullMarker >> not)
+    let n = List.length realValues
+
+    if n = 0 then
+        {
+            Column = header
+            InferredType = StringColumn
+            DetectedUnit = None
+            Issues = []
+        }
+    else
+        let fractionWhere pred =
+            (realValues |> List.filter pred |> List.length |> float) / float n
+
+        // ── null markers ──
+        let seenNulls = nonBlank |> List.filter isNullMarker
+
+        let nullIssue =
+            if not seenNulls.IsEmpty then
+                Some {
+                    Kind = NullMarkersPresent
+                    Detail = "Null-marker tokens present — blank them so they don't parse as text."
+                    Examples = examplesOf seenNulls
+                    Suggested = [ BlankNullMarkers defaultNullMarkers ]
+                    Safe = true
+                    NeedsChoice = false
+                }
+            else
+                None
+
+        // ── numbers formatted as text ──
+        let sym =
+            currencySymbols
+            |> List.tryFind (fun s -> realValues |> List.exists (fun v -> v.Contains s))
+
+        let anyPercent = realValues |> List.exists (fun v -> v.Contains "%")
+        let anyApostrophe = realValues |> List.exists (fun v -> v.StartsWith "'")
+
+        let numericCleanup = [
+            Trim
+            if anyApostrophe then
+                StripLeadingApostrophe
+            match sym with
+            | Some s -> StripCurrency s
+            | None -> ()
+            if anyPercent then
+                StripPercent
+            StripThousandsSeparators
+        ]
+
+        let cleanedNumericFraction =
+            fractionWhere (fun v -> isNumeric (applyTransforms numericCleanup v))
+
+        let rawNumericFraction = fractionWhere isNumeric
+        let isNumberColumn = cleanedNumericFraction >= DqThreshold
+
+        let detectedUnit =
+            if isNumberColumn && sym.IsSome then sym
+            elif isNumberColumn && anyPercent then Some "%"
+            else None
+
+        let numberIssue =
+            if isNumberColumn && (cleanedNumericFraction > rawNumericFraction + 1e-9) then
+                Some {
+                    Kind = NumbersFormattedAsText
+                    Detail = "Numeric values rendered as text (symbols / separators / spacing)."
+                    Examples = examplesOf (realValues |> List.filter (isNumeric >> not))
+                    Suggested = numericCleanup
+                    Safe = true
+                    NeedsChoice = false
+                }
+            else
+                None
+
+        // ── dates (only when not already a clean number column) ──
+        let dateIssue =
+            if isNumberColumn then
+                None
+            else
+                let dayF = fractionWhere (fun v -> (toIsoDate DayFirst v).IsSome)
+                let monthF = fractionWhere (fun v -> (toIsoDate MonthFirst v).IsSome)
+                let yearF = fractionWhere (fun v -> (toIsoDate YearFirst v).IsSome)
+
+                if max dayF (max monthF yearF) < DqThreshold then
+                    None
+                else
+                    let isoFirst =
+                        realValues
+                        |> List.exists (fun v ->
+                            match threeParts v with
+                            | Some(a, _, _) -> a >= 1000
+                            | None -> false)
+
+                    let forcesDay =
+                        realValues
+                        |> List.exists (fun v -> (toIsoDate DayFirst v).IsSome && (toIsoDate MonthFirst v).IsNone)
+
+                    let forcesMonth =
+                        realValues
+                        |> List.exists (fun v -> (toIsoDate MonthFirst v).IsSome && (toIsoDate DayFirst v).IsNone)
+
+                    let resolved kind order detail =
+                        Some {
+                            Kind = kind
+                            Detail = detail
+                            Examples = examplesOf realValues
+                            Suggested = [ ParseDateToIso order ]
+                            Safe = true
+                            NeedsChoice = false
+                        }
+
+                    if isoFirst && yearF >= DqThreshold then
+                        resolved ResolvedDateFormat YearFirst "ISO dates (yyyy-mm-dd) — normalised as-is."
+                    elif forcesDay && not forcesMonth then
+                        resolved ResolvedDateFormat DayFirst "Dates resolved as day-first (a day value exceeds 12)."
+                    elif forcesMonth && not forcesDay then
+                        resolved
+                            ResolvedDateFormat
+                            MonthFirst
+                            "Dates resolved as month-first (a month value exceeds 12)."
+                    else
+                        Some {
+                            Kind = AmbiguousDateFormat
+                            Detail = "Ambiguous date order (e.g. 01/02/2024) — choose day-first or month-first."
+                            Examples = examplesOf realValues
+                            Suggested = []
+                            Safe = false
+                            NeedsChoice = true
+                        }
+
+        // ── stray whitespace (only when nothing else already implies Trim) ──
+        let whitespaceIssue =
+            let hasWs = cells |> List.exists (fun c -> c.Trim() <> "" && c <> c.Trim())
+
+            if hasWs && nullIssue.IsNone && numberIssue.IsNone && dateIssue.IsNone then
+                Some {
+                    Kind = LeadingTrailingWhitespace
+                    Detail = "Leading / trailing whitespace on values."
+                    Examples = examplesOf (cells |> List.filter (fun c -> c.Trim() <> "" && c <> c.Trim()))
+                    Suggested = [ Trim ]
+                    Safe = true
+                    NeedsChoice = false
+                }
+            else
+                None
+
+        let issues =
+            [ nullIssue; numberIssue; dateIssue; whitespaceIssue ] |> List.choose id
+
+        // Type inferred after the safe (pre-checked) fixes.
+        let safeTransforms = issues |> List.filter _.Safe |> List.collect _.Suggested
+
+        let inferred =
+            realValues |> List.map (applyTransforms safeTransforms) |> inferColumnType
+
+        {
+            Column = header
+            InferredType = inferred
+            DetectedUnit = detectedUnit
+            Issues = issues
+        }
+
 // ─── Fingerprint ──────────────────────────────────────────────────
 
 module Fingerprint =
@@ -317,11 +640,17 @@ let suggest
 
 /// Rewrite the raw CSV into the target schema's canonical shape: header
 /// row = schema field names (in schema order), one column per mapped
-/// field, body cells pulled from the mapped source column. Columns the
-/// mapping doesn't cover are dropped — "minimally, just the required
-/// data". The result is fed to the existing `DataType.Process` for the
-/// chosen target type.
-let rewriteCsv (schema: DataTypeSchema) (mapping: Map<string, string>) (rawCsv: string) : string =
+/// field, body cells pulled from the mapped source column with that
+/// column's `transforms` (data-quality remediation) applied first.
+/// Columns the mapping doesn't cover are dropped — "minimally, just the
+/// required data". The result is fed to the existing `DataType.Process`
+/// for the chosen target type.
+let rewriteCsv
+    (schema: DataTypeSchema)
+    (fieldToColumn: Map<string, string>)
+    (transforms: Map<string, CellTransform list>)
+    (rawCsv: string)
+    : string =
     match splitLines rawCsv StringSplitOptions.None with
     | [] -> ""
     | header :: rows ->
@@ -331,15 +660,17 @@ let rewriteCsv (schema: DataTypeSchema) (mapping: Map<string, string>) (rawCsv: 
             let target = name.Trim().ToLower()
             srcHeaders |> List.tryFindIndex (fun h -> h.Trim().ToLower() = target)
 
-        // schema columns that have a mapping AND resolve to a real source column
+        // schema columns that have a mapping AND resolve to a real source
+        // column — keep the source name to look up its transforms.
         let emitted =
             schema.Columns
             |> List.choose (fun col ->
-                match mapping |> Map.tryFind col.Name with
-                | Some src -> srcIndex src |> Option.map (fun idx -> col.Name, idx)
+                match fieldToColumn |> Map.tryFind col.Name with
+                | Some src -> srcIndex src |> Option.map (fun idx -> col.Name, idx, src)
                 | None -> None)
 
-        let outHeader = emitted |> List.map (fst >> writeCell) |> String.concat ","
+        let outHeader =
+            emitted |> List.map (fun (name, _, _) -> writeCell name) |> String.concat ","
 
         let outRows =
             rows
@@ -348,7 +679,10 @@ let rewriteCsv (schema: DataTypeSchema) (mapping: Map<string, string>) (rawCsv: 
                 let cells = splitCsvLine r
 
                 emitted
-                |> List.map (fun (_, idx) -> (if idx < cells.Length then cells[idx] else "") |> writeCell)
+                |> List.map (fun (_, idx, src) ->
+                    let raw = if idx < cells.Length then cells[idx] else ""
+                    let ts = transforms |> Map.tryFind src |> Option.defaultValue []
+                    applyTransforms ts raw |> writeCell)
                 |> String.concat ",")
 
         String.concat "\n" (outHeader :: outRows)

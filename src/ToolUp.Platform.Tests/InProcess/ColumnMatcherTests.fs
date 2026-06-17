@@ -128,7 +128,7 @@ let tests =
                 // plus an extra unmapped column that must be dropped.
                 let raw = "Area,Notes,Turnover\nNorth,ignore,100\nSouth,ignore,200"
                 let mapping = Map.ofList [ "Region", "Area"; "Revenue", "Turnover" ]
-                let result = ColumnMapping.rewriteCsv sc mapping raw
+                let result = ColumnMapping.rewriteCsv sc mapping Map.empty raw
                 let expected = "Region,Revenue\nNorth,100\nSouth,200"
                 Expect.equal result expected "rewritten to canonical shape"
             }
@@ -138,7 +138,7 @@ let tests =
 
                 let raw = "Area\nNorth\nSouth"
                 let mapping = Map.ofList [ "Region", "Area" ] // Segment unmapped
-                let result = ColumnMapping.rewriteCsv sc mapping raw
+                let result = ColumnMapping.rewriteCsv sc mapping Map.empty raw
                 Expect.equal result "Region\nNorth\nSouth" "only Region emitted"
             }
 
@@ -146,8 +146,88 @@ let tests =
                 let sc = schema [ col "Name" StringColumn true ]
                 let raw = "Title\n\"Smith, John\""
                 let mapping = Map.ofList [ "Name", "Title" ]
-                let result = ColumnMapping.rewriteCsv sc mapping raw
+                let result = ColumnMapping.rewriteCsv sc mapping Map.empty raw
                 Expect.equal result "Name\n\"Smith, John\"" "comma value re-quoted"
+            }
+
+            test "per-column transforms are applied during rewrite" {
+                let sc = schema [ col "Revenue" NumberColumn true; col "Day" DateColumn true ]
+                let raw = "Amount,When\n\"$1,234.50\",01/02/2024\n$900,13/02/2024"
+                let mapping = Map.ofList [ "Revenue", "Amount"; "Day", "When" ]
+
+                let transforms =
+                    Map.ofList [
+                        "Amount",
+                        [
+                            ColumnMappingTypes.Trim
+                            ColumnMappingTypes.StripCurrency "$"
+                            ColumnMappingTypes.StripThousandsSeparators
+                        ]
+                        "When", [ ColumnMappingTypes.ParseDateToIso ColumnMappingTypes.DayFirst ]
+                    ]
+
+                let result = ColumnMapping.rewriteCsv sc mapping transforms raw
+                Expect.equal result "Revenue,Day\n1234.50,2024-02-01\n900,2024-02-13" "cleaned + ISO dates"
+            }
+        ]
+
+        testList "toIsoDate" [
+            test "day-first vs month-first disambiguate 01/02/2024" {
+                Expect.equal (ColumnMapping.toIsoDate DayFirst "01/02/2024") (Some "2024-02-01") "day-first"
+                Expect.equal (ColumnMapping.toIsoDate MonthFirst "01/02/2024") (Some "2024-01-02") "month-first"
+            }
+            test "ISO year-first parses" {
+                Expect.equal (ColumnMapping.toIsoDate YearFirst "2024-03-09") (Some "2024-03-09") "iso"
+            }
+            test "out-of-range under an order returns None" {
+                Expect.isNone (ColumnMapping.toIsoDate MonthFirst "13/02/2024") "month 13 invalid"
+            }
+        ]
+
+        testList "applyTransform" [
+            test "strips thousands separators and currency, keeps decimals" {
+                let v =
+                    ColumnMapping.applyTransforms [ Trim; StripCurrency "$"; StripThousandsSeparators ] " $1,234.50 "
+
+                Expect.equal v "1234.50" "clean number"
+            }
+            test "DecimalCommaToDot handles European numbers" {
+                Expect.equal (ColumnMapping.applyTransform DecimalCommaToDot "1.234,56") "1234.56" "euro decimal"
+            }
+            test "BlankNullMarkers blanks markers only" {
+                let ts = [ BlankNullMarkers [ "N/A"; "-" ] ]
+                Expect.equal (ColumnMapping.applyTransforms ts "N/A") "" "marker blanked"
+                Expect.equal (ColumnMapping.applyTransforms ts "42") "42" "real value kept"
+            }
+        ]
+
+        testList "profileColumn" [
+            test "currency column is flagged NumbersFormattedAsText with detected unit" {
+                let p = ColumnMapping.profileColumn "Price" [ "$1,200"; "$950"; "$1,000.50" ]
+                Expect.equal p.InferredType NumberColumn "numeric after cleanup"
+                Expect.equal p.DetectedUnit (Some "$") "unit captured"
+                Expect.isTrue (p.Issues |> List.exists (fun i -> i.Kind = NumbersFormattedAsText)) "flagged"
+                Expect.isTrue (p.Issues |> List.forall _.Safe) "safe fix"
+            }
+            test "ambiguous date column needs a choice" {
+                let p =
+                    ColumnMapping.profileColumn "When" [ "01/02/2024"; "03/04/2024"; "05/06/2024" ]
+
+                let dateIssue = p.Issues |> List.find (fun i -> i.Kind = AmbiguousDateFormat)
+                Expect.isTrue dateIssue.NeedsChoice "blocks until chosen"
+                Expect.isFalse dateIssue.Safe "not auto-applied"
+            }
+            test "date column with a day > 12 resolves automatically (no choice)" {
+                let p =
+                    ColumnMapping.profileColumn "When" [ "13/02/2024"; "01/02/2024"; "28/02/2024" ]
+
+                let dateIssue = p.Issues |> List.find (fun i -> i.Kind = ResolvedDateFormat)
+                Expect.isFalse dateIssue.NeedsChoice "resolved as day-first"
+                Expect.equal dateIssue.Suggested [ ParseDateToIso DayFirst ] "day-first transform"
+            }
+            test "clean column has no issues" {
+                let p = ColumnMapping.profileColumn "Qty" [ "1"; "2"; "3" ]
+                Expect.isEmpty p.Issues "nothing to fix"
             }
         ]
     ]

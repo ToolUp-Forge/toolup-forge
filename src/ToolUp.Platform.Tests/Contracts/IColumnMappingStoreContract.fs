@@ -78,6 +78,7 @@ let private mk fingerprint typeId pairs : ColumnMapping = {
     Fingerprint = fingerprint
     TargetTypeId = typeId
     FieldToColumn = Map.ofList pairs
+    Transforms = Map.empty
     SourceHeaders = pairs |> List.map snd
     CreatedBy = "tester"
     CreatedAt = DateTime.UtcNow

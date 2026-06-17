@@ -7,12 +7,32 @@ registered schema (header-based `DataType.Detect`); a CSV with renamed or extra
 columns falls through to `"UnrecognisedData"`. The mapping manager lets the user:
 
 1. upload any CSV,
-2. pick the target data format (a `DataType` that publishes a `DataTypeSchema`),
-3. review **smart auto-suggested** field→column matches — with a warning to
+2. **review the data-quality scan** (see below) and remediate,
+3. pick the target data format (a `DataType` that publishes a `DataTypeSchema`),
+4. review **smart auto-suggested** field→column matches — with a warning to
    double-check and an explicit "review these" list of `LowConfidence` /
    `TypeMismatch` / `Ambiguous` / `Unmatched` guesses — and override as needed,
-4. confirm; the CSV is rewritten into the schema's canonical header shape and
-   ingested as the target type.
+5. confirm; the CSV is rewritten (with remediation applied) into the schema's
+   canonical header shape and ingested as the target type.
+
+**Data-quality scan + remediation (pre-mapping).** Before mapping, each source
+column is profiled (`ColumnMapping.profileColumn`) for problems and the fixes are
+proposed as typed, per-column `CellTransform`s carried inside the mapping:
+- **numbers rendered as text** — currency (`$1,200`), thousands separators, stray
+  whitespace, Excel's leading apostrophe — stripped to real numbers; a stripped
+  currency/percent symbol is captured as the column's *unit* and shown on its
+  label (`Price ($)`) so `$` vs `£` columns stay distinguishable. Output headers
+  stay canonical (schema field names) so `DataType.Process` still parses.
+- **ambiguous dates** — `01/02/2024` (every part ≤ 12) forces an explicit
+  day-first / month-first / ISO choice before proceeding; a value that's
+  self-evidently one order (a day > 12) resolves automatically. Dates normalise to
+  ISO `yyyy-MM-dd`.
+- **null-markers** (`N/A`, `-`, `NULL`) blanked; whitespace trimmed.
+
+Safe fixes are pre-selected (opt-out per column); the chosen transforms persist in
+the saved mapping, so a re-imported structure is cleaned automatically. Remediation
+also sharpens the matcher — a column that only *looked* like text because of `$`
+and commas now reads as a number, so `TypeMismatch` fires correctly.
 
 **Frictionless re-import.** On upload the manager first checks whether the file's
 structure is already known: if one or more **saved mappings** exist for its

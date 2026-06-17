@@ -31,6 +31,8 @@ open ToolUp.Platform
 // ─── Model ────────────────────────────────────────────────────────
 
 type WizardStep =
+    /// Data-quality scan + remediation, shown first when issues are found.
+    | ReviewData
     | PickTarget
     | ReviewMapping
 
@@ -41,6 +43,14 @@ type Wizard = {
     Samples: Map<string, string list>
     Fingerprint: string
     Step: WizardStep
+    /// Per-column data-quality scan (drives the ReviewData step).
+    Profiles: ColumnProfile list
+    /// Columns the user opted OUT of remediation for (default: all
+    /// safe fixes on, so absence = enabled).
+    DisabledFixes: Set<string>
+    /// Chosen day/month order for each ambiguous-date column. A column
+    /// with an ambiguous date and no entry here blocks "Continue".
+    DateOrders: Map<string, DateOrder>
     TargetTypeId: DataTypeId option
     Suggestion: MappingSuggestion option
     /// User edits over the auto-suggestion: field name → chosen column
@@ -87,6 +97,9 @@ type Msg =
     | ImportFinished of Result<DataTypeId list, string>
     | MakeAdditionalMapping
     | DismissImport
+    | ToggleColumnFixes of column: string
+    | SetDateOrder of column: string * order: DateOrder
+    | ProceedToMapping
     | SelectTarget of DataTypeId
     | ChangeFormat
     | OverrideColumn of field: string * column: string option
@@ -137,20 +150,90 @@ let private unresolvedRequired (w: Wizard) : string list =
         |> List.filter (fun f -> f.Field.Required && (chosenColumn w f).IsNone)
         |> List.map (fun f -> f.Field.Name)
 
-/// A fresh wizard at the target-picker step for a held file.
-let private wizardFor (held: HeldFile) : Wizard = {
-    FileName = held.FileName
-    RawContents = held.RawContents
-    Headers = held.Headers
-    Samples = held.Samples
-    Fingerprint = held.Fingerprint
-    Step = PickTarget
-    TargetTypeId = None
-    Suggestion = None
-    Overrides = Map.empty
-    ReusedSaved = false
-    Saving = false
-}
+// ─── Data-quality (ReviewData step) helpers ───────────────────────
+
+let private hasAmbiguousDate (p: ColumnProfile) =
+    p.Issues |> List.exists (fun i -> i.Kind = AmbiguousDateFormat)
+
+/// The remediation transforms currently chosen for a column: its safe
+/// fixes (unless opted out) plus the chosen date order (for ambiguous
+/// date columns).
+let private columnTransforms (w: Wizard) (p: ColumnProfile) : CellTransform list =
+    let safe =
+        if w.DisabledFixes.Contains p.Column then
+            []
+        else
+            p.Issues |> List.filter _.Safe |> List.collect _.Suggested
+
+    let dateChoice =
+        if hasAmbiguousDate p then
+            match w.DateOrders |> Map.tryFind p.Column with
+            | Some order -> [ ParseDateToIso order ]
+            | None -> []
+        else
+            []
+
+    safe @ dateChoice
+
+/// source column → its chosen transforms (omitting empty), for the
+/// `ColumnMapping` record and for remediating samples before `suggest`.
+let private wizardTransforms (w: Wizard) : Map<string, CellTransform list> =
+    w.Profiles
+    |> List.choose (fun p ->
+        match columnTransforms w p with
+        | [] -> None
+        | ts -> Some(p.Column, ts))
+    |> Map.ofList
+
+/// Ambiguous-date columns still awaiting an order choice — block Continue.
+let private unresolvedDates (w: Wizard) : string list =
+    w.Profiles
+    |> List.filter (fun p -> hasAmbiguousDate p && (w.DateOrders |> Map.tryFind p.Column).IsNone)
+    |> List.map _.Column
+
+/// Samples with the chosen transforms applied — so `suggest` sees clean,
+/// correctly-typed values.
+let private remediatedSamples (w: Wizard) : Map<string, string list> =
+    let transforms = wizardTransforms w
+
+    w.Samples
+    |> Map.map (fun col vals ->
+        match transforms |> Map.tryFind col with
+        | Some ts -> vals |> List.map (ColumnMapping.applyTransforms ts)
+        | None -> vals)
+
+/// Column display label with its detected unit, so `$` vs `£` columns
+/// stay distinguishable in the mapping dropdowns.
+let private columnLabel (profiles: ColumnProfile list) (header: string) : string =
+    match profiles |> List.tryFind (fun p -> p.Column = header) with
+    | Some { DetectedUnit = Some unit } -> sprintf "%s (%s)" header unit
+    | _ -> header
+
+/// A fresh wizard for a held file: profiles its columns and starts on the
+/// ReviewData step when there are issues, else jumps straight to mapping.
+let private wizardFor (held: HeldFile) : Wizard =
+    let profiles =
+        held.Headers
+        |> List.map (fun h -> ColumnMapping.profileColumn h (held.Samples |> Map.tryFind h |> Option.defaultValue []))
+
+    let hasIssues = profiles |> List.exists (fun p -> not p.Issues.IsEmpty)
+
+    {
+        FileName = held.FileName
+        RawContents = held.RawContents
+        Headers = held.Headers
+        Samples = held.Samples
+        Fingerprint = held.Fingerprint
+        Step = (if hasIssues then ReviewData else PickTarget)
+        Profiles = profiles
+        DisabledFixes = Set.empty
+        DateOrders = Map.empty
+        TargetTypeId = None
+        Suggestion = None
+        Overrides = Map.empty
+        ReusedSaved = false
+        Saving = false
+    }
 
 /// Disambiguate the uploaded file name per target type so several mapped
 /// imports of one source file land as distinct data objects rather than
@@ -180,7 +263,8 @@ let private importMappings
             if err.IsNone then
                 match schemaFor displays m.TargetTypeId with
                 | Some schema ->
-                    let rewritten = ColumnMapping.rewriteCsv schema m.FieldToColumn held.RawContents
+                    let rewritten =
+                        ColumnMapping.rewriteCsv schema m.FieldToColumn m.Transforms held.RawContents
 
                     let upload = {
                         filename = importedFileName held.FileName m.TargetTypeId
@@ -378,12 +462,54 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         },
         Cmd.none
 
+    | ToggleColumnFixes column ->
+        match model.Wizard with
+        | Some w ->
+            let disabled =
+                if w.DisabledFixes.Contains column then
+                    Set.remove column w.DisabledFixes
+                else
+                    Set.add column w.DisabledFixes
+
+            {
+                model with
+                    Wizard = Some { w with DisabledFixes = disabled }
+            },
+            Cmd.none
+        | None -> model, Cmd.none
+
+    | SetDateOrder(column, order) ->
+        match model.Wizard with
+        | Some w ->
+            {
+                model with
+                    Wizard =
+                        Some {
+                            w with
+                                DateOrders = Map.add column order w.DateOrders
+                        }
+            },
+            Cmd.none
+        | None -> model, Cmd.none
+
+    | ProceedToMapping ->
+        match model.Wizard with
+        | Some w ->
+            {
+                model with
+                    Wizard = Some { w with Step = PickTarget }
+            },
+            Cmd.none
+        | None -> model, Cmd.none
+
     | SelectTarget typeId ->
         match model.Wizard with
         | Some w ->
             match schemaFor displays typeId with
             | Some schema ->
-                let suggestion = ColumnMapping.suggest typeId schema w.Headers w.Samples
+                // suggest against remediated samples so cleaned columns
+                // read with their true types.
+                let suggestion = ColumnMapping.suggest typeId schema w.Headers (remediatedSamples w)
 
                 let w' = {
                     w with
@@ -454,6 +580,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                     Fingerprint = w.Fingerprint
                     TargetTypeId = typeId
                     FieldToColumn = effectiveMapping w
+                    Transforms = wizardTransforms w
                     SourceHeaders = w.Headers
                     CreatedBy = ""
                     CreatedAt = System.DateTime.UtcNow
@@ -573,7 +700,159 @@ let private columnSelect (w: Wizard) (field: FieldSuggestion) dispatch =
         prop.children [
             Html.option [ prop.value ""; prop.text "— not mapped —" ]
             for h in w.Headers do
-                Html.option [ prop.value h; prop.text h ]
+                Html.option [ prop.value h; prop.text (columnLabel w.Profiles h) ]
+        ]
+    ]
+
+// ─── ReviewData step ──────────────────────────────────────────────
+
+let private dateOrderName =
+    function
+    | DayFirst -> "Day first (DD/MM)"
+    | MonthFirst -> "Month first (MM/DD)"
+    | YearFirst -> "ISO (YYYY-MM-DD)"
+
+let private reviewDataView (w: Wizard) dispatch =
+    let problemColumns = w.Profiles |> List.filter (fun p -> not p.Issues.IsEmpty)
+    let blockers = unresolvedDates w
+
+    let columnCard (p: ColumnProfile) =
+        let enabled = not (w.DisabledFixes.Contains p.Column)
+        let ambiguous = hasAmbiguousDate p
+        let chosenOrder = w.DateOrders |> Map.tryFind p.Column
+
+        // before/after preview on the first example value
+        let example = p.Issues |> List.collect _.Examples |> List.tryHead
+
+        Html.div [
+            prop.className "p-3 rounded border border-gray-200 space-y-2"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between gap-3"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.span [ prop.className "font-medium text-sm"; prop.text p.Column ]
+                                match p.DetectedUnit with
+                                | Some u ->
+                                    Html.span [
+                                        prop.className "ml-2 text-xs text-gray-500"
+                                        prop.text $"unit {u} → kept in label"
+                                    ]
+                                | None -> ()
+                            ]
+                        ]
+                        // opt-out toggle for the safe fixes (dates excepted)
+                        if p.Issues |> List.exists _.Safe then
+                            Html.label [
+                                prop.className "flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"
+                                prop.children [
+                                    Html.input [
+                                        prop.type' "checkbox"
+                                        prop.isChecked enabled
+                                        prop.onChange (fun (_: bool) -> dispatch (ToggleColumnFixes p.Column))
+                                    ]
+                                    Html.span [ prop.text "Apply fixes" ]
+                                ]
+                            ]
+                    ]
+                ]
+
+                for issue in p.Issues do
+                    Html.div [
+                        prop.className "text-xs text-gray-600"
+                        prop.children [
+                            Html.span [
+                                prop.className (
+                                    if issue.NeedsChoice then
+                                        "text-amber-700 font-medium"
+                                    else
+                                        "text-gray-600"
+                                )
+                                prop.text ((if issue.NeedsChoice then "⚠ " else "• ") + issue.Detail)
+                            ]
+                            if not issue.Examples.IsEmpty then
+                                Html.span [
+                                    prop.className "ml-1 text-gray-400"
+                                    prop.text (
+                                        sprintf "e.g. %s" (String.concat ", " (issue.Examples |> List.truncate 3))
+                                    )
+                                ]
+                        ]
+                    ]
+
+                // ambiguous-date order chooser (required)
+                if ambiguous then
+                    Html.div [
+                        prop.className "flex items-center gap-3 pt-1"
+                        prop.children [
+                            for order in [ DayFirst; MonthFirst; YearFirst ] do
+                                let selected = (chosenOrder = Some order)
+
+                                Html.label [
+                                    prop.className "flex items-center gap-1.5 text-xs cursor-pointer"
+                                    prop.children [
+                                        Html.input [
+                                            prop.type' "radio"
+                                            prop.name $"dateorder-{p.Column}"
+                                            prop.isChecked selected
+                                            prop.onChange (fun (_: bool) -> dispatch (SetDateOrder(p.Column, order)))
+                                        ]
+                                        Html.span [ prop.text (dateOrderName order) ]
+                                    ]
+                                ]
+                        ]
+                    ]
+
+                // before → after preview
+                match example with
+                | Some raw ->
+                    let after = ColumnMapping.applyTransforms (columnTransforms w p) raw
+
+                    if after <> raw then
+                        Html.div [
+                            prop.className "text-xs text-gray-500"
+                            prop.text $"preview: \"{raw}\" → \"{after}\""
+                        ]
+                | None -> ()
+            ]
+        ]
+
+    Html.div [
+        prop.className "space-y-3"
+        prop.children [
+            Html.p [
+                prop.className "text-sm text-gray-600"
+                prop.text
+                    "We scanned the data for problems before mapping. Safe fixes are pre-selected; ambiguous dates need a choice."
+            ]
+            for p in problemColumns do
+                columnCard p
+
+            if not blockers.IsEmpty then
+                Html.div [
+                    prop.className "text-sm text-amber-700"
+                    prop.text ("Choose a date order for: " + String.concat ", " blockers)
+                ]
+
+            Html.button [
+                prop.className [
+                    "px-4 py-2 rounded-lg text-sm"
+                    Tokens.Typography.buttonText
+                    if blockers.IsEmpty then
+                        Tokens.Colours.brand
+                        + " "
+                        + Tokens.Colours.brandText
+                        + " hover:bg-brand-dark cursor-pointer"
+                    else
+                        "bg-gray-200 text-gray-500 cursor-not-allowed"
+                ]
+                prop.disabled (not blockers.IsEmpty)
+                prop.text "Continue to mapping"
+                prop.onClick (fun _ ->
+                    if blockers.IsEmpty then
+                        dispatch ProceedToMapping)
+            ]
         ]
     ]
 
@@ -688,6 +967,7 @@ let private wizardView (displays: DataTypeDisplay list) (w: Wizard) dispatch =
 
     let body =
         match w.Step with
+        | ReviewData -> reviewDataView w dispatch
         | PickTarget ->
             let tabular = displays |> List.filter (fun d -> d.Info.Schema.IsSome)
 
