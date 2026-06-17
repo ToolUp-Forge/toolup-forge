@@ -72,6 +72,10 @@ type Msg =
     | UploadRewritten of DataFileUpload
     | UploadDone
     | DeleteFile of string
+    | ReprocessFile of string
+    | Reprocessed of Result<ProcessedFileEntry, string>
+    | ResetDataStore
+    | ResetDone of Result<int, string>
     | ApiError of string
     | DismissError
 
@@ -316,6 +320,45 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
 
     | DeleteFile fileName ->
         model, Cmd.OfRemoting.call fileApi.DeleteFile fileName (fun _ -> LoadFiles) (fun ex -> ApiError ex.Message)
+
+    | ReprocessFile fileName ->
+        model, Cmd.OfRemoting.call fileApi.ReprocessFile fileName Reprocessed (fun ex -> ApiError ex.Message)
+
+    | Reprocessed(Ok entry) ->
+        // The server has already overwritten the persisted sidecar by the
+        // time we get here — replace the entry in `ProcessedData` (matched
+        // by `FileName`), or append if none existed.
+        let updated =
+            (model.ProcessedData |> List.filter (fun e -> e.FileName <> entry.FileName))
+            @ [ entry ]
+
+        { model with ProcessedData = updated }, Cmd.none
+
+    | Reprocessed(Error msg) ->
+        {
+            model with
+                Error = Some(sprintf "Reprocess failed: %s" msg)
+        },
+        Cmd.none
+
+    | ResetDataStore -> model, Cmd.OfRemoting.call fileApi.ResetDataStore () ResetDone (fun ex -> ApiError ex.Message)
+
+    | ResetDone(Ok _) ->
+        // Re-fetch rather than trusting the local view — keeps the client
+        // in sync with whatever the server actually wiped.
+        {
+            model with
+                UploadedFiles = []
+                ProcessedData = []
+        },
+        Cmd.ofMsg LoadFiles
+
+    | ResetDone(Error msg) ->
+        {
+            model with
+                Error = Some(sprintf "Reset failed: %s" msg)
+        },
+        Cmd.none
 
     | ApiError errorMsg ->
         let wizard = model.Wizard |> Option.map (fun w -> { w with Saving = false })
@@ -668,18 +711,32 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                             Html.td [
                                                 prop.className "py-2 pr-3"
                                                 prop.children [
-                                                    Html.button [
-                                                        prop.className
-                                                            "text-sm text-red-600 hover:text-red-800 hover:underline"
-                                                        prop.text "Delete"
-                                                        prop.onClick (fun _ ->
-                                                            let prompt =
-                                                                sprintf
-                                                                    "Delete %s? Analyses depending on it will lose access."
-                                                                    f.FileName
+                                                    Html.div [
+                                                        prop.className "flex items-center gap-3"
+                                                        prop.children [
+                                                            Html.button [
+                                                                prop.className
+                                                                    "text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                                                                prop.title
+                                                                    "Re-run processing on this file's persisted bytes. Use this when the file's processed summary is missing or shows a stale-DataType error after a deploy."
+                                                                prop.text "Reprocess"
+                                                                prop.onClick (fun _ ->
+                                                                    dispatch (ReprocessFile f.FileName))
+                                                            ]
+                                                            Html.button [
+                                                                prop.className
+                                                                    "text-sm text-red-600 hover:text-red-800 hover:underline"
+                                                                prop.text "Delete"
+                                                                prop.onClick (fun _ ->
+                                                                    let prompt =
+                                                                        sprintf
+                                                                            "Delete %s? Analyses depending on it will lose access."
+                                                                            f.FileName
 
-                                                            if Browser.Dom.window.confirm prompt then
-                                                                dispatch (DeleteFile f.FileName))
+                                                                    if Browser.Dom.window.confirm prompt then
+                                                                        dispatch (DeleteFile f.FileName))
+                                                            ]
+                                                        ]
                                                     ]
                                                 ]
                                             ]
@@ -693,6 +750,41 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                 if not model.ProcessedData.IsEmpty then
                     Misc.divider
                     processedDataSection displays model.ProcessedData
+
+                // Owner / Admin escape hatch — same server-gated reset as
+                // the built-in Data Manager. Shown only when there's
+                // something to wipe; non-Owner-Admin clicks land on the
+                // server-side gate and surface the resulting `Error`.
+                let totalFileCount = model.UploadedFiles.Length
+
+                Misc.divider
+
+                Html.div [
+                    prop.className "flex items-center justify-between gap-4"
+                    prop.children [
+                        Html.div [
+                            prop.className "text-sm text-gray-600"
+                            prop.text
+                                "Reset removes every imported file and its derived data from this scope. Owner / Admin only on team deployments."
+                        ]
+                        Html.button [
+                            prop.className
+                                "text-sm px-3 py-1.5 rounded border border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 transition-colors whitespace-nowrap"
+                            prop.title
+                                "Wipe every file, processed-data summary, and entry sidecar in this scope. This cannot be undone."
+                            prop.text "Reset data store"
+                            prop.onClick (fun _ ->
+                                let prompt =
+                                    sprintf
+                                        "Reset the data store? This permanently deletes %d file%s and every derived summary in this scope. This cannot be undone."
+                                        totalFileCount
+                                        (if totalFileCount = 1 then "" else "s")
+
+                                if Browser.Dom.window.confirm prompt then
+                                    dispatch ResetDataStore)
+                        ]
+                    ]
+                ]
             ]
         ]
 
