@@ -145,20 +145,44 @@ type ColumnProfile = {
     Issues: ColumnIssue list
 }
 
-/// The persisted, reusable mapping. Keyed by `(Fingerprint, TargetTypeId)`
-/// within a storage scope; crosses the wire via `IColumnMappingApi`.
-/// `FieldToColumn` maps schema-field name → source-CSV column name;
-/// `Transforms` maps source-CSV column name → the remediation applied to
-/// its cells before mapping.
-type ColumnMapping = {
+/// A reusable **conversion recipe** — the saved, replayable definition of
+/// how a CSV of a given column-structure is turned into a platform data
+/// type. It is more than a column mapping: it bundles the two named parts
+/// of the ingestion/conversion stage — the field **Mapping** and the
+/// data-quality **Remediation**. Keyed by `(Fingerprint, TargetTypeId)`
+/// within a storage scope; crosses the wire via `IConversionApi`.
+type Conversion = {
     Fingerprint: string
     TargetTypeId: DataTypeId
-    FieldToColumn: Map<string, string>
-    /// Per-source-column data-quality remediation, applied during rewrite.
-    Transforms: Map<string, CellTransform list>
+    /// Schema-field name → source-CSV column name.
+    Mapping: Map<string, string>
+    /// Source-CSV column name → the remediation transforms applied to its
+    /// cells before mapping.
+    Remediation: Map<string, CellTransform list>
     /// The source CSV's header set at save time — kept for display and
     /// to detect when a re-used fingerprint's headers have drifted.
     SourceHeaders: string list
     CreatedBy: string
     CreatedAt: DateTime
+}
+
+/// Provenance for a single ingested data object: the record, attached to
+/// the produced file, of the conversion that created it. Marks the
+/// conversion + remediation as part of the ingestion stage so it is
+/// transparent and auditable — distinct from the reusable `Conversion`
+/// recipe (which is keyed by structure for replay).
+type ConversionRecord = {
+    /// The produced (derived) data-object file name in the store.
+    ProducedFile: string
+    /// The original uploaded file name.
+    SourceFile: string
+    Fingerprint: string
+    TargetTypeId: DataTypeId
+    /// Schema-field name → source column it was drawn from.
+    Mapping: Map<string, string>
+    /// Human-readable per-column remediation steps applied (e.g.
+    /// "Amount: stripped $, removed thousands separators").
+    RemediationSteps: string list
+    ConvertedBy: string
+    ConvertedAt: DateTime
 }

@@ -335,6 +335,28 @@ let applyTransform (t: CellTransform) (s: string) : string =
 let applyTransforms (ts: CellTransform list) (s: string) : string =
     ts |> List.fold (fun acc t -> applyTransform t acc) s
 
+let private describeTransform =
+    function
+    | Trim -> "trimmed whitespace"
+    | StripThousandsSeparators -> "removed thousands separators"
+    | StripCurrency sym -> sprintf "stripped %s" sym
+    | StripPercent -> "stripped %"
+    | DecimalCommaToDot -> "normalised decimal comma"
+    | StripLeadingApostrophe -> "removed leading apostrophe"
+    | BlankNullMarkers _ -> "blanked null-markers"
+    | NormaliseBoolean -> "normalised booleans"
+    | ParseDateToIso DayFirst -> "parsed dates day-first → ISO"
+    | ParseDateToIso MonthFirst -> "parsed dates month-first → ISO"
+    | ParseDateToIso YearFirst -> "parsed dates → ISO"
+
+/// One human-readable line summarising a column's remediation (for the
+/// per-object `ConversionRecord`). `None` when the column had no
+/// transforms.
+let describeColumnRemediation (column: string) (ts: CellTransform list) : string option =
+    match ts with
+    | [] -> None
+    | xs -> Some(sprintf "%s: %s" column (xs |> List.map describeTransform |> String.concat ", "))
+
 [<Literal>]
 let private DqThreshold = 0.8
 

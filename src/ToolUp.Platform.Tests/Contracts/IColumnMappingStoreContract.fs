@@ -74,21 +74,21 @@ type private InMemoryObjectStore() =
                 }
         }
 
-let private mk fingerprint typeId pairs : ColumnMapping = {
+let private mk fingerprint typeId pairs : Conversion = {
     Fingerprint = fingerprint
     TargetTypeId = typeId
-    FieldToColumn = Map.ofList pairs
-    Transforms = Map.empty
+    Mapping = Map.ofList pairs
+    Remediation = Map.empty
     SourceHeaders = pairs |> List.map snd
     CreatedBy = "tester"
     CreatedAt = DateTime.UtcNow
 }
 
-let private newStore () : IColumnMappingStore =
+let private newStore () : IConversionStore =
     ColumnMappingStore.create (InMemoryObjectStore())
 
 let tests =
-    testList "IColumnMappingStore contract" [
+    testList "IConversionStore contract" [
         testCaseAsync "Save then GetByFingerprint round-trips the mapping"
         <| async {
             let s = newStore ()
@@ -126,7 +126,7 @@ let tests =
             Expect.equal (List.length got) 2 "T1 overwritten in place, T2 added"
 
             let t1 = got |> List.find (fun m -> m.TargetTypeId = "T1")
-            Expect.equal (t1.FieldToColumn |> Map.find "A") "b" "T1 is the latest save"
+            Expect.equal (t1.Mapping |> Map.find "A") "b" "T1 is the latest save"
         }
 
         testCaseAsync "List returns every mapping saved in the scope"
@@ -160,5 +160,35 @@ let tests =
             Expect.isEmpty crossGet "no cross-scope read"
             let! bList = s.List "scope-b"
             Expect.isEmpty bList "no cross-scope list"
+        }
+
+        testCaseAsync "provenance records save + list, separate from recipes"
+        <| async {
+            let s = newStore ()
+
+            let record: ConversionRecord = {
+                ProducedFile = "data__SalesData.csv"
+                SourceFile = "data.csv"
+                Fingerprint = "fp"
+                TargetTypeId = "SalesData"
+                Mapping = Map.ofList [ "Revenue", "Amount" ]
+                RemediationSteps = [ "Amount: stripped $, removed thousands separators" ]
+                ConvertedBy = "tester"
+                ConvertedAt = DateTime.UtcNow
+            }
+
+            // a recipe in the same scope must not pollute the record list
+            do! s.Save("scope-a", mk "fp" "SalesData" [ "Revenue", "Amount" ]) |> Async.Ignore
+            let! saved = s.SaveRecord("scope-a", record)
+            Expect.isOk saved "record saved"
+
+            let! records = s.ListRecords "scope-a"
+            Expect.equal records [ record ] "one record, recipes excluded"
+
+            let! recipes = s.List "scope-a"
+            Expect.equal (List.length recipes) 1 "recipe still listed separately"
+
+            let! crossScope = s.ListRecords "scope-b"
+            Expect.isEmpty crossScope "records scope-isolated"
         }
     ]

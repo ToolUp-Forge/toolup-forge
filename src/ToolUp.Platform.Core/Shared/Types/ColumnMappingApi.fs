@@ -20,24 +20,36 @@ open ToolUp.Platform
 open DataManagementTypes
 open ColumnMappingTypes
 
-type IColumnMappingApi = {
-    /// All saved mappings for a source-CSV fingerprint (a column-structure
-    /// can carry several — one per target type — so a single file can
-    /// spawn multiple data objects on re-upload). Empty when none exist.
+type IConversionApi = {
+    /// All saved conversion recipes for a source-CSV fingerprint (a
+    /// column-structure can carry several — one per target type — so a
+    /// single file can spawn multiple data objects on re-upload). Empty
+    /// when none exist.
     [<AllowAnonymous>]
-    GetMappings: string -> Async<ColumnMapping list>
-    /// Every mapping saved in this scope (admin / review surface).
+    GetConversions: string -> Async<Conversion list>
+    /// Every conversion recipe saved in this scope (admin / review surface).
     [<AllowAnonymous>]
-    ListMappings: unit -> Async<ColumnMapping list>
-    /// Persist a mapping, keyed by its `(Fingerprint, TargetTypeId)` —
-    /// additive: saving a mapping to a new target type for an existing
-    /// fingerprint does not overwrite the others.
+    ListConversions: unit -> Async<Conversion list>
+    /// Persist a conversion recipe, keyed by its `(Fingerprint,
+    /// TargetTypeId)` — additive: saving a recipe to a new target type for
+    /// an existing fingerprint does not overwrite the others.
     [<AllowAnonymous>]
-    [<Audit "Custom:ColumnMappingSaved">]
-    SaveMapping: ColumnMapping -> Async<Result<unit, string>>
-    /// Forget one saved mapping, identified by its fingerprint + target
-    /// type.
+    [<Audit "Custom:ConversionSaved">]
+    SaveConversion: Conversion -> Async<Result<unit, string>>
+    /// Forget one saved conversion recipe, identified by fingerprint +
+    /// target type.
     [<AllowAnonymous>]
-    [<Audit "Custom:ColumnMappingDeleted">]
-    DeleteMapping: string * DataTypeId -> Async<Result<unit, string>>
+    [<Audit "Custom:ConversionDeleted">]
+    DeleteConversion: string * DataTypeId -> Async<Result<unit, string>>
+    /// Record the provenance of one ingested data object — the conversion
+    /// + remediation that produced it. Marks the conversion as part of the
+    /// ingestion stage; emits a `DataConverted` audit event when an audit
+    /// log is composed.
+    [<AllowAnonymous>]
+    [<Audit "Custom:DataConverted">]
+    RecordConversion: ConversionRecord -> Async<Result<unit, string>>
+    /// Every conversion-provenance record in this scope (joined to the
+    /// file list to mark which objects were converted, with their steps).
+    [<AllowAnonymous>]
+    ListConversionRecords: unit -> Async<ConversionRecord list>
 }

@@ -30,9 +30,22 @@ proposed as typed, per-column `CellTransform`s carried inside the mapping:
 - **null-markers** (`N/A`, `-`, `NULL`) blanked; whitespace trimmed.
 
 Safe fixes are pre-selected (opt-out per column); the chosen transforms persist in
-the saved mapping, so a re-imported structure is cleaned automatically. Remediation
+the saved recipe, so a re-imported structure is cleaned automatically. Remediation
 also sharpens the matcher — a column that only *looked* like text because of `$`
 and commas now reads as a number, so `TypeMismatch` fires correctly.
+
+**Conversion as a first-class artefact + per-object provenance.** The saved,
+reusable artefact is a **`Conversion`** (renamed from `ColumnMapping`) whose two
+named parts are the field `Mapping` and the data-quality `Remediation` — it's more
+than a simple mapping. The contract is `IConversionApi`
+(`GetConversions`/`ListConversions`/`SaveConversion`/`DeleteConversion`), backed by
+`IConversionStore`. Separately, each *produced* data object gets a
+**`ConversionRecord`** (provenance): source file, target type, field mapping, and
+the human-readable remediation steps applied. It's persisted alongside the object
+(`RecordConversion`) and emitted as a `Custom:DataConverted` audit event when an
+`IAuditLog` is composed — so the conversion is marked on the ingestion and the file
+list shows a "Converted" badge with the steps. Native (auto-detected) imports get
+no record — they aren't conversions.
 
 **Frictionless re-import.** On upload the manager first checks whether the file's
 structure is already known: if one or more **saved mappings** exist for its

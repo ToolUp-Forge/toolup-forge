@@ -22,15 +22,17 @@ let private resolveScopeId (ctx: HttpContext) : string =
     | true, (:? StorageScope as s) -> s.Container
     | _ -> $"user-{FileManagement.getUserId ctx}"
 
-let columnMappingApi (ctx: HttpContext) : IColumnMappingApi =
+let columnMappingApi (ctx: HttpContext) : IConversionApi =
     let store =
-        ctx.RequestServices.GetService(typeof<IColumnMappingStore>) :?> IColumnMappingStore
+        ctx.RequestServices.GetService(typeof<IConversionStore>) :?> IConversionStore
 
     let scopeId = resolveScopeId ctx
 
     {
-        GetMappings = fun fingerprint -> store.GetByFingerprint(scopeId, fingerprint)
-        ListMappings = fun () -> store.List scopeId
-        SaveMapping = fun mapping -> store.Save(scopeId, mapping)
-        DeleteMapping = fun (fingerprint, targetTypeId) -> store.Delete(scopeId, fingerprint, targetTypeId)
+        GetConversions = fun fingerprint -> store.GetByFingerprint(scopeId, fingerprint)
+        ListConversions = fun () -> store.List scopeId
+        SaveConversion = fun conversion -> store.Save(scopeId, conversion)
+        DeleteConversion = fun (fingerprint, targetTypeId) -> store.Delete(scopeId, fingerprint, targetTypeId)
+        RecordConversion = fun record -> store.SaveRecord(scopeId, record)
+        ListConversionRecords = fun () -> store.ListRecords scopeId
     }

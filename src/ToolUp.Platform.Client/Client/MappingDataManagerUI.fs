@@ -8,12 +8,14 @@
 ///   upload CSV → pick the target format → auto-mapped fields (review
 ///   the flagged guesses, override as needed) → confirm.
 ///
-/// On confirm the CSV is rewritten into the target schema's canonical
-/// header shape (`ColumnMapping.rewriteCsv`) and uploaded with an
-/// explicit `dataType`, so the existing `DataType.Process` runs
-/// unchanged. The confirmed mapping is persisted via `IColumnMappingApi`
-/// keyed by the source CSV's column-structure fingerprint, so the same
-/// shape auto-applies on the next upload.
+/// A data-quality scan + remediation step runs first; on confirm the CSV
+/// is rewritten (remediation applied) into the target schema's canonical
+/// header shape and uploaded with an explicit `dataType`, so the existing
+/// `DataType.Process` runs unchanged. The confirmed **conversion recipe**
+/// (mapping + remediation) is persisted via `IConversionApi`, keyed by the
+/// source CSV's column-structure, so the same shape auto-applies next time;
+/// each produced object also gets a `ConversionRecord` (provenance) marking
+/// the conversion on the ingestion.
 ///
 /// Selected by `ClientConfig.DataManager = MappingDataManager`; pair with
 /// `ServerConfig.ColumnMapping = EnabledColumnMapping` to back the store.
@@ -75,6 +77,9 @@ type HeldFile = {
 type Model = {
     UploadedFiles: UploadedFileInfo list
     ProcessedData: ProcessedFileEntry list
+    /// Per-object conversion provenance, joined to the file list to mark
+    /// which objects were produced by a conversion (+ their steps).
+    Records: ConversionRecord list
     /// The file currently being worked (present from upload until the
     /// user dismisses the import result).
     Held: HeldFile option
@@ -90,9 +95,10 @@ type Model = {
 type Msg =
     | LoadFiles
     | FilesLoaded of FileListSnapshot
+    | RecordsLoaded of ConversionRecord list
     | SelectFile of Browser.Types.File
     | FileChosen of fileName: string * contents: string
-    | MappingsFetched of ColumnMapping list
+    | MappingsFetched of Conversion list
     | NativeUploaded of FileUploadResult
     | ImportFinished of Result<DataTypeId list, string>
     | MakeAdditionalMapping
@@ -116,8 +122,8 @@ type Msg =
 let private fileApi: FileManagementApi =
     Api.makeProxy<FileManagementApi> (customOptions = UserSession.withRequestHeaders)
 
-let private mappingApi: IColumnMappingApi =
-    Api.makeProxy<IColumnMappingApi> (customOptions = UserSession.withRequestHeaders)
+let private conversionApi: IConversionApi =
+    Api.makeProxy<IConversionApi> (customOptions = UserSession.withRequestHeaders)
 
 // ─── Mapping helpers (pure) ───────────────────────────────────────
 
@@ -247,33 +253,60 @@ let private importedFileName (baseName: string) (typeId: DataTypeId) : string =
     else
         baseName + "__" + typeId
 
-/// Rewrite + upload each mapping as its own data object. Returns the
-/// target-type ids imported, or the first error. Mappings whose target
-/// type is no longer registered are skipped.
-let private importMappings
+/// Human-readable per-column remediation steps for a conversion's
+/// provenance record.
+let private remediationSteps (conversion: Conversion) : string list =
+    conversion.Remediation
+    |> Map.toList
+    |> List.choose (fun (col, ts) -> ColumnMapping.describeColumnRemediation col ts)
+
+/// Rewrite + upload each conversion as its own data object, then record
+/// its provenance (`RecordConversion`). Returns the target-type ids
+/// imported, or the first error. Conversions whose target type is no
+/// longer registered are skipped.
+let private importConversions
     (displays: DataTypeDisplay list)
     (held: HeldFile)
-    (mappings: ColumnMapping list)
+    (conversions: Conversion list)
     : Async<Result<DataTypeId list, string>> =
     async {
         let mutable err = None
         let mutable imported = []
 
-        for m in mappings do
+        for c in conversions do
             if err.IsNone then
-                match schemaFor displays m.TargetTypeId with
+                match schemaFor displays c.TargetTypeId with
                 | Some schema ->
                     let rewritten =
-                        ColumnMapping.rewriteCsv schema m.FieldToColumn m.Transforms held.RawContents
+                        ColumnMapping.rewriteCsv schema c.Mapping c.Remediation held.RawContents
+
+                    let producedFile = importedFileName held.FileName c.TargetTypeId
 
                     let upload = {
-                        filename = importedFileName held.FileName m.TargetTypeId
+                        filename = producedFile
                         contents = rewritten
-                        dataType = m.TargetTypeId
+                        dataType = c.TargetTypeId
                     }
 
                     match! fileApi.UploadFile { File = upload } with
-                    | Ok _ -> imported <- imported @ [ m.TargetTypeId ]
+                    | Ok _ ->
+                        imported <- imported @ [ c.TargetTypeId ]
+
+                        // Mark the conversion on the produced object —
+                        // provenance + audit. Best-effort: a failed record
+                        // doesn't fail the import.
+                        let record: ConversionRecord = {
+                            ProducedFile = producedFile
+                            SourceFile = held.FileName
+                            Fingerprint = c.Fingerprint
+                            TargetTypeId = c.TargetTypeId
+                            Mapping = c.Mapping
+                            RemediationSteps = remediationSteps c
+                            ConvertedBy = ""
+                            ConvertedAt = System.DateTime.UtcNow
+                        }
+
+                        do! conversionApi.RecordConversion record |> Async.Ignore
                     | Error e -> err <- Some e
                 | None -> ()
 
@@ -282,17 +315,17 @@ let private importMappings
         | None -> return Ok imported
     }
 
-/// Persist a freshly-confirmed mapping, then import it as its own data
-/// object.
+/// Persist a freshly-confirmed conversion recipe, then import it as its
+/// own data object (recording provenance).
 let private saveAndImport
     (displays: DataTypeDisplay list)
     (held: HeldFile)
-    (mapping: ColumnMapping)
+    (conversion: Conversion)
     : Async<Result<DataTypeId list, string>> =
     async {
-        match! mappingApi.SaveMapping mapping with
+        match! conversionApi.SaveConversion conversion with
         | Error e -> return Error e
-        | Ok() -> return! importMappings displays held [ mapping ]
+        | Ok() -> return! importConversions displays held [ conversion ]
     }
 
 // ─── Update ───────────────────────────────────────────────────────
@@ -301,6 +334,7 @@ let init () =
     {
         UploadedFiles = []
         ProcessedData = []
+        Records = []
         Held = None
         Wizard = None
         LastImport = None
@@ -311,7 +345,12 @@ let init () =
 
 let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     match msg with
-    | LoadFiles -> model, Cmd.OfRemoting.call fileApi.ListFiles () FilesLoaded (fun ex -> ApiError ex.Message)
+    | LoadFiles ->
+        model,
+        Cmd.batch [
+            Cmd.OfRemoting.call fileApi.ListFiles () FilesLoaded (fun ex -> ApiError ex.Message)
+            Cmd.OfRemoting.call conversionApi.ListConversionRecords () RecordsLoaded (fun _ -> RecordsLoaded [])
+        ]
 
     | FilesLoaded snapshot ->
         {
@@ -320,6 +359,8 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 ProcessedData = snapshot.Processed
         },
         Cmd.none
+
+    | RecordsLoaded records -> { model with Records = records }, Cmd.none
 
     | SelectFile file ->
         let read () = async {
@@ -355,7 +396,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 Busy = true
                 Error = None
         },
-        Cmd.OfRemoting.call mappingApi.GetMappings fingerprint MappingsFetched (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call conversionApi.GetConversions fingerprint MappingsFetched (fun ex -> ApiError ex.Message)
 
     | MappingsFetched saved ->
         match model.Held with
@@ -370,7 +411,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
 
             if not importable.IsEmpty then
                 model,
-                Cmd.OfAsync.either (importMappings displays held) importable ImportFinished (fun ex ->
+                Cmd.OfAsync.either (importConversions displays held) importable ImportFinished (fun ex ->
                     ApiError ex.Message)
             else
                 let upload = {
@@ -576,23 +617,25 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
 
             match schemaFor displays typeId with
             | Some _ ->
-                let record = {
+                let conversion: Conversion = {
                     Fingerprint = w.Fingerprint
                     TargetTypeId = typeId
-                    FieldToColumn = effectiveMapping w
-                    Transforms = wizardTransforms w
+                    Mapping = effectiveMapping w
+                    Remediation = wizardTransforms w
                     SourceHeaders = w.Headers
                     CreatedBy = ""
                     CreatedAt = System.DateTime.UtcNow
                 }
 
-                // Save the mapping (additive — keyed by fingerprint+type),
-                // then import this one as its own data object.
+                // Save the conversion recipe (additive — keyed by
+                // fingerprint+type), then import this one as its own data
+                // object (recording provenance).
                 {
                     model with
                         Wizard = Some { w with Saving = true }
                 },
-                Cmd.OfAsync.either (saveAndImport displays held) record ImportFinished (fun ex -> ApiError ex.Message)
+                Cmd.OfAsync.either (saveAndImport displays held) conversion ImportFinished (fun ex ->
+                    ApiError ex.Message)
             | None ->
                 {
                     model with
@@ -1142,7 +1185,33 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                                 prop.className "py-2 pr-3"
                                                 prop.text (labelFor displays f.DataType)
                                             ]
-                                            Html.td [ prop.className "py-2 pr-3"; prop.text f.FileName ]
+                                            Html.td [
+                                                prop.className "py-2 pr-3"
+                                                prop.children [
+                                                    Html.span [ prop.text f.FileName ]
+                                                    match
+                                                        model.Records
+                                                        |> List.tryFind (fun r -> r.ProducedFile = f.FileName)
+                                                    with
+                                                    | Some r ->
+                                                        let tip =
+                                                            let steps =
+                                                                if r.RemediationSteps.IsEmpty then
+                                                                    "no remediation"
+                                                                else
+                                                                    String.concat "; " r.RemediationSteps
+
+                                                            sprintf "Converted from %s — %s" r.SourceFile steps
+
+                                                        Html.span [
+                                                            prop.className
+                                                                "ml-2 inline-block px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs"
+                                                            prop.title tip
+                                                            prop.text "Converted"
+                                                        ]
+                                                    | None -> ()
+                                                ]
+                                            ]
                                             Html.td [ prop.className "py-2 pr-3"; prop.text (string f.RowCount) ]
                                             Html.td [ prop.className "py-2 pr-3"; prop.text (formatSize f.SizeBytes) ]
                                             Html.td [

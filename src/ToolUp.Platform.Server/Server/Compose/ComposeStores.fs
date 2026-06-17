@@ -150,7 +150,7 @@ let registerEntityStore
 let registerColumnMappingStore (services: IServiceCollection) (config: ServerConfig) : unit =
     match config.ColumnMapping with
     | EnabledColumnMapping ->
-        services.AddSingleton<IColumnMappingStore>(fun (sp: System.IServiceProvider) ->
+        services.AddSingleton<IConversionStore>(fun (sp: System.IServiceProvider) ->
             let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
             ColumnMappingStore.create dos)
         |> ignore
