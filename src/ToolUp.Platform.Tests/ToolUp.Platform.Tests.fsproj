@@ -43,6 +43,7 @@
         <Compile Include="Contracts\ISmokeTestContract.fs" />
         <Compile Include="Contracts\IConfigValidatorContract.fs" />
         <Compile Include="Contracts\IEntityStoreContract.fs" />
+        <Compile Include="Contracts\IColumnMappingStoreContract.fs" />
         <!-- Phase 26 — deploy-plane substrate contract packs. -->
         <Compile Include="Contracts\IBuildOrchestratorContract.fs" />
         <Compile Include="Contracts\ITenantFleetContract.fs" />
@@ -131,6 +132,7 @@
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />
         <Compile Include="InProcess\DataObjectStoreTests.fs" />
+        <Compile Include="InProcess\ColumnMatcherTests.fs" />
         <Compile Include="InProcess\DataCatalogTests.fs" />
         <Compile Include="InProcess\ResultStoreTests.fs" />
         <Compile Include="InProcess\ConversationStoreTests.fs" />

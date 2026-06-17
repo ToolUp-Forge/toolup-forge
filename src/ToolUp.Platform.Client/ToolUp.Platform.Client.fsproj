@@ -92,6 +92,8 @@
         <Compile Include="Client\UI\Toolkit\Layout.fs" />
         <Compile Include="Client\UI\Toolkit\Forms.fs" />
         <Compile Include="Client\UI\Toolkit\Data.fs" />
+        <Compile Include="Client\UI\Toolkit\StateViews.fs" />
+        <Compile Include="Client\UI\Toolkit\Kpi.fs" />
         <Compile Include="Client\NarrativeCommit.fs" />
         <Compile Include="Client\NarrativeRenderer.fs" />
         <Compile Include="Client\Markdown.fs" />
@@ -156,6 +158,7 @@
              owns accumulation, retry dispatch, and the banner mount. -->
         <Compile Include="Client\BootDegradation.fs" />
         <Compile Include="Client\FileManagerUI.fs" />
+        <Compile Include="Client\MappingDataManagerUI.fs" />
         <!-- 0.5.7 — Debounced typeahead component over IUserDirectoryApi.
              Consumed by TeamManagerUI's "Invite a member" form; degrades
              to a plain text input when no IUserDirectory companion is

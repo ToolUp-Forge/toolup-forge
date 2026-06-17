@@ -62,6 +62,15 @@ let buildRouteHandlers
         else
             [ makeApi FileManagement.fileManagementApi ]
 
+    // Column-mapping API — mounted only when the mapping-aware Data
+    // Manager substrate is enabled (`ColumnMapping = EnabledColumnMapping`).
+    // The store it resolves is registered by
+    // `ComposeStores.registerColumnMappingStore` under the same flag.
+    let columnMappingHandler =
+        match config.ColumnMapping with
+        | EnabledColumnMapping -> [ makeApi ColumnMappingApiHandler.columnMappingApi ]
+        | NoColumnMapping -> []
+
     // Configuration API is always auto-injected; the handler itself
     // short-circuits on empty `ModuleConfigs` (ListModules returns
     // []) and on Anonymous mode (no config scope), so registering it
@@ -567,6 +576,7 @@ let buildRouteHandlers
             @ webhookHandler
             @ moduleQueryBusHandler
             @ fileManagementHandler
+            @ columnMappingHandler
             @ jobApiHandler
             @ maintenanceApiHandler
             @ dataIngestionApiHandler

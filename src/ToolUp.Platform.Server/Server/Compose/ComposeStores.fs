@@ -139,6 +139,23 @@ let registerEntityStore
         |> ignore
     | NoEntityStore -> ()
 
+/// Register the `IColumnMappingStore` substrate when
+/// `ServerConfig.ColumnMapping = EnabledColumnMapping`. The default
+/// store (`ColumnMappingStore.create`) wraps the resolved
+/// `IDataObjectStore`, persisting reusable CSV→schema maps keyed by the
+/// source CSV's column-structure fingerprint. `NoColumnMapping` (the
+/// default) skips registration — the mapping-aware Data Manager and its
+/// `IColumnMappingApi` route are not mounted, so the store is never
+/// resolved and costs zero at runtime.
+let registerColumnMappingStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.ColumnMapping with
+    | EnabledColumnMapping ->
+        services.AddSingleton<IColumnMappingStore>(fun (sp: System.IServiceProvider) ->
+            let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
+            ColumnMappingStore.create dos)
+        |> ignore
+    | NoColumnMapping -> ()
+
 /// Phase 8 / 8a / 53 — conditional store registrations. `IResultStore`
 /// is registered only when `ServerConfig.ResultStore` opts in;
 /// `ILineageStore` only when `ServerConfig.Lineage = EnabledLineageStore`;

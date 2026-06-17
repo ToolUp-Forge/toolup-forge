@@ -134,6 +134,8 @@
         <Compile Include="Server\Infra\PersistentEventStore.fs" />
         <Compile Include="Server\IDataObjectStore.fs" />
         <Compile Include="Server\DataObjectStore.fs" />
+        <Compile Include="Server\IColumnMappingStore.fs" />
+        <Compile Include="Server\ColumnMappingStore.fs" />
         <Compile Include="Server\IEntityStore.fs" />
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
@@ -422,6 +424,7 @@
         <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
         <Compile Include="Server\Files\FileNameSanitiser.fs" />
         <Compile Include="Server\Files\FileManagement.fs" />
+        <Compile Include="Server\ColumnMappingApiHandler.fs" />
         <Compile Include="Server\INarrativeStore.fs" />
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
         <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />

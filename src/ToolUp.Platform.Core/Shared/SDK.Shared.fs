@@ -304,6 +304,22 @@ type DataIngestionMode =
     /// `JobScheduler = InProcessJobScheduler` too.
     | EnabledDataIngestion
 
+/// Selects whether `compose` registers the column-mapping substrate
+/// that backs the mapping-aware Data Manager (`DataManager =
+/// MappingDataManager` on the client). Default: `NoColumnMapping` — no
+/// `IColumnMappingStore`, no `IColumnMappingApi` route. Pairs with the
+/// client `DataManagerMode`, mirroring the `DataIngestion` (server) /
+/// `DataManager` (client) split: the client mode renders the wizard,
+/// this server flag persists the reusable maps and mounts the API.
+type ColumnMappingMode =
+    /// No column-mapping infrastructure. Default — the built-in Data
+    /// Manager (`DefaultDataManager`) needs no per-CSV mapping store.
+    | NoColumnMapping
+    /// `IColumnMappingStore` (default `IDataObjectStore`-backed) in DI
+    /// and `IColumnMappingApi` auto-mounted. Enable alongside
+    /// `ClientConfig.DataManager = MappingDataManager`.
+    | EnabledColumnMapping
+
 /// Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate.
 /// Selects whether `compose` registers `IOAuthTokenRefresher` +
 /// `OAuthRefreshJobHandler` (`_platform.oauth.refresh`). Default:
@@ -1769,6 +1785,13 @@ type ServerConfig = {
     /// job — the API returns an error explaining the missing
     /// dependency when the scheduler is disabled.
     DataIngestion: DataIngestionMode
+    /// Column-mapping selection. Default: `NoColumnMapping` — no
+    /// `IColumnMappingStore`, no `IColumnMappingApi` route. Enable with
+    /// `EnabledColumnMapping` to back the mapping-aware Data Manager
+    /// (`ClientConfig.DataManager = MappingDataManager`): a reusable
+    /// CSV-column→schema-field map is persisted per storage scope,
+    /// keyed by the source CSV's column-structure fingerprint.
+    ColumnMapping: ColumnMappingMode
     /// Phase 10h — generic OAuth 2.0 refresh-token lifecycle
     /// substrate. Default: `NoOAuthRefresher` — no
     /// `IOAuthTokenRefresher` registered; OAuth-using connectors
@@ -2652,6 +2675,7 @@ module ServerConfig =
         WebhookUrlAllowedHosts = []
         PublicBaseUrl = None
         DataIngestion = NoDataIngestion
+        ColumnMapping = NoColumnMapping
         OAuthRefresher = NoOAuthRefresher
         EntityStore = NoEntityStore
         UsageMetering = NoUsageMetering
@@ -3337,6 +3361,13 @@ module ServerConfig =
                         NoDataIngestion
                         EnabledDataIngestion
                         defaults.DataIngestion
+                ColumnMapping =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_COLUMN_MAPPING"
+                        NoColumnMapping
+                        EnabledColumnMapping
+                        defaults.ColumnMapping
                 OAuthRefresher =
                     parseEnabledDisabled
                         logger

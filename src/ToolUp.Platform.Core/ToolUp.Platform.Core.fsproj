@@ -71,6 +71,9 @@
         <Compile Include="Shared\Types\PrerenderTypes.fs" />
         <Compile Include="Shared\Types\DataManagementTypes.fs" />
         <Compile Include="Shared\Types\ProcessedDataTypes.fs" />
+        <Compile Include="Shared\Types\ColumnMappingTypes.fs" />
+        <Compile Include="Shared\ColumnMapping.fs" />
+        <Compile Include="Shared\Types\ColumnMappingApi.fs" />
         <Compile Include="Shared\Visualisation.fs" />
         <Compile Include="Shared\TimeManagement.fs" />
         <Compile Include="Shared\Interfaces\IFileProcessor.fs" />

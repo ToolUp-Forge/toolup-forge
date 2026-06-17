@@ -360,6 +360,16 @@ type DataManagerMode =
     | DefaultDataManager
     /// Use the SDK's built-in file manager with custom name and icon.
     | ConfiguredDataManager of DataManagerConfig
+    /// Use the SDK's mapping-aware Data Manager: upload an arbitrary CSV,
+    /// pick a registered (schema-bearing) target type, and map the
+    /// schema's fields to the CSV's columns with smart auto-suggestion +
+    /// per-field override. The confirmed map is persisted per scope,
+    /// keyed by the CSV's column-structure, and reused on later uploads.
+    /// Requires `ServerConfig.ColumnMapping = EnabledColumnMapping` to
+    /// back the mapping store.
+    | MappingDataManager
+    /// The mapping-aware Data Manager with custom name / icon / group.
+    | ConfiguredMappingDataManager of DataManagerConfig
     /// Use a custom data manager module provided by the developer.
     | ExternalDataManager of ErasedModule
 
@@ -958,9 +968,31 @@ type InputsPaneWidth =
     | Auto
 
 /// Branding configuration for the client application
+/// Selects the indicator the shell renders in the content area during
+/// its `Prefetching` lifecycle phase (`Client.InitPhase`) — and any
+/// future SDK-owned loading surface. `SkeletonLoader` (default) is the
+/// gray-pulse content skeleton, byte-for-byte unchanged from 0.5.16, so
+/// existing deployments are unaffected until they opt in (GP 11).
+/// `BrandMarkLoader` centres the animated ToolUp mark
+/// (`ToolUp.Platform.Icons.dataLoading`, colour-cycling); `SpinnerLoader`
+/// centres the neutral, `currentColor`-tinted spinner
+/// (`ToolUp.Platform.Icons.spinner`) for deployments that prefer not to
+/// show the brand mark. `CustomLoader` supplies a bespoke element.
+type LoadingIndicatorMode =
+    | SkeletonLoader
+    | BrandMarkLoader
+    | SpinnerLoader
+    | CustomLoader of (unit -> ReactElement)
+
 type ClientConfig = {
     AppName: string
     AppLogo: string
+    /// Selects the shell's loading indicator (rendered in the content
+    /// area during the `Prefetching` lifecycle phase). Default
+    /// `SkeletonLoader` — the gray-pulse content skeleton, unchanged from
+    /// 0.5.16. Switch to `BrandMarkLoader` for the animated ToolUp mark
+    /// or `SpinnerLoader` for a neutral theme-tinted spinner.
+    LoadingIndicator: LoadingIndicatorMode
     /// Name of the module to show on startup. Falls back to the first module if None or not found.
     ActiveModule: string option
     /// Controls the data manager. Default: SDK built-in file manager.
@@ -1266,6 +1298,7 @@ module ClientConfig =
     let create (handlers: ClientHandlerRegistry) : ClientConfig = {
         AppName = "My App"
         AppLogo = "favicon.png"
+        LoadingIndicator = SkeletonLoader
         ActiveModule = None
         DataManager = DefaultDataManager
         TeamManager = DefaultTeamManager

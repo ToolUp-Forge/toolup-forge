@@ -11,6 +11,8 @@ let allTests =
         InMemoryEventStoreTests.tests
         PersistentEventStoreTests.tests
         DataObjectStoreTests.tests
+        ColumnMatcherTests.tests
+        IColumnMappingStoreContract.tests
         DataCatalogTests.tests
         ResultStoreTests.tests
         ConversationStoreTests.tests

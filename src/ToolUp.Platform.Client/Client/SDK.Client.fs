@@ -1609,7 +1609,7 @@ module Client =
         // stale data while new prefetches refresh.
         let content: PageContent =
             match model.InitPhase with
-            | Prefetching -> Custom(Toolup.UIToolkit.Layout.loadingSkeleton ())
+            | Prefetching -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
             | Ready
             | Reprefetching ->
                 match tryFind modules model.ActiveModuleId with
@@ -2068,7 +2068,9 @@ module Client =
             | DefaultDataManager -> [ FileManagerUI.create allDataTypeDisplays None ]
             | ConfiguredDataManager dmConfig -> [ FileManagerUI.create allDataTypeDisplays (Some dmConfig) ]
             | MappingDataManager -> [ MappingDataManagerUI.create allDataTypeDisplays None ]
-            | ConfiguredMappingDataManager dmConfig -> [ MappingDataManagerUI.create allDataTypeDisplays (Some dmConfig) ]
+            | ConfiguredMappingDataManager dmConfig -> [
+                MappingDataManagerUI.create allDataTypeDisplays (Some dmConfig)
+              ]
             | ExternalDataManager custom -> [ custom ]
 
         // Trailing SDK modules — Admin-grouped built-ins. Appended after

@@ -529,6 +529,11 @@ let compose
     // registration is prepended automatically.
     registerEntityStore services config entityRegistrations
 
+    // Column-mapping substrate (mapping-aware Data Manager). Conditional
+    // on `ServerConfig.ColumnMapping`; `NoColumnMapping` (default) skips
+    // registration entirely.
+    registerColumnMappingStore services config
+
     // Phase 26 — Layer 3 deploy-plane substrate. Conditional on
     // `ServerConfig.DeployPlane`; `NoDeployPlane` (default) skips
     // registration entirely. `SingleNodeDeployPlane` wires
