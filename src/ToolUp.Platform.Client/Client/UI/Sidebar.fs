@@ -297,15 +297,18 @@ let private pinIcon (isPinned: bool) =
     ]
 
 /// Render a single module button. Shared between the pinned section
-/// and declared groups — the pinned section suppresses the pin
-/// affordance since clicking it there always means "unpin", which
-/// would make the button disappear out from under the click.
+/// and declared groups. The pin affordance renders in every section,
+/// the pinned one included: a pinned module renders *only* in the
+/// pinned section (declared groups filter the pinned set out), so the
+/// affordance there is the sole unpin control. In that section the
+/// button shows the filled glyph + "Unpin" title and is always visible;
+/// clicking it fires before the unpin re-render, so the row dropping
+/// back to its home group is the expected result, not a lost click.
 let private renderModuleButton
     (isExpanded: bool)
     (selectedModule: string)
     (onModuleSelected: string -> unit)
     (onPinToggled: string -> unit)
-    (showPinAffordance: bool)
     (m: SidebarModule)
     =
     Html.div [
@@ -359,7 +362,7 @@ let private renderModuleButton
             // Absolute-positioned so it overlays the button without
             // shifting layout; pointer-events-auto inside a pointer-
             // events-none parent would also work but this is simpler.
-            if isExpanded && showPinAffordance then
+            if isExpanded then
                 Html.button [
                     prop.className [
                         // `bg-transparent` — same consumer-global-button
@@ -518,13 +521,7 @@ let Sidebar
             section.Modules
             |> List.map (fun m ->
                 let button =
-                    renderModuleButton
-                        isExpanded
-                        selectedModule
-                        onModuleSelected
-                        onPinToggled
-                        (not section.IsPinnedSection)
-                        m
+                    renderModuleButton isExpanded selectedModule onModuleSelected onPinToggled m
 
                 React.KeyedFragment(m.Id, [ SortableItem m.Id button ]))
 
