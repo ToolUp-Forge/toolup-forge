@@ -177,37 +177,51 @@ module ProcessedEntryStore =
                 |> Async.Ignore
         }
 
-    /// Load the persisted entry for `fileName`. Returns `None` when the
-    /// sidecar doesn't exist (legacy upload) or the persisted JSON
-    /// can't be deserialised (e.g. the module's `Info` record shape
-    /// changed). Callers fall back to reprocessing in either case.
-    let tryLoad
+    /// Deserialise persisted sidecar bytes into a `ProcessedFileEntry`.
+    /// `None` (with a Warn) when the JSON can't be read back — e.g. the
+    /// module's `Info` record shape changed since persistence. Callers
+    /// fall back to reprocessing.
+    let private tryDeserialise
+        (logger: ILogger option)
+        (container: string)
+        (fileName: string)
+        (bytes: byte[])
+        : ProcessedFileEntry option =
+        try
+            let json = Text.Encoding.UTF8.GetString bytes
+            Some(JsonSerializer.Deserialize<ProcessedFileEntry>(json, jsonOptions))
+        with ex ->
+            logger
+            |> Option.iter (fun l ->
+                l.Warn(
+                    sprintf
+                        "Persisted ProcessedFileEntry for '%s' in '%s' could not be deserialised; will reprocess. %s"
+                        fileName
+                        container
+                        ex.Message
+                ))
+
+            None
+
+    /// Load the persisted entry from an already-listed sidecar
+    /// `DataObject`. `loadPersistedFiles` holds the latest metadata for
+    /// every sidecar from its `ListObjects` sweep, so a direct
+    /// `GetVersion` reads the current content in one metadata + one
+    /// content fetch — skipping the per-object version-list round-trip
+    /// that `Get` performs. Deserialise / Warn-and-reprocess fallback via
+    /// `tryDeserialise`.
+    let tryLoadFromMeta
         (store: IDataObjectStore)
         (container: string)
         (logger: ILogger option)
-        (fileName: string)
+        (meta: DataObject)
         : Async<ProcessedFileEntry option> =
         async {
-            let! result = store.Get(container, objectIdFor fileName)
-
-            match result with
+            match! store.GetVersion(container, meta.ObjectId, meta.Version) with
             | Ok(_, bytes) ->
-                try
-                    let json = Text.Encoding.UTF8.GetString bytes
-                    let entry = JsonSerializer.Deserialize<ProcessedFileEntry>(json, jsonOptions)
-                    return Some entry
-                with ex ->
-                    logger
-                    |> Option.iter (fun l ->
-                        l.Warn(
-                            sprintf
-                                "Persisted ProcessedFileEntry for '%s' in '%s' could not be deserialised; will reprocess. %s"
-                                fileName
-                                container
-                                ex.Message
-                        ))
+                let fileName = tryParseFileName meta.ObjectId |> Option.defaultValue meta.ObjectId
 
-                    return None
+                return tryDeserialise logger container fileName bytes
             | Error _ -> return None
         }
 
@@ -366,13 +380,16 @@ type SessionFileStore
     // Bounded fan-out for the per-file blob reads in `loadPersistedFiles`.
     // Each file body + each entry sidecar is an independent
     // `IDataObjectStore` round-trip; on a remote store (S3 / Azure) the
-    // default `DataObjectStore.Get` is itself several blob ops (version
-    // list + metadata + content download), so the prior sequential loops
-    // paid a multi-round-trip latency per file in series. A bound collapses
-    // N serial waits into a few waves without letting a large scope exhaust
-    // the backing store's connection pool. Matches the `16` degree
-    // `DataObjectStore` already uses for its own metadata fan-out
-    // (`metadataReadParallelism`) — the same connection-pool budget, and
+    // reads below are fanned out (the prior loops ran them in series).
+    // Both passes read by KNOWN version — `GetVersion` against the
+    // `DataObject` metadata the single `ListObjects` sweep already
+    // returned — rather than `Get`, which re-runs a per-object version-
+    // list blob op; so each object costs one metadata + one content
+    // fetch, not version-list + metadata + content. The bound collapses
+    // N serial waits into a few waves without letting a large scope
+    // exhaust the backing store's connection pool; it matches the `16`
+    // degree `DataObjectStore` already uses for its own metadata fan-out
+    // (`metadataReadParallelism`) — same connection-pool budget, and
     // `DataObjectStore` holds no shared mutable state so concurrent reads
     // are safe.
     let startupHydrationConcurrency = 16
@@ -399,12 +416,12 @@ type SessionFileStore
                 |> List.partition (fun obj -> ProcessedEntryStore.tryParseFileName obj.ObjectId |> Option.isNone)
 
             // Pass 1: load raw file bytes into the in-memory `files`
-            // dictionary, fanned out across files. Per-file `Get` failure
+            // dictionary, fanned out across files. Per-file read failure
             // is silently skipped (matches prior behaviour — a corrupt
             // blob shouldn't crash startup for the rest of the scope).
             fileObjects
             |> List.map (fun obj -> async {
-                match! store.Get(container, obj.ObjectId) with
+                match! store.GetVersion(container, obj.ObjectId, obj.Version) with
                 | Ok(_, bytes) ->
                     let contents = Text.Encoding.UTF8.GetString bytes
                     let! detectedType = detectFileType dataTypes contents
@@ -427,6 +444,18 @@ type SessionFileStore
 
             let registeredTypes = dataTypes |> List.map _.Id |> Set.ofList
             let logger = runtime.PostSaveHooksLogger
+
+            // Index the sidecar metadata from the same `ListObjects`
+            // sweep so pass 2 reads each entry by known version
+            // (`tryLoadFromMeta`) rather than issuing a fresh `Get`.
+            // Case-insensitive to match the `files` dictionary comparer.
+            let sidecarByFile =
+                System.Collections.Generic.Dictionary<string, DataObject>(StringComparer.OrdinalIgnoreCase)
+
+            for entryObj in entryObjects do
+                match ProcessedEntryStore.tryParseFileName entryObj.ObjectId with
+                | Some fileName -> sidecarByFile[fileName] <- entryObj
+                | None -> ()
 
             // Pass 2: hydrate processed entries, fanned out across files.
             // Prefer a persisted sidecar over re-running `DataType.Process`:
@@ -452,7 +481,12 @@ type SessionFileStore
             //     fast path.
             files.Values
             |> Seq.map (fun file -> async {
-                match! ProcessedEntryStore.tryLoad store container logger file.FileName with
+                let! persisted =
+                    match sidecarByFile.TryGetValue file.FileName with
+                    | true, meta -> ProcessedEntryStore.tryLoadFromMeta store container logger meta
+                    | false, _ -> async { return None }
+
+                match persisted with
                 | Some entry when Set.contains entry.DataType registeredTypes ->
                     processedEntries.TryAdd(file.FileName, entry) |> ignore
                 | Some entry ->
