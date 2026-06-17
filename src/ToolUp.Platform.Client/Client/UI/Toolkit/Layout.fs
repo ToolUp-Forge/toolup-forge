@@ -159,6 +159,30 @@ module Layout =
             ]
         ]
 
+    /// Centre a loading icon in the content area. `svgSizeClasses` carries
+    /// the Tailwind arbitrary-variant sizing (`[&>svg]:w-16` etc.) the icon
+    /// SVG inherits; the brand mark is self-coloured (gradient) while the
+    /// spinner picks up `text-*` via `currentColor`.
+    let private centredLoader (svgSizeClasses: string) (icon: ReactElement) : ReactElement =
+        Html.div [
+            prop.role "status"
+            prop.ariaLabel "Loading"
+            prop.className "flex items-center justify-center min-h-full p-6"
+            prop.children [ Html.div [ prop.className svgSizeClasses; prop.children [ icon ] ] ]
+        ]
+
+    /// Resolve a `LoadingIndicatorMode` to the content-area element the
+    /// shell renders during its `Prefetching` phase. `SkeletonLoader`
+    /// keeps the 0.5.16 gray-pulse skeleton; `BrandMarkLoader` /
+    /// `SpinnerLoader` centre the matching icon; `CustomLoader` defers to
+    /// the consumer-supplied thunk.
+    let loadingIndicator (mode: LoadingIndicatorMode) : ReactElement =
+        match mode with
+        | SkeletonLoader -> loadingSkeleton ()
+        | BrandMarkLoader -> centredLoader "[&>svg]:w-16 [&>svg]:h-16" ToolUp.Platform.Icons.dataLoading
+        | SpinnerLoader -> centredLoader "[&>svg]:w-10 [&>svg]:h-10 text-brand" ToolUp.Platform.Icons.spinner
+        | CustomLoader render -> render ()
+
     /// Application shell - combines sidebar, header, main content, and optional side panel.
     /// `sections` is the structured sidebar layout (pinned / groups / other).
     /// `selectedModule` is the id of the currently active module.

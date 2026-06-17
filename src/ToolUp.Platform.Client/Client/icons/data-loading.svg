@@ -1,0 +1,17 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <linearGradient id="toolupDataLoading" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D49BFF">
+        <animate attributeName="stop-color" dur="3.6s" repeatCount="indefinite" values="#D49BFF;#F58FD6;#9B8CFF;#8FC2FF;#D49BFF" keyTimes="0;0.25;0.5;0.75;1"/>
+      </stop>
+      <stop offset="0.55" stop-color="#A24EE0">
+        <animate attributeName="stop-color" dur="3.6s" repeatCount="indefinite" values="#A24EE0;#D456C0;#7E6BEA;#5E8CF0;#A24EE0" keyTimes="0;0.25;0.5;0.75;1"/>
+      </stop>
+      <stop offset="1" stop-color="#8338EC">
+        <animate attributeName="stop-color" dur="3.6s" repeatCount="indefinite" values="#8338EC;#C13DA8;#6450E2;#3F6FE0;#8338EC" keyTimes="0;0.25;0.5;0.75;1"/>
+      </stop>
+    </linearGradient>
+  </defs>
+  <path d="M22 70 L50 46 Q60 38 70 46 L98 70" fill="none" stroke="url(#toolupDataLoading)" stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="60" cy="99" r="12.5" fill="url(#toolupDataLoading)"/>
+</svg>

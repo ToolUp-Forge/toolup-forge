@@ -64,3 +64,22 @@ let interconnected: ReactElement = Icon.ofImport interconnectedSvg
 let private lockSvg: obj = importDefault "./icons/lock.svg?react"
 
 let lock: ReactElement = Icon.ofImport lockSvg
+
+// ─── Loading indicators ───────────────────────────────────────────
+//
+// Two animated "data loading" marks. `dataLoading` is the ToolUp brand
+// mark (chevron + dot) whose gradient cycles pink → magenta → violet →
+// blue via SMIL `<animate>` on the gradient stops — self-coloured, so
+// it ignores the surrounding `currentColor` cascade. `spinner` is a
+// conventional rotating arc that uses `currentColor` for deployments
+// that prefer a neutral, theme-tinted indicator over the brand mark.
+// Both animate via SMIL (not a CSS `<style>` block) so they survive the
+// vite-plugin-svgr → SVGO pipeline intact.
+
+let private dataLoadingSvg: obj = importDefault "./icons/data-loading.svg?react"
+
+let dataLoading: ReactElement = Icon.ofImport dataLoadingSvg
+
+let private spinnerSvg: obj = importDefault "./icons/spinner.svg?react"
+
+let spinner: ReactElement = Icon.ofImport spinnerSvg
