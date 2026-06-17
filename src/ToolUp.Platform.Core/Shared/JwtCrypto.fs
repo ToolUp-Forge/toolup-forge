@@ -8,15 +8,20 @@ module ToolUp.Platform.JwtCrypto
 // InterPlatform peer auth provider, and ShareTokenStore). GP 1 permits
 // BCL crypto in Core.
 //
-// **Server-only.** The whole module is gated `#if !FABLE_COMPILER`
+// **Server-only.** The implementation is gated `#if !FABLE_COMPILER`
 // because it uses `System.Security.Cryptography`, which Fable cannot
-// transpile. The guard matters for the ProjectReference Fable path
+// transpile. The `module` declaration above sits OUTSIDE the guard, so
+// this file ships under the `fable/`-packed nupkg surface and a Fable
+// consumer transpiles it to a valid empty module (the guard strips the
+// crypto body). This is required: the Core .fsproj lists this file as a
+// <Compile> item and is itself packed into fable/, so excluding the .fs
+// would leave the packed Fable fsproj pointing at a missing source
+// (FS0222). The same guard also covers the ProjectReference Fable path
 // (a Fable client referencing Platform.Client → Core compiles Core's
-// whole `<Compile>` graph), while the Core .fsproj additionally
-// excludes this file from the `fable/`-packed nupkg surface. Every
-// consumer (StaticJwt / peer auth / ShareTokenStore) is server-tier, so
-// no Fable-compiled code references these members. The Fable-safe
-// base64url codec lives separately in `Base64Url`.
+// whole `<Compile>` graph). Every consumer (StaticJwt / peer auth /
+// ShareTokenStore) is server-tier, so no Fable-compiled code references
+// these members. The Fable-safe base64url codec lives separately in
+// `Base64Url`.
 //
 // The OIDC providers' *asymmetric* JWS verification (RS256/ES256/PS256,
 // `JwsAlgorithm.tryParse` / `verifyJws`) is a different trust model and

@@ -11,12 +11,21 @@
          in the same nupkg. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
         <!-- Shared\JwtCrypto.fs is BCL-crypto (System.Security.Cryptography)
-             and is NOT Fable-safe — exclude it from the Fable-packed
-             source so a Fable consumer never tries to transpile it. Its
-             only consumers are server-tier (StaticJwt / peer auth /
-             ShareTokenStore), which get it via the Core DLL. The
-             Fable-safe Base64Url codec ships normally. -->
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**;Shared\JwtCrypto.fs" PackagePath="fable\" />
+             and is NOT Fable-safe, but it MUST still ship under fable/:
+             the same .fsproj is packed into the nupkg, and it lists
+             JwtCrypto.fs as a <Compile> item. Excluding the .fs file while
+             keeping the Compile reference leaves the packed Fable fsproj
+             pointing at a missing source — Fable then reads it as empty and
+             fails with "must begin with a namespace or module declaration"
+             (FS0222). The file guards itself instead: its `module
+             ToolUp.Platform.JwtCrypto` declaration sits OUTSIDE the
+             `#if !FABLE_COMPILER`, while the whole BCL-crypto body sits
+             inside it, so a Fable consumer transpiles it to a valid empty
+             module. Its real consumers are server-tier (StaticJwt / peer
+             auth / ShareTokenStore), which get the implementation via the
+             Core DLL. This is the same ship-with-guard pattern every other
+             server-only Shared file in Core uses. -->
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <!-- Phase 11.C.2 closure: pack the parent companion's README. All
          four ToolUp.Platform tiers (Core / Server / Client / Build) ship
@@ -47,10 +56,10 @@
         <Compile Include="Shared\AuthAttributes.fs" />
         <!-- Wave 19 TIDY-UP — shared JWT/crypto primitives, consolidating
              the base64url codec + HS256/HMAC helpers hand-copied across
-             every token site. Base64Url is Fable-safe (ships under
-             fable/); JwtCrypto is BCL-crypto and excluded from the Fable
-             pack glob above. Placed early — every later token/auth file
-             references them. -->
+             every token site. Base64Url is Fable-safe; JwtCrypto is
+             BCL-crypto but self-guards under Fable (`#if !FABLE_COMPILER`
+             body, module declaration outside) so both ship under fable/.
+             Placed early — every later token/auth file references them. -->
         <Compile Include="Shared\Base64Url.fs" />
         <Compile Include="Shared\JwtCrypto.fs" />
         <Compile Include="Shared\Interfaces\ILogger.fs" />
