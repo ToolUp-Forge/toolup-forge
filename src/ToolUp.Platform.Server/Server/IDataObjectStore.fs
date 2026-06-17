@@ -65,6 +65,25 @@ type IDataObjectStore =
     abstract GetVersion:
         scopeId: string * objectId: string * version: int -> Async<Result<DataObject * byte[], DataObjectError>>
 
+    /// Fetch content bytes directly by `contentHash` within a scope.
+    /// Content blobs are content-addressable and deduplicated per
+    /// scope, so a caller that already holds a `DataObject` (e.g. every
+    /// entry from `ListObjects`) can read its bytes with a single blob
+    /// download — skipping the version-chain listing and the metadata
+    /// round-trip that `Get` / `GetVersion` pay to resolve the latest
+    /// version and its `ContentHash` first. Used by
+    /// `SessionFileStore.loadPersistedFiles` to hydrate a scope's files
+    /// (and entry sidecars) from the metadata its `ListObjects` sweep
+    /// already returned. `StorageFailure` when no content blob with that
+    /// hash exists in the scope — list-then-read callers treat a
+    /// vanished blob as "skip", the same as a failed `Get`.
+    ///
+    /// Portability audit (GP 12): identity by value (string `scopeId` +
+    /// `contentHash`), async at the boundary, failure as
+    /// `DataObjectError` data, stateless between calls, single-scope (no
+    /// cross-shard ordering claim), no precision surface.
+    abstract GetContent: scopeId: string * contentHash: string -> Async<Result<byte[], DataObjectError>>
+
     /// Return all versions' metadata for an object, sorted ascending
     /// by `Version`. Empty list when the object does not exist —
     /// callers that need to distinguish "no versions" from "exists
@@ -171,3 +190,28 @@ type IDataObjectStore =
     abstract Erase:
         scopeId: string * subjectUserId: string * policy: ErasurePolicy * dryRun: bool ->
             Async<Result<ErasureSummary, ErasureError>>
+
+// ─── IObjectCounter (Phase 171) ──────────────────────────────────
+//
+// Optional capability a data-object store MAY implement to count
+// objects of a given `dataType` within a scope **without
+// materialising them** (a SQL `COUNT`, a blob-index size, a
+// maintained counter). `IDataCatalog.CountObjects` uses it when the
+// underlying store implements it, and otherwise falls back to
+// `ListObjects |> List.length` — correct-by-default, efficient-where-
+// possible (GP 12).
+//
+// Kept as a *separate optional* interface rather than a new abstract
+// member on `IDataObjectStore`: F# interfaces cannot carry a default
+// body, so widening `IDataObjectStore` would break every existing
+// implementation (including external ones) for a count that the
+// catalog can already derive. Stores that can count cheaply opt in;
+// everyone else is unaffected (GP 11).
+
+/// Optional fast-path counting capability. A store implements this
+/// when it can count objects of a type without enumerating them.
+type IObjectCounter =
+    /// Number of stored objects whose `DataType` matches `dataType`
+    /// in `scopeId`. Scope-isolated by the same structural derivation
+    /// as `IDataObjectStore.ListObjects` (GP 4).
+    abstract CountObjects: scopeId: string * dataType: string -> Async<int>

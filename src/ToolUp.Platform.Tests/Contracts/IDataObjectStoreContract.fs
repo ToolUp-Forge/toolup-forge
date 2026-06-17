@@ -86,6 +86,45 @@ let tests (name: string) (factory: unit -> IDataObjectStore * string * string) =
             Expect.equal (textOf content) "second" "Get returns latest content"
         }
 
+        testCaseAsync "GetContent returns bytes by content hash"
+        <| async {
+            let store, scope, _ = factory ()
+            let! _ = saveContent store scope "doc" "payload-bytes" Unversioned
+
+            let obj, _ = okOrFail "Get" (store.Get(scope, "doc") |> Async.RunSynchronously)
+
+            let content =
+                okOrFail "GetContent" (store.GetContent(scope, obj.ContentHash) |> Async.RunSynchronously)
+
+            Expect.equal (textOf content) "payload-bytes" "GetContent returns the object's bytes by hash"
+        }
+
+        testCaseAsync "GetContent of an unknown hash returns an error"
+        <| async {
+            let store, scope, _ = factory ()
+            let! result = store.GetContent(scope, "sha256-that-does-not-exist")
+
+            match result with
+            | Ok _ -> failtest "expected an error for a missing content hash"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "GetContent is scope-isolated"
+        <| async {
+            let store, scopeA, scopeB = factory ()
+            let! _ = saveContent store scopeA "a-only" "secret-a" Unversioned
+
+            let objA, _ = okOrFail "Get" (store.Get(scopeA, "a-only") |> Async.RunSynchronously)
+
+            // Content blobs are per-scope: the same hash resolved against
+            // another scope must not surface scopeA's bytes (GP 4).
+            let! crossScope = store.GetContent(scopeB, objA.ContentHash)
+
+            match crossScope with
+            | Ok _ -> failtest "scopeB must not read scopeA's content by hash (GP4)"
+            | Error _ -> ()
+        }
+
         testCaseAsync "Get / GetVersion of missing object returns NotFound"
         <| async {
             let store, scope, _ = factory ()

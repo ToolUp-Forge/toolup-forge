@@ -396,6 +396,16 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                     | Error msg -> return Error(StorageFailure msg)
         }
 
+        member _.GetContent(scopeId, contentHash) = async {
+            // Content-addressable read: the bytes live at a per-scope,
+            // hash-keyed blob, so a caller holding the `ContentHash`
+            // (every `ListObjects` entry does) needs neither the version
+            // list nor the metadata blob that `Get` / `GetVersion` fetch.
+            let container = containerFor scopeId
+            let! result = blobStorage.Download(container, contentBlobName contentHash)
+            return liftStorage result
+        }
+
         member _.ListVersions(scopeId, objectId) = async {
             let container = containerFor scopeId
             let! versions = listVersionBlobs blobStorage container objectId

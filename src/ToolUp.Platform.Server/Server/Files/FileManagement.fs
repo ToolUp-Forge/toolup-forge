@@ -204,12 +204,12 @@ module ProcessedEntryStore =
             None
 
     /// Load the persisted entry from an already-listed sidecar
-    /// `DataObject`. `loadPersistedFiles` holds the latest metadata for
-    /// every sidecar from its `ListObjects` sweep, so a direct
-    /// `GetVersion` reads the current content in one metadata + one
-    /// content fetch — skipping the per-object version-list round-trip
-    /// that `Get` performs. Deserialise / Warn-and-reprocess fallback via
-    /// `tryDeserialise`.
+    /// `DataObject`. `loadPersistedFiles` holds the latest metadata —
+    /// including `ContentHash` — for every sidecar from its `ListObjects`
+    /// sweep, so a direct `GetContent` reads the bytes in a single blob
+    /// download, skipping both the per-object version-list and the
+    /// metadata round-trip that `Get` / `GetVersion` perform. Deserialise
+    /// / Warn-and-reprocess fallback via `tryDeserialise`.
     let tryLoadFromMeta
         (store: IDataObjectStore)
         (container: string)
@@ -217,8 +217,8 @@ module ProcessedEntryStore =
         (meta: DataObject)
         : Async<ProcessedFileEntry option> =
         async {
-            match! store.GetVersion(container, meta.ObjectId, meta.Version) with
-            | Ok(_, bytes) ->
+            match! store.GetContent(container, meta.ContentHash) with
+            | Ok bytes ->
                 let fileName = tryParseFileName meta.ObjectId |> Option.defaultValue meta.ObjectId
 
                 return tryDeserialise logger container fileName bytes
@@ -381,17 +381,18 @@ type SessionFileStore
     // Each file body + each entry sidecar is an independent
     // `IDataObjectStore` round-trip; on a remote store (S3 / Azure) the
     // reads below are fanned out (the prior loops ran them in series).
-    // Both passes read by KNOWN version — `GetVersion` against the
-    // `DataObject` metadata the single `ListObjects` sweep already
-    // returned — rather than `Get`, which re-runs a per-object version-
-    // list blob op; so each object costs one metadata + one content
-    // fetch, not version-list + metadata + content. The bound collapses
-    // N serial waits into a few waves without letting a large scope
-    // exhaust the backing store's connection pool; it matches the `16`
-    // degree `DataObjectStore` already uses for its own metadata fan-out
-    // (`metadataReadParallelism`) — same connection-pool budget, and
-    // `DataObjectStore` holds no shared mutable state so concurrent reads
-    // are safe.
+    // Both passes read content directly by hash — `GetContent` against
+    // the `ContentHash` the single `ListObjects` sweep already returned —
+    // rather than `Get` / `GetVersion`, which each re-resolve the latest
+    // version (a per-object version-list blob op) and re-download the
+    // metadata blob before the content. So every object costs exactly one
+    // content fetch here, not version-list + metadata + content. The
+    // bound collapses N serial waits into a few waves without letting a
+    // large scope exhaust the backing store's connection pool; it matches
+    // the `16` degree `DataObjectStore` already uses for its own metadata
+    // fan-out (`metadataReadParallelism`) — same connection-pool budget,
+    // and `DataObjectStore` holds no shared mutable state so concurrent
+    // reads are safe.
     let startupHydrationConcurrency = 16
 
     // Runs synchronously at `SessionFileStore` construction. Stores are
@@ -421,8 +422,8 @@ type SessionFileStore
             // blob shouldn't crash startup for the rest of the scope).
             fileObjects
             |> List.map (fun obj -> async {
-                match! store.GetVersion(container, obj.ObjectId, obj.Version) with
-                | Ok(_, bytes) ->
+                match! store.GetContent(container, obj.ContentHash) with
+                | Ok bytes ->
                     let contents = Text.Encoding.UTF8.GetString bytes
                     let! detectedType = detectFileType dataTypes contents
                     let rowCount = max 0 (contents.Split('\n').Length - 1)
@@ -538,7 +539,22 @@ type SessionFileStore
         | Error reason -> return Error(sprintf "Invalid filename '%s': %s" upload.filename reason)
         | Ok() ->
 
-            let! detectedType = detectFileType dataTypes upload.contents
+            // Honour an explicit, registered target `dataType` (the
+            // mapping-aware Data Manager rewrites a CSV to a schema's
+            // canonical headers and names the target type directly), and
+            // fall back to header-based detection otherwise. The default
+            // path is unchanged: the built-in `FileManagerUI` uploads
+            // with `dataType = "UnrecognisedData"`, which never matches a
+            // registered type and so always detects.
+            let! detectedType =
+                if
+                    upload.dataType <> "UnrecognisedData"
+                    && dataTypes |> List.exists (fun dt -> dt.Id = upload.dataType)
+                then
+                    async { return upload.dataType }
+                else
+                    detectFileType dataTypes upload.contents
+
             let rowCount = max 0 (upload.contents.Split('\n').Length - 1)
             let sizeBytes = int64 upload.contents.Length
 

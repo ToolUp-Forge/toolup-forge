@@ -44,6 +44,10 @@ type private InMemoryObjectStore() =
         member this.GetVersion(scopeId, objectId, _version) =
             (this :> IDataObjectStore).Get(scopeId, objectId)
 
+        // Stub — the catalog tests don't read content by hash (this
+        // double stores by objectId with an empty ContentHash).
+        member _.GetContent(_, _) = async { return Error NotFound }
+
         member _.ListVersions(_, _) = async { return [] }
 
         member _.ListObjects(scopeId) = async {
