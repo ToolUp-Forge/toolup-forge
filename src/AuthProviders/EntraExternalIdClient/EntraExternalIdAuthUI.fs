@@ -86,7 +86,7 @@ let private SignInScreen
 
     pageFrame [
         Html.h1 [
-            prop.className "text-2xl font-semibold text-brand font-['Umami']"
+            prop.className "text-2xl font-semibold text-brand font-[Umami]"
             prop.text "Welcome"
         ]
         Html.p [
@@ -104,7 +104,7 @@ let private SignInScreen
 let private ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
     pageFrame [
         Html.h1 [
-            prop.className "text-xl font-semibold text-brand font-['Umami']"
+            prop.className "text-xl font-semibold text-brand font-[Umami]"
             prop.text "Sign-in failed"
         ]
         Html.p [

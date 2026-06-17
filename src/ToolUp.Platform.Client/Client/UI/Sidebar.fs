@@ -573,7 +573,19 @@ let Sidebar
                     ]
                     if isExpanded then
                         Html.span [
-                            prop.className "ml-3 text-white text-xl font-bold font-['Umami']"
+                            // Unquoted arbitrary font family. The quoted form
+                            // `font-['Umami']` compiles through Fable to a JS
+                            // string literal whose inner single quotes get
+                            // backslash-escaped (`font-[\'Umami\']`); Tailwind
+                            // v4's `@source` scanner reads the raw .js bytes
+                            // and the escaped quotes defeat its arbitrary-value
+                            // extractor, so the rule is never generated and the
+                            // logo silently falls back to the body font. The
+                            // unquoted form has no quotes to escape, so it
+                            // scans reliably regardless of how Fable emits the
+                            // string. Single-word family only — multi-word
+                            // would need underscores (`font-[Some_Font]`).
+                            prop.className "ml-3 text-white text-xl font-bold font-[Umami]"
                             prop.text appName
                         ]
                 ]

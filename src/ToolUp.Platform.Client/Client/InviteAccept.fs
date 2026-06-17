@@ -190,7 +190,7 @@ let InviteAccept () : ReactElement =
     | AcceptState.NotSignedIn ->
         pageFrame [
             Html.h1 [
-                prop.className "text-2xl font-semibold text-brand font-['Umami']"
+                prop.className "text-2xl font-semibold text-brand font-[Umami]"
                 prop.text "Sign in to accept"
             ]
             Html.p [
@@ -214,7 +214,7 @@ let InviteAccept () : ReactElement =
     | AcceptState.Accepted result ->
         pageFrame [
             Html.h1 [
-                prop.className "text-2xl font-semibold text-brand font-['Umami']"
+                prop.className "text-2xl font-semibold text-brand font-[Umami]"
                 prop.text $"Welcome to {result.TeamName}"
             ]
             Html.p [
@@ -230,7 +230,7 @@ let InviteAccept () : ReactElement =
     | AcceptState.Failed message ->
         pageFrame [
             Html.h1 [
-                prop.className "text-xl font-semibold text-brand font-['Umami']"
+                prop.className "text-xl font-semibold text-brand font-[Umami]"
                 prop.text "Could not accept invitation"
             ]
             Html.p [

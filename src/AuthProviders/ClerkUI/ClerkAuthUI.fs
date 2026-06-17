@@ -56,7 +56,7 @@ let wrapApp (publishableKey: string) (shell: ReactElement) =
                                 elements = {|
                                     rootBox =
                                         "w-screen bg-bg-light font-sans min-h-screen flex items-center justify-center"
-                                    headerTitle = "text-xl font-semibold mb-2 text-brand font-['Umami'] text-center"
+                                    headerTitle = "text-xl font-semibold mb-2 text-brand font-[Umami] text-center"
                                     headerSubtitle = $"text-base {Tokens.Text.secondary} font-sans text-center"
                                     formButtonPrimary = $"{Tokens.Button.primary} w-full"
                                     formFieldInput =
