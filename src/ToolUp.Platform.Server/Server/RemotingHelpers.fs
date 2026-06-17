@@ -40,7 +40,22 @@ let private tryClassifyUserError ex (routeInfo: ToolUp.Remoting.Server.RouteInfo
 /// Create a Fable.Remoting API handler with standard error handling.
 /// Errors are logged via the DI `ILogger` and propagated to the client
 /// so the UI can surface actionable messages.
-let makeApi api =
+///
+/// The explicit `<'impl>` type parameter is load-bearing. With an
+/// un-annotated parameter (`let makeApi api = ...`) F# failed to generalise
+/// `api`, monomorphising `makeApi` to the first call site's type. Every
+/// `makeApi`-composed handler then shared ONE compile-time `'impl` — and thus
+/// ONE `AuthClassifier.classify typeof<'impl>` map (whichever API pinned it,
+/// e.g. `PlatformInfoApi`). Routing still worked (it reflects the runtime
+/// record value), but the Phase 69d auth pre-flight evaluated EVERY endpoint
+/// against that single API's classifications, so every other method missed
+/// and fail-closed as `Unclassified` once an auth resolver was composed
+/// (`/health`, `/api/FileManagementApi/ListFiles`, … all 401'd). Annotating
+/// the context-factory shape (`HttpContext -> 'impl`) forces per-call-site
+/// generalisation — matching the explicitly-generic `permissionGuardedApiCore<'T>`
+/// module path, which never had the bug. Every caller is already a
+/// `HttpContext -> 'ApiRecord` factory.
+let makeApi<'impl> (api: HttpContext -> 'impl) =
     let errorHandler ex routeInfo =
         match tryClassifyUserError ex routeInfo with
         | Some result -> result

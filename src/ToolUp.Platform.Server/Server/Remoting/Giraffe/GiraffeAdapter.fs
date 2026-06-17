@@ -680,44 +680,37 @@ module GiraffeUtil =
                     // (JWKS fetch, OIDC introspection, tenant lookup). Same
                     // promotion applied below to the idempotency lookup + the
                     // rate-limit evaluation.
-                    let! resolvedAuthContextForRequest = task {
-                        match options.AuthContextResolver with
-                        | None -> return None
-                        | Some resolver ->
-                            // Phase 132 — deny-on-miss. With a resolver armed,
-                            // a classification-map miss defaults to
-                            // `Unclassified` (→ `Deny` in `AuthClassifier.evaluate`)
-                            // rather than `Public`. The round-trip startup
-                            // assertion above guarantees this can only fire for a
-                            // genuinely-unknown method path (no classified field
-                            // maps to it), for which fail-closed is correct.
-                            let methodCls =
-                                classifications
-                                |> Map.tryFind methodNameForAuth
-                                |> Option.defaultValue Unclassified
+                    // A classification-map MISS means this method does not belong
+                    // to THIS handler's API. In a multi-API `choose` the dispatch
+                    // handlers are tried in order and a non-matching request must
+                    // fall through to the next handler (the proxy's
+                    // `EndpointNotFound -> next` path does this). The Phase 69d
+                    // auth pre-flight must therefore NOT fail-closed on a miss —
+                    // doing so lets whichever API is composed first deny every
+                    // other API's methods (and even raw non-remoting routes like
+                    // `/health`), 401-ing the whole app once an auth resolver is
+                    // armed. Fail-closed is still guaranteed for genuinely-
+                    // unclassified methods: the startup classifier refuses to
+                    // start unless every method that DOES belong to this API is
+                    // classified, so a `Some` lookup is exhaustive for this API.
+                    let methodClassification = classifications |> Map.tryFind methodNameForAuth
 
-                            match methodCls with
-                            | Public -> return None
-                            | _ ->
-                                let! authCtx = resolver ctx |> Async.StartAsTask
-                                return Some authCtx
+                    let! resolvedAuthContextForRequest = task {
+                        match options.AuthContextResolver, methodClassification with
+                        | None, _
+                        | Some _, None
+                        | Some _, Some Public -> return None
+                        | Some resolver, Some _ ->
+                            let! authCtx = resolver ctx |> Async.StartAsTask
+                            return Some authCtx
                     }
 
                     let denyReason =
-                        match options.AuthContextResolver with
-                        | None -> None
-                        | Some _ ->
-                            // Phase 132 — deny-on-miss (see the resolver-trigger
-                            // site above). A miss defaults to `Unclassified`,
-                            // which `AuthClassifier.evaluate` denies fail-closed.
-                            let methodCls =
-                                classifications
-                                |> Map.tryFind methodNameForAuth
-                                |> Option.defaultValue Unclassified
-
-                            let authDecision = AuthClassifier.evaluate methodCls resolvedAuthContextForRequest
-
-                            match authDecision with
+                        match options.AuthContextResolver, methodClassification with
+                        | None, _
+                        | Some _, None -> None
+                        | Some _, Some methodCls ->
+                            match AuthClassifier.evaluate methodCls resolvedAuthContextForRequest with
                             | Deny r -> Some r
                             | Allow -> None
 

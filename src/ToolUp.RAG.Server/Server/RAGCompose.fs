@@ -640,8 +640,20 @@ let composeWithRAG
             ragLogger.Info(sprintf "[RAGCompose] Dev endpoints registered: %s" (String.concat ", " active))
 
     let aiHandlers = [
+        // `aiAssistantApi` returns a 2-tuple of API records (legacy
+        // SubmitMessage + the Phase 69c.tail typed streaming companion
+        // StreamChatV2). Both halves must be mounted as separate APIs —
+        // mirrors AICompose.fs. Passing the whole tuple to a single
+        // `makeApi` raises "Protocol definition must be encoded as a record
+        // type. The input type 'Tuple`2'" at startup (RAGCompose ⊕ AICompose
+        // drift — RAGServerApp.run is the canonical commercial-app shape, so
+        // this path must stay in lockstep with AICompose).
         makeApi (fun ctx ->
-            ToolUp.AI.AIAssistantHandler.aiAssistantApi resolvedAiConfig moduleAIContextMap (resolveManager ctx) ctx)
+            ToolUp.AI.AIAssistantHandler.aiAssistantApi resolvedAiConfig moduleAIContextMap (resolveManager ctx) ctx
+            |> fst)
+        makeApi (fun ctx ->
+            ToolUp.AI.AIAssistantHandler.aiAssistantApi resolvedAiConfig moduleAIContextMap (resolveManager ctx) ctx
+            |> snd)
         makeApi (ToolUp.AI.AISettingsHandler.aiSettingsApi aiProviderFactory providerProfile)
         // Phase 70 — Platform Admin AI keys API. Every method is
         // gated server-side on canModifyPlatformConfig; the client-
