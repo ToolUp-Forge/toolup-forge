@@ -363,10 +363,29 @@ type SessionFileStore
         | None -> ()
     }
 
-    // Runs synchronously at construction time (server startup, not a request
-    // path). `IDataObjectStore`, `detectFileType`, and `processFile` are all async
-    // now; `Async.RunSynchronously` is acceptable here because we are NOT on
-    // a request thread — this is one-time startup work.
+    // Bounded fan-out for the per-file blob reads in `loadPersistedFiles`.
+    // Each file body + each entry sidecar is an independent
+    // `IDataObjectStore` round-trip; on a remote store (S3 / Azure) the
+    // default `DataObjectStore.Get` is itself several blob ops (version
+    // list + metadata + content download), so the prior sequential loops
+    // paid a multi-round-trip latency per file in series. A bound collapses
+    // N serial waits into a few waves without letting a large scope exhaust
+    // the backing store's connection pool. Matches the `16` degree
+    // `DataObjectStore` already uses for its own metadata fan-out
+    // (`metadataReadParallelism`) — the same connection-pool budget, and
+    // `DataObjectStore` holds no shared mutable state so concurrent reads
+    // are safe.
+    let startupHydrationConcurrency = 16
+
+    // Runs synchronously at `SessionFileStore` construction. Stores are
+    // built lazily per scope via `getStore`'s `GetOrAdd`, so this is NOT
+    // server-startup work — it runs on the FIRST request that resolves a
+    // given scope (typically the first data-bearing request after a user
+    // logs in, and again for every scope after a process restart / deploy).
+    // `Async.RunSynchronously` is acceptable because construction is not
+    // itself on a hot path and the result is cached for the scope's
+    // lifetime; the fan-out + fast-path below keep that one-time cost from
+    // scaling O(files × parse) on the request thread.
     let loadPersistedFiles () =
         match dataObjectStore with
         | Some store ->
@@ -380,86 +399,81 @@ type SessionFileStore
                 |> List.partition (fun obj -> ProcessedEntryStore.tryParseFileName obj.ObjectId |> Option.isNone)
 
             // Pass 1: load raw file bytes into the in-memory `files`
-            // dictionary. Per-file `Get` failure is silently skipped
-            // (matches prior behaviour — a corrupt blob shouldn't
-            // crash startup for the rest of the scope).
-            for obj in fileObjects do
-                match store.Get(container, obj.ObjectId) |> Async.RunSynchronously with
+            // dictionary, fanned out across files. Per-file `Get` failure
+            // is silently skipped (matches prior behaviour — a corrupt
+            // blob shouldn't crash startup for the rest of the scope).
+            fileObjects
+            |> List.map (fun obj -> async {
+                match! store.Get(container, obj.ObjectId) with
                 | Ok(_, bytes) ->
                     let contents = Text.Encoding.UTF8.GetString bytes
-                    let detectedType = detectFileType dataTypes contents |> Async.RunSynchronously
+                    let! detectedType = detectFileType dataTypes contents
                     let rowCount = max 0 (contents.Split('\n').Length - 1)
 
-                    let file = {
-                        FileName = obj.ObjectId
-                        DataType = detectedType
-                        Contents = contents
-                        UploadedAt = obj.CreatedAt
-                        SizeBytes = int64 contents.Length
-                        RowCount = rowCount
-                    }
-
-                    files.TryAdd(obj.ObjectId, file) |> ignore
-                | Error _ -> ()
+                    return
+                        Some {
+                            FileName = obj.ObjectId
+                            DataType = detectedType
+                            Contents = contents
+                            UploadedAt = obj.CreatedAt
+                            SizeBytes = int64 contents.Length
+                            RowCount = rowCount
+                        }
+                | Error _ -> return None
+            })
+            |> fun xs -> Async.Parallel(xs, startupHydrationConcurrency)
+            |> Async.RunSynchronously
+            |> Array.iter (Option.iter (fun file -> files.TryAdd(file.FileName, file) |> ignore))
 
             let registeredTypes = dataTypes |> List.map _.Id |> Set.ofList
             let logger = runtime.PostSaveHooksLogger
 
-            // Pass 2: hydrate processed entries. Prefer a persisted
-            // sidecar over re-running `DataType.Process`:
-            //   - Sidecar present + DataType still registered → use
-            //     verbatim. Re-derive the heavy in-memory parsed
-            //     payload via `processFile` so post-save-hook callers
-            //     and module consumers see the parsed data; if that
-            //     re-derivation fails, the persisted entry remains
-            //     the user-visible state and `processedData` carries
-            //     the empty payload (same as today's behaviour for
-            //     files where `Process` failed at upload time).
+            // Pass 2: hydrate processed entries, fanned out across files.
+            // Prefer a persisted sidecar over re-running `DataType.Process`:
+            //   - Sidecar present + DataType still registered → register
+            //     the persisted summary verbatim. We deliberately do NOT
+            //     re-run `processFile` to rebuild the heavy in-memory
+            //     parsed payload here: nothing reads `processedData` on the
+            //     request path (`GetProcessedData` returns the summary
+            //     `processedEntries`, and api handlers re-parse raw contents
+            //     on demand via `getFileContents`), so the prior eager
+            //     re-derivation was O(files × parse) of startup work whose
+            //     result was never consumed — the dominant cost of the
+            //     first post-login request for a scope with many / large
+            //     files. `processedData` is now populated only for files
+            //     touched this session (`AddFile` / `ReprocessFile`), which
+            //     is where the payload is actually used (post-save hooks).
             //   - Sidecar present but DataType unregistered (module
-            //     unloaded since persistence) → keep the persisted
-            //     `Info` but overlay an `Error` so the user clicks
-            //     Reprocess. No `processedData` populated — the
-            //     producing module isn't loaded.
-            //   - Sidecar missing (legacy upload before this feature,
-            //     or unreadable) → fall back to detect + process,
-            //     then persist the rebuilt entry so the next restart
-            //     hits the fast path.
-            for kvp in files do
-                let file = kvp.Value
-
-                let persisted =
-                    ProcessedEntryStore.tryLoad store container logger file.FileName
-                    |> Async.RunSynchronously
-
-                match persisted with
+            //     unloaded since persistence) → keep the persisted `Info`
+            //     but overlay an `Error` so the user clicks Reprocess.
+            //   - Sidecar missing (legacy upload before this feature, or
+            //     unreadable) → process once to build the entry, then
+            //     persist the rebuilt entry so the next restart hits the
+            //     fast path.
+            files.Values
+            |> Seq.map (fun file -> async {
+                match! ProcessedEntryStore.tryLoad store container logger file.FileName with
                 | Some entry when Set.contains entry.DataType registeredTypes ->
                     processedEntries.TryAdd(file.FileName, entry) |> ignore
-
-                    let data, _ =
-                        processFile dataTypes file.FileName entry.DataType file.Contents
-                        |> Async.RunSynchronously
-
-                    processedData.TryAdd(file.FileName, data) |> ignore
                 | Some entry ->
                     let staleError =
                         sprintf "DataType '%s' is no longer registered. Click Reprocess to rebuild." entry.DataType
 
-                    let staleEntry = { entry with Error = Some staleError }
-                    processedEntries.TryAdd(file.FileName, staleEntry) |> ignore
+                    processedEntries.TryAdd(file.FileName, { entry with Error = Some staleError })
+                    |> ignore
                 | None ->
-                    let data, entry =
-                        processFile dataTypes file.FileName file.DataType file.Contents
-                        |> Async.RunSynchronously
-
-                    processedData.TryAdd(file.FileName, data) |> ignore
+                    let! _, entry = processFile dataTypes file.FileName file.DataType file.Contents
                     processedEntries.TryAdd(file.FileName, entry) |> ignore
 
                     // Promote the legacy file into the fast path on the
                     // next restart by writing the freshly-rebuilt entry.
                     // `"system"` createdBy mirrors the convention used
                     // elsewhere for non-user-attributed startup work.
-                    ProcessedEntryStore.save store container "system" entry
-                    |> Async.RunSynchronously
+                    do! ProcessedEntryStore.save store container "system" entry
+            })
+            |> fun xs -> Async.Parallel(xs, startupHydrationConcurrency)
+            |> Async.RunSynchronously
+            |> ignore
 
             // Orphan-sweep: an entry sidecar whose underlying file is
             // gone (e.g. earlier crash between file-delete and sidecar-
