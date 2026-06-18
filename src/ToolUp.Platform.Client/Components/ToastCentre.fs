@@ -42,6 +42,20 @@ let private levelLabel (level: SystemMessageLevel) =
     | SystemMessageLevel.Warning -> "Warning"
     | SystemMessageLevel.Error -> "Error"
 
+/// Defensive cap on a toast's body length. A `SystemMessage` is meant to
+/// be a short, human-readable line. An upstream bug or a verbose server
+/// error could carry an unbounded payload (a stack trace, or echoed file
+/// contents from a failed upload), and rendering megabytes of text into a
+/// fixed-size pop-up locks up the main thread. Clamp well below anything a
+/// genuine message needs.
+[<Literal>]
+let private maxToastChars = 500
+
+let private clampText (text: string) =
+    if isNull text then ""
+    elif text.Length <= maxToastChars then text
+    else text.Substring(0, maxToastChars) + "…"
+
 /// Fixed-position toast container. Subscribes to the generic
 /// `NotificationClient` on mount and renders `SystemMessage` envelopes
 /// as transient pop-ups. Other notification kinds pass through the
@@ -54,10 +68,15 @@ let private levelLabel (level: SystemMessageLevel) =
 /// shell model and keeps dismissal local.
 [<ReactComponent>]
 let ToastCentre () =
-    let toasts, setToasts = React.useState<ActiveToast list> []
+    // `useStateWithUpdater` (vs `useState`) so every mutation is a
+    // functional update over the *latest* committed list — never a stale
+    // closure capture. This is load-bearing: the subscription and the
+    // auto-dismiss interval both mutate the list from callbacks that
+    // outlive the render they were created in.
+    let toasts, setToasts = React.useStateWithUpdater<ActiveToast list> []
 
     let dismiss (id: Guid) =
-        setToasts (toasts |> List.filter (fun t -> t.Id <> id))
+        setToasts (fun current -> current |> List.filter (fun t -> t.Id <> id))
 
     // Subscribe on mount, unsubscribe on unmount. `useEffectOnce` runs
     // exactly once per component lifetime — the NotificationClient
@@ -71,30 +90,44 @@ let ToastCentre () =
                     let toast = {
                         Id = envelope.Id
                         Level = level
-                        Text = text
+                        Text = clampText text
                         DismissAt = dismissDeadline level DateTime.UtcNow
                     }
 
-                    setToasts (toast :: toasts)
+                    setToasts (fun current -> toast :: current)
                 | _ -> ())
 
         FsReact.createDisposable (fun () -> dispose ()))
 
-    // Auto-dismiss tick. Fires every second; removes any toasts whose
-    // deadline has passed. Cheap even with no toasts — the filter is
-    // O(n) on a list that's almost always empty or single-digit.
-    React.useEffect (
-        (fun () ->
-            let intervalId =
-                JS.setInterval
-                    (fun () ->
-                        let now = DateTime.UtcNow
-                        setToasts (toasts |> List.filter (fun t -> t.DismissAt > now)))
-                    1000
+    // Auto-dismiss tick. Set up ONCE (`useEffectOnce`) — a single interval
+    // for the component's lifetime. The functional updater reads the latest
+    // list, so the interval never needs `toasts` in its closure and never
+    // has to be torn down and recreated on every change.
+    //
+    // Critically, the updater returns the SAME reference when nothing
+    // expired, so React bails out of the re-render. The previous version
+    // had `[| box toasts |]` deps + `setToasts (List.filter ...)`, where
+    // `List.filter` allocates a fresh list every tick even when nothing
+    // changed — that fresh reference forced a re-render every second, which
+    // re-ran the effect, which recreated the interval, forever. A
+    // non-expiring `Error` toast (DismissAt = MaxValue) meant the list was
+    // never empty, so the loop never stopped and could freeze the tab.
+    React.useEffectOnce (fun () ->
+        let intervalId =
+            JS.setInterval
+                (fun () ->
+                    let now = DateTime.UtcNow
 
-            FsReact.createDisposable (fun () -> JS.clearInterval intervalId)),
-        [| box toasts |]
-    )
+                    setToasts (fun current ->
+                        let kept = current |> List.filter (fun t -> t.DismissAt > now)
+
+                        if List.length kept = List.length current then
+                            current
+                        else
+                            kept))
+                1000
+
+        FsReact.createDisposable (fun () -> JS.clearInterval intervalId))
 
     if toasts.IsEmpty then
         Html.none
