@@ -20,5 +20,9 @@
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="AWSSDK.KeyManagementService" />
+    <!-- Direct reference so the CPM-pinned AWSSDK.Core 4.0.7.1 governs the
+         restore; KeyManagementService's transitive floor (4.0.0.29) carries a
+         low-severity advisory (NU1901). -->
+    <PackageReference Include="AWSSDK.Core" />
   </ItemGroup>
 </Project>
