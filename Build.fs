@@ -61,7 +61,7 @@ let main args =
             |> CreateProcess.withWorkingDirectory dir
             |> CreateProcess.ensureExitCode
 
-        let outputDir = Path.getFullName "../local-nuget-feed"
+        let outputDir = Path.getFullName "../../local-nuget-feed"
         Directory.ensure outputDir
 
         let templatePackProjects = !!"templates/**/ToolUp.Templates.*.fsproj"
