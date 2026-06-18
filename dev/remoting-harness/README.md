@@ -1,8 +1,8 @@
 # ToolUp.Remoting harness — private dev tool
 
-A small, runnable test harness inside `toolup-forge/dev/` that exercises **ToolUp.Remoting** (the workspace `toolup-remoting/` sibling, published as `ToolUp.Remoting.* v0.1.0` to `local-nuget-feed/` post Phase 69 ship) against **forge's integration patterns** — `Api.make` wrapper shape, body normalisation, error envelope, per-request context, telemetry hooks — *before* we flip forge's SDK companions over in [Phase 69a](../../../ToolUp-Diametrical/roadmap/phases/69a-forge-sdk-adoption-toolup-remoting.md).
+A small, runnable test harness inside `toolup-forge/dev/` that exercises **ToolUp.Remoting** (the workspace `toolup-remoting/` sibling, published as `ToolUp.Remoting.* v0.1.0` to `local-nuget-feed/` post Phase 69 ship) against **forge's integration patterns** — `Api.make` wrapper shape, body normalisation, error envelope, per-request context, telemetry hooks — *before* we flip forge's SDK companions over in the eventual SDK adoption sweep.
 
-The harness is **private** — `<IsPackable>false</IsPackable>`, not in `ToolUp.Forge.sln`, has its own `ToolUp.Remoting.Harness.sln`. It does not ship in any forge nupkg. The OSS publication boundary still applies (no Diametrical / Concord / Fern / Xcelsys / cookbook-apps references).
+The harness is **private** — `<IsPackable>false</IsPackable>`, not in `ToolUp.Forge.sln`, has its own `ToolUp.Remoting.Harness.sln`. It does not ship in any forge nupkg. The OSS publication boundary still applies (no private-ecosystem references).
 
 ## Why this exists
 
