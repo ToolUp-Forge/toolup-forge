@@ -9,6 +9,7 @@
         <Compile Include="Fixtures.fs" />
         <Compile Include="InProcess\ImportTests.fs" />
         <Compile Include="InProcess\RoundTripTests.fs" />
+        <Compile Include="InProcess\CustomPartTests.fs" />
         <Compile Include="InProcess\RevisionTests.fs" />
         <Compile Include="InProcess\KnowledgeBaseTests.fs" />
         <Compile Include="Program.fs" />

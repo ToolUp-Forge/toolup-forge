@@ -520,6 +520,7 @@ let fromStream (stream: Stream) : ImportedDocument =
             Comments = importComments main
         }
         Residue = { Entries = List.ofSeq residue }
+        CustomParts = Package.readCustomParts doc
     }
 
 /// Import a `.docx` from raw bytes.

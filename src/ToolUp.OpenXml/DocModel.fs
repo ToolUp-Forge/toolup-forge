@@ -333,6 +333,31 @@ type ResidueEntry = {
     Disposition: ResidueDisposition
 }
 
+/// An out-of-band OPC part carried alongside the document parts: an
+/// arbitrary extra part the caller attaches to the package — a
+/// structured sidecar payload the document vocabulary does not model
+/// — and reads back on import. The model never interprets the
+/// content; it is round-tripped opaquely. Emission writes a
+/// content-type override in `[Content_Types].xml` and a package-root
+/// relationship (`TargetMode=Internal`) so OPC-aware editors (Word,
+/// LibreOffice) preserve the part untouched on their own round-trip.
+type CustomPart = {
+    /// Package-relative part URI, honoured verbatim (e.g.
+    /// `"/myapp/tree.xml"`). Do NOT place under `/customXml/` — Word
+    /// renumbers and owns that space; pick your own package path.
+    PartUri: string
+    /// The part's content type, written as an `Override` in
+    /// `[Content_Types].xml` (e.g.
+    /// `"application/vnd.myapp.doc-tree+xml"`).
+    ContentType: string
+    /// Relationship type for the package-root relationship that
+    /// references the part. The caller owns this URI.
+    RelationshipType: string
+    /// UTF-8 XML payload. Carried opaquely — the model neither parses
+    /// nor validates it.
+    Content: string
+}
+
 type ResidueReport = { Entries: ResidueEntry list }
 
 module ResidueReport =
@@ -352,4 +377,8 @@ module ResidueReport =
 type ImportedDocument = {
     Model: DocModel
     Residue: ResidueReport
+    /// Out-of-band custom parts attached to the package (parts the
+    /// document vocabulary does not model — see `CustomPart`). Empty
+    /// for a document with no such parts.
+    CustomParts: CustomPart list
 }

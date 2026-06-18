@@ -10,6 +10,7 @@ let allTests =
     testList "ToolUp.OpenXml.Tests" [
         ImportTests.tests
         RoundTripTests.tests
+        CustomPartTests.tests
         RevisionTests.tests
         KnowledgeBaseTests.tests
     ]

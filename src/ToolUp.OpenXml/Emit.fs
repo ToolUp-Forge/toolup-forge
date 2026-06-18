@@ -556,9 +556,9 @@ let private emitComments (doc: WordprocessingDocument) (comments: Comment list) 
 
 // ─── Entry points ────────────────────────────────────────────────
 
-/// Emit the model as a `.docx` package onto the stream. The stream
-/// is written and left open; the caller owns it.
-let toStream (model: DocModel) (stream: Stream) : unit =
+/// Emit the model's document parts as a `.docx` package onto the
+/// stream. The stream is written and left open; the caller owns it.
+let private toStreamCore (model: DocModel) (stream: Stream) : unit =
     use doc = Package.create stream
     let main = Package.mainPart doc
     let document = main.Document
@@ -578,8 +578,28 @@ let toStream (model: DocModel) (stream: Stream) : unit =
 
     document.Save()
 
-/// Emit the model as `.docx` bytes.
-let toBytes (model: DocModel) : byte[] =
+/// Emit the model plus any out-of-band custom parts as a `.docx`
+/// package onto the stream. The document parts are written first;
+/// each `CustomPart` is then attached at the OPC level (a part with a
+/// content-type override + a package-root relationship). Passing `[]`
+/// is byte-for-byte equivalent to a custom-part-free emit. The stream
+/// must be seekable and writable; it is left open and the caller owns
+/// it.
+let toStreamWith (customParts: CustomPart list) (model: DocModel) (stream: Stream) : unit =
+    toStreamCore model stream
+    Package.attachCustomParts stream customParts
+
+/// Emit the model as a `.docx` package onto the stream. The stream is
+/// written and left open; the caller owns it.
+let toStream (model: DocModel) (stream: Stream) : unit = toStreamWith [] model stream
+
+/// Emit the model plus any out-of-band custom parts as `.docx` bytes.
+/// Round-trips through `Import.fromBytes`, which surfaces the same
+/// parts on `ImportedDocument.CustomParts`.
+let toBytesWith (customParts: CustomPart list) (model: DocModel) : byte[] =
     use stream = new MemoryStream()
-    toStream model stream
+    toStreamWith customParts model stream
     stream.ToArray()
+
+/// Emit the model as `.docx` bytes.
+let toBytes (model: DocModel) : byte[] = toBytesWith [] model

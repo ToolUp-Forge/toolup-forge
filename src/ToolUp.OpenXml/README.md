@@ -126,6 +126,45 @@ change adds / removes the paragraph itself.
   a minimal styles part covering the heading levels in use, a decimal numbering
   definition per numbering id in use, and bordered table defaults.
 
+## Custom parts (out-of-band OPC parts)
+
+Sometimes a consumer needs to carry an extra payload *inside* the `.docx`
+package — a structured sidecar the document body doesn't model — and read it
+back on import, without post-processing the finished bytes through a second OPC
+pass. `Emit.toBytesWith` / `Import`'s `CustomParts` fold this into the single
+emit / import pass:
+
+```fsharp
+let part = {
+    PartUri = "/myapp/tree.xml"                           // honoured verbatim
+    ContentType = "application/vnd.myapp.doc-tree+xml"
+    RelationshipType = "http://example.test/relationships/doc-tree"
+    Content = "<tree><node id=\"1\">root</node></tree>"   // UTF-8 XML, carried opaquely
+}
+
+let bytes = Emit.toBytesWith [ part ] model               // toBytes = toBytesWith []
+
+let imported = Import.fromBytes bytes
+imported.CustomParts = [ part ]                            // round-trips intact
+```
+
+- Each part is written with a content-type **Override** in `[Content_Types].xml`
+  and a **package-root relationship** (`TargetMode=Internal`) of the given
+  `RelationshipType`, so OPC-aware editors (Word, LibreOffice) preserve the part
+  untouched on their own round-trip.
+- The caller's `PartUri` is honoured **verbatim** — do **not** place parts under
+  `/customXml/`; Word renumbers and owns that space (`item1.xml` + `itemProps`).
+- Re-emitting a part whose URI already exists **replaces** it and dedupes its
+  relationship rather than duplicating either (last write wins).
+- The content is carried opaquely — the model never parses or validates it — and
+  the document parts and their existing relationships are untouched (purely
+  additive, GP 13). `toBytes` / `toBytesWith []` emit no custom part, so existing
+  callers are unaffected.
+
+The `Emit.toBytes` signature is unchanged (it delegates to `toBytesWith []`);
+`toStreamWith` is the streaming twin. `Package.attachCustomParts` /
+`Package.readCustomParts` expose the OPC-level plumbing for lower-level consumers.
+
 ## Out of scope
 
 XLSX / PPTX structural models (docx-first; the package / parts helpers already
