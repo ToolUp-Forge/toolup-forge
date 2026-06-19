@@ -172,8 +172,12 @@ let init () =
         Cmd.OfRemoting.call aiApi.ListConversations () (Finished >> LoadConversations) (fun ex -> ApiError ex.Message)
         Cmd.OfRemoting.call aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
         Cmd.OfRemoting.call aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
-        // Subscribe to SSE events for streaming AI responses
-        Cmd.ofEffect (fun dispatch -> SSEClient.subscribe (SSEEvent >> dispatch) |> ignore)
+    // The SSE stream subscription is NOT a boot-time `Cmd.ofEffect` —
+    // that pattern discarded the unsubscribe handle, orphaning an
+    // EventSource on every mount / HMR / navigation. It is owned by the
+    // `SseSubscription` component (below), whose `useEffectOnce` disposer
+    // closes the stream on unmount. See `AIClientConfig.fs` for the
+    // matching shell-side lifetime-aware handle.
     ]
 
 // ─── Update ───────────────────────────────────────────────────────
@@ -849,6 +853,22 @@ let private MessageInput (messages: ConversationMessage list) (onSubmit: string 
         ]
     ]
 
+[<ReactComponent>]
+let private SseSubscription (dispatch: Msg -> unit) =
+    // The full-page AI module owns its own SSE stream lifecycle. A
+    // `useEffectOnce` subscribe/dispose pair closes the EventSource on
+    // unmount (navigation away / HMR), so the stream never orphans the
+    // way a boot-time `Cmd.ofEffect` would — that discarded the
+    // unsubscribe handle `SSEClient.subscribe` returns. Mirrors the
+    // shell side panel's lifetime-aware `EffectHandle` in
+    // `AIClientConfig.fs`, expressed module-side as a React hook.
+    // Renders nothing — it exists purely for the lifecycle binding.
+    React.useEffectOnce (fun () ->
+        let unsubscribe = SSEClient.subscribe (SSEEvent >> dispatch)
+        FsReact.createDisposable (fun () -> unsubscribe ()))
+
+    Html.none
+
 let private view model dispatch =
     let inputPanel =
         Layout.Panel.panel "Conversations" [
@@ -924,6 +944,10 @@ let private view model dispatch =
 
     let outputPanel =
         Layout.Panel.panel "AI Assistant" [
+            // Owns the SSE stream lifecycle for this module page —
+            // subscribes on mount, closes the EventSource on unmount.
+            SseSubscription dispatch
+
             providerPicker
             exportMenu
 
