@@ -478,14 +478,26 @@ let registerFileManagementRuntime
         | Some _ as limit -> Some(fun _scopeId -> async { return limit })
         | None -> None
 
+    // Per-file upload ceiling: `TOOLUP_MAX_FILE_BYTES` (positive int64) overrides
+    // the generous default; `0` / negative disables the ceiling; unset/garbage
+    // falls back to the default. Operators raising the limit for large uploads no
+    // longer need a code change + repack.
+    let maxFileBytes: int64 option =
+        match System.Environment.GetEnvironmentVariable "TOOLUP_MAX_FILE_BYTES" with
+        | null
+        | "" -> FileManagement.FileManagementRuntime.empty.MaxFileBytes
+        | raw ->
+            match System.Int64.TryParse raw with
+            | true, n when n > 0L -> Some n
+            | true, _ -> None // 0 / negative disables the ceiling
+            | false, _ -> FileManagement.FileManagementRuntime.empty.MaxFileBytes
+
     let fileManagementRuntime: FileManagement.FileManagementRuntime = {
         PostSaveHooks = FileManagement.drainPendingPostSaveHooks ()
         PostSaveHooksLogger = Some resolvedLogger
         QuotaResolver = quotaResolver
         UsageLog = Some usageLogInstance
-        // Inherit the generous default per-file ceiling (see
-        // FileManagementRuntime.empty). A future ServerConfig knob can override.
-        MaxFileBytes = FileManagement.FileManagementRuntime.empty.MaxFileBytes
+        MaxFileBytes = maxFileBytes
     }
 
     services.AddSingleton<FileManagement.FileManagementRuntime>(fileManagementRuntime)

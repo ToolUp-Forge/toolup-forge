@@ -428,6 +428,10 @@ let update msg model =
                         Messages = model.Messages @ [ assistantMsg ]
                         StreamingContent = ""
                         WatchdogToken = None
+                        // Terminal: clear the running task so the "Running…" badge
+                        // + Cancel button don't hang against a finished task when
+                        // the server emits no closing status event.
+                        CurrentTask = None
                 },
                 Cmd.none
             | _ -> model, Cmd.none
@@ -513,6 +517,8 @@ let update msg model =
             {
                 withNote with
                     ErrorMessage = Some errorMsg
+                    // Terminal: don't leave the task "Running…" after a stream error.
+                    CurrentTask = None
             },
             Cmd.none
 
@@ -562,6 +568,8 @@ let update msg model =
             model with
                 ErrorMessage = Some errorMsg
                 WatchdogToken = None
+                // Terminal: clear the running task so the spinner/Cancel don't hang.
+                CurrentTask = None
         },
         Cmd.none
     | DismissError -> { model with ErrorMessage = None }, Cmd.none

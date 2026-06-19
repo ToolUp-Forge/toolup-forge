@@ -582,7 +582,11 @@ type SessionFileStore
                     detectFileType dataTypes upload.contents
 
             let rowCount = max 0 (upload.contents.Split('\n').Length - 1)
-            let sizeBytes = int64 upload.contents.Length
+            // Real UTF-8 byte count, not the UTF-16 char count — this value
+            // feeds the per-file ceiling, the scope quota sum, and the emitted
+            // `storage.bytes` usage record, so multibyte content (non-ASCII
+            // markets/SKUs, £/€/¥) must not be under-counted as chars.
+            let sizeBytes = int64 (Text.Encoding.UTF8.GetByteCount upload.contents)
 
             // Phase 9 quota enforcement. The resolver is optional — when
             // not configured (or it returns `None` for this scope) the
