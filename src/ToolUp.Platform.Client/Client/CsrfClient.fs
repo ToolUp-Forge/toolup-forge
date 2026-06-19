@@ -212,7 +212,7 @@ let mutable private guardInstalled = false
       var tok = '';
       try { tok = getTok() || ''; } catch(e){}
       if (tok) { if (!hasHeader('X-CSRF-Token')) { try { setHeader('X-CSRF-Token', tok); } catch(e){} } }
-      else { warnOnce('notoken', 'a state-changing /api request was dispatched without a CSRF token (the fetch path waits up to 2s for the token fetch; the XHR path cannot wait inside send). If it 403s, the /api/csrf-token endpoint is unreachable or slow — a manual retry after the token resolves will succeed.'); }
+      else { warnOnce('notoken', 'a state-changing /api request was dispatched without a CSRF token. Both the fetch and XHR/Remoting paths wait up to 2s for the shared token fetch before dispatching, so this warning means the token was STILL unavailable after that wait — the /api/csrf-token endpoint is unreachable or slow. If it 403s, a manual retry after the token resolves will succeed.'); }
     }
   }
 
@@ -236,16 +236,48 @@ let mutable private guardInstalled = false
       return rawSetHeader.apply(this, arguments);
     };
     P.send = function(){
+      var sendArgs = arguments;
       try {
         var ctx = eligible(this.__tuMethod, this.__tuUrl);
         if (ctx) {
           var self = this;
-          applyHeaders(ctx,
-            function(k){ return !!(self.__tuSet && self.__tuSet[k.toLowerCase()]); },
-            function(k, v){ self.setRequestHeader(k, v); });
+          var hasHeader = function(k){ return !!(self.__tuSet && self.__tuSet[k.toLowerCase()]); };
+          var setHeader = function(k, v){ self.setRequestHeader(k, v); };
+          var stateChanging = ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'PATCH' || ctx.method === 'DELETE';
+          if (csrfEnabled && stateChanging) {
+            var tok = '';
+            try { tok = getTok() || ''; } catch(e){}
+            if (!tok) {
+              // First-dispatch protection for the XHR/Remoting path: the
+              // token cache is empty (a fast click after paint can beat
+              // the boot prefetch). The XHR is open()ed but not yet sent,
+              // so we can DEFER the actual dispatch until the SHARED
+              // in-flight token fetch resolves (multicast — never a second
+              // round-trip), capped at 2s, then apply headers (so the
+              // now-resolved token attaches) and send. Returning from
+              // send() before calling rawSend is valid — setRequestHeader
+              // + send remain legal while the request is still OPENED.
+              // Mirrors the fetch path; previously the XHR path could not
+              // wait and 403'd on the first state-changing call.
+              var waited = null;
+              try { waited = getEnsure(); } catch(e){ waited = null; }
+              if (waited && typeof waited.then === 'function') {
+                var capped = new Promise(function(res){ setTimeout(res, 2000); });
+                var go = function(){
+                  try { applyHeaders(ctx, hasHeader, setHeader); } catch(e){}
+                  rawSend.apply(self, sendArgs);
+                };
+                Promise.race([waited, capped]).then(go, go);
+                return;
+              }
+            }
+          }
+          // Token already present, or not a CSRF-relevant request: apply
+          // headers and dispatch synchronously as before.
+          applyHeaders(ctx, hasHeader, setHeader);
         }
       } catch (e) {}
-      return rawSend.apply(this, arguments);
+      return rawSend.apply(this, sendArgs);
     };
   }
 
