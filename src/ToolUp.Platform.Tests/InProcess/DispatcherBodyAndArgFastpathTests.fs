@@ -98,10 +98,11 @@ let tests =
 
             Expect.stringContains
                 contents
-                "el.Clone()"
+                "Seq.map _.Clone()"
                 "Each per-arg JsonElement must be Clone'd so it survives the parent \
                  JsonDocument's `use` scope. Without Clone the JsonElement values become \
-                 invalid the moment the parent document disposes."
+                 invalid the moment the parent document disposes. (Asserts the `_.Clone()` \
+                 lambda-shorthand form the SDK standardised on.)"
         }
 
         test "deserialiseArgWithBackend takes JsonElement (no re-parse)" {
