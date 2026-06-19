@@ -231,16 +231,38 @@ module ProcessedEntryStore =
 
 // ─── File Store ───────────────────────────────────────────────────
 
+// One-time guard so the header-trust degradation warning below fires once
+// per process rather than on every request that takes the fallback path.
+let mutable private headerTrustWarned = 0
+
 /// Read the user ID for the current request. Prefers the value populated
 /// by `ScopeResolutionMiddleware` (stored in `HttpContext.Items`) to avoid
 /// duplicating an async auth call on the synchronous Fable.Remoting handler
-/// path. Falls back to the X-User-Id header if the middleware did not run.
+/// path. Falls back to the X-User-Id header if the middleware did not run —
+/// a header-trust degradation that warns once (see below).
 let getUserId (ctx: HttpContext) =
     match ctx.Items.TryGetValue "ToolUp.UserId" with
     | true, (:? string as id) -> id
     | _ ->
         match ctx.Request.Headers.TryGetValue "X-User-Id" with
-        | true, values when values.Count > 0 -> values[0]
+        | true, values when values.Count > 0 ->
+            // `ScopeResolutionMiddleware` did not populate `ToolUp.UserId`,
+            // so identity is being taken from a *client-supplied* `X-User-Id`
+            // request header. That is safe only behind a gateway that
+            // authoritatively sets/strips the header; if the middleware was
+            // simply never wired, this is a subject-spoofing surface (any
+            // caller can claim any user's scope). Surface it once per process
+            // so the operator notices the silent degradation — previously it
+            // fell through with no signal at all.
+            if System.Threading.Interlocked.Exchange(&headerTrustWarned, 1) = 0 then
+                let msg =
+                    "FileManagement.getUserId fell back to the client-supplied X-User-Id header: ScopeResolutionMiddleware did not populate HttpContext.Items[\"ToolUp.UserId\"], so request identity is being trusted from an untrusted header. Safe only behind a gateway that authoritatively sets X-User-Id; otherwise wire ScopeResolutionMiddleware so the subject is resolved server-side."
+
+                match ctx.RequestServices.GetService(typeof<ILogger>) with
+                | :? ILogger as l -> l.Warn msg
+                | _ -> eprintfn "%s" msg
+
+            values[0]
         | _ -> "anonymous"
 
 type StoredFile = {
