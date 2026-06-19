@@ -32,6 +32,9 @@ let private spec: ProviderSpec = {
     }
     CreateWithApiKey = GeminiAIProvider.createWithApiKey
     CreateWithApiKeyAndModel = GeminiAIProvider.createWithApiKeyAndModel
+    // Legacy text-only Gemini 1.0 — `GeminiAIProviderWire.isVisionCapable`
+    // matches gemini-2/gemini-1.5/gemini-pro-vision and rejects this.
+    NonVisionModel = "models/gemini-1.0-pro"
 }
 
 let tests = ProviderTestPack.tests spec

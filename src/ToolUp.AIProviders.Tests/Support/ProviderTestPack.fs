@@ -13,13 +13,16 @@ open ToolUp.AI
 open ToolUp.AI.DefaultAIProviderFactory
 open ToolUp.AIProviders.Tests.Support.InMemoryStores
 
-// ─── Live-API integration pack ──────────────────────────────────────
+// ─── Live-API behavioural-conformance pack ──────────────────────────
 //
 // Parameterised on per-provider plumbing — env-var key, descriptor,
-// `createWithApiKey` / `createWithApiKeyAndModel` helpers — so every
-// shipped AIProvider companion exercises the same wire shape against
-// the same canonical request. Closes Phase 67's deferred test-shaped
-// tail without privileging Gemini.
+// `createWithApiKey` / `createWithApiKeyAndModel` helpers, a non-vision
+// model id — so every shipped AIProvider companion (and any future
+// fourth provider) exercises the SAME conformance set against the same
+// canonical inputs, with zero copied assertions. Closes Phase 67's
+// deferred test-shaped tail (wire shape) AND adds Phase 181's
+// behavioural-contract bar (structured output + capability gating)
+// without privileging any one provider.
 //
 // **Env-var gating.** Each pack reads its provider's API-key env var
 // (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`). When the
@@ -58,6 +61,15 @@ type ProviderSpec = {
     /// Curried `apiKey -> model -> IAIProvider`. Drops directly into
     /// `AIProviderBuilder.Build` for case 2.
     CreateWithApiKeyAndModel: string -> string -> IAIProvider
+    /// A model id this provider classifies as NON-vision-capable
+    /// (`Capabilities.SupportsVisionInput = false`). Drives the
+    /// capability-gating conformance arm: a multimodal message routed
+    /// to this model must be rejected synchronously with
+    /// `UnsupportedCapability("vision", _)` BEFORE any vendor round-trip,
+    /// so the arm makes no network call and never validates the key.
+    /// (Need not be a currently-available model — the rejection fires
+    /// purely from the provider's `isVisionCapable` classifier.)
+    NonVisionModel: string
 }
 
 // ─── Canonical request shape ───────────────────────────────────────
@@ -131,6 +143,134 @@ let private runCanonicalRoundTrip (provider: IAIProvider) = async {
         Expect.isSome
             response.Usage
             "provider should populate AIProviderResponse.Usage on a healthy response (caching-capable providers always do)"
+}
+
+// ─── Behavioural-conformance arms (Phase 181) ──────────────────────
+//
+// The two arms below lift the pack from a *wire-shape* check (request
+// constructed cleanly, response parses) to a *behavioural-contract*
+// check over the interface surface `IAIProvider` documents:
+// structured-output (Phase 67b) and capability-gating (Phase 6o).
+// Both are threaded through `ProviderSpec`, so every shipped provider
+// — and any future fourth provider — gets the identical bar with zero
+// copied assertions.
+
+/// A trivial object schema: typed root, every property required,
+/// `additionalProperties:false`. This is the shape every native
+/// structured-output mode accepts (OpenAI strict `json_schema`,
+/// Gemini `responseSchema`, Claude's forced-tool `input_schema`).
+let private trivialObjectSchema =
+    """{"type":"object","properties":{"greeting":{"type":"string"}},"required":["greeting"],"additionalProperties":false}"""
+
+/// A schema whose ROOT is a `oneOf` union rather than a typed object.
+/// The native structured-output modes require an object root, so this
+/// is the "schema the native mode cannot honour" probe. How a provider
+/// rejects it varies — and that variance IS the native-vs-fallback
+/// boundary Phase 67b documents:
+///   • a provider that pre-validates surfaces `SchemaUnsupported`;
+///   • a provider that ships the schema to the vendor surfaces the
+///     vendor's HTTP 4xx as `PermanentClient`.
+/// Both are clean, terminal (non-retryable) rejections. The conformance
+/// bar forbids only the two failure modes: a silent `Ok` carrying
+/// non-conformant content, or a retryable error that would churn the
+/// retry budget on an un-fixable request. (A provider that legitimately
+/// honours a `oneOf` root is accepted too — provided its `Ok` still
+/// carries parseable JSON.)
+let private nonConformantSchema =
+    """{"oneOf":[{"type":"object","properties":{"a":{"type":"string"}},"required":["a"]},{"type":"object","properties":{"b":{"type":"integer"}},"required":["b"]}]}"""
+
+/// Structured-output conformance: drive `SendStructuredMessage` against
+/// a conformable schema (expect `Ok` with JSON-parseable `Content`) and
+/// against a non-conformable schema (expect a clean terminal rejection,
+/// or a conformant `Ok` — never silent non-JSON, never a retry-storm).
+let private runStructuredOutputConformance (provider: IAIProvider) = async {
+    let! okResult =
+        provider.SendStructuredMessage(
+            [ AIProviderMessage.text "user" "Return a short greeting." ],
+            [],
+            Some "You return only the requested JSON document — no prose, no Markdown fences.",
+            trivialObjectSchema,
+            canonicalRetryPolicy
+        )
+
+    match okResult with
+    | Error err -> failtestf "structured-output (object schema): expected Ok; got %s" (AIProviderError.toMessage err)
+    | Ok response ->
+        Expect.isFalse
+            (String.IsNullOrWhiteSpace response.Content)
+            "structured-output response should carry Content (the JSON document)"
+
+        try
+            use _ = System.Text.Json.JsonDocument.Parse(response.Content)
+            ()
+        with ex ->
+            failtestf "structured-output Content is not parseable JSON (%s): %s" ex.Message response.Content
+
+    let! badResult =
+        provider.SendStructuredMessage(
+            [ AIProviderMessage.text "user" "Return a value." ],
+            [],
+            None,
+            nonConformantSchema,
+            canonicalRetryPolicy
+        )
+
+    match badResult with
+    | Ok response ->
+        // A provider that genuinely supports a oneOf root is acceptable,
+        // but its Ok must still carry conformant (parseable) JSON.
+        try
+            use _ = System.Text.Json.JsonDocument.Parse(response.Content)
+            ()
+        with _ ->
+            failtestf "non-conformant schema: an Ok must still carry parseable JSON; got Content=%s" response.Content
+    | Error(SchemaUnsupported _)
+    | Error(PermanentClient _) -> () // the two expected clean-rejection shapes
+    | Error err ->
+        // Any other error is acceptable only if it is terminal — a
+        // retryable error against an un-fixable schema is the failure
+        // mode the bar exists to catch.
+        Expect.isFalse
+            (AIProviderError.isRetryable err)
+            (sprintf
+                "non-conformant schema: expected a clean terminal rejection (SchemaUnsupported / PermanentClient) or a conformant Ok; got retryable %s"
+                (AIProviderError.toMessage err))
+}
+
+/// Bytes for the capability-gating probe. Tiny + all-zero — the image
+/// never leaves the process (the vision pre-check fails synchronously
+/// before any wire encoding), so neither size nor validity matters.
+let private capabilityProbeImageBytes = Array.create 64 0uy
+
+/// Capability-gating conformance: a multimodal message routed to a
+/// non-vision model must fail synchronously with
+/// `UnsupportedCapability("vision", _)` — no vendor HTTP 400. Makes no
+/// network call, so it costs nothing even with a live key set.
+let private runCapabilityGatingConformance (spec: ProviderSpec) (apiKey: string) = async {
+    let visionMessage =
+        AIProviderMessage.multipart "user" [
+            TextPart "Describe this image."
+            ImagePart {
+                MediaType = "image/png"
+                Source = Base64Bytes capabilityProbeImageBytes
+            }
+        ]
+
+    let provider = spec.CreateWithApiKeyAndModel apiKey spec.NonVisionModel
+
+    let! result = provider.SendMessage([ visionMessage ], [], None, None, canonicalRetryPolicy)
+
+    match result with
+    | Error(UnsupportedCapability("vision", _)) -> ()
+    | Error err ->
+        failtestf
+            "capability-gating: expected UnsupportedCapability(\"vision\", _) against non-vision model '%s'; got %s"
+            spec.NonVisionModel
+            (AIProviderError.toMessage err)
+    | Ok _ ->
+        failtestf
+            "capability-gating: non-vision model '%s' accepted image input (expected a synchronous UnsupportedCapability rejection)"
+            spec.NonVisionModel
 }
 
 // ─── Factory round-trip plumbing ───────────────────────────────────
@@ -224,4 +364,14 @@ let tests (spec: ProviderSpec) : Test =
                         (ProviderResolutionError.toMessage err)
                 | Ok provider -> do! runCanonicalRoundTrip provider
             }
+
+            // ── Phase 181 behavioural-conformance arms ──
+            testCaseAsync "Conformance — structured output (Ok JSON + non-conformant schema rejected cleanly)"
+            <| async {
+                let provider = spec.CreateWithApiKey apiKey
+                do! runStructuredOutputConformance provider
+            }
+
+            testCaseAsync "Conformance — capability gating (vision rejected synchronously against a non-vision model)"
+            <| async { do! runCapabilityGatingConformance spec apiKey }
         ]

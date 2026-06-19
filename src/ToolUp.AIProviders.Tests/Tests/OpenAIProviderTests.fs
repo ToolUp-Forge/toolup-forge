@@ -31,6 +31,9 @@ let private spec: ProviderSpec = {
     }
     CreateWithApiKey = OpenAIProvider.createWithApiKey
     CreateWithApiKeyAndModel = OpenAIProvider.createWithApiKeyAndModel
+    // GPT-3.5 has no vision — `OpenAIProviderWire.isVisionCapable`
+    // matches gpt-4o/gpt-4-turbo/gpt-4.1/o1/o3 and rejects this.
+    NonVisionModel = "gpt-3.5-turbo"
 }
 
 let tests = ProviderTestPack.tests spec

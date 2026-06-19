@@ -32,6 +32,9 @@ let private spec: ProviderSpec = {
     }
     CreateWithApiKey = ClaudeAIProvider.createWithApiKey
     CreateWithApiKeyAndModel = ClaudeAIProvider.createWithApiKeyAndModel
+    // Original Haiku 3 family — `ClaudeAIProviderWire.isVisionCapable`
+    // accepts sonnet/opus/fable + haiku-4/haiku-3.5 and rejects this.
+    NonVisionModel = "claude-3-haiku-20240307"
 }
 
 let tests = ProviderTestPack.tests spec
