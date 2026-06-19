@@ -46,6 +46,12 @@ on:
 permissions:
   contents: read
   packages: write
+  # Phase 182 — build-provenance attestation. `attest-build-provenance`
+  # mints a signed attestation (in-toto provenance) per published nupkg;
+  # it needs `id-token: write` (OIDC for the Sigstore signing identity)
+  # and `attestations: write` (to record the attestation against the repo).
+  id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -71,4 +77,32 @@ jobs:
       - name: Pack + push every public-surface SDK package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Phase 182 — turn on per-package CycloneDX SBOM emission on the
+          # release path (default-off elsewhere, GP 11/13). SBOMs land in
+          # ./artifacts/ alongside the nupkgs; the push step filters to
+          # *.nupkg, so the .cdx.json files are never pushed to the feed.
+          TOOLUP_EMIT_SBOM: "true"
         run: dotnet run --project Build.fsproj -- Publish
+
+      # Phase 182 — signed build-provenance attestation for every pushed
+      # package. Binds each artefact's SHA-256 digest to this workflow run
+      # (source commit + build environment) via an in-toto provenance
+      # statement signed through Sigstore. A consumer verifies with
+      # `gh attestation verify <nupkg> --repo ToolUp-Forge/toolup-forge`.
+      # Runs after the push so a publish failure never produces a dangling
+      # attestation; the nupkgs persist in ./artifacts/ from the step above.
+      - name: Attest build provenance for published packages
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "artifacts/*.nupkg"
+
+      # Phase 182 — retain the per-package SBOMs as a downloadable run
+      # artefact (GitHub Packages NuGet has no SBOM slot). `warn` rather
+      # than `error` so a manual re-run that skips every duplicate (no new
+      # SBOMs) doesn't fail the job.
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: "artifacts/*.cdx.json"
+          if-no-files-found: warn

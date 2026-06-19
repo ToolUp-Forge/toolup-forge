@@ -8,6 +8,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.BuildTypes.fs" />
+    <!-- Phase 182 — SBOM/provenance emission consumed by the Publish
+         target in SDK.Build.fs (compiled after this). -->
+    <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Sbom.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Build.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.HostPackaging.fs" />
     <Compile Include="Build.fs" />

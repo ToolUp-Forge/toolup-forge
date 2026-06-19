@@ -19,6 +19,10 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Build\SDK.BuildTypes.fs" />
+        <!-- Phase 182 — release SBOM + provenance sidecar emission;
+             consumed by the Publish target in SDK.Build.fs (compiled
+             after this). -->
+        <Compile Include="Build\SDK.Sbom.fs" />
         <Compile Include="Build\SDK.Build.fs" />
         <Compile Include="Build\SDK.HostPackaging.fs" />
         <!-- Phase 57 follow-up — FAKE Prerender target factory.

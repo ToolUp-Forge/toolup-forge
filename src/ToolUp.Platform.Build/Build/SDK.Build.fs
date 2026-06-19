@@ -343,6 +343,33 @@ let registerTargets (config: BuildConfig) =
 
             run dotnet [ "pack"; proj; "-c"; "Release"; "-o"; artifactsDir; "--nologo" ] "."
 
+        // Phase 182 — gated SBOM (+ optional provenance sidecar) emission.
+        // Off unless TOOLUP_EMIT_SBOM is set (GP 11/13); CI's
+        // publish-nuget.yml sets it on the release path. Emitted alongside
+        // the nupkgs in `artifacts/` — the push loop below filters to
+        // `*.nupkg`, so the `.cdx.json` SBOMs / `.sig` sidecars are never
+        // pushed to the feed (they travel as separate CI artefacts +
+        // GitHub build-provenance attestation). The signer hook is `None`
+        // here — CI uses GitHub's native attestation; a deployment wiring
+        // an IArtefactSigner passes it from its own Build.fs (see Sbom).
+        let producedNupkgs =
+            System.IO.Directory.GetFiles(artifactsDir, "*.nupkg")
+            |> Array.filter (fun p -> not (p.EndsWith ".snupkg"))
+            |> Array.sort
+            |> Array.toList
+
+        let sbomArtefacts =
+            Sbom.emit
+                System.Environment.GetEnvironmentVariable
+                (fun () -> System.DateTimeOffset.UtcNow)
+                (fun () -> "urn:uuid:" + System.Guid.NewGuid().ToString())
+                None
+                (Trace.tracefn "%s")
+                producedNupkgs
+
+        if not (List.isEmpty sbomArtefacts) then
+            Trace.tracefn "SBOM: emitted %d artefact(s) into %s" (List.length sbomArtefacts) artifactsDir
+
         let token =
             [ "GITHUB_TOKEN"; "GITHUB_PACKAGES_TOKEN" ]
             |> List.tryPick (fun name ->
