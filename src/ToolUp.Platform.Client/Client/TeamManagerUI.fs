@@ -63,6 +63,12 @@ type Model = {
     /// Add-member form state for a given teamId.
     AddMemberUserId: string
     AddMemberRole: TeamRole
+    /// In-flight guard for the page-level "Add a member" form (the
+    /// no-modal email-detect / direct-add paths). The modal flow tracks
+    /// its own `Submitting` inside `IssueByEmailModal`; this covers the
+    /// inline form, which previously had no busy state and so allowed a
+    /// double-click to fire two invites / adds.
+    AddMemberSubmitting: bool
     /// Shell-supplied callback fired when the active team changes
     /// (`ActiveTeamSwitched(_, Ok())` or `TeamCreated(Ok _)`).
     /// Populated from `ClientModuleContext.OnTeamSwitched` at init —
@@ -161,6 +167,7 @@ let init (ctx: ClientModuleContext) =
         Error = None
         AddMemberUserId = ""
         AddMemberRole = Member
+        AddMemberSubmitting = false
         OnTeamSwitched = ctx.OnTeamSwitched
         IsPlatformAdmin = None
         PendingByEmail = Map.empty
@@ -270,6 +277,11 @@ let update (msg: Msg) (model: Model) =
 
     | SetAddMemberRole role -> { model with AddMemberRole = role }, Cmd.none
 
+    // Ignore a second click while an add/invite is already in flight —
+    // the page-level form had no busy guard, so a double-click fired two
+    // invites / adds.
+    | AddMember _ when model.AddMemberSubmitting -> model, Cmd.none
+
     | AddMember teamId ->
         let raw = model.AddMemberUserId.Trim()
 
@@ -304,7 +316,10 @@ let update (msg: Msg) (model: Model) =
         // direct-add path — useful for SSO replication scripts that
         // already know the identity-provider-resolved id.
         elif raw.Contains('@') && raw.IndexOf('.', raw.IndexOf('@')) > 0 then
-            model,
+            {
+                model with
+                    AddMemberSubmitting = true
+            },
             Cmd.OfRemoting.call
                 inviteApi.IssuePendingInviteByEmail
                 {
@@ -316,7 +331,10 @@ let update (msg: Msg) (model: Model) =
                 (fun r -> IssueByEmailSubmitted(teamId, r))
                 (fun e -> IssueByEmailSubmitted(teamId, Error e.Message))
         else
-            model,
+            {
+                model with
+                    AddMemberSubmitting = true
+            },
             Cmd.OfRemoting.call teamApi.AddTeamMember (teamId, raw, model.AddMemberRole) MemberAdded (fun e ->
                 ApiError e.Message)
 
@@ -329,11 +347,18 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 AddMemberUserId = ""
+                AddMemberSubmitting = false
                 Error = None
         },
         refresh
 
-    | MemberAdded(Error e) -> { model with Error = Some e }, Cmd.none
+    | MemberAdded(Error e) ->
+        {
+            model with
+                AddMemberSubmitting = false
+                Error = Some e
+        },
+        Cmd.none
 
     | RemoveMember(teamId, userId) ->
         model, Cmd.OfRemoting.call teamApi.RemoveTeamMember (teamId, userId) MemberRemoved (fun e -> ApiError e.Message)
@@ -482,6 +507,7 @@ let update (msg: Msg) (model: Model) =
             model with
                 IssueByEmailModal = None
                 AddMemberUserId = ""
+                AddMemberSubmitting = false
                 Error = None
         },
         Cmd.ofMsg (LoadPendingByEmail teamId)
@@ -504,7 +530,13 @@ let update (msg: Msg) (model: Model) =
                         }
             },
             Cmd.none
-        | None -> { model with Error = Some e }, Cmd.none
+        | None ->
+            {
+                model with
+                    AddMemberSubmitting = false
+                    Error = Some e
+            },
+            Cmd.none
 
     | OpenRevokeByEmailConfirm(teamId, email) ->
         {
@@ -774,7 +806,27 @@ let private addMemberForm (teamId: string) (callerRole: TeamRole option) (model:
                     ]
                 ]
 
-                Html.div [ Forms.Button.primary "Invite member" (fun () -> dispatch (AddMember teamId)) ]
+                Html.div [
+                    if model.AddMemberSubmitting then
+                        // Disabled while a previous add/invite is in flight,
+                        // so a double-click can't fire two requests.
+                        Html.button [
+                            prop.disabled true
+                            prop.className [
+                                Tokens.Colours.brand
+                                Tokens.Colours.brandText
+                                Tokens.Spacing.buttonPaddingX
+                                Tokens.Spacing.buttonPaddingY
+                                Tokens.Typography.buttonText
+                                "rounded-lg"
+                                "opacity-50"
+                                "cursor-not-allowed"
+                            ]
+                            prop.text "Inviting…"
+                        ]
+                    else
+                        Forms.Button.primary "Invite member" (fun () -> dispatch (AddMember teamId))
+                ]
             ]
         ]
     ]
