@@ -157,7 +157,8 @@ let private classifyForAgentLoop (err: AIProviderError) =
     | StreamingAborted _
     | TransientNetwork _
     | TransientServer _
-    | UnsupportedCapability _ -> Fatal
+    | UnsupportedCapability _
+    | SchemaUnsupported _ -> Fatal
 
 /// Run the agent loop: send messages to AI, execute tool calls, repeat until done.
 /// This runs entirely server-side, calling module functions in-process

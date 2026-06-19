@@ -3,6 +3,12 @@
 
 namespace ToolUp.Encryption.AwsKms
 
+// AWS SDK v4 declares IAmazonKeyManagementService as an interface with static
+// abstract members; F# flags FS3536 whenever such an interface is used as an
+// ordinary type rather than a generic constraint. We use it as a plain
+// constructor/parameter type by design (DI of the deployment's KMS client).
+#nowarn "3536"
+
 open System
 open Amazon.KeyManagementService
 open Amazon.KeyManagementService.Model
