@@ -41,6 +41,24 @@ type Program<'arg, 'model, 'msg, 'view> = private {
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Program =
 
+    /// Format a message for diagnostics without ever crashing the dispatch
+    /// loop. A message can legitimately carry a large payload (e.g. an uploaded
+    /// file's raw contents); `sprintf "%A"` on multi-MB data can blow the JS
+    /// call stack ("Maximum call stack size exceeded"). That overflow must not
+    /// propagate through the error reporter — which would re-format the same
+    /// message and overflow again, recursing through the reporter itself.
+    /// Total + bounded: catches the overflow and caps the output length.
+    let safeMsgRepr (msg: 'msg) : string =
+        try
+            let s = sprintf "%A" msg
+
+            if s.Length > 1000 then
+                s.Substring(0, 1000) + "…(truncated)"
+            else
+                s
+        with _ ->
+            "<message could not be formatted (large or cyclic payload)>"
+
     /// Default error reporter — routes to the platform console / trace.
     /// Replaced by `withErrorReporter`.
     let private defaultErrorReporter (ctx: ErrorContext) =
@@ -437,13 +455,16 @@ module Program =
                             (fun ex ->
                                 reportException
                                     (ErrorPhase.Update(box msg))
-                                    (sprintf "Error handling the message: %A" msg)
+                                    ("Error handling the message: " + safeMsgRepr msg)
                                     ex)
                             dispatch'
 
                         state <- model'
                 with ex ->
-                    reportException (ErrorPhase.Update(box msg)) (sprintf "Unable to process the message: %A" msg) ex
+                    reportException
+                        (ErrorPhase.Update(box msg))
+                        ("Unable to process the message: " + safeMsgRepr msg)
+                        ex
 
                 nextMsg <- rb.Pop()
 

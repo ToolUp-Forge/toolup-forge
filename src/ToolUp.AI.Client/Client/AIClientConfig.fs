@@ -798,7 +798,10 @@ let withSidePanel
 
     let traceUpdate (msg: OuterMsg) (model: OuterModel) =
         let nextModel, nextCmd = outerUpdate msg model
-        traceLog.Debug(sprintf "outerMsg=%A" msg)
+        // Format defensively — a message may carry a large payload (e.g. an
+        // uploaded file's raw contents) and `sprintf "%A"` on multi-MB data
+        // blows the JS call stack. Tracing must never crash message handling.
+        traceLog.Debug("outerMsg=" + ToolUp.Elmish.Program.safeMsgRepr msg)
         nextModel, nextCmd
 
     let prog =
