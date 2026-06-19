@@ -268,7 +268,7 @@ let registerTargets (config: BuildConfig) =
 
     Target.create "Pack" (fun _ ->
         // Pack each public-surface SDK fsproj into the local NuGet feed
-        // at ../local-nuget-feed (a sibling folder of this repo — see
+        // at ../../local-nuget-feed (the single workspace-root shared feed — see
         // this repo's nuget.config header for the local-feed rationale).
         //
         // Per-fsproj iteration (rather than solution-level pack)
@@ -278,7 +278,7 @@ let registerTargets (config: BuildConfig) =
         // build the consumer before the packages exist. Each SDK fsproj's
         // transitive ProjectReference graph stays inside the SDK
         // boundary, so per-fsproj pack builds cleanly.
-        let outputDir = Path.getFullName "../local-nuget-feed"
+        let outputDir = Path.getFullName "../../local-nuget-feed"
         Directory.ensure outputDir
 
         let projects =

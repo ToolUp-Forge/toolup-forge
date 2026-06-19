@@ -223,7 +223,7 @@
   <!--
     ToolUp SDK package versions. App-Server / App-Client / TestClient
     PackageReference these names (no version), resolved against the
-    shared workspace-level NuGet feed at ../local-nuget-feed/ (see
+    shared workspace-level NuGet feed at ../../local-nuget-feed/ (see
     nuget.config).
 
     All versions track ToolUpSdkVersion in lockstep. Per-package overrides

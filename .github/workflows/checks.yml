@@ -55,11 +55,11 @@ jobs:
           global-json-file: global.json
 
       # Same CI workaround as publish-nuget.yml: the workspace-shared
-      # local-feed at ../local-nuget-feed is referenced by nuget.config
+      # local-feed at ../../local-nuget-feed is referenced by nuget.config
       # for dev-machine iteration; the runner has no such folder. An
       # empty dir lets NuGet enumerate it (0 packages) and proceed.
       - name: Create empty local-feed dir (CI workaround)
-        run: mkdir -p ../local-nuget-feed
+        run: mkdir -p ../../local-nuget-feed
 
       - name: Check Apache-2.0 SPDX headers
         run: dotnet run --project Build.fsproj -- AddHeaders --check
