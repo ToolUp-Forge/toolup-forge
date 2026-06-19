@@ -78,8 +78,10 @@ let private parseEvent (json: string) : ParseOutcome =
 /// The chat surface (with `StreamError` ungated from `DebugMode`)
 /// renders the failure inline so the user can act on it before the
 /// 60-second watchdog fires.
-let subscribe (dispatch: AIStreamEvent -> unit) =
-    let userId = UserSession.getUserId ()
+/// Open one EventSource under `userId` and wire the message + error
+/// handlers. Factored out of `subscribe` so the re-keying path (below)
+/// can reopen the stream under a fresh identity with identical wiring.
+let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : EventSource =
     let es = createEventSource $"/api/ai/events?userId={userId}"
 
     onMessage es (fun event ->
@@ -113,5 +115,36 @@ let subscribe (dispatch: AIStreamEvent -> unit) =
         else
             log.Warn "SSE connection error — auto-reconnecting")
 
-    // Return dispose function
-    fun () -> es.close ()
+    es
+
+let subscribe (dispatch: AIStreamEvent -> unit) =
+    // The stream URL pins `?userId=` at open time. Binding it once and
+    // never re-keying leaves the stream stuck on whatever subject was
+    // resolved at subscribe — so a sign-in that completes after the page
+    // mounted, or any later auth-token / subject transition (e.g. switching
+    // identity in `multiTeam`), would silently keep delivering the *old*
+    // subject's AI events and drop the new one's. Mirror `NotificationClient`:
+    // observe identity transitions and reopen the stream under the fresh id,
+    // comparing the connected id so a same-user token refresh doesn't
+    // needlessly cycle the connection.
+    let mutable connectedUserId = UserSession.getUserId ()
+    let mutable es = openStream connectedUserId dispatch
+
+    // `onAuthTokenChange` is the canonical sign-in / sign-out / token-identity
+    // signal (a short poll under the hood). On each transition, re-read the
+    // subject and reopen only when it actually differs from the connected id.
+    let stopWatcher =
+        UserSession.onAuthTokenChange (fun _ ->
+            let fresh = UserSession.getUserId ()
+
+            if fresh <> connectedUserId then
+                log.Warn $"SSE re-keying stream from '{connectedUserId}' to '{fresh}' after an identity change"
+                es.close ()
+                connectedUserId <- fresh
+                es <- openStream fresh dispatch)
+
+    // Return dispose function — stop the identity watcher, then close the
+    // currently-open stream.
+    fun () ->
+        stopWatcher ()
+        es.close ()
