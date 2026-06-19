@@ -816,6 +816,12 @@ let private platformLibraryPage: PageConfig = {
 }
 
 let register () : ToolUp.Platform.ErasedModule =
+    // Phase 102–107 tail — broker the "view original" affordance to the
+    // AI Sources panel. Composing the Knowledge Base in is what makes a
+    // citation's original openable; a deployment without it leaves the
+    // bridge unregistered and the panel renders as before (GP 11).
+    ToolUp.Platform.OriginalDocumentBridge.register ClientModel.originalDocumentOpener
+
     ToolUp.Platform.ClientModule.create {
         Init = ClientModel.init
         Update = ClientModel.update

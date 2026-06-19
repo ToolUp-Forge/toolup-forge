@@ -509,6 +509,85 @@ let private renderContentWithUnverifiedBadges (content: string) : ReactElement =
             ]
         ]
 
+// ─── "View original" affordance (Phase 102–107 client tail) ──────
+//
+// A citation whose `OriginalRef` is `Some r` can be opened at its
+// source. The AI client can't fetch the original itself — that surface
+// lives in the KnowledgeBase companion (`GetOriginalDocument`), which
+// AI must not import. The fetch is brokered through
+// `OriginalDocumentBridge`: the KnowledgeBase companion registers an
+// opener at compose time, and this button reads `current ()` to decide
+// whether to render. No opener registered (deployment without a
+// Knowledge Base, or a pre-103 chunk with `OriginalRef = None`) →
+// renders nothing, so the panel behaves exactly as before (GP 11).
+
+let private formatOriginalSize (bytes: int64) : string =
+    if bytes < 1024L then
+        sprintf "%d B" bytes
+    elif bytes < 1024L * 1024L then
+        sprintf "%d KB" (bytes / 1024L)
+    else
+        sprintf "%.1f MB" (float bytes / 1024.0 / 1024.0)
+
+/// Fetch status for a single "view original" button. The async fetch +
+/// open runs in the click handler (never in render), the result lands
+/// back here — the React-component analogue of MVU request/success/
+/// failure messages.
+type private OriginalFetchState =
+    | OriginalIdle
+    | OriginalLoading
+    | OriginalFailed of string
+
+[<ReactComponent>]
+let ViewOriginalButton (originalRef: OriginalDocumentRef) =
+    let state, setState = React.useState OriginalIdle
+
+    match OriginalDocumentBridge.current () with
+    | None ->
+        // No producing companion composed in — nothing to open.
+        Html.none
+    | Some opener ->
+        let isLoading = state = OriginalLoading
+
+        let onActivate () =
+            if not isLoading then
+                setState OriginalLoading
+
+                async {
+                    let! result = opener originalRef
+
+                    match result with
+                    | Ok() -> setState OriginalIdle
+                    | Error msg -> setState (OriginalFailed msg)
+                }
+                |> Async.StartImmediate
+
+        Html.div [
+            prop.className "mt-1"
+            prop.children [
+                Html.button [
+                    prop.className
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-violet-700 hover:bg-violet-50 border border-violet-100 transition-colors disabled:opacity-60"
+                    prop.disabled isLoading
+                    prop.title (
+                        sprintf
+                            "%s · %s · %s"
+                            originalRef.FileName
+                            originalRef.FileType
+                            (formatOriginalSize originalRef.SizeBytes)
+                    )
+                    prop.onClick (fun _ -> onActivate ())
+                    prop.children [
+                        Html.span [ prop.text (if isLoading then "⏳" else "⤓") ]
+                        Html.span [ prop.text (if isLoading then "Opening…" else "View original") ]
+                    ]
+                ]
+                match state with
+                | OriginalFailed msg -> Html.div [ prop.className "text-[10px] text-amber-700 mt-0.5"; prop.text msg ]
+                | _ -> Html.none
+            ]
+        ]
+
 [<ReactComponent>]
 let MessageSources (sources: RetrievedSource list) (content: string) =
     let isExpanded, setExpanded = React.useState false
@@ -692,6 +771,14 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                                                 prop.className "text-gray-600 mt-1 leading-relaxed"
                                                 prop.text src.Snippet
                                             ]
+                                        // Phase 102–107 tail — when the chunk's
+                                        // source has a fetchable binary original,
+                                        // offer to open it. `None` (notes,
+                                        // narratives, pre-103 chunks) renders
+                                        // nothing.
+                                        match src.OriginalRef with
+                                        | Some r -> ViewOriginalButton r
+                                        | None -> Html.none
                                     ]
                                 ]
                         ]

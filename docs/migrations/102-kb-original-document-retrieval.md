@@ -37,6 +37,16 @@ serverApp |> KnowledgeBase.Server.withOriginalSourceResolver myResolver
 - Persisted conversations / wire payloads from before this release deserialise with `OriginalRef = None` (pinned by `KnowledgeOriginalRetrievalTests` "pre-OriginalRef wire payloads…").
 - Out-of-scope fetch returns `NotInScope` and a `KnowledgeOriginalRetrievalDenied` audit row.
 
+## Client tail shipped (view-original affordance)
+
+The server substrate above landed without any client affordance, so the capability was invisible end-user-side. The client tail now ships it in the SDK's citation/Sources surface — **purely additive, opt-in by data** (a citation with `OriginalRef = None` renders exactly as before, GP 11 / GP 13):
+
+- **AI Sources panel** (`ToolUp.AI.Client/Client/ConversationPanel.fs`) — each retrieved source whose `OriginalRef` is `Some r` gets a `ViewOriginalButton` (name / type / size in its tooltip). Fetch status (`Idle` / `Loading` / `Failed msg`) lives in React-local state; the fetch runs in the click handler, never in render.
+- **Cross-companion bridge** (`ToolUp.Platform.Client/Client/OriginalDocumentBridge.fs`) — the AI client must not import KnowledgeBase types, so the opener is brokered through `ToolUp.Platform` exactly as `NarrativeCommit` brokers the reverse direction. The Sources panel reads `OriginalDocumentBridge.current ()`; a deployment with no Knowledge Base composed in registers no opener and the affordance never renders.
+- **KnowledgeBase opener** (`ToolUp.KnowledgeBase.Client/Client/ClientModel.fs`, registered in `ClientView.register`) — fetches via `knowledgeApi.GetOriginalDocument r.DocumentId`, opens the original in a new tab (PDF page locator honoured as a `#page=N` deep link; other `SourceLocator` kinds and popup-blocked tabs degrade to a plain open / download). `NotInScope` is reported generically ("not available") so the affordance can't be used as an existence oracle (GP 4); `NoOriginalAvailable` / `OriginalRetrievalFailed` surface benign inline messages (GP 9).
+
+Consumers get the affordance automatically by bumping the SDK — no wiring change. **One-time re-ingest:** chunks ingested *before* Phase 103 carry no `_originalRef`, so their citations surface `OriginalRef = None` and show no button; re-ingest existing corpora to backfill the ref (new uploads already stamp it).
+
 ## Rollback
 
-Revert `aa1138e` then `7943a70`. No data migration in either direction — the `_originalRef` metadata key is ignored by older readers, and documents ingested without it simply surface `OriginalRef = None`.
+Revert `aa1138e` then `7943a70`. No data migration in either direction — the `_originalRef` metadata key is ignored by older readers, and documents ingested without it simply surface `OriginalRef = None`. The client tail is additive on top; reverting it removes the affordance and leaves the server substrate intact.

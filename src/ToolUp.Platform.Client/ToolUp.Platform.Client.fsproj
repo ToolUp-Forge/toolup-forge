@@ -116,6 +116,11 @@
         <Compile Include="Client\ModuleQueryClient.fs" />
         <Compile Include="Client\ModuleStateObserver.fs" />
         <Compile Include="Client\NavigationRequest.fs" />
+        <!-- Phase 102–107 tail — brokers the "view original" affordance
+             from the AI Sources panel to the KnowledgeBase companion's
+             GetOriginalDocument surface without a compile-time edge
+             between the two (mirrors NarrativeCommit's reverse direction). -->
+        <Compile Include="Client\OriginalDocumentBridge.fs" />
         <!-- Phase 110 — host-neutral client tree-hosting seam: the
              ClientHostCapabilities bag (Navigate / Call / Notify /
              Dispatch) an external typed-tree UI runtime binds against,

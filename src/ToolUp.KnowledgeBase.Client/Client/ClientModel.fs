@@ -8,6 +8,13 @@ open ToolUp.Elmish
 open SharedTypes
 open PlatformKnowledgeApi
 open ToolUp.Remoting.Client
+open Fable.Core
+open Fable.Core.JsInterop
+
+// Alias for the neutral Platform-side knowledge types (Phase 102–107).
+// Not `open`ed because `SourceLocator` / `ChunkOrigin` case names
+// collide with the KB-side `SourceLocation` / `KnowledgeSource` DUs.
+module VK = ToolUp.Platform.VectorKnowledgeTypes
 
 /// Which note the editor panel is currently authoring. `CreateNew`
 /// means the editor was opened from the "New note" button; `EditExisting`
@@ -520,3 +527,74 @@ let private submitNarrative
 /// KnowledgeBaseView.narrativeCommitHandler`) to enable
 /// `NarrativeRenderer`'s "Save to Knowledge Base" button.
 let narrativeCommitHandler: NarrativeCommitHandler = { Submit = submitNarrative }
+
+// ─── "View original" opener (Phase 102–107 client tail) ────────────
+//
+// Brokered to the AI Sources panel via
+// `ToolUp.Platform.OriginalDocumentBridge` (registered in
+// `KnowledgeBaseView.register`). Fetches the original bytes through the
+// scope-gated `GetOriginalDocument` API and opens them in a new tab,
+// honouring a PDF page locator as a `#page=N` deep link where present;
+// other locator kinds — and a popup-blocked tab — degrade to a plain
+// open / download. Absence and denial come back as benign inline
+// messages: an out-of-scope id is reported generically so the
+// affordance can't be used to probe for document existence (GP 4 / GP 9).
+
+[<Fable.Core.Emit("new Blob([new Uint8Array($0)], { type: $1 })")>]
+let private makeOriginalBlob (bytes: byte[]) (mime: string) : obj = jsNative
+
+[<Fable.Core.Emit("URL.createObjectURL($0)")>]
+let private createOriginalObjectUrl (blob: obj) : string = jsNative
+
+// Keep the object URL alive long enough for the new tab / download to
+// read it, then release it.
+[<Fable.Core.Emit("setTimeout(function () { URL.revokeObjectURL($0) }, 60000)")>]
+let private revokeOriginalUrlLater (url: string) : unit = jsNative
+
+// Returns the opened Window, or null when the browser blocked the popup.
+[<Fable.Core.Emit("window.open($0, '_blank')")>]
+let private openOriginalTab (url: string) : obj = jsNative
+
+/// PDF viewers honour a `#page=N` fragment; other locator kinds have no
+/// portable in-document anchor, so they degrade to opening at the top.
+let private pageFragment (location: VK.SourceLocator option) : string =
+    match location with
+    | Some(VK.SourceLocator.Page n) -> sprintf "#page=%d" n
+    | _ -> ""
+
+let private openOriginal (original: OriginalDocument) (location: VK.SourceLocator option) : unit =
+    let blob = makeOriginalBlob original.Content original.ContentType
+    let url = createOriginalObjectUrl blob
+    let win = openOriginalTab (url + pageFragment location)
+
+    if isNull win then
+        // Popup blocked — fall back to a download (loses the page deep
+        // link but still delivers the file to the user).
+        let a = Browser.Dom.document.createElement "a" :?> Browser.Types.HTMLAnchorElement
+
+        a.href <- url
+        a?download <- original.FileName
+        Browser.Dom.document.body.appendChild a |> ignore
+        a.click ()
+        Browser.Dom.document.body.removeChild a |> ignore
+
+    revokeOriginalUrlLater url
+
+/// Companion-exported "view original" opener. Registered into
+/// `ToolUp.Platform.OriginalDocumentBridge` by `KnowledgeBaseView.register`
+/// so the AI Sources panel can open a citation's original document
+/// without a compile-time edge onto the Knowledge Base.
+let originalDocumentOpener: ToolUp.Platform.OriginalDocumentBridge.OriginalDocumentOpener =
+    fun (originalRef: VK.OriginalDocumentRef) -> async {
+        let! result = knowledgeApi.GetOriginalDocument originalRef.DocumentId
+
+        match result with
+        | Ok original ->
+            openOriginal original originalRef.Location
+            return Ok()
+        // Out-of-scope is deliberately indistinguishable from absent —
+        // no existence oracle (GP 4).
+        | Error NotInScope -> return Error "This source isn't available."
+        | Error NoOriginalAvailable -> return Error "This source has no original document to open."
+        | Error(OriginalRetrievalFailed _) -> return Error "Couldn't open the original document. Please try again."
+    }
