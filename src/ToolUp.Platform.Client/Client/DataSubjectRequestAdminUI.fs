@@ -345,7 +345,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         Cmd.none
 
     | DownloadResolved(Ok bytes) ->
-        downloadExport (model.SubjectInput.Trim()) bytes
+        let subject = model.SubjectInput.Trim()
 
         {
             model with
@@ -354,7 +354,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 TicketStatus = None
                 Banner = OkBanner $"Background export ready — {bytes.Length} bytes downloaded."
         },
-        Cmd.none
+        Cmd.ofEffect (fun _ -> downloadExport subject bytes)
 
     | DownloadResolved(Result.Error err) ->
         {
@@ -388,14 +388,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | CancelResolved(Result.Error err) -> { model with Banner = ErrorBanner err }, Cmd.none
 
     | ExportResolved(Ok bytes) ->
-        downloadExport (model.SubjectInput.Trim()) bytes
+        let subject = model.SubjectInput.Trim()
 
         {
             model with
                 Busy = Idle
                 Banner = OkBanner $"Export ready — {bytes.Length} bytes downloaded."
         },
-        Cmd.none
+        Cmd.ofEffect (fun _ -> downloadExport subject bytes)
 
     | ExportResolved(Result.Error err) ->
         {

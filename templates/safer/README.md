@@ -103,7 +103,7 @@ These are real, in this build, exercised every time you run `pwsh ./run.ps1` —
 
 SAFER is deliberately minimal; everything below is a natural next step but explicitly out of scope for the starter:
 
-- **SSE live updates** instead of polling — wire `INotificationChannel.Publish` in the server's `sendMessage` and `NotificationClient.subscribe` on the client. Drops the 2 s polling latency to ~milliseconds. The SDK ships `NotificationClient` with reconnection + per-event-kind dispatch; see [`toolup-app`](https://github.com/Toolup-Analytics/toolup-app) or [`docs/platform/`](https://github.com/ToolUp-Forge/toolup-forge/tree/main/docs/platform) for the canonical wiring.
+- **SSE live updates** instead of polling — wire `INotificationChannel.Publish` in the server's `sendMessage` and `NotificationClient.subscribe` on the client. Drops the 2 s polling latency to ~milliseconds. The SDK ships `NotificationClient` with reconnection + per-event-kind dispatch; see [`docs/platform/`](https://github.com/ToolUp-Forge/toolup-forge/tree/main/docs/platform) for the canonical wiring.
 - **Persistence** — swap `ConcurrentQueue` for an `IEntityStore` (Phase 19) over `IBlobStorage`. Process restart no longer wipes; multi-instance deployments need it.
 - **Multiple rooms / channels** — extend the `ChatApi` with a `ChannelId` parameter and partition the buffer by channel.
 - **Auth / users** — change `TOOLUP_PLATFORM_SURFACES=anonymous` to `individual` or `team` in `run.ps1`, register an `IAuthProvider` companion (Clerk, OIDC, Entra). The chat module's API surface stays unchanged; the SDK's `AccessContext` flows through every handler.

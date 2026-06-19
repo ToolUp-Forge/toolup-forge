@@ -125,17 +125,17 @@ module internal Middleware =
     let private refuseUnsupportedSeams (options: RemotingOptions<'ctx, 'impl>) : unit =
         let composed = [
             if options.Telemetry.IsSome then
-                yield "withTelemetry"
+                "withTelemetry"
             if options.AuthContextResolver.IsSome then
-                yield "withAuthContext"
+                "withAuthContext"
             if options.RateLimitStore.IsSome then
-                yield "withRateLimitStore"
+                "withRateLimitStore"
             if options.IdempotencyStore.IsSome then
-                yield "withIdempotencyStore"
+                "withIdempotencyStore"
             if options.AuditEmitter.IsSome then
-                yield "withAudit"
+                "withAudit"
             if options.SchemaVersion <> 1 then
-                yield (sprintf "withSchemaVersion(%d)" options.SchemaVersion)
+                (sprintf "withSchemaVersion(%d)" options.SchemaVersion)
         ]
 
         if not (List.isEmpty composed) then

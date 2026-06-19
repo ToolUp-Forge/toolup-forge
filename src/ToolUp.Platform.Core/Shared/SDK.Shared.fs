@@ -1133,8 +1133,8 @@ type MediaLibraryMode =
 /// `Tenant` entity. `IContainerScheduler` is **consumer-supplied** —
 /// the SDK does not register a default. Operators wire a backend
 /// (`DockerLocalContainerScheduler` is the dev-grade reference
-/// companion; Fly Machines / K8s / CloudRun ship as third-party or
-/// Diametrical-side companions). When `SingleNodeDeployPlane` is set
+/// companion; Fly Machines / K8s / CloudRun ship as downstream
+/// cloud-specific companions). When `SingleNodeDeployPlane` is set
 /// without an `IContainerScheduler` in DI, an `IConfigValidator` emits
 /// a startup error.
 ///

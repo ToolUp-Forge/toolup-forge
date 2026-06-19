@@ -179,9 +179,9 @@ let update (msg: Msg) (model: Model) =
     | ConnectUrlReady(_, Ok url) ->
         // Navigate the browser to the upstream provider's authorize
         // endpoint. `assign` records a history entry; the user can
-        // back-button to ToolUp if they cancel consent.
-        Browser.Dom.window.location.assign url
-        model, Cmd.none
+        // back-button to ToolUp if they cancel consent. Deferred through
+        // a Cmd so `update` stays pure (effect runs after the model commits).
+        model, Cmd.ofEffect (fun _ -> Browser.Dom.window.location.assign url)
 
     | ConnectUrlReady(_, Error msg) -> { model with LastError = Some msg }, Cmd.none
 

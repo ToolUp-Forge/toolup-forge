@@ -32,7 +32,7 @@ Kestrel sync-IO defects — `AllowSynchronousIO=false` rejecting
 (the 0.5.10 fix). That class only manifests when the response is
 written through the HTTP pipeline; this probe never crosses an
 outbound HTTP boundary on the response side. A separate end-to-end
-probe (local `dotnet run` of toolup-app + curl) covers it.
+probe (local `dotnet run` of a consuming app + curl) covers it.
 
 ## Auth on a dev machine
 

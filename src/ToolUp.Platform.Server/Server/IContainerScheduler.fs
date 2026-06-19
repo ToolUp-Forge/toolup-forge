@@ -12,8 +12,8 @@ open System.Collections.Generic
 // one reference companion (`DockerLocalContainerScheduler` at
 // `src/ContainerSchedulers/DockerLocal/`) proving the abstraction
 // against a dev-grade local Docker socket; cloud-specific
-// companions ship downstream — Diametrical-side for ToolUp Cloud,
-// third-party for self-hosted operators. Forge intentionally
+// companions ship downstream — managed-cloud and third-party
+// for self-hosted operators alike. Forge intentionally
 // privileges no cloud here (GP 1).
 //
 // **Server-only by construction.** `StreamLogs` returns

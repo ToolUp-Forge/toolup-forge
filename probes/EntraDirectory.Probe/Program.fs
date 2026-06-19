@@ -18,7 +18,7 @@ module EntraDirectory.Probe.Program
 // That class only manifests when the response body is written through
 // the HTTP pipeline; this probe never crosses an HTTP boundary on the
 // outbound side. A separate end-to-end probe (local `dotnet run` of
-// toolup-app + curl against the API) is needed for that class.
+// a consuming app + curl against the API) is needed for that class.
 
 open System
 open ToolUp.Platform

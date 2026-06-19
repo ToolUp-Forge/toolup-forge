@@ -55,7 +55,7 @@ let pageHeader (spec: HeaderSpec) : XmlNode =
     tag "header" [ _class "bk-header" ] [ brandNode; navNode; rightNode ]
 
 /// Footer spec.
-///   `Copyright` — copyright line text (e.g. "© 2026 Diametrical Ltd")
+///   `Copyright` — copyright line text (e.g. "© 2026 Example Co")
 ///   `Links`     — link items (terms / privacy / contact / etc.)
 type FooterSpec = {
     Copyright: string

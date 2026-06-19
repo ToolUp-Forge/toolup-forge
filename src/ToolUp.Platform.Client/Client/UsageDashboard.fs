@@ -120,9 +120,7 @@ let update msg model =
 
         { model with Exporting = true }, cmd
 
-    | ExportComplete(Ok bytes) ->
-        downloadCsv bytes
-        { model with Exporting = false }, Cmd.none
+    | ExportComplete(Ok bytes) -> { model with Exporting = false }, Cmd.ofEffect (fun _ -> downloadCsv bytes)
 
     | ExportComplete(Error _) -> { model with Exporting = false }, Cmd.none
 

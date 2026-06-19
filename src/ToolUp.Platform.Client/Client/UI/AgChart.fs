@@ -31,6 +31,15 @@ let ensureChartsModulesRegistered () =
 
 let agChart: obj = import "AgCharts" "ag-charts-react"
 
+/// Chart theme/branding palette (GP 5 mutable exception). These are
+/// deployment-branding overrides: the sole writer is the consumer's
+/// composition/boot path (set once, before any chart renders); every
+/// reader is `AgChart.options` on the render path. Intentionally NOT
+/// `private` — `options` is a `static member inline` on the erased
+/// `AgChart` type, so Fable inlines the body at each call site and must
+/// export these module values (same constraint as `MemoizedChart`);
+/// marking them private yields a runtime "does not provide an export"
+/// SyntaxError.
 module ChartPalette =
     let mutable fills = [| "#8066E8"; "#59229D"; "#9BC53D"; "#E55934"; "#FA7921" |]
     let mutable strokes = [| "#866BE8"; "#59229D"; "#9BC53D"; "#E55934"; "#FA7921" |]
