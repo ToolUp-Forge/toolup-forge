@@ -139,7 +139,7 @@ let private makeVectorisationHook
     (maxDocumentBytes: int option)
     (eventStoreRef: IEventStore option ref)
     (logger: ILogger)
-    : ProcessedData * ProcessedFileEntry * StorageScope -> Async<unit> =
+    : ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit> =
 
     let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
 
@@ -161,7 +161,7 @@ let private makeVectorisationHook
         else
             System.Text.Encoding.UTF8.GetByteCount s
 
-    fun (processedData, entry, scope) -> async {
+    fun (processedData, entry, scope, createdBy) -> async {
         match handlers |> List.tryFind (fun h -> h.DataTypeId = entry.DataType) with
         | None ->
             // Wave 1 Gap #3 — surface the silent drop. Previously this
@@ -298,12 +298,20 @@ let private makeVectorisationHook
                         Scope = vectorScope
                         ScopeId = scope.ScopeId
                         Container = scope.Container
-                        // Post-save hook fires from session-file storage with
-                        // no per-request `AccessContext` in scope, so no user
-                        // re-auth is possible here. Observers fall back to
-                        // their historical publish-to-UploadedBy behaviour
-                        // for `None` (Wave 2B Gap #7).
-                        OriginatingUserId = None
+                        // The post-save hook fires from session-file storage
+                        // with no per-request `AccessContext` in scope, but
+                        // `AddFile` threads the uploading user's id through the
+                        // hook tuple as `createdBy`, so the ingestion job is
+                        // attributed to the actual user rather than left
+                        // anonymous. An empty/whitespace id (e.g. the "system"
+                        // hydration path) falls back to `None`, preserving the
+                        // historical publish-to-UploadedBy behaviour for
+                        // observers (Wave 2B Gap #7).
+                        OriginatingUserId =
+                            if System.String.IsNullOrWhiteSpace createdBy then
+                                None
+                            else
+                                Some createdBy
                     }
 
                     let accepted = queue.Enqueue(job)

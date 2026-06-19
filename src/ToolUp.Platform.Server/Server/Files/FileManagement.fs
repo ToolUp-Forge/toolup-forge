@@ -285,8 +285,11 @@ type FileManagementRuntime = {
     /// Hooks that fire fire-and-forget after every successful
     /// `SessionFileStore.AddFile`. Empty by default; `RAGCompose`
     /// registers a vectorisation hook when any `VectorisationHandler`
-    /// is wired.
-    PostSaveHooks: (ProcessedData * ProcessedFileEntry * StorageScope -> Async<unit>) list
+    /// is wired. The fourth tuple element is the uploading user's id
+    /// (`AddFile`'s `createdBy`) — distinct from `StorageScope.ScopeId`
+    /// (which is the team in team scopes) so a hook can attribute the
+    /// work it spawns to the actual user.
+    PostSaveHooks: (ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) list
     /// Logger used to record exceptions thrown by post-save hooks.
     /// Hooks run on `Async.Start` after the HTTP response has been
     /// sent, so without this an unhandled exception is invisible to
@@ -340,14 +343,15 @@ module FileManagementRuntime =
 // (b) — registration list survives across tests that bypass `compose`;
 // reset for Expecto via `CacheReset.invalidateAll`. See
 // docs/platform/testing-conventions.md.
-let mutable internal pendingPostSaveHooks: (ProcessedData * ProcessedFileEntry * StorageScope -> Async<unit>) list = []
+let mutable internal pendingPostSaveHooks
+    : (ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) list = []
 
 /// Register post-save hooks that fire after every successful
 /// `SessionFileStore.AddFile`. Companions call this from their compose
 /// path BEFORE the SDK's `compose` runs. Replaces the existing list
 /// (matching the prior contract — a single companion owns hook
 /// registration today).
-let configurePostSaveHooks (hooks: (ProcessedData * ProcessedFileEntry * StorageScope -> Async<unit>) list) =
+let configurePostSaveHooks (hooks: (ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) list) =
     pendingPostSaveHooks <- hooks
 
 /// Drain pending companion-registered hooks. Called by `compose`
@@ -768,7 +772,7 @@ type SessionFileStore
                 if not runtime.PostSaveHooks.IsEmpty && entry.Error.IsNone then
                     let safeHook hook = async {
                         try
-                            do! hook (data, entry, scope)
+                            do! hook (data, entry, scope, createdBy)
                         with ex ->
                             let msg =
                                 $"Post-save hook failed for file '{upload.filename}' (scope='{scope.ScopeId}')"
