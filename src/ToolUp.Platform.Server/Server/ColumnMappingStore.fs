@@ -55,7 +55,11 @@ let recordObjectIdFor (producedFile: string) : string = RecordPrefix + sha produ
 let inline private deserialise<'T> (bytes: byte[]) : 'T option =
     try
         Some(JsonSerializer.Deserialize<'T>(Encoding.UTF8.GetString bytes, jsonOptions))
-    with _ ->
+    with ex ->
+        // A recipe/record that fails to deserialise silently stops applying —
+        // surface it (stderr; no logger is threaded into this module) so a
+        // saved conversion that mysteriously stopped working is diagnosable.
+        eprintfn "ColumnMappingStore: a %s sidecar could not be deserialised; skipping it. %O" (typeof<'T>.Name) ex
         None
 
 /// Read + deserialise every sidecar of one data-type tag in a scope.
@@ -68,9 +72,15 @@ let private readAllOf<'T> (store: IDataObjectStore) (tag: string) (scopeId: stri
         |> List.map (fun o -> async {
             match! store.Get(scopeId, o.ObjectId) with
             | Ok(_, bytes) -> return deserialise<'T> bytes
-            | Error _ -> return None
+            | Error e ->
+                eprintfn "ColumnMappingStore: a '%s' sidecar could not be read; skipping it. %A" tag e
+                return None
         })
-        |> Async.Sequential
+        // Bounded parallel, not serial: `GetByFingerprint` runs on every CSV
+        // upload (to find a reusable recipe), so N serial blob round-trips on a
+        // remote store would be on the upload hot path. 16 matches the
+        // startup-hydration fan-out convention.
+        |> fun xs -> Async.Parallel(xs, 16)
 
     return results |> Array.toList |> List.choose id
 }

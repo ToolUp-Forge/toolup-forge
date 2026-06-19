@@ -279,6 +279,12 @@ type FileManagementRuntime = {
     /// (test-harness / `NoUsageMetering`) makes the emission sites
     /// no-op.
     UsageLog: IUsageLog option
+    /// Hard per-file ceiling (bytes). Independent of the per-scope quota:
+    /// a single file over this is rejected before it is read into memory,
+    /// detected over its whole length, and processed. `None` disables it;
+    /// the default is generous (a real CSV is far smaller) and exists so an
+    /// unbounded upload can't OOM the process by default.
+    MaxFileBytes: int64 option
 }
 
 module FileManagementRuntime =
@@ -289,6 +295,10 @@ module FileManagementRuntime =
         PostSaveHooksLogger = None
         QuotaResolver = None
         UsageLog = None
+        // 64 MiB — orders of magnitude above any real tabular upload in this
+        // app's domain, but a hard backstop against a pathological/abusive
+        // multi-hundred-MB body. Override (or `None`) at compose time.
+        MaxFileBytes = Some(64L * 1024L * 1024L)
     }
 
 /// Pending post-save hooks registered by companions (notably
@@ -437,7 +447,23 @@ type SessionFileStore
                             SizeBytes = int64 contents.Length
                             RowCount = rowCount
                         }
-                | Error _ -> return None
+                | Error e ->
+                    // A corrupt/unreadable blob shouldn't crash startup for the
+                    // rest of the scope — but it MUST NOT vanish silently: the
+                    // user would just see their uploaded file gone after a
+                    // restart with no operator signal.
+                    let msg =
+                        sprintf
+                            "Hydration: persisted file '%s' in '%s' could not be read; skipping. %A"
+                            obj.ObjectId
+                            container
+                            e
+
+                    match runtime.PostSaveHooksLogger with
+                    | Some l -> l.Warn msg
+                    | None -> eprintfn "%s" msg
+
+                    return None
             })
             |> fun xs -> Async.Parallel(xs, startupHydrationConcurrency)
             |> Async.RunSynchronously
@@ -574,6 +600,13 @@ type SessionFileStore
             let existingBytes = files.Values |> Seq.sumBy _.SizeBytes
 
             match quota with
+            // Hard per-file ceiling (independent of the per-scope quota) —
+            // reject a pathological body before it is held in memory, detected
+            // over its whole length, and processed. `None` disables it.
+            | _ when runtime.MaxFileBytes |> Option.exists (fun maxBytes -> sizeBytes > maxBytes) ->
+                return
+                    Error
+                        $"File '{upload.filename}' ({sizeBytes} bytes) exceeds the {runtime.MaxFileBytes.Value}-byte per-file limit."
             | Some limit when existingBytes + sizeBytes > limit ->
                 return
                     Error
@@ -615,7 +648,14 @@ type SessionFileStore
 
                 let! data, entry = processFile dataTypes upload.filename detectedType upload.contents
 
-                processedData.AddOrUpdate(upload.filename, data, fun _ _ -> data) |> ignore
+                // Retain the heavy parsed payload in memory ONLY when a
+                // post-save hook might consume it. Nothing reads this dict on
+                // the request path (api handlers re-parse via getFileContents),
+                // so populating it for every upload otherwise just pins a large
+                // payload per file for the scope's lifetime.
+                if not runtime.PostSaveHooks.IsEmpty then
+                    processedData.AddOrUpdate(upload.filename, data, fun _ _ -> data) |> ignore
+
                 processedEntries.AddOrUpdate(upload.filename, entry, fun _ _ -> entry) |> ignore
 
                 // Persist the entry sidecar so the summary survives server
@@ -645,13 +685,16 @@ type SessionFileStore
                         try
                             do! hook (data, entry, scope)
                         with ex ->
+                            let msg =
+                                $"Post-save hook failed for file '{upload.filename}' (scope='{scope.ScopeId}')"
+
                             match runtime.PostSaveHooksLogger with
-                            | Some logger ->
-                                logger.Error(
-                                    $"Post-save hook failed for file '{upload.filename}' (scope='{scope.ScopeId}')",
-                                    Some ex
-                                )
-                            | None -> ()
+                            | Some logger -> logger.Error(msg, Some ex)
+                            // No configured logger MUST NOT mean a silently
+                            // dropped index update — the user was already told
+                            // the upload succeeded. Fall back to stderr so a
+                            // failed RAG/audit hook is never invisible.
+                            | None -> eprintfn "%s: %O" msg ex
                     }
 
                     runtime.PostSaveHooks

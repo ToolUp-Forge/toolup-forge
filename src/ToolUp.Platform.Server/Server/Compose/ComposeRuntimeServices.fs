@@ -483,6 +483,9 @@ let registerFileManagementRuntime
         PostSaveHooksLogger = Some resolvedLogger
         QuotaResolver = quotaResolver
         UsageLog = Some usageLogInstance
+        // Inherit the generous default per-file ceiling (see
+        // FileManagementRuntime.empty). A future ServerConfig knob can override.
+        MaxFileBytes = FileManagement.FileManagementRuntime.empty.MaxFileBytes
     }
 
     services.AddSingleton<FileManagement.FileManagementRuntime>(fileManagementRuntime)
