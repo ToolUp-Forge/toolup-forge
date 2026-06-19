@@ -122,14 +122,26 @@ let resolveFraming (mode: GroundingMode) (framing: string) : string =
 /// them. The background service then issues one batched embedding call per
 /// document — see `IngestionBackgroundService` for the cache-warming flow.
 ///
-/// When the queue is at capacity, `Enqueue` returns `false` and we log a
-/// warning. The post-save hook is fire-and-forget — there's no UX path to
-/// propagate a 429 from a `SessionFileStore.AddFile` that's already
-/// committed — so the failure mode is "data manager file lands but is not
-/// indexed; user sees nothing in retrieval until they re-trigger". KB's
-/// own enqueue sites (`UploadDocument`, `AddNote`, `UpdateNote`,
-/// `IngestNarrative`) check the bool and mark the document `Failed` so the
-/// user sees the rejection in the KB UI.
+/// When the queue is at capacity, `Enqueue` returns `false`. Because the
+/// drainer (`IngestionBackgroundService`) may simply be behind, we retry
+/// with a short bounded backoff (`enqueueRetryDelaysMs`) before giving up
+/// — most transient saturation clears within that window. The post-save
+/// hook is fire-and-forget (runs after `AddFile` already returned HTTP
+/// 200), so the backoff sleeps never delay the user's upload response.
+/// Only after the retries are exhausted is the document dropped: we log at
+/// `Error` AND write a `DocumentVectorisationDropped` event so the
+/// otherwise-silent loss ("data manager file lands but is not indexed") is
+/// queryable alongside the `DocumentVectorisationSkipped` / `DocumentRejected`
+/// events. KB's own enqueue sites (`UploadDocument`, `AddNote`,
+/// `UpdateNote`, `IngestNarrative`) additionally mark the document `Failed`
+/// so the user sees the rejection in the KB UI; the Data-Manager client
+/// badge for the same is a roadmap follow-on.
+/// Bounded backoff delays (ms) for re-attempting a full ingestion queue.
+/// One entry per retry after the initial attempt — five total tries over
+/// ~1.85s. Runs on the fire-and-forget post-save path, so this does not
+/// add latency to the upload response.
+let private enqueueRetryDelaysMs: int list = [ 100; 250; 500; 1000 ]
+
 let private makeVectorisationHook
     (handlers: VectorisationHandler list)
     (queue: IngestionQueue)
@@ -314,19 +326,49 @@ let private makeVectorisationHook
                                 Some createdBy
                     }
 
-                    let accepted = queue.Enqueue(job)
+                    // Bounded retry: a full queue is often just the drainer
+                    // running behind, so a short backoff usually clears space
+                    // rather than dropping the document. Fire-and-forget path,
+                    // so the sleeps don't delay the upload response.
+                    let rec tryEnqueue (delays: int list) = async {
+                        if queue.Enqueue(job) then
+                            return true
+                        else
+                            match delays with
+                            | [] -> return false
+                            | d :: rest ->
+                                do! Async.Sleep d
+                                return! tryEnqueue rest
+                    }
+
+                    let! accepted = tryEnqueue enqueueRetryDelaysMs
                     telemetry.RecordEnqueue(queue.Count, queue.Capacity, accepted)
 
                     if not accepted then
-                        // Permanent data loss for this document's searchability,
-                        // not a transient hiccup — log at Error so it trips
-                        // error-rate alerting, not just a grep. The telemetry
-                        // RecordEnqueue(accepted=false) above makes the drop
-                        // queryable in the RAG telemetry snapshot.
+                        // Retries exhausted — permanent data loss for this
+                        // document's searchability. Log at Error so it trips
+                        // error-rate alerting, AND write an event so the drop
+                        // is queryable per-document in the RAG event trail
+                        // (symmetric with DocumentVectorisationSkipped /
+                        // DocumentRejected), not just in the telemetry snapshot.
+                        let attempts = List.length enqueueRetryDelaysMs + 1
+
                         logger.Error(
-                            $"[RAGCompose] Ingestion queue full ({queue.Count}/{queue.Capacity}) — DROPPED vectorisation for {entry.FileName}. The file is saved but is permanently unsearchable until re-uploaded. Raise IngestionQueueCapacity (RAGServerApp.withIngestionQueueCapacity) or IngestionConcurrency if drops recur.",
+                            $"[RAGCompose] Ingestion queue full ({queue.Count}/{queue.Capacity}) after {attempts} attempts — DROPPED vectorisation for {entry.FileName}. The file is saved but is permanently unsearchable until re-uploaded. Raise IngestionQueueCapacity (RAGServerApp.withIngestionQueueCapacity) or IngestionConcurrency if drops recur.",
                             None
                         )
+
+                        do!
+                            writeEvent scope.ScopeId "DocumentVectorisationDropped" {|
+                                DocumentId = entry.FileName
+                                FileName = entry.FileName
+                                Container = scope.Container
+                                ChunkCount = List.length chunkPairs
+                                QueueDepth = queue.Count
+                                QueueCapacity = queue.Capacity
+                                Attempts = attempts
+                                Reason = "ingestion queue full after bounded retry"
+                            |}
     }
 
 // ─── Null blob storage for when no storage is configured ─────────
