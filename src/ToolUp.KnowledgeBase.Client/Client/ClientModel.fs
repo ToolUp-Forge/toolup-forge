@@ -68,6 +68,10 @@ type Msg =
     | UploadCompleted of ApiCall<byte[] * string, KnowledgeDocument>
     | DeleteRequested of string
     | DocumentDeleted of string
+    /// The upload / delete RPC threw (network, 413, 500, expired auth) — without
+    /// these the `Cmd.OfAsync.perform` swallowed the error and the spinner hung.
+    | UploadFailed of string
+    | DeleteFailed of string
     | PollStatuses
     | StatusPolled of string * IngestionStatus
     | ResetIndexRequested
@@ -178,8 +182,11 @@ let update (msg: Msg) (model: Model) =
                 Uploading = true
                 UploadError = None
         },
-        Cmd.OfAsync.perform (fun (b, n) -> knowledgeApi.UploadDocument b n) (bytes, fileName) (fun doc ->
-            UploadCompleted(Finished doc))
+        Cmd.OfAsync.either
+            (fun (b, n) -> knowledgeApi.UploadDocument b n)
+            (bytes, fileName)
+            (fun doc -> UploadCompleted(Finished doc))
+            (fun ex -> UploadFailed ex.Message)
 
     | UploadCompleted(Finished doc) ->
         match doc.Status with
@@ -215,11 +222,28 @@ let update (msg: Msg) (model: Model) =
         Cmd.none
 
     | DeleteRequested docId ->
-        model, Cmd.OfAsync.perform (fun id -> knowledgeApi.DeleteDocument id) docId (fun _ -> DocumentDeleted docId)
+        model,
+        Cmd.OfAsync.either (fun id -> knowledgeApi.DeleteDocument id) docId (fun _ -> DocumentDeleted docId) (fun ex ->
+            DeleteFailed ex.Message)
 
     | DocumentDeleted docId ->
         let docs = model.Documents |> List.filter (fun d -> d.Id <> docId)
         { model with Documents = docs }, Cmd.none
+
+    | UploadFailed reason ->
+        {
+            model with
+                Uploading = false
+                UploadError = Some reason
+        },
+        Cmd.none
+
+    | DeleteFailed reason ->
+        {
+            model with
+                LoadError = Some(sprintf "Couldn't delete the document: %s" reason)
+        },
+        Cmd.none
 
     | PollStatuses ->
         // Fire all status fetches in parallel and queue the next poll cycle.

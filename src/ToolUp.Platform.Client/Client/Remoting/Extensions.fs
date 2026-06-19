@@ -45,13 +45,19 @@ module InternalUtilities =
     /// Asynchronously reads the blob data content as string
     let readBlobAsText (blob: Blob) : Async<string> =
         Async.FromContinuations
-        <| fun (resolve, _, _) ->
+        <| fun (resolve, reject, _) ->
             let reader = createFileReader ()
 
             reader.onload <-
                 fun _ ->
                     if reader.readyState = FileReaderState.DONE then
                         resolve (unbox reader.result)
+
+            // Without an error leg the continuation never fires on a reader
+            // failure (corrupt blob, OOM, revoked permission) and the Async
+            // hangs forever — and this one is awaited on the Remoting response
+            // path, so a reader fault would hang the whole RPC with no timeout.
+            reader.onerror <- fun _ -> reject (exn "FileReader failed while reading the blob as text.")
 
             reader.readAsText (blob)
 
@@ -63,7 +69,7 @@ module BrowserFileExtensions =
         /// Asynchronously reads the File content as byte[]
         member instance.ReadAsByteArray() =
             Async.FromContinuations
-            <| fun (resolve, _, _) ->
+            <| fun (resolve, reject, _) ->
                 let reader = InternalUtilities.createFileReader ()
 
                 reader.onload <-
@@ -71,12 +77,13 @@ module BrowserFileExtensions =
                         if reader.readyState = FileReaderState.DONE then
                             resolve (InternalUtilities.createUInt8Array (reader.result))
 
+                reader.onerror <- fun _ -> reject (exn "FileReader failed while reading the file as a byte array.")
                 reader.readAsArrayBuffer (instance)
 
         /// Asynchronously reads the File content as a data url string
         member instance.ReadAsDataUrl() =
             Async.FromContinuations
-            <| fun (resolve, _, _) ->
+            <| fun (resolve, reject, _) ->
                 let reader = InternalUtilities.createFileReader ()
 
                 reader.onload <-
@@ -84,12 +91,13 @@ module BrowserFileExtensions =
                         if reader.readyState = FileReaderState.DONE then
                             resolve (unbox<string> reader.result)
 
+                reader.onerror <- fun _ -> reject (exn "FileReader failed while reading the file as a data URL.")
                 reader.readAsDataURL (instance)
 
         /// Asynchronously reads the File contents as text
         member instance.ReadAsText() =
             Async.FromContinuations
-            <| fun (resolve, _, _) ->
+            <| fun (resolve, reject, _) ->
                 let reader = InternalUtilities.createFileReader ()
 
                 reader.onload <-
@@ -97,6 +105,7 @@ module BrowserFileExtensions =
                         if reader.readyState = FileReaderState.DONE then
                             resolve (unbox<string> reader.result)
 
+                reader.onerror <- fun _ -> reject (exn "FileReader failed while reading the file as text.")
                 reader.readAsText (instance)
 
 [<Extension>]

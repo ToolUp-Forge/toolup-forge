@@ -59,8 +59,12 @@ let private writeCell (s: string) : string =
     else
         s
 
-let private splitLines (raw: string) (opts: StringSplitOptions) : string list =
-    raw.Split([| "\r\n"; "\n"; "\r" |], opts) |> Array.toList
+// Returns an ARRAY, not a `string list`. A multi-MB / 50k-row CSV turned into
+// an F# linked list (and then folded/concatenated) is the large-list /
+// deep-recursion shape that overflows the JS call stack under Fable — and this
+// engine runs in the browser (the mapping wizard's parsePreview + rewriteCsv).
+let private splitLines (raw: string) (opts: StringSplitOptions) : string[] =
+    raw.Split([| "\r\n"; "\n"; "\r" |], opts)
 
 // ─── Name similarity ──────────────────────────────────────────────
 
@@ -552,11 +556,18 @@ module Fingerprint =
 /// `suggest` for type inference. Single tested parse site shared by
 /// client and server.
 let parsePreview (sampleSize: int) (rawCsv: string) : string list * Map<string, string list> =
-    match splitLines rawCsv StringSplitOptions.RemoveEmptyEntries with
-    | [] -> [], Map.empty
-    | header :: rows ->
-        let headers = splitCsvLine header |> List.map (fun h -> h.Trim())
-        let sampleRows = rows |> List.truncate sampleSize |> List.map splitCsvLine
+    let lines = splitLines rawCsv StringSplitOptions.RemoveEmptyEntries
+
+    if lines.Length = 0 then
+        [], Map.empty
+    else
+        let headers = splitCsvLine lines[0] |> List.map (fun h -> h.Trim())
+
+        // Materialise at most `sampleSize` body rows — never the whole file
+        // (a 50k-row file should not build a 50k-element structure to sample 20).
+        let sampleCount = min (max 0 sampleSize) (lines.Length - 1)
+
+        let sampleRows = [ for i in 1..sampleCount -> splitCsvLine lines[i] |> List.toArray ]
 
         let samples =
             headers
@@ -673,38 +684,50 @@ let rewriteCsv
     (transforms: Map<string, CellTransform list>)
     (rawCsv: string)
     : string =
-    match splitLines rawCsv StringSplitOptions.None with
-    | [] -> ""
-    | header :: rows ->
-        let srcHeaders = splitCsvLine header
+    let lines = splitLines rawCsv StringSplitOptions.None
+
+    if lines.Length = 0 then
+        ""
+    else
+        let srcHeaders = splitCsvLine lines[0]
 
         let srcIndex (name: string) =
             let target = name.Trim().ToLower()
             srcHeaders |> List.tryFindIndex (fun h -> h.Trim().ToLower() = target)
 
         // schema columns that have a mapping AND resolve to a real source
-        // column — keep the source name to look up its transforms.
+        // column. Pre-resolve each one's source index + transforms ONCE so the
+        // per-row loop does no Map lookups.
         let emitted =
             schema.Columns
             |> List.choose (fun col ->
                 match fieldToColumn |> Map.tryFind col.Name with
-                | Some src -> srcIndex src |> Option.map (fun idx -> col.Name, idx, src)
+                | Some src ->
+                    srcIndex src
+                    |> Option.map (fun idx -> col.Name, idx, (transforms |> Map.tryFind src |> Option.defaultValue []))
                 | None -> None)
 
-        let outHeader =
-            emitted |> List.map (fun (name, _, _) -> writeCell name) |> String.concat ","
+        // Build the output with a StringBuilder over the line ARRAY — no
+        // 50k-element `string list`, no `String.concat` over every row (the
+        // shape that overflows the Fable call stack on "Confirm & import").
+        let sb = System.Text.StringBuilder()
 
-        let outRows =
-            rows
-            |> List.filter (fun r -> r.Trim() <> "")
-            |> List.map (fun r ->
-                let cells = splitCsvLine r
+        sb.Append(emitted |> List.map (fun (name, _, _) -> writeCell name) |> String.concat ",")
+        |> ignore
 
-                emitted
-                |> List.map (fun (_, idx, src) ->
-                    let raw = if idx < cells.Length then cells[idx] else ""
-                    let ts = transforms |> Map.tryFind src |> Option.defaultValue []
-                    applyTransforms ts raw |> writeCell)
-                |> String.concat ",")
+        for i in 1 .. lines.Length - 1 do
+            let r = lines[i]
 
-        String.concat "\n" (outHeader :: outRows)
+            if r.Trim() <> "" then
+                let cells = splitCsvLine r |> List.toArray
+
+                let rowOut =
+                    emitted
+                    |> List.map (fun (_, idx, ts) ->
+                        let raw = if idx >= 0 && idx < cells.Length then cells[idx] else ""
+                        applyTransforms ts raw |> writeCell)
+                    |> String.concat ","
+
+                sb.Append('\n').Append(rowOut) |> ignore
+
+        sb.ToString()

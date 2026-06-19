@@ -136,15 +136,19 @@ module Program =
     /// structured / filterable observability.
     [<System.Obsolete("Use Program.withErrorReporter + an update interceptor for structured tracing. withConsoleTrace will be removed in a future major.")>]
     let withConsoleTrace (program: Program<'arg, 'model, 'msg, 'view>) =
+        // Log bounded string reprs (`safeMsgRepr`), never the live msg/model
+        // object — a message can carry a multi-MB payload (uploaded file
+        // contents), which `%A`-formats to a stack overflow on the .NET sink
+        // and pins memory in the Fable devtools sink.
         let traceInit (arg: 'arg) =
             let initModel, cmd = program.init arg
-            Log.toConsole ("Initial state:", initModel)
+            Log.toConsole ("Initial state:", safeMsgRepr initModel)
             initModel, cmd
 
         let traceUpdate msg model =
-            Log.toConsole ("New message:", msg)
+            Log.toConsole ("New message:", safeMsgRepr msg)
             let newModel, cmd = program.update msg model
-            Log.toConsole ("Updated state:", newModel)
+            Log.toConsole ("Updated state:", safeMsgRepr newModel)
             newModel, cmd
 
         let traceSubscribe model =
