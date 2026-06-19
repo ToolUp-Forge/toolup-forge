@@ -363,18 +363,24 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | RecordsLoaded records -> { model with Records = records }, Cmd.none
 
     | SelectFile file ->
-        let read () = async {
+        // Read the file via a direct effect rather than the previous
+        // `Cmd.OfAsync.perform` + `Async.FromContinuations` pairing. Under
+        // Fable 5 that async path silently no-ops here — the deferred async
+        // start never runs the reader (no FileReader is even constructed),
+        // so `FileChosen` is never dispatched and the import appears to hang
+        // forever with no spinner, no network, and no error (`OfAsync.perform`
+        // swallows exceptions). An effect runs synchronously when the runtime
+        // execs the Cmd, and we dispatch straight from the reader callbacks —
+        // no trampoline, no swallowed errors.
+        model,
+        Cmd.ofEffect (fun dispatch ->
             let reader = Browser.Dom.FileReader.Create()
+            reader.onload <- fun _ -> dispatch (FileChosen(file.name, reader.result :?> string))
 
-            let! content =
-                Async.FromContinuations(fun (cont, _, _) ->
-                    reader.onload <- fun _ -> cont (reader.result :?> string)
-                    reader.readAsText file)
+            reader.onerror <-
+                fun _ -> dispatch (ApiError(sprintf "Couldn't read '%s' — the file may be unreadable." file.name))
 
-            return file.name, content
-        }
-
-        model, Cmd.OfAsync.perform read () (fun (n, c) -> FileChosen(n, c))
+            reader.readAsText file)
 
     | FileChosen(fileName, contents) ->
         let headers, samples = ColumnMapping.parsePreview 20 contents

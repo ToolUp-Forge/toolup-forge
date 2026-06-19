@@ -77,30 +77,32 @@ let update msg model =
     | SelectFile action ->
         match action with
         | Start file ->
-            let readFileAsync () = async {
-                let reader = Browser.Dom.FileReader.Create()
-
-                let! content =
-                    Async.FromContinuations(fun (cont, _, _) ->
-                        reader.onload <-
-                            fun _ ->
-                                let content = reader.result :?> string
-                                cont content
-
-                        reader.readAsText file)
-
-                return {
-                    filename = file.name
-                    contents = content
-                    dataType = "UnrecognisedData"
-                }
-            }
-
+            // Read via a direct effect, not `Cmd.OfAsync.perform` +
+            // `Async.FromContinuations`. Under Fable 5 that async path
+            // silently no-ops (the deferred async start never runs the
+            // reader), so the upload hangs with no error. An effect runs
+            // synchronously and dispatches straight from the reader callbacks.
             {
                 model with
                     CurrentUpload = Loading None
             },
-            Cmd.OfAsync.perform readFileAsync () (Finished >> SelectFile)
+            Cmd.ofEffect (fun dispatch ->
+                let reader = Browser.Dom.FileReader.Create()
+
+                reader.onload <-
+                    fun _ ->
+                        let upload = {
+                            filename = file.name
+                            contents = reader.result :?> string
+                            dataType = "UnrecognisedData"
+                        }
+
+                        dispatch (SelectFile(Finished upload))
+
+                reader.onerror <-
+                    fun _ -> dispatch (ApiError(sprintf "Couldn't read '%s' — the file may be unreadable." file.name))
+
+                reader.readAsText file)
 
         | Finished dataFileUpload -> model, Cmd.ofMsg (UploadFile(Start dataFileUpload))
 
