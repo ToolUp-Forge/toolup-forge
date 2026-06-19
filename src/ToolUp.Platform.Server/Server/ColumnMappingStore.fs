@@ -52,38 +52,54 @@ let objectIdFor (fingerprint: string) (targetTypeId: string) : string =
 /// Object id for a provenance record (keyed by produced file name).
 let recordObjectIdFor (producedFile: string) : string = RecordPrefix + sha producedFile
 
-let inline private deserialise<'T> (bytes: byte[]) : 'T option =
+/// Warn through the threaded structured logger, falling back to stderr
+/// only when none was resolved (test harnesses that bypass compose).
+let private warn (logger: ILogger option) (msg: string) =
+    match logger with
+    | Some l -> l.Warn msg
+    | None -> eprintfn "%s" msg
+
+let inline private deserialise<'T> (logger: ILogger option) (bytes: byte[]) : 'T option =
     try
         Some(JsonSerializer.Deserialize<'T>(Encoding.UTF8.GetString bytes, jsonOptions))
     with ex ->
         // A recipe/record that fails to deserialise silently stops applying —
-        // surface it (stderr; no logger is threaded into this module) so a
-        // saved conversion that mysteriously stopped working is diagnosable.
-        eprintfn "ColumnMappingStore: a %s sidecar could not be deserialised; skipping it. %O" (typeof<'T>.Name) ex
+        // surface it so a saved conversion that mysteriously stopped working
+        // is diagnosable.
+        warn
+            logger
+            (sprintf "ColumnMappingStore: a %s sidecar could not be deserialised; skipping it. %O" (typeof<'T>.Name) ex)
+
         None
 
 /// Read + deserialise every sidecar of one data-type tag in a scope.
-let private readAllOf<'T> (store: IDataObjectStore) (tag: string) (scopeId: string) : Async<'T list> = async {
-    let! objects = store.ListObjects scopeId
+let private readAllOf<'T>
+    (store: IDataObjectStore)
+    (logger: ILogger option)
+    (tag: string)
+    (scopeId: string)
+    : Async<'T list> =
+    async {
+        let! objects = store.ListObjects scopeId
 
-    let! results =
-        objects
-        |> List.filter (fun o -> o.DataType = tag)
-        |> List.map (fun o -> async {
-            match! store.Get(scopeId, o.ObjectId) with
-            | Ok(_, bytes) -> return deserialise<'T> bytes
-            | Error e ->
-                eprintfn "ColumnMappingStore: a '%s' sidecar could not be read; skipping it. %A" tag e
-                return None
-        })
-        // Bounded parallel, not serial: `GetByFingerprint` runs on every CSV
-        // upload (to find a reusable recipe), so N serial blob round-trips on a
-        // remote store would be on the upload hot path. 16 matches the
-        // startup-hydration fan-out convention.
-        |> fun xs -> Async.Parallel(xs, 16)
+        let! results =
+            objects
+            |> List.filter (fun o -> o.DataType = tag)
+            |> List.map (fun o -> async {
+                match! store.Get(scopeId, o.ObjectId) with
+                | Ok(_, bytes) -> return deserialise<'T> logger bytes
+                | Error e ->
+                    warn logger (sprintf "ColumnMappingStore: a '%s' sidecar could not be read; skipping it. %A" tag e)
+                    return None
+            })
+            // Bounded parallel, not serial: `GetByFingerprint` runs on every CSV
+            // upload (to find a reusable recipe), so N serial blob round-trips on a
+            // remote store would be on the upload hot path. 16 matches the
+            // startup-hydration fan-out convention.
+            |> fun xs -> Async.Parallel(xs, 16)
 
-    return results |> Array.toList |> List.choose id
-}
+        return results |> Array.toList |> List.choose id
+    }
 
 let private saveObjectIn (store: IDataObjectStore) scopeId objectId tag createdBy value = async {
     try
@@ -96,8 +112,10 @@ let private saveObjectIn (store: IDataObjectStore) scopeId objectId tag createdB
         return Error ex.Message
 }
 
-/// Create the default store over an `IDataObjectStore`.
-let create (store: IDataObjectStore) : IConversionStore =
+/// Create the default store over an `IDataObjectStore`. `logger` routes
+/// the deserialise / read-failure warnings to the structured log; `None`
+/// (test harnesses) falls back to stderr.
+let create (store: IDataObjectStore) (logger: ILogger option) : IConversionStore =
     { new IConversionStore with
         member _.Save(scopeId, conversion) =
             saveObjectIn
@@ -109,12 +127,12 @@ let create (store: IDataObjectStore) : IConversionStore =
                 conversion
 
         member _.GetByFingerprint(scopeId, fingerprint) = async {
-            let! all = readAllOf<Conversion> store RecipeDataType scopeId
+            let! all = readAllOf<Conversion> store logger RecipeDataType scopeId
             return all |> List.filter (fun c -> c.Fingerprint = fingerprint)
         }
 
         member _.List(scopeId) =
-            readAllOf<Conversion> store RecipeDataType scopeId
+            readAllOf<Conversion> store logger RecipeDataType scopeId
 
         member _.Delete(scopeId, fingerprint, targetTypeId) = async {
             match! store.Delete(scopeId, objectIdFor fingerprint targetTypeId) with
@@ -127,5 +145,5 @@ let create (store: IDataObjectStore) : IConversionStore =
             saveObjectIn store scopeId (recordObjectIdFor record.ProducedFile) RecordDataType record.ConvertedBy record
 
         member _.ListRecords(scopeId) =
-            readAllOf<ConversionRecord> store RecordDataType scopeId
+            readAllOf<ConversionRecord> store logger RecordDataType scopeId
     }

@@ -152,7 +152,13 @@ let registerColumnMappingStore (services: IServiceCollection) (config: ServerCon
     | EnabledColumnMapping ->
         services.AddSingleton<IConversionStore>(fun (sp: System.IServiceProvider) ->
             let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
-            ColumnMappingStore.create dos)
+
+            let logger =
+                match sp.GetService(typeof<ILogger>) with
+                | :? ILogger as l -> Some l
+                | _ -> None
+
+            ColumnMappingStore.create dos logger)
         |> ignore
     | NoColumnMapping -> ()
 

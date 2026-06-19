@@ -85,7 +85,7 @@ let private mk fingerprint typeId pairs : Conversion = {
 }
 
 let private newStore () : IConversionStore =
-    ColumnMappingStore.create (InMemoryObjectStore())
+    ColumnMappingStore.create (InMemoryObjectStore()) None
 
 let tests =
     testList "IConversionStore contract" [
