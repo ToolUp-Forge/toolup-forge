@@ -154,7 +154,7 @@ let private unresolvedRequired (w: Wizard) : string list =
     | Some s ->
         s.Fields
         |> List.filter (fun f -> f.Field.Required && (chosenColumn w f).IsNone)
-        |> List.map (fun f -> f.Field.Name)
+        |> List.map _.Field.Name
 
 // ─── Data-quality (ReviewData step) helpers ───────────────────────
 

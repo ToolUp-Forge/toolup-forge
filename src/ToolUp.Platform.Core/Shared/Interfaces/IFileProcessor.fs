@@ -45,10 +45,7 @@ module CsvHeaders =
             |> Array.tryHead
 
         match firstLine with
-        | Some line ->
-            line.Split(',')
-            |> Array.map (fun h -> h.Trim().ToLowerInvariant())
-            |> Set.ofArray
+        | Some line -> line.Split(',') |> Array.map _.Trim().ToLowerInvariant() |> Set.ofArray
         | None -> Set.empty
 
     /// True if the header set contains all of the given names

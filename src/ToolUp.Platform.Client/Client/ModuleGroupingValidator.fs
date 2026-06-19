@@ -53,13 +53,13 @@ open ToolUp.Platform
 let result (modules: ErasedModule list) : Result<unit, string> =
     if List.isEmpty modules then
         Ok()
-    elif modules |> List.exists (fun m -> m.Group.IsSome) then
+    elif modules |> List.exists _.Group.IsSome then
         Ok()
     else
         let firstName =
             modules
             |> List.tryHead
-            |> Option.map (fun m -> m.Definition.Name)
+            |> Option.map _.Definition.Name
             |> Option.defaultValue "<unnamed>"
 
         Error(

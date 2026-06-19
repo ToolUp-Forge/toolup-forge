@@ -373,8 +373,7 @@ type Reader(data: byte[]) =
 
         if FSharpType.IsRecord t then
 #if !FABLE_COMPILER
-                let fieldTypes =
-                    FSharpType.GetRecordFields t |> Array.map (fun prop -> prop.PropertyType)
+                let fieldTypes = FSharpType.GetRecordFields t |> Array.map _.PropertyType
 
                 let ctor = FSharpValue.PreComputeRecordConstructor(t, true)
 
@@ -412,7 +411,7 @@ type Reader(data: byte[]) =
                                              FSharpType.GetUnionCases(t, true) |> Array.find (fun x -> x.Tag = tag)
 
                                          let fields = case.GetFields()
-                                         case, fields |> Array.map (fun x -> x.PropertyType)
+                                         case, fields |> Array.map _.PropertyType
                                  )
 
                              let fields =
@@ -434,7 +433,7 @@ type Reader(data: byte[]) =
 #else
             let tag = x.Read typeof<int> :?> int
             let case = FSharpType.GetUnionCases t |> Array.find (fun x -> x.Tag = tag)
-            let fieldTypes = case.GetFields() |> Array.map (fun x -> x.PropertyType)
+            let fieldTypes = case.GetFields() |> Array.map _.PropertyType
 
             let fields =
                 // single case field is serialized directly

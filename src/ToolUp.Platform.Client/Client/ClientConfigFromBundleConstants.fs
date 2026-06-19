@@ -121,7 +121,7 @@ let private parseSurfacesString (raw: string) (fallback: SurfaceProfile list) : 
     | s ->
         let tokens =
             s.Split([| ','; ';'; ' ' |])
-            |> Array.map (fun t -> t.Trim().ToLowerInvariant())
+            |> Array.map _.Trim().ToLowerInvariant()
             |> Array.filter (fun t -> t <> "")
             |> Array.toList
 

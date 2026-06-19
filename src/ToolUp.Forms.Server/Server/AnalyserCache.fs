@@ -193,7 +193,7 @@ type ResultStoreAnalyserCache(resultStore: IResultStore, scopeIdResolver: unit -
 
                 let count =
                     entries
-                    |> List.filter (fun obj -> obj.DataType.StartsWith prefix)
+                    |> List.filter _.DataType.StartsWith(prefix)
                     |> List.distinctBy _.DataType
                     |> List.length
 

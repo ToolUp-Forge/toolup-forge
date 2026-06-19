@@ -166,7 +166,7 @@ type IngestionBackgroundService
             for (chunkId, chunk) in doc.Chunks do
                 let job = chunkJob doc chunkId chunk
                 do! emitFailed job msg
-                do! notifyObservers "OnChunkFailed" job (fun o -> o.OnChunkFailed(job, msg))
+                do! notifyObservers "OnChunkFailed" job (_.OnChunkFailed(job, msg))
         | Ok() ->
             // Pre-warm the embedding cache with one batched call. Failures
             // here propagate to per-chunk failure events because the
@@ -223,7 +223,7 @@ type IngestionBackgroundService
                     do! notifyObservers "OnChunkIndexed" job (fun o -> o.OnChunkIndexed job)
                 with ex ->
                     do! emitFailed job ex.Message
-                    do! notifyObservers "OnChunkFailed" job (fun o -> o.OnChunkFailed(job, ex.Message))
+                    do! notifyObservers "OnChunkFailed" job (_.OnChunkFailed(job, ex.Message))
     }
 
     let processJob (doc: DocumentIngestionJob) = async {
@@ -254,7 +254,7 @@ type IngestionBackgroundService
                 for (chunkId, chunk) in doc.Chunks do
                     let job = chunkJob doc chunkId chunk
                     do! emitFailed job msg
-                    do! notifyObservers "OnChunkFailed" job (fun o -> o.OnChunkFailed(job, msg))
+                    do! notifyObservers "OnChunkFailed" job (_.OnChunkFailed(job, msg))
         finally
             sem.Release() |> ignore
     }

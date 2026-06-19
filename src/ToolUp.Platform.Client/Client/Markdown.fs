@@ -214,7 +214,7 @@ let private splitTableRow (line: string) : string list option =
 
         Some(
             body.Split('|')
-            |> Array.map (fun c -> c.Trim().Replace(tableEscapePlaceholder, "|"))
+            |> Array.map _.Trim().Replace(tableEscapePlaceholder, "|")
             |> Array.toList
         )
 

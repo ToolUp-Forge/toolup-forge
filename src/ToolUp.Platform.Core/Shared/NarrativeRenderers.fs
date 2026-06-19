@@ -69,7 +69,7 @@ let tryFindByContentType (contentType: string) (registry: INarrativeRenderer lis
 /// types the deployment did not customise.
 let resolve (additional: INarrativeRenderer list) : INarrativeRenderer list =
     let additionalContentTypes =
-        additional |> List.map (fun r -> r.ContentType.ToLowerInvariant()) |> Set.ofList
+        additional |> List.map _.ContentType.ToLowerInvariant() |> Set.ofList
 
     let preservedDefaults =
         defaults

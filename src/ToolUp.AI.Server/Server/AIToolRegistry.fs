@@ -62,7 +62,7 @@ let toProviderDef (def: AIToolDefinition) : AIProviderToolDef =
 
     let required =
         def.Parameters
-        |> List.filter (fun p -> p.Required)
+        |> List.filter _.Required
         |> List.map (fun p -> $"\"{jsonEscape p.Name}\"")
         |> String.concat ","
 

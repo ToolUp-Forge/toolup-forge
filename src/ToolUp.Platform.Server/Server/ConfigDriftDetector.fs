@@ -74,7 +74,7 @@ let rec private redact (node: JsonNode) : unit =
             // iterate the snapshot — never `for kvp in obj do … obj.[k] <- …`.
             // See docs/migrations/fablejsonconverter-to-stj.md
             // "JsonNode equivalents" for the canonical pattern.
-            let names = obj |> Seq.map (fun kvp -> kvp.Key) |> Seq.toArray
+            let names = obj |> Seq.map _.Key |> Seq.toArray
 
             for name in names do
                 let child = obj[name]
@@ -191,8 +191,8 @@ let rec private diffTokens
 
         let allKeys =
             seq {
-                yield! prevObj |> Seq.map (fun kvp -> kvp.Key)
-                yield! currObj |> Seq.map (fun kvp -> kvp.Key)
+                yield! prevObj |> Seq.map _.Key
+                yield! currObj |> Seq.map _.Key
             }
             |> Seq.distinct
             |> Seq.sort
@@ -263,7 +263,7 @@ let run (storage: IBlobStorage) (auditLog: IAuditLog) (logger: ILogger) (config:
                 let prevHash =
                     prevSnapshot.["companionSetHash"]
                     |> Option.ofObj
-                    |> Option.map (fun n -> n.GetValue<string>())
+                    |> Option.map _.GetValue<string>()
 
                 let changes =
                     if prevConfig <> null && currConfig <> null then

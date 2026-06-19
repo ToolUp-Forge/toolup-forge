@@ -33,7 +33,7 @@ type DataCatalog(registrations: DataTypeRegistration list, objectStore: IDataObj
 
     /// Index by `Info.Id` for O(1) schema and producer lookups.
     /// Multiple producers per id are preserved as a list.
-    let byId = registrations |> List.groupBy (fun r -> r.DataType.Info.Id) |> Map.ofList
+    let byId = registrations |> List.groupBy _.DataType.Info.Id |> Map.ofList
 
     interface IDataCatalog with
         member _.ListTypes() = async {
@@ -56,14 +56,14 @@ type DataCatalog(registrations: DataTypeRegistration list, objectStore: IDataObj
             return
                 byId
                 |> Map.tryFind typeId
-                |> Option.bind (fun rs -> rs |> List.tryPick (fun r -> r.DataType.Info.Schema))
+                |> Option.bind (fun rs -> rs |> List.tryPick _.DataType.Info.Schema)
         }
 
         member _.GetProducers(typeId) = async {
             return
                 byId
                 |> Map.tryFind typeId
-                |> Option.map (fun rs -> rs |> List.map (fun r -> r.ModuleName) |> List.distinct)
+                |> Option.map (fun rs -> rs |> List.map _.ModuleName |> List.distinct)
                 |> Option.defaultValue []
         }
 
@@ -91,7 +91,7 @@ type DataCatalog(registrations: DataTypeRegistration list, objectStore: IDataObj
             let schema =
                 byId
                 |> Map.tryFind typeId
-                |> Option.bind (fun rs -> rs |> List.tryPick (fun r -> r.DataType.Info.Schema))
+                |> Option.bind (fun rs -> rs |> List.tryPick _.DataType.Info.Schema)
 
             // In-process cap is the generator's `Int32.MaxValue` ceiling;
             // the per-scope partner-sandbox cap is enforced by the gate

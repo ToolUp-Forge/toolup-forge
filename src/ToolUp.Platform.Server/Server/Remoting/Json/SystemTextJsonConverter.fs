@@ -57,7 +57,7 @@ module private UnionReflection =
 
                         {
                             Uci = uci
-                            FieldTypes = fields |> Array.map (fun pi -> pi.PropertyType)
+                            FieldTypes = fields |> Array.map _.PropertyType
                             FieldReader = reader
                             Constructor = FSharpValue.PreComputeUnionConstructor(uci, bindingFlags)
                         })
@@ -122,8 +122,8 @@ module private RecordReflection =
 
                 {
                     RecordType = t
-                    FieldNames = fields |> Array.map (fun pi -> pi.Name)
-                    FieldTypes = fields |> Array.map (fun pi -> pi.PropertyType)
+                    FieldNames = fields |> Array.map _.Name
+                    FieldTypes = fields |> Array.map _.PropertyType
                     Reader = FSharpValue.PreComputeRecordReader(t, UnionReflection.bindingFlags)
                     Constructor = FSharpValue.PreComputeRecordConstructor(t, UnionReflection.bindingFlags)
                     FieldIndexByName = nameIndex
@@ -815,7 +815,7 @@ type FSharpListConverter<'T>() =
             use doc = JsonDocument.ParseValue(&reader)
 
             doc.RootElement.EnumerateArray()
-            |> Seq.map (fun el -> el.Deserialize<'T>(options))
+            |> Seq.map _.Deserialize<'T>(options)
             |> List.ofSeq
         | other -> failwithf "Unexpected token %A when reading %s list" other typeof<'T>.FullName
 

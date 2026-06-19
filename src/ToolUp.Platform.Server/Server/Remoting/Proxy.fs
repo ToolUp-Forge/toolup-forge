@@ -56,7 +56,7 @@ let private parseArgumentArray
             functionName
             expectedArgCount
 
-    doc.RootElement.EnumerateArray() |> Seq.map (fun el -> el.Clone()) |> Seq.toList
+    doc.RootElement.EnumerateArray() |> Seq.map _.Clone() |> Seq.toList
 
 /// Phase 69m — parse the outer arguments-array from cached bytes
 /// directly (no string materialisation). Used when the adapter's body
@@ -77,7 +77,7 @@ let private parseArgumentArrayBytes
             functionName
             expectedArgCount
 
-    doc.RootElement.EnumerateArray() |> Seq.map (fun el -> el.Clone()) |> Seq.toList
+    doc.RootElement.EnumerateArray() |> Seq.map _.Clone() |> Seq.toList
 
 /// Phase 69m — deserialise one `JsonElement` argument into `'inp`.
 /// `JsonElement.Deserialize` walks the existing element's tokens; no

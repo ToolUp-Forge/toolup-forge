@@ -41,7 +41,7 @@ let private sha (material: string) : string =
     use h = SHA256.Create()
 
     h.ComputeHash(Encoding.UTF8.GetBytes material)
-    |> Array.map (fun b -> b.ToString("x2"))
+    |> Array.map _.ToString("x2")
     |> String.concat ""
 
 /// Object id for a recipe (fingerprint, target type) pair.

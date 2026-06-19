@@ -162,8 +162,7 @@ let composeAI (app: AIServerApp) : ServerApp =
     // silently lost lookup to the prepended built-in at
     // `registry.RegisterAll` (the agent then saw two tools with the
     // same name and hit a provider-side 400 at runtime).
-    let builtInToolNames =
-        NarrativeTools.builtInTools |> List.map (fun t -> t.Definition.Name)
+    let builtInToolNames = NarrativeTools.builtInTools |> List.map _.Definition.Name
 
     let moduleToolNames = moduleTools |> List.map (fun (def, _) -> def.Name)
 
@@ -188,8 +187,8 @@ let composeAI (app: AIServerApp) : ServerApp =
     // disables the check (back-compat with consumers that haven't
     // adopted the builder).
     if not app.PlatformProviders.IsEmpty then
-        let declaredIds = app.PlatformProviders |> List.map (fun p -> p.Descriptor.Id)
-        let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map (fun d -> d.Id)
+        let declaredIds = app.PlatformProviders |> List.map _.Descriptor.Id
+        let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map _.Id
 
         // Compare as sets — the validator's purpose is to catch
         // "declared providers do not match factory-wired providers", a

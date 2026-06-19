@@ -484,9 +484,9 @@ let composeWithRAG
     // before any request runs, rather than as a mysterious
     // NoProviderConfigured at first request. Mirrors AICompose.fs.
     if not platformProviders.IsEmpty then
-        let declaredIds = platformProviders |> List.map (fun p -> p.Descriptor.Id)
+        let declaredIds = platformProviders |> List.map _.Descriptor.Id
 
-        let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map (fun d -> d.Id)
+        let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map _.Id
 
         if Set.ofList declaredIds <> Set.ofList factoryIds then
             failwithf
@@ -617,8 +617,7 @@ let composeWithRAG
     // Validate tool name uniqueness across modules AND against the
     // platform-reserved `NarrativeTools.builtInTools` names. Same shape
     // as `composeWithAI` — duplicates fail loudly here at compose time.
-    let builtInToolNames =
-        NarrativeTools.builtInTools |> List.map (fun t -> t.Definition.Name)
+    let builtInToolNames = NarrativeTools.builtInTools |> List.map _.Definition.Name
 
     let moduleToolNames = moduleTools |> List.map (fun (def, _) -> def.Name)
 

@@ -160,7 +160,7 @@ let private boolTokens = set [ "true"; "false"; "yes"; "no" ]
 /// `StringColumn`. Booleans are recognised only from the explicit token
 /// set (not `0`/`1`) so numeric columns aren't mis-typed.
 let inferColumnType (cells: string list) : ColumnType =
-    let values = cells |> List.map (fun c -> c.Trim()) |> List.filter (fun c -> c <> "")
+    let values = cells |> List.map _.Trim() |> List.filter (fun c -> c <> "")
 
     match values with
     | [] -> StringColumn
@@ -370,8 +370,7 @@ let private examplesOf (xs: string list) = xs |> List.distinct |> List.truncate 
 /// propose remediation. Pure — the wizard's "Review data" step renders
 /// the result; the chosen transforms ride into the saved `ColumnMapping`.
 let profileColumn (header: string) (cells: string list) : ColumnProfile =
-    let nonBlank =
-        cells |> List.map (fun c -> c.Trim()) |> List.filter (fun c -> c <> "")
+    let nonBlank = cells |> List.map _.Trim() |> List.filter (fun c -> c <> "")
 
     let realValues = nonBlank |> List.filter (isNullMarker >> not)
     let n = List.length realValues
@@ -544,7 +543,7 @@ module Fingerprint =
     /// so a saved mapping is reused.
     let ofHeaders (headers: string list) : string =
         headers
-        |> List.map (fun h -> h.Trim().ToLower())
+        |> List.map _.Trim().ToLower()
         |> List.filter (fun h -> h <> "")
         |> List.sort
         |> String.concat "|"
@@ -561,7 +560,7 @@ let parsePreview (sampleSize: int) (rawCsv: string) : string list * Map<string, 
     if lines.Length = 0 then
         [], Map.empty
     else
-        let headers = splitCsvLine lines[0] |> List.map (fun h -> h.Trim())
+        let headers = splitCsvLine lines[0] |> List.map _.Trim()
 
         // Materialise at most `sampleSize` body rows — never the whole file
         // (a 50k-row file should not build a 50k-element structure to sample 20).

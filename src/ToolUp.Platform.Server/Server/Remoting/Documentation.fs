@@ -92,15 +92,9 @@ module Docs =
             route.["httpMethod"] <- JsonValue.Create(routeMethod fieldInfo.PropertyType)
             route.["route"] <- JsonValue.Create(routeBuilder recordType.Name fieldInfo.Name)
 
-            let description =
-                routeDocs
-                |> Option.bind (fun route -> route.Description)
-                |> Option.defaultValue ""
+            let description = routeDocs |> Option.bind _.Description |> Option.defaultValue ""
 
-            let alias =
-                routeDocs
-                |> Option.bind (fun route -> route.Alias)
-                |> Option.defaultValue fieldInfo.Name
+            let alias = routeDocs |> Option.bind _.Alias |> Option.defaultValue fieldInfo.Name
 
             route.["description"] <- JsonValue.Create(description)
             route.["alias"] <- JsonValue.Create(alias)

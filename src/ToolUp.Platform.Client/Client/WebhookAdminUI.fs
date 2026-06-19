@@ -666,7 +666,7 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
                                                             prop.className "px-3 py-2 font-mono text-gray-500"
                                                             prop.text (
                                                                 row.EventId
-                                                                |> Option.map (fun g -> g.ToString("N").Substring(0, 8))
+                                                                |> Option.map _.ToString("N").Substring(0, 8)
                                                                 |> Option.defaultValue "—"
                                                             )
                                                         ]

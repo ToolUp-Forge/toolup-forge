@@ -223,7 +223,7 @@ and TypeCache private (cache: ConcurrentDictionary<Type, CachePayload>) =
     /// Gets all types registered in the cache
     member __.Keys = cache.Keys |> Seq.map id
     /// Gets all values registered in the cache
-    member __.Values = cache.Values |> Seq.map (fun p -> p.Value)
+    member __.Values = cache.Values |> Seq.map _.Value
 
     /// Try looking up cached value by type
     member __.TryGetValue<'T>(result: byref<'T>) : bool =

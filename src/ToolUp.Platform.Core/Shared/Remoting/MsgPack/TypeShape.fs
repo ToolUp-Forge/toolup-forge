@@ -124,7 +124,7 @@ module private TypeShapeImpl =
             else
                 templateTy.MakeGenericType typeArgs
 
-        let ctypes = args |> Array.map (fun o -> o.GetType())
+        let ctypes = args |> Array.map _.GetType()
 
         let ctor =
             templateTy.GetConstructor(AllMembers, null, CallingConventions.Standard, ctypes, [||])
@@ -551,7 +551,7 @@ module private MemberUtils =
         |> invalidOp
 
     let isStructMember (path: MemberInfo[]) =
-        path |> Array.exists (fun m -> m.DeclaringType.IsValueType)
+        path |> Array.exists _.DeclaringType.IsValueType
 
     let isPublicMember (memberInfo: MemberInfo) =
         match memberInfo with
@@ -870,7 +870,7 @@ module private MemberUtils2 =
             <| sprintf "TypeShape internal error: Member '%O' is not writable" memberInfo
 
     let mkCtorUntyped<'Record> (ctorInfo: ConstructorInfo) =
-        let argTypes = ctorInfo.GetParameters() |> Array.map (fun p -> p.ParameterType)
+        let argTypes = ctorInfo.GetParameters() |> Array.map _.ParameterType
         let arity = argTypes.Length
 
         let argumentType =
@@ -1165,7 +1165,7 @@ and [<Sealed>] ShapeFSharpUnion<'U> private () =
 #endif
     let tagReader = FSharpValue.PreComputeUnionTagReader(typeof<'U>, AllMembers)
 
-    let caseNames = ucis |> Array.map (fun u -> u.CaseInfo.Name)
+    let caseNames = ucis |> Array.map _.CaseInfo.Name
 
     member _.IsStructUnion = isStructUnion
 
@@ -1302,7 +1302,7 @@ and [<Sealed>] ShapePoco<'Poco> private () =
 
     let properties =
         typeof<'Poco>.GetProperties(AllInstanceMembers)
-        |> Seq.filter (fun p -> p.CanRead)
+        |> Seq.filter _.CanRead
         |> Seq.map (fun p -> mkMemberUntyped<'Poco> p.Name p [| p |])
         |> Seq.toArray
 
@@ -1446,7 +1446,7 @@ module Shape =
                 if t.IsValueType then
                     t.GetProperties(AllMembers)
                     |> Seq.filter (fun p -> p.Name <> "Tag")
-                    |> Seq.map (fun p -> p.PropertyType)
+                    |> Seq.map _.PropertyType
                     |> Seq.distinct
                     |> Seq.forall (isEqualityConstraint (t :: stack))
 
@@ -1456,8 +1456,8 @@ module Shape =
                     true
                 else
                     FSharpType.GetUnionCases(t, AllMembers)
-                    |> Seq.collect (fun uci -> uci.GetFields())
-                    |> Seq.map (fun p -> p.PropertyType)
+                    |> Seq.collect _.GetFields()
+                    |> Seq.map _.PropertyType
                     |> Seq.distinct
                     |> Seq.forall (isEqualityConstraint (t :: stack))
 
@@ -1468,7 +1468,7 @@ module Shape =
                     false
                 else
                     FSharpType.GetRecordFields(t, AllMembers)
-                    |> Seq.map (fun p -> p.PropertyType)
+                    |> Seq.map _.PropertyType
                     |> Seq.distinct
                     |> Seq.forall (isEqualityConstraint (t :: stack))
 
@@ -1505,7 +1505,7 @@ module Shape =
                 if t.IsValueType then
                     t.GetProperties(AllMembers)
                     |> Seq.filter (fun p -> p.Name <> "Tag")
-                    |> Seq.map (fun p -> p.PropertyType)
+                    |> Seq.map _.PropertyType
                     |> Seq.distinct
                     |> Seq.forall (isComparisonConstraint (t :: stack))
 
@@ -1515,8 +1515,8 @@ module Shape =
                     true
                 else
                     FSharpType.GetUnionCases(t, AllMembers)
-                    |> Seq.collect (fun uci -> uci.GetFields())
-                    |> Seq.map (fun p -> p.PropertyType)
+                    |> Seq.collect _.GetFields()
+                    |> Seq.map _.PropertyType
                     |> Seq.distinct
                     |> Seq.forall (isComparisonConstraint (t :: stack))
 
@@ -1527,7 +1527,7 @@ module Shape =
                     false
                 else
                     FSharpType.GetRecordFields(t, AllMembers)
-                    |> Seq.map (fun p -> p.PropertyType)
+                    |> Seq.map _.PropertyType
                     |> Seq.distinct
                     |> Seq.forall (isComparisonConstraint (t :: stack))
 

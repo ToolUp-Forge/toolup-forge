@@ -3202,7 +3202,7 @@ module ServerConfig =
             | Some raw ->
                 let tokens =
                     raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
-                    |> Array.map (fun s -> s.Trim().ToLowerInvariant())
+                    |> Array.map _.Trim().ToLowerInvariant()
                     |> Array.filter (fun s -> s <> "")
                     |> Array.toList
 

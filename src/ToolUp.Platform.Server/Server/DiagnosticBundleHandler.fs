@@ -99,7 +99,7 @@ let rec private redact (node: JsonNode) : unit =
             // iterate the snapshot — never `for kvp in obj do … obj.[k] <- …`.
             // See docs/migrations/fablejsonconverter-to-stj.md
             // "JsonNode equivalents" for the canonical pattern.
-            let names = obj |> Seq.map (fun kvp -> kvp.Key) |> Seq.toArray
+            let names = obj |> Seq.map _.Key |> Seq.toArray
 
             for name in names do
                 let child = obj.[name]

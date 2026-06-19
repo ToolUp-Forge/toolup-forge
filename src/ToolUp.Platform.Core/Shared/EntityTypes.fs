@@ -214,7 +214,7 @@ module EntityRegistration =
         (reg: EntityRegistration<'T>)
         : EntityRegistration<'T> =
         let combined entity =
-            extractor entity |> List.map (fun s -> s.Replace("|", "_")) |> String.concat "|"
+            extractor entity |> List.map _.Replace("|", "_") |> String.concat "|"
 
         {
             reg with

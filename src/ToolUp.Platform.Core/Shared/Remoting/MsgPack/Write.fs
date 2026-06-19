@@ -819,7 +819,7 @@ module Fable =
             | true, writer -> writer.Invoke(x, out)
             | _ ->
                 if FSharpType.IsRecord t then
-                    let fieldTypes = FSharpType.GetRecordFields t |> Array.map (fun x -> x.PropertyType)
+                    let fieldTypes = FSharpType.GetRecordFields t |> Array.map _.PropertyType
 
                     cacheGetOrAdd(
                         t,
@@ -839,7 +839,7 @@ module Fable =
                         t,
                         Action<_, _>(fun x out ->
                             let case, fields = FSharpValue.GetUnionFields(x, t)
-                            let fieldTypes = case.GetFields() |> Array.map (fun x -> x.PropertyType)
+                            let fieldTypes = case.GetFields() |> Array.map _.PropertyType
                             writeUnion out case.Tag fieldTypes fields)
                     )
                         .Invoke(x, out)

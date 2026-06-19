@@ -114,7 +114,7 @@ let private resolveAuditLog (ctx: HttpContext) : IAuditLog option =
 let private ensureRegistered (registry: EntityRegistry) : unit =
     let registration =
         EntityRegistration.create<AdSlotEntity> AdSlotEntityType
-        |> EntityRegistration.withIndex SlotIdIndex (fun e -> e.SlotId)
+        |> EntityRegistration.withIndex SlotIdIndex _.SlotId
 
     registry.Register registration
 
