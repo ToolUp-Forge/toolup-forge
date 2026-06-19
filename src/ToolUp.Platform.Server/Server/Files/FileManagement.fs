@@ -280,10 +280,17 @@ type FileManagementRuntime = {
     /// no-op.
     UsageLog: IUsageLog option
     /// Hard per-file ceiling (bytes). Independent of the per-scope quota:
-    /// a single file over this is rejected before it is read into memory,
-    /// detected over its whole length, and processed. `None` disables it;
-    /// the default is generous (a real CSV is far smaller) and exists so an
-    /// unbounded upload can't OOM the process by default.
+    /// a single file over this is rejected before it is *detected over its
+    /// whole length and processed*. Note this check runs in `AddFile`, by
+    /// which point `upload.contents` is already a fully-materialised string
+    /// — the request body was read into memory and deserialised by the
+    /// transport before the handler ran. The pre-materialisation guard is
+    /// the transport-level `ServerConfig.MaxRequestBodyBytes` (stamped onto
+    /// Kestrel's `Limits.MaxRequestBodySize` in `buildHostBuilder`); this
+    /// ceiling is the application-level backstop that additionally bounds
+    /// the detect/parse cost. `None` disables it; the default is generous
+    /// (a real CSV is far smaller) and exists so an unbounded upload can't
+    /// blow up the detect/process pass by default.
     MaxFileBytes: int64 option
 }
 
@@ -654,8 +661,11 @@ type SessionFileStore
 
             match quota with
             // Hard per-file ceiling (independent of the per-scope quota) —
-            // reject a pathological body before it is held in memory, detected
-            // over its whole length, and processed. `None` disables it.
+            // reject a pathological body before it is detected over its whole
+            // length and processed. `upload.contents` is already in memory by
+            // here (the transport materialised + deserialised the body); the
+            // pre-materialisation guard is Kestrel's MaxRequestBodySize set
+            // from `ServerConfig.MaxRequestBodyBytes`. `None` disables it.
             | _ when runtime.MaxFileBytes |> Option.exists (fun maxBytes -> sizeBytes > maxBytes) ->
                 return
                     Error
