@@ -332,6 +332,7 @@
         <Compile Include="Server\RateLimitConfigValidator.fs" />
         <Compile Include="Server\RateLimiterInstanceValidator.fs" />
         <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
+        <Compile Include="Server\Files\SessionFileStoreInstanceValidator.fs" />
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />
         <Compile Include="Server\ICspContributor.fs" />
