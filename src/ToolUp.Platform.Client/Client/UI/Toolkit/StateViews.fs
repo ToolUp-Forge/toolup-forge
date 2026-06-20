@@ -14,7 +14,10 @@ open ToolUp.Platform
 /// Modules previously rolled their own placeholder markup (terse grey strings,
 /// bespoke red banners). These helpers give every page a consistent, polished
 /// state surface. All colours flow from the design tokens — no hardcoded hex.
-/// Icons are caller-supplied so the helpers stay product-neutral.
+/// Icons are caller-supplied so the helpers stay product-neutral, with one
+/// deliberate exception: `inlineLoading` renders the ToolUp brand mark
+/// (`Icons.dataLoading`) so a recomputing panel shows the same "working"
+/// indicator as the `BrandMarkLoader` boot screen rather than a bare circle.
 module StateViews =
 
     /// A call-to-action rendered as a primary button inside an empty state.
@@ -74,14 +77,21 @@ module StateViews =
             ]
         ]
 
-    /// Inline spinner + label, for "recomputing while showing stale results".
-    /// The spinner ring uses the brand token, not a hex literal.
+    /// Inline "working" mark + label, for "recomputing while showing stale
+    /// results". Renders the ToolUp brand mark (`Icons.dataLoading` — the
+    /// colour-cycling chevron-and-dot, self-animated via SMIL so it ignores
+    /// the surrounding `currentColor` cascade) rather than a neutral spinner
+    /// ring, so a panel's inline loading state matches the `BrandMarkLoader`
+    /// boot indicator instead of a bare circle. This is the one StateViews
+    /// helper that is intentionally brand-specific (the others take a
+    /// caller-supplied icon) — see the module header.
     let inlineLoading (label: string) =
         Html.div [
             prop.className "flex items-center gap-2 text-gray-500 text-sm"
             prop.children [
                 Html.div [
-                    prop.className "w-4 h-4 border-2 border-gray-300 border-t-brand rounded-full animate-spin"
+                    prop.className "[&>svg]:w-5 [&>svg]:h-5"
+                    prop.children [ Icons.dataLoading ]
                 ]
                 Html.span [ prop.text label ]
             ]
