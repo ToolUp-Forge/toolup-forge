@@ -631,6 +631,68 @@ module Client =
             OnTeamSwitched = buildOnTeamSwitched config
         }
 
+    /// The deployment's default landing surface id — the module the
+    /// shell lands on when nothing else is selected:
+    /// `ClientConfig.ActiveModule` when set, else the first registered
+    /// module (Home when the Home module is enabled, since it's injected
+    /// at the head). Empty string only for the degenerate no-modules case.
+    let private bootDefaultModuleId (config: ClientConfig) (modules: ErasedModule list) : string =
+        match config.ActiveModule with
+        | Some id -> id
+        | None ->
+            modules
+            |> List.tryHead
+            |> Option.map (fun m -> m.Definition.Id)
+            |> Option.defaultValue ""
+
+    /// Resolve the active *content* surface accounting for the
+    /// no-active-team gate (`ClientConfig.NoActiveTeamLandingModuleId`).
+    /// The sidebar filter hides the work modules while a gated, team-
+    /// scoped deployment has no active team, but the active module (the
+    /// content area) is tracked separately — without this a no-team user
+    /// lands on the sidebar-hidden Home / first module instead of the
+    /// landing. Applied at boot promotion, team-state changes, and
+    /// prefetch refreshes (NOT on explicit sidebar navigation, which the
+    /// `SelectModule` arm honours directly):
+    ///   * Active team present: if the user is still parked on the landing
+    ///     (e.g. a team was just assigned), fall through to the default
+    ///     surface; otherwise keep the selection.
+    ///   * No active team: keep the selection only if it's still reachable
+    ///     under the gate — the landing itself, or (for a platform admin)
+    ///     a module in an admin / management group. Anything else (the
+    ///     default Home, a hidden work module) resolves to the landing.
+    /// Returns `model.ActiveModuleId` unchanged for every non-gated
+    /// deployment.
+    let private resolveActiveModuleId (config: ClientConfig) (modules: ErasedModule list) (model: Model) : string =
+        match config.NoActiveTeamLandingModuleId with
+        | Some landingId when ClientConfig.hasTeamScope config ->
+            if model.ActiveTeamId.IsSome then
+                // Gate inactive — only rescue a user stranded on the landing
+                // now that they have a team.
+                if model.ActiveModuleId = landingId then
+                    bootDefaultModuleId config modules
+                else
+                    model.ActiveModuleId
+            else
+                // Gate active — the selection survives only if it's still a
+                // gate-visible surface (the landing, or an admin/management
+                // module for an admin); otherwise force the landing.
+                let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
+
+                let selectionStillReachable =
+                    model.ActiveModuleId = landingId
+                    || (isAdmin
+                        && modules
+                           |> List.tryFind (fun m -> m.Definition.Id = model.ActiveModuleId)
+                           |> Option.map (fun m -> ClientConfig.isAdminSidebarGroup m.Group)
+                           |> Option.defaultValue false)
+
+                if selectionStillReachable then
+                    model.ActiveModuleId
+                else
+                    landingId
+        | _ -> model.ActiveModuleId
+
     /// Wipe `ModuleStates` and re-run the active module's `Init`
     /// against the now-populated context. Shared by the cold-load
     /// prefetch gate (`ConfigsLoaded` / `FlagsLoaded` after both have
@@ -659,8 +721,14 @@ module Client =
         (prior: Model)
         (model: Model)
         : Model * Cmd<Msg> =
+        // Re-resolve through the no-team gate: a team that arrived (or was
+        // lost) since the prior render can move the active surface between
+        // the landing and the default module.
+        let activeId = resolveActiveModuleId config modules model
+
         let activeModuleAlreadyInit =
-            model.ModuleStates |> Map.containsKey model.ActiveModuleId
+            model.ActiveModuleId = activeId
+            && model.ModuleStates |> Map.containsKey activeId
 
         let configsUnchanged =
             prior.ModuleConfigs = model.ModuleConfigs
@@ -669,23 +737,35 @@ module Client =
         let flagsUnchanged = prior.ResolvedFlags = model.ResolvedFlags
 
         if activeModuleAlreadyInit && configsUnchanged && flagsUnchanged then
-            // No observable change to the active module's context inputs —
-            // skip the destroy / re-init cycle.
+            // No observable change to the active module's context inputs
+            // AND the gate didn't move the active surface — skip the
+            // destroy / re-init cycle.
             model, Cmd.none
         else
-            let reset = { model with ModuleStates = Map.empty }
-
-            match tryFind modules reset.ActiveModuleId with
+            match tryFind modules activeId with
             | Some moduleImpl ->
-                let ctx = buildContext config queryBus reset reset.ActiveModuleId
+                let reset = {
+                    model with
+                        ActiveModuleId = activeId
+                        ActivePageRoute = defaultPageRoute moduleImpl
+                        ModuleStates = Map.empty
+                }
+
+                let ctx = buildContext config queryBus reset activeId
                 let state, cmd = moduleImpl.Init ctx
 
                 {
                     reset with
-                        ModuleStates = Map.ofList [ moduleImpl.Definition.Id, state ]
+                        ModuleStates = Map.ofList [ activeId, state ]
                 },
                 Cmd.map ModuleMsg cmd
-            | None -> reset, Cmd.none
+            | None ->
+                {
+                    model with
+                        ActiveModuleId = activeId
+                        ModuleStates = Map.empty
+                },
+                Cmd.none
 
     /// 0.5.16 — first-load promotion helper: run the active module's
     /// `Init` against the now-populated context and flip
@@ -705,18 +785,35 @@ module Client =
         (modules: ErasedModule list)
         (model: Model)
         : Model * Cmd<Msg> =
-        match tryFind modules model.ActiveModuleId with
+        // Resolve through the no-team gate so the first rendered surface is
+        // the landing module (not the sidebar-hidden Home) when the caller
+        // has no active team.
+        let activeId = resolveActiveModuleId config modules model
+
+        match tryFind modules activeId with
         | Some moduleImpl ->
-            let ctx = buildContext config queryBus model model.ActiveModuleId
+            let resolved = {
+                model with
+                    ActiveModuleId = activeId
+                    ActivePageRoute = defaultPageRoute moduleImpl
+            }
+
+            let ctx = buildContext config queryBus resolved activeId
             let state, cmd = moduleImpl.Init ctx
 
             {
-                model with
-                    ModuleStates = Map.ofList [ moduleImpl.Definition.Id, state ]
+                resolved with
+                    ModuleStates = Map.ofList [ activeId, state ]
                     InitPhase = Ready
             },
             Cmd.map ModuleMsg cmd
-        | None -> { model with InitPhase = Ready }, Cmd.none
+        | None ->
+            {
+                model with
+                    ActiveModuleId = activeId
+                    InitPhase = Ready
+            },
+            Cmd.none
 
     /// Aggregate processed data from every module that exposes it.
     /// Pure — callers store the result in `Model.ProcessedData` and the
@@ -791,12 +888,35 @@ module Client =
         |> RegisteredModules.publish
 
         let moduleImpl =
-            match _config.ActiveModule with
-            | Some id -> tryFind modules id |> Option.defaultValue modules[0]
-            | None -> modules[0]
+            // The no-team gate lands a freshly-signed-in user (no active
+            // team yet) on the landing module rather than the default
+            // Home / first module. `ActiveTeamId` is None at boot; the
+            // active-team fetch reconciles the surface via `ActiveTeamLoaded`
+            // once it resolves (team → default; still no team → landing).
+            let initialId =
+                match _config.NoActiveTeamLandingModuleId with
+                | Some landingId when ClientConfig.hasTeamScope _config -> landingId
+                | _ ->
+                    match _config.ActiveModule with
+                    | Some id -> id
+                    | None -> modules[0].Definition.Id
+
+            tryFind modules initialId |> Option.defaultValue modules[0]
 
         let needsAuth = ClientConfig.requiresAnyAuth _config
         let hasToken = UserSession.getAuthToken () |> Option.isSome
+
+        // A dev composition root that sets `DevDefaultUserId` ships a stable
+        // header identity (X-User-Id) that the boot loaders attach via
+        // `UserSession.withRequestHeaders`, so they succeed against a
+        // header-auth-accepting server even with no JWT. Treat that identity
+        // like a token for the boot-fetch gate: without it a no-JWT dev build
+        // skips the team / role / config loaders entirely, so the shell never
+        // learns the caller's active team — and the no-team gate
+        // (`NoActiveTeamLandingModuleId`) would then mis-classify every dev
+        // user as teamless. Production (real OIDC) always has a token, so this
+        // only changes the no-JWT dev path.
+        let hasDevIdentity = _config.DevDefaultUserId |> Option.isSome
 
         // 0.5.16 — defer module `Init` only when prefetches are in flight
         // AND will populate real values before the active module renders.
@@ -822,7 +942,7 @@ module Client =
         // the `Prefetching` invariant holds and the view renders the
         // skeleton; `initActiveOnFirstPrefetchReady` populates the
         // entry on Ready promotion.
-        let willDeferInit = needsAuth && hasToken
+        let willDeferInit = needsAuth && (hasToken || hasDevIdentity)
 
         let initPhase, moduleStates, moduleInitCmd =
             if willDeferInit then
@@ -889,7 +1009,7 @@ module Client =
         // See `programLifetimeEffects` below.
 
         let initCmds =
-            if needsAuth && not hasToken then
+            if needsAuth && not hasToken && not hasDevIdentity then
                 // Welcome-Page case: the user hasn't signed in yet and
                 // every auth-required fetch would 401. Drop them
                 // entirely; the `auth-token-acquired` lifetime effect
@@ -1193,7 +1313,21 @@ module Client =
                         Degradations = BootDegradation.remove "active-team" model.Degradations
                 }
 
-                updated, maybeAutoSelectSoleTeam updated
+                // The no-team gate keys on `ActiveTeamId`; now that the
+                // active-team fetch resolved, reconcile the active content
+                // surface (landing <-> default surface) when the active
+                // module has already mounted. `prior = updated` so the
+                // re-init fires only when the gate actually moved the surface
+                // (configs / flags are unchanged on this arm). Before mount
+                // (`Prefetching` / `Reprefetching`) the cold-load promotion
+                // resolves the gate itself, so no reconcile is needed.
+                let reconciled, reconcileCmd =
+                    match updated.InitPhase with
+                    | Ready -> reinitActiveAfterPrefetch _config queryBus modules updated updated
+                    | Prefetching
+                    | Reprefetching -> updated, Cmd.none
+
+                reconciled, Cmd.batch [ reconcileCmd; maybeAutoSelectSoleTeam reconciled ]
 
             | AuthTokenAcquired ->
                 // 0.5.5 — `UserSession.localStorage.toolup-auth-token`
