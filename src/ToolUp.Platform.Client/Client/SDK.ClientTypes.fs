@@ -1056,6 +1056,33 @@ type ClientConfig = {
     /// the sidebar and becomes the default landing surface unless
     /// `ActiveModule` names a specific module.
     HomeModule: HomeModuleMode
+    /// Opt-in no-active-team gate. When `Some moduleId` AND the deployment
+    /// declares a `Team` surface AND the caller has no active team
+    /// (`ActiveTeamId = None`, i.e. the resolved `SubjectKind` is
+    /// `UserKind` in the post-sign-in / pre-team-pick window), the shell
+    /// hides every sidebar module EXCEPT the named landing module — and,
+    /// for `PlatformRole.PlatformAdmin` callers, the admin / management
+    /// sidebar groups (`ClientConfig.isAdminSidebarGroup`) so an admin can
+    /// still reach the team-assignment tools. The named module is the
+    /// deployment's "you have no team yet" surface; it should declare
+    /// `Visibility.visibleTo [ UserKind ]` so it disappears once an active
+    /// team upgrades the subject to `TeamMemberKind`.
+    ///
+    /// Why a deployment-wide gate and not per-module `Visibility`:
+    /// SDK-injected built-ins (the Data Manager, Team Manager, Settings)
+    /// ship `Visibility.visibleToAuthenticated`, which admits `UserKind`,
+    /// so a consumer cannot hide them from a no-team caller by editing its
+    /// own modules. This restores a refined form of the Phase 55
+    /// team-mode-no-active-team blanket-hide, opt-in and admin-aware.
+    ///
+    /// **Default `None`** — no gate; behaviour is byte-identical for every
+    /// deployment that doesn't opt in (GP 13). Inert on non-team surfaces
+    /// (the `hasTeamScope` guard) even when set.
+    ///
+    /// GP 12 — this is UI shape only; the server-side `[<TenantScoped>]`
+    /// classifier + `SurfaceEnforcementMiddleware` remain the authoritative
+    /// gate (a no-team caller's tenant-scoped API calls 401 regardless).
+    NoActiveTeamLandingModuleId: string option
     /// Controls the data-ingestion admin (Phase 10b). Active in every
     /// non-Anonymous mode; `NoDataIngestionAdmin` opts out explicitly.
     /// Default: SDK built-in. Pair with `ServerConfig.DataIngestion =
@@ -1312,6 +1339,9 @@ module ClientConfig =
         // Phase 171 — off by default (GP 13); existing deployments
         // keep their first-registered module as the landing surface.
         HomeModule = NoHomeModule
+        // Opt-in; off by default so the no-team gate never changes an
+        // existing deployment's sidebar (GP 13).
+        NoActiveTeamLandingModuleId = None
         DataIngestionAdmin = DefaultDataIngestionAdmin
         DataSubjectRequestAdmin = NoDataSubjectRequestAdmin
         ToastCentre = DefaultToastCentre
@@ -1371,6 +1401,28 @@ module ClientConfig =
         |> List.exists (function
             | SurfaceProfile.Team _ -> true
             | _ -> false)
+
+    /// Admin / management sidebar groups — the set kept visible for a
+    /// `PlatformRole.PlatformAdmin` caller under the
+    /// `NoActiveTeamLandingModuleId` no-team gate, so a team-less admin
+    /// still reaches the team-assignment tools (Team Manager lives in
+    /// "Team Management"). Mirrors the SDK built-ins' `withGroup` labels
+    /// (PlatformAdminUI / HealthMonitorUI / ServiceStatusBoardUI /
+    /// DataSubjectRequestAdminUI → "Platform Management"; TeamManagerUI /
+    /// PermissionsAdminUI / DataIngestionUI → "Team Management") plus the
+    /// consumer-convention "Platform Admin" group that the Phase 4b
+    /// role-gate already recognises. A module with no group is never in
+    /// the admin set.
+    let private adminSidebarGroups: Set<string> =
+        Set.ofList [ "Platform Admin"; "Platform Management"; "Team Management" ]
+
+    /// True iff the (optional) sidebar group is an admin / management
+    /// group kept visible to a team-less platform admin under the no-team
+    /// gate. See `adminSidebarGroups` and `NoActiveTeamLandingModuleId`.
+    let isAdminSidebarGroup (group: string option) : bool =
+        match group with
+        | Some g -> adminSidebarGroups.Contains g
+        | None -> false
 
     /// Phase 66 Stream B.8 — true iff any declared `Team` surface
     /// requests the header team-switcher UX (the retiring `MultiTeam`

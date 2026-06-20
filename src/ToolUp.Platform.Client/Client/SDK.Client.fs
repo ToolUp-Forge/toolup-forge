@@ -1742,8 +1742,35 @@ module Client =
             let resolvedSubjectKind: SubjectKind =
                 ClientConfig.resolveSubjectKind model.ActiveTeamId config
 
-            let visibleModules =
+            let kindVisibleModules =
                 adminGroupFiltered |> List.filter (fun m -> m.Visibility resolvedSubjectKind)
+
+            // No-active-team gate (opt-in via `ClientConfig.NoActiveTeamLandingModuleId`).
+            // When the deployment declares a `Team` surface and the caller
+            // has no active team (resolved `SubjectKind = UserKind` — the
+            // post-sign-in / pre-team-pick window), collapse the sidebar to
+            // just the named landing module so a freshly-signed-in user sees
+            // only the "you have no team yet" surface. Platform admins
+            // additionally keep their admin / management groups
+            // (`isAdminSidebarGroup`) so they can reach the team-assignment
+            // tools and unblock themselves. Inert (no filtering) once an
+            // active team upgrades the subject to `TeamMemberKind`, on
+            // non-team surfaces, and for every deployment that leaves the
+            // field `None`. The header team switcher is rendered separately,
+            // so a multi-team member with an unpicked team still gets the
+            // affordance to select one. Structurally a refined, opt-in,
+            // admin-aware revival of the Phase 55 blanket-hide; GP 12 — UI
+            // shape only, the server's `[<TenantScoped>]` gate is authoritative.
+            let visibleModules =
+                match config.NoActiveTeamLandingModuleId with
+                | Some landingId when ClientConfig.hasTeamScope config && model.ActiveTeamId.IsNone ->
+                    let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
+
+                    kindVisibleModules
+                    |> List.filter (fun m ->
+                        m.Definition.Id = landingId
+                        || (isAdmin && ClientConfig.isAdminSidebarGroup m.Group))
+                | _ -> kindVisibleModules
 
             // One sidebar entry per module for legacy single-page modules
             // (sidebar Id = module Id); one entry per `PageConfig` for
