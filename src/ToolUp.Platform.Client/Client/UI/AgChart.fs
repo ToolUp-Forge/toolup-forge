@@ -48,6 +48,43 @@ module ChartPalette =
     let mutable markerStroke = "#811682"
     let mutable fontFamily = "Inter, sans-serif"
 
+    // Phase 222: resolve a CSS custom property from :root to a literal string.
+    // AG Charts series strokes/fills must be literal colours (not CSS utilities
+    // or var() refs), so the live theme value is read here at render time. The
+    // "#59229D" fallback equals the SDK brand default, so a no-DOM / no-theme
+    // context is byte-for-byte unchanged.
+    let private cssVar (name: string) (fallback: string) =
+        try
+            let style: obj =
+                Browser.Dom.window?getComputedStyle (Browser.Dom.document.documentElement)
+
+            let v: string = style?getPropertyValue (name)
+
+            if System.String.IsNullOrWhiteSpace v then
+                fallback
+            else
+                v.Trim()
+        with _ ->
+            fallback
+
+    let mutable private themed = false
+
+    /// Pull brand-derived chart colours from the live CSS theme (`--color-brand`)
+    /// once, at first render — so charts follow a consumer's / per-team palette
+    /// override instead of the frozen `#59229D` literal. Only the slots still at
+    /// their built-in brand default are replaced, so an explicit consumer
+    /// override (set at boot) is preserved. Must be public: `AgChart.options` is
+    /// `inline` and calls this at each render site.
+    let refreshFromTheme () =
+        if not themed then
+            themed <- true
+            let brand = cssVar "--color-brand" "#59229D"
+
+            if accentColor = "#59229D" then
+                accentColor <- brand
+                fills <- [| fills[0]; brand; fills[2]; fills[3]; fills[4] |]
+                strokes <- [| strokes[0]; brand; strokes[2]; strokes[3]; strokes[4] |]
+
 type ChartPosition =
     | Bottom
     | Left
@@ -304,6 +341,8 @@ type AgChart =
              |> createObj)
 
     static member inline options value =
+        ChartPalette.refreshFromTheme ()
+
         let value =
             value
             |> Seq.append [
