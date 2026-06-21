@@ -32,11 +32,14 @@ module StateViews =
             prop.className "flex flex-col items-center justify-center text-center h-full min-h-[18rem] gap-3 p-8"
             prop.children [
                 Html.div [
-                    prop.className "text-gray-400 [&>svg]:w-12 [&>svg]:h-12"
+                    prop.className "text-[var(--muted)] [&>svg]:w-12 [&>svg]:h-12"
                     prop.children [ icon ]
                 ]
-                Html.h3 [ prop.className "text-lg font-semibold text-gray-900"; prop.text title ]
-                Html.p [ prop.className "text-base text-gray-500 max-w-md"; prop.text hint ]
+                Html.h3 [
+                    prop.className "text-lg font-semibold text-[var(--text-strong)]"
+                    prop.text title
+                ]
+                Html.p [ prop.className "text-base text-[var(--muted)] max-w-md"; prop.text hint ]
                 match action with
                 | Some a ->
                     Html.div [
@@ -53,7 +56,7 @@ module StateViews =
         Html.div [
             prop.className "flex items-center justify-center text-center h-full min-h-[12rem] p-6"
             prop.children [
-                Html.p [ prop.className "text-base text-gray-500 max-w-md"; prop.text message ]
+                Html.p [ prop.className "text-base text-[var(--muted)] max-w-md"; prop.text message ]
             ]
         ]
 
@@ -61,14 +64,14 @@ module StateViews =
     /// module hand-rolled. Pass `None` for a non-dismissible banner.
     let errorBanner (message: string) (onDismiss: (unit -> unit) option) =
         Html.div [
-            prop.className "flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3"
+            prop.className "flex items-start gap-3 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3"
             prop.children [
-                Html.span [ prop.className "text-base flex-1 text-red-700"; prop.text message ]
+                Html.span [ prop.className "text-base flex-1 text-[var(--neg)]"; prop.text message ]
                 match onDismiss with
                 | Some dismiss ->
                     Html.button [
                         prop.className
-                            "text-red-400 hover:text-red-600 transition-colors flex-shrink-0 text-lg leading-none"
+                            "text-[var(--neg)] hover:text-red-600 transition-colors flex-shrink-0 text-lg leading-none"
                         prop.title "Dismiss"
                         prop.onClick (fun _ -> dismiss ())
                         prop.text "×"
@@ -87,7 +90,7 @@ module StateViews =
     /// caller-supplied icon) — see the module header.
     let inlineLoading (label: string) =
         Html.div [
-            prop.className "flex items-center gap-2 text-gray-500 text-sm"
+            prop.className "flex items-center gap-2 text-[var(--muted)] text-sm"
             prop.children [
                 Html.div [
                     prop.className "[&>svg]:w-5 [&>svg]:h-5"

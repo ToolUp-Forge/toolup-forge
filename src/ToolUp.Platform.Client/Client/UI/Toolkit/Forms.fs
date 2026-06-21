@@ -44,7 +44,7 @@ module Forms =
                     Tokens.Spacing.buttonPaddingX
                     Tokens.Spacing.buttonPaddingY
                     Tokens.Typography.buttonText
-                    "rounded-lg"
+                    "rounded-[var(--radius)]"
                     "hover:bg-brand-dark"
                     "transition-colors"
                 ]
@@ -60,7 +60,7 @@ module Forms =
                     Tokens.Spacing.secondaryButtonPaddingX
                     Tokens.Spacing.secondaryButtonPaddingY
                     Tokens.Typography.buttonText
-                    "rounded-lg"
+                    "rounded-[var(--radius)]"
                     "hover:bg-gray-200"
                     "transition-colors"
                 ]
@@ -121,7 +121,7 @@ module Forms =
                 prop.onBlur (fun _ -> handleBlur ())
                 prop.className [
                     "border border-border"
-                    "rounded-lg"
+                    "rounded-[var(--radius)]"
                     "px-4 py-2"
                     "focus:outline-none focus:border-brand"
                     "transition-colors"
@@ -192,12 +192,12 @@ module Forms =
                 prop.className [
                     "flex items-center gap-2"
                     "border border-border"
-                    "rounded-lg"
+                    "rounded-[var(--radius)]"
                     "px-4 py-2"
                     "focus-within:border-brand"
                     "transition-colors"
                     "w-full"
-                    "bg-white"
+                    "bg-[var(--surface)]"
                 ]
                 prop.children [
                     match prefix with
@@ -211,7 +211,7 @@ module Forms =
                         prop.onChange handleChange
                         prop.onKeyDown handleKeyDown
                         prop.onBlur (fun _ -> handleBlur ())
-                        prop.className [ "flex-1"; "focus:outline-none"; "text-right"; "bg-white" ]
+                        prop.className [ "flex-1"; "focus:outline-none"; "text-right"; "bg-[var(--surface)]" ]
                     ]
 
                     match suffix with
@@ -273,12 +273,12 @@ module Forms =
                 prop.className [
                     "flex items-center gap-2"
                     "border border-border"
-                    "rounded-lg"
+                    "rounded-[var(--radius)]"
                     "px-4 py-2"
                     "focus-within:border-brand"
                     "transition-colors"
                     "w-full"
-                    "bg-white"
+                    "bg-[var(--surface)]"
                 ]
                 prop.children [
                     Html.input [
@@ -288,7 +288,7 @@ module Forms =
                         prop.onChange handleChange
                         prop.onKeyDown handleKeyDown
                         prop.onBlur (fun _ -> handleBlur ())
-                        prop.className [ "flex-1"; "focus:outline-none"; "text-right"; "bg-white" ]
+                        prop.className [ "flex-1"; "focus:outline-none"; "text-right"; "bg-[var(--surface)]" ]
                     ]
                 ]
             ]
@@ -327,10 +327,10 @@ module Forms =
                     prop.className [
                         "w-full"
                         "border border-border"
-                        "rounded-lg"
+                        "rounded-[var(--radius)]"
                         "px-4 py-2"
                         "text-left"
-                        "bg-white"
+                        "bg-[var(--surface)]"
                         "flex items-center justify-between"
                         "focus:outline-none focus:border-brand"
                         "transition-colors"
@@ -360,11 +360,11 @@ module Forms =
                         prop.className [
                             "absolute z-10"
                             "w-full top-0"
-                            "bg-white"
+                            "bg-[var(--surface)]"
                             "border border-border"
-                            "rounded-lg"
+                            "rounded-[var(--radius)]"
                             "max-h-60 overflow-auto"
-                            "text-gray-900"
+                            "text-[var(--text-strong)]"
                         ]
                         prop.children [
                             for (optValue, optLabel) in options do
@@ -409,7 +409,10 @@ module Forms =
             prop.className "flex items-center gap-4 flex-nowrap"
             prop.children [
                 // Label
-                Html.label [ prop.className "w-48 text-base text-gray-900 flex-shrink-0"; prop.text label ]
+                Html.label [
+                    prop.className "w-48 text-base text-[var(--text-strong)] flex-shrink-0"
+                    prop.text label
+                ]
 
                 // Hidden file input
                 Html.input [
@@ -435,7 +438,7 @@ module Forms =
                         Tokens.Colours.brandText
                         "px-6 py-2.5"
                         Tokens.Typography.buttonText
-                        "rounded-lg"
+                        "rounded-[var(--radius)]"
                         "hover:bg-brand-dark"
                         "transition-colors"
                         "inline-block"
@@ -452,9 +455,9 @@ module Forms =
                     prop.children [
                         match fileName with
                         | Some name ->
-                            Html.span [ prop.className "text-green-600 text-base"; prop.text "✓" ]
-                            Html.span [ prop.className "text-base text-gray-900"; prop.text name ]
-                        | None -> Html.span [ prop.className "text-base text-gray-500"; prop.text placeholder ]
+                            Html.span [ prop.className "text-[var(--pos)] text-base"; prop.text "✓" ]
+                            Html.span [ prop.className "text-base text-[var(--text-strong)]"; prop.text name ]
+                        | None -> Html.span [ prop.className "text-base text-[var(--muted)]"; prop.text placeholder ]
                     ]
                 ]
             ]
@@ -472,12 +475,15 @@ module Forms =
         Html.div [
             prop.className "flex items-center gap-4 flex-nowrap"
             prop.children [
-                Html.label [ prop.className "w-48 text-base text-gray-900 flex-shrink-0"; prop.text label ]
+                Html.label [
+                    prop.className "w-48 text-base text-[var(--text-strong)] flex-shrink-0"
+                    prop.text label
+                ]
 
                 match options with
                 | [] ->
                     Html.span [
-                        prop.className "text-base text-gray-400 italic"
+                        prop.className "text-base text-[var(--muted)] italic"
                         prop.text "No data files available — upload via Data Manager"
                     ]
                 | _ ->

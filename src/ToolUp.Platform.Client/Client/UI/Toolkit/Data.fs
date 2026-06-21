@@ -26,7 +26,7 @@ module Data =
                                     prop.className [
                                         // add horizontal padding (px-6) to increase space between columns
                                         if i = 0 then "text-left px-6" else "text-right px-6"
-                                        "py-3 text-base font-bold text-gray-700"
+                                        "py-3 text-base font-bold text-[var(--text)]"
                                     ]
                                     prop.text header
                                 ]
@@ -47,7 +47,7 @@ module Data =
                                                     "text-left font-bold px-6"
                                                 else
                                                     "text-right px-6"
-                                                "py-1.5 text-base text-gray-900"
+                                                "py-1.5 text-base text-[var(--text-strong)]"
                                             ]
                                             prop.children [ cell ]
                                         ]
@@ -92,7 +92,7 @@ module Data =
                                 Html.th [
                                     prop.className [
                                         if i = 0 then "text-left px-6" else "text-right px-6"
-                                        "py-3 text-base font-bold text-gray-700"
+                                        "py-3 text-base font-bold text-[var(--text)]"
                                     ]
                                     prop.text header
                                 ]
@@ -111,7 +111,7 @@ module Data =
                                                     "text-left font-bold px-6"
                                                 else
                                                     "text-right px-6"
-                                                "py-1.5 text-base text-gray-900"
+                                                "py-1.5 text-base text-[var(--text-strong)]"
                                             ]
                                             prop.children [ cellFor colIdx rowIdx ]
                                         ]
@@ -135,7 +135,7 @@ module Data =
                 + if isActive then
                       $"{Tokens.Colours.brand} {Tokens.Colours.brandText} hover:{Tokens.Colours.brandHover}"
                   else
-                      "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                      "bg-gray-200 text-[var(--text-strong)] hover:bg-gray-300"
             )
             prop.onClick (fun _ ->
                 match isActive, clickable with

@@ -41,7 +41,7 @@ module Layout =
     /// the slot; the toolkit stays feature-agnostic).
     let pageHeader (title: string, icon) (headerAction: ReactElement option) =
         Html.div [
-            prop.className "w-full h-20 bg-white border-b border-separator px-6 flex items-center"
+            prop.className "w-full h-20 bg-[var(--surface)] border-b border-separator px-6 flex items-center"
             prop.children [
                 Html.div [
                     prop.className "flex items-center gap-3"
@@ -254,10 +254,10 @@ module Layout =
         // Render a placeholder rather than indexing into an empty list.
         if List.isEmpty flatModules then
             Html.section [
-                prop.className "h-screen w-screen flex items-center justify-center bg-white"
+                prop.className "h-screen w-screen flex items-center justify-center bg-[var(--surface)]"
                 prop.children [
                     Html.div [
-                        prop.className "text-center text-gray-500"
+                        prop.className "text-center text-[var(--muted)]"
                         prop.children [
                             Html.h1 [ prop.className "text-xl font-semibold mb-2"; prop.text appName ]
                             Html.p [ prop.text "No modules are available for this account." ]
@@ -274,7 +274,7 @@ module Layout =
             Html.section [
                 prop.className "h-screen w-screen relative overflow-hidden"
                 prop.children [
-                    Html.div [ prop.className "absolute inset-0 bg-white" ]
+                    Html.div [ prop.className "absolute inset-0 bg-[var(--surface)]" ]
 
                     Html.div [
                         prop.className "relative z-10 h-full w-full"

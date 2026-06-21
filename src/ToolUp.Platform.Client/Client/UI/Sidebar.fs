@@ -324,7 +324,7 @@ let private renderModuleButton
                     // element selector, so this keeps the sidebar flush
                     // on `bg-sidebar` regardless of consumer CSS. Don't
                     // remove it.
-                    "w-full flex items-center py-3 text-white transition-colors rounded-lg bg-transparent"
+                    "w-full flex items-center py-3 text-white transition-colors rounded-[var(--radius)] bg-transparent"
                     "hover:bg-white/5"
                     if isExpanded then "px-3" else "justify-center"
                     if m.Id = selectedModule then

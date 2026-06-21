@@ -59,9 +59,9 @@ module Typography =
                     prop.className (
                         "mt-1 transition-colors flex-shrink-0 "
                         + if copied then
-                              "text-green-500"
+                              "text-[var(--pos)]"
                           else
-                              "text-gray-400 hover:text-brand"
+                              "text-[var(--muted)] hover:text-brand"
                     )
                     prop.title (if copied then "Copied!" else "Copy to clipboard")
                     prop.onClick (fun _ ->
@@ -135,9 +135,9 @@ module Typography =
                     prop.className (
                         "mt-1 transition-colors flex-shrink-0 "
                         + if copied then
-                              "text-green-500"
+                              "text-[var(--pos)]"
                           else
-                              "text-gray-400 hover:text-brand"
+                              "text-[var(--muted)] hover:text-brand"
                     )
                     prop.title (
                         if copied then
