@@ -126,6 +126,12 @@
              Unbundled item "Handler `match Subject` wildcard-fallback
              linter for Phase 66 cross-shape safety". -->
         <Compile Include="Support\SubjectWildcardAnalyzer.fs" />
+        <!-- Phase 195 — the Phase 195 analyzer's pure recognition core,
+             SOURCE-LINKED (not project-referenced — keeps FSharp.Analyzers.SDK
+             / FCS out of this lean pack) so the parity test in
+             RemotingAnalyzerRecognitionTests.fs runs the EXACT decision code
+             the analyzer ships against the runtime AuthClassifier. -->
+        <Compile Include="..\ToolUp.Remoting.Analyzers\Recognition.fs" Link="Support\RemotingAnalyzerRecognition.fs" />
         <!-- Phase 14k WS5 Item 2 — fixture loader for the mixed-dim
              recall-fidelity test. Co-located with the JSON fixture
              under `ToolUp.RAG.Evaluation/fixtures/eval-mixed-dim.json`;
@@ -566,6 +572,11 @@
              ../../api-baselines/. -->
         <Compile Include="Contracts\PublicApiApproval.fs" />
         <Compile Include="InProcess\PublicApiApprovalTests.fs" />
+        <!-- Phase 195 — analyzer recognition parity: the source-linked
+             Recognition.fs decision core vs the runtime AuthClassifier
+             (unclassified-set equality), TUR0001/TUR0002 finding shape,
+             and source-name normalisation. -->
+        <Compile Include="InProcess\RemotingAnalyzerRecognitionTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>ToolUp.Remoting.Analyzers</PackageId>
+    <Description>FSharp.Analyzers.SDK analyzer for ToolUp.Remoting API records: flags methods missing a Phase 69d authorisation classification (TUR0001) or — opt-in — an audit annotation (TUR0002), shifting the dispatcher's startup refusal left to an IDE squiggle / CI diagnostic. Pure tooling; references nothing at runtime.</Description>
+    <PackageTags>fsharp;analyzer;fsharp-analyzers;remoting;authorization;audit</PackageTags>
+    <!--
+      Analyzer-package shape (FSharp.Analyzers.SDK convention): the analyzer
+      DLL ships under `analyzers/dotnet/fs`, NOT `lib/`, so the analyzer host
+      (the `fsharp-analyzers` CLI / Ionide) discovers it by the `*Analyzer*.dll`
+      glob. A consumer adds the PackageReference and opts in via their
+      `.fsproj` / editorconfig; the package contributes no compile/runtime
+      surface (GP 13 — uninstalled = byte-for-byte unchanged).
+    -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- No lib/ build output ⇒ no symbols to package; the inherited
+         IncludeSymbols=true would otherwise fail NU5017 on the empty .snupkg. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <!-- NU1608: FSharp.Analyzers.SDK pins FSharp.Core 10.0.101 but the
+         workspace CPM resolves the newer 10.1.300 — a benign patch-level
+         forward-resolve WITHIN the F# 10 line, not a baseline downgrade.
+         NU5128: no lib/ + no package dependencies is intentional for an
+         analyzer-only package. -->
+    <NoWarn>$(NoWarn);NU1608;NU5128</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Pure recognition core (FSharp.Core only). SOURCE-LINKED into
+         ToolUp.Platform.Tests so the parity test runs this exact decision
+         code against the runtime AuthClassifier — see Recognition.fs header. -->
+    <Compile Include="Recognition.fs" />
+    <Compile Include="Extraction.fs" />
+    <Compile Include="Analyzer.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <!-- Host-provided at analysis time; PrivateAssets keeps it out of the
+         package dependency set. -->
+    <PackageReference Include="FSharp.Analyzers.SDK" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- Ship the built analyzer assembly under analyzers/dotnet/fs. -->
+  <ItemGroup>
+    <None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/fs" Visible="false" />
+  </ItemGroup>
+</Project>

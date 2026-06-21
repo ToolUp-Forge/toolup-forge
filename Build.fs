@@ -22,6 +22,12 @@ let config = {
             TestPack.create "Stripe" "src/ToolUp.Stripe.Tests/ToolUp.Stripe.Tests.fsproj"
             // Phase 182 — release SBOM gate + CycloneDX emission contract.
             TestPack.create "Build" "src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj"
+            // Phase 195 — compile-time auth/audit analyzer AST-path coverage
+            // (offline FCS parse fixtures → Analyzer.analyzeParseTree). The
+            // recognition-vs-runtime parity lives in the Platform pack.
+            TestPack.create
+                "RemotingAnalyzers"
+                "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj"
         ]
 }
 

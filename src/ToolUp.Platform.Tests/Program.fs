@@ -368,6 +368,11 @@ let allTests =
         // synthetic comparer fixtures (fails-closed on removal, no
         // false-positive on add). MetadataLoadContext, metadata-only.
         PublicApiApprovalTests.tests
+        // Phase 195 — compile-time auth/audit analyzer recognition parity.
+        // The source-linked Recognition.fs decision core vs the runtime
+        // AuthClassifier (unclassified-set equality), plus TUR0001/TUR0002
+        // finding shape and source-name normalisation.
+        RemotingAnalyzerRecognitionTests.tests
     ]
 
 [<EntryPoint>]
