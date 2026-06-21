@@ -193,6 +193,21 @@ module ConfigKeys =
         [<Literal>]
         let FaviconUrl = "faviconUrl"
 
+        // Phase 223 — full allow-listed palette (colours only; never fonts or
+        // component shape). Each drives the matching client-toolkit/shell theming
+        // token at :root, so a team's override re-skins the whole client surface.
+        [<Literal>]
+        let BrandDarkColor = "brandDarkColor"
+
+        [<Literal>]
+        let SidebarColor = "sidebarColor"
+
+        [<Literal>]
+        let PosColor = "posColor"
+
+        [<Literal>]
+        let NegColor = "negColor"
+
     /// Reserved module key for the per-team notification-prefs surface.
     /// Auto-injected by `compose` so deployments enabling
     /// transactional sinks (email / SMS / push) get a dedicated admin

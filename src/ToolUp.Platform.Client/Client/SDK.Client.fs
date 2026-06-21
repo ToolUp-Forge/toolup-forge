@@ -2158,6 +2158,7 @@ module Client =
                     PrimaryColor = Branding.DefaultPrimaryColor
                     LogoUrl = config.AppLogo
                     FaviconUrl = config.AppLogo
+                    PaletteOverrides = []
                 }
                 model.PlatformConfig
 

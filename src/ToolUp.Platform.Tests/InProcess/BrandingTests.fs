@@ -13,6 +13,7 @@ let private defaults: Branding = {
     PrimaryColor = "#000000"
     LogoUrl = "default-logo.png"
     FaviconUrl = "default-fav.png"
+    PaletteOverrides = []
 }
 
 /// A minimal app-supplied `_platform` entry carrying one field, used to
@@ -97,6 +98,55 @@ let tests =
 
                 Expect.equal resolved.PrimaryColor defaults.PrimaryColor (sprintf "%s → default" raw)
 
+        // ─── Phase 223 — palette overrides (allow-list) ──────────
+
+        testCase "empty config yields no palette overrides"
+        <| fun _ ->
+            let resolved = Branding.resolve defaults Map.empty
+            Expect.isEmpty resolved.PaletteOverrides "no team colours set → nothing injected (app base theme shows)"
+
+        testCase "a set colour key contributes its :root token"
+        <| fun _ ->
+            let resolved =
+                Branding.resolve defaults (Map.ofList [ ConfigKeys.BrandingKeys.SidebarColor, "#1e293b" ])
+
+            Expect.contains resolved.PaletteOverrides ("--color-sidebar", "#1e293b") "sidebarColor → --color-sidebar"
+
+            Expect.isFalse
+                (resolved.PaletteOverrides |> List.exists (fun (k, _) -> k = "--neg"))
+                "an unset colour is absent (not defaulted) so it never clobbers the base theme"
+
+        testCase "primaryColor drives both --color-brand and the legacy --brand-primary"
+        <| fun _ ->
+            let resolved =
+                Branding.resolve defaults (Map.ofList [ ConfigKeys.BrandingKeys.PrimaryColor, "#6d28d9" ])
+
+            Expect.contains resolved.PaletteOverrides ("--color-brand", "#6d28d9") "drives the shell brand token"
+            Expect.contains resolved.PaletteOverrides ("--brand-primary", "#6d28d9") "and the Phase 5e legacy token"
+
+        testCase "a malformed palette colour is dropped, not injected"
+        <| fun _ ->
+            let resolved =
+                Branding.resolve defaults (Map.ofList [ ConfigKeys.BrandingKeys.PosColor, "not-a-hex" ])
+
+            Expect.isEmpty resolved.PaletteOverrides "invalid hex contributes no override"
+
+        testCase "the palette allow-list is colours only (no font/component keys)"
+        <| fun _ ->
+            // Every injectable var is a colour token; there is no var through
+            // which a team could set a font-family or a component shape.
+            Expect.equal
+                (Set.ofList Branding.paletteCssVars)
+                (Set.ofList [
+                    "--color-brand"
+                    "--brand-primary"
+                    "--color-brand-dark"
+                    "--color-sidebar"
+                    "--pos"
+                    "--neg"
+                ])
+                "palette is the fixed colour allow-list — fonts/components are not team-overridable by construction"
+
         // ─── mergeBrandingSchema ──────────────────────────────────
 
         testCase "merge with no _platform entry prepends a branding-only one"
@@ -118,7 +168,11 @@ let tests =
             let keys = brandingKeys (platformEntry merged)
 
             Expect.isTrue (Set.contains "currencySymbol" keys) "existing field retained"
-            Expect.equal (Set.count keys) 5 "currencySymbol + four branding fields"
+
+            Expect.equal
+                (Set.count keys)
+                9
+                "currencySymbol + eight branding fields (4 chrome + Phase 223's 4 palette colours)"
 
         testCase "app-declared field of the same key wins (no duplicate)"
         <| fun _ ->

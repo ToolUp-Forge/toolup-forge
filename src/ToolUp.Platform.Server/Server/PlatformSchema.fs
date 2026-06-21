@@ -89,7 +89,47 @@ let internal sdkBrandingFields: ConfigFieldSchema list = [
         DisplayName = "Primary colour"
         Description =
             Some
-                "Brand primary colour as a hex value (e.g. #2563eb). Applied as the `--brand-primary` CSS custom property. Leave blank to use the deployment default."
+                "Brand primary colour as a hex value (e.g. #2563eb). Drives the `--color-brand` (and legacy `--brand-primary`) theming token, re-skinning the sidebar accent, buttons and toolkit. Leave blank to use the deployment default."
+        Kind = ConfigFieldKind.String(Some 7)
+        Required = false
+        DefaultJson = "\"\""
+    }
+    {
+        Key = ConfigKeys.BrandingKeys.BrandDarkColor
+        DisplayName = "Primary colour (dark)"
+        Description =
+            Some
+                "Darker brand shade as a hex value (e.g. #1e40af), used for hovers / active states. Drives the `--color-brand-dark` token. Leave blank to use the deployment default."
+        Kind = ConfigFieldKind.String(Some 7)
+        Required = false
+        DefaultJson = "\"\""
+    }
+    {
+        Key = ConfigKeys.BrandingKeys.SidebarColor
+        DisplayName = "Sidebar colour"
+        Description =
+            Some
+                "Sidebar background as a hex value (e.g. #1e293b). Drives the `--color-sidebar` token. Leave blank to use the deployment default."
+        Kind = ConfigFieldKind.String(Some 7)
+        Required = false
+        DefaultJson = "\"\""
+    }
+    {
+        Key = ConfigKeys.BrandingKeys.PosColor
+        DisplayName = "Positive / success colour"
+        Description =
+            Some
+                "Colour for positive deltas and success states as a hex value (e.g. #15803d). Drives the `--pos` token. Leave blank to use the deployment default."
+        Kind = ConfigFieldKind.String(Some 7)
+        Required = false
+        DefaultJson = "\"\""
+    }
+    {
+        Key = ConfigKeys.BrandingKeys.NegColor
+        DisplayName = "Negative / error colour"
+        Description =
+            Some
+                "Colour for negative deltas and error states as a hex value (e.g. #dc2626). Drives the `--neg` token. Leave blank to use the deployment default."
         Kind = ConfigFieldKind.String(Some 7)
         Required = false
         DefaultJson = "\"\""

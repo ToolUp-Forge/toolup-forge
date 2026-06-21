@@ -30,6 +30,7 @@ let private fallback: Branding = {
     PrimaryColor = Branding.DefaultPrimaryColor
     LogoUrl = "favicon.png"
     FaviconUrl = "favicon.png"
+    PaletteOverrides = []
 }
 
 let private context = React.createContext<Branding> (defaultValue = fallback)
