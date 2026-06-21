@@ -351,6 +351,16 @@ let allTests =
         // record flattening, schema JSON round-trip, generated source
         // declarations + JSON-RPC POST skeleton).
         IPeerNonFSharpSdkContract.tests
+        // Phase 174 — architecture-fitness dependency-direction gate.
+        // Reflection over the compiled ToolUp.Platform.{Core,Server,Client}
+        // assembly graph (no Server→Client / Client→Server / Core→upward
+        // edge, no AG Grid Enterprise reference from the default Client
+        // tier) + source-tree open scans (infra opens under Shared/,
+        // Enterprise shim in the Client tree, cross-module opens across
+        // the samples module set). Each live check is paired with a
+        // fail-closed fixture so a green run means the gate checked
+        // something, not that it found nothing to look at.
+        ArchitectureFitnessTests.tests
     ]
 
 [<EntryPoint>]
