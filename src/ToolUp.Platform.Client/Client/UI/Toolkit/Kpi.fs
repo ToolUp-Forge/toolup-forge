@@ -51,23 +51,27 @@ module Kpi =
     /// A single stat tile.
     let tile (t: Tile) =
         Html.div [
-            prop.className "flex flex-col gap-1 rounded-lg border border-border bg-white px-5 py-4 min-w-[10rem]"
+            prop.className
+                "flex flex-col gap-1 rounded-[var(--radius)] border border-border bg-[var(--surface)] px-5 py-4 min-w-[10rem]"
             prop.children [
                 Html.span [
-                    prop.className "text-xs font-medium text-gray-500 uppercase tracking-wide"
+                    prop.className "text-xs font-medium text-[var(--muted)] uppercase tracking-wide"
                     prop.text t.Label
                 ]
                 Html.div [
                     prop.className "flex items-baseline gap-2"
                     prop.children [
-                        Html.span [ prop.className "text-2xl font-semibold text-gray-900"; prop.text t.Value ]
+                        Html.span [
+                            prop.className "text-2xl font-semibold text-[var(--text-strong)]"
+                            prop.text t.Value
+                        ]
                         match t.Delta with
                         | Some d -> deltaView d
                         | None -> Html.none
                     ]
                 ]
                 match t.Hint with
-                | Some h -> Html.span [ prop.className "text-xs text-gray-400"; prop.text h ]
+                | Some h -> Html.span [ prop.className "text-xs text-[var(--muted)]"; prop.text h ]
                 | None -> Html.none
             ]
         ]

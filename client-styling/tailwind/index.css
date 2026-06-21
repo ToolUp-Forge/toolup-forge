@@ -45,6 +45,35 @@
   --default-ring-color: var(--color-blue-500);
 }
 
+/* Client-toolkit theming tokens (Phase 221). Brand-neutral DEFAULTS that
+   equal the current rendered look — referenced from Tailwind's own colour
+   scale / radius so adoption is a ZERO visual change. The client toolkit
+   (`Toolup.UIToolkit.Tokens` + Kpi/Data/StateViews/Forms/…) and shell read
+   these instead of hardcoding shape/neutral/status, mirroring the SSR
+   ToolUp.BrandKit `--bk-*` contract: colours/shape are CSS-variable-
+   parameterised, never baked in. A consumer app overrides any of these in a
+   :root AFTER this block to re-skin the whole client surface with no
+   rebuild; per-team branding (Phase 5e / 223) injects the colour subset
+   (brand/sidebar/status + logo only — never fonts or component shape) at
+   runtime. Override the VALUES, never the NAMES. */
+:root {
+  /* surfaces + neutrals */
+  --surface:     #ffffff;
+  --surface-2:   var(--color-gray-50);
+  --text-strong: var(--color-gray-900);
+  --text:        var(--color-gray-600);
+  --muted:       var(--color-gray-500);
+
+  /* status (deltas) */
+  --pos: var(--color-green-600);
+  --neg: var(--color-red-600);
+
+  /* shape + elevation */
+  --radius:      0.5rem;     /* = rounded-lg, the current toolkit radius */
+  --radius-pill: 9999px;
+  --shadow:      0 0 #0000;  /* none by default; an app may opt into elevation */
+}
+
 /* Official v3 -> v4 compatibility base layer (upgrade guide §7). v4
    changed several element defaults that would otherwise silently restyle
    every consumer and the SDK shell. Deliberate, removable bridge —

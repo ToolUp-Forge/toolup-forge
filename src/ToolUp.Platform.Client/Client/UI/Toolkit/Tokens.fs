@@ -11,32 +11,36 @@ open ToolUp.Platform
 
 /// Design tokens - foundational values from the design system
 module Tokens =
+    // Phase 221: neutrals / surface / shape / status read the client-toolkit
+    // theming tokens (defined in the canonical client-styling/tailwind/index.css
+    // at current-look defaults). Override the token VALUES in a consumer :root to
+    // re-skin; do not hardcode the literals back here.
     module Text =
-        let primary = "text-gray-900"
-        let secondary = "text-gray-600"
+        let primary = "text-[var(--text-strong)]"
+        let secondary = "text-[var(--text)]"
 
     module Bg =
         let panel = "bg-bg-light"
-        let card = "bg-white"
+        let card = "bg-[var(--surface)]"
 
     module Border =
         let defaultValue = "border border-border"
-        let panel = "rounded-lg"
+        let panel = "rounded-[var(--radius)]"
 
     module Button =
         let primary =
-            "bg-brand text-white px-12 py-4 font-medium uppercase rounded-lg hover:bg-brand-dark transition-colors"
+            "bg-brand text-white px-12 py-4 font-medium uppercase rounded-[var(--radius)] hover:bg-brand-dark transition-colors"
 
         let secondary =
-            "bg-transparent text-gray-900 border border-border px-6 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+            "bg-transparent text-[var(--text-strong)] border border-border px-6 py-2 rounded-[var(--radius)] hover:bg-gray-100 transition-colors"
 
     module Colours =
         let brand = "bg-brand"
         let brandHover = "bg-brand-dark"
         let brandText = "text-white"
-        let success = "text-green-600"
-        let error = "text-red-600"
-        let neutral = "text-gray-600"
+        let success = "text-[var(--pos)]"
+        let error = "text-[var(--neg)]"
+        let neutral = "text-[var(--text)]"
 
     module Spacing =
         let buttonPaddingX = "px-12"
