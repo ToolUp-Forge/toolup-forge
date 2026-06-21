@@ -368,6 +368,9 @@
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />
+        <!-- Phase 5e — per-tenant branding: Branding.resolve fallback +
+             hex validation, and PlatformSchema.mergeBrandingSchema. -->
+        <Compile Include="InProcess\BrandingTests.fs" />
         <Compile Include="InProcess\BrandKitTests.fs" />
         <!-- Phase 92 — BrandKit layout library render-shape tests (a11y
              baseline + class hooks + optional-slot rule) and the

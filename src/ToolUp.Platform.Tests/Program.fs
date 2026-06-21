@@ -222,6 +222,7 @@ let allTests =
         KnowledgeOriginalRetrievalTests.tests
         KnowledgeScopeResetAuditTests.tests
         KnowledgeUploadPolicyTests.tests
+        BrandingTests.tests
         BrandKitTests.tests
         // Phase 92 — BrandKit layout library (seven layouts: a11y
         // baseline, class hooks, optional-slot rule) + Feliz.ViewEngine
