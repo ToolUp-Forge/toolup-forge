@@ -59,6 +59,7 @@ let private baseModel: Client.Model = {
     ResolvedFlags = Map.empty
     SidebarPrefs = SidebarPreferences.load ()
     ProcessedData = []
+    PrefetchedProcessedData = []
     MyTeams = []
     ActiveTeamId = None
     ActiveTeamLoadCompleted = false
