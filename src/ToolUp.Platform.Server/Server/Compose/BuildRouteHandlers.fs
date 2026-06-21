@@ -93,11 +93,25 @@ let buildRouteHandlers
                 // with the SDK default fields).
                 config.ModuleConfigs
 
+        // Phase 5e — per-tenant branding. The four `_platform` branding
+        // fields (app name / primary colour / logo / favicon) are merged
+        // into the platform schema only when the deployment is team-
+        // scoped. Branding is meaningless without a team to scope it to,
+        // so Anonymous / Individual / AuthenticatedEphemeral deployments
+        // never see the fields and pay nothing (GP 13). Defaults resolve
+        // client-side from `ClientConfig`, so a team-scoped deployment
+        // that sets no overrides renders byte-for-byte as before.
+        let withBranding =
+            if DeploymentConfig.hasTeamScope config then
+                mergeBrandingSchema withPlatform
+            else
+                withPlatform
+
         let withPrefs =
             if List.isEmpty transactionalSinks then
-                withPlatform
+                withBranding
             else
-                mergeNotificationPrefsSchema withPlatform
+                mergeNotificationPrefsSchema withBranding
 
         // When usage metering is enabled, the admin UI surfaces the
         // per-team quota tab without requiring every app to re-declare

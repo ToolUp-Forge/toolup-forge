@@ -2144,10 +2144,27 @@ module Client =
             | [ single ] -> Some single
             | many -> Some(Html.div [ prop.className "flex items-center gap-3"; prop.children many ])
 
+        // Phase 5e — resolve the active team's branding from the
+        // prefetched `_platform` config against the composition root's
+        // `ClientConfig` defaults. Blank / absent overrides fall back to
+        // the defaults, so a single-tenant deployment (or a team that
+        // customised nothing) renders byte-for-byte as before. Live on
+        // team switch: `TeamSwitched` clears `PlatformConfig` and the
+        // `ConfigsLoaded` reload repopulates it, re-running this resolve.
+        let resolvedBranding =
+            Branding.resolve
+                {
+                    AppName = config.AppName
+                    PrimaryColor = Branding.DefaultPrimaryColor
+                    LogoUrl = config.AppLogo
+                    FaviconUrl = config.AppLogo
+                }
+                model.PlatformConfig
+
         let shell =
             Toolup.UIToolkit.Layout.AppShell
-                config.AppName
-                config.AppLogo
+                resolvedBranding.AppName
+                resolvedBranding.LogoUrl
                 sidebarSections
                 selectedSidebarId
                 (ModuleSelected >> dispatch)
@@ -2225,7 +2242,17 @@ module Client =
 
         // Wrap in AgGridProvider — supplies AG Grid modules and optional license key
         // to all grid instances in the React tree via context.
-        ToolUp.Platform.AgGrid.provider config.GridModules [ withLoadingIndicator ]
+        let withGrid =
+            ToolUp.Platform.AgGrid.provider config.GridModules [ withLoadingIndicator ]
+
+        // Phase 5e — wrap the whole tree in the branding provider so any
+        // view (shell chrome and module views alike) can read the active
+        // team's `Branding` via `BrandingProvider.useBranding`. The
+        // `BrandedHeader` sibling, mounted inside the provider, applies
+        // the favicon + `--brand-primary` document side effects.
+        BrandingProvider.provider
+            resolvedBranding
+            (React.Fragment [ Components.BrandedHeader.BrandedHeader(); withGrid ])
 
     /// Wrap the rendered shell with the auth UI handler registered
     /// for the configured `AuthUIMode`. `AnonymousKind` / `ClaimBearerKind`

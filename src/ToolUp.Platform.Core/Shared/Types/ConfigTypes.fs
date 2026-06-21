@@ -171,6 +171,28 @@ module ConfigKeys =
     [<Literal>]
     let PlatformModuleKey = "_platform"
 
+    /// Field keys for the SDK-shipped per-team branding fields
+    /// (Phase 5e). These live on the reserved `_platform` schema — the
+    /// existing Platform Defaults admin tab — and are merged in by
+    /// `compose` only when the deployment is team-scoped. The client
+    /// shell resolves them via `Branding.resolve` against the prefetched
+    /// `_platform` config, each field falling back to the composition
+    /// root's `ClientConfig` default when the active team set no
+    /// override. Centralised so the server schema and the client
+    /// resolver name the same keys.
+    module BrandingKeys =
+        [<Literal>]
+        let AppName = "appName"
+
+        [<Literal>]
+        let PrimaryColor = "primaryColor"
+
+        [<Literal>]
+        let LogoUrl = "logoUrl"
+
+        [<Literal>]
+        let FaviconUrl = "faviconUrl"
+
     /// Reserved module key for the per-team notification-prefs surface.
     /// Auto-injected by `compose` so deployments enabling
     /// transactional sinks (email / SMS / push) get a dedicated admin

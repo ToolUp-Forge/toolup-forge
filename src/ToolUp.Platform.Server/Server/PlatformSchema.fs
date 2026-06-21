@@ -59,6 +59,102 @@ let mergePlatformSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
             else
                 e)
 
+/// SDK-shipped per-team branding fields (Phase 5e). These extend the
+/// reserved `_platform` schema — they surface on the existing Platform
+/// Defaults admin tab rather than a dedicated module key, because they
+/// are app-level chrome an Owner edits alongside the other platform
+/// defaults. Every field is `Required = false` with a blank
+/// `DefaultJson`: a blank stored value means "use the deployment
+/// default", which the client resolves from `ClientConfig` via
+/// `Branding.resolve`. So a team that customises nothing renders
+/// byte-for-byte as before.
+///
+/// `mergeBrandingSchema` appends these only when the deployment is
+/// team-scoped (`DeploymentConfig.hasTeamScope`) — branding is
+/// meaningless without a team to scope it to, so Anonymous / Individual
+/// / AuthenticatedEphemeral deployments never see the fields (GP 13).
+let internal sdkBrandingFields: ConfigFieldSchema list = [
+    {
+        Key = ConfigKeys.BrandingKeys.AppName
+        DisplayName = "Application name"
+        Description =
+            Some
+                "Name shown in the sidebar header and browser tab for this team. Up to 60 characters. Leave blank to use the deployment default."
+        Kind = ConfigFieldKind.String(Some 60)
+        Required = false
+        DefaultJson = "\"\""
+    }
+    {
+        Key = ConfigKeys.BrandingKeys.PrimaryColor
+        DisplayName = "Primary colour"
+        Description =
+            Some
+                "Brand primary colour as a hex value (e.g. #2563eb). Applied as the `--brand-primary` CSS custom property. Leave blank to use the deployment default."
+        Kind = ConfigFieldKind.String(Some 7)
+        Required = false
+        DefaultJson = "\"\""
+    }
+    {
+        Key = ConfigKeys.BrandingKeys.LogoUrl
+        DisplayName = "Logo URL"
+        Description =
+            Some
+                "URL (or app-relative path) of the logo shown in the sidebar header. Up to 512 characters. Leave blank to use the deployment default."
+        Kind = ConfigFieldKind.String(Some 512)
+        Required = false
+        DefaultJson = "\"\""
+    }
+    {
+        Key = ConfigKeys.BrandingKeys.FaviconUrl
+        DisplayName = "Favicon URL"
+        Description =
+            Some
+                "URL (or app-relative path) of the browser-tab favicon. Up to 512 characters. Leave blank to use the deployment default (the logo)."
+        Kind = ConfigFieldKind.String(Some 512)
+        Required = false
+        DefaultJson = "\"\""
+    }
+]
+
+/// Merge the Phase 5e branding fields into the `_platform` entry of the
+/// app-supplied `ServerConfig.ModuleConfigs`. Same collision semantics
+/// as `mergePlatformSchema`: an app-declared field with the same `Key`
+/// wins, SDK fields the app didn't redeclare are appended. When no
+/// `_platform` entry exists yet (e.g. `IncludePlatformDefaults = false`),
+/// a branding-only `_platform` entry is prepended so the fields still
+/// surface on the Platform Defaults tab. Called from `compose` only on
+/// team-scoped deployments.
+let mergeBrandingSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry list =
+    match appEntries |> List.tryFind (fun e -> e.ModuleKey = ConfigKeys.PlatformModuleKey) with
+    | None ->
+        let brandingEntry = {
+            ModuleKey = ConfigKeys.PlatformModuleKey
+            DisplayName = "Platform Defaults"
+            Schema = { Fields = sdkBrandingFields }
+        }
+
+        brandingEntry :: appEntries
+    | Some platform ->
+        let existingKeys = platform.Schema.Fields |> List.map _.Key |> Set.ofList
+
+        let extraFields =
+            sdkBrandingFields
+            |> List.filter (fun f -> not (Set.contains f.Key existingKeys))
+
+        let merged = {
+            platform with
+                Schema = {
+                    Fields = platform.Schema.Fields @ extraFields
+                }
+        }
+
+        appEntries
+        |> List.map (fun e ->
+            if e.ModuleKey = ConfigKeys.PlatformModuleKey then
+                merged
+            else
+                e)
+
 /// SDK-shipped default `_platform.notification_prefs` schema (Phase 6f).
 /// Declares the per-team kill switches for transactional email / SMS /
 /// push delivery and the `From:` address used by every email sink.

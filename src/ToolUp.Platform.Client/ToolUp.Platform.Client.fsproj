@@ -141,6 +141,11 @@
         <Compile Include="Client\I18n.fs" />
         <Compile Include="Client\ProcessedDataContext.fs" />
         <Compile Include="Client\LoadingIndicatorContext.fs" />
+        <!-- Phase 5e — per-tenant branding. Context + hook surfacing the
+             active team's resolved Branding; BrandedHeader applies the
+             favicon + brand-primary CSS var as document side effects. -->
+        <Compile Include="Client\BrandingProvider.fs" />
+        <Compile Include="Components\BrandedHeader.fs" />
         <Compile Include="Client\GeneralUITypes.fs" />
         <Compile Include="Client\Consent\IConsentProvider.fs" />
         <Compile Include="Client\Consent\NoOpConsentProvider.fs" />

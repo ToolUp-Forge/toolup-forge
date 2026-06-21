@@ -254,6 +254,35 @@ Two namespaces are load-bearing and should not be reused by applications:
 
 An application declaring `ModuleConfigSchema.ModuleKey = "_platform"` will work — the server doesn't prevent it — but overlapping with a future SDK default would silently clobber it. Applications should use their own keys (`app.locale`, `acme.pricing`, etc.) if they want platform-wide defaults.
 
+### Per-tenant branding
+
+Per-team app-chrome customisation — application name, primary colour, logo, favicon — rides the same `_platform` config surface rather than a bespoke API. The four fields (`appName`, `primaryColor`, `logoUrl`, `faviconUrl`, declared in `ConfigKeys.BrandingKeys`) are merged onto the SDK-shipped `_platform` schema by `compose`, so they appear on the **existing Platform Defaults tab** of `TeamConfigUI` — an Owner/Admin edits them exactly like the currency symbol.
+
+The merge is **team-scope gated**. `compose` calls `mergeBrandingSchema` only when `DeploymentConfig.hasTeamScope config` is true (any `Team` / `MultiTeam` surface). Anonymous / Individual / AuthenticatedEphemeral deployments never see the fields and pay nothing for the feature (GP 13) — branding is meaningless without a team to scope it to.
+
+Every field is `Required = false` with a blank default. On the client, `SDK.Client.run` resolves the effective branding once per render via `Branding.resolve`, reading the prefetched `_platform` map (`Model.PlatformConfig`) against a default record built from the composition root's `ClientConfig` (`AppName`, `AppLogo`):
+
+```fsharp
+// Shell-side resolution (illustrative)
+let resolvedBranding =
+    Branding.resolve
+        { AppName = config.AppName
+          PrimaryColor = Branding.DefaultPrimaryColor
+          LogoUrl = config.AppLogo
+          FaviconUrl = config.AppLogo }
+        model.PlatformConfig
+```
+
+A blank or absent override falls back to the deployment default, so a single-tenant deployment — or a team that customises nothing — renders byte-for-byte as before. `primaryColor` is additionally validated as a `#RGB` / `#RRGGBB` hex string; a malformed stored value degrades to the default rather than emitting an invalid CSS custom property.
+
+Resolution is **live on team switch**: `TeamSwitched` clears `Model.PlatformConfig`, and the `ConfigsLoaded` reload repopulates it, re-running the resolve on the next render with no page reload.
+
+The resolved `Branding` reaches the UI two ways:
+- **App name + logo** flow straight into `Layout.AppShell` (replacing the former `config.AppName` / `config.AppLogo` arguments).
+- **Favicon + primary colour** are applied as document side effects by `Components.BrandedHeader`, a `[<ReactComponent>]` mounted inside `BrandingProvider`. It reads `BrandingProvider.useBranding ()` and, on change, sets the `<link rel="icon">` href and the `--brand-primary` CSS custom property on `:root` (the same create-or-update `[<Emit>]` idiom as `Bootstrap.MetadataHook`).
+
+`BrandingProvider` wraps the whole view tree, so any module view can read the active team's branding via `useBranding ()` — the same context idiom as `FeatureFlags` / `LoadingIndicatorContext` / `ProcessedDataContext`. Future theming knobs (accent colours, dark-mode tokens) should extend `ConfigKeys.BrandingKeys` + `sdkBrandingFields` and the `Branding` record rather than introduce a parallel surface.
+
 ### Relationship to `IAIConfigResolver`
 
 The AI companion already persists per-user / per-team AI preferences via `IUserAIConfigStore` (Phase 0c). These are distinct surfaces on purpose:

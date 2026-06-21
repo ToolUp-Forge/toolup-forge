@@ -127,6 +127,7 @@
         <Compile Include="Shared\IModuleQueryBus.fs" />
         <Compile Include="Shared\Types\ConfigTypes.fs" />
         <Compile Include="Shared\Types\ConfigApi.fs" />
+        <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />
         <Compile Include="Shared\INotificationChannel.fs" />
         <Compile Include="Shared\IHealthCheck.fs" />
