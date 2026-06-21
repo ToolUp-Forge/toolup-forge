@@ -11,6 +11,12 @@ open ToolUp.AI
 
 let private log = Logger.forCategory "ai.sse"
 
+// Phase 117 parity — one-shot guard for the "authenticated session fell
+// back to query-param identity" AuthDiagnostics warn (mirrors
+// `NotificationClient.queryParamFallbackWarned`). Module-scoped so the
+// per-tab AI stream logs it once rather than on every identity re-key.
+let mutable private queryParamFallbackWarned = false
+
 // ─── EventSource interop ─────────────────────────────────────────
 
 [<Erase>]
@@ -78,11 +84,47 @@ let private parseEvent (json: string) : ParseOutcome =
 /// The chat surface (with `StreamError` ungated from `DebugMode`)
 /// renders the failure inline so the user can act on it before the
 /// 60-second watchdog fires.
-/// Open one EventSource under `userId` and wire the message + error
-/// handlers. Factored out of `subscribe` so the re-keying path (below)
-/// can reopen the stream under a fresh identity with identical wiring.
+/// Open one EventSource under the current identity and wire the message
+/// + error handlers. Factored out of `subscribe` so the re-keying path
+/// (below) can reopen the stream under a fresh identity with identical
+/// wiring.
+///
+/// Phase 117 parity with `NotificationClient.openConnection` — the
+/// connect handshake prefers cookie auth: when an auth token is present
+/// the URL carries no `?userId=` at all (the JWT cookie authenticates
+/// the handshake and the server's middleware-resolved principal becomes
+/// the scope — a query param would at best be redundant and at worst be
+/// audited as a mismatch under `CookieRequired`). `?userId=` is the
+/// anonymous-session marker only. An authenticated-kind session with no
+/// token yet (the documented dev escape hatch where no `IAuthBridge` is
+/// wired) still falls back to the param so dev deployments keep working,
+/// but the degradation surfaces once per tab through `AuthDiagnostics`
+/// instead of silently. EventSource sends same-origin cookies on the
+/// handshake by default, so the cookie path needs no `withCredentials`.
 let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : EventSource =
-    let es = createEventSource $"/api/ai/events?userId={userId}"
+    let url =
+        match UserSession.getAuthToken () with
+        | Some _ -> "/api/ai/events"
+        | None ->
+            (match UserSession.getSubjectKind () with
+             | AnonymousKind -> ()
+             | UserKind
+             | TeamMemberKind
+             | ClaimBearerKind ->
+                 if not queryParamFallbackWarned then
+                     queryParamFallbackWarned <- true
+
+                     log.Warn
+                         "authenticated session has no auth token; AI SSE falling back to query-param identity (dev escape hatch — production deployments should wire an IAuthBridge so the cookie handshake carries identity)"
+
+                     AuthDiagnostics.emitErr None "ai-sse-queryparam-fallback" {
+                         Kind = "SseQueryParamIdentity"
+                         SubCause = None
+                     })
+
+            $"/api/ai/events?userId={userId}"
+
+    let es = createEventSource url
 
     onMessage es (fun event ->
         let data = getData event
