@@ -559,6 +559,13 @@
              fail-closed fixture proving the detector fires on a planted
              violation. -->
         <Compile Include="InProcess\ArchitectureFitnessTests.fs" />
+        <!-- Phase 175 — Public-API approval / baseline (SemVer guard).
+             Renderer + comparer (Contracts) and the per-assembly gate +
+             synthetic comparer fixtures (InProcess). MetadataLoadContext
+             reflects the packable set metadata-only; baselines live in
+             ../../api-baselines/. -->
+        <Compile Include="Contracts\PublicApiApproval.fs" />
+        <Compile Include="InProcess\PublicApiApprovalTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -682,5 +689,9 @@
         <PackageReference Include="HNSW" />
         <!-- Phase 18 — TestServer host for the buyer→seller worked example. -->
         <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+        <!-- Phase 175 — metadata-only reflection over the packable assembly
+             set for the Public-API approval baseline. Test-tier only; never
+             reaches a shipped package (GP 13). -->
+        <PackageReference Include="System.Reflection.MetadataLoadContext" />
     </ItemGroup>
 </Project>

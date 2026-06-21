@@ -214,6 +214,9 @@
     <PackageVersion Include="System.Management" Version="10.0.6" />
     <PackageVersion Include="System.Memory.Data" Version="10.0.7" />
     <PackageVersion Include="System.Reactive" Version="5.0" />
+    <!-- Phase 175 — metadata-only reflection for the Public-API approval
+         baseline (test-tier only; ToolUp.Platform.Tests). -->
+    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.7" />
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.7" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.7" />
     <PackageVersion Include="System.Text.Json" Version="8.0.6" />

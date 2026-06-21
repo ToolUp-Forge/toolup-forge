@@ -361,6 +361,13 @@ let allTests =
         // fail-closed fixture so a green run means the gate checked
         // something, not that it found nothing to look at.
         ArchitectureFitnessTests.tests
+        // Phase 175 — Public-API approval / baseline (SemVer guard).
+        // Per-assembly surface diff over the packable ToolUp.* set vs
+        // committed api-baselines/*.approved.txt (a removed / renamed /
+        // retyped member fails and is named; additive growth passes) +
+        // synthetic comparer fixtures (fails-closed on removal, no
+        // false-positive on add). MetadataLoadContext, metadata-only.
+        PublicApiApprovalTests.tests
     ]
 
 [<EntryPoint>]
