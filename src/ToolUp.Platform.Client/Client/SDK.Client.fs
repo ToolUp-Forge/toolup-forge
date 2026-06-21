@@ -178,6 +178,11 @@ module Client =
         /// is distinguishable from genuinely-empty data (GP 9). Wiped on
         /// `TeamSwitched` like every other per-boot-cycle field.
         Degradations: BootDegradation.BootDegradation list
+        /// File snapshot prefetched at boot — its `Processed` entries. Merged
+        /// into `ProcessedData` (so data modules see uploaded data on load
+        /// without visiting Data Manager) until the DataManager module is
+        /// mounted, at which point its live state becomes authoritative.
+        PrefetchedProcessedData: ProcessedFileEntry list
     }
 
     type Msg =
@@ -195,6 +200,11 @@ module Client =
         /// caller's access context. Re-inits the active module so its
         /// `ClientModuleContext.Flags` reflects the loaded values.
         | FlagsLoaded of Map<string, FlagValue>
+        /// Boot-time data prefetch result. Carries the persisted file
+        /// snapshot; its `Processed` entries are stored in
+        /// `PrefetchedProcessedData` and merged into `ProcessedData` so data
+        /// modules see uploaded data on load without visiting Data Manager.
+        | DataSnapshotPrefetched of FileListSnapshot
         /// User collapsed or expanded a sidebar section. The key is
         /// the reserved `"_pinned"` / `"_other"` sentinel or a declared
         /// group name. Persisted to localStorage — no server round-trip
@@ -354,6 +364,16 @@ module Client =
     /// the `FeatureFlags` React context.
     let private featureFlagApi: IFeatureFlagApi =
         Api.makeProxy<IFeatureFlagApi> (customOptions = UserSession.withRequestHeaders)
+
+    /// File-management proxy for the boot-time data prefetch. `ListFiles`
+    /// returns the persisted file snapshot whose `Processed` field is the
+    /// same `ProcessedFileEntry list` the DataManager module publishes once
+    /// mounted — fetching it at boot lets every data module see its uploaded
+    /// data on load, without the user first visiting the Data Manager page.
+    let private fileApi: FileManagementApi =
+        Api.makeProxy<FileManagementApi> (customOptions = UserSession.withRequestHeaders)
+
+    let private loadFileSnapshot = async { return! fileApi.ListFiles() }
 
     /// Async wrapper around `platformApi.GetAccessibleModules` that
     /// swallows any error — the client is expected to keep working if
@@ -828,6 +848,36 @@ module Client =
                 | None -> []
             | None -> [])
 
+    /// The configured DataManager's module Id, if any. Used to decide when
+    /// the boot-prefetched snapshot is still the source (DataManager not yet
+    /// mounted) vs the live module state.
+    let private dataManagerModuleId (config: ClientConfig) : string option =
+        match config.DataManager with
+        | NoDataManager -> None
+        | DefaultDataManager
+        | ConfiguredDataManager _ -> Some "_sdk.DataManager"
+        | MappingDataManager
+        | ConfiguredMappingDataManager _ -> Some "_sdk.MappingDataManager"
+        | ExternalDataManager custom -> Some custom.Definition.Id
+
+    /// Module-derived processed data, plus the boot-prefetched snapshot while
+    /// the DataManager module hasn't been mounted yet — so data modules see
+    /// uploaded data on load without first visiting the Data Manager page.
+    /// Once the DataManager is in `ModuleStates`, its live state (which the
+    /// `computeProcessedData` aggregation already includes) is authoritative
+    /// and the prefetched fallback is dropped to avoid stale entries.
+    let private resolveProcessedData
+        (config: ClientConfig)
+        (modules: ErasedModule list)
+        (states: Map<string, obj>)
+        (prefetched: ProcessedFileEntry list)
+        : ProcessedFileEntry list =
+        let derived = computeProcessedData modules states
+
+        match dataManagerModuleId config with
+        | Some dmId when states |> Map.containsKey dmId -> derived
+        | _ -> derived @ prefetched
+
     /// 0.5.5 — boot-time API fetches packaged as a single `Cmd<Msg>`
     /// so `init` and the `AuthTokenAcquired` update arm dispatch the
     /// same set. Called from `init` only when a token is already
@@ -860,6 +910,15 @@ module Client =
             else
                 []
 
+        // When a DataManager is configured, prefetch its file snapshot at boot
+        // so data modules see uploaded data immediately, without the user
+        // first opening the Data Manager page (best-effort — a failed fetch
+        // routes to `BootLoadFailed` and `PrefetchedProcessedData` stays empty).
+        let dataLoaders =
+            match config.DataManager with
+            | NoDataManager -> []
+            | _ -> [ bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched ]
+
         Cmd.batch (
             [
                 loadPerms
@@ -868,6 +927,7 @@ module Client =
                 bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
             ]
             @ teamScopedLoaders
+            @ dataLoaders
         )
 
     let init (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) () =
@@ -961,7 +1021,7 @@ module Client =
                 let state, cmd = moduleImpl.Init seedCtx
                 Ready, Map.ofList [ moduleImpl.Definition.Id, state ], Cmd.map ModuleMsg cmd
 
-        let processed = computeProcessedData modules moduleStates
+        let processed = resolveProcessedData _config modules moduleStates []
 
         let model = {
             ActiveModuleId = moduleImpl.Definition.Id
@@ -982,6 +1042,7 @@ module Client =
             ResetCounters = Map.empty
             InitPhase = initPhase
             Degradations = []
+            PrefetchedProcessedData = []
         }
 
         // 0.5.5 — Boot-time fetches are gated on auth state below.
@@ -1111,6 +1172,16 @@ module Client =
                     },
                     Cmd.map ModuleMsg cmd
                 | None -> model, Cmd.none
+
+            | DataSnapshotPrefetched snapshot ->
+                // Boot-time data prefetch: store the snapshot's processed
+                // entries. The post-update recompute below merges them into
+                // `ProcessedData` until the DataManager module is mounted.
+                {
+                    model with
+                        PrefetchedProcessedData = snapshot.Processed
+                },
+                Cmd.none
 
             | ModuleSelected sidebarId ->
                 // Sidebar Ids for multi-page modules are composite
@@ -1666,7 +1737,8 @@ module Client =
 
         let finalModel = {
             newModel with
-                ProcessedData = computeProcessedData modules newModel.ModuleStates
+                ProcessedData =
+                    resolveProcessedData _config modules newModel.ModuleStates newModel.PrefetchedProcessedData
         }
 
         // Detect ProcessedData entries that disappeared (file deleted,

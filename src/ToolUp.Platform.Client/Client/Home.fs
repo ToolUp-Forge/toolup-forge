@@ -6,6 +6,7 @@ module Home
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
+open ProcessedDataTypes
 
 // ─── Phase 171 — Home / Overview landing module (client) ─────────
 //
@@ -145,6 +146,41 @@ let private renderContext (ctx: DeploymentContext) =
         ]
     ]
 
+/// Tool cards, with each tool's per-type catalog counts augmented by the
+/// client-side processed-data context (populated by the boot prefetch). A
+/// ReactComponent so `React.useContext` re-renders the grid the instant the
+/// background data fetch lands — so the home reflects loaded data without a
+/// Data Manager visit, even though the server overview's catalog count is 0.
+[<ReactComponent>]
+let private ToolsGrid (tools: ToolSummary list) =
+    let processed = React.useContext ProcessedDataContext.Context
+
+    let fileCountFor typeId =
+        processed
+        |> List.filter (fun e -> e.DataType = typeId && e.Error.IsNone)
+        |> List.length
+
+    let augmented =
+        tools
+        |> List.map (fun tool ->
+            let counts =
+                tool.DataCounts
+                |> List.map (fun dc -> {
+                    dc with
+                        Count = max dc.Count (fileCountFor dc.TypeId)
+                })
+
+            {
+                tool with
+                    DataCounts = counts
+                    TotalRecords = counts |> List.sumBy _.Count
+            })
+
+    Html.div [
+        prop.className "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        prop.children (augmented |> List.map renderToolCard)
+    ]
+
 let private renderOverview (ov: HomeOverview) =
     Html.div [
         prop.className "space-y-6"
@@ -175,10 +211,7 @@ let private renderOverview (ov: HomeOverview) =
                             prop.text "No data-producing tools are registered in this deployment yet."
                         ]
                     else
-                        Html.div [
-                            prop.className "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-                            prop.children (ov.Tools |> List.map renderToolCard)
-                        ]
+                        ToolsGrid ov.Tools
                 ]
             ]
         ]
