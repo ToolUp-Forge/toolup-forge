@@ -71,7 +71,7 @@ module StateViews =
                 | Some dismiss ->
                     Html.button [
                         prop.className
-                            "text-[var(--neg)] hover:text-red-600 transition-colors flex-shrink-0 text-lg leading-none"
+                            "text-[var(--neg)] hover:text-[var(--neg)]/80 transition-colors flex-shrink-0 text-lg leading-none"
                         prop.title "Dismiss"
                         prop.onClick (fun _ -> dismiss ())
                         prop.text "×"

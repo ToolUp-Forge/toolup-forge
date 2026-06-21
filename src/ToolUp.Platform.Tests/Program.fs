@@ -305,6 +305,7 @@ let allTests =
         SvgPropTests.tests
         DataPropTests.tests
         AriaPropTests.tests
+        ClientToolkitThemingTests.tests
         DomAttrCustomAuditTests.tests
         // v0.5.0 — STJ backward-compat backstop. Frozen-snapshot wire
         // shape + roundtrip-equality for representative persistence
