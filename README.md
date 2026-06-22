@@ -20,7 +20,7 @@ Add the meta-manifest to your `Directory.Packages.props`:
 
 ```xml
 <PropertyGroup>
-  <ToolUpSdkVersion>0.5.16</ToolUpSdkVersion>
+  <ToolUpSdkVersion>0.7.0</ToolUpSdkVersion>
 </PropertyGroup>
 <ItemGroup>
   <PackageReference Include="ToolUp.Sdk" />
