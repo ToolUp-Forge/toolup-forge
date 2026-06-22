@@ -35,6 +35,8 @@ let allTests =
         TransientFaultPolicyTests.tests
         // Phase 238 — generic inbound-webhook receiver substrate.
         WebhookSubstrateTests.tests
+        // Phase 241 — presence substrate.
+        PresenceChannelTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests

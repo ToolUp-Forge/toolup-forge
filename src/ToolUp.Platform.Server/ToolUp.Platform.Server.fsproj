@@ -100,6 +100,8 @@
         <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
         <Compile Include="Server\SseTraceContributor.fs" />
         <Compile Include="Server\Notifications\NotificationChannel.fs" />
+        <!-- Phase 241 — in-memory presence channel (single-instance default). -->
+        <Compile Include="Server\Notifications\PresenceChannel.fs" />
         <Compile Include="Server\INotificationSink.fs" />
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />

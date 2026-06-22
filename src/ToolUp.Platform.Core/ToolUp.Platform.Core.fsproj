@@ -130,6 +130,8 @@
         <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />
         <Compile Include="Shared\INotificationChannel.fs" />
+        <!-- Phase 241 — presence substrate. -->
+        <Compile Include="Shared\IPresenceChannel.fs" />
         <Compile Include="Shared\IHealthCheck.fs" />
         <Compile Include="Shared\ISmokeTest.fs" />
         <Compile Include="Shared\IConfigValidator.fs" />

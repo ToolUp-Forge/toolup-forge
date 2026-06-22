@@ -158,6 +158,8 @@
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
         <!-- Phase 238 — generic inbound-webhook receiver substrate. -->
         <Compile Include="InProcess\WebhookSubstrateTests.fs" />
+        <!-- Phase 241 — presence substrate. -->
+        <Compile Include="InProcess\PresenceChannelTests.fs" />
         <!-- Phase 176 — transient-fault decorator substrate: identity
              pass-through (contract packs re-run through the wrapper) +
              retry / backoff / breaker / per-call-timeout behaviour. -->
