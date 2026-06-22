@@ -115,6 +115,21 @@ let registerEntityStore
                 tenantRegister :: entityRegistrations
             | NoDeployPlane -> entityRegistrations
 
+        // Phase 159 — when the durable consent store is entity-backed,
+        // prepend its `ConsentRecord` registration so the entity store
+        // knows the type before any consent write. Same auto-register
+        // convenience as the Tenant prepend above; gated on the mode so
+        // a deployment not using durable consent pays nothing.
+        let effectiveRegistrations =
+            match config.ConsentStateStore with
+            | EntityBackedConsentStateStore ->
+                let consentRegister (registry: EntityStore.EntityRegistry) =
+                    registry.Register Consent.ConsentStateStore.ConsentRecord.registration
+
+                consentRegister :: effectiveRegistrations
+            | NoConsentStateStore
+            | InMemoryConsentStateStore -> effectiveRegistrations
+
         for registerFn in effectiveRegistrations do
             registerFn entityRegistry
 
@@ -161,6 +176,38 @@ let registerColumnMappingStore (services: IServiceCollection) (config: ServerCon
             ColumnMappingStore.create dos logger)
         |> ignore
     | NoColumnMapping -> ()
+
+/// Phase 159 — register the durable per-subject `IConsentStateStore`
+/// when `ServerConfig.ConsentStateStore` opts in. `NoConsentStateStore`
+/// (default) registers nothing — consent state lives only in the
+/// browser via `IConsentProvider`, zero runtime cost (GP 13).
+/// `InMemoryConsentStateStore` registers the dev-only single-instance
+/// store. `EntityBackedConsentStateStore` registers the durable store
+/// over the already-registered `IEntityStore` (+ `IAuditLog` for the
+/// `Custom:ConsentGranted` / `Custom:ConsentWithdrawn` emission); the
+/// `ConsentRecord` entity type is registered by `registerEntityStore`
+/// under the same flag. Requires `EntityStore = EnabledEntityStore` —
+/// the factory resolves `null` for `IEntityStore` otherwise and fails
+/// loudly at first resolve.
+let registerConsentStateStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    let resolveAuditLog (sp: System.IServiceProvider) : IAuditLog option =
+        match sp.GetService(typeof<IAuditLog>) with
+        | :? IAuditLog as log -> Some log
+        | _ -> None
+
+    match config.ConsentStateStore with
+    | NoConsentStateStore -> ()
+    | InMemoryConsentStateStore ->
+        services.AddSingleton<Consent.ConsentStateStore.IConsentStateStore>(fun (sp: System.IServiceProvider) ->
+            Consent.ConsentStateStore.ConsentStateStore.inMemory (resolveAuditLog sp))
+        |> ignore
+    | EntityBackedConsentStateStore ->
+        services.AddSingleton<Consent.ConsentStateStore.IConsentStateStore>(fun (sp: System.IServiceProvider) ->
+            let entityStore =
+                sp.GetService(typeof<IEntityStore.IEntityStore>) :?> IEntityStore.IEntityStore
+
+            Consent.ConsentStateStore.ConsentStateStore.entityBacked entityStore (resolveAuditLog sp))
+        |> ignore
 
 /// Phase 8 / 8a / 53 — conditional store registrations. `IResultStore`
 /// is registered only when `ServerConfig.ResultStore` opts in;

@@ -546,6 +546,11 @@ let compose
     // registration entirely.
     registerColumnMappingStore services config
 
+    // Phase 159 — durable per-subject consent-state store. Conditional
+    // on `ServerConfig.ConsentStateStore`; `NoConsentStateStore`
+    // (default) registers nothing.
+    registerConsentStateStore services config
+
     // Phase 26 — Layer 3 deploy-plane substrate. Conditional on
     // `ServerConfig.DeployPlane`; `NoDeployPlane` (default) skips
     // registration entirely. `SingleNodeDeployPlane` wires

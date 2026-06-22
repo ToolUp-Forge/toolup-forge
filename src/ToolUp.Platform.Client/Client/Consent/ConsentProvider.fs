@@ -26,11 +26,16 @@ module ConsentProvider =
                 match mode with
                 | NoConsentProvider -> NoOpConsentProvider() :> _
                 | FundingChoicesConsent adClientId -> FundingChoicesConsentProvider(adClientId) :> _
-                | CustomConsentProvider _ ->
-                    // Sub-companion CMP packages register their own
-                    // `IConsentProvider`; until one is wired, fall
-                    // back to the no-op to keep the surface safe.
-                    NoOpConsentProvider() :> _
+                | CustomConsentProvider name ->
+                    // Phase 159 — a third-party CMP companion registers
+                    // an `IConsentManagementBridge` under this name; the
+                    // resolver wraps it in a `BridgedConsentProvider`.
+                    // Until one is wired, fall back to the no-op to keep
+                    // the surface safe (fail-closed — gated surfaces stay
+                    // hidden).
+                    match ConsentManagementBridge.tryResolve name with
+                    | Some bridge -> BridgedConsentProvider(bridge) :> _
+                    | None -> NoOpConsentProvider() :> _
 
             instance <- Some provider
             provider

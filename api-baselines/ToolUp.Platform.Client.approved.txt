@@ -2427,11 +2427,51 @@ ToolUp.Platform.ClientRequestSeam.CorrelationIdProvider : Microsoft.FSharp.Core.
 ToolUp.Platform.ClientRequestSeam.HeaderProviders : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[System.String, System.String][]]] { get }
 ToolUp.Platform.ClientRequestSeamModule (class)
 ToolUp.Platform.ClientRequestSeamModule.empty : ToolUp.Platform.ClientRequestSeam { get }
+ToolUp.Platform.Consent.BridgedConsentProvider (class)
+ToolUp.Platform.Consent.BridgedConsentProvider..ctor(ToolUp.Platform.Consent.IConsentManagementBridge)
+ToolUp.Platform.Consent.ConsentBanner (class)
+ToolUp.Platform.Consent.ConsentBanner.ConsentBanner(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory]) : Fable.React.ReactElement
+ToolUp.Platform.Consent.ConsentBanner.commit(ToolUp.Platform.ConsentState) : System.Void
+ToolUp.Platform.Consent.ConsentBanner.defaultManagedCategories : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory] { get }
+ToolUp.Platform.Consent.ConsentBanner.init(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], ToolUp.Platform.ConsentState) : ToolUp.Platform.Consent.ConsentBanner+Model
+ToolUp.Platform.Consent.ConsentBanner.onCommit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ConsentState, Microsoft.FSharp.Core.Unit]) : System.Void
+ToolUp.Platform.Consent.ConsentBanner.render() : Fable.React.ReactElement
+ToolUp.Platform.Consent.ConsentBanner.toConsentState(System.DateTimeOffset, ToolUp.Platform.Consent.ConsentBanner+Model) : ToolUp.Platform.ConsentState
+ToolUp.Platform.Consent.ConsentBanner.update(System.DateTimeOffset, ToolUp.Platform.Consent.ConsentBanner+Msg, ToolUp.Platform.Consent.ConsentBanner+Model) : System.Tuple`2[ToolUp.Platform.Consent.ConsentBanner+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Consent.ConsentBanner+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.Platform.Consent.ConsentBanner+Model (class)
+ToolUp.Platform.Consent.ConsentBanner+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ConsentCategory, System.Boolean], System.Int32, System.Boolean)
+ToolUp.Platform.Consent.ConsentBanner+Model.Dismissed : System.Boolean { get }
+ToolUp.Platform.Consent.ConsentBanner+Model.Managed : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory] { get }
+ToolUp.Platform.Consent.ConsentBanner+Model.Pending : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ConsentCategory, System.Boolean] { get }
+ToolUp.Platform.Consent.ConsentBanner+Model.Version : System.Int32 { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg (class)
+ToolUp.Platform.Consent.ConsentBanner+Msg.AcceptAll : ToolUp.Platform.Consent.ConsentBanner+Msg { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg.IsAcceptAll : System.Boolean { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg.IsRejectAll : System.Boolean { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg.IsSavePreferences : System.Boolean { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg.IsToggleCategory : System.Boolean { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg.RejectAll : ToolUp.Platform.Consent.ConsentBanner+Msg { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg.SavePreferences : ToolUp.Platform.Consent.ConsentBanner+Msg { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg.Tag : System.Int32 { get }
+ToolUp.Platform.Consent.ConsentBanner+Msg+Tags (class)
+ToolUp.Platform.Consent.ConsentBanner+Msg+Tags.AcceptAll : System.Int32 (literal)
+ToolUp.Platform.Consent.ConsentBanner+Msg+Tags.RejectAll : System.Int32 (literal)
+ToolUp.Platform.Consent.ConsentBanner+Msg+Tags.SavePreferences : System.Int32 (literal)
+ToolUp.Platform.Consent.ConsentBanner+Msg+Tags.ToggleCategory : System.Int32 (literal)
+ToolUp.Platform.Consent.ConsentBanner+Msg+ToggleCategory (class)
+ToolUp.Platform.Consent.ConsentBanner+Msg+ToggleCategory.Item : ToolUp.Platform.ConsentCategory { get }
+ToolUp.Platform.Consent.ConsentManagementBridge (class)
+ToolUp.Platform.Consent.ConsentManagementBridge.register(ToolUp.Platform.Consent.IConsentManagementBridge) : System.Void
+ToolUp.Platform.Consent.ConsentManagementBridge.tryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Consent.IConsentManagementBridge]
 ToolUp.Platform.Consent.ConsentProvider (class)
 ToolUp.Platform.Consent.ConsentProvider.current() : ToolUp.Platform.Consent.IConsentProvider
 ToolUp.Platform.Consent.ConsentProvider.resolve(ToolUp.Platform.ConsentProviderMode) : ToolUp.Platform.Consent.IConsentProvider
 ToolUp.Platform.Consent.FundingChoicesConsentProvider (class)
 ToolUp.Platform.Consent.FundingChoicesConsentProvider..ctor(System.String)
+ToolUp.Platform.Consent.IConsentManagementBridge (interface)
+ToolUp.Platform.Consent.IConsentManagementBridge.CurrentDecision() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConsentState]
+ToolUp.Platform.Consent.IConsentManagementBridge.Name : System.String { get }
+ToolUp.Platform.Consent.IConsentManagementBridge.Subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ConsentState, Microsoft.FSharp.Core.Unit]) : System.IDisposable
 ToolUp.Platform.Consent.IConsentProvider (interface)
 ToolUp.Platform.Consent.IConsentProvider.GetCurrentState() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConsentState]
 ToolUp.Platform.Consent.IConsentProvider.HasConsented(ToolUp.Platform.ConsentCategory) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConsentDecision]

@@ -150,7 +150,14 @@
         <Compile Include="Client\Consent\IConsentProvider.fs" />
         <Compile Include="Client\Consent\NoOpConsentProvider.fs" />
         <Compile Include="Client\Consent\FundingChoicesProvider.fs" />
+        <!-- Phase 159 — third-party CMP bridge seam + named-bridge
+             registry. Before ConsentProvider.fs (resolve reads the
+             registry for CustomConsentProvider). -->
+        <Compile Include="Client\Consent\IConsentManagementBridge.fs" />
         <Compile Include="Client\Consent\ConsentProvider.fs" />
+        <!-- Phase 159 — SDK category-toggle consent banner (pure MVU core
+             + Feliz view). After ConsentProvider.fs (reads current()). -->
+        <Compile Include="Client\Consent\ConsentBanner.fs" />
         <Compile Include="Components\ConsentGate.fs" />
         <Compile Include="Client\AdPanel\AdScriptLoader.fs" />
         <Compile Include="Client\AdPanel\IAdAnalyticsSink.fs" />

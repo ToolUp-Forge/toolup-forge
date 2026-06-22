@@ -55,6 +55,9 @@
         <!-- Phase 121 — boot-degradation accumulator + shell update arms +
              UserSession bridge-failure counter (Platform.Client tier). -->
         <Compile Include="BootDegradationTests.fs" />
+        <!-- Phase 159 — ConsentBanner MVU core (Platform.Client tier,
+             reached transitively; pure init/update/toConsentState). -->
+        <Compile Include="ConsentBannerTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

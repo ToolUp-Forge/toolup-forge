@@ -12,6 +12,8 @@ let allTests =
         NotificationClientTests.tests
         // Phase 121 — boot-degradation surface (Platform.Client tier).
         BootDegradationTests.tests
+        // Phase 159 — ConsentBanner MVU core (Platform.Client tier).
+        ConsentBannerTests.tests
     ]
 
 [<EntryPoint>]

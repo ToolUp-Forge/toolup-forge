@@ -65,28 +65,65 @@ let AdSlot (config: ClientConfig) (slot: AdSlotConfig) : ReactElement =
     | EnabledAdPanel panelConfig ->
         let insRef = React.useElementRef ()
 
+        // Phase 159 — fail-closed consent gate on the *script load*, not
+        // just the `<ins>` render. The AdSense bundle is a third-party
+        // tracking script; loading it before consent is itself the
+        // privacy event. Track consent reactively and only load the
+        // script once every required category is granted. `NoConsent
+        // Provider` resolves to the no-op (everything but `Necessary`
+        // stays `NotYetDecided`), so a deployment that requires an
+        // ad-consent category never loads the script until a real
+        // provider grants it.
+        let consentGranted, setConsentGranted = React.useState false
+
         React.useEffectOnce (fun () ->
-            AdScriptLoader.ensureLoaded slot.AdClientId
-            pushAd ()
+            let provider = ToolUp.Platform.Consent.ConsentProvider.current ()
+            let mutable cancelled = false
 
-            match insRef.current, hasMutationObserver () with
-            | Some node, true ->
-                let observer =
-                    createObserver (fun _mutations _obs ->
-                        if getAdStatus (node :> obj) = "filled" then
-                            let impression: AdImpression = {
-                                SlotId = slot.SlotId
-                                AdClientId = slot.AdClientId
-                                OccurredAt = DateTimeOffset.UtcNow
-                                PathAtImpression = currentPath ()
-                            }
+            let evaluate (state: ConsentState) =
+                if not cancelled then
+                    setConsentGranted (ConsentState.hasAll panelConfig.ConsentCategoriesRequired state)
 
-                            AdAnalytics.current().LogImpression impression |> Async.StartImmediate)
+            async {
+                let! initial = provider.GetCurrentState()
+                evaluate initial
+            }
+            |> Async.StartImmediate
 
-                observeAttributes observer (node :> obj)
+            let subscription = provider.OnStateChanged evaluate
 
-                FsReact.createDisposable (fun () -> disconnect observer)
-            | _ -> FsReact.createDisposable id)
+            FsReact.createDisposable (fun () ->
+                cancelled <- true
+                subscription.Dispose()))
+
+        React.useEffect (
+            (fun () ->
+                if not consentGranted then
+                    FsReact.createDisposable id
+                else
+                    AdScriptLoader.ensureLoaded slot.AdClientId
+                    pushAd ()
+
+                    match insRef.current, hasMutationObserver () with
+                    | Some node, true ->
+                        let observer =
+                            createObserver (fun _mutations _obs ->
+                                if getAdStatus (node :> obj) = "filled" then
+                                    let impression: AdImpression = {
+                                        SlotId = slot.SlotId
+                                        AdClientId = slot.AdClientId
+                                        OccurredAt = DateTimeOffset.UtcNow
+                                        PathAtImpression = currentPath ()
+                                    }
+
+                                    AdAnalytics.current().LogImpression impression |> Async.StartImmediate)
+
+                        observeAttributes observer (node :> obj)
+
+                        FsReact.createDisposable (fun () -> disconnect observer)
+                    | _ -> FsReact.createDisposable id),
+            [| box consentGranted |]
+        )
 
         Components.ConsentGate.render
             panelConfig.ConsentCategoriesRequired
