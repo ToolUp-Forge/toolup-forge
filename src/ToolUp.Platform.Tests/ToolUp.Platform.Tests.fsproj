@@ -577,6 +577,19 @@
              (unclassified-set equality), TUR0001/TUR0002 finding shape,
              and source-name normalisation. -->
         <Compile Include="InProcess\RemotingAnalyzerRecognitionTests.fs" />
+        <!-- Phase 196 — adversarial fail-closed test pack. Proves the
+             inverse of the Phase 69d/69h happy-path packs: an un-annotated /
+             mis-annotated / under-credentialled call FAILS CLOSED rather
+             than only that annotated ones pass. The reusable classifier
+             fail-closed contract (Contracts) is instantiated against both
+             attribute families; the adversarial fixtures (InProcess) drive
+             real composition refusal + classify/evaluate denials + audit
+             omission observability + the PII-redaction default, and
+             source-pin the dispatcher deny-before-dispatch ordering + the
+             audit emission gate (same TestServer-scaffold deferral as the
+             69l/69m perf packs). Test-only; no production source changed. -->
+        <Compile Include="Contracts\FailClosedContract.fs" />
+        <Compile Include="InProcess\AdversarialFailClosedTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

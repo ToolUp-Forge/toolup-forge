@@ -373,6 +373,11 @@ let allTests =
         // AuthClassifier (unclassified-set equality), plus TUR0001/TUR0002
         // finding shape and source-name normalisation.
         RemotingAnalyzerRecognitionTests.tests
+        // Phase 196 — adversarial fail-closed pack: proves un-annotated /
+        // mis-annotated / under-credentialled calls refuse to start or fail
+        // closed (the inverse of the Phase 69d/69h happy-path coverage), plus
+        // audit-omission observability + the PII-redaction default.
+        AdversarialFailClosedTests.tests
     ]
 
 [<EntryPoint>]
