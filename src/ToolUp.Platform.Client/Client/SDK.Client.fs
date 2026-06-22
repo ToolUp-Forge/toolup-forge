@@ -1890,6 +1890,118 @@ module Client =
             ]
         ]
 
+    /// Built-in no-active-team onboarding surface. Rendered in the content
+    /// area when a team-scoped deployment has an authenticated user whose
+    /// active-team fetch resolved to none AND no `NoActiveTeamLandingModuleId`
+    /// is configured — replacing the wall of `401 missing-tenant` that every
+    /// `TenantScoped` module would otherwise produce. Consumers wanting a
+    /// bespoke landing keep setting `NoActiveTeamLandingModuleId`; this is the
+    /// sane default when they don't. Adapts to membership: create a team when
+    /// the user has none, or pick one when they have teams but none active.
+    [<ReactComponent>]
+    let NoActiveTeamSurface (myTeams: TeamInfo list) (dispatch: Msg -> unit) =
+        let newName, setNewName = React.useState ""
+        let busy, setBusy = React.useState false
+
+        let toast (level: SystemMessageLevel) (text: string) =
+            NotificationClient.publishLocal (
+                NotificationEnvelope.create (UserSession.getUserId ()) (Notification.SystemMessage(level, text))
+            )
+
+        let switchTo (teamId: string) =
+            async {
+                try
+                    match! withCsrf (teamApi.SetActiveTeam teamId) with
+                    | Ok() -> dispatch (TeamSwitched(Some teamId))
+                    | Error _ -> toast SystemMessageLevel.Warning "Couldn't switch team. Please try again."
+                with _ ->
+                    toast SystemMessageLevel.Warning "Couldn't switch team. Please try again."
+            }
+            |> Async.StartImmediate
+
+        let createTeam () =
+            let name = newName.Trim()
+
+            if name <> "" && not busy then
+                setBusy true
+
+                async {
+                    try
+                        match! withCsrf (teamApi.CreateTeam name) with
+                        | Ok team ->
+                            // Switch straight into the new team — reloads MyTeams,
+                            // sets active, and mounts the work modules. Reliable
+                            // even if the membership-notification stream is down.
+                            dispatch (TeamSwitched(Some team.TeamId))
+                        | Error msg ->
+                            setBusy false
+                            // Also surfaces a policy denial ("requires Platform Admin").
+                            toast SystemMessageLevel.Warning msg
+                    with _ ->
+                        setBusy false
+                        toast SystemMessageLevel.Warning "Couldn't create the team. Please try again."
+                }
+                |> Async.StartImmediate
+
+        Html.div [
+            prop.className "flex items-center justify-center w-full h-full p-8"
+            prop.children [
+                Html.div [
+                    prop.className "max-w-md w-full bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-4"
+                    prop.children [
+                        Html.h2 [
+                            prop.className "text-lg font-semibold text-gray-900"
+                            prop.text "You're not in a team yet"
+                        ]
+
+                        if List.isEmpty myTeams then
+                            Html.p [
+                                prop.className "text-sm text-gray-600"
+                                prop.text
+                                    "Analysis tools are scoped to a team. Create one to get started, or ask a Platform Admin to add you (or open an invite link you've been sent)."
+                            ]
+
+                            Html.div [
+                                prop.className "space-y-2"
+                                prop.children [
+                                    Html.input [
+                                        prop.className "w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                                        prop.placeholder "Team name"
+                                        prop.value newName
+                                        prop.onChange (fun (v: string) -> setNewName v)
+                                        prop.onKeyDown (fun e ->
+                                            if e.key = "Enter" then
+                                                createTeam ())
+                                    ]
+                                    Html.button [
+                                        prop.className
+                                            "w-full px-3 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                                        prop.disabled (busy || newName.Trim() = "")
+                                        prop.text (if busy then "Creating…" else "Create team")
+                                        prop.onClick (fun _ -> createTeam ())
+                                    ]
+                                ]
+                            ]
+                        else
+                            Html.p [ prop.className "text-sm text-gray-600"; prop.text "Pick a team to continue:" ]
+
+                            Html.div [
+                                prop.className "space-y-1"
+                                prop.children [
+                                    for team in myTeams do
+                                        Html.button [
+                                            prop.className
+                                                "w-full text-left px-3 py-2 text-sm rounded border border-gray-200 hover:bg-gray-50"
+                                            prop.text team.Name
+                                            prop.onClick (fun _ -> switchTo team.TeamId)
+                                        ]
+                                ]
+                            ]
+                    ]
+                ]
+            ]
+        ]
+
     let view (config: ClientConfig) (modules: ErasedModule list) (chrome: ExtraChrome) model dispatch =
         // Select the page content for the active module. Multi-page
         // modules (`PageViews = Some map`) dispatch on the active
@@ -1926,6 +2038,19 @@ module Client =
         let content: PageContent =
             match model.InitPhase with
             | Prefetching -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
+            | Ready
+            | Reprefetching when
+                ClientConfig.hasTeamScope config
+                && model.ActiveTeamLoadCompleted
+                && model.ActiveTeamId.IsNone
+                && config.NoActiveTeamLandingModuleId.IsNone
+                ->
+                // No active team in a team-scoped deployment, the active-team
+                // fetch has resolved (no flash before teams load), and the
+                // consumer configured no landing module. Render the built-in
+                // onboarding surface instead of mounting a TenantScoped module
+                // that would 401 `missing-tenant`.
+                Custom(NoActiveTeamSurface model.MyTeams dispatch)
             | Ready
             | Reprefetching ->
                 match tryFind modules model.ActiveModuleId with

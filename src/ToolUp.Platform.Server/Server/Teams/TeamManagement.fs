@@ -498,6 +498,24 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
 /// consumption) call this after the membership is confirmed.
 module ActiveTeamPolicy =
 
+    /// Where a swallowed `ensureActiveTeam` failure is reported. The
+    /// pointer write is best-effort (it must not fail the membership
+    /// add), but a failure leaves a freshly-provisioned user in the
+    /// no-active-team state where every `TenantScoped` route 401s
+    /// `missing-tenant` — previously silent. The default emits one line
+    /// to stderr so the condition is diagnosable; override at composition
+    /// to route into structured logging. Mirrors
+    /// `Cmd.OfRemoting.Interceptors.errorReporter`.
+    let mutable errorReporter: string -> exn -> unit =
+        fun userId ex ->
+            try
+                eprintfn
+                    "[ActiveTeamPolicy.ensureActiveTeam] could not set an active team for user '%s' — they will land in the no-active-team state (TenantScoped routes 401 until they pick a team): %s"
+                    userId
+                    ex.Message
+            with _ ->
+                ()
+
     /// Point `userId`'s active team at `teamId` iff no active team is
     /// currently set. Never re-points an existing selection — a user
     /// who deliberately switched teams keeps their choice when they
@@ -518,9 +536,11 @@ module ActiveTeamPolicy =
             | None ->
                 let! _ = store.SetActiveTeam(userId, teamId)
                 ()
-        with _ ->
-            // Swallowed deliberately: the user lands in the legacy
-            // no-active-team state, which is recoverable via the
-            // (userOrTeam-gated) SetActiveTeam route from the client.
-            ()
+        with ex ->
+            // Best-effort: don't fail the membership add. But report it —
+            // the user lands in the no-active-team state (recoverable via
+            // the SetActiveTeam route / onboarding surface from the
+            // client), and a silent failure here is exactly the
+            // "TenantScoped 401s and nobody knows why" trap.
+            errorReporter userId ex
     }
