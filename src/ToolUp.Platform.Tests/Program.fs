@@ -31,6 +31,8 @@ let allTests =
         OAuthSecretEncryptionModeValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
         FileSecretStoreTests.tests
+        // Phase 176 — transient-fault decorator substrate.
+        TransientFaultPolicyTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests
@@ -85,6 +87,7 @@ let allTests =
         ConfigValidatorAggregatorTests.tests
         HealthStateTrackerTests.tests
         ServiceStatusBoardApiHandlerTests.tests
+        DeploymentReadinessReportTests.tests
         RedisNotificationChannelHealthTests.tests
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
@@ -245,6 +248,10 @@ let allTests =
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
         ConsentProviderTests.subscriptionFiringTests
+        // Phase 159 — durable per-subject consent state store.
+        ConsentStateStoreTests.tests
+        ConsentStateStoreTests.entityBackedTests
+        ConsentStateStoreTests.restartPersistenceTests
         AdAnalyticsSinkTests.tests
         AdAnalyticsSinkTests.noOpTests
         UserClaimsTests.tests

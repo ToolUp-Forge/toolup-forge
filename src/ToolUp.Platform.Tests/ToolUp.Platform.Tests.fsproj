@@ -94,6 +94,9 @@
         <Compile Include="Contracts\IAssetStoreContract.fs" />
         <Compile Include="Contracts\IMediaLibraryContract.fs" />
         <Compile Include="Contracts\IConsentProviderContract.fs" />
+        <!-- Phase 159 — durable per-subject consent state store contract
+             (round-trip + per-subject / per-scope isolation + withdraw). -->
+        <Compile Include="Contracts\IConsentStateStoreContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
         <Compile Include="Contracts\IUserClaimsContract.fs" />
@@ -153,6 +156,10 @@
         <Compile Include="InProcess\InMemoryDataSourceTests.fs" />
         <Compile Include="InProcess\OAuthSubstrateTests.fs" />
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
+        <!-- Phase 176 — transient-fault decorator substrate: identity
+             pass-through (contract packs re-run through the wrapper) +
+             retry / backoff / breaker / per-call-timeout behaviour. -->
+        <Compile Include="InProcess\TransientFaultPolicyTests.fs" />
         <Compile Include="InProcess\PermissionStoreTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
@@ -199,6 +206,7 @@
         <Compile Include="InProcess\AIProviderProbeValidatorTests.fs" />
         <Compile Include="InProcess\HealthStateTrackerTests.fs" />
         <Compile Include="InProcess\ServiceStatusBoardApiHandlerTests.fs" />
+        <Compile Include="InProcess\DeploymentReadinessReportTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelHealthTests.fs" />
         <Compile Include="InProcess\AIProviderHealthTests.fs" />
         <Compile Include="InProcess\MinimumViableShapeTests.fs" />
@@ -418,6 +426,9 @@
              deployment reads a pre-v0.5.0 blob and crashes silently. -->
         <Compile Include="InProcess\StjBackwardCompatTests.fs" />
         <Compile Include="InProcess\ConsentProviderTests.fs" />
+        <!-- Phase 159 — IConsentStateStore bindings (in-memory + entity-
+             backed over BlobEntityStore) + restart-durability proof. -->
+        <Compile Include="InProcess\ConsentStateStoreTests.fs" />
         <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->
         <Compile Include="InProcess\UserClaimsTests.fs" />

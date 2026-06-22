@@ -214,6 +214,16 @@
         <!-- Phase 11.G — `SecretStore.fromEnv` (env-var-driven dispatch
              with cloud-companion resolver list). -->
         <Compile Include="Server\Infra\SecretStoreFromEnv.fs" />
+        <!-- Phase 176 — transient-fault decorator substrate: the
+             TransientFaultPolicy record + shared runner (retry / breaker /
+             per-call timeout), then the IBlobStorage / ISecretStore
+             decorators that route every method through it. Before
+             SDK.Server (compose applies them) + ServerApp (the builder
+             carries the ResilienceMode opt-in). Identity policy = byte-for-
+             byte pass-through (GP 11/13). -->
+        <Compile Include="Server\Infra\TransientFaultPolicy.fs" />
+        <Compile Include="Server\Infra\ResilientBlobStorage.fs" />
+        <Compile Include="Server\Infra\ResilientSecretStore.fs" />
         <Compile Include="Server\IBlobEncryptionKeyResolver.fs" />
         <Compile Include="Server\EncryptedBlobStorage.fs" />
         <Compile Include="Server\SingleKeyResolver.fs" />
@@ -312,6 +322,10 @@
         <Compile Include="Server\Premium\PremiumGate.fs" />
         <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
+        <!-- Phase 159 — durable per-subject consent persistence over
+             IEntityStore (in-memory dev impl + entity-backed production
+             impl + Custom: audit emission). -->
+        <Compile Include="Server\Consent\ConsentStateStore.fs" />
         <!-- Phase 61 — PlatformAdmin public-utility admin endpoints
              (ad-unit CRUD + rate-limit decisions + premium-user list).
              Each handler gates server-side on Platform-Admin role. -->
@@ -443,6 +457,8 @@
         <!-- Phase 171 — Home / Overview landing aggregation handler. -->
         <Compile Include="Server\HomeOverviewApiHandler.fs" />
         <Compile Include="Server\ServiceStatusBoardApiHandler.fs" />
+        <!-- Phase 177 — deployment-readiness scorecard gatherer + handler. -->
+        <Compile Include="Server\DeploymentReadinessReport.fs" />
         <Compile Include="Server\HealthStateTracker.fs" />
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />

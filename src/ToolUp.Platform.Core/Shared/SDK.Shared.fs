@@ -1011,6 +1011,25 @@ type SmokeTestMode =
     | NoSmokeTest
     | EnabledSmokeTest
 
+/// Phase 177 — opt-in deployment-readiness scorecard. The read
+/// consolidates the four already-shipped operability signals
+/// (`IConfigValidator` preflight, `ISmokeTest` results, the
+/// `ConfigDrift` finding, the `IHealthCheck` aggregate) into one
+/// Platform-Admin go/no-go verdict.
+///
+///   * `NoReadinessReport` (default, GP 11/13) — the
+///     `IDeploymentReadinessApi` route is not mounted; the surface 404s
+///     and the deployment is byte-for-byte unchanged.
+///   * `EnabledReadinessReport` — mounts the Platform-Admin-gated read.
+///     Each source sub-summary is independently `NotComposed` when its
+///     substrate isn't wired, so enabling the report over a deployment
+///     that composes a subset of the signals yields an honest partial
+///     scorecard rather than a fabricated pass. Pure projection — no new
+///     gate, no new control-plane behaviour.
+type DeploymentReadinessMode =
+    | NoReadinessReport
+    | EnabledReadinessReport
+
 /// Phase 53 — `IConversationStore` substrate opt-in. Promotes AI
 /// assistant conversations from ephemeral `AIAssistantHandler` state
 /// to a first-class persisted record so conversations are auditable,
@@ -1528,6 +1547,22 @@ type RateLimitStoreMode =
 type ConsentAuditMode =
     | NoConsentAudit
     | EnabledConsentAudit
+
+/// Phase 159 — server-side durable per-subject consent-state store
+/// opt-in. Default `NoConsentStateStore` registers nothing — consent
+/// state lives only in the browser via `IConsentProvider` (Phase 59),
+/// byte-for-byte unchanged (GP 13). `InMemoryConsentStateStore`
+/// registers the single-instance dev store (does NOT survive restart).
+/// `EntityBackedConsentStateStore` registers the durable production
+/// store over `IEntityStore` — requires `EntityStore =
+/// EnabledEntityStore` (the compose path prepends the `ConsentRecord`
+/// entity registration automatically). Distinct from `ConsentAudit`
+/// (which mounts the client-event audit endpoint); this is the
+/// authoritative server-side read-back store.
+type ConsentStateStoreMode =
+    | NoConsentStateStore
+    | InMemoryConsentStateStore
+    | EntityBackedConsentStateStore
 
 /// Phase 60 — server-side ad-analytics opt-in. Default
 /// `NoAdAnalytics` strips the `/api/_platform/ads/analytics`
@@ -2409,6 +2444,13 @@ type ServerConfig = {
     /// consent state still works via `IConsentProvider`.
     ConsentAudit: ConsentAuditMode
 
+    /// Phase 159 — server-side durable per-subject consent-state
+    /// store opt-in. Default `NoConsentStateStore` registers nothing
+    /// (GP 13). `EntityBackedConsentStateStore` registers the durable
+    /// store over `IEntityStore`; `InMemoryConsentStateStore` is the
+    /// dev-only single-instance store.
+    ConsentStateStore: ConsentStateStoreMode
+
     /// Phase 60 — server-side ad-analytics opt-in. Default
     /// `NoAdAnalytics` strips the
     /// `/api/_platform/ads/analytics` endpoint.
@@ -2451,6 +2493,16 @@ type ServerConfig = {
     /// call with per-hook isolation + audit. Zero cost when not enabled
     /// (GP 13).
     TenantLifecycle: TenantLifecycleMode
+    /// Phase 177 — opt-in deployment-readiness scorecard. Default
+    /// `NoReadinessReport` (GP 11/13) leaves the
+    /// `IDeploymentReadinessApi` route unmounted (the surface 404s, the
+    /// deployment is byte-for-byte unchanged). `EnabledReadinessReport`
+    /// mounts the Platform-Admin-gated read that consolidates the
+    /// `IConfigValidator` / `ISmokeTest` / `ConfigDrift` / `IHealthCheck`
+    /// signals into one go/no-go verdict. Set via
+    /// `ServerApp.withDeploymentReadiness`. Pure projection over existing
+    /// signals — zero cost when not enabled.
+    DeploymentReadiness: DeploymentReadinessMode
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -2728,11 +2780,13 @@ module ServerConfig =
         RateLimitStore = NoRateLimitStore
         RateLimits = []
         ConsentAudit = NoConsentAudit
+        ConsentStateStore = NoConsentStateStore
         AdAnalytics = NoAdAnalytics
         TeamCreationPolicy = PlatformAdminOnly
         NarrativeRetention = NarrativeRetentionPolicy.defaults
         PeerSubstrate = NoPeerSubstrate
         TenantLifecycle = NoTenantLifecycle
+        DeploymentReadiness = NoReadinessReport
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────
@@ -3419,6 +3473,13 @@ module ServerConfig =
                         defaults.RateLimiter
                 SmokeTest =
                     parseEnabledDisabled logger "TOOLUP_SMOKE_TEST" NoSmokeTest EnabledSmokeTest defaults.SmokeTest
+                DeploymentReadiness =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_DEPLOYMENT_READINESS"
+                        NoReadinessReport
+                        EnabledReadinessReport
+                        defaults.DeploymentReadiness
                 AssetStore =
                     parseEnabledDisabled logger "TOOLUP_ASSET_STORE" NoAssetStore EnabledAssetStore defaults.AssetStore
                 ConsentAudit =
@@ -3435,6 +3496,22 @@ module ServerConfig =
                         NoAdAnalytics
                         EnabledAdAnalytics
                         defaults.AdAnalytics
+                // Phase 159 — durable per-subject consent-state store mode.
+                ConsentStateStore =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_CONSENT_STATE_STORE"
+                        [
+                            "no", NoConsentStateStore
+                            "off", NoConsentStateStore
+                            "disabled", NoConsentStateStore
+                            "inmemory", InMemoryConsentStateStore
+                            "in-memory", InMemoryConsentStateStore
+                            "entity", EntityBackedConsentStateStore
+                            "entity-backed", EntityBackedConsentStateStore
+                        ]
+                        None
+                        defaults.ConsentStateStore
                 ServerlessHost =
                     parseFlatDuCase
                         logger

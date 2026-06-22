@@ -13,6 +13,7 @@ open ToolUp.Platform.IDataExporter
 open ToolUp.Platform.Providers
 open ToolUp.Platform.PermissionStore
 open ToolUp.Platform.RemotingHelpers
+open ToolUp.Platform.TransientFault
 open ToolUp.Platform.Tracing
 open ToolUp.Platform.Usage
 open ToolUp.Platform.VectorisationTypes
@@ -639,6 +640,20 @@ type ServerApp = {
     /// `ServerApp.withModuleBindingVerifier` (e.g.
     /// `DefaultModuleBindingVerifier.create` from `ToolUp.ArtefactSigning`).
     ModuleBindingVerifier: IModuleBindingVerifier option
+    /// Phase 176 — opt-in transient-fault resilience for the resolved
+    /// `IBlobStorage`. `NoResilience` (the default) resolves to the bare
+    /// storage — no decorator in the hot path, byte-for-byte unchanged
+    /// (GP 13). `WithResiliencePolicy policy` wraps it in
+    /// `ResilientBlobStorage` so every method retries transient faults /
+    /// trips the breaker / honours the per-call timeout per the policy
+    /// record (GP 12 rule 3, retry-as-data). Wired via
+    /// `ServerApp.withStorageResilience`.
+    StorageResilience: ResilienceMode
+    /// Phase 176 — opt-in transient-fault resilience for the resolved
+    /// `ISecretStore`. Same shape as `StorageResilience`; `NoResilience`
+    /// (the default) leaves the secret store un-decorated. Wired via
+    /// `ServerApp.withSecretResilience`.
+    SecretResilience: ResilienceMode
 }
 
 module ServerApp =
@@ -682,6 +697,8 @@ module ServerApp =
         UserDirectory = None
         ComposedCompanions = []
         ModuleBindingVerifier = None
+        StorageResilience = NoResilience
+        SecretResilience = NoResilience
     }
 
     /// Phase 1h companion-conflict validator. Companion compose seams
@@ -717,6 +734,21 @@ module ServerApp =
 
     let withConfig (c: ServerConfig) (app: ServerApp) : ServerApp = { app with Config = c }
     let withAuth (a: IAuthProvider) (app: ServerApp) : ServerApp = { app with Auth = Some a }
+
+    /// Phase 159 — select the durable per-subject consent-state store
+    /// mode. `EntityBackedConsentStateStore` registers the durable store
+    /// over `IEntityStore` (requires `EntityStore = EnabledEntityStore`;
+    /// the compose path registers the `ConsentRecord` entity type
+    /// automatically). Default `NoConsentStateStore` registers nothing
+    /// (GP 13). Sugar over a `Config` update so the consent store reads
+    /// the same as every other fluent opt-in.
+    let withConsentStateStore (mode: ConsentStateStoreMode) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    ConsentStateStore = mode
+            }
+    }
 
     /// Phase 165 — opt into the module-binding gate. Once a verifier is
     /// configured, `addModule` drops any module whose `BindingStamp` does
@@ -1105,6 +1137,29 @@ module ServerApp =
             EncryptionKeyResolver = Some resolver
     }
 
+    /// Phase 176 — opt the resolved `IBlobStorage` into transient-fault
+    /// resilience. The resolved storage (after any envelope-encryption
+    /// decorator) is wrapped with `ResilientBlobStorage policy`, so every
+    /// method retries genuinely-transient thrown faults / trips the
+    /// breaker / honours the per-call timeout per the `TransientFaultPolicy`
+    /// record. Deterministic `Result.Error` outcomes are values, not
+    /// exceptions, so they are never retried. Omitting this call leaves
+    /// the storage layer un-decorated and byte-for-byte unchanged (GP 13).
+    /// Calling it multiple times keeps the last policy.
+    let withStorageResilience (policy: TransientFaultPolicy) (app: ServerApp) : ServerApp = {
+        app with
+            StorageResilience = WithResiliencePolicy policy
+    }
+
+    /// Phase 176 — opt the resolved `ISecretStore` into transient-fault
+    /// resilience. Same shape as `withStorageResilience`; the secret store
+    /// is wrapped with `ResilientSecretStore policy`. Omitting this call
+    /// leaves the secret store un-decorated (GP 13).
+    let withSecretResilience (policy: TransientFaultPolicy) (app: ServerApp) : ServerApp = {
+        app with
+            SecretResilience = WithResiliencePolicy policy
+    }
+
     /// Phase 9d — override the SDK default per-team compute quota
     /// policy. Deployments supply a custom `ITeamQuotaPolicy` to plug
     /// in a SaaS-billing-aware policy, a per-tier subscription gate, or
@@ -1284,6 +1339,22 @@ module ServerApp =
             Config = {
                 app.Config with
                     BackfillMissedTicks = enabled
+            }
+    }
+
+    /// Phase 177 — opt into the deployment-readiness scorecard. Flips
+    /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
+    /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`
+    /// read that consolidates the `IConfigValidator` / `ISmokeTest` /
+    /// `ConfigDrift` / `IHealthCheck` signals into one go/no-go verdict.
+    /// Pure projection over signals that already exist — no new gate, no
+    /// new control-plane behaviour. A deployment that never calls this
+    /// stays `NoReadinessReport` and is byte-for-byte unchanged (GP 13).
+    let withDeploymentReadiness (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    DeploymentReadiness = EnabledReadinessReport
             }
     }
 
@@ -1499,5 +1570,7 @@ module ServerApp =
                 app.ModuleSurfaceDefaults
                 app.RouteSurfaceOverrides
                 app.ScheduledJobs
+                app.StorageResilience
+                app.SecretResilience
 
         host.RunBlocking()

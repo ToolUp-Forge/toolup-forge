@@ -142,6 +142,11 @@
         <Compile Include="Shared\IJobSchedulerTelemetry.fs" />
         <Compile Include="Shared\ServiceStatusTypes.fs" />
         <Compile Include="Shared\ServiceStatusBoardApi.fs" />
+        <!-- Phase 177 — deployment-readiness scorecard: report record +
+             verdict DU + pure `summarise`, plus the opt-in
+             `IDeploymentReadinessApi` read surface. Pure / BCL-only so it
+             ships in the Fable-packed source. -->
+        <Compile Include="Shared\DeploymentReadiness.fs" />
         <Compile Include="Shared\IDevDiagnosticsContributor.fs" />
         <Compile Include="Shared\NarrativeTypes.fs" />
         <Compile Include="Shared\NarrativePlaintext.fs" />

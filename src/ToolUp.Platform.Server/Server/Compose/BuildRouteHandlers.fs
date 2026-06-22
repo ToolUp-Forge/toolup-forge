@@ -290,6 +290,19 @@ let buildRouteHandlers
         makeApi (ServiceStatusBoardApiHandler.serviceStatusBoardApi config)
     ]
 
+    // Phase 177 — deployment-readiness scorecard. Opt-in: mounted only
+    // when `ServerConfig.DeploymentReadiness = EnabledReadinessReport`,
+    // so an unopted deployment 404s the route and is byte-for-byte
+    // unchanged (GP 13). The request-scoped Platform-Admin gate inside
+    // the handler short-circuits Anonymous / non-admin callers. The whole
+    // `ServerConfig` is closed over so the handler reads the per-source
+    // mode fields at compose time rather than re-resolving them per
+    // request.
+    let deploymentReadinessApiHandler: HttpHandler list =
+        match config.DeploymentReadiness with
+        | NoReadinessReport -> []
+        | EnabledReadinessReport -> [ makeApi (DeploymentReadinessReport.deploymentReadinessApi config) ]
+
     // Usage admin route. Auto-injected unconditionally so the client
     // dashboard's `IUsageQueryApi` proxy never 404s in mode-mismatched
     // deployments. The default `ClientConfig.UsageDashboard =
@@ -597,6 +610,7 @@ let buildRouteHandlers
             @ oauthFlowRoutes
             @ healthMonitorApiHandler
             @ serviceStatusBoardApiHandler
+            @ deploymentReadinessApiHandler
             @ usageQueryApiHandler
             @ homeOverviewApiHandler
             @ encryptionAdminHandler
