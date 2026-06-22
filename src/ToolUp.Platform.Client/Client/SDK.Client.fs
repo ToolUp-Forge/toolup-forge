@@ -263,6 +263,14 @@ module Client =
         /// admin- or script-initiated active-team changes propagate
         /// without a page reload.
         | MembershipActiveTeamSet of teamId: string
+        /// Server-driven `MembershipChanged.Added` for the current user —
+        /// they were just added to a team (e.g. a Platform Admin created
+        /// or provisioned one). Refreshes `MyTeams` so the new team
+        /// appears in the header switcher in-session, without changing
+        /// the active team (use the switcher to move). Previously this
+        /// kind was dropped, so a freshly-created team only surfaced
+        /// after a page reload.
+        | MembershipAdded of teamId: string
         /// Initial / refresh load of the team list for the header
         /// switcher and any caller that wants membership-aware UI
         /// outside `TeamManagerUI`. Fired on init in team-scoped modes
@@ -1353,6 +1361,12 @@ module Client =
                 else
                     model, Cmd.none
 
+            | MembershipAdded _ ->
+                // Added to a team (without an active-team switch) — refresh
+                // the team list so the new team shows up in the header
+                // switcher this session. Active team is left untouched.
+                model, bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
+
             | MyTeamsLoaded teams ->
                 // Sole-team auto-select may fire here (teams arriving
                 // after the active-team fetch) or in `ActiveTeamLoaded`
@@ -1813,6 +1827,16 @@ module Client =
             |> Option.map _.Name
             |> Option.defaultValue "Select team"
 
+        // Surface a failed switch via the existing ToastCentre instead of
+        // swallowing it — a silent failure leaves the user believing they
+        // switched team when they didn't.
+        let warnSwitchFailed () =
+            NotificationClient.publishLocal (
+                NotificationEnvelope.create
+                    (UserSession.getUserId ())
+                    (Notification.SystemMessage(SystemMessageLevel.Warning, "Couldn't switch team. Please try again."))
+            )
+
         Html.div [
             prop.ref rootRef
             prop.className "relative inline-block"
@@ -1846,17 +1870,18 @@ module Client =
                                     prop.onClick (fun _ ->
                                         if not isActive then
                                             // Close immediately, then persist on the server
-                                            // and dispatch shell-level `TeamSwitched`. Same
-                                            // path `TeamManagerUI` uses, just routed from
-                                            // the header instead of the page.
+                                            // (CSRF-ensured, matching TeamManagerUI) and
+                                            // dispatch shell-level `TeamSwitched`. Surface a
+                                            // toast on failure rather than swallowing it.
                                             setIsOpen false
 
                                             async {
                                                 try
-                                                    let! _ = teamApi.SetActiveTeam team.TeamId
-                                                    dispatch (TeamSwitched(Some team.TeamId))
+                                                    match! withCsrf (teamApi.SetActiveTeam team.TeamId) with
+                                                    | Ok() -> dispatch (TeamSwitched(Some team.TeamId))
+                                                    | Error _ -> warnSwitchFailed ()
                                                 with _ ->
-                                                    ()
+                                                    warnSwitchFailed ()
                                             }
                                             |> Async.StartImmediate)
                                 ]
@@ -3050,7 +3075,7 @@ module Client =
                         match payload.ChangeKind with
                         | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId)
                         | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId)
-                        | MembershipChangeKind.Added
+                        | MembershipChangeKind.Added -> dispatch (MembershipAdded payload.TeamId)
                         | MembershipChangeKind.RoleChanged -> ()
                     | _ -> ()
 
