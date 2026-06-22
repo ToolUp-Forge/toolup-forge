@@ -691,3 +691,99 @@ let integrityTests =
             | Ok _ -> failtest "expected Error for an over-length team name"
         }
     ]
+
+// ─── Phase 228 — team-creation quota ─────────────────────────────────
+//
+// Opt-in per-user cap under AnyAuthenticatedUser. Default (None) is
+// unlimited; Platform Admins are exempt; inert under PlatformAdminOnly.
+
+[<Tests>]
+let quotaTests =
+    testList "Phase 228 — team-creation quota" [
+
+        testCaseAsync "Quota unset → unlimited team creation (unchanged)"
+        <| async {
+            let auditLog = CapturingAuditLog()
+            let teamStore = freshTeamStore () :> ITeamStore
+            let adminStore = freshAdminStore (auditLog :> IAuditLog)
+            let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
+            let api = PlatformApiHandler.teamApi (teamConfig AnyAuthenticatedUser) ctx
+
+            let! r1 = api.CreateTeam "T1"
+            let! r2 = api.CreateTeam "T2"
+            let! r3 = api.CreateTeam "T3"
+            Expect.isOk r1 "first create ok"
+            Expect.isOk r2 "second create ok"
+            Expect.isOk r3 "third create ok — no quota configured"
+        }
+
+        testCaseAsync "Quota set → rejected once the limit is reached"
+        <| async {
+            let auditLog = CapturingAuditLog()
+            let teamStore = freshTeamStore () :> ITeamStore
+            let adminStore = freshAdminStore (auditLog :> IAuditLog)
+            let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
+
+            let config = {
+                teamConfig AnyAuthenticatedUser with
+                    TeamCreationQuota = Some 2
+            }
+
+            let api = PlatformApiHandler.teamApi config ctx
+
+            let! r1 = api.CreateTeam "T1"
+            let! r2 = api.CreateTeam "T2"
+            let! r3 = api.CreateTeam "T3"
+            Expect.isOk r1 "first under the limit"
+            Expect.isOk r2 "second reaches the limit exactly"
+
+            match r3 with
+            | Error msg -> Expect.stringContains msg "limit reached" "third is rejected at quota"
+            | Ok _ -> failtest "expected a quota rejection on the third create"
+
+            let! teams = teamStore.GetTeamsForUser "bob"
+            Expect.hasLength teams 2 "no third team persisted"
+        }
+
+        testCaseAsync "Platform Admin is exempt from the quota"
+        <| async {
+            let auditLog = CapturingAuditLog()
+            let teamStore = freshTeamStore () :> ITeamStore
+            let adminStore = freshAdminStore (auditLog :> IAuditLog)
+            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let ctx = ctxFor "alice" teamStore adminStore (auditLog :> IAuditLog)
+
+            let config = {
+                teamConfig AnyAuthenticatedUser with
+                    TeamCreationQuota = Some 1
+            }
+
+            let api = PlatformApiHandler.teamApi config ctx
+
+            let! r1 = api.CreateTeam "A1"
+            let! r2 = api.CreateTeam "A2"
+            Expect.isOk r1 "admin first create ok"
+            Expect.isOk r2 "admin second create ok despite a quota of 1"
+        }
+
+        testCaseAsync "Quota is inert under PlatformAdminOnly"
+        <| async {
+            let auditLog = CapturingAuditLog()
+            let teamStore = freshTeamStore () :> ITeamStore
+            let adminStore = freshAdminStore (auditLog :> IAuditLog)
+            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let ctx = ctxFor "alice" teamStore adminStore (auditLog :> IAuditLog)
+
+            let config = {
+                teamConfig PlatformAdminOnly with
+                    TeamCreationQuota = Some 1
+            }
+
+            let api = PlatformApiHandler.teamApi config ctx
+
+            let! r1 = api.CreateTeam "P1"
+            let! r2 = api.CreateTeam "P2"
+            Expect.isOk r1 "admin first create ok"
+            Expect.isOk r2 "quota ignored under PlatformAdminOnly"
+        }
+    ]

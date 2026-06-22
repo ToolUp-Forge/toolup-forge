@@ -244,6 +244,7 @@ let allTests =
         InMemoryRateLimitStoreTests.contractTests
         TeamCreationPolicyTests.tests
         TeamCreationPolicyTests.integrityTests
+        TeamCreationPolicyTests.quotaTests
         TeamInvitationTests.tests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests

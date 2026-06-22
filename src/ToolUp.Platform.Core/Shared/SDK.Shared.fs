@@ -2470,6 +2470,14 @@ type ServerConfig = {
     /// / Individual) — `CreateTeam` already returns `Error "Team
     /// management not available in this mode"` there.
     TeamCreationPolicy: TeamCreationPolicy
+    /// Opt-in cap on how many teams a single non-admin user may own under
+    /// `TeamCreationPolicy = AnyAuthenticatedUser`. `None` (default) =
+    /// unlimited (pre-228 behaviour, byte-for-byte). `Some n` rejects a
+    /// create once the caller already owns `n` teams (audited as
+    /// `TeamCreationDenied`). Platform Admins are never limited; inert
+    /// under `PlatformAdminOnly` (admins provision freely) and in modes
+    /// that don't register `ITeamStore`.
+    TeamCreationQuota: int option
     /// Per-scope retention policy for the registered `INarrativeStore`.
     /// Default `NarrativeRetentionPolicy.defaults` keeps the historical
     /// 100-per-scope cap with no age limit; deployments with long-lived
@@ -2783,6 +2791,7 @@ module ServerConfig =
         ConsentStateStore = NoConsentStateStore
         AdAnalytics = NoAdAnalytics
         TeamCreationPolicy = PlatformAdminOnly
+        TeamCreationQuota = None
         NarrativeRetention = NarrativeRetentionPolicy.defaults
         PeerSubstrate = NoPeerSubstrate
         TenantLifecycle = NoTenantLifecycle

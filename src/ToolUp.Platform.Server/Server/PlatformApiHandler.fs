@@ -244,6 +244,34 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             else
                 let! allowed = isAdminAllowed ()
 
+                // Opt-in per-user team-creation quota (AnyAuthenticatedUser
+                // only; Platform Admins exempt). Counts the teams the caller
+                // already owns; a `None` quota (default) is unlimited, so this
+                // resolves to `None` and the create proceeds unchanged.
+                let! quotaError = async {
+                    match config.TeamCreationPolicy, config.TeamCreationQuota with
+                    | AnyAuthenticatedUser, Some maxTeams ->
+                        let! isAdmin = isPlatformAdmin ()
+
+                        if isAdmin then
+                            return None
+                        else
+                            let! teams = ts.GetTeamsForUser userId
+
+                            let! roles =
+                                teams
+                                |> List.map (fun t -> ts.GetMemberRole(t.TeamId, userId))
+                                |> Async.Parallel
+
+                            let owned = roles |> Array.filter (fun r -> r = Some Owner) |> Array.length
+
+                            if owned >= maxTeams then
+                                return Some $"Team creation limit reached (maximum {maxTeams} teams per user)."
+                            else
+                                return None
+                    | _ -> return None
+                }
+
                 if not allowed then
                     audit
                         "_platform"
@@ -253,6 +281,15 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         })
 
                     return Error "Team creation requires Platform Admin"
+                elif quotaError.IsSome then
+                    audit
+                        "_platform"
+                        (TeamCreationDenied {
+                            UserId = userId
+                            AttemptedName = trimmedName
+                        })
+
+                    return Error quotaError.Value
                 else
                     // Full-width GUID. The previous `[..7]` slice was 32 bits —
                     // birthday-collision-prone at SaaS scale — and the id is the
