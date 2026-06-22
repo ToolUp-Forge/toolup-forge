@@ -77,6 +77,29 @@ module StripeHttp =
                 return Error(sprintf "Stripe request failed: %s" ex.Message)
         }
 
+    /// GET a Stripe endpoint with bearer auth. Returns the parsed JSON
+    /// root (cloned) on 2xx; a structured `Error` carrying Stripe's
+    /// message (never the API key) on non-2xx or network failure.
+    /// Phase 240 — consumed by `StripeBillingProvider.GetSubscriptionStatus`.
+    let getJson (client: HttpClient) (apiKey: string) (path: string) : Task<Result<JsonElement, string>> = task {
+        try
+            use req = new HttpRequestMessage(HttpMethod.Get, ApiBase + path)
+            req.Headers.Authorization <- AuthenticationHeaderValue("Bearer", apiKey)
+            let! resp = client.SendAsync req
+            let! body = resp.Content.ReadAsStringAsync()
+
+            if resp.IsSuccessStatusCode then
+                try
+                    use doc = JsonDocument.Parse body
+                    return Ok(doc.RootElement.Clone())
+                with ex ->
+                    return Error(sprintf "Stripe response parse error: %s" ex.Message)
+            else
+                return Error(describeError (int resp.StatusCode) body)
+        with ex ->
+            return Error(sprintf "Stripe request failed: %s" ex.Message)
+    }
+
     /// Read an absolute-URL string field from a Stripe JSON response.
     let readUri (root: JsonElement) (field: string) : Result<Uri, string> =
         match root.TryGetProperty field with

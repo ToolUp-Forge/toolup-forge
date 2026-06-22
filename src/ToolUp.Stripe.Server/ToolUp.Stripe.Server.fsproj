@@ -16,6 +16,8 @@
     <Compile Include="StripeHttp.fs" />
     <Compile Include="CustomerPortal.fs" />
     <Compile Include="Checkout.fs" />
+    <!-- Phase 240 — direct-billing IPaymentProvider impl. -->
+    <Compile Include="StripeBillingProvider.fs" />
     <Compile Include="Routes.fs" />
   </ItemGroup>
   <ItemGroup>

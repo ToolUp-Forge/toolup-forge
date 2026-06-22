@@ -225,6 +225,8 @@
         <Compile Include="Shared\MetricsTypes.fs" />
         <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
         <Compile Include="Shared\Interfaces\IProviderProfile.fs" />
+        <!-- Phase 240 — IPaymentProvider direct-billing substrate. -->
+        <Compile Include="Shared\Payments\PaymentTypes.fs" />
         <Compile Include="Shared\Types\I18nTypes.fs" />
         <Compile Include="Shared\I18nDefaults.fs" />
         <Compile Include="Shared\Interfaces\ILocaleResolver.fs" />

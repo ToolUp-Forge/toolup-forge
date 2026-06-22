@@ -14,6 +14,7 @@
     <Compile Include="IdempotencyStoreContractTests.fs" />
     <Compile Include="TierTokenSinkTests.fs" />
     <Compile Include="StripeHttpWrapperTests.fs" />
+    <Compile Include="StripeBillingProviderTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
