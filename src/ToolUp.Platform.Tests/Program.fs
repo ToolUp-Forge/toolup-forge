@@ -33,6 +33,8 @@ let allTests =
         FileSecretStoreTests.tests
         // Phase 176 — transient-fault decorator substrate.
         TransientFaultPolicyTests.tests
+        // Phase 238 — generic inbound-webhook receiver substrate.
+        WebhookSubstrateTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests

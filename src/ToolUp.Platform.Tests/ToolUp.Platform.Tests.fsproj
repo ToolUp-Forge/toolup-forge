@@ -156,6 +156,8 @@
         <Compile Include="InProcess\InMemoryDataSourceTests.fs" />
         <Compile Include="InProcess\OAuthSubstrateTests.fs" />
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
+        <!-- Phase 238 — generic inbound-webhook receiver substrate. -->
+        <Compile Include="InProcess\WebhookSubstrateTests.fs" />
         <!-- Phase 176 — transient-fault decorator substrate: identity
              pass-through (contract packs re-run through the wrapper) +
              retry / backoff / breaker / per-call-timeout behaviour. -->
@@ -705,6 +707,9 @@
         <!-- Phase 18 — inter-platform peer substrate, exercised by the
              IPlatformPeer contract pack + buyer→seller worked example. -->
         <ProjectReference Include="..\InterPlatform\InterPlatform.fsproj" />
+        <!-- Phase 238 — generic inbound-webhook receiver substrate. -->
+        <ProjectReference Include="..\Webhooks\ToolUp.Webhooks.Core\ToolUp.Webhooks.Core.fsproj" />
+        <ProjectReference Include="..\Webhooks\ToolUp.Webhooks.Server\ToolUp.Webhooks.Server.fsproj" />
     </ItemGroup>
     <!-- Phase 14k WS5 Item 2 — mixed-dim fixture JSON co-located with the
          existing eval-baseline.json in the RAG.Evaluation project. Linked

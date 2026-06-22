@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>ToolUp.Webhooks.Server</PackageId>
+    <Description>Giraffe / ASP.NET Core wiring for ToolUp.Webhooks.Core: per-kind handler registry, in-memory dedup store, and the verify-then-dedup-then-dispatch inbound route. Fail-closed on bad signature.</Description>
+    <PackageTags>fsharp;webhooks;giraffe;aspnetcore;inbound</PackageTags>
+    <Version>0.1.0-alpha</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="WebhookRegistry.fs" />
+    <Compile Include="InMemoryWebhookDedupStore.fs" />
+    <Compile Include="WebhookRoutes.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Giraffe" />
+    <ProjectReference Include="..\ToolUp.Webhooks.Core\ToolUp.Webhooks.Core.fsproj" />
+  </ItemGroup>
+</Project>
