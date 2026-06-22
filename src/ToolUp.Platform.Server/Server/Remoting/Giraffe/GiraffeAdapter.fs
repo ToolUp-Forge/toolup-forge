@@ -725,11 +725,22 @@ module GiraffeUtil =
                         // per-method-completion contract.
                         ctx.Response.StatusCode <- 401
 
+                        // The per-request deny reason (`missing-role: Admin`,
+                        // `missing-tenant`, …) is server-side-only data — it
+                        // names *which* authorization rule failed and so must
+                        // not reach the client (it would leak the auth policy;
+                        // see the `AuthDecision.Deny` doc in Auth.fs). Route it
+                        // to the diagnostics logger and redact the wire `error`
+                        // to a constant `"auth-denied"`. The structured channel
+                        // is already opaque (generic `category = "auth"`, no
+                        // typed reason field — pinned by the adversarial pack),
+                        // so this closes the last message-text disclosure.
+                        options.DiagnosticsLogger
+                        |> Option.iter (fun log ->
+                            log (sprintf "%s: auth-denied: %s" methodNameForAuth denyReason.Value))
+
                         let envelope =
-                            Errors.categorisedWithSchema
-                                options.SchemaVersion
-                                ErrorCategory.Auth
-                                (box (sprintf "%s: auth-denied: %s" methodNameForAuth denyReason.Value))
+                            Errors.categorisedWithSchema options.SchemaVersion ErrorCategory.Auth (box "auth-denied")
 
                         return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                     else

@@ -31,7 +31,9 @@ open ToolUp.Platform.Tests.Contracts.FailClosedContract
 //   A — classifier fail-closed contract (server + mirror families)
 //   B — un-annotated method refuses to start (both compose paths)
 //   C — the deny path returns before the handler runs (ordering pin)
-//   D — the deny signal on the wire is the opaque generic category
+//   D — the deny signal on the wire is the opaque generic category AND
+//       the wire message text carries no reason substring (the reason is
+//       logged server-side only)
 //   E — a money-moving method without [<Audit>] emits zero events; the
 //       inverse emits exactly one (omission is observable)
 //   F — forgetting [<PiiSafe>] keeps PII out of the audit row
@@ -235,7 +237,8 @@ let tests =
                 "the deny path sets 401 — the call is rejected, not handled"
         }
 
-        // ── D — the deny signal on the wire is the opaque generic category ──
+        // ── D — the deny signal on the wire is the opaque generic category;
+        //        the wire message text carries no reason substring ──
         test "the deny envelope category is the opaque generic 'auth' (clients branch on category, not the rule)" {
             // Every deny cause — missing-role, missing-tenant, anonymous,
             // no-resolver — routes through the same `ErrorCategory.Auth`
@@ -243,6 +246,32 @@ let tests =
             // *which* authorization rule failed.
             let envelope = Errors.categorisedWithSchema 1 ErrorCategory.Auth (box "opaque")
             Expect.equal envelope.category "auth" "the wire category for a denial is the generic 'auth'"
+        }
+
+        test "the deny path redacts the wire message to a constant, routing the reason to the server-side logger only" {
+            // The deny envelope's `error` payload used to interpolate the
+            // per-request `denyReason.Value` (`missing-role: Admin`,
+            // `missing-tenant`, …) into the wire message text — leaking WHICH
+            // authorization rule failed, contradicting the `AuthDecision.Deny`
+            // doc contract in Auth.fs. Pin the redaction at the source: the
+            // deny envelope is built with the constant `"auth-denied"` message,
+            // and `denyReason.Value` is handed to the diagnostics logger, never
+            // boxed into the envelope.
+            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
+
+            Expect.stringContains
+                adapter
+                "ErrorCategory.Auth (box \"auth-denied\")"
+                "the deny envelope error payload is the constant \"auth-denied\" — no per-request reason on the wire"
+
+            Expect.isFalse
+                (adapter.Contains "(box (sprintf \"%s: auth-denied: %s\" methodNameForAuth denyReason.Value))")
+                "the leaky envelope-message interpolation of denyReason.Value must be gone"
+
+            Expect.stringContains
+                adapter
+                "log (sprintf \"%s: auth-denied: %s\" methodNameForAuth denyReason.Value)"
+                "the per-request deny reason is routed to the diagnostics logger (server-side only)"
         }
 
         test "the wire error envelope carries no structured deny-reason field (the reason is server-side data)" {
