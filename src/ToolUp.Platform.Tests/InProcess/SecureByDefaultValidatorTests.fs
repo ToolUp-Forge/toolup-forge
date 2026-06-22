@@ -3,19 +3,49 @@ module ToolUp.Platform.Tests.InProcess.SecureByDefaultValidatorTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Phase 129 — secure-by-default refusals / warnings ──────────────
 
 let private run (v: IConfigValidator) : ValidationResult = v.Validate() |> Async.RunSynchronously
 
-// ── 129a — AutoBootstrapDevAdmin: Warning local, Error internet-facing ──
+// ── Phase 230 — AutoBootstrapDevAdmin: Error unless the explicit opt-in
+//    env var is set (closes the proxy-production gap where RequireHttps is
+//    false). Warning only on a deliberate local auth-dev opt-in. ──
 let private devAdminTests =
     let validator cfg =
         AutoBootstrapDevAdminModeValidator.AutoBootstrapDevAdminModeValidator(cfg) :> IConfigValidator
 
-    testList "Phase 129a — AutoBootstrapDevAdmin escalation" [
-        test "internet-facing (RequireHttps) + auth + dev-admin set → Error" {
+    // The opt-in is a process-global env var — set/restore around each case
+    // and sequence the block so a sibling case never sees a stale value.
+    let withOptIn (value: string option) (f: unit -> 'a) : 'a =
+        let key = PlatformAdminStore.allowDevAdminBootstrapEnvVar
+        let prior = Environment.GetEnvironmentVariable key
+        Environment.SetEnvironmentVariable(key, Option.toObj value)
+
+        try
+            f ()
+        finally
+            Environment.SetEnvironmentVariable(key, prior)
+
+    testSequenced
+    <| testList "Phase 230 — AutoBootstrapDevAdmin escalation guard" [
+        test "auth + dev-admin set + opt-in UNSET → Error (incl. behind a TLS proxy)" {
+            let cfg = {
+                ServerConfig.defaults with
+                    Surfaces = Surfaces.individual
+                    AutoBootstrapDevAdmin = Some "dev-1"
+            }
+
+            withOptIn None (fun () ->
+                match run (validator cfg) with
+                | Error _ -> ()
+                | other -> failtestf "expected Error when the opt-in is unset, got %A" other)
+        }
+
+        test "auth + dev-admin set + RequireHttps + opt-in UNSET → Error" {
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
@@ -23,21 +53,23 @@ let private devAdminTests =
                     AutoBootstrapDevAdmin = Some "dev-1"
             }
 
-            match run (validator cfg) with
-            | Error _ -> ()
-            | other -> failtestf "expected Error on internet-facing shape, got %A" other
+            withOptIn None (fun () ->
+                match run (validator cfg) with
+                | Error _ -> ()
+                | other -> failtestf "expected Error on the production shape, got %A" other)
         }
 
-        test "pure-local (no https / forwarded) + auth + dev-admin set → Warning" {
+        test "auth + dev-admin set + opt-in SET → Warning (deliberate local auth-dev)" {
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
                     AutoBootstrapDevAdmin = Some "dev-1"
             }
 
-            match run (validator cfg) with
-            | Warning _ -> ()
-            | other -> failtestf "expected Warning on pure-local dev shape, got %A" other
+            withOptIn (Some "1") (fun () ->
+                match run (validator cfg) with
+                | Warning _ -> ()
+                | other -> failtestf "expected Warning when the opt-in is set, got %A" other)
         }
 
         test "dev-admin unset → Ok" {
@@ -47,7 +79,7 @@ let private devAdminTests =
                     RequireHttps = true
             }
 
-            Expect.equal (run (validator cfg)) Ok "no dev-admin → no finding"
+            withOptIn None (fun () -> Expect.equal (run (validator cfg)) Ok "no dev-admin → no finding")
         }
     ]
 
@@ -164,6 +196,76 @@ let private redirectBaseTests =
         }
     ]
 
+// ── Phase 230 — the bootstrap itself fails closed: in an auth-requiring
+//    deployment the AutoBootstrapDevAdmin fallback elevates only when the
+//    explicit opt-in is set. Proves the runtime refusal, not just the
+//    preflight signal. ──
+let private bootstrapTests =
+    let silentLogger =
+        { new ILogger with
+            member _.Debug _ = ()
+            member _.Info _ = ()
+            member _.Warn _ = ()
+            member _.Error(_, _) = ()
+        }
+
+    let noOpAudit =
+        { new IAuditLog with
+            member _.Record(_, _) = async { return () }
+            member _.GetAuditTrail(_, _, _) = async { return [] }
+        }
+
+    let mkStore () : IPlatformAdminStore =
+        let storage = InMemoryBlobStorage() :> IBlobStorage
+        PlatformAdminStore.BlobBackedPlatformAdminStore(storage, noOpAudit) :> _
+
+    // Both the env-path admin and the opt-in are process-global — snapshot
+    // and restore around each case, and sequence the block.
+    let withEnv (initialAdmin: string option) (optIn: string option) (f: unit -> unit) =
+        let k1 = "TOOLUP_INITIAL_PLATFORM_ADMIN"
+        let k2 = PlatformAdminStore.allowDevAdminBootstrapEnvVar
+        let p1 = Environment.GetEnvironmentVariable k1
+        let p2 = Environment.GetEnvironmentVariable k2
+        Environment.SetEnvironmentVariable(k1, Option.toObj initialAdmin)
+        Environment.SetEnvironmentVariable(k2, Option.toObj optIn)
+
+        try
+            f ()
+        finally
+            Environment.SetEnvironmentVariable(k1, p1)
+            Environment.SetEnvironmentVariable(k2, p2)
+
+    let adminsAfterBootstrap (requiresAuth: bool) (initialAdmin: string option) (optIn: string option) =
+        let store = mkStore ()
+
+        withEnv initialAdmin optIn (fun () ->
+            PlatformAdminStore.bootstrap silentLogger (Some "dev-1") requiresAuth store
+            |> Async.RunSynchronously)
+
+        store.ListPlatformAdmins() |> Async.RunSynchronously
+
+    testSequenced
+    <| testList "Phase 230 — bootstrap dev-admin fail-closed" [
+        test "auth + dev-admin + opt-in UNSET → refuses (no elevation)" {
+            Expect.isEmpty (adminsAfterBootstrap true None None) "no elevation when the opt-in is unset in auth mode"
+        }
+
+        test "auth + dev-admin + opt-in SET → elevates" {
+            Expect.equal (adminsAfterBootstrap true None (Some "1")) [ "dev-1" ] "elevates with the deliberate opt-in"
+        }
+
+        test "non-auth (anonymous) + dev-admin → elevates (no opt-in needed)" {
+            Expect.equal (adminsAfterBootstrap false None None) [ "dev-1" ] "anonymous dev needs no opt-in"
+        }
+
+        test "env-path admin always elevates (priority 1, ungated)" {
+            Expect.equal
+                (adminsAfterBootstrap true (Some "env-admin") None)
+                [ "env-admin" ]
+                "TOOLUP_INITIAL_PLATFORM_ADMIN is never gated"
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "Phase 129 — secure-by-default" [ devAdminTests; csrfDefaultTests; redirectBaseTests ]
+    testList "Phase 129 — secure-by-default" [ devAdminTests; bootstrapTests; csrfDefaultTests; redirectBaseTests ]

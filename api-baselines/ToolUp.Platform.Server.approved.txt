@@ -1987,7 +1987,8 @@ ToolUp.Platform.PlatformAdminDevDiagnostics (class)
 ToolUp.Platform.PlatformAdminDevDiagnostics+PlatformAdminContributor (class)
 ToolUp.Platform.PlatformAdminDevDiagnostics+PlatformAdminContributor..ctor(ToolUp.Platform.IPlatformAdminStore, ToolUp.Platform.IPlatformRuntimeConfigStore)
 ToolUp.Platform.PlatformAdminStore (class)
-ToolUp.Platform.PlatformAdminStore.bootstrap(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.IPlatformAdminStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.PlatformAdminStore.allowDevAdminBootstrapEnvVar : System.String (literal)
+ToolUp.Platform.PlatformAdminStore.bootstrap(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, ToolUp.Platform.IPlatformAdminStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.PlatformAdminStore+BlobBackedPlatformAdminStore (class)
 ToolUp.Platform.PlatformAdminStore+BlobBackedPlatformAdminStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog)
 ToolUp.Platform.PlatformApiHandler (class)

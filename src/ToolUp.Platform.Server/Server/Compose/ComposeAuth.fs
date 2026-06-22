@@ -53,7 +53,11 @@ let registerPlatformAdminStore
     services.AddSingleton<IPlatformAdminStore>(platformAdminStore) |> ignore
 
     try
-        PlatformAdminStore.bootstrap resolvedLogger config.AutoBootstrapDevAdmin platformAdminStore
+        PlatformAdminStore.bootstrap
+            resolvedLogger
+            config.AutoBootstrapDevAdmin
+            (DeploymentConfig.requiresAnyAuth config)
+            platformAdminStore
         |> Async.RunSynchronously
     with ex ->
         resolvedLogger.Error(sprintf "[PlatformAdmin] Bootstrap aborted: %s" ex.Message, Some ex)

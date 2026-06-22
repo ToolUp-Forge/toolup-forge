@@ -37,27 +37,42 @@ type AutoBootstrapDevAdminModeValidator(config: ServerConfig, ?timeout: TimeSpan
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
 
-            // Phase 129 — an auth-requiring deployment that requires HTTPS
-            // is the production shape where a leaked AutoBootstrapDevAdmin
-            // is a live privilege escalation: refuse startup. A local
-            // auth-dev deployment (RequireHttps = false, the default) keeps
-            // the Warning the field is legitimately used under. (Keys on
-            // RequireHttps alone, NOT TrustForwardedHeaders — the latter
-            // defaults to true, so it would mis-flag local dev as
-            // internet-facing and break the field's intended workflow. This
-            // is exactly the stricter `isHttpsTerminatedHere` intent.)
-            let internetFacing = DeploymentConfig.isHttpsTerminatedHere config
+            // Phase 230 — the bootstrap (PlatformAdminStore.bootstrap) now
+            // refuses the AutoBootstrapDevAdmin fallback in an auth-requiring
+            // deployment UNLESS TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP is explicitly
+            // set. So the validator keys on that opt-in rather than on
+            // RequireHttps (which is false both for local dev AND for
+            // production behind a TLS-terminating proxy — the gap Phase 230
+            // closes):
+            //   * opt-in NOT set → the field is set but will be refused at
+            //     bootstrap, AND its presence in a production config is a
+            //     misconfiguration to surface loudly → Error.
+            //   * opt-in set → a deliberate local auth-dev bootstrap that WILL
+            //     elevate the first sign-in → Warning (must never be prod).
+            let optInSet =
+                let v =
+                    Environment.GetEnvironmentVariable PlatformAdminStore.allowDevAdminBootstrapEnvVar
+
+                not (String.IsNullOrWhiteSpace v) && v.Trim() <> "0"
 
             match config.AutoBootstrapDevAdmin with
             | Some uid when requiresAuth && not (String.IsNullOrWhiteSpace uid) ->
-                let message =
-                    sprintf
-                        "ServerConfig.AutoBootstrapDevAdmin = Some \"%s\" in an auth-requiring mode. When the platform-admin list is empty and TOOLUP_INITIAL_PLATFORM_ADMIN is unset, the bootstrap silently grants Platform Admin to the first sign-in — a privilege-escalation vector if this dev-convenience field leaks into a production deployment (HeaderAuthProviderModeValidator does not catch this; it fires only for HeaderAuthProvider). Production deployments MUST leave AutoBootstrapDevAdmin = None and set TOOLUP_INITIAL_PLATFORM_ADMIN instead. Verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
-                        uid
-
-                if internetFacing then
-                    return Error message
+                if optInSet then
+                    return
+                        Warning(
+                            sprintf
+                                "ServerConfig.AutoBootstrapDevAdmin = Some \"%s\" in an auth-requiring mode with %s set — the bootstrap WILL grant Platform Admin to the first sign-in when the admin list is empty. This is a deliberate local auth-dev bootstrap; it MUST NOT be a production deployment. Production deployments leave AutoBootstrapDevAdmin = None and set TOOLUP_INITIAL_PLATFORM_ADMIN instead."
+                                uid
+                                PlatformAdminStore.allowDevAdminBootstrapEnvVar
+                        )
                 else
-                    return Warning message
+                    return
+                        Error(
+                            sprintf
+                                "ServerConfig.AutoBootstrapDevAdmin = Some \"%s\" in an auth-requiring mode but %s is not set. The bootstrap will REFUSE this dev-convenience field (Phase 230 — a leaked field could otherwise grant Platform Admin to the first sign-in, including behind a TLS-terminating proxy where RequireHttps = false). Production deployments MUST leave AutoBootstrapDevAdmin = None and set TOOLUP_INITIAL_PLATFORM_ADMIN; for a deliberate local auth-dev bootstrap set %s=1."
+                                uid
+                                PlatformAdminStore.allowDevAdminBootstrapEnvVar
+                                PlatformAdminStore.allowDevAdminBootstrapEnvVar
+                        )
             | _ -> return Ok
         }

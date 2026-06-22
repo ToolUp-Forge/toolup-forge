@@ -40,6 +40,17 @@ let private bootstrapActor = "_bootstrap"
 [<Literal>]
 let private initialAdminEnvVar = "TOOLUP_INITIAL_PLATFORM_ADMIN"
 
+/// Phase 230 — explicit second opt-in required for the
+/// `AutoBootstrapDevAdmin` fallback to elevate in an auth-requiring
+/// deployment. A dev-convenience field that leaks into production
+/// (especially behind a TLS-terminating proxy, where `RequireHttps = false`
+/// makes the deployment indistinguishable from local dev) can otherwise
+/// silently grant Platform Admin to the first sign-in. Requiring a second,
+/// deliberate env var means a single leaked field can never escalate.
+/// Public so the preflight validator references the same name.
+[<Literal>]
+let allowDevAdminBootstrapEnvVar = "TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP"
+
 module private Json =
     let private options =
         JsonSerializerOptions(PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
@@ -165,44 +176,77 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog) =
 /// startup — a deployment without a bootstrap admin can still run; the
 /// operator can assign one later via direct blob manipulation or by
 /// re-running with a source set against an empty admin list.
-let bootstrap (logger: ILogger) (autoBootstrapDevAdmin: string option) (store: IPlatformAdminStore) = async {
-    let envValue = Environment.GetEnvironmentVariable initialAdminEnvVar
+let bootstrap
+    (logger: ILogger)
+    (autoBootstrapDevAdmin: string option)
+    (requiresAuth: bool)
+    (store: IPlatformAdminStore)
+    =
+    async {
+        let envValue = Environment.GetEnvironmentVariable initialAdminEnvVar
 
-    let target =
-        if not (String.IsNullOrWhiteSpace envValue) then
-            Some(envValue.Trim(), sprintf "env var %s" initialAdminEnvVar, false)
-        else
-            match autoBootstrapDevAdmin with
-            | Some id when not (System.String.IsNullOrWhiteSpace id) ->
-                Some(id.Trim(), "ServerConfig.AutoBootstrapDevAdmin (dev convenience)", true)
-            | _ -> None
+        // Phase 230 — the dev fallback only elevates in an auth-requiring
+        // deployment when TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP is explicitly set.
+        // A non-auth (anonymous) deployment needs no opt-in; the env path
+        // (priority 1) is never gated.
+        let devFallbackAllowed =
+            if not requiresAuth then
+                true
+            else
+                let v = Environment.GetEnvironmentVariable allowDevAdminBootstrapEnvVar
+                not (String.IsNullOrWhiteSpace v) && v.Trim() <> "0"
 
-    match target with
-    | None -> ()
-    | Some(trimmed, source, isDevFallback) ->
-        let! existing = store.ListPlatformAdmins()
+        let target =
+            if not (String.IsNullOrWhiteSpace envValue) then
+                Some(envValue.Trim(), sprintf "env var %s" initialAdminEnvVar, false)
+            else
+                match autoBootstrapDevAdmin with
+                | Some id when not (System.String.IsNullOrWhiteSpace id) ->
+                    if devFallbackAllowed then
+                        Some(id.Trim(), "ServerConfig.AutoBootstrapDevAdmin (dev convenience)", true)
+                    else
+                        // Auth-requiring deployment without the explicit
+                        // TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP opt-in — fail closed
+                        // (no elevation) and surface it loudly.
+                        logger.Error(
+                            sprintf
+                                "[PlatformAdmin] AutoBootstrapDevAdmin = Some \"%s\" is set in an auth-requiring deployment but %s is not set — REFUSING to bootstrap a dev admin (this would be a first-sign-in privilege escalation in production). Set %s for production, or %s=1 for a deliberate local auth-dev bootstrap."
+                                (id.Trim())
+                                allowDevAdminBootstrapEnvVar
+                                initialAdminEnvVar
+                                allowDevAdminBootstrapEnvVar,
+                            None
+                        )
 
-        if not (List.isEmpty existing) then
-            // Already-populated — bootstrap is one-shot. No-op.
-            ()
-        else
-            let! result = store.AssignPlatformAdmin(bootstrapActor, trimmed)
+                        None
+                | _ -> None
 
-            match result with
-            | Ok() ->
-                let message =
-                    sprintf "[PlatformAdmin] Bootstrapped initial admin from %s: %s" source trimmed
+        match target with
+        | None -> ()
+        | Some(trimmed, source, isDevFallback) ->
+            let! existing = store.ListPlatformAdmins()
 
-                if isDevFallback then
-                    logger.Warn(
-                        message
-                        + " — production deployments MUST set TOOLUP_INITIAL_PLATFORM_ADMIN instead."
+            if not (List.isEmpty existing) then
+                // Already-populated — bootstrap is one-shot. No-op.
+                ()
+            else
+                let! result = store.AssignPlatformAdmin(bootstrapActor, trimmed)
+
+                match result with
+                | Ok() ->
+                    let message =
+                        sprintf "[PlatformAdmin] Bootstrapped initial admin from %s: %s" source trimmed
+
+                    if isDevFallback then
+                        logger.Warn(
+                            message
+                            + " — production deployments MUST set TOOLUP_INITIAL_PLATFORM_ADMIN instead."
+                        )
+                    else
+                        logger.Info message
+                | Error msg ->
+                    logger.Error(
+                        sprintf "[PlatformAdmin] Bootstrap failed to assign initial admin %s: %s" trimmed msg,
+                        None
                     )
-                else
-                    logger.Info message
-            | Error msg ->
-                logger.Error(
-                    sprintf "[PlatformAdmin] Bootstrap failed to assign initial admin %s: %s" trimmed msg,
-                    None
-                )
-}
+    }
