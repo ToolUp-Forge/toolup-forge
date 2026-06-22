@@ -1780,6 +1780,91 @@ module Client =
 
         finalModel, Cmd.batch [ cmd; processedDataResetCmds ]
 
+    /// Controlled team switcher for the page header. Replaces the previous
+    /// native `<details>` element, which had neither close-on-outside-click
+    /// nor close-on-selection — once opened (e.g. to pick a freshly-created
+    /// team) nothing dismissed it. Open state lives in `React.useState`; a
+    /// `mousedown` listener on `document` closes the menu on an outside
+    /// click (mirroring `UI.Toolkit.Forms.dropdown`), and selecting a team
+    /// closes it explicitly. The server-persist-then-dispatch path
+    /// (`teamApi.SetActiveTeam` → `TeamSwitched`) is unchanged from the old
+    /// inline render.
+    [<ReactComponent>]
+    let TeamSwitcher (myTeams: TeamInfo list) (activeTeamId: string option) (dispatch: Msg -> unit) =
+        let isOpen, setIsOpen = React.useState false
+        let rootRef = React.useRef<Browser.Types.HTMLDivElement option> (None)
+
+        // Close on outside click — same idiom as UI.Toolkit.Forms.dropdown.
+        React.useEffect (
+            (fun () ->
+                let handler (e: Browser.Types.Event) =
+                    match rootRef.current with
+                    | Some element when not (element.contains (e.target :?> Browser.Types.Node)) -> setIsOpen false
+                    | _ -> ()
+
+                Browser.Dom.document.addEventListener ("mousedown", handler)
+                FsReact.createDisposable (fun () -> Browser.Dom.document.removeEventListener ("mousedown", handler))),
+            [||]
+        )
+
+        let activeName =
+            activeTeamId
+            |> Option.bind (fun id -> myTeams |> List.tryFind (fun t -> t.TeamId = id))
+            |> Option.map _.Name
+            |> Option.defaultValue "Select team"
+
+        Html.div [
+            prop.ref rootRef
+            prop.className "relative inline-block"
+            prop.children [
+                Html.button [
+                    prop.className
+                        "list-none cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-sm"
+                    prop.onClick (fun _ -> setIsOpen (not isOpen))
+                    prop.children [
+                        Html.span [ prop.className "text-gray-500"; prop.text "Team:" ]
+                        Html.span [ prop.className "font-medium text-gray-900"; prop.text activeName ]
+                        Html.span [ prop.className "text-gray-400 text-xs"; prop.text "▾" ]
+                    ]
+                ]
+                if isOpen then
+                    Html.div [
+                        prop.className
+                            "absolute right-0 mt-1 min-w-[200px] bg-white border border-gray-200 rounded shadow-lg z-20"
+                        prop.children [
+                            for team in myTeams do
+                                let isActive = activeTeamId = Some team.TeamId
+
+                                Html.button [
+                                    prop.className [
+                                        "w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                                        if isActive then
+                                            "bg-blue-50 font-medium text-blue-700"
+                                    ]
+                                    prop.disabled isActive
+                                    prop.text team.Name
+                                    prop.onClick (fun _ ->
+                                        if not isActive then
+                                            // Close immediately, then persist on the server
+                                            // and dispatch shell-level `TeamSwitched`. Same
+                                            // path `TeamManagerUI` uses, just routed from
+                                            // the header instead of the page.
+                                            setIsOpen false
+
+                                            async {
+                                                try
+                                                    let! _ = teamApi.SetActiveTeam team.TeamId
+                                                    dispatch (TeamSwitched(Some team.TeamId))
+                                                with _ ->
+                                                    ()
+                                            }
+                                            |> Async.StartImmediate)
+                                ]
+                        ]
+                    ]
+            ]
+        ]
+
     let view (config: ClientConfig) (modules: ErasedModule list) (chrome: ExtraChrome) model dispatch =
         // Select the page content for the active module. Multi-page
         // modules (`PageViews = Some map`) dispatch on the active
@@ -2042,68 +2127,7 @@ module Client =
                 || (not model.MyTeams.IsEmpty && model.ActiveTeamId.IsNone)
 
             if ClientConfig.hasMultiTeamSwitcher config && switcherUseful then
-                let activeName =
-                    model.ActiveTeamId
-                    |> Option.bind (fun id -> model.MyTeams |> List.tryFind (fun t -> t.TeamId = id))
-                    |> Option.map _.Name
-                    |> Option.defaultValue "Select team"
-
-                Some(
-                    Html.div [
-                        prop.className "relative inline-block"
-                        prop.children [
-                            Html.details [
-                                prop.className "group"
-                                prop.children [
-                                    Html.summary [
-                                        prop.className
-                                            "list-none cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-sm"
-                                        prop.children [
-                                            Html.span [ prop.className "text-gray-500"; prop.text "Team:" ]
-                                            Html.span [
-                                                prop.className "font-medium text-gray-900"
-                                                prop.text activeName
-                                            ]
-                                            Html.span [ prop.className "text-gray-400 text-xs"; prop.text "▾" ]
-                                        ]
-                                    ]
-                                    Html.div [
-                                        prop.className
-                                            "absolute right-0 mt-1 min-w-[200px] bg-white border border-gray-200 rounded shadow-lg z-20"
-                                        prop.children [
-                                            for team in model.MyTeams do
-                                                let isActive = model.ActiveTeamId = Some team.TeamId
-
-                                                Html.button [
-                                                    prop.className [
-                                                        "w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                                                        if isActive then
-                                                            "bg-blue-50 font-medium text-blue-700"
-                                                    ]
-                                                    prop.disabled isActive
-                                                    prop.text team.Name
-                                                    prop.onClick (fun _ ->
-                                                        if not isActive then
-                                                            // Persist on the server, then dispatch
-                                                            // shell-level `TeamSwitched`. Same path
-                                                            // `TeamManagerUI` uses, just routed from
-                                                            // the header instead of the page.
-                                                            async {
-                                                                try
-                                                                    let! _ = teamApi.SetActiveTeam team.TeamId
-                                                                    dispatch (TeamSwitched(Some team.TeamId))
-                                                                with _ ->
-                                                                    ()
-                                                            }
-                                                            |> Async.StartImmediate)
-                                                ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                )
+                Some(TeamSwitcher model.MyTeams model.ActiveTeamId dispatch)
             else
                 None
 
