@@ -105,4 +105,46 @@
     margin: auto;
   }
 }
+
+/* Sidebar scrollbar. The shell's sidebar scroll region (a `bg-sidebar`
+   ancestor with an `overflow-y-auto` child) otherwise renders the native OS
+   scrollbar — a grey track, grey thumb, and up/down stepper buttons that
+   clash against the dark `--color-sidebar`. Re-skin it to a thin, track-less,
+   button-less light-on-dark thumb. The thumb is a white alpha so it reads
+   correctly against any dark sidebar value an app overrides in. Scoped under
+   `.bg-sidebar` so the rest of the app keeps its native scrollbars. Firefox
+   (scrollbar-width/color) and WebKit/Chromium (::-webkit-scrollbar) covered. */
+.bg-sidebar,
+.bg-sidebar * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+.bg-sidebar ::-webkit-scrollbar,
+.bg-sidebar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.bg-sidebar ::-webkit-scrollbar-track,
+.bg-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.bg-sidebar ::-webkit-scrollbar-thumb,
+.bg-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.bg-sidebar ::-webkit-scrollbar-thumb:hover,
+.bg-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+  background-clip: padding-box;
+}
+/* Kill the up/down stepper buttons (the worst of the OS-default look). */
+.bg-sidebar ::-webkit-scrollbar-button,
+.bg-sidebar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
 /* >>> end @toolup/tailwind canonical <<< */
