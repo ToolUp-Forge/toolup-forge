@@ -2128,6 +2128,8 @@ ToolUp.Platform.ClerkUIConfig (class)
 ToolUp.Platform.ClerkUIConfig..ctor(System.String)
 ToolUp.Platform.ClerkUIConfig.PublishableKey : System.String { get }
 ToolUp.Platform.Client (class)
+ToolUp.Platform.Client.NoActiveTeamSurface(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ToolUp.Platform.Client.TeamSwitcher(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.Platform.Client.activeModuleId(ToolUp.Platform.Client+Model) : System.String
 ToolUp.Platform.Client.activePageRoute(ToolUp.Platform.Client+Model) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Client.boot(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
@@ -2193,6 +2195,7 @@ ToolUp.Platform.Client+Msg.IsDataSnapshotPrefetched : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsDismissBootDegradations : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsFlagsLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsMembershipActiveTeamSet : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsMembershipAdded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsMembershipRevoked : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsModuleActionReceived : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsModuleEventPublished : System.Boolean { get }
@@ -2224,6 +2227,8 @@ ToolUp.Platform.Client+Msg+FlagsLoaded (class)
 ToolUp.Platform.Client+Msg+FlagsLoaded.Item : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue] { get }
 ToolUp.Platform.Client+Msg+MembershipActiveTeamSet (class)
 ToolUp.Platform.Client+Msg+MembershipActiveTeamSet.teamId : System.String { get }
+ToolUp.Platform.Client+Msg+MembershipAdded (class)
+ToolUp.Platform.Client+Msg+MembershipAdded.teamId : System.String { get }
 ToolUp.Platform.Client+Msg+MembershipRevoked (class)
 ToolUp.Platform.Client+Msg+MembershipRevoked.teamId : System.String { get }
 ToolUp.Platform.Client+Msg+ModuleActionReceived (class)
@@ -2263,6 +2268,7 @@ ToolUp.Platform.Client+Msg+Tags.DataSnapshotPrefetched : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.DismissBootDegradations : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.FlagsLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.MembershipActiveTeamSet : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.MembershipAdded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.MembershipRevoked : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ModuleActionReceived : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ModuleEventPublished : System.Int32 (literal)

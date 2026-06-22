@@ -2520,10 +2520,12 @@ ToolUp.Platform.TeamCreationPolicyValidator+TeamCreationPolicyValidator..ctor(To
 ToolUp.Platform.TeamManagement (class)
 ToolUp.Platform.TeamManagement+ActiveTeamPolicy (class)
 ToolUp.Platform.TeamManagement+ActiveTeamPolicy.ensureActiveTeam(ToolUp.Platform.TeamManagement+ITeamStore, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.TeamManagement+ActiveTeamPolicy.errorReporter : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit]] { get; set }
 ToolUp.Platform.TeamManagement+ITeamStore (interface)
 ToolUp.Platform.TeamManagement+ITeamStore.AddMember(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+ITeamStore.ChangeMemberRole(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+ITeamStore.CreateTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]
+ToolUp.Platform.TeamManagement+ITeamStore.DeleteTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+ITeamStore.GetActiveTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.TeamManagement+ITeamStore.GetMemberRole(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
 ToolUp.Platform.TeamManagement+ITeamStore.GetTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamInfo]]
@@ -2542,6 +2544,7 @@ ToolUp.Platform.TeamManagement+TeamStore..ctor(ToolUp.Platform.BlobStorage+IBlob
 ToolUp.Platform.TeamManagement+TeamStore.AddMember(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.ChangeMemberRole(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.CreateTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]
+ToolUp.Platform.TeamManagement+TeamStore.DeleteTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.GetActiveTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.GetMemberRole(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
 ToolUp.Platform.TeamManagement+TeamStore.GetTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamInfo]]
