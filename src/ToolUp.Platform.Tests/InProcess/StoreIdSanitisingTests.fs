@@ -30,6 +30,7 @@ type private RecordingTeamStore() =
                     TeamId = teamId
                     Name = name
                     CreatedAt = DateTime.UtcNow
+                    Archived = false
                 }
         }
 
@@ -46,6 +47,17 @@ type private RecordingTeamStore() =
         member _.RemoveMember(_, _) = async { return Ok() }
         member _.ChangeMemberRole(_, _, _) = async { return Ok() }
         member _.SetActiveTeam(_, _) = async { return Ok() }
+
+        member _.SetArchived(teamId, _archived) = async {
+            calls.Add($"SetArchived:{teamId}")
+            return Ok()
+        }
+
+        member _.PurgeTeam(teamId) = async {
+            calls.Add($"PurgeTeam:{teamId}")
+            return Ok()
+        }
+
         member _.GetTeam _ = failwith "read not exercised"
         member _.ListTeams() = failwith "read not exercised"
         member _.GetTeamsForUser _ = failwith "read not exercised"

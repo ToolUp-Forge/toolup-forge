@@ -85,6 +85,20 @@ type Model = {
     /// Tracks whether a CreateTeamWithOwner call is in flight, so
     /// the submit button can disable to prevent double-fire.
     CreateTeamInFlight: bool
+    /// Live all-teams admin table from `ListAllTeams`. Loaded on shell
+    /// init and after every successful archive / restore / delete /
+    /// create. Platform-Admin only — non-admins never see this surface.
+    Teams: LoadState<TeamSummary list>
+    /// Team ids with an archive / restore / delete call in flight, so
+    /// their row action buttons can disable to prevent double-fire.
+    TeamActionPending: Set<string>
+    /// `Some teamId` = the delete-confirm modal is open for that team.
+    /// Delete is only offered on an already-archived team; the modal
+    /// echoes the team name as a brake on accidental destruction.
+    ConfirmDeleteTeam: string option
+    /// Inline error from a per-team archive / restore / delete attempt,
+    /// keyed by team id so the banner renders against the right row.
+    TeamActionError: Map<string, string>
     /// Phase 4b deferred follow-up — current runtime PlatformKnowledgeBase
     /// state. Loaded on shell init via `GetPlatformKnowledgeBase`;
     /// updated optimistically after a successful `Set`.
@@ -109,6 +123,14 @@ type Msg =
     | UseSelfAsTeamOwner
     | SubmitCreateTeam
     | CreateTeamResolved of Result<TeamInfo, string>
+    | RefreshTeams
+    | TeamsLoaded of Result<TeamSummary list, string>
+    | SetTeamArchived of teamId: string * archived: bool
+    | TeamArchiveResolved of teamId: string * archived: bool * Result<unit, string>
+    | RequestDeleteTeam of teamId: string
+    | CancelDeleteTeam
+    | ConfirmDeleteTeam
+    | DeleteTeamResolved of teamId: string * Result<unit, string>
     | PlatformKnowledgeBaseLoaded of Result<PlatformKnowledgeBaseMode, string>
     | TogglePlatformKnowledgeBase of PlatformKnowledgeBaseMode
     | TogglePlatformKnowledgeBaseResolved of requested: PlatformKnowledgeBaseMode * Result<unit, string>
@@ -160,6 +182,23 @@ let private createTeamCmd (request: CreateTeamRequest) =
     Cmd.OfRemoting.call teamApi.CreateTeamWithOwner request CreateTeamResolved (fun ex ->
         CreateTeamResolved(Error ex.Message))
 
+let private loadTeamsCmd () =
+    Cmd.OfRemoting.call teamApi.ListAllTeams () TeamsLoaded (fun ex -> TeamsLoaded(Error ex.Message))
+
+let private setArchivedCmd (teamId: string) (archived: bool) =
+    let call =
+        if archived then
+            teamApi.ArchiveTeam
+        else
+            teamApi.RestoreTeam
+
+    Cmd.OfRemoting.call call teamId (fun result -> TeamArchiveResolved(teamId, archived, result)) (fun ex ->
+        TeamArchiveResolved(teamId, archived, Error ex.Message))
+
+let private deleteTeamCmd (teamId: string) =
+    Cmd.OfRemoting.call teamApi.DeleteTeamHard teamId (fun result -> DeleteTeamResolved(teamId, result)) (fun ex ->
+        DeleteTeamResolved(teamId, Error ex.Message))
+
 let init () =
     let model = {
         ActiveTab = AdminsTab
@@ -172,11 +211,15 @@ let init () =
         NewTeamOwnerUserId = ""
         CreateTeamError = None
         CreateTeamInFlight = false
+        Teams = Loading
+        TeamActionPending = Set.empty
+        ConfirmDeleteTeam = None
+        TeamActionError = Map.empty
         PlatformKnowledgeBase = Loading
         SettingsError = None
     }
 
-    model, Cmd.batch [ loadAdminsCmd (); loadPlatformKnowledgeBaseCmd () ]
+    model, Cmd.batch [ loadAdminsCmd (); loadTeamsCmd (); loadPlatformKnowledgeBaseCmd () ]
 
 // ─── Update ──────────────────────────────────────────────────────────
 
@@ -321,14 +364,89 @@ let update (msg: Msg) (model: Model) =
                 NewTeamOwnerUserId = ""
                 CreateTeamError = None
                 CreateTeamInFlight = false
+                Teams = Loading
         },
-        Cmd.none
+        // Refresh the admin table so the new team appears immediately.
+        loadTeamsCmd ()
 
     | CreateTeamResolved(Error msg) ->
         {
             model with
                 CreateTeamError = Some msg
                 CreateTeamInFlight = false
+        },
+        Cmd.none
+
+    | RefreshTeams -> { model with Teams = Loading }, loadTeamsCmd ()
+
+    | TeamsLoaded(Ok teams) ->
+        {
+            model with
+                Teams = Loaded(teams |> List.sortBy (fun t -> t.Name.ToLowerInvariant()))
+        },
+        Cmd.none
+
+    | TeamsLoaded(Error msg) -> { model with Teams = LoadError msg }, Cmd.none
+
+    | SetTeamArchived(teamId, archived) ->
+        {
+            model with
+                TeamActionPending = model.TeamActionPending |> Set.add teamId
+                TeamActionError = model.TeamActionError |> Map.remove teamId
+        },
+        setArchivedCmd teamId archived
+
+    | TeamArchiveResolved(teamId, _, Ok()) ->
+        {
+            model with
+                TeamActionPending = model.TeamActionPending |> Set.remove teamId
+                Teams = Loading
+        },
+        loadTeamsCmd ()
+
+    | TeamArchiveResolved(teamId, _, Error msg) ->
+        {
+            model with
+                TeamActionPending = model.TeamActionPending |> Set.remove teamId
+                TeamActionError = model.TeamActionError |> Map.add teamId msg
+        },
+        Cmd.none
+
+    | RequestDeleteTeam teamId ->
+        {
+            model with
+                ConfirmDeleteTeam = Some teamId
+                TeamActionError = model.TeamActionError |> Map.remove teamId
+        },
+        Cmd.none
+
+    | CancelDeleteTeam -> { model with ConfirmDeleteTeam = None }, Cmd.none
+
+    | ConfirmDeleteTeam ->
+        match model.ConfirmDeleteTeam with
+        | None -> model, Cmd.none
+        | Some teamId ->
+            {
+                model with
+                    ConfirmDeleteTeam = None
+                    TeamActionPending = model.TeamActionPending |> Set.add teamId
+                    TeamActionError = model.TeamActionError |> Map.remove teamId
+            },
+            deleteTeamCmd teamId
+
+    | DeleteTeamResolved(teamId, Ok()) ->
+        {
+            model with
+                TeamActionPending = model.TeamActionPending |> Set.remove teamId
+                Teams = Loading
+        },
+        loadTeamsCmd ()
+
+    | DeleteTeamResolved(teamId, Error msg) ->
+        {
+            model with
+                TeamActionPending = model.TeamActionPending |> Set.remove teamId
+                TeamActionError = model.TeamActionError |> Map.add teamId msg
         },
         Cmd.none
 
@@ -520,6 +638,247 @@ let private assignConfirmModalView (targetUserId: string) (dispatch: Msg -> unit
         ]
     ]
 
+// ─── All-teams admin table ───────────────────────────────────────────
+
+let private formatDate (d: System.DateTime) =
+    // Explicit components, not `ToString(format)` — custom-format
+    // DateTime rendering is unreliable under Fable across runtimes.
+    sprintf "%04d-%02d-%02d" d.Year d.Month d.Day
+
+let private userIdList (ids: string list) =
+    match ids with
+    | [] -> Html.span [ prop.className "text-text-secondary"; prop.text "—" ]
+    | _ ->
+        Html.span [
+            prop.className "font-mono text-xs text-text-primary break-all"
+            prop.text (String.concat ", " ids)
+        ]
+
+let private teamActionButton (label: string) (disabled: bool) (extraClass: string) (onClick: unit -> unit) =
+    Html.button [
+        prop.disabled disabled
+        prop.className [
+            "px-2.5 py-1 text-xs font-medium rounded border transition-colors"
+            if disabled then
+                "border-border text-gray-400 cursor-not-allowed"
+            else
+                extraClass
+        ]
+        prop.text label
+        prop.onClick (fun _ -> onClick ())
+    ]
+
+let private teamRow (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
+    let pending = model.TeamActionPending |> Set.contains team.TeamId
+    let rowError = model.TeamActionError |> Map.tryFind team.TeamId
+
+    Html.tbody [
+        prop.className "border-b border-border last:border-0"
+        prop.children [
+            Html.tr [
+                prop.className (if team.Archived then "bg-gray-50/60" else "")
+                prop.children [
+                    Html.td [
+                        prop.className "px-3 py-2 align-top"
+                        prop.children [
+                            Html.div [
+                                prop.className "flex items-center gap-2"
+                                prop.children [
+                                    Html.span [
+                                        prop.className "text-sm font-medium text-text-primary"
+                                        prop.text team.Name
+                                    ]
+                                    if team.Archived then
+                                        Html.span [
+                                            prop.className
+                                                "px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded bg-amber-100 text-amber-800"
+                                            prop.text "Archived"
+                                        ]
+                                ]
+                            ]
+                            Html.span [
+                                prop.className "font-mono text-[10px] text-text-secondary break-all"
+                                prop.text team.TeamId
+                            ]
+                        ]
+                    ]
+                    Html.td [
+                        prop.className "px-3 py-2 align-top text-sm text-text-secondary whitespace-nowrap"
+                        prop.text (formatDate team.CreatedAt)
+                    ]
+                    Html.td [
+                        prop.className "px-3 py-2 align-top text-sm text-text-primary text-center"
+                        prop.text (string team.MemberCount)
+                    ]
+                    Html.td [
+                        prop.className "px-3 py-2 align-top max-w-[12rem]"
+                        prop.children [ userIdList team.Owners ]
+                    ]
+                    Html.td [
+                        prop.className "px-3 py-2 align-top max-w-[12rem]"
+                        prop.children [ userIdList team.Admins ]
+                    ]
+                    Html.td [
+                        prop.className "px-3 py-2 align-top"
+                        prop.children [
+                            Html.div [
+                                prop.className "flex flex-wrap gap-2 justify-end"
+                                prop.children [
+                                    if team.Archived then
+                                        teamActionButton
+                                            "Restore"
+                                            pending
+                                            "bg-white text-brand border-brand hover:bg-brand/5"
+                                            (fun () -> dispatch (SetTeamArchived(team.TeamId, false)))
+
+                                        teamActionButton
+                                            "Delete"
+                                            pending
+                                            "bg-white text-red-700 border-red-300 hover:bg-red-50"
+                                            (fun () -> dispatch (RequestDeleteTeam team.TeamId))
+                                    else
+                                        teamActionButton
+                                            "Archive"
+                                            pending
+                                            "bg-white text-text-primary border-border hover:bg-gray-50"
+                                            (fun () -> dispatch (SetTeamArchived(team.TeamId, true)))
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+            match rowError with
+            | Some msg ->
+                Html.tr [
+                    prop.children [
+                        Html.td [
+                            prop.colSpan 6
+                            prop.className "px-3 pb-2"
+                            prop.children [ errorBanner msg ]
+                        ]
+                    ]
+                ]
+            | None -> Html.none
+        ]
+    ]
+
+let private teamsTableView (model: Model) (dispatch: Msg -> unit) =
+    let headerCell (label: string) (extra: string) =
+        Html.th [
+            prop.className (
+                "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-text-secondary "
+                + extra
+            )
+            prop.text label
+        ]
+
+    Html.div [
+        prop.className "rounded border border-border bg-white"
+        prop.children [
+            Html.div [
+                prop.className "flex items-center justify-between px-3 py-2 border-b border-border"
+                prop.children [
+                    Html.h3 [
+                        prop.className "text-sm font-medium text-text-primary"
+                        prop.text "All teams"
+                    ]
+                    Html.button [
+                        prop.className "text-xs text-brand hover:underline"
+                        prop.text "Refresh"
+                        prop.onClick (fun _ -> dispatch RefreshTeams)
+                    ]
+                ]
+            ]
+            match model.Teams with
+            | NotLoaded
+            | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "Loading teams…" ]
+            | LoadError msg -> Html.div [ prop.className "p-3"; prop.children [ errorBanner msg ] ]
+            | Loaded [] -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "No teams yet." ]
+            | Loaded teams ->
+                Html.div [
+                    prop.className "overflow-x-auto"
+                    prop.children [
+                        Html.table [
+                            prop.className "w-full text-sm"
+                            prop.children [
+                                Html.thead [
+                                    prop.className "border-b border-border"
+                                    prop.children [
+                                        Html.tr [
+                                            prop.children [
+                                                headerCell "Team" ""
+                                                headerCell "Created" ""
+                                                headerCell "Members" "text-center"
+                                                headerCell "Owners" ""
+                                                headerCell "Admins" ""
+                                                headerCell "Actions" "text-right"
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                                yield! teams |> List.map (teamRow model dispatch)
+                            ]
+                        ]
+                    ]
+                ]
+        ]
+    ]
+
+/// Delete-team confirm overlay — only reachable from an archived row.
+/// Echoes the team name as a brake on accidental destruction; the
+/// purge removes the team record AND every membership row.
+let private deleteTeamModalView (model: Model) (teamId: string) (dispatch: Msg -> unit) =
+    let teamName =
+        match model.Teams with
+        | Loaded teams ->
+            teams
+            |> List.tryFind (fun t -> t.TeamId = teamId)
+            |> Option.map _.Name
+            |> Option.defaultValue teamId
+        | _ -> teamId
+
+    Html.div [
+        prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        prop.children [
+            Html.div [
+                prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
+                prop.children [
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text "Delete this team?" ]
+                    Html.p [
+                        prop.className "text-sm text-text-secondary"
+                        prop.text
+                            "This permanently removes the team record and every member's membership of it. It cannot be undone — restore is not possible after deletion."
+                    ]
+                    Html.div [
+                        prop.className "rounded border border-border bg-gray-50 px-3 py-2"
+                        prop.children [
+                            Html.span [ prop.className "text-xs text-text-secondary"; prop.text "Team: " ]
+                            Html.span [ prop.className "text-sm font-medium text-text-primary"; prop.text teamName ]
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "flex justify-end gap-3 pt-2"
+                        prop.children [
+                            Html.button [
+                                prop.className
+                                    "px-4 py-2 rounded text-sm font-medium border border-border text-text-primary hover:bg-gray-50"
+                                prop.text "Cancel"
+                                prop.onClick (fun _ -> dispatch CancelDeleteTeam)
+                            ]
+                            Html.button [
+                                prop.className
+                                    "px-4 py-2 rounded text-sm font-medium bg-red-600 text-white hover:bg-red-700"
+                                prop.text "Delete team"
+                                prop.onClick (fun _ -> dispatch ConfirmDeleteTeam)
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
 let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
     let selfId = UserSession.getUserId ()
     let selfDisplay = UserSession.getDisplayName () |> Option.defaultValue selfId
@@ -627,6 +986,7 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                     | None -> Html.none
                 ]
             ]
+            teamsTableView model dispatch
         ]
     ]
 
@@ -752,10 +1112,16 @@ let private tabBar (model: Model) (dispatch: Msg -> unit) =
 
 /// View factory closed over the active `ClientConfig` so the
 /// Phase 61 public-utility widgets can read consent / ad / premium
-/// substrate state. The standard view body is unchanged; the
-/// public-utility widgets append below the existing tab content when
+/// substrate state. The public-utility widgets append below the
+/// existing tab content when
 /// `ClientConfig.PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
-let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+///
+/// Renders as a single full-width pane (via `withFullWidthView` in
+/// `create`) rather than the legacy `body, Html.none` `SplitPanel`
+/// tuple — the admin tabs (admin list, teams table, settings) have no
+/// "controls left / output right" affordance and were being squashed
+/// into the left third of the shell by the SplitPanel wrap.
+let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.ActiveTab with
         | AdminsTab -> adminsTabView model dispatch
@@ -765,20 +1131,20 @@ let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> uni
     let publicUtilitySection =
         ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.render config
 
-    let body =
-        Html.div [
-            prop.className "flex flex-col h-full"
-            prop.children [
-                tabBar model dispatch
-                content
-                publicUtilitySection
-                match model.AssignConfirm with
-                | Some targetUserId -> assignConfirmModalView targetUserId dispatch
-                | None -> Html.none
-            ]
+    Html.div [
+        prop.className "flex flex-col h-full"
+        prop.children [
+            tabBar model dispatch
+            content
+            publicUtilitySection
+            match model.AssignConfirm with
+            | Some targetUserId -> assignConfirmModalView targetUserId dispatch
+            | None -> Html.none
+            match model.ConfirmDeleteTeam with
+            | Some teamId -> deleteTeamModalView model teamId dispatch
+            | None -> Html.none
         ]
-
-    body, Html.none
+    ]
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -809,7 +1175,7 @@ let create (config: PlatformAdminConfig option) (clientConfig: ClientConfig) : E
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformAdmin"
-    |> ToolUp.Platform.ClientModule.withView (viewWith clientConfig)
+    |> ToolUp.Platform.ClientModule.withFullWidthView (viewWith clientConfig)
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

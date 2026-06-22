@@ -245,6 +245,9 @@ let allTests =
         TeamCreationPolicyTests.tests
         TeamCreationPolicyTests.integrityTests
         TeamCreationPolicyTests.quotaTests
+        // Platform-Admin team lifecycle — ListAllTeams / Archive / Restore
+        // / DeleteTeamHard gating + archived-team access enforcement.
+        TeamAdminLifecycleTests.tests
         TeamInvitationTests.tests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests

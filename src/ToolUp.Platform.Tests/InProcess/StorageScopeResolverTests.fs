@@ -309,6 +309,8 @@ let private teamTests =
                     member _.GetMemberRole(_, _) = async { return None }
                     member _.GetActiveTeam _ = async { return raise (exn "blob store unreachable") }
                     member _.SetActiveTeam(_, _) = async { return Error "unused" }
+                    member _.SetArchived(_, _) = async { return Error "unused" }
+                    member _.PurgeTeam _ = async { return Error "unused" }
                 }
 
             let cache = new MemoryCache(MemoryCacheOptions()) :> IMemoryCache

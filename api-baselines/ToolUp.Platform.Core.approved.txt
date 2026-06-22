@@ -738,14 +738,17 @@ ToolUp.Platform.AuditEvent.IsShareTokenUsed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsSigningKeyRotated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsSurfaceDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsSyntheticSampleGenerated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsTeamArchived : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamCreated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamCreationDenied : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsTeamDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamInviteAccepted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamInviteAcceptedFromPending : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamInviteAcceptedFromPendingFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamInviteIssued : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamInviteRedeemed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamInviteRevoked : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsTeamRestored : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantDeprovisioned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantLifecycleHookFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantProvisioned : System.Boolean { get }
@@ -1003,24 +1006,31 @@ ToolUp.Platform.AuditEvent+Tags.ShareTokenUsed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.SigningKeyRotated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.SurfaceDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.SyntheticSampleGenerated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.TeamArchived : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamCreated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamCreationDenied : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.TeamDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamInviteAccepted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamInviteAcceptedFromPending : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamInviteAcceptedFromPendingFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamInviteIssued : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamInviteRedeemed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamInviteRevoked : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.TeamRestored : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantDeprovisioned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantLifecycleHookFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantProvisioned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.UserLoggedIn : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowActionExecuted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.WorkflowTransitioned : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+TeamArchived (class)
+ToolUp.Platform.AuditEvent+TeamArchived.Item : ToolUp.Platform.TeamArchivedPayload { get }
 ToolUp.Platform.AuditEvent+TeamCreated (class)
 ToolUp.Platform.AuditEvent+TeamCreated.Item : ToolUp.Platform.TeamCreatedPayload { get }
 ToolUp.Platform.AuditEvent+TeamCreationDenied (class)
 ToolUp.Platform.AuditEvent+TeamCreationDenied.Item : ToolUp.Platform.TeamCreationDeniedPayload { get }
+ToolUp.Platform.AuditEvent+TeamDeleted (class)
+ToolUp.Platform.AuditEvent+TeamDeleted.Item : ToolUp.Platform.TeamDeletedPayload { get }
 ToolUp.Platform.AuditEvent+TeamInviteAccepted (class)
 ToolUp.Platform.AuditEvent+TeamInviteAccepted.Item : ToolUp.Platform.TeamInviteAcceptedPayload { get }
 ToolUp.Platform.AuditEvent+TeamInviteAcceptedFromPending (class)
@@ -1033,6 +1043,8 @@ ToolUp.Platform.AuditEvent+TeamInviteRedeemed (class)
 ToolUp.Platform.AuditEvent+TeamInviteRedeemed.Item : ToolUp.Platform.TeamInviteRedeemedPayload { get }
 ToolUp.Platform.AuditEvent+TeamInviteRevoked (class)
 ToolUp.Platform.AuditEvent+TeamInviteRevoked.Item : ToolUp.Platform.TeamInviteRevokedPayload { get }
+ToolUp.Platform.AuditEvent+TeamRestored (class)
+ToolUp.Platform.AuditEvent+TeamRestored.Item : ToolUp.Platform.TeamRestoredPayload { get }
 ToolUp.Platform.AuditEvent+TenantDeprovisioned (class)
 ToolUp.Platform.AuditEvent+TenantDeprovisioned.Item : ToolUp.Platform.TenantDeprovisionedPayload { get }
 ToolUp.Platform.AuditEvent+TenantLifecycleHookFailed (class)
@@ -5323,17 +5335,26 @@ ToolUp.Platform.TableSchema..ctor(System.String, Microsoft.FSharp.Collections.FS
 ToolUp.Platform.TableSchema.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ColumnInfo] { get }
 ToolUp.Platform.TableSchema.TableName : System.String { get }
 ToolUp.Platform.TeamApi (class)
-ToolUp.Platform.TeamApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateTeamRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamCreationPolicy]])
+ToolUp.Platform.TeamApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateTeamRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamCreationPolicy]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamSummary], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.TeamApi.AddTeamMember : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.TeamApi.ArchiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.TeamApi.ChangeMemberRole : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.TeamApi.CreateTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]] { get }
 ToolUp.Platform.TeamApi.CreateTeamWithOwner : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateTeamRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]] { get }
+ToolUp.Platform.TeamApi.DeleteTeamHard : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.TeamApi.GetActiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]] { get }
 ToolUp.Platform.TeamApi.GetMyTeams : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]] { get }
 ToolUp.Platform.TeamApi.GetTeamCreationPolicy : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamCreationPolicy]] { get }
 ToolUp.Platform.TeamApi.GetTeamMembers : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]] { get }
+ToolUp.Platform.TeamApi.ListAllTeams : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamSummary], System.String]]] { get }
 ToolUp.Platform.TeamApi.RemoveTeamMember : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.TeamApi.RestoreTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.TeamApi.SetActiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.TeamArchivedPayload (class)
+ToolUp.Platform.TeamArchivedPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.TeamArchivedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamArchivedPayload.TeamName : System.String { get }
+ToolUp.Platform.TeamArchivedPayload.UserId : System.String { get }
 ToolUp.Platform.TeamConfig (class)
 ToolUp.Platform.TeamConfig..ctor(ToolUp.Platform.Persistence, ToolUp.Platform.TeamSwitchingUX)
 ToolUp.Platform.TeamConfig.Persistence : ToolUp.Platform.Persistence { get }
@@ -5356,8 +5377,14 @@ ToolUp.Platform.TeamCreationPolicy.Tag : System.Int32 { get }
 ToolUp.Platform.TeamCreationPolicy+Tags (class)
 ToolUp.Platform.TeamCreationPolicy+Tags.AnyAuthenticatedUser : System.Int32 (literal)
 ToolUp.Platform.TeamCreationPolicy+Tags.PlatformAdminOnly : System.Int32 (literal)
+ToolUp.Platform.TeamDeletedPayload (class)
+ToolUp.Platform.TeamDeletedPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.TeamDeletedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamDeletedPayload.TeamName : System.String { get }
+ToolUp.Platform.TeamDeletedPayload.UserId : System.String { get }
 ToolUp.Platform.TeamInfo (class)
-ToolUp.Platform.TeamInfo..ctor(System.String, System.String, System.DateTime)
+ToolUp.Platform.TeamInfo..ctor(System.String, System.String, System.DateTime, System.Boolean)
+ToolUp.Platform.TeamInfo.Archived : System.Boolean { get }
 ToolUp.Platform.TeamInfo.CreatedAt : System.DateTime { get }
 ToolUp.Platform.TeamInfo.Name : System.String { get }
 ToolUp.Platform.TeamInfo.TeamId : System.String { get }
@@ -5456,6 +5483,11 @@ ToolUp.Platform.TeamPermissions.Defaults : Microsoft.FSharp.Collections.FSharpMa
 ToolUp.Platform.TeamPermissions.Members : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]] { get }
 ToolUp.Platform.TeamPermissionsModule (class)
 ToolUp.Platform.TeamPermissionsModule.empty : ToolUp.Platform.TeamPermissions { get }
+ToolUp.Platform.TeamRestoredPayload (class)
+ToolUp.Platform.TeamRestoredPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.TeamRestoredPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamRestoredPayload.TeamName : System.String { get }
+ToolUp.Platform.TeamRestoredPayload.UserId : System.String { get }
 ToolUp.Platform.TeamRole (class)
 ToolUp.Platform.TeamRole.Admin : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.TeamRole.IsAdmin : System.Boolean { get }
@@ -5474,6 +5506,15 @@ ToolUp.Platform.TeamRoles.canManageRole(ToolUp.Platform.TeamRole, ToolUp.Platfor
 ToolUp.Platform.TeamRoles.canWriteTeamConfig(ToolUp.Platform.TeamRole) : System.Boolean
 ToolUp.Platform.TeamRoles.displayName(ToolUp.Platform.TeamRole) : System.String
 ToolUp.Platform.TeamRoles.isOwner(ToolUp.Platform.TeamRole) : System.Boolean
+ToolUp.Platform.TeamSummary (class)
+ToolUp.Platform.TeamSummary..ctor(System.String, System.String, System.DateTime, System.Boolean, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.TeamSummary.Admins : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.TeamSummary.Archived : System.Boolean { get }
+ToolUp.Platform.TeamSummary.CreatedAt : System.DateTime { get }
+ToolUp.Platform.TeamSummary.MemberCount : System.Int32 { get }
+ToolUp.Platform.TeamSummary.Name : System.String { get }
+ToolUp.Platform.TeamSummary.Owners : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.TeamSummary.TeamId : System.String { get }
 ToolUp.Platform.TeamSwitchingUX (class)
 ToolUp.Platform.TeamSwitchingUX.HeaderSwitcher : ToolUp.Platform.TeamSwitchingUX { get }
 ToolUp.Platform.TeamSwitchingUX.IsHeaderSwitcher : System.Boolean { get }

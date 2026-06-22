@@ -86,6 +86,8 @@ let private teamStoreStub (activeTeam: string option) (role: TeamRole option) : 
         member _.GetMemberRole(_, _) = async { return role }
         member _.GetActiveTeam _ = async { return activeTeam }
         member _.SetActiveTeam(_, _) = async { return Error "unused" }
+        member _.SetArchived(_, _) = async { return Error "unused" }
+        member _.PurgeTeam _ = async { return Error "unused" }
     }
 
 /// Inline `ITeamStore` whose active-team read raises — exercises the
@@ -105,6 +107,8 @@ let private throwingTeamStore: ITeamStore =
         member _.GetMemberRole(_, _) = async { return None }
         member _.GetActiveTeam _ = async { return raise (exn "blob store unreachable") }
         member _.SetActiveTeam(_, _) = async { return Error "unused" }
+        member _.SetArchived(_, _) = async { return Error "unused" }
+        member _.PurgeTeam _ = async { return Error "unused" }
     }
 
 let private run (resolver: ISubjectResolver) (request: SubjectResolutionRequest) =

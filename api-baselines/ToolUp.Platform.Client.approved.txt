@@ -718,12 +718,13 @@ PlatformAdminUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
 PlatformAdminUI+LoadState`1+Tags.Loading : System.Int32 (literal)
 PlatformAdminUI+LoadState`1+Tags.NotLoaded : System.Int32 (literal)
 PlatformAdminUI+Model (class)
-PlatformAdminUI+Model..ctor(PlatformAdminUI+Tab, PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, PlatformAdminUI+LoadState`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+PlatformAdminUI+Model..ctor(PlatformAdminUI+Tab, PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamSummary]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], PlatformAdminUI+LoadState`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 PlatformAdminUI+Model.ActiveTab : PlatformAdminUI+Tab { get }
 PlatformAdminUI+Model.Admins : PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 PlatformAdminUI+Model.AssignConfirm : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PlatformAdminUI+Model.AssignError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PlatformAdminUI+Model.AssignInput : System.String { get }
+PlatformAdminUI+Model.ConfirmDeleteTeam : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PlatformAdminUI+Model.CreateTeamError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PlatformAdminUI+Model.CreateTeamInFlight : System.Boolean { get }
 PlatformAdminUI+Model.NewTeamName : System.String { get }
@@ -731,28 +732,42 @@ PlatformAdminUI+Model.NewTeamOwnerUserId : System.String { get }
 PlatformAdminUI+Model.PlatformKnowledgeBase : PlatformAdminUI+LoadState`1[ToolUp.Platform.PlatformKnowledgeBaseMode] { get }
 PlatformAdminUI+Model.RevokeError : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 PlatformAdminUI+Model.SettingsError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+PlatformAdminUI+Model.TeamActionError : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+PlatformAdminUI+Model.TeamActionPending : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+PlatformAdminUI+Model.Teams : PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamSummary]] { get }
 PlatformAdminUI+Msg (class)
 PlatformAdminUI+Msg.CancelAssignConfirm : PlatformAdminUI+Msg { get }
+PlatformAdminUI+Msg.CancelDeleteTeam : PlatformAdminUI+Msg { get }
 PlatformAdminUI+Msg.ConfirmAssign : PlatformAdminUI+Msg { get }
+PlatformAdminUI+Msg.ConfirmDeleteTeam : PlatformAdminUI+Msg { get }
 PlatformAdminUI+Msg.IsAdminsLoaded : System.Boolean { get }
 PlatformAdminUI+Msg.IsAssignResolved : System.Boolean { get }
 PlatformAdminUI+Msg.IsCancelAssignConfirm : System.Boolean { get }
+PlatformAdminUI+Msg.IsCancelDeleteTeam : System.Boolean { get }
 PlatformAdminUI+Msg.IsConfirmAssign : System.Boolean { get }
+PlatformAdminUI+Msg.IsConfirmDeleteTeam : System.Boolean { get }
 PlatformAdminUI+Msg.IsCreateTeamResolved : System.Boolean { get }
+PlatformAdminUI+Msg.IsDeleteTeamResolved : System.Boolean { get }
 PlatformAdminUI+Msg.IsPlatformKnowledgeBaseLoaded : System.Boolean { get }
 PlatformAdminUI+Msg.IsRefreshAdmins : System.Boolean { get }
+PlatformAdminUI+Msg.IsRefreshTeams : System.Boolean { get }
 PlatformAdminUI+Msg.IsRequestAssignConfirm : System.Boolean { get }
+PlatformAdminUI+Msg.IsRequestDeleteTeam : System.Boolean { get }
 PlatformAdminUI+Msg.IsRequestRevoke : System.Boolean { get }
 PlatformAdminUI+Msg.IsRevokeResolved : System.Boolean { get }
 PlatformAdminUI+Msg.IsSetNewTeamName : System.Boolean { get }
 PlatformAdminUI+Msg.IsSetNewTeamOwnerUserId : System.Boolean { get }
+PlatformAdminUI+Msg.IsSetTeamArchived : System.Boolean { get }
 PlatformAdminUI+Msg.IsSubmitCreateTeam : System.Boolean { get }
 PlatformAdminUI+Msg.IsSwitchTab : System.Boolean { get }
+PlatformAdminUI+Msg.IsTeamArchiveResolved : System.Boolean { get }
+PlatformAdminUI+Msg.IsTeamsLoaded : System.Boolean { get }
 PlatformAdminUI+Msg.IsTogglePlatformKnowledgeBase : System.Boolean { get }
 PlatformAdminUI+Msg.IsTogglePlatformKnowledgeBaseResolved : System.Boolean { get }
 PlatformAdminUI+Msg.IsUpdateAssignInput : System.Boolean { get }
 PlatformAdminUI+Msg.IsUseSelfAsTeamOwner : System.Boolean { get }
 PlatformAdminUI+Msg.RefreshAdmins : PlatformAdminUI+Msg { get }
+PlatformAdminUI+Msg.RefreshTeams : PlatformAdminUI+Msg { get }
 PlatformAdminUI+Msg.RequestAssignConfirm : PlatformAdminUI+Msg { get }
 PlatformAdminUI+Msg.SubmitCreateTeam : PlatformAdminUI+Msg { get }
 PlatformAdminUI+Msg.Tag : System.Int32 { get }
@@ -764,8 +779,13 @@ PlatformAdminUI+Msg+AssignResolved.Item2 : Microsoft.FSharp.Core.FSharpResult`2[
 PlatformAdminUI+Msg+AssignResolved.targetUserId : System.String { get }
 PlatformAdminUI+Msg+CreateTeamResolved (class)
 PlatformAdminUI+Msg+CreateTeamResolved.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String] { get }
+PlatformAdminUI+Msg+DeleteTeamResolved (class)
+PlatformAdminUI+Msg+DeleteTeamResolved.Item2 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+PlatformAdminUI+Msg+DeleteTeamResolved.teamId : System.String { get }
 PlatformAdminUI+Msg+PlatformKnowledgeBaseLoaded (class)
 PlatformAdminUI+Msg+PlatformKnowledgeBaseLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PlatformKnowledgeBaseMode, System.String] { get }
+PlatformAdminUI+Msg+RequestDeleteTeam (class)
+PlatformAdminUI+Msg+RequestDeleteTeam.teamId : System.String { get }
 PlatformAdminUI+Msg+RequestRevoke (class)
 PlatformAdminUI+Msg+RequestRevoke.targetUserId : System.String { get }
 PlatformAdminUI+Msg+RevokeResolved (class)
@@ -775,27 +795,44 @@ PlatformAdminUI+Msg+SetNewTeamName (class)
 PlatformAdminUI+Msg+SetNewTeamName.Item : System.String { get }
 PlatformAdminUI+Msg+SetNewTeamOwnerUserId (class)
 PlatformAdminUI+Msg+SetNewTeamOwnerUserId.Item : System.String { get }
+PlatformAdminUI+Msg+SetTeamArchived (class)
+PlatformAdminUI+Msg+SetTeamArchived.archived : System.Boolean { get }
+PlatformAdminUI+Msg+SetTeamArchived.teamId : System.String { get }
 PlatformAdminUI+Msg+SwitchTab (class)
 PlatformAdminUI+Msg+SwitchTab.Item : PlatformAdminUI+Tab { get }
 PlatformAdminUI+Msg+Tags (class)
 PlatformAdminUI+Msg+Tags.AdminsLoaded : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.AssignResolved : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.CancelAssignConfirm : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.CancelDeleteTeam : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.ConfirmAssign : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.ConfirmDeleteTeam : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.CreateTeamResolved : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.DeleteTeamResolved : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.PlatformKnowledgeBaseLoaded : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.RefreshAdmins : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.RefreshTeams : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.RequestAssignConfirm : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.RequestDeleteTeam : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.RequestRevoke : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.RevokeResolved : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.SetNewTeamName : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.SetNewTeamOwnerUserId : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.SetTeamArchived : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.SubmitCreateTeam : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.SwitchTab : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.TeamArchiveResolved : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.TeamsLoaded : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.TogglePlatformKnowledgeBase : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.TogglePlatformKnowledgeBaseResolved : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.UpdateAssignInput : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.UseSelfAsTeamOwner : System.Int32 (literal)
+PlatformAdminUI+Msg+TeamArchiveResolved (class)
+PlatformAdminUI+Msg+TeamArchiveResolved.Item3 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+PlatformAdminUI+Msg+TeamArchiveResolved.archived : System.Boolean { get }
+PlatformAdminUI+Msg+TeamArchiveResolved.teamId : System.String { get }
+PlatformAdminUI+Msg+TeamsLoaded (class)
+PlatformAdminUI+Msg+TeamsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamSummary], System.String] { get }
 PlatformAdminUI+Msg+TogglePlatformKnowledgeBase (class)
 PlatformAdminUI+Msg+TogglePlatformKnowledgeBase.Item : ToolUp.Platform.PlatformKnowledgeBaseMode { get }
 PlatformAdminUI+Msg+TogglePlatformKnowledgeBaseResolved (class)

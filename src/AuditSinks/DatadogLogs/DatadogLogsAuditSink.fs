@@ -210,6 +210,9 @@ let private extractEventScopeId (audit: AuditEvent) : string option =
         // level (deployment-wide refusal trail); Datadog queries filter
         // there, same posture as `PlatformAdminAssigned`.
         None
+    | TeamArchived p -> Some p.TeamId
+    | TeamRestored p -> Some p.TeamId
+    | TeamDeleted p -> Some p.TeamId
     | TeamInviteIssued p -> Some p.TeamId
     | TeamInviteAccepted p -> Some p.TeamId
     | TeamInviteAcceptedFromPending p -> Some p.TeamId

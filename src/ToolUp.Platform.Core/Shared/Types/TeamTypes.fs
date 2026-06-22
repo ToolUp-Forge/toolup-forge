@@ -12,6 +12,32 @@ type TeamInfo = {
     TeamId: string
     Name: string
     CreatedAt: DateTime
+    /// Whether the team is archived. Archived teams are filtered out
+    /// of members' team lists (`GetMyTeams`) and cannot be selected as
+    /// the active team; a member whose active team is archived is
+    /// bumped to the no-active-team state. Nothing is deleted —
+    /// archive is fully reversible via `TeamApi.RestoreTeam`. Persisted
+    /// team blobs written before this field existed deserialize as
+    /// `false` (the `archived` JSON property is treated as optional).
+    Archived: bool
+}
+
+/// Richer per-team view for the Platform-Management admin table. Pairs
+/// each team's metadata with a membership summary (count + the user ids
+/// holding Owner / Admin roles) so a Platform Admin can see, at a
+/// glance, who runs each team. Computed server-side by `ListAllTeams`
+/// from `ITeamStore.ListTeams` + `GetTeamMembers`; the user ids are the
+/// admin-asserted membership principal ids (the default composition has
+/// no `IUserDirectory` reverse-lookup, so they are not resolved to
+/// display names — a deployment that wires a directory can map them).
+type TeamSummary = {
+    TeamId: string
+    Name: string
+    CreatedAt: DateTime
+    Archived: bool
+    MemberCount: int
+    Owners: string list
+    Admins: string list
 }
 
 /// A user's membership in a team.
@@ -189,6 +215,39 @@ type TeamApi = {
     /// `CreateTeam` is the real enforcement.
     [<AllowAnonymous>]
     GetTeamCreationPolicy: unit -> Async<TeamCreationPolicy>
+    /// Platform-Admin only — enumerate every team on the deployment
+    /// with a membership summary (count + Owner / Admin user ids) for
+    /// the Platform-Management admin table. Gated server-side on
+    /// `IPlatformAdminStore.IsPlatformAdmin`; non-admin callers receive
+    /// `Error "Platform Admin required"` (the client also hides the
+    /// surface, but the server gate is the real enforcement).
+    [<RequiresClaim "scope">]
+    ListAllTeams: unit -> Async<Result<TeamSummary list, string>>
+    /// Platform-Admin only — archive a team. Reversible: the team's
+    /// data and membership rows are retained, but the team is filtered
+    /// out of members' `GetMyTeams` and can no longer be selected as
+    /// active; members whose active team this is are bumped to the
+    /// no-active-team state. Restore via `RestoreTeam`.
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:TeamArchived">]
+    ArchiveTeam: string -> Async<Result<unit, string>>
+    /// Platform-Admin only — restore a previously-archived team,
+    /// clearing the archived flag so members can see and select it
+    /// again. Idempotent on an already-active team.
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:TeamRestored">]
+    RestoreTeam: string -> Async<Result<unit, string>>
+    /// Platform-Admin only — **irreversibly** delete a team: purges the
+    /// team record AND strips the team from every member's membership
+    /// rows + active-team pointers. Named `DeleteTeamHard` to keep it
+    /// distinct from the store's blob-only `DeleteTeam` create-rollback
+    /// primitive. The client only offers this on an already-archived
+    /// team behind a name-echoing confirm modal; the server applies no
+    /// archive precondition (a direct API caller may delete any team),
+    /// the admin gate is the enforcement.
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:TeamDeleted">]
+    DeleteTeamHard: string -> Async<Result<unit, string>>
 }
 
 /// Team permission management. Owner/Admin only — members receive

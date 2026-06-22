@@ -15,7 +15,7 @@ open ToolUp.Platform.RemotingHelpers
 // own route prefix and per-concern test surface:
 //
 //   * `platformInfoApiHandler`   → `PlatformInfoApi`   (1 method)
-//   * `teamApiHandler`           → `TeamApi`            (9 methods)
+//   * `teamApiHandler`           → `TeamApi`            (13 methods)
 //   * `permissionApiHandler`     → `PermissionApi`      (3 methods)
 //   * `accessibilityApiHandler`  → `AccessibilityApi`   (1 method)
 //   * `dataCatalogApiHandler`    → `DataCatalogApi`     (1 method)
@@ -114,7 +114,7 @@ let platformInfoApiHandler (config: ServerConfig) =
             }
     })
 
-// ─── TeamApi — team CRUD + membership (8 methods) ───────────────────
+// ─── TeamApi — team CRUD + membership + admin lifecycle (13 methods) ─
 
 /// Build the `TeamApi` record for one request. Resolves `ITeamStore`
 /// per request; returns `Error "Team management not available in this
@@ -366,7 +366,12 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
         GetMyTeams =
             fun () -> async {
                 match teamStore with
-                | Some ts -> return! ts.GetTeamsForUser(userId)
+                | Some ts ->
+                    let! teams = ts.GetTeamsForUser(userId)
+                    // Archived teams are hidden from members — they can't
+                    // be selected as active and shouldn't clutter the
+                    // switcher. A Platform Admin restores via RestoreTeam.
+                    return teams |> List.filter (fun t -> not t.Archived)
                 | None -> return []
             }
         AddTeamMember =
@@ -523,7 +528,15 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     let! callerRole = ts.GetMemberRole(teamId, userId)
 
                     match callerRole with
-                    | Some _ -> return! ts.SetActiveTeam(userId, teamId)
+                    | Some _ ->
+                        // Reject selecting an archived team — it is no
+                        // longer an accessible scope (the same reason it
+                        // is filtered from GetMyTeams).
+                        let! team = ts.GetTeam(teamId)
+
+                        match team with
+                        | Some t when t.Archived -> return Error "This team is archived"
+                        | _ -> return! ts.SetActiveTeam(userId, teamId)
                     | None -> return Error "You are not a member of this team"
                 | None -> return Error "Team management not available in this mode"
             }
@@ -534,6 +547,123 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                 | None -> return None
             }
         GetTeamCreationPolicy = fun () -> async { return config.TeamCreationPolicy }
+        ListAllTeams =
+            fun () -> async {
+                let! isAdmin = isPlatformAdmin ()
+
+                if not isAdmin then
+                    return Error "Platform Admin required"
+                else
+                    match teamStore with
+                    | None -> return Error "Team management not available in this mode"
+                    | Some ts ->
+                        let! teams = ts.ListTeams()
+
+                        let! summaries =
+                            teams
+                            |> List.map (fun team -> async {
+                                let! members = ts.GetTeamMembers(team.TeamId)
+
+                                let ofRole role =
+                                    members |> List.filter (fun m -> m.Role = role) |> List.map _.UserId
+
+                                return {
+                                    TeamId = team.TeamId
+                                    Name = team.Name
+                                    CreatedAt = team.CreatedAt
+                                    Archived = team.Archived
+                                    MemberCount = members.Length
+                                    Owners = ofRole Owner
+                                    Admins = ofRole Admin
+                                }
+                            })
+                            // Bounded parallelism mirrors ITeamStore.ListTeams —
+                            // keep a large team count from saturating the backend.
+                            |> fun comps -> Async.Parallel(comps, maxDegreeOfParallelism = 32)
+
+                        return Ok(summaries |> Array.toList)
+            }
+        ArchiveTeam =
+            fun teamId -> async {
+                let! isAdmin = isPlatformAdmin ()
+
+                if not isAdmin then
+                    return Error "Platform Admin required"
+                else
+                    match teamStore with
+                    | None -> return Error "Team management not available in this mode"
+                    | Some ts ->
+                        let! team = ts.GetTeam(teamId)
+                        let! result = ts.SetArchived(teamId, true)
+
+                        match result with
+                        | Ok() ->
+                            audit
+                                teamId
+                                (TeamArchived {
+                                    UserId = userId
+                                    TeamId = teamId
+                                    TeamName = team |> Option.map _.Name |> Option.defaultValue teamId
+                                })
+
+                            return Ok()
+                        | Error e -> return Error e
+            }
+        RestoreTeam =
+            fun teamId -> async {
+                let! isAdmin = isPlatformAdmin ()
+
+                if not isAdmin then
+                    return Error "Platform Admin required"
+                else
+                    match teamStore with
+                    | None -> return Error "Team management not available in this mode"
+                    | Some ts ->
+                        let! team = ts.GetTeam(teamId)
+                        let! result = ts.SetArchived(teamId, false)
+
+                        match result with
+                        | Ok() ->
+                            audit
+                                teamId
+                                (TeamRestored {
+                                    UserId = userId
+                                    TeamId = teamId
+                                    TeamName = team |> Option.map _.Name |> Option.defaultValue teamId
+                                })
+
+                            return Ok()
+                        | Error e -> return Error e
+            }
+        DeleteTeamHard =
+            fun teamId -> async {
+                let! isAdmin = isPlatformAdmin ()
+
+                if not isAdmin then
+                    return Error "Platform Admin required"
+                else
+                    match teamStore with
+                    | None -> return Error "Team management not available in this mode"
+                    | Some ts ->
+                        // Capture the name before the purge — once the
+                        // record is gone the audit can't recover it.
+                        let! team = ts.GetTeam(teamId)
+                        let teamName = team |> Option.map _.Name |> Option.defaultValue teamId
+                        let! result = ts.PurgeTeam(teamId)
+
+                        match result with
+                        | Ok() ->
+                            audit
+                                teamId
+                                (TeamDeleted {
+                                    UserId = userId
+                                    TeamId = teamId
+                                    TeamName = teamName
+                                })
+
+                            return Ok()
+                        | Error e -> return Error e
+            }
     }
 
 /// Fable.Remoting route handler wrapping `teamApi`. Route mount path is

@@ -34,6 +34,7 @@ module private Json =
             teamId = team.TeamId
             name = team.Name
             createdAt = team.CreatedAt.ToString("o")
+            archived = team.Archived
         |}
 
         JsonSerializer.Serialize(obj, options) |> Encoding.UTF8.GetBytes
@@ -42,10 +43,19 @@ module private Json =
         let doc = JsonDocument.Parse(Encoding.UTF8.GetString(bytes))
         let root = doc.RootElement
 
+        // `archived` is optional for back-compat — team blobs written
+        // before the field existed have no `archived` property and
+        // deserialize as not-archived.
+        let archived =
+            match root.TryGetProperty("archived") with
+            | true, prop -> prop.GetBoolean()
+            | false, _ -> false
+
         {
             TeamId = root.GetProperty("teamId").GetString()
             Name = root.GetProperty("name").GetString()
             CreatedAt = DateTime.Parse(root.GetProperty("createdAt").GetString())
+            Archived = archived
         }
 
     let private roleToString =
@@ -130,6 +140,20 @@ type ITeamStore =
     /// Set the user's active team. Returns `Error` when the user is not
     /// a member of the requested team.
     abstract SetActiveTeam: userId: string * teamId: string -> Async<Result<unit, string>>
+    /// Set a team's archived flag. Archiving (`archived = true`) also
+    /// bumps every member whose active-team pointer is this team to the
+    /// no-active-team state (clears the pointer + publishes
+    /// `MembershipChanged` so resolver caches evict) — an archived team
+    /// must not remain a member's active scope. Restoring
+    /// (`archived = false`) flips the flag only; members re-select the
+    /// team themselves. `Error` when the team does not exist.
+    abstract SetArchived: teamId: string * archived: bool -> Async<Result<unit, string>>
+    /// **Irreversibly** purge a team: delete the team record AND strip
+    /// the team from every member's membership rows + clear active-team
+    /// pointers referencing it. Distinct from `DeleteTeam`, which only
+    /// removes the team blob (the create-rollback primitive). `Error`
+    /// when the team does not exist.
+    abstract PurgeTeam: teamId: string -> Async<Result<unit, string>>
 
 // ─── TeamStore ───────────────────────────────────────────────────
 
@@ -217,6 +241,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
                 TeamId = teamId
                 Name = name
                 CreatedAt = DateTime.UtcNow
+                Archived = false
             }
 
             let! result = storage.Upload(platformContainer, teamBlobName teamId, Json.serializeTeam team)
@@ -456,6 +481,85 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
             return Error "User is not a member of this team"
     }
 
+    // ── Archive / purge (Platform-Admin team lifecycle) ──────
+
+    /// Clear `userId`'s active-team pointer iff it currently points at
+    /// `teamId`, then publish `MembershipChanged` so the resolver caches
+    /// evict and the member drops to the no-active-team state. Shared by
+    /// `SetArchived` (archive bump) and `PurgeTeam` (hard delete).
+    member private _.ClearActiveTeamIfMatches(userId: string, teamId: string) = async {
+        let! result = storage.Download(platformContainer, activeTeamBlobName userId)
+
+        match result with
+        | Ok bytes when Encoding.UTF8.GetString(bytes).Trim() = teamId ->
+            let! _ = storage.Delete(platformContainer, activeTeamBlobName userId)
+            do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
+        | _ -> ()
+    }
+
+    member this.SetArchived(teamId: string, archived: bool) = async {
+        let! existing = this.GetTeam(teamId)
+
+        match existing with
+        | None -> return Error $"Team '{teamId}' not found"
+        | Some team ->
+            let updated = { team with Archived = archived }
+            let! result = storage.Upload(platformContainer, teamBlobName teamId, Json.serializeTeam updated)
+
+            match result with
+            | Error e -> return Error e
+            | Ok _ ->
+                // On archive, bump every member whose active team is this
+                // one — an archived team must not remain a member's active
+                // scope. Restore (archived = false) leaves pointers alone;
+                // the team is simply un-hidden and members re-select it.
+                if archived then
+                    let! members = this.GetTeamMembers(teamId)
+
+                    do!
+                        members
+                        |> List.map (fun m -> this.ClearActiveTeamIfMatches(m.UserId, teamId))
+                        |> Async.Sequential
+                        |> Async.Ignore
+
+                return Ok()
+    }
+
+    member this.PurgeTeam(teamId: string) = async {
+        let! existing = this.GetTeam(teamId)
+
+        match existing with
+        | None -> return Error $"Team '{teamId}' not found"
+        | Some _ ->
+            // Strip the team from every member's membership rows + clear
+            // active-team pointers. Each per-user membership edit takes the
+            // per-user lock so a concurrent AddMember/RemoveMember for the
+            // same user can't lose the strip.
+            let! members = this.GetTeamMembers(teamId)
+
+            do!
+                members
+                |> List.map (fun m ->
+                    withUserLock
+                        m.UserId
+                        (async {
+                            let! current = this.LoadMemberships(m.UserId)
+                            let stripped = current |> List.filter (fun x -> x.TeamId <> teamId)
+
+                            if stripped.Length <> current.Length then
+                                do! this.SaveMemberships(m.UserId, stripped)
+
+                            do! this.ClearActiveTeamIfMatches(m.UserId, teamId)
+                            do! publishChange teamId m.UserId MembershipChangeKind.Removed
+                        }))
+                |> Async.Sequential
+                |> Async.Ignore
+
+            // Delete the team record last — once it's gone, GetTeam returns
+            // None and the team is fully purged.
+            return! storage.Delete(platformContainer, teamBlobName teamId)
+    }
+
     // ── ITeamStore routing ───────────────────────────────────
     // Public members above are the implementation; the interface
     // block delegates to them so consumers typed against the
@@ -478,6 +582,8 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
         member this.GetMemberRole(teamId, userId) = this.GetMemberRole(teamId, userId)
         member this.GetActiveTeam(userId) = this.GetActiveTeam(userId)
         member this.SetActiveTeam(userId, teamId) = this.SetActiveTeam(userId, teamId)
+        member this.SetArchived(teamId, archived) = this.SetArchived(teamId, archived)
+        member this.PurgeTeam(teamId) = this.PurgeTeam(teamId)
 
 // ─── First-team-becomes-active policy ────────────────────────────
 

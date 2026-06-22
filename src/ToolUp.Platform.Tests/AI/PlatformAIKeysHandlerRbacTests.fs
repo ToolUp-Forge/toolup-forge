@@ -164,6 +164,12 @@ let private stubTeamStore (teams: TeamInfo list) : ITeamStore =
 
         member _.SetActiveTeam(_, _) =
             failwith "stubTeamStore.SetActiveTeam not used"
+
+        member _.SetArchived(_, _) =
+            failwith "stubTeamStore.SetArchived not used"
+
+        member _.PurgeTeam _ =
+            failwith "stubTeamStore.PurgeTeam not used"
     }
 
 // ─── AccessContext + HttpContext helpers ─────────────────────────
@@ -218,6 +224,7 @@ let private teamAlpha: TeamInfo = {
     TeamId = "team-alpha"
     Name = "Team Alpha"
     CreatedAt = DateTime.UnixEpoch
+    Archived = false
 }
 
 let private expectAdminGate (label: string) (result: Result<'a, string>) =

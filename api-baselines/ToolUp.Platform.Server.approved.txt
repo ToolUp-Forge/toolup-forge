@@ -2532,8 +2532,10 @@ ToolUp.Platform.TeamManagement+ITeamStore.GetTeam(System.String) : Microsoft.FSh
 ToolUp.Platform.TeamManagement+ITeamStore.GetTeamMembers(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]
 ToolUp.Platform.TeamManagement+ITeamStore.GetTeamsForUser(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
 ToolUp.Platform.TeamManagement+ITeamStore.ListTeams() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
+ToolUp.Platform.TeamManagement+ITeamStore.PurgeTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+ITeamStore.RemoveMember(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+ITeamStore.SetActiveTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.TeamManagement+ITeamStore.SetArchived(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+StoredMembership (class)
 ToolUp.Platform.TeamManagement+StoredMembership..ctor(System.String, ToolUp.Platform.TeamRole, System.DateTime)
 ToolUp.Platform.TeamManagement+StoredMembership.JoinedAt : System.DateTime { get }
@@ -2551,8 +2553,10 @@ ToolUp.Platform.TeamManagement+TeamStore.GetTeam(System.String) : Microsoft.FSha
 ToolUp.Platform.TeamManagement+TeamStore.GetTeamMembers(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]
 ToolUp.Platform.TeamManagement+TeamStore.GetTeamsForUser(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
 ToolUp.Platform.TeamManagement+TeamStore.ListTeams() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
+ToolUp.Platform.TeamManagement+TeamStore.PurgeTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.RemoveMember(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.SetActiveTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.TeamManagement+TeamStore.SetArchived(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamQuotaPolicy (class)
 ToolUp.Platform.TeamQuotaPolicy+BlobBackedTeamQuotaPolicy (class)
 ToolUp.Platform.TeamQuotaPolicy+BlobBackedTeamQuotaPolicy..ctor(ToolUp.Platform.IConfigStore, ToolUp.Platform.Usage.IUsageLog)

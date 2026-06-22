@@ -594,6 +594,8 @@ type private AddMemberFailingStore(inner: ITeamStore) =
         member _.GetMemberRole(teamId, userId) = inner.GetMemberRole(teamId, userId)
         member _.GetActiveTeam(userId) = inner.GetActiveTeam(userId)
         member _.SetActiveTeam(userId, teamId) = inner.SetActiveTeam(userId, teamId)
+        member _.SetArchived(teamId, archived) = inner.SetArchived(teamId, archived)
+        member _.PurgeTeam(teamId) = inner.PurgeTeam(teamId)
 
 [<Tests>]
 let integrityTests =

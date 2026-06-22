@@ -177,6 +177,33 @@ type TeamCreationDeniedPayload = {
     AttemptedName: string
 }
 
+/// A Platform Admin archived a team via `TeamApi.ArchiveTeam`. Reversible
+/// (data retained); the team is hidden from members until restored.
+type TeamArchivedPayload = {
+    /// The Platform Admin who archived the team.
+    UserId: string
+    TeamId: string
+    TeamName: string
+}
+
+/// A Platform Admin restored a previously-archived team via
+/// `TeamApi.RestoreTeam`.
+type TeamRestoredPayload = {
+    UserId: string
+    TeamId: string
+    TeamName: string
+}
+
+/// A Platform Admin irreversibly deleted a team via
+/// `TeamApi.DeleteTeamHard` — the team record and every membership row
+/// referencing it were purged. The team name is captured here because
+/// the record no longer exists after the event fires.
+type TeamDeletedPayload = {
+    UserId: string
+    TeamId: string
+    TeamName: string
+}
+
 type MemberAddedPayload = {
     UserId: string
     TeamId: string
@@ -2132,6 +2159,14 @@ type AuditEvent =
     /// not hold `PlatformRole.PlatformAdmin`. Emitted by the
     /// `teamApiHandler.CreateTeam` gate before any team is minted.
     | TeamCreationDenied of TeamCreationDeniedPayload
+    /// A Platform Admin archived a team (`TeamApi.ArchiveTeam`).
+    /// Reversible — data retained, team hidden from members.
+    | TeamArchived of TeamArchivedPayload
+    /// A Platform Admin restored an archived team (`TeamApi.RestoreTeam`).
+    | TeamRestored of TeamRestoredPayload
+    /// A Platform Admin irreversibly deleted a team
+    /// (`TeamApi.DeleteTeamHard`) — record + membership rows purged.
+    | TeamDeleted of TeamDeletedPayload
     /// Phase 3d — `ITeamInviteApi.IssueInvite` succeeded. Reserved
     /// `SourceModule = "_platform.team_invites"`. Recorded under
     /// `team-{TeamId}` scope.
@@ -2363,6 +2398,9 @@ module AuditEvent =
         | AssetUploaded _ -> "AssetUploaded"
         | AssetDeleted _ -> "AssetDeleted"
         | TeamCreationDenied _ -> "TeamCreationDenied"
+        | TeamArchived _ -> "TeamArchived"
+        | TeamRestored _ -> "TeamRestored"
+        | TeamDeleted _ -> "TeamDeleted"
         | TeamInviteIssued _ -> "TeamInviteIssued"
         | TeamInviteAccepted _ -> "TeamInviteAccepted"
         | TeamInviteAcceptedFromPending _ -> "TeamInviteAcceptedFromPending"

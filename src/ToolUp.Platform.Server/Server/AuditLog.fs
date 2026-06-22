@@ -576,6 +576,30 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> TeamCreationDenied(fromAuditJson<TeamCreationDeniedPayload> j)
     }
     {
+        EventType = "TeamArchived"
+        TryEncode =
+            (function
+            | TeamArchived p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamArchived(fromAuditJson<TeamArchivedPayload> j)
+    }
+    {
+        EventType = "TeamRestored"
+        TryEncode =
+            (function
+            | TeamRestored p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamRestored(fromAuditJson<TeamRestoredPayload> j)
+    }
+    {
+        EventType = "TeamDeleted"
+        TryEncode =
+            (function
+            | TeamDeleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamDeleted(fromAuditJson<TeamDeletedPayload> j)
+    }
+    {
         EventType = "TeamInviteIssued"
         TryEncode =
             (function
