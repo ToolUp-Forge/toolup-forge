@@ -36,6 +36,9 @@ open ToolUp.Platform.ConfigurePipeline
 open ToolUp.Platform.BuildRouteHandlers
 open ToolUp.Platform.ComposeAudit
 open ToolUp.Platform.ComposeEncryption
+open ToolUp.Platform.TransientFault
+open ToolUp.Platform.ResilientBlobStorage
+open ToolUp.Platform.ResilientSecretStore
 open ToolUp.Platform.ComposeAuth
 open ToolUp.Platform.ComposeNotifications
 open ToolUp.Platform.ComposeJobs
@@ -124,6 +127,8 @@ let compose
     (moduleSurfaceDefaults: (string * SurfaceRequirement) list)
     (routeSurfaceOverrides: ((string * string) * SurfaceRequirement) list)
     (scheduledJobDeclarations: ScheduledJobDeclaration list)
+    (storageResilience: ResilienceMode)
+    (secretResilience: ResilienceMode)
     =
 
     // Phase 9l — resolve the deployment's distributed-tracing sink.
@@ -247,10 +252,17 @@ let compose
     // consumer (DataObjectStore, EventStore, JobStore, WebhookRegistry,
     // TeamStore, PermissionStore, NotificationAddressBook, etc.) receives
     // the wrapped instance.
+    // Phase 176 — resilience decorator is OUTERMOST: a transient fault on
+    // the underlying store retries the whole operation (including the
+    // encrypt/decrypt envelope). `NoResilience` (the default) returns the
+    // encrypted storage un-wrapped — byte-for-byte unchanged (GP 13).
     let resolvedBlobStorage =
         applyEncryptionDecorator innerBlobStorage encryptionKeyResolver
+        |> applyStorageResilience storageResilience
 
-    let secretStore = FileSecretStore.FileSecretStore() :> Secrets.ISecretStore
+    let secretStore =
+        FileSecretStore.FileSecretStore() :> Secrets.ISecretStore
+        |> applySecretResilience secretResilience
 
     let resolvedLogger =
         logger

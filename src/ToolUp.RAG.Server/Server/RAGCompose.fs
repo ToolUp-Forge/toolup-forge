@@ -8,6 +8,7 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Providers
 open ToolUp.Platform.RemotingHelpers
+open ToolUp.Platform.TransientFault
 open ToolUp.Platform.Server
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
@@ -474,6 +475,12 @@ let composeWithRAG
     // haven't adopted withPlatformProvider).
     (platformKeyStoreOverride: IPlatformAIKeyStore option)
     (platformProviders: DefaultAIProviderFactory.AIPlatformProvider list)
+    // Phase 176 — transient-fault resilience opt-in, forwarded to the
+    // base `compose` so a RAG deployment's storage / secret store inherits
+    // the same retry/breaker/timeout decorator. `NoResilience` (default)
+    // leaves them un-decorated.
+    (storageResilience: ResilienceMode)
+    (secretResilience: ResilienceMode)
     =
 
     // Phase 70 A.5 — verify the consumer-declared platform-provider
@@ -1108,6 +1115,8 @@ let composeWithRAG
         moduleSurfaceDefaults
         routeSurfaceOverrides
         scheduledJobDeclarations
+        storageResilience
+        secretResilience
 
 // ─── RAGServerApp — record-based wrapper around `AIServerApp` + RAG ──
 //
@@ -1874,5 +1883,7 @@ module RAGServerApp =
                 b.ScheduledJobs
                 ai.PlatformKeyStore
                 ai.PlatformProviders
+                b.StorageResilience
+                b.SecretResilience
 
         host.RunBlocking()
