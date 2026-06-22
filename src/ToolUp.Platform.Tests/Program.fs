@@ -68,6 +68,7 @@ let allTests =
         HtmlRendererTests.tests
         NarrativeElementTests.tests
         DataSubjectRequestTests.tests
+        DataSubjectRequestTests.authorizationTests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests
         TransactionalDispatcherTests.tests

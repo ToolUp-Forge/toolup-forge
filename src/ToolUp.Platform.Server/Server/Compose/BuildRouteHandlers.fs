@@ -567,6 +567,7 @@ let buildRouteHandlers
                     dsrConfig.Policy
                     scopeId
                     accessContext.UserId
+                    accessContext
                     audit
                     asyncDeps)
           ]

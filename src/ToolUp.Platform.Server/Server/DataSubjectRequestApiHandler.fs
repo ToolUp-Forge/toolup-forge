@@ -215,9 +215,17 @@ let create
     (defaultPolicy: ErasurePolicy)
     (scopeId: string)
     (actorUserId: string)
+    (accessContext: AccessContext)
     (audit: AuditOnDsr)
     (asyncDeps: DsrAsyncDeps option)
     : IDataSubjectRequestApi =
+    // Phase 229 — in-handler Platform-Admin gate, in addition to the
+    // `[<RequiresRole "PlatformAdmin">]` classifier attribute on the
+    // contract (defence in depth — the gate must not depend solely on the
+    // deployment's auth middleware). Same wording as PlatformAdminApiHandler
+    // / PlatformAIKeysHandler so the client error banner renders uniformly.
+    let denyNonAdmin () =
+        not (AccessContext.canModifyPlatformConfig accessContext)
     // Per-handler-instance preview cache. Process-local; admin re-
     // previews after process restart. Acceptable for MVP since
     // erasure is a low-frequency admin operation, not a hot-path
@@ -257,110 +265,10 @@ let create
     {
         RequestExport =
             fun input -> async {
-                let request =
-                    mkRequest DataSubjectRequestKind.Export input.SubjectUserId input.TeamId input.Reason defaultPolicy
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
 
-                do! emitAudit RequestStarted request Map.empty
-
-                try
-                    let! segments = executeExport exporters request scopeId
-
-                    let totalBytes = segments |> List.sumBy (fun s -> s.Body.Length)
-
-                    do!
-                        emitAudit
-                            ExportCompleted
-                            request
-                            (Map [ "segmentCount", string segments.Length; "totalBytes", string totalBytes ])
-
-                    return Result.Ok(serialiseSegments segments)
-                with ex ->
-                    return Result.Error ex.Message
-            }
-
-        PreviewErasure =
-            fun input -> async {
-                let policy = input.OverridePolicy |> Option.defaultValue defaultPolicy
-
-                let request =
-                    mkRequest DataSubjectRequestKind.Erase input.SubjectUserId input.TeamId input.Reason policy
-
-                do! emitAudit RequestStarted request Map.empty
-
-                try
-                    let! perHandler = preview handlers request scopeId
-
-                    let preview = {
-                        Request = request
-                        PerHandlerCounts = perHandler
-                    }
-
-                    previewCache[request.Id] <- (request, preview)
-
-                    let totalAffected = perHandler.Values |> Seq.sumBy _.RecordsAffected
-
-                    do!
-                        emitAudit
-                            PreviewCompleted
-                            request
-                            (Map [
-                                "handlerCount", string perHandler.Count
-                                "totalAffected", string totalAffected
-                            ])
-
-                    return Result.Ok preview
-                with ex ->
-                    return Result.Error ex.Message
-            }
-
-        ConfirmErasure =
-            fun requestId -> async {
-                match previewCache.TryGetValue requestId with
-                | false, _ ->
-                    return Result.Ok(Refused $"No preview found for request {requestId}. Re-run PreviewErasure first.")
-                | true, (request, _preview) ->
-                    try
-                        let! outcome = executeErase handlers request scopeId
-
-                        let kind =
-                            if outcome.OverallSuccess then
-                                ErasureCompleted
-                            else
-                                ErasureFailed
-
-                        let totalAffected =
-                            outcome.PerHandler.Values
-                            |> Seq.sumBy (fun r ->
-                                match r with
-                                | Result.Ok s -> s.RecordsAffected
-                                | _ -> 0)
-
-                        do!
-                            emitAudit
-                                kind
-                                request
-                                (Map [
-                                    "totalAffected", string totalAffected
-                                    "handlerCount", string outcome.PerHandler.Count
-                                ])
-
-                        // One-shot — drop the preview from the cache so a
-                        // second confirm doesn't re-run.
-                        previewCache.TryRemove requestId |> ignore
-                        return Result.Ok(Completed outcome)
-                    with ex ->
-                        return Result.Error ex.Message
-            }
-
-        // ─── Phase 9h.A — async export surface ─────────────────────────
-        RequestExportAsync =
-            fun input -> async {
-                match asyncDeps with
-                | None ->
-                    return
-                        Result.Error
-                            "Async DSR export is not enabled — set DataSubjectRequests = Enabled { Async = true } and compose an IJobScheduler."
-                | Some deps ->
                     let request =
                         mkRequest
                             DataSubjectRequestKind.Export
@@ -372,67 +280,202 @@ let create
                     do! emitAudit RequestStarted request Map.empty
 
                     try
-                        let! ticket = deps.Store.BeginExport(scopeId, request)
-                        do! deps.Notify ticket ExportStatus.Preparing
+                        let! segments = executeExport exporters request scopeId
 
-                        let registration: JobRegistration = {
-                            ScopeId = scopeId
-                            Handler = DsrJobs.ExportHandler
-                            Payload = DsrJobPayload.serialise ticket request
-                            Trigger = Manual
-                            Idempotency =
-                                Some {
-                                    Key = $"dsr-export-{request.Id}"
-                                    TtlSeconds = 60 * 60 * 24
-                                }
-                            RetryPolicy = JobRetryPolicy.defaults
-                            ShardKey = None
-                            Precision = Minute
-                            CreatedBy = actorUserId
-                            Tags = Map [ "source", "dsr-export"; "ticket", ticket ]
-                        }
+                        let totalBytes = segments |> List.sumBy (fun s -> s.Body.Length)
 
-                        match! deps.Scheduler.Schedule registration with
-                        | Result.Error err ->
-                            do! deps.Store.Fail(ticket, $"schedule failed: {err}")
-                            return Result.Error $"Failed to schedule export job: {err}"
-                        | Result.Ok jobId ->
-                            // Fire immediately (Manual trigger) so the
-                            // export does not wait for the next scheduler
-                            // tick. TriggerOnce enqueues the attempt now.
-                            let! _ = deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId)
-                            return Result.Ok ticket
+                        do!
+                            emitAudit
+                                ExportCompleted
+                                request
+                                (Map [ "segmentCount", string segments.Length; "totalBytes", string totalBytes ])
+
+                        return Result.Ok(serialiseSegments segments)
                     with ex ->
                         return Result.Error ex.Message
             }
 
+        PreviewErasure =
+            fun input -> async {
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
+
+                    let policy = input.OverridePolicy |> Option.defaultValue defaultPolicy
+
+                    let request =
+                        mkRequest DataSubjectRequestKind.Erase input.SubjectUserId input.TeamId input.Reason policy
+
+                    do! emitAudit RequestStarted request Map.empty
+
+                    try
+                        let! perHandler = preview handlers request scopeId
+
+                        let preview = {
+                            Request = request
+                            PerHandlerCounts = perHandler
+                        }
+
+                        previewCache[request.Id] <- (request, preview)
+
+                        let totalAffected = perHandler.Values |> Seq.sumBy _.RecordsAffected
+
+                        do!
+                            emitAudit
+                                PreviewCompleted
+                                request
+                                (Map [
+                                    "handlerCount", string perHandler.Count
+                                    "totalAffected", string totalAffected
+                                ])
+
+                        return Result.Ok preview
+                    with ex ->
+                        return Result.Error ex.Message
+            }
+
+        ConfirmErasure =
+            fun requestId -> async {
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
+
+                    match previewCache.TryGetValue requestId with
+                    | false, _ ->
+                        return
+                            Result.Ok(Refused $"No preview found for request {requestId}. Re-run PreviewErasure first.")
+                    | true, (request, _preview) ->
+                        try
+                            let! outcome = executeErase handlers request scopeId
+
+                            let kind =
+                                if outcome.OverallSuccess then
+                                    ErasureCompleted
+                                else
+                                    ErasureFailed
+
+                            let totalAffected =
+                                outcome.PerHandler.Values
+                                |> Seq.sumBy (fun r ->
+                                    match r with
+                                    | Result.Ok s -> s.RecordsAffected
+                                    | _ -> 0)
+
+                            do!
+                                emitAudit
+                                    kind
+                                    request
+                                    (Map [
+                                        "totalAffected", string totalAffected
+                                        "handlerCount", string outcome.PerHandler.Count
+                                    ])
+
+                            // One-shot — drop the preview from the cache so a
+                            // second confirm doesn't re-run.
+                            previewCache.TryRemove requestId |> ignore
+                            return Result.Ok(Completed outcome)
+                        with ex ->
+                            return Result.Error ex.Message
+            }
+
+        // ─── Phase 9h.A — async export surface ─────────────────────────
+        RequestExportAsync =
+            fun input -> async {
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
+
+                    match asyncDeps with
+                    | None ->
+                        return
+                            Result.Error
+                                "Async DSR export is not enabled — set DataSubjectRequests = Enabled { Async = true } and compose an IJobScheduler."
+                    | Some deps ->
+                        let request =
+                            mkRequest
+                                DataSubjectRequestKind.Export
+                                input.SubjectUserId
+                                input.TeamId
+                                input.Reason
+                                defaultPolicy
+
+                        do! emitAudit RequestStarted request Map.empty
+
+                        try
+                            let! ticket = deps.Store.BeginExport(scopeId, request)
+                            do! deps.Notify ticket ExportStatus.Preparing
+
+                            let registration: JobRegistration = {
+                                ScopeId = scopeId
+                                Handler = DsrJobs.ExportHandler
+                                Payload = DsrJobPayload.serialise ticket request
+                                Trigger = Manual
+                                Idempotency =
+                                    Some {
+                                        Key = $"dsr-export-{request.Id}"
+                                        TtlSeconds = 60 * 60 * 24
+                                    }
+                                RetryPolicy = JobRetryPolicy.defaults
+                                ShardKey = None
+                                Precision = Minute
+                                CreatedBy = actorUserId
+                                Tags = Map [ "source", "dsr-export"; "ticket", ticket ]
+                            }
+
+                            match! deps.Scheduler.Schedule registration with
+                            | Result.Error err ->
+                                do! deps.Store.Fail(ticket, $"schedule failed: {err}")
+                                return Result.Error $"Failed to schedule export job: {err}"
+                            | Result.Ok jobId ->
+                                // Fire immediately (Manual trigger) so the
+                                // export does not wait for the next scheduler
+                                // tick. TriggerOnce enqueues the attempt now.
+                                let! _ = deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId)
+                                return Result.Ok ticket
+                        with ex ->
+                            return Result.Error ex.Message
+            }
+
         GetExportStatus =
             fun ticket -> async {
-                match asyncDeps with
-                | None -> return Result.Error "Async DSR export is not enabled."
-                | Some deps ->
-                    let! status = deps.Store.GetStatus ticket
-                    return Result.Ok status
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
+
+                    match asyncDeps with
+                    | None -> return Result.Error "Async DSR export is not enabled."
+                    | Some deps ->
+                        let! status = deps.Store.GetStatus ticket
+                        return Result.Ok status
             }
 
         DownloadExport =
             fun ticket -> async {
-                match asyncDeps with
-                | None -> return Result.Error "Async DSR export is not enabled."
-                | Some deps ->
-                    match! deps.Store.Download ticket with
-                    | Result.Ok bytes -> return Result.Ok bytes
-                    | Result.Error status -> return Result.Error $"Export not downloadable: {ExportStatus.name status}"
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
+
+                    match asyncDeps with
+                    | None -> return Result.Error "Async DSR export is not enabled."
+                    | Some deps ->
+                        match! deps.Store.Download ticket with
+                        | Result.Ok bytes -> return Result.Ok bytes
+                        | Result.Error status ->
+                            return Result.Error $"Export not downloadable: {ExportStatus.name status}"
             }
 
         CancelExport =
             fun ticket -> async {
-                match asyncDeps with
-                | None -> return Result.Error "Async DSR export is not enabled."
-                | Some deps ->
-                    do! deps.Store.Cancel ticket
-                    do! deps.Notify ticket ExportStatus.Cancelled
-                    return Result.Ok()
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
+
+                    match asyncDeps with
+                    | None -> return Result.Error "Async DSR export is not enabled."
+                    | Some deps ->
+                        do! deps.Store.Cancel ticket
+                        do! deps.Notify ticket ExportStatus.Cancelled
+                        return Result.Ok()
             }
     }
 

@@ -74,6 +74,15 @@ let private mkApi (exporters: IDataExporter list) (handlers: IErasureHandler lis
     let audit: AuditOnDsr =
         fun e -> async { lock auditEvents (fun () -> auditEvents.Add e) }
 
+    // Phase 229 — DSR is Platform-Admin gated; the orchestrator contract
+    // runs as an admin so the gate passes and the pipeline behaviour under
+    // test is exercised. (The gate itself is covered by
+    // DataSubjectRequestTests.authorizationTests.)
+    let adminContext: AccessContext = {
+        AccessContext.unrestricted (AuthenticatedUser "admin-actor") with
+            PlatformRole = Some PlatformRole.PlatformAdmin
+    }
+
     let api =
         DataSubjectRequestApiHandler.create
             exporters
@@ -81,6 +90,7 @@ let private mkApi (exporters: IDataExporter list) (handlers: IErasureHandler lis
             ErasurePolicy.Tombstone
             "team-test"
             "admin-actor"
+            adminContext
             audit
             None // Phase 9h.A — synchronous-only; no async export deps in this contract.
 

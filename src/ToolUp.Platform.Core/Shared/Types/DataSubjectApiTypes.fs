@@ -94,12 +94,15 @@ module DsrNotifications =
     let ExportProgressKey = "_sdk.DataSubjectRequests.ExportProgress"
 
 /// Fable.Remoting contract surface — every method returns
-/// `Async<Result<_, string>>` per the SDK convention. Owner / Admin
-/// gated upstream.
-/// Annotation note (69d.tail): neither `DataSubjectRequestApiHandler.create`
-/// nor the compose mount applies an in-handler role gate today — the only
-/// guard is the deployment's auth middleware, so the honest classification
-/// is `AllowAnonymous` (handler behaviour unchanged; see gap flag).
+/// `Async<Result<_, string>>` per the SDK convention. **Platform-Admin
+/// only**: every method carries `[<RequiresRole "PlatformAdmin">]` (the
+/// classifier rejects non-admins at dispatch) AND
+/// `DataSubjectRequestApiHandler.create` re-checks
+/// `AccessContext.canModifyPlatformConfig` in-handler (defence in depth —
+/// the gate does not depend solely on the deployment's auth middleware).
+/// Phase 229 closed the prior `[<AllowAnonymous>]` gap, where export and
+/// erasure of any subject's data by id were reachable by any caller the
+/// deployment surface admitted.
 type IDataSubjectRequestApi = {
     /// Stream every record across every registered exporter that
     /// names the subject. Returns a single byte payload (the
@@ -107,20 +110,20 @@ type IDataSubjectRequestApi = {
     /// zip / tar / raw concatenation based on byte budget). For
     /// the MVP the payload is a JSON envelope `{ segments: [...] }`
     /// where each segment carries name / mimeType / base64 bytes.
-    [<AllowAnonymous>]
+    [<RequiresRole "PlatformAdmin">]
     [<Audit "DataExported">]
     RequestExport: ExportRequestInput -> Async<Result<byte[], string>>
 
     /// Phase 1 of an erasure — preview only. Returns the affected-
     /// record counts per handler. No mutation.
-    [<AllowAnonymous>]
+    [<RequiresRole "PlatformAdmin">]
     [<Audit "PiiAccessed">]
     PreviewErasure: ErasureRequestInput -> Async<Result<ErasurePreview, string>>
 
     /// Phase 2 of an erasure — confirm a previously-previewed
     /// request and execute. Caller passes the preview's
     /// `Request.Id` so the handler can correlate.
-    [<AllowAnonymous>]
+    [<RequiresRole "PlatformAdmin">]
     [<Audit "Custom:DataErased">]
     ConfirmErasure: DataSubjectRequestId -> Async<Result<ErasureRunResult, string>>
 
@@ -131,7 +134,7 @@ type IDataSubjectRequestApi = {
     /// deployment did not enable async DSR
     /// (`DataSubjectRequestConfig.Async = false`) or no
     /// `IJobScheduler` / `IBackgroundExportStore` is composed.
-    [<AllowAnonymous>]
+    [<RequiresRole "PlatformAdmin">]
     [<Audit "DataExported">]
     RequestExportAsync: ExportRequestInput -> Async<Result<ExportTicket, string>>
 
@@ -139,14 +142,14 @@ type IDataSubjectRequestApi = {
     /// `Preparing` while the job runs; `Ready sizeBytes` when the
     /// envelope is downloadable; `Failed` / `Cancelled` / `Expired` /
     /// `Unknown` terminally.
-    [<AllowAnonymous>]
+    [<RequiresRole "PlatformAdmin">]
     GetExportStatus: ExportTicket -> Async<Result<ExportStatus, string>>
 
     /// Phase 9h.A — download a `Ready` background-export envelope. The
     /// payload is byte-identical to the synchronous `RequestExport`
     /// shape. `Error` carries the non-`Ready` status name when the
     /// ticket isn't downloadable yet.
-    [<AllowAnonymous>]
+    [<RequiresRole "PlatformAdmin">]
     [<Audit "DataExported">]
     DownloadExport: ExportTicket -> Async<Result<byte[], string>>
 
@@ -154,6 +157,6 @@ type IDataSubjectRequestApi = {
     /// ticket to `Cancelled`; the background job observes the cancelled
     /// ticket before `Complete` and skips writing the envelope, so the
     /// system stays consistent (the partial envelope TTL-expires).
-    [<AllowAnonymous>]
+    [<RequiresRole "PlatformAdmin">]
     CancelExport: ExportTicket -> Async<Result<unit, string>>
 }
