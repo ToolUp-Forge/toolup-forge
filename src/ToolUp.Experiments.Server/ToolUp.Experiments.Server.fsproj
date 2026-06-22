@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>ToolUp.Experiments.Server</PackageId>
+    <Description>Default in-memory IExperimentStore + the assign-and-log-once ExperimentService over ToolUp.Experiments.Core. Exposure logging via the IExposureSink seam (adapt to IEventStore at compose time). Pure F#.</Description>
+    <PackageTags>fsharp;experiments;ab-testing</PackageTags>
+    <Version>0.1.0-alpha</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="InMemoryExperimentStore.fs" />
+    <Compile Include="ExperimentService.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <ProjectReference Include="..\ToolUp.Experiments.Core\ToolUp.Experiments.Core.fsproj" />
+  </ItemGroup>
+</Project>

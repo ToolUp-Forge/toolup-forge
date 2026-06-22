@@ -37,6 +37,8 @@ let allTests =
         WebhookSubstrateTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
+        // Phase 242 — A/B experiment substrate.
+        ExperimentSubstrateTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests
@@ -145,6 +147,7 @@ let allTests =
         JobSchedulerInstanceValidatorTests.tests
         OAuthStateStoreInstanceValidatorTests.tests
         NotificationChannelInstanceValidatorTests.tests
+        MultiInstanceAdminCoherenceValidatorTests.tests
         NotificationsExplicitOffTests.tests
         RateLimitModeValidatorTests.tests
         RateLimitConfigValidatorTests.tests

@@ -160,6 +160,8 @@
         <Compile Include="InProcess\WebhookSubstrateTests.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="InProcess\PresenceChannelTests.fs" />
+        <!-- Phase 242 — A/B experiment substrate. -->
+        <Compile Include="InProcess\ExperimentSubstrateTests.fs" />
         <!-- Phase 176 — transient-fault decorator substrate: identity
              pass-through (contract packs re-run through the wrapper) +
              retry / backoff / breaker / per-call-timeout behaviour. -->
@@ -288,6 +290,7 @@
         <Compile Include="InProcess\ScheduledJobDeclarationTests.fs" />
         <Compile Include="InProcess\OAuthStateStoreInstanceValidatorTests.fs" />
         <Compile Include="InProcess\NotificationChannelInstanceValidatorTests.fs" />
+        <Compile Include="InProcess\MultiInstanceAdminCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\NotificationsExplicitOffTests.fs" />
         <Compile Include="InProcess\RateLimitModeValidatorTests.fs" />
         <Compile Include="InProcess\RateLimitConfigValidatorTests.fs" />
@@ -712,6 +715,9 @@
         <!-- Phase 238 — generic inbound-webhook receiver substrate. -->
         <ProjectReference Include="..\Webhooks\ToolUp.Webhooks.Core\ToolUp.Webhooks.Core.fsproj" />
         <ProjectReference Include="..\Webhooks\ToolUp.Webhooks.Server\ToolUp.Webhooks.Server.fsproj" />
+        <!-- Phase 242 — A/B experiment substrate. -->
+        <ProjectReference Include="..\ToolUp.Experiments.Core\ToolUp.Experiments.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Experiments.Server\ToolUp.Experiments.Server.fsproj" />
     </ItemGroup>
     <!-- Phase 14k WS5 Item 2 — mixed-dim fixture JSON co-located with the
          existing eval-baseline.json in the RAG.Evaluation project. Linked
