@@ -231,64 +231,86 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     let createTeamCore (name: string) (ownerUserId: string) = async {
         match teamStore with
         | Some ts ->
-            let! allowed = isAdminAllowed ()
+            // Server-side name validation. The client validates too, but the
+            // Remoting API is directly callable — an empty/whitespace or
+            // over-length name must not persist just because the UI was
+            // bypassed.
+            let trimmedName = name.Trim()
 
-            if not allowed then
-                audit
-                    "_platform"
-                    (TeamCreationDenied {
-                        UserId = userId
-                        AttemptedName = name
-                    })
-
-                return Error "Team creation requires Platform Admin"
+            if System.String.IsNullOrWhiteSpace trimmedName then
+                return Error "Team name can't be empty"
+            elif trimmedName.Length > 100 then
+                return Error "Team name is too long (max 100 characters)"
             else
-                let teamId = Guid.NewGuid().ToString("N")[..7]
-                let! result = ts.CreateTeam(teamId, name)
+                let! allowed = isAdminAllowed ()
 
-                match result with
-                | Ok team ->
+                if not allowed then
                     audit
-                        teamId
-                        (TeamCreated {
+                        "_platform"
+                        (TeamCreationDenied {
                             UserId = userId
-                            TeamId = teamId
-                            TeamName = name
+                            AttemptedName = trimmedName
                         })
 
-                    let! addResult = ts.AddMember(teamId, ownerUserId, Owner)
+                    return Error "Team creation requires Platform Admin"
+                else
+                    // Full-width GUID. The previous `[..7]` slice was 32 bits —
+                    // birthday-collision-prone at SaaS scale — and the id is the
+                    // data partition key, so a collision co-tenants two teams
+                    // (GP 4). `CreateTeam` additionally fails closed on an
+                    // existing blob.
+                    let teamId = Guid.NewGuid().ToString("N")
+                    let! result = ts.CreateTeam(teamId, trimmedName)
 
-                    match addResult with
-                    | Ok() ->
-                        audit
-                            teamId
-                            (MemberAdded {
-                                UserId = userId
-                                TeamId = teamId
-                                AffectedUserId = ownerUserId
-                                Role = TeamRoles.displayName Owner
-                            })
-                    | Error _ -> ()
+                    match result with
+                    | Ok team ->
+                        let! addResult = ts.AddMember(teamId, ownerUserId, Owner)
 
-                    // Only re-point the caller's active team when they
-                    // are the new Owner. Spinning up a team for someone
-                    // else (Platform Admin provisioning) shouldn't
-                    // re-point the operator's active team at it — but
-                    // the provisioned Owner gets the first-team-becomes-
-                    // active courtesy (`ensureActiveTeam` only writes
-                    // when their pointer is unset) so they don't land
-                    // in the no-active-team personal scope on first
-                    // sign-in.
-                    if ownerUserId = userId then
-                        let! _ = ts.SetActiveTeam(userId, teamId)
-                        ()
-                    else
                         match addResult with
-                        | Ok() -> do! ActiveTeamPolicy.ensureActiveTeam ts ownerUserId teamId
-                        | Error _ -> ()
+                        | Ok() ->
+                            // Team is whole (record + owner). Emit the creation
+                            // audit only now — a half-created team must never
+                            // surface a TeamCreated with no matching owner.
+                            audit
+                                teamId
+                                (TeamCreated {
+                                    UserId = userId
+                                    TeamId = teamId
+                                    TeamName = trimmedName
+                                })
 
-                    return Ok team
-                | Error e -> return Error e
+                            audit
+                                teamId
+                                (MemberAdded {
+                                    UserId = userId
+                                    TeamId = teamId
+                                    AffectedUserId = ownerUserId
+                                    Role = TeamRoles.displayName Owner
+                                })
+
+                            // Only re-point the caller's active team when they
+                            // are the new Owner. Spinning up a team for someone
+                            // else (Platform Admin provisioning) shouldn't
+                            // re-point the operator's active team at it — but
+                            // the provisioned Owner gets the first-team-becomes-
+                            // active courtesy (`ensureActiveTeam` only writes
+                            // when their pointer is unset) so they don't land
+                            // in the no-active-team personal scope on first
+                            // sign-in.
+                            if ownerUserId = userId then
+                                let! _ = ts.SetActiveTeam(userId, teamId)
+                                ()
+                            else
+                                do! ActiveTeamPolicy.ensureActiveTeam ts ownerUserId teamId
+
+                            return Ok team
+                        | Error addErr ->
+                            // Owner-membership write failed — roll back the
+                            // orphan team blob and fail honestly rather than
+                            // returning Ok over an owner-less, inaccessible team.
+                            let! _ = ts.DeleteTeam teamId
+                            return Error addErr
+                    | Error e -> return Error e
         | None -> return Error "Team management not available in this mode"
     }
 

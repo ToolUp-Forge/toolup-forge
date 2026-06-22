@@ -33,6 +33,11 @@ type private RecordingTeamStore() =
                 }
         }
 
+        member _.DeleteTeam(teamId) = async {
+            calls.Add($"DeleteTeam:{teamId}")
+            return Ok()
+        }
+
         member _.AddMember(teamId, userId, _role) = async {
             calls.Add($"AddMember:{teamId}:{userId}")
             return Ok()

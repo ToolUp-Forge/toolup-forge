@@ -74,6 +74,9 @@ type SanitisingTeamStore(inner: ITeamStore) =
         member _.CreateTeam(teamId, name) =
             guard (validate "teamId" teamId) (fun () -> inner.CreateTeam(teamId, name))
 
+        member _.DeleteTeam(teamId) =
+            guard (validate "teamId" teamId) (fun () -> inner.DeleteTeam(teamId))
+
         member _.AddMember(teamId, userId, role) =
             guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
                 inner.AddMember(teamId, userId, role))

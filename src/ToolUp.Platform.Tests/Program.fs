@@ -243,6 +243,7 @@ let allTests =
         // backends).
         InMemoryRateLimitStoreTests.contractTests
         TeamCreationPolicyTests.tests
+        TeamCreationPolicyTests.integrityTests
         TeamInvitationTests.tests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests

@@ -75,6 +75,7 @@ let private emptyRequest: SubjectResolutionRequest = {
 let private teamStoreStub (activeTeam: string option) (role: TeamRole option) : ITeamStore =
     { new ITeamStore with
         member _.CreateTeam(_, _) = async { return Error "unused" }
+        member _.DeleteTeam _ = async { return Error "unused" }
         member _.GetTeam _ = async { return None }
         member _.ListTeams() = async { return [] }
         member _.AddMember(_, _, _) = async { return Error "unused" }
@@ -93,6 +94,7 @@ let private teamStoreStub (activeTeam: string option) (role: TeamRole option) : 
 let private throwingTeamStore: ITeamStore =
     { new ITeamStore with
         member _.CreateTeam(_, _) = async { return Error "unused" }
+        member _.DeleteTeam _ = async { return Error "unused" }
         member _.GetTeam _ = async { return None }
         member _.ListTeams() = async { return [] }
         member _.AddMember(_, _, _) = async { return Error "unused" }

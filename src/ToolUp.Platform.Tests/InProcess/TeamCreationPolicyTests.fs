@@ -567,3 +567,127 @@ let tests =
             Expect.isGreaterThan v2.Timeout.TotalMilliseconds 0.0 "non-zero timeout (bootstrap validator)"
         }
     ]
+
+// ─── Phase 225 — team-create integrity ───────────────────────────────
+//
+// Collision guard (CreateTeam fails closed on an existing id), atomic
+// rollback (a failed owner-membership write leaves no orphan team), and
+// server-side name validation.
+
+/// `ITeamStore` decorator whose `AddMember` always fails — drives the
+/// create-path rollback (`DeleteTeam`) when the owner write fails. Every
+/// other method delegates to a real store.
+type private AddMemberFailingStore(inner: ITeamStore) =
+    interface ITeamStore with
+        member _.AddMember(_, _, _) = async { return Error "forced add-member failure" }
+        member _.CreateTeam(teamId, name) = inner.CreateTeam(teamId, name)
+        member _.DeleteTeam(teamId) = inner.DeleteTeam(teamId)
+        member _.GetTeam(teamId) = inner.GetTeam(teamId)
+        member _.ListTeams() = inner.ListTeams()
+        member _.RemoveMember(teamId, userId) = inner.RemoveMember(teamId, userId)
+
+        member _.ChangeMemberRole(teamId, userId, role) =
+            inner.ChangeMemberRole(teamId, userId, role)
+
+        member _.GetTeamsForUser(userId) = inner.GetTeamsForUser(userId)
+        member _.GetTeamMembers(teamId) = inner.GetTeamMembers(teamId)
+        member _.GetMemberRole(teamId, userId) = inner.GetMemberRole(teamId, userId)
+        member _.GetActiveTeam(userId) = inner.GetActiveTeam(userId)
+        member _.SetActiveTeam(userId, teamId) = inner.SetActiveTeam(userId, teamId)
+
+[<Tests>]
+let integrityTests =
+    testList "Phase 225 — team-create integrity" [
+
+        testCaseAsync "CreateTeam fails closed on an existing team id (no overwrite)"
+        <| async {
+            let store = freshTeamStore ()
+
+            let! first = store.CreateTeam("dup-id", "Original")
+            Expect.isOk first "first create with this id succeeds"
+
+            let! second = store.CreateTeam("dup-id", "Impostor")
+
+            match second with
+            | Error msg -> Expect.stringContains msg "already exists" "duplicate id is rejected"
+            | Ok _ -> failtest "expected Error on a colliding team id"
+
+            // The original team's metadata must be untouched — a silent
+            // overwrite would co-tenant two teams onto one partition.
+            let! fetched = (store :> ITeamStore).GetTeam("dup-id")
+            Expect.equal (fetched |> Option.map _.Name) (Some "Original") "original team metadata is preserved"
+        }
+
+        testCaseAsync "DeleteTeam removes the team record"
+        <| async {
+            let store = freshTeamStore ()
+            let! _ = store.CreateTeam("del-id", "Temp")
+
+            let! deleted = store.DeleteTeam("del-id")
+            Expect.isOk deleted "delete succeeds"
+
+            let! fetched = store.GetTeam("del-id")
+            Expect.isNone fetched "team blob is gone after delete"
+        }
+
+        testCaseAsync "Owner-write failure rolls back the team (no orphan, no TeamCreated audit)"
+        <| async {
+            let auditLog = CapturingAuditLog()
+            let realStore = freshTeamStore () :> ITeamStore
+            let failing = AddMemberFailingStore(realStore) :> ITeamStore
+            let adminStore = freshAdminStore (auditLog :> IAuditLog)
+            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let ctx = ctxFor "alice" failing adminStore (auditLog :> IAuditLog)
+            let api = PlatformApiHandler.teamApi (teamConfig PlatformAdminOnly) ctx
+
+            let! result = api.CreateTeam "Doomed"
+
+            match result with
+            | Error msg -> Expect.stringContains msg "forced add-member failure" "the owner-write error surfaces"
+            | Ok _ -> failtest "expected Error when the owner-membership write fails"
+
+            // The just-created team blob must have been rolled back.
+            let! teams = realStore.ListTeams()
+            Expect.isEmpty teams "no orphan team left behind after rollback"
+
+            // TeamCreated is only emitted once the team is whole — it must
+            // never fire for a rolled-back create.
+            let kinds =
+                auditLog.Recorded |> List.map (fun (_, ev) -> AuditEvent.eventTypeName ev)
+
+            Expect.isFalse (List.contains "TeamCreated" kinds) "no TeamCreated audit on a rolled-back create"
+        }
+
+        testCaseAsync "CreateTeam rejects a blank name (server-side)"
+        <| async {
+            let auditLog = CapturingAuditLog()
+            let teamStore = freshTeamStore () :> ITeamStore
+            let adminStore = freshAdminStore (auditLog :> IAuditLog)
+            let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
+            let api = PlatformApiHandler.teamApi (teamConfig AnyAuthenticatedUser) ctx
+
+            let! result = api.CreateTeam "   "
+
+            match result with
+            | Error msg -> Expect.equal msg "Team name can't be empty" "blank name is rejected"
+            | Ok _ -> failtest "expected Error for a blank team name"
+
+            let! teams = teamStore.ListTeams()
+            Expect.isEmpty teams "no team created for a blank name"
+        }
+
+        testCaseAsync "CreateTeam rejects an over-length name (server-side)"
+        <| async {
+            let auditLog = CapturingAuditLog()
+            let teamStore = freshTeamStore () :> ITeamStore
+            let adminStore = freshAdminStore (auditLog :> IAuditLog)
+            let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
+            let api = PlatformApiHandler.teamApi (teamConfig AnyAuthenticatedUser) ctx
+
+            let! result = api.CreateTeam(String('x', 101))
+
+            match result with
+            | Error msg -> Expect.stringContains msg "too long" "over-length name is rejected"
+            | Ok _ -> failtest "expected Error for an over-length team name"
+        }
+    ]

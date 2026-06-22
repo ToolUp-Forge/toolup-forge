@@ -138,6 +138,9 @@ let private stubTeamStore (teams: TeamInfo list) : ITeamStore =
         member _.CreateTeam(_, _) =
             failwith "stubTeamStore.CreateTeam not used"
 
+        member _.DeleteTeam _ =
+            failwith "stubTeamStore.DeleteTeam not used"
+
         member _.AddMember(_, _, _) =
             failwith "stubTeamStore.AddMember not used"
 

@@ -99,6 +99,10 @@ type ITeamStore =
     /// Create a new team with the given id and display name. Persists to
     /// the backing store. Returns the constructed `TeamInfo` on success.
     abstract CreateTeam: teamId: string * name: string -> Async<Result<TeamInfo, string>>
+    /// Delete a team's metadata blob. Used to roll back a half-created
+    /// team when the owner-membership write fails, so a partial create
+    /// can't leave an orphan (owner-less, inaccessible) team behind.
+    abstract DeleteTeam: teamId: string -> Async<Result<unit, string>>
     /// Look up a team by id. `None` when the team does not exist.
     abstract GetTeam: teamId: string -> Async<TeamInfo option>
     /// List every team in the store. Used by admin surfaces and diagnostics.
@@ -194,16 +198,35 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
 
     // ── Team CRUD ────────────────────────────────────────────
 
-    member _.CreateTeam(teamId: string, name: string) = async {
-        let team: TeamInfo = {
-            TeamId = teamId
-            Name = name
-            CreatedAt = DateTime.UtcNow
-        }
+    member this.CreateTeam(teamId: string, name: string) = async {
+        // Fail-closed on an already-existing team blob. The team id is the
+        // data partition key (`team-{teamId}`), so silently overwriting an
+        // existing team would co-tenant two distinct teams onto one
+        // container — a tenant-isolation breach (GP 4). Combined with the
+        // full-width GUID id minted by the caller, a collision is
+        // astronomically unlikely; this probe also rejects a double-submit
+        // that reuses an id. (Residual TOCTOU is acceptable given the id
+        // width; a true conditional-create awaits an IBlobStorage
+        // compare-and-set capability.)
+        let! existing = this.GetTeam(teamId)
 
-        let! result = storage.Upload(platformContainer, teamBlobName teamId, Json.serializeTeam team)
-        return result |> Result.map (fun _ -> team)
+        match existing with
+        | Some _ -> return Error $"Team '{teamId}' already exists"
+        | None ->
+            let team: TeamInfo = {
+                TeamId = teamId
+                Name = name
+                CreatedAt = DateTime.UtcNow
+            }
+
+            let! result = storage.Upload(platformContainer, teamBlobName teamId, Json.serializeTeam team)
+            return result |> Result.map (fun _ -> team)
     }
+
+    /// Delete the team's metadata blob. Used by the create path to roll
+    /// back a team whose owner-membership write failed; deletes only the
+    /// team record (a half-created team has no members to clean up).
+    member _.DeleteTeam(teamId: string) = async { return! storage.Delete(platformContainer, teamBlobName teamId) }
 
     member _.GetTeam(teamId: string) = async {
         let! result = storage.Download(platformContainer, teamBlobName teamId)
@@ -441,6 +464,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
 
     interface ITeamStore with
         member this.CreateTeam(teamId, name) = this.CreateTeam(teamId, name)
+        member this.DeleteTeam(teamId) = this.DeleteTeam(teamId)
         member this.GetTeam(teamId) = this.GetTeam(teamId)
         member this.ListTeams() = this.ListTeams()
         member this.AddMember(teamId, userId, role) = this.AddMember(teamId, userId, role)

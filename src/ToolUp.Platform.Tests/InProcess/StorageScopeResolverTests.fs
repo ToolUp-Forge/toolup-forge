@@ -298,6 +298,7 @@ let private teamTests =
             let throwingStore =
                 { new ITeamStore with
                     member _.CreateTeam(_, _) = async { return Error "unused" }
+                    member _.DeleteTeam _ = async { return Error "unused" }
                     member _.GetTeam _ = async { return None }
                     member _.ListTeams() = async { return [] }
                     member _.AddMember(_, _, _) = async { return Error "unused" }
