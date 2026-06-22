@@ -99,12 +99,68 @@ let private constantTimeEquals (a: string) (b: string) : bool =
 
         result = 0
 
+// Phase 232 — why the gate failed. The handler maps EVERY failure to a
+// uniform 403 (so the response never discloses whether a token is
+// configured or which part failed — pre-232 the missing-header case
+// returned 401, leaking that a token IS set), but distinguishes the
+// reason internally for logging + throttling.
+type private GateFailure =
+    /// No Platform-Admin role AND no `TOOLUP_ADMIN_TOKEN` configured.
+    | NoCredentials
+    /// A token is configured but the `X-Admin-Token` header is absent.
+    | TokenMissing
+    /// A token is configured and the header is present but wrong.
+    | TokenInvalid
+
+/// Phase 232 — per-source-IP throttle on token attempts. In-process
+/// (single-instance) brute-force friction layered over the high-entropy
+/// token; not the primary control. `recordTokenFailure` counts a failed
+/// token attempt within a sliding window; `isThrottled` blocks once the
+/// cap is reached. Successful auth does not reset the window (the cap is
+/// on failures only).
+[<Literal>]
+let private maxTokenFailures = 5
+
+[<Literal>]
+let private windowMinutes = 5.0
+
+let private tokenFailures =
+    System.Collections.Concurrent.ConcurrentDictionary<string, int * DateTime>()
+
+let private clientIp (ctx: HttpContext) : string =
+    match ctx.Connection.RemoteIpAddress with
+    | null -> "unknown"
+    | ip -> string ip
+
+let private isThrottled (ip: string) : bool =
+    match tokenFailures.TryGetValue ip with
+    | true, (count, windowStart) when (DateTime.UtcNow - windowStart).TotalMinutes < windowMinutes ->
+        count >= maxTokenFailures
+    | _ -> false
+
+let private recordTokenFailure (ip: string) : unit =
+    tokenFailures.AddOrUpdate(
+        ip,
+        (fun _ -> (1, DateTime.UtcNow)),
+        (fun _ (count, windowStart) ->
+            if (DateTime.UtcNow - windowStart).TotalMinutes < windowMinutes then
+                (count + 1, windowStart)
+            else
+                (1, DateTime.UtcNow))
+    )
+    |> ignore
+
+let private resolveLogger (ctx: HttpContext) : ILogger option =
+    match ctx.RequestServices.GetService(typeof<ILogger>) with
+    | :? ILogger as l -> Some l
+    | _ -> None
+
 /// Decide the gate outcome and resolve the audit actor. Returns
 /// `Ok actor` when the caller is admitted (either via the Phase 4b
 /// `PlatformRole` path or via the Phase 22 token fallback); `Error
-/// (statusCode, message)` otherwise. Pure on `HttpContext` reads —
-/// the actual handler writes the response after invoking this.
-let private resolveGate (ctx: HttpContext) : Result<string, int * string> =
+/// failure` otherwise (the handler maps every failure to a uniform 403).
+/// Pure on `HttpContext` reads — the handler writes the response.
+let private resolveGate (ctx: HttpContext) : Result<string, GateFailure> =
     // Phase 4b — preferred path. Caller holds Platform Admin role.
     let accessContext =
         match ctx.RequestServices.GetService(typeof<AccessContext>) with
@@ -120,69 +176,108 @@ let private resolveGate (ctx: HttpContext) : Result<string, int * string> =
         Ok accessContext.Value.UserId
     else
         // Token fallback — preserves the Phase 22 emergency / scripted
-        // access path. Same error contract as the original handler.
+        // access path.
         match readEnvToken () with
-        | None ->
-            // Endpoint registered, but neither role nor env-token
-            // available. Fail closed with a message that names both
-            // recovery paths.
-            Error(401, "encryption-admin: caller lacks PlatformAdmin role and TOOLUP_ADMIN_TOKEN is not configured")
+        | None -> Error NoCredentials
         | Some envToken ->
             match readHeader ctx AdminTokenHeader with
-            | None ->
-                Error(
-                    401,
-                    sprintf "encryption-admin: missing %s header (or assign PlatformAdmin role)" AdminTokenHeader
-                )
+            | None -> Error TokenMissing
             | Some headerToken ->
                 if constantTimeEquals envToken headerToken then
                     Ok(resolveActor ctx)
                 else
-                    Error(403, "encryption-admin: invalid admin token")
+                    Error TokenInvalid
 
 let private destroyScopeKey (scopeId: string) : HttpHandler =
     fun next (ctx: HttpContext) -> task {
-        // Step 1: gate. Role-OR-token (Phase 4b commit 4g).
-        match resolveGate ctx with
-        | Error(statusCode, message) ->
-            ctx.Response.StatusCode <- statusCode
-            return! ctx.WriteTextAsync message
-        | Ok actor ->
-            // Step 2: resolve the active key resolver and dispatch on
-            // its concrete type.
-            let resolverObj = ctx.RequestServices.GetService(typeof<IBlobEncryptionKeyResolver>)
+        let ip = clientIp ctx
+        let logger = resolveLogger ctx
 
-            match resolverObj with
-            | null ->
-                ctx.Response.StatusCode <- 400
+        // Phase 232 — per-IP throttle on token brute-force.
+        if isThrottled ip then
+            logger
+            |> Option.iter (fun l ->
+                l.Warn(sprintf "[encryption-admin] throttled: too many failed token attempts from %s" ip))
+
+            ctx.Response.StatusCode <- 429
+            return! ctx.WriteTextAsync "encryption-admin: too many attempts; try again later"
+        else
+            // Step 1: gate. Role-OR-token (Phase 4b commit 4g).
+            match resolveGate ctx with
+            | Error failure ->
+                // Phase 232 — log + throttle the attempt and respond with a
+                // UNIFORM 403 that discloses neither whether a token is
+                // configured nor which part failed.
+                match failure with
+                | TokenMissing
+                | TokenInvalid ->
+                    recordTokenFailure ip
+
+                    logger
+                    |> Option.iter (fun l ->
+                        l.Warn(
+                            sprintf
+                                "[encryption-admin] failed token attempt (%A) from %s on destroy-scope-key/%s"
+                                failure
+                                ip
+                                scopeId
+                        ))
+                | NoCredentials ->
+                    logger
+                    |> Option.iter (fun l ->
+                        l.Warn(
+                            sprintf
+                                "[encryption-admin] rejected (no PlatformAdmin role and no admin token configured) from %s"
+                                ip
+                        ))
+
+                ctx.Response.StatusCode <- 403
 
                 return!
                     ctx.WriteTextAsync
-                        "encryption-admin: no IBlobEncryptionKeyResolver registered (encryption not enabled)"
-            | :? PerScopeKeyResolver.PerScopeKeyResolver as perScope ->
-                let! result = perScope.DestroyKey(scopeId, actor) |> Async.StartImmediateAsTask
+                        "encryption-admin: forbidden (assign the PlatformAdmin role or present a valid admin token)"
+            | Ok actor ->
+                // Phase 232 — log token-gated access (the canonical
+                // EncryptionKeyDestroyed audit fires on the destroy itself).
+                if actor.StartsWith "token:" then
+                    logger
+                    |> Option.iter (fun l ->
+                        l.Info(sprintf "[encryption-admin] token-gated access granted from %s, actor=%s" ip actor))
 
-                match result with
-                | Ok() ->
-                    ctx.Response.StatusCode <- 200
+                // Step 2: resolve the active key resolver and dispatch on
+                // its concrete type.
+                let resolverObj = ctx.RequestServices.GetService(typeof<IBlobEncryptionKeyResolver>)
+
+                match resolverObj with
+                | null ->
+                    ctx.Response.StatusCode <- 400
 
                     return!
-                        ctx.WriteJsonAsync {|
-                            ScopeId = scopeId
-                            Status = "destroyed"
-                        |}
-                | Error err ->
-                    ctx.Response.StatusCode <- 500
-                    return! ctx.WriteTextAsync(KeyResolutionError.message err)
-            | _ ->
-                // Other resolver types (SingleKeyResolver, KMS, custom
-                // impls) don't support per-scope destruction. Surface a
-                // clear error.
-                ctx.Response.StatusCode <- 400
+                        ctx.WriteTextAsync
+                            "encryption-admin: no IBlobEncryptionKeyResolver registered (encryption not enabled)"
+                | :? PerScopeKeyResolver.PerScopeKeyResolver as perScope ->
+                    let! result = perScope.DestroyKey(scopeId, actor) |> Async.StartImmediateAsTask
 
-                return!
-                    ctx.WriteTextAsync
-                        "encryption-admin: active resolver does not support per-scope destruction (only PerScopeKeyResolver does)"
+                    match result with
+                    | Ok() ->
+                        ctx.Response.StatusCode <- 200
+
+                        return!
+                            ctx.WriteJsonAsync {|
+                                ScopeId = scopeId
+                                Status = "destroyed"
+                            |}
+                    | Error err ->
+                        ctx.Response.StatusCode <- 500
+                        return! ctx.WriteTextAsync(KeyResolutionError.message err)
+                | _ ->
+                    // Other resolver types (SingleKeyResolver, KMS, custom
+                    // impls) don't support per-scope destruction.
+                    ctx.Response.StatusCode <- 400
+
+                    return!
+                        ctx.WriteTextAsync
+                            "encryption-admin: active resolver does not support per-scope destruction (only PerScopeKeyResolver does)"
     }
 
 /// Routes table. Mounted by `compose` only when an
