@@ -39,12 +39,25 @@ type. Ordinary data records are never flagged.
 CLI:
 
 ```pwsh
-dotnet tool install --global fsharp-analyzers
+# Pin the host to 0.36.0 — it MUST match the analyzer's FSharp.Analyzers.SDK
+# pin (0.36.0). The analyzer DLL is built against FSharp.Core 10.0.101
+# (assembly 10.0.0.0), which is exactly what the 0.36.0 host bundles, so it
+# loads cleanly. A newer host (e.g. 0.37.2) rejects a 0.36.0-built analyzer on
+# the SDK-version check ("built using SDK version 0.36.0.0. Expect 0.37.2.0").
+dotnet tool install --global fsharp-analyzers --version 0.36.0
 fsharp-analyzers --project MyProject.fsproj --analyzers-path <restored-pkg>/analyzers/dotnet/fs
 ```
 
 Or point your editor's F# analyzer path at the restored package's `analyzers/dotnet/fs` directory.
 Enable `TUR0002` with `TOOLUP_REMOTING_ANALYZER_AUDIT=1`.
+
+> **Host ABI note.** An analyzer DLL must be FSharp.Core-ABI-compatible with the host that loads it,
+> not with the workspace baseline. The forge analyzer project therefore `VersionOverride`s FSharp.Core
+> to `10.0.101` (assembly `10.0.0.0`) — the version `fsharp-analyzers` **0.36.0** bundles — while the
+> rest of the workspace stays on the `10.1.300` baseline. Building the analyzer against `10.1.300`
+> instead produces `Could not load FSharp.Core 10.1.0.0. The expected assembly version of FSharp.Core
+> is 10.0.0.0.` and the host registers **0 analyzers while exiting 0** (a silent false-green). If the
+> SDK pin ever moves, re-pin FSharp.Core to whatever the matching host bundles, in lockstep.
 
 ## Verification
 
@@ -60,6 +73,14 @@ Enable `TUR0002` with `TOOLUP_REMOTING_ANALYZER_AUDIT=1`.
    - `ToolUp.Remoting.Analyzers.Tests` — the AST-extraction gate: offline FCS parse of fixture
      sources driven through `Analyzer.analyzeParseTree` (TUR0001 raised / classified clean / data
      records ignored / TUR0002 opt-in gating).
+5. CLI host load (the path consumers actually run). With `fsharp-analyzers` **0.36.0** installed,
+   pointing `--analyzers-path` at the restored `toolup.remoting.analyzers/<ver>/analyzers/dotnet/fs`
+   logs `Registered 1 analyzers from 1 dlls` and emits `TUR0001` on an unclassified fixture API
+   record — confirmed against SDK 0.7.0. Anything other than `Registered 1 analyzers` (e.g.
+   `Could not load FSharp.Core …`, `Registered 0 analyzers`, `Assembly will be skipped`) is a
+   host/analyzer ABI mismatch, not a clean run — see the Host ABI note above. The consumer-side
+   guarded runner `dev-scripts/run-analyzers.ps1` treats those strings as hard failures so the
+   false-green can't reach CI.
 
 ## Rollback
 

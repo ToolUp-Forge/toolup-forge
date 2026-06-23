@@ -19,12 +19,9 @@
     <!-- No lib/ build output ⇒ no symbols to package; the inherited
          IncludeSymbols=true would otherwise fail NU5017 on the empty .snupkg. -->
     <IncludeSymbols>false</IncludeSymbols>
-    <!-- NU1608: FSharp.Analyzers.SDK pins FSharp.Core 10.0.101 but the
-         workspace CPM resolves the newer 10.1.300 — a benign patch-level
-         forward-resolve WITHIN the F# 10 line, not a baseline downgrade.
-         NU5128: no lib/ + no package dependencies is intentional for an
+    <!-- NU5128: no lib/ + no package dependencies is intentional for an
          analyzer-only package. -->
-    <NoWarn>$(NoWarn);NU1608;NU5128</NoWarn>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <!-- Pure recognition core (FSharp.Core only). SOURCE-LINKED into
@@ -35,7 +32,22 @@
     <Compile Include="Analyzer.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="FSharp.Core" />
+    <!-- An analyzer DLL must be ABI-compatible with the `fsharp-analyzers`
+         CLI / Ionide HOST that loads it, NOT with the workspace baseline.
+         The host bundles its own FSharp.Core and refuses to forward-load a
+         higher assembly version: the only host matching FSharp.Analyzers.SDK
+         0.36.0 (fsharp-analyzers 0.36.0) ships FSharp.Core 10.0.0.0, so an
+         analyzer built against the workspace's 10.1.300 (assembly 10.1.0.0)
+         fails to load with "Could not load FSharp.Core 10.1.0.0. The expected
+         assembly version of FSharp.Core is 10.0.0.0." (and the host exits 0
+         having registered 0 analyzers — a silent false-green).
+         VersionOverride pins THIS project (only) to 10.0.101 — the exact
+         FSharp.Core the SDK 0.36.0 depends on and the host bundles (assembly
+         10.0.0.0). The workspace 10.1.300 baseline is unchanged everywhere
+         else; Recognition.fs is still source-linked into ToolUp.Platform.Tests
+         and compiled there against 10.1.300. Re-pin in lockstep if the SDK /
+         host version ever moves. -->
+    <PackageReference Include="FSharp.Core" VersionOverride="10.0.101" />
     <!-- Host-provided at analysis time; PrivateAssets keeps it out of the
          package dependency set. -->
     <PackageReference Include="FSharp.Analyzers.SDK" PrivateAssets="all" />
