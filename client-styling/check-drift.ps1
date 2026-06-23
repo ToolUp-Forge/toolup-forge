@@ -8,8 +8,8 @@
     consumer client embeds the marked region verbatim and pins exactly
     those versions. This script:
 
-      1. Discovers consumer clients: any *index.css under an adjacent
-         consumer-app tree that contains the canonical start marker
+      1. Discovers consumer clients: any *index.css anywhere under the
+         workspace root that contains the canonical start marker
          (skips node_modules / bin / obj / output / .vite / .git).
       2. Diffs each consumer's marked region against the canonical region
          (CRLF-normalised, ordinal compare).
@@ -29,7 +29,7 @@ $styleDir = Join-Path $PSScriptRoot 'tailwind'
 $canonCss = Join-Path $styleDir 'index.css'
 $depsFile = Join-Path $styleDir 'deps.json'
 $canonMjs = Join-Path $styleDir 'vite-fable-tailwind.mjs'
-$wsRoot   = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$wsRoot   = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 
 $START = '>>> @toolup/tailwind canonical'
 $END   = '>>> end @toolup/tailwind canonical <<<'
