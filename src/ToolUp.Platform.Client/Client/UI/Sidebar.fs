@@ -540,11 +540,17 @@ let Sidebar
                     | true, Some title -> renderSectionHeader onGroupToggled section title
                     | _ -> ()
 
-                    // Modules — hidden entirely when section is
-                    // collapsed, even in narrow mode (consistency
-                    // across widths avoids surprise when the user
-                    // expands the sidebar and sees a different set).
-                    if not section.IsCollapsed then
+                    // Modules render when the section is expanded OR the
+                    // sidebar is in narrow (icons-only) mode. Group collapse
+                    // is an expanded-mode affordance — the collapse chevron
+                    // lives in the section header, which only shows when
+                    // expanded. In narrow mode there is no header to toggle,
+                    // so honouring `IsCollapsed` there would leave a fresh
+                    // user (whose groups all default collapsed — `prefs`
+                    // starts with an empty `ExpandedGroups`) staring at a
+                    // completely empty sidebar with no way to reach any
+                    // module. Narrow mode therefore always shows the icons.
+                    if (not isExpanded) || (not section.IsCollapsed) then
                         React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
             ]
         ]
