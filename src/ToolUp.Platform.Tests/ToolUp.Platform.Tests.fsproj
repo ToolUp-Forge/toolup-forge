@@ -162,6 +162,8 @@
         <Compile Include="InProcess\PresenceChannelTests.fs" />
         <!-- Phase 242 — A/B experiment substrate. -->
         <Compile Include="InProcess\ExperimentSubstrateTests.fs" />
+        <!-- Phase 243 — BPMN-shaped workflow engine. -->
+        <Compile Include="InProcess\WorkflowEngineTests.fs" />
         <!-- Phase 176 — transient-fault decorator substrate: identity
              pass-through (contract packs re-run through the wrapper) +
              retry / backoff / breaker / per-call-timeout behaviour. -->
@@ -718,6 +720,9 @@
         <!-- Phase 242 — A/B experiment substrate. -->
         <ProjectReference Include="..\ToolUp.Experiments.Core\ToolUp.Experiments.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Experiments.Server\ToolUp.Experiments.Server.fsproj" />
+        <!-- Phase 243 — BPMN-shaped workflow engine. -->
+        <ProjectReference Include="..\ToolUp.Workflow.Core\ToolUp.Workflow.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Workflow.Server\ToolUp.Workflow.Server.fsproj" />
     </ItemGroup>
     <!-- Phase 14k WS5 Item 2 — mixed-dim fixture JSON co-located with the
          existing eval-baseline.json in the RAG.Evaluation project. Linked

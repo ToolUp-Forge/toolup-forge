@@ -39,6 +39,8 @@ let allTests =
         PresenceChannelTests.tests
         // Phase 242 — A/B experiment substrate.
         ExperimentSubstrateTests.tests
+        // Phase 243 — BPMN-shaped workflow engine.
+        WorkflowEngineTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests

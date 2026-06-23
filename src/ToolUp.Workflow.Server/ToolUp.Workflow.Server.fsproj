@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>ToolUp.Workflow.Server</PackageId>
+    <Description>The advancing engine for ToolUp.Workflow.Core graphs: parallel join, exclusive-choice branching, external-trigger resume, and saga compensation ordering. Pure F#, stateless between calls (the instance is passed in).</Description>
+    <PackageTags>fsharp;workflow;bpmn;saga</PackageTags>
+    <Version>0.1.0-alpha</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="WorkflowEngine.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <ProjectReference Include="..\ToolUp.Workflow.Core\ToolUp.Workflow.Core.fsproj" />
+  </ItemGroup>
+</Project>
