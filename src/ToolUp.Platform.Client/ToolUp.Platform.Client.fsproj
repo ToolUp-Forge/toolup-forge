@@ -112,6 +112,8 @@
              SDK.Client.installRequestSeam. -->
         <Compile Include="Client\RemotingInterceptors.fs" />
         <Compile Include="Client\UserSession.fs" />
+        <!-- Phase 241 — presence client hook (heartbeat + roster). -->
+        <Compile Include="Client\PresenceClient.fs" />
         <Compile Include="Client\NotificationClient.fs" />
         <Compile Include="Client\ModuleQueryClient.fs" />
         <Compile Include="Client\ModuleStateObserver.fs" />
