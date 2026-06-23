@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Phase 244 — source-link the SAME shared contract the web client +
+         server compile, proving it is framework-neutral (a plain .NET
+         console app consumes it with no Fable / browser / ASP.NET Core). -->
+    <Compile Include="..\HelloWorld\HelloWorld.Module\SharedTypes.fs">
+      <Link>SharedTypes.fs</Link>
+    </Compile>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <!-- Core only — for the `ToolUp.Platform` auth attributes the shared
+         contract annotates with. No server / client tier needed. -->
+    <ProjectReference Include="..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+</Project>
