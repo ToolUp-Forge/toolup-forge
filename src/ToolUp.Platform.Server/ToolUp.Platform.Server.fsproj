@@ -428,6 +428,8 @@
         <Compile Include="Server\WebhookUrlValidator.fs" />
         <Compile Include="Server\WebhookApiHandler.fs" />
         <Compile Include="Server\IFeatureFlagStore.fs" />
+        <!-- Phase 239 — read-only external flag-resolution seam. -->
+        <Compile Include="Server\IFlagSource.fs" />
         <Compile Include="Server\FeatureFlagStore.fs" />
         <Compile Include="Server\FeatureFlagStoreErasureHandler.fs" />
         <Compile Include="Server\BlobStorageErasureHandler.fs" />

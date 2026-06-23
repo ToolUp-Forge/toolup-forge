@@ -101,11 +101,46 @@ let private isPremium (userClaims: IUserClaims) (ctx: AccessContext) : Async<boo
         | NotPremium -> return false
 }
 
-/// Assemble an evaluator. `declared` is the union of platform-level
-/// and module-declared flags the deployment knows about — the admin
-/// UI renders against the same set and the evaluator uses it to look
-/// up defaults and to validate that a read key was actually declared.
-let create (store: IFeatureFlagStore) (declared: FeatureFlag seq) (logger: ILogger option) : FlagEvaluator =
+/// First-Some walk over an external `IFlagSource` list for a declared
+/// flag. Phase 239 — consulted after the store scope walk, before the
+/// declared default.
+let private firstSomeSource
+    (flagSources: IFlagSource list)
+    (flag: FeatureFlag)
+    (ctx: AccessContext)
+    : Async<FlagValue option> =
+    let rec loop =
+        function
+        | [] -> async.Return None
+        | (s: IFlagSource) :: rest -> async {
+            let! v = s.Resolve(flag, ctx)
+
+            match v with
+            | Some _ -> return v
+            | None -> return! loop rest
+          }
+
+    loop flagSources
+
+/// Assemble an evaluator with an optional external flag-source layer
+/// (Phase 239). `declared` is the union of platform-level and
+/// module-declared flags the deployment knows about — the admin UI
+/// renders against the same set and the evaluator uses it to look up
+/// defaults and to validate that a read key was actually declared.
+///
+/// `flagSources` are read-only external resolvers (e.g. an OpenFeature
+/// companion) consulted only when no in-process scope set the key, and
+/// before the declared default. `flagSources = []` is byte-for-byte
+/// equivalent to the pre-239 evaluator — `create` is exactly this with
+/// no sources. `TryEvaluate` is the explicit-*override* reader and stays
+/// store-only; the external layer applies in the value resolvers
+/// (`IsEnabled` / `ResolveVariant` / `Resolve`).
+let createWithFlagSources
+    (store: IFeatureFlagStore)
+    (declared: FeatureFlag seq)
+    (flagSources: IFlagSource list)
+    (logger: ILogger option)
+    : FlagEvaluator =
     let declaredMap = declared |> Seq.map (fun f -> f.Key, f) |> Map.ofSeq
 
     let warn (msg: string) =
@@ -131,10 +166,20 @@ let create (store: IFeatureFlagStore) (declared: FeatureFlag seq) (logger: ILogg
             | _ -> return false
         | None ->
             match Map.tryFind key declaredMap with
-            | Some { DefaultValue = FlagValue.Bool b } -> return b
-            | Some { DefaultValue = FlagValue.Variant _ } ->
-                warn $"FeatureFlag '{key}': declared as Variant but read as Bool — returning false"
-                return false
+            | Some flag ->
+                // No in-process override — consult external sources
+                // (type-aware) before the declared default.
+                let! fromSource = firstSomeSource flagSources flag ctx
+
+                match fromSource, flag.DefaultValue with
+                | Some(FlagValue.Bool b), _ -> return b
+                | Some(FlagValue.Variant _), FlagValue.Bool dflt ->
+                    warn $"FeatureFlag '{key}': source returned Variant for a Bool flag — declared default"
+                    return dflt
+                | _, FlagValue.Bool b -> return b
+                | _, FlagValue.Variant _ ->
+                    warn $"FeatureFlag '{key}': declared as Variant but read as Bool — returning false"
+                    return false
             | None ->
                 warn $"FeatureFlag '{key}': read but not declared by any module — returning false"
                 return false
@@ -155,12 +200,18 @@ let create (store: IFeatureFlagStore) (declared: FeatureFlag seq) (logger: ILogg
             | _ -> return ""
         | None ->
             match Map.tryFind key declaredMap with
-            | Some {
-                       DefaultValue = FlagValue.Variant(_, dflt)
-                   } -> return dflt
-            | Some { DefaultValue = FlagValue.Bool _ } ->
-                warn $"FeatureFlag '{key}': declared as Bool but read as Variant — returning empty string"
-                return ""
+            | Some flag ->
+                let! fromSource = firstSomeSource flagSources flag ctx
+
+                match fromSource, flag.DefaultValue with
+                | Some(FlagValue.Variant(_, chosen)), _ -> return chosen
+                | Some(FlagValue.Bool _), FlagValue.Variant(_, dflt) ->
+                    warn $"FeatureFlag '{key}': source returned Bool for a Variant flag — declared default"
+                    return dflt
+                | _, FlagValue.Variant(_, dflt) -> return dflt
+                | _, FlagValue.Bool _ ->
+                    warn $"FeatureFlag '{key}': declared as Bool but read as Variant — returning empty string"
+                    return ""
             | None ->
                 warn $"FeatureFlag '{key}': read but not declared by any module — returning empty string"
                 return ""
@@ -182,6 +233,12 @@ let create (store: IFeatureFlagStore) (declared: FeatureFlag seq) (logger: ILogg
         ResolveVariant = resolveVariant
         Resolve = resolve
     }
+
+/// Assemble an evaluator with no external flag sources — the pre-239
+/// behaviour, unchanged. `create store declared logger` ≡
+/// `createWithFlagSources store declared [] logger`.
+let create (store: IFeatureFlagStore) (declared: FeatureFlag seq) (logger: ILogger option) : FlagEvaluator =
+    createWithFlagSources store declared [] logger
 
 /// Phase 62 — evaluator with extra source-gating registered against
 /// flag keys. Identical to `create` for any key not in `sources` —

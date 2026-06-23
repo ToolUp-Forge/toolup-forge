@@ -41,6 +41,8 @@ let allTests =
         ExperimentSubstrateTests.tests
         // Phase 243 — BPMN-shaped workflow engine.
         WorkflowEngineTests.tests
+        // Phase 239 — IFlagSource seam + OpenFeature companion.
+        FlagSourceTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests
