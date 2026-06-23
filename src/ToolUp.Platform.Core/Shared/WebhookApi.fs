@@ -57,9 +57,9 @@ type WebhookTestResult = {
 ///
 /// Returned `WebhookSubscription` records are masked via
 /// `WebhookSubscription.maskSecret` before crossing the wire — the
-/// secret value is only ever returned by `CreateSubscription` so the
-/// admin can copy it into the receiving service. Once created, the
-/// secret is write-only (rotation requires delete + recreate).
+/// secret value is only ever returned by `CreateSubscription` and
+/// `RotateSecret` so the admin can copy it into the receiving service.
+/// Every other path returns the secret write-only (masked).
 type IWebhookApi = {
     /// Create a new subscription in the caller's scope. Returns the
     /// full `WebhookSubscription` *with the unmasked secret* — the
@@ -80,6 +80,21 @@ type IWebhookApi = {
     /// scope reads are impossible — the handler scopes the lookup).
     [<RequiresClaim "scope">]
     GetSubscription: Guid -> Async<Result<WebhookSubscription, string>>
+
+    /// Rotate the subscription's signing secret server-side, keeping
+    /// the subscription id stable (no delete + recreate downtime).
+    /// Generates a new high-entropy secret, returns the full
+    /// `WebhookSubscription` *with the unmasked new secret* — the only
+    /// response besides `CreateSubscription` that does so. The prior
+    /// secret is retained as a grace-window `PreviousSecret` so the
+    /// dispatcher dual-signs deliveries during the window
+    /// (`WebhookSubscription.secretRotationGracePeriod`); a receiver
+    /// still holding the old secret keeps verifying until it updates,
+    /// then the previous secret expires. The rotation is audited (actor
+    /// + subscription id; never the secret value).
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:WebhookSubscriptionSecretRotated">]
+    RotateSecret: Guid -> Async<Result<WebhookSubscription, string>>
 
     /// Flip subscription status. The admin UI uses this to pause
     /// (during incident response) or to re-enable an auto-disabled

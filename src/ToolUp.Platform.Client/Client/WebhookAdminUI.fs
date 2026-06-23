@@ -40,10 +40,11 @@ type Model = {
     /// Most recent test-fire result per subscription. Surfaced under the
     /// Test fire button.
     TestResults: Map<Guid, WebhookTestResult>
-    /// Newly created subscription's *unmasked* secret. Shown once in
-    /// the detail pane behind a "I have copied this" dismiss button —
-    /// after dismiss, the list refetches with the masked representation
-    /// and the secret is gone forever (rotation = delete + recreate).
+    /// Freshly-revealed *unmasked* secret from a create or rotate.
+    /// Shown once in the detail pane behind a "I have copied this"
+    /// dismiss button — after dismiss, the list refetches with the
+    /// masked representation and the secret is gone forever (the only
+    /// way to obtain a new value is another rotation).
     NewlyCreatedSecret: (Guid * string) option
 }
 
@@ -57,6 +58,8 @@ type Msg =
     | StatusUpdateCompleted of Guid * Result<unit, string>
     | DeleteSubmit of Guid
     | DeleteCompleted of Guid * Result<unit, string>
+    | RotateSecretSubmit of Guid
+    | RotateSecretCompleted of Guid * Result<WebhookSubscription, string>
     | TestFireSubmit of Guid
     | TestFireCompleted of Guid * Result<WebhookTestResult, string>
     | LoadDeliveries of Guid
@@ -227,6 +230,37 @@ let update (msg: Msg) (model: Model) =
         loadSubscriptionsCmd ()
 
     | DeleteCompleted(id, Error err) ->
+        {
+            model with
+                Status = model.Status |> Map.add id (Failed err)
+        },
+        Cmd.none
+
+    | RotateSecretSubmit id ->
+        let cmd =
+            Cmd.OfRemoting.call webhookApi.RotateSecret id (fun result -> RotateSecretCompleted(id, result)) (fun e ->
+                RotateSecretCompleted(id, Error e.Message))
+
+        {
+            model with
+                Status = model.Status |> Map.add id Working
+        },
+        cmd
+
+    | RotateSecretCompleted(id, Ok sub) ->
+        // Reveal the new secret once — same one-time-reveal banner the
+        // create flow uses. The list refetch returns the masked
+        // representation, so the unmasked value lives only in this
+        // session until `DismissCreatedSecret` clears it.
+        {
+            model with
+                NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret)
+                SelectedId = Some sub.SubscriptionId
+                Status = model.Status |> Map.add id (Done "Secret rotated — copy the new value below.")
+        },
+        loadSubscriptionsCmd ()
+
+    | RotateSecretCompleted(id, Error err) ->
         {
             model with
                 Status = model.Status |> Map.add id (Failed err)
@@ -440,7 +474,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                     Html.p [
                         prop.className "text-xs text-gray-500 mt-1"
                         prop.text
-                            "Copy this value into the receiving service. Rotation requires delete + recreate (no in-place rotation API)."
+                            "Copy this value into the receiving service. To replace it later, use Rotate secret on the subscription — no delete + recreate needed."
                     ]
                 ]
             ]
@@ -551,6 +585,16 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
                     prop.text "Test fire"
                     prop.onClick (fun _ -> dispatch (TestFireSubmit sub.SubscriptionId))
+                ]
+                Html.button [
+                    prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
+                    prop.text "Rotate secret"
+                    prop.onClick (fun _ ->
+                        if
+                            Browser.Dom.window.confirm
+                                "Rotate this subscription's signing secret? The new secret is shown once. The previous secret keeps verifying during a short grace window so deliveries are not missed."
+                        then
+                            dispatch (RotateSecretSubmit sub.SubscriptionId))
                 ]
                 Html.button [
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-red-300 text-red-700 hover:bg-red-50"

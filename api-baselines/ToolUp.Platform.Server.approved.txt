@@ -1443,6 +1443,7 @@ ToolUp.Platform.IWebhookRegistry.DeleteSubscription(System.String, System.Guid) 
 ToolUp.Platform.IWebhookRegistry.GetSubscription(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookSubscription]]
 ToolUp.Platform.IWebhookRegistry.ListAllActive() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookSubscription]]
 ToolUp.Platform.IWebhookRegistry.ListSubscriptions(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookSubscription]]
+ToolUp.Platform.IWebhookRegistry.RotateSecret(System.String, System.Guid, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]
 ToolUp.Platform.IWebhookRegistry.SetConsecutiveFailures(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IWebhookRegistry.UpdateStatus(System.String, System.Guid, ToolUp.Platform.WebhookStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.InMemoryAuditSink (class)
@@ -2767,6 +2768,10 @@ ToolUp.Platform.WebhookDispatcher+IWebhookDispatcher.TestFire(System.String, Sys
 ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService (class)
 ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService..ctor(ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.IEventStore, System.Net.Http.HttpClient, ToolUp.Platform.WebhookRetryPolicy, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter])
 ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.WebhookDispatcher+WebhookSignature (class)
+ToolUp.Platform.WebhookDispatcher+WebhookSignature.header(System.DateTime, ToolUp.Platform.WebhookSubscription, System.Byte[]) : System.String
+ToolUp.Platform.WebhookDispatcher+WebhookSignature.headerFor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Byte[]) : System.String
+ToolUp.Platform.WebhookDispatcher+WebhookSignature.verifies(System.String, System.Byte[], System.String) : System.Boolean
 ToolUp.Platform.WebhookRegistry (class)
 ToolUp.Platform.WebhookRegistry.createDeliveryLog(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IWebhookDeliveryLog
 ToolUp.Platform.WebhookRegistry.createRegistry(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IWebhookRegistry

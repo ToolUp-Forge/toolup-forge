@@ -21,6 +21,15 @@ let private auditJsonOptions = FableConverters.create ()
 let private toAuditJson (value: 'T) =
     JsonSerializer.Serialize(value, auditJsonOptions)
 
+/// Generate a fresh high-entropy signing secret for server-side
+/// rotation. 32 cryptographically-random bytes, base64-encoded (~44
+/// chars) — the same shape the admin UI's client-side "Generate" button
+/// produces at create time (32 random bytes → base64), so receivers see
+/// a consistent secret format across create and rotate.
+let private generateSecret () : string =
+    System.Security.Cryptography.RandomNumberGenerator.GetBytes 32
+    |> Convert.ToBase64String
+
 /// Build the `IWebhookApi` Fable.Remoting handler. Resolves
 /// `IWebhookRegistry`, `IWebhookDeliveryLog`, `IWebhookDispatcher`,
 /// `IEventStore`, and `AccessContext` lazily from DI per request —
@@ -173,6 +182,8 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
                             CreatedBy = accessContext.UserId
                             CreatedAt = DateTime.UtcNow
                             ConsecutiveFailures = 0
+                            PreviousSecret = None
+                            PreviousSecretExpiresAt = None
                         }
 
                         match! registry.CreateSubscription sub with
@@ -235,6 +246,45 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
                             logger.Info $"Webhook: status sub={id:N} {prior.Status} → {status}"
 
                             return Ok()
+                })
+
+        RotateSecret =
+            fun id ->
+                withWriteScope (fun scope -> async {
+                    match! registry.GetSubscription(scope.ScopeId, id) with
+                    | None -> return Error "Subscription not found."
+                    | Some _ ->
+                        // Generate the new secret server-side (the admin
+                        // never supplies it on rotation — they copy out
+                        // the returned value once). Grace window keeps the
+                        // prior secret valid so deliveries are not missed
+                        // while the receiver updates.
+                        let newSecret = generateSecret ()
+
+                        let graceExpiresAt = DateTime.UtcNow + WebhookSubscription.secretRotationGracePeriod
+
+                        match! registry.RotateSecret(scope.ScopeId, id, newSecret, graceExpiresAt) with
+                        | Error e ->
+                            logger.Warn $"Webhook: secret rotation failed sub={id:N}: {e}"
+
+                            return Error e
+                        | Ok rotated ->
+                            // Audit the rotation — actor + subscription id
+                            // + grace-window expiry, but NEVER the secret
+                            // value (old or new).
+                            do!
+                                emitAudit scope.ScopeId WebhookEventTypes.SubscriptionSecretRotated {|
+                                    SubscriptionId = id
+                                    RotatedBy = accessContext.UserId
+                                    PreviousSecretExpiresAt = graceExpiresAt
+                                |}
+
+                            logger.Info
+                                $"Webhook: secret rotated sub={id:N} scope={scope.ScopeId} grace-until={graceExpiresAt:o}"
+
+                            // Return the unmasked record so the admin UI
+                            // can reveal the new secret once for copy-out.
+                            return Ok rotated
                 })
 
         DeleteSubscription =

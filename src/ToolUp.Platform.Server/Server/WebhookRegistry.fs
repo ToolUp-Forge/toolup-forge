@@ -136,6 +136,17 @@ type BlobWebhookRegistry(storage: IBlobStorage) =
                 return! save updated
         }
 
+        member _.RotateSecret(scopeId, subscriptionId, newSecret, graceExpiresAt) = async {
+            match! load scopeId subscriptionId with
+            | None -> return Error "Subscription not found."
+            | Some sub ->
+                let rotated = WebhookSubscription.withRotatedSecret newSecret graceExpiresAt sub
+
+                match! save rotated with
+                | Ok() -> return Ok rotated
+                | Error e -> return Error e
+        }
+
         member _.SetConsecutiveFailures(scopeId, subscriptionId, count) = async {
             match! load scopeId subscriptionId with
             | None -> return Error "Subscription not found."

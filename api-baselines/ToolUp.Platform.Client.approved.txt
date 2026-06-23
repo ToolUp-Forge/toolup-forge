@@ -3501,6 +3501,8 @@ WebhookAdminUI+Msg.IsDismissError : System.Boolean { get }
 WebhookAdminUI+Msg.IsDismissPerSubStatus : System.Boolean { get }
 WebhookAdminUI+Msg.IsLoadDeliveries : System.Boolean { get }
 WebhookAdminUI+Msg.IsLoadSubscriptions : System.Boolean { get }
+WebhookAdminUI+Msg.IsRotateSecretCompleted : System.Boolean { get }
+WebhookAdminUI+Msg.IsRotateSecretSubmit : System.Boolean { get }
 WebhookAdminUI+Msg.IsSelectSubscription : System.Boolean { get }
 WebhookAdminUI+Msg.IsStatusUpdateCompleted : System.Boolean { get }
 WebhookAdminUI+Msg.IsSubscriptionsLoaded : System.Boolean { get }
@@ -3525,6 +3527,11 @@ WebhookAdminUI+Msg+DismissPerSubStatus (class)
 WebhookAdminUI+Msg+DismissPerSubStatus.Item : System.Guid { get }
 WebhookAdminUI+Msg+LoadDeliveries (class)
 WebhookAdminUI+Msg+LoadDeliveries.Item : System.Guid { get }
+WebhookAdminUI+Msg+RotateSecretCompleted (class)
+WebhookAdminUI+Msg+RotateSecretCompleted.Item1 : System.Guid { get }
+WebhookAdminUI+Msg+RotateSecretCompleted.Item2 : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String] { get }
+WebhookAdminUI+Msg+RotateSecretSubmit (class)
+WebhookAdminUI+Msg+RotateSecretSubmit.Item : System.Guid { get }
 WebhookAdminUI+Msg+SelectSubscription (class)
 WebhookAdminUI+Msg+SelectSubscription.Item : System.Guid { get }
 WebhookAdminUI+Msg+StatusUpdateCompleted (class)
@@ -3543,6 +3550,8 @@ WebhookAdminUI+Msg+Tags.DismissError : System.Int32 (literal)
 WebhookAdminUI+Msg+Tags.DismissPerSubStatus : System.Int32 (literal)
 WebhookAdminUI+Msg+Tags.LoadDeliveries : System.Int32 (literal)
 WebhookAdminUI+Msg+Tags.LoadSubscriptions : System.Int32 (literal)
+WebhookAdminUI+Msg+Tags.RotateSecretCompleted : System.Int32 (literal)
+WebhookAdminUI+Msg+Tags.RotateSecretSubmit : System.Int32 (literal)
 WebhookAdminUI+Msg+Tags.SelectSubscription : System.Int32 (literal)
 WebhookAdminUI+Msg+Tags.StatusUpdateCompleted : System.Int32 (literal)
 WebhookAdminUI+Msg+Tags.SubscriptionsLoaded : System.Int32 (literal)

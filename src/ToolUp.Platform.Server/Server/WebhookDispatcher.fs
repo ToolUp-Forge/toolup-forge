@@ -58,15 +58,51 @@ let private deliveryTimeout = TimeSpan.FromSeconds 30.0
 
 // ─── HMAC ────────────────────────────────────────────────────────
 
-/// HMAC-SHA256 over the raw POST body using the subscription's secret
-/// as the key. Hex-encoded — receivers compute the same and compare
-/// constant-time. The header value uses Stripe's convention of
-/// `sha256=<hex>` so admins recognise the format.
-let private signBody (secret: string) (body: byte[]) : string =
-    use hmac = new HMACSHA256(Encoding.UTF8.GetBytes secret)
-    let hash = hmac.ComputeHash(body)
-    let hex = Convert.ToHexString(hash).ToLowerInvariant()
-    $"sha256={hex}"
+/// Webhook signature emission + verification. The header value uses
+/// Stripe's convention of `sha256=<hex>` so admins recognise the
+/// format. During a Phase 235 secret-rotation grace window the
+/// subscription has both a current and a previous secret, so the header
+/// carries *both* signatures comma-separated (`sha256=<new>,sha256=<old>`);
+/// a receiver still configured with the old secret finds a matching
+/// signature and keeps verifying, while one updated to the new secret
+/// matches the other. Once the grace window closes only the current
+/// signature is emitted and the old secret stops verifying.
+module WebhookSignature =
+    /// HMAC-SHA256 over the raw POST body using `secret` as the key,
+    /// rendered as `sha256=<lowerhex>`.
+    let private signOne (secret: string) (body: byte[]) : string =
+        use hmac = new HMACSHA256(Encoding.UTF8.GetBytes secret)
+        let hash = hmac.ComputeHash body
+        let hex = Convert.ToHexString(hash).ToLowerInvariant()
+        $"sha256={hex}"
+
+    /// Build the `X-ToolUp-Signature` header value: one `sha256=<hex>`
+    /// per accepted secret, comma-joined. Order is current-first.
+    let headerFor (secrets: string list) (body: byte[]) : string =
+        secrets |> List.map (fun s -> signOne s body) |> String.concat ","
+
+    /// The header a delivery at instant `now` should carry — signed with
+    /// every secret the subscription's grace window currently accepts.
+    let header (now: DateTime) (sub: WebhookSubscription) (body: byte[]) : string =
+        headerFor (WebhookSubscription.acceptedSecrets now sub) body
+
+    /// Receiver-side verification: does `headerValue` (the comma-joined
+    /// signature header the dispatcher emitted) contain a signature
+    /// matching HMAC-SHA256(`secret`, `body`)? Constant-time compare per
+    /// candidate. External receivers reimplement this in their own
+    /// stack; the SDK exposes it for same-deployment receivers + tests.
+    let verifies (secret: string) (body: byte[]) (headerValue: string) : bool =
+        let expected = signOne secret body |> Encoding.UTF8.GetBytes
+
+        headerValue.Split ','
+        |> Array.exists (fun candidate ->
+            let candidateBytes = candidate.Trim() |> Encoding.UTF8.GetBytes
+
+            candidateBytes.Length = expected.Length
+            && CryptographicOperations.FixedTimeEquals(
+                ReadOnlySpan<byte>(candidateBytes),
+                ReadOnlySpan<byte>(expected)
+            ))
 
 // ─── Rate-limit key ──────────────────────────────────────────────
 
@@ -143,7 +179,10 @@ let private deliverOnce
     : Async<WebhookDeliveryOutcome> =
     async {
         let body = serialiseOutbound payload
-        let signature = signBody sub.Secret body
+        // Phase 235 — sign with every secret the grace window accepts
+        // (current + unexpired previous). Evaluated per attempt so a
+        // grace window that closes mid-retry-loop drops the old secret.
+        let signature = WebhookSignature.header DateTime.UtcNow sub body
         let stopwatch = System.Diagnostics.Stopwatch.StartNew()
 
         try

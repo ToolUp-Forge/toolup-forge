@@ -35,6 +35,8 @@ let allTests =
         TransientFaultPolicyTests.tests
         // Phase 238 — generic inbound-webhook receiver substrate.
         WebhookSubstrateTests.tests
+        // Phase 235 — outbound webhook signing-secret rotation.
+        WebhookSecretRotationTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
         // Phase 242 — A/B experiment substrate.

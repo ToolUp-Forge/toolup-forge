@@ -70,6 +70,12 @@ let private webhookSubFixture: WebhookSubscription = {
     CreatedBy = "user-001"
     CreatedAt = DateTime(2026, 1, 15, 12, 30, 0, DateTimeKind.Utc)
     ConsecutiveFailures = 0
+    // Phase 235 — never-rotated subscription: both grace-window fields
+    // are None. A pre-235 persisted blob lacks these keys entirely;
+    // FableConverters reads the missing option fields back as None, so
+    // the additive growth is backward-compatible on the read path.
+    PreviousSecret = None
+    PreviousSecretExpiresAt = None
 }
 
 let private shareTokenClaimFixture: ShareTokenClaim = {
@@ -155,7 +161,7 @@ let private frozenFlagValueVariant =
 let private frozenWebhookStatus = "\"Active\""
 
 let private frozenWebhookSub =
-    """{"SubscriptionId":"11111111-2222-3333-4444-555555555555","ScopeId":"team-acme","TargetUrl":"https://example.com/hook","Secret":"shhh","EventTypes":["FlagChanged","JobCompleted"],"Status":"Active","CreatedBy":"user-001","CreatedAt":"2026-01-15T12:30:00.0000000Z","ConsecutiveFailures":0}"""
+    """{"SubscriptionId":"11111111-2222-3333-4444-555555555555","ScopeId":"team-acme","TargetUrl":"https://example.com/hook","Secret":"shhh","EventTypes":["FlagChanged","JobCompleted"],"Status":"Active","CreatedBy":"user-001","CreatedAt":"2026-01-15T12:30:00.0000000Z","ConsecutiveFailures":0,"PreviousSecret":null,"PreviousSecretExpiresAt":null}"""
 
 let private frozenShareTokenClaim =
     """{"TokenId":"tok_abc123","ScopeId":"team-acme","ResourceKind":"forms.publishable","ResourceId":"form-001","AttributedHandle":"respondent@example.com","IssuedBy":"user-001","IssuedAt":"2026-01-15T12:30:00+00:00","ExpiresAt":"2026-02-14T12:30:00+00:00","UseLimit":1,"UsedCount":0,"Revoked":false,"RateLimit":null}"""

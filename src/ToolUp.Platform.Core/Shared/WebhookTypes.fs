@@ -27,10 +27,19 @@ type WebhookStatus =
 /// `_platform/webhooks/{scopeId}/subscriptions/{subscriptionId:N}.json`.
 ///
 /// `Secret` is sensitive — server-side responses for `List` /
-/// `GetSubscription` mask it (`***`). Only `CreateSubscription` returns
-/// it so the admin can copy it into the receiving service. Rotation is
-/// not currently supported — admins delete and recreate to rotate
-/// (deferred follow-up).
+/// `GetSubscription` mask it (`***`). Only `CreateSubscription` and
+/// `RotateSecret` return it (unmasked, once) so the admin can copy it
+/// into the receiving service.
+///
+/// `PreviousSecret` / `PreviousSecretExpiresAt` carry the *grace-window*
+/// state for a rotated secret (Phase 235). On rotation the new secret
+/// becomes `Secret`; the prior `Secret` is retained as `PreviousSecret`
+/// until `PreviousSecretExpiresAt`, so the dispatcher dual-signs
+/// deliveries (new + previous) during the window — a receiver still
+/// configured with the old secret keeps verifying while it updates,
+/// then the previous secret expires. `None` on a never-rotated
+/// subscription and after the window closes. `PreviousSecret` is masked
+/// alongside `Secret` on the wire.
 ///
 /// `EventTypes = []` means "all event types" — empty as wildcard
 /// matches the event-store filter convention (no entries =
@@ -51,21 +60,63 @@ type WebhookSubscription = {
     CreatedBy: string
     CreatedAt: DateTime
     ConsecutiveFailures: int
+    PreviousSecret: string option
+    PreviousSecretExpiresAt: DateTime option
 }
 
 module WebhookSubscription =
-    /// Mask the secret for outbound list/get responses. The masked
-    /// representation preserves the secret's length so admin UIs can
-    /// hint at "secret is set" without leaking the value.
+    /// Default grace window for a rotated signing secret. While the
+    /// window is open the dispatcher dual-signs every delivery (new +
+    /// previous secret) so a receiver still holding the old secret keeps
+    /// verifying without missed deliveries; at window end the previous
+    /// secret is dropped and only the new signature is emitted. 24h
+    /// gives receivers a full business day to update their stored secret.
+    /// This is the only rotation knob — rotation is otherwise immediate.
+    let secretRotationGracePeriod = TimeSpan.FromHours 24.0
+
+    /// Mask sensitive secrets for outbound list/get responses. The
+    /// masked representation preserves each secret's length so admin
+    /// UIs can hint at "secret is set" without leaking the value. Both
+    /// the current `Secret` and any grace-window `PreviousSecret` are
+    /// masked.
     let maskSecret (sub: WebhookSubscription) : WebhookSubscription = {
         sub with
             Secret = String.replicate (max 1 sub.Secret.Length) "*"
+            PreviousSecret =
+                sub.PreviousSecret
+                |> Option.map (fun s -> String.replicate (max 1 s.Length) "*")
     }
 
     /// Does this subscription's filter accept this event type?
     /// `EventTypes = []` matches everything.
     let acceptsEventType (eventType: string) (sub: WebhookSubscription) : bool =
         List.isEmpty sub.EventTypes || List.contains eventType sub.EventTypes
+
+    /// Apply a secret rotation as a pure transition: `newSecret` becomes
+    /// the current `Secret`, the prior `Secret` becomes `PreviousSecret`
+    /// (valid until `graceExpiresAt`), and the subscription id is
+    /// unchanged. Used by the registry's rotate path.
+    let withRotatedSecret
+        (newSecret: string)
+        (graceExpiresAt: DateTime)
+        (sub: WebhookSubscription)
+        : WebhookSubscription =
+        {
+            sub with
+                Secret = newSecret
+                PreviousSecret = Some sub.Secret
+                PreviousSecretExpiresAt = Some graceExpiresAt
+        }
+
+    /// The secrets a delivery should be signed with / a receiver may
+    /// verify against at instant `now`: always the current `Secret`,
+    /// plus the grace-window `PreviousSecret` while it is unexpired.
+    /// Once `PreviousSecretExpiresAt` has passed, only the current
+    /// secret is returned — the previous secret stops verifying.
+    let acceptedSecrets (now: DateTime) (sub: WebhookSubscription) : string list =
+        match sub.PreviousSecret, sub.PreviousSecretExpiresAt with
+        | Some prev, Some expiresAt when now < expiresAt -> [ sub.Secret; prev ]
+        | _ -> [ sub.Secret ]
 
 // ─── Retry policy ────────────────────────────────────────────────
 
@@ -176,6 +227,9 @@ module WebhookEventTypes =
 
     [<Literal>]
     let SubscriptionDeleted = "WebhookSubscriptionDeleted"
+
+    [<Literal>]
+    let SubscriptionSecretRotated = "WebhookSubscriptionSecretRotated"
 
     [<Literal>]
     let DeliveryFailed = "WebhookDeliveryFailed"

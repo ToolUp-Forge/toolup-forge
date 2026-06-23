@@ -158,6 +158,8 @@
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
         <!-- Phase 238 — generic inbound-webhook receiver substrate. -->
         <Compile Include="InProcess\WebhookSubstrateTests.fs" />
+        <!-- Phase 235 — outbound webhook signing-secret rotation. -->
+        <Compile Include="InProcess\WebhookSecretRotationTests.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="InProcess\PresenceChannelTests.fs" />
         <!-- Phase 242 — A/B experiment substrate. -->

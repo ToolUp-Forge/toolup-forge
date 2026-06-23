@@ -46,6 +46,19 @@ type IWebhookRegistry =
     /// state on re-activation).
     abstract UpdateStatus: scopeId: string * subscriptionId: Guid * status: WebhookStatus -> Async<Result<unit, string>>
 
+    /// Rotate the signing secret. The new secret becomes the current
+    /// `Secret`; the prior current secret is retained as
+    /// `PreviousSecret` until `graceExpiresAt`, so the dispatcher
+    /// dual-signs deliveries during the grace window and receivers can
+    /// verify against either. The subscription id is unchanged. Returns
+    /// the updated record (unmasked) so the caller can reveal the new
+    /// secret once. `Error` when the subscription does not exist in the
+    /// scope. Read-modify-write, same last-write-wins window as
+    /// `UpdateStatus` / `SetConsecutiveFailures`.
+    abstract RotateSecret:
+        scopeId: string * subscriptionId: Guid * newSecret: string * graceExpiresAt: DateTime ->
+            Async<Result<WebhookSubscription, string>>
+
     /// Persist the current `ConsecutiveFailures` value. Called by the
     /// dispatcher after every dead-letter (increment) and after every
     /// successful delivery (reset to 0). Separate from `UpdateStatus`

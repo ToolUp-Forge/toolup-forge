@@ -2929,12 +2929,13 @@ ToolUp.Platform.IUserDirectoryApi (class)
 ToolUp.Platform.IUserDirectoryApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]])
 ToolUp.Platform.IUserDirectoryApi.SearchUsers : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]] { get }
 ToolUp.Platform.IWebhookApi (class)
-ToolUp.Platform.IWebhookApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateWebhookRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookSubscription], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, ToolUp.Platform.WebhookStatus], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookTestResult, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookDelivery], System.String]]])
+ToolUp.Platform.IWebhookApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateWebhookRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookSubscription], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, ToolUp.Platform.WebhookStatus], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookTestResult, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookDelivery], System.String]]])
 ToolUp.Platform.IWebhookApi.CreateSubscription : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateWebhookRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]] { get }
 ToolUp.Platform.IWebhookApi.DeleteSubscription : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IWebhookApi.GetSubscription : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]] { get }
 ToolUp.Platform.IWebhookApi.ListDeliveries : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookDelivery], System.String]]] { get }
 ToolUp.Platform.IWebhookApi.ListSubscriptions : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookSubscription], System.String]]] { get }
+ToolUp.Platform.IWebhookApi.RotateSecret : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]] { get }
 ToolUp.Platform.IWebhookApi.TestFire : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookTestResult, System.String]]] { get }
 ToolUp.Platform.IWebhookApi.UpdateStatus : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, ToolUp.Platform.WebhookStatus], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IdempotencyKey (class)
@@ -6032,6 +6033,7 @@ ToolUp.Platform.WebhookEventTypes.DeliveryFailed : System.String (literal)
 ToolUp.Platform.WebhookEventTypes.SubscriptionAutoDisabled : System.String (literal)
 ToolUp.Platform.WebhookEventTypes.SubscriptionCreated : System.String (literal)
 ToolUp.Platform.WebhookEventTypes.SubscriptionDeleted : System.String (literal)
+ToolUp.Platform.WebhookEventTypes.SubscriptionSecretRotated : System.String (literal)
 ToolUp.Platform.WebhookEventTypes.SubscriptionStatusChanged : System.String (literal)
 ToolUp.Platform.WebhookMode (class)
 ToolUp.Platform.WebhookMode.EnabledWebhooks : ToolUp.Platform.WebhookMode { get }
@@ -6064,19 +6066,24 @@ ToolUp.Platform.WebhookStatus+Tags.Active : System.Int32 (literal)
 ToolUp.Platform.WebhookStatus+Tags.Disabled : System.Int32 (literal)
 ToolUp.Platform.WebhookStatus+Tags.Paused : System.Int32 (literal)
 ToolUp.Platform.WebhookSubscription (class)
-ToolUp.Platform.WebhookSubscription..ctor(System.Guid, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.WebhookStatus, System.String, System.DateTime, System.Int32)
+ToolUp.Platform.WebhookSubscription..ctor(System.Guid, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.WebhookStatus, System.String, System.DateTime, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
 ToolUp.Platform.WebhookSubscription.ConsecutiveFailures : System.Int32 { get }
 ToolUp.Platform.WebhookSubscription.CreatedAt : System.DateTime { get }
 ToolUp.Platform.WebhookSubscription.CreatedBy : System.String { get }
 ToolUp.Platform.WebhookSubscription.EventTypes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.WebhookSubscription.PreviousSecret : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WebhookSubscription.PreviousSecretExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.WebhookSubscription.ScopeId : System.String { get }
 ToolUp.Platform.WebhookSubscription.Secret : System.String { get }
 ToolUp.Platform.WebhookSubscription.Status : ToolUp.Platform.WebhookStatus { get }
 ToolUp.Platform.WebhookSubscription.SubscriptionId : System.Guid { get }
 ToolUp.Platform.WebhookSubscription.TargetUrl : System.String { get }
 ToolUp.Platform.WebhookSubscriptionModule (class)
+ToolUp.Platform.WebhookSubscriptionModule.acceptedSecrets(System.DateTime, ToolUp.Platform.WebhookSubscription) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.WebhookSubscriptionModule.acceptsEventType(System.String, ToolUp.Platform.WebhookSubscription) : System.Boolean
 ToolUp.Platform.WebhookSubscriptionModule.maskSecret(ToolUp.Platform.WebhookSubscription) : ToolUp.Platform.WebhookSubscription
+ToolUp.Platform.WebhookSubscriptionModule.secretRotationGracePeriod : System.TimeSpan { get }
+ToolUp.Platform.WebhookSubscriptionModule.withRotatedSecret(System.String, System.DateTime, ToolUp.Platform.WebhookSubscription) : ToolUp.Platform.WebhookSubscription
 ToolUp.Platform.WebhookTestResult (class)
 ToolUp.Platform.WebhookTestResult..ctor(System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.WebhookTestResult.DeliveryId : System.Guid { get }
