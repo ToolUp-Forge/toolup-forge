@@ -65,6 +65,14 @@ type private InlineScheduler() =
         member _.GetRecentRuns(_, _, _) = async { return [] }
         member _.NotifyEventWritten(_, _, _) = async { return () }
 
+/// Phase 229 — the DSR endpoints gate on Platform-Admin authority
+/// (`AccessContext.canModifyPlatformConfig`). These tests drive the admin
+/// happy path, so the actor's context carries `PlatformRole.PlatformAdmin`.
+let private adminContext: AccessContext = {
+    AccessContext.unrestricted (AuthenticatedUser "admin") with
+        PlatformRole = Some PlatformRole.PlatformAdmin
+}
+
 let private mkAsyncApi (exporters: IDataExporter list) =
     let store = BlobBackedBackgroundExportStore.create (InMemoryBlobStorage())
     let scheduler = InlineScheduler()
@@ -85,6 +93,7 @@ let private mkAsyncApi (exporters: IDataExporter list) =
             ErasurePolicy.Tombstone
             "team-1"
             "admin"
+            adminContext
             audit.Callback
             (Some deps)
 
@@ -182,6 +191,7 @@ let tests =
                     ErasurePolicy.Tombstone
                     "team-1"
                     "admin"
+                    adminContext
                     (CapturingAudit()).Callback
                     None
 
