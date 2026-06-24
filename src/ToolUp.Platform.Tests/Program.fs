@@ -74,6 +74,7 @@ let allTests =
         ValidationTests.tests
         IdempotencyTests.tests
         IdempotencyReplayAuditTests.tests
+        AuditBodyDisposalTests.tests
         StreamingTests.tests
         StreamingDispatchTests.tests
         MarkdownRendererTests.tests

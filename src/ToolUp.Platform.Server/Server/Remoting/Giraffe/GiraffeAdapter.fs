@@ -885,6 +885,31 @@ module GiraffeUtil =
                                 let! _ = readCachedBodyBytes ()
                                 ()
 
+                            // Same eager-materialise for the Phase 69h audit
+                            // payload path. The audit emission below (after the
+                            // proxy dispatches) reads the cached body to build
+                            // the input-record snapshot — but the proxy's
+                            // StreamReader disposes ctx.Request.Body after
+                            // dispatch. A method that is audited AND carries an
+                            // input type BUT is not validated (validation is the
+                            // only other stage that seeds the cache up-front,
+                            // line ~774) would otherwise hit the disposed
+                            // FileBufferingReadStream on that first read and throw
+                            // ObjectDisposedException. Because the response has
+                            // already started by then, the error handler can't
+                            // run and the connection is reset — surfacing as a
+                            // 502 at the gateway even though the handler
+                            // succeeded (e.g. TeamApi.CreateTeamWithOwner). Pull
+                            // the materialisation forward, exactly as the
+                            // idempotency guard above does.
+                            if
+                                options.AuditEmitter.IsSome
+                                && auditInputTypes.ContainsKey methodNameForAuth
+                                && not (validationInputTypes.ContainsKey methodNameForAuth)
+                            then
+                                let! _ = readCachedBodyBytes ()
+                                ()
+
                             // 0.1.15 — async lookup via `let!` instead of
                             // sync-over-async GetAwaiter().GetResult().
                             let! cachedResponse = task {
