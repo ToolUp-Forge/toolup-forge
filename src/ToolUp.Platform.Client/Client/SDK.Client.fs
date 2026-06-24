@@ -147,6 +147,15 @@ module Client =
         /// the role is user-bound, not team-bound. Anonymous-mode
         /// deployments leave this `None` (the fetch returns false).
         PlatformRole: PlatformRole option
+        /// Phase 245 — platform-admin "show all modules" escape. With
+        /// per-team module exposure, a platform admin's sidebar is
+        /// exposure-filtered like a member's (admins respect a team's
+        /// hidden set). `true` bypasses that filter so the admin sees
+        /// every managed module — including ones the active team hides —
+        /// for triage/configuration; `false` (default) is the member
+        /// view. Admin-only and team-scoped: inert for non-admins and
+        /// when nothing is hidden. Not persisted; resets each shell start.
+        ShowAllModules: bool
         /// Boot-time prefetch gate for the persisted config fetch
         /// (`/api/_platform/config/all`). Flips `Pending -> Loaded ()`
         /// inside `ConfigsLoaded`. Combined with `FlagsPrefetch` via
@@ -189,6 +198,9 @@ module Client =
         | ModuleMsg of obj
         | ModuleSelected of string
         | AccessibleModulesLoaded of AccessibleModulesResponse option
+        /// Phase 245 — platform admin toggled the "show all modules"
+        /// sidebar escape (reveal/hide the active team's hidden modules).
+        | ToggleShowAllModules
         /// Fires once per shell start when the initial config fetch
         /// completes. Carries every module's values (keyed by module Id)
         /// plus the reserved `_platform` entry. Modules are re-initialised
@@ -1036,6 +1048,7 @@ module Client =
             ActivePageRoute = defaultPageRoute moduleImpl
             ModuleStates = moduleStates
             AccessibleModules = None
+            ShowAllModules = false
             ModuleConfigs = Map.empty
             PlatformConfig = Map.empty
             ResolvedFlags = Map.empty
@@ -1252,6 +1265,13 @@ module Client =
                         // Phase 121 — the data arrived after all; clear
                         // any prior failure entry for this source.
                         Degradations = BootDegradation.remove "permissions" model.Degradations
+                },
+                Cmd.none
+
+            | ToggleShowAllModules ->
+                {
+                    model with
+                        ShowAllModules = not model.ShowAllModules
                 },
                 Cmd.none
 
@@ -2121,7 +2141,15 @@ module Client =
             // and debug-only modules — bypass the filter and stay
             // visible regardless of RBAC config.
             let rbacFiltered =
+                let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
+
                 match model.AccessibleModules with
+                | Some _ when isAdmin && model.ShowAllModules ->
+                    // Phase 245 — admin "show all modules" escape: reveal
+                    // every managed module, including ones the active team
+                    // hides, for triage/configuration. The per-route guard
+                    // still governs what the admin can actually do.
+                    modules
                 | Some response ->
                     let managed = Set.ofList response.Managed
                     let accessible = Set.ofList response.Accessible
@@ -2307,11 +2335,57 @@ module Client =
                     ]
                 )
 
+        // Phase 245 — admin "show all modules" escape. With per-team
+        // module exposure, a platform admin's sidebar is exposure-
+        // filtered like a member's; this toggle reveals the modules the
+        // active team hides (and switches back to the member view). Only
+        // rendered for a platform admin whose loaded accessible set is a
+        // strict subset of Managed — i.e. the active team actually hides
+        // something — so it stays invisible for non-admins and when there
+        // is nothing to reveal.
+        let adminShowAllToggle =
+            let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
+
+            let hasHidden =
+                match model.AccessibleModules with
+                | Some r -> List.length r.Accessible < List.length r.Managed
+                | None -> false
+
+            if isAdmin && hasHidden then
+                Some(
+                    Html.button [
+                        prop.className [
+                            "text-sm px-3 py-1.5 rounded transition-colors border"
+                            if model.ShowAllModules then
+                                "border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100"
+                            else
+                                "border-border text-text hover:bg-gray-100"
+                        ]
+                        prop.title (
+                            if model.ShowAllModules then
+                                "Showing every module, including ones hidden from this team. Click to return to the member view."
+                            else
+                                "You're seeing this team's member view — modules hidden from the team are omitted. Click to reveal them."
+                        )
+                        prop.text (
+                            if model.ShowAllModules then
+                                "Viewing all modules"
+                            else
+                                "Show hidden modules"
+                        )
+                        prop.onClick (fun _ -> dispatch ToggleShowAllModules)
+                    ]
+                )
+            else
+                None
+
         // Compose the switcher with any caller-supplied HeaderAction
-        // and the SDK's default sign-out button. All three render
-        // side-by-side in the page header.
+        // and the SDK's default sign-out button. All render side-by-side
+        // in the page header.
         let combinedHeaderAction =
-            let pieces = [ teamSwitcher; chrome.HeaderAction; signOutAction ] |> List.choose id
+            let pieces =
+                [ teamSwitcher; adminShowAllToggle; chrome.HeaderAction; signOutAction ]
+                |> List.choose id
 
             match pieces with
             | [] -> None

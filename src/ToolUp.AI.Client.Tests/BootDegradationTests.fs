@@ -54,6 +54,7 @@ let private baseModel: Client.Model = {
     ActivePageRoute = None
     ModuleStates = Map.empty
     AccessibleModules = None
+    ShowAllModules = false
     ModuleConfigs = Map.empty
     PlatformConfig = Map.empty
     ResolvedFlags = Map.empty

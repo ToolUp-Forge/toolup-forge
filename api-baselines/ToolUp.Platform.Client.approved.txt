@@ -2215,7 +2215,7 @@ ToolUp.Platform.Client+InitPhase+Tags.Prefetching : System.Int32 (literal)
 ToolUp.Platform.Client+InitPhase+Tags.Ready : System.Int32 (literal)
 ToolUp.Platform.Client+InitPhase+Tags.Reprefetching : System.Int32 (literal)
 ToolUp.Platform.Client+Model (class)
-ToolUp.Platform.Client+Model..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], SidebarPreferences+UserSidebarPreferences, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32], ToolUp.Platform.Client+InitPhase, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootDegradation+BootDegradation], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry])
+ToolUp.Platform.Client+Model..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], SidebarPreferences+UserSidebarPreferences, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], System.Boolean, ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32], ToolUp.Platform.Client+InitPhase, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootDegradation+BootDegradation], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry])
 ToolUp.Platform.Client+Model.AccessibleModules : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse] { get }
 ToolUp.Platform.Client+Model.ActiveModuleId : System.String { get }
 ToolUp.Platform.Client+Model.ActivePageRoute : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -2234,6 +2234,7 @@ ToolUp.Platform.Client+Model.PrefetchedProcessedData : Microsoft.FSharp.Collecti
 ToolUp.Platform.Client+Model.ProcessedData : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
 ToolUp.Platform.Client+Model.ResetCounters : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32] { get }
 ToolUp.Platform.Client+Model.ResolvedFlags : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue] { get }
+ToolUp.Platform.Client+Model.ShowAllModules : System.Boolean { get }
 ToolUp.Platform.Client+Model.SidebarPrefs : SidebarPreferences+UserSidebarPreferences { get }
 ToolUp.Platform.Client+Msg (class)
 ToolUp.Platform.Client+Msg.AuthTokenAcquired : ToolUp.Platform.Client+Msg { get }
@@ -2262,7 +2263,9 @@ ToolUp.Platform.Client+Msg.IsSidebarGroupToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModulePinToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModuleReordered : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsTeamSwitched : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsToggleShowAllModules : System.Boolean { get }
 ToolUp.Platform.Client+Msg.Tag : System.Int32 { get }
+ToolUp.Platform.Client+Msg.ToggleShowAllModules : ToolUp.Platform.Client+Msg { get }
 ToolUp.Platform.Client+Msg+AccessibleModulesLoaded (class)
 ToolUp.Platform.Client+Msg+AccessibleModulesLoaded.Item : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse] { get }
 ToolUp.Platform.Client+Msg+ActiveTeamLoaded (class)
@@ -2335,6 +2338,7 @@ ToolUp.Platform.Client+Msg+Tags.SidebarGroupToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarModulePinToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarModuleReordered : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.TeamSwitched : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.ToggleShowAllModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+TeamSwitched (class)
 ToolUp.Platform.Client+Msg+TeamSwitched.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig (class)
