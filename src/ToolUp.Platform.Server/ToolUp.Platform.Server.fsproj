@@ -423,9 +423,9 @@
         <Compile Include="Server\Config\ConfigHandler.fs" />
         <Compile Include="Server\IWebhookRegistry.fs" />
         <Compile Include="Server\WebhookRegistry.fs" />
+        <Compile Include="Server\WebhookUrlValidator.fs" />
         <Compile Include="Server\WebhookDispatcher.fs" />
         <Compile Include="Server\HookedEventStore.fs" />
-        <Compile Include="Server\WebhookUrlValidator.fs" />
         <Compile Include="Server\WebhookApiHandler.fs" />
         <Compile Include="Server\IFeatureFlagStore.fs" />
         <!-- Phase 239 — read-only external flag-resolution seam. -->

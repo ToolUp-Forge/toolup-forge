@@ -256,7 +256,11 @@ type WebhookDispatcherService
         // chain). Cell-and-lookup mirrors `jobSchedulerLookup` in
         // `SDK.Server.fs`; by the time the BackgroundService's
         // `ExecuteAsync` runs, compose has populated the cell.
-        getRateLimiter: unit -> IRateLimiter
+        getRateLimiter: unit -> IRateLimiter,
+        // SSRF policy (operator allowlist from ServerConfig.WebhookUrlAllowedHosts).
+        // Re-applied at delivery time to defeat DNS rebinding past the
+        // registration-time guard in WebhookApiHandler.
+        urlPolicy: WebhookUrlValidator.WebhookUrlPolicy
     ) =
     inherit BackgroundService()
 
@@ -287,7 +291,7 @@ type WebhookDispatcherService
     /// `ConsecutiveFailures`; flips the subscription to `Disabled`
     /// (and emits `WebhookSubscriptionAutoDisabled`) once
     /// `DisableAfterConsecutiveFailures` is hit.
-    let runDelivery (sub: WebhookSubscription) (event: ModuleEvent) = async {
+    let runDeliveryInner (sub: WebhookSubscription) (event: ModuleEvent) = async {
         let mutable attempt = 1
         let mutable finalOutcome = WebhookDeliveryOutcome.DeadLettered "no attempts run"
 
@@ -429,6 +433,44 @@ type WebhookDispatcherService
             deliveryActivityOpt |> Option.iter _.Dispose()
     }
 
+    /// Gap audit pass-2 #1 (delivery-time) — SSRF re-validation wrapper around
+    /// `runDeliveryInner`. The registration-time guard (WebhookApiHandler) can
+    /// be defeated by DNS rebinding: a host that resolved to a public IP at
+    /// registration is repointed at 127.0.0.1 / 169.254.169.254 (cloud IMDS)
+    /// before delivery. Re-resolve + re-classify here so the dispatcher can't be
+    /// weaponised as an SSRF vehicle. A refusal dead-letters immediately
+    /// (re-resolution would only re-fail) and emits the standard DeliveryFailed
+    /// audit; it does NOT bump ConsecutiveFailures — a platform-side block is
+    /// not a receiver-health signal (mirrors the rate-limit-refused treatment).
+    let runDelivery (sub: WebhookSubscription) (event: ModuleEvent) = async {
+        match WebhookUrlValidator.validate urlPolicy sub.TargetUrl with
+        | Ok() -> do! runDeliveryInner sub event
+        | Error reason ->
+            let blocked =
+                sprintf "SSRF policy refused target at delivery (DNS rebinding guard): %s" reason
+
+            do!
+                recordDelivery sub.ScopeId {
+                    DeliveryId = Guid.NewGuid()
+                    SubscriptionId = sub.SubscriptionId
+                    EventId = Some event.Id
+                    Attempt = 1
+                    AttemptedAt = DateTime.UtcNow
+                    Outcome = WebhookDeliveryOutcome.DeadLettered blocked
+                }
+
+            do!
+                emitAudit sub.ScopeId WebhookEventTypes.DeliveryFailed {|
+                    SubscriptionId = sub.SubscriptionId
+                    EventId = event.Id
+                    EventType = event.EventType
+                    FinalError = blocked
+                |}
+
+            logger.Warn
+                $"[WebhookDispatcher] event=ssrf_blocked_at_delivery subscriptionId={sub.SubscriptionId} scope={sub.ScopeId}: {blocked}"
+    }
+
     /// Match an event against every active subscription in its scope.
     /// Per-scope listing is the cheap path — we don't scan
     /// `ListAllActive` here because the event's scope is already
@@ -500,11 +542,22 @@ type WebhookDispatcherService
                 let! rateLimitDecision = (getRateLimiter ()).Wait(rateLimitKeyFor sub)
 
                 let! outcome = async {
-                    match rateLimitDecision with
-                    | Refused reason ->
-                        return WebhookDeliveryOutcome.Failure(None, sprintf "Rate-limit refused: %s" reason, 0L)
-                    | Proceed
-                    | DelayedBy _ -> return! deliverOnce httpClient sub payload
+                    // Delivery-time SSRF re-validation (same DNS-rebinding guard
+                    // as runDelivery) before the test fire leaves the process.
+                    match WebhookUrlValidator.validate urlPolicy sub.TargetUrl with
+                    | Error reason ->
+                        return
+                            WebhookDeliveryOutcome.Failure(
+                                None,
+                                sprintf "SSRF policy refused target at delivery (DNS rebinding guard): %s" reason,
+                                0L
+                            )
+                    | Ok() ->
+                        match rateLimitDecision with
+                        | Refused reason ->
+                            return WebhookDeliveryOutcome.Failure(None, sprintf "Rate-limit refused: %s" reason, 0L)
+                        | Proceed
+                        | DelayedBy _ -> return! deliverOnce httpClient sub payload
                 }
 
                 // Record the test-fire row so admins see it in the log
@@ -569,6 +622,7 @@ let create
     (logger: ILogger)
     (activitySink: IActivitySink)
     (getRateLimiter: unit -> IRateLimiter)
+    (urlPolicy: WebhookUrlValidator.WebhookUrlPolicy)
     : WebhookDispatcherService =
     new WebhookDispatcherService(
         registry,
@@ -578,5 +632,6 @@ let create
         retryPolicy,
         logger,
         activitySink,
-        getRateLimiter
+        getRateLimiter,
+        urlPolicy
     )

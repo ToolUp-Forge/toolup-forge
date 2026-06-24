@@ -59,6 +59,13 @@ let buildWebhookSubsystem
         let deliveryLog = WebhookRegistry.createDeliveryLog resolvedBlobStorage
         let httpClient = new System.Net.Http.HttpClient()
 
+        // Same SSRF allowlist the registration-time guard uses
+        // (WebhookApiHandler) — threaded into the dispatcher so delivery-time
+        // re-validation honours operator-allowlisted internal hosts too.
+        let urlPolicy: WebhookUrlValidator.WebhookUrlPolicy = {
+            AllowedHosts = config.WebhookUrlAllowedHosts
+        }
+
         let dispatcher =
             WebhookDispatcher.create
                 registry
@@ -69,6 +76,7 @@ let buildWebhookSubsystem
                 resolvedLogger
                 resolvedActivitySink
                 rateLimiterLookup
+                urlPolicy
 
         // Wrap the inner event store so every event written through the
         // DI-registered `IEventStore` triggers webhook fan-out. The
