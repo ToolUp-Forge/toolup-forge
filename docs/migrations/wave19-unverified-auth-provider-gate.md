@@ -25,7 +25,7 @@ not authProvider.IsCryptographicallyVerified
 
 so **any** provider that does not affirmatively assert verification is refused in an auth-requiring surface — fail-closed by capability (Auth-core audit, Mode-gating Finding 3).
 
-First-party providers are wired accordingly: OIDC, Entra (delegates to its inner OIDC provider), and StaticJwt report `true`; `HeaderAuthProvider` reports `false`. The escape hatch `ServerConfig.AcceptHeaderAuthWhenAuthRequired` (env `TOOLUP_ACCEPT_HEADER_AUTH_WHEN_AUTH_REQUIRED`) is unchanged and now covers *any* unverified provider behind a verified-identity proxy, not just `HeaderAuthProvider`.
+First-party providers are wired accordingly: OIDC, Entra (delegates to its inner OIDC provider), and StaticJwt report `true`; `HeaderAuthProvider` reports `false`. The escape hatch `ServerConfig.AcceptHeaderAuthWhenAuthRequired` (env `TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE` — the field was renamed but the env-var name retains the `IN_AUTH_MODE` suffix; see `docs/operations/env-vars.md`) is unchanged and now covers *any* unverified provider behind a verified-identity proxy, not just `HeaderAuthProvider`.
 
 ## Consumer action
 
