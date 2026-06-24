@@ -12,6 +12,9 @@
       </stop>
     </linearGradient>
   </defs>
-  <path d="M22 70 L50 46 Q60 38 70 46 L98 70" fill="none" stroke="url(#toolupDataLoading)" stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="60" cy="99" r="12.5" fill="url(#toolupDataLoading)"/>
+  <g>
+    <path d="M30 64 L54 44 Q60 39 66 44 L90 64" fill="none" stroke="url(#toolupDataLoading)" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="60" cy="90" r="10" fill="url(#toolupDataLoading)"/>
+    <animateTransform attributeName="transform" type="rotate" values="0 60 66.25;360 60 66.25" dur="1s" repeatCount="indefinite" calcMode="linear"/>
+  </g>
 </svg>

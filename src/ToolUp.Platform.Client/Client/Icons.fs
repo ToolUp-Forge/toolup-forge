@@ -68,9 +68,12 @@ let lock: ReactElement = Icon.ofImport lockSvg
 // ─── Loading indicators ───────────────────────────────────────────
 //
 // Two animated "data loading" marks. `dataLoading` is the ToolUp brand
-// mark (chevron + dot) whose gradient cycles pink → magenta → violet →
-// blue via SMIL `<animate>` on the gradient stops — self-coloured, so
-// it ignores the surrounding `currentColor` cascade. `spinner` is a
+// mark (chevron + dot) that both spins (SMIL `<animateTransform
+// type="rotate">`) and cycles its gradient pink → magenta → violet →
+// blue (SMIL `<animate>` on the stops) — self-coloured, so it ignores
+// the surrounding `currentColor` cascade. (The colour cycle alone read
+// as too subtle to register as "working"; the rotation is the dominant
+// signal, with the colour cycle kept underneath.) `spinner` is a
 // conventional rotating arc that uses `currentColor` for deployments
 // that prefer a neutral, theme-tinted indicator over the brand mark.
 // Both animate via SMIL (not a CSS `<style>` block) so they survive the

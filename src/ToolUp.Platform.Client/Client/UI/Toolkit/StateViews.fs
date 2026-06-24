@@ -82,7 +82,7 @@ module StateViews =
 
     /// Inline "working" mark + label, for "recomputing while showing stale
     /// results". Renders the ToolUp brand mark (`Icons.dataLoading` — the
-    /// colour-cycling chevron-and-dot, self-animated via SMIL so it ignores
+    /// spinning, colour-cycling chevron-and-dot, self-animated via SMIL so it ignores
     /// the surrounding `currentColor` cascade) rather than a neutral spinner
     /// ring, so a panel's inline loading state matches the `BrandMarkLoader`
     /// boot indicator instead of a bare circle. This is the one StateViews

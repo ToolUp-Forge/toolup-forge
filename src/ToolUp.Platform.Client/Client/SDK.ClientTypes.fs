@@ -974,7 +974,7 @@ type InputsPaneWidth =
 /// gray-pulse content skeleton, byte-for-byte unchanged from 0.5.16, so
 /// existing deployments are unaffected until they opt in (GP 11).
 /// `BrandMarkLoader` centres the animated ToolUp mark
-/// (`ToolUp.Platform.Icons.dataLoading`, colour-cycling); `SpinnerLoader`
+/// (`ToolUp.Platform.Icons.dataLoading`, the spinning, colour-cycling chevron-and-dot); `SpinnerLoader`
 /// centres the neutral, `currentColor`-tinted spinner
 /// (`ToolUp.Platform.Icons.spinner`) for deployments that prefer not to
 /// show the brand mark. `CustomLoader` supplies a bespoke element.
