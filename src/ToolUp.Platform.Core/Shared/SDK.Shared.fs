@@ -3065,7 +3065,20 @@ module ServerConfig =
                     logger.Warn
                         $"TOOLUP_PUBLIC_BASE_URL={raw} had a trailing slash; stripped to {noTrailing} (token issuers append their own path segment)."
 
-                Some noTrailing
+                // Validate it parses as an absolute http(s) URL. A malformed
+                // value (missing scheme, non-http scheme, stray host) would
+                // otherwise be accepted silently and produce broken
+                // share-token / public / OAuth-redirect links that only fail
+                // at link-follow time. Fail soft (warn + fall back to None),
+                // mirroring the empty-value handling above.
+                match System.Uri.TryCreate(noTrailing, System.UriKind.Absolute) with
+                | true, uri when uri.Scheme = System.Uri.UriSchemeHttp || uri.Scheme = System.Uri.UriSchemeHttps ->
+                    Some noTrailing
+                | _ ->
+                    logger.Warn
+                        $"TOOLUP_PUBLIC_BASE_URL={raw} is not a valid absolute http(s) URL; ignoring it (public links fall back to relative). Set a value like https://app.example.com."
+
+                    defaults.PublicBaseUrl
 
     /// Phase 71.A.5 — `TOOLUP_PUBLIC_PATH`. Canonical precedence:
     /// env var > override-record value > `defaults.PublicPath`.

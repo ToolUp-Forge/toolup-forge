@@ -193,8 +193,22 @@ let bootstrap
             if not requiresAuth then
                 true
             else
-                let v = Environment.GetEnvironmentVariable allowDevAdminBootstrapEnvVar
-                not (String.IsNullOrWhiteSpace v) && v.Trim() <> "0"
+                // Recognise only the canonical truthy spellings (1/true/yes/on),
+                // matching the workspace-wide boolean-env convention
+                // (`envFlag` in SDK.Shared). The previous "anything but empty/0"
+                // test treated the disable spellings (`false`/`no`/`off`) as
+                // ENABLED — an operator setting `TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP=false`
+                // to turn the dev-admin bootstrap OFF got the opposite, keeping
+                // a first-sign-in privilege-escalation path open.
+                match Environment.GetEnvironmentVariable allowDevAdminBootstrapEnvVar with
+                | null -> false
+                | v ->
+                    match v.Trim().ToLowerInvariant() with
+                    | "1"
+                    | "true"
+                    | "yes"
+                    | "on" -> true
+                    | _ -> false
 
         let target =
             if not (String.IsNullOrWhiteSpace envValue) then

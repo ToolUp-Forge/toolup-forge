@@ -49,11 +49,21 @@ type AutoBootstrapDevAdminModeValidator(config: ServerConfig, ?timeout: TimeSpan
             //     misconfiguration to surface loudly → Error.
             //   * opt-in set → a deliberate local auth-dev bootstrap that WILL
             //     elevate the first sign-in → Warning (must never be prod).
+            // Mirror PlatformAdminStore.bootstrap's opt-in parse exactly:
+            // only the canonical truthy spellings (1/true/yes/on) enable.
+            // The disable spellings (false/no/off) must read as "not set" so
+            // the validator's Warning/Error branch matches what the bootstrap
+            // gate will actually do.
             let optInSet =
-                let v =
-                    Environment.GetEnvironmentVariable PlatformAdminStore.allowDevAdminBootstrapEnvVar
-
-                not (String.IsNullOrWhiteSpace v) && v.Trim() <> "0"
+                match Environment.GetEnvironmentVariable PlatformAdminStore.allowDevAdminBootstrapEnvVar with
+                | null -> false
+                | v ->
+                    match v.Trim().ToLowerInvariant() with
+                    | "1"
+                    | "true"
+                    | "yes"
+                    | "on" -> true
+                    | _ -> false
 
             match config.AutoBootstrapDevAdmin with
             | Some uid when requiresAuth && not (String.IsNullOrWhiteSpace uid) ->
