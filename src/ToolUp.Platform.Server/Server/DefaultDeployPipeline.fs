@@ -286,10 +286,33 @@ type DefaultDeployPipeline
 
                 do! emitState summary
 
-                // Fire the pipeline driver. Failures inside the driver
-                // emit `DeployFailed` events; they never propagate back
-                // to the BeginDeploy caller.
-                Async.Start(runPipeline summary)
+                // Fire the pipeline driver. `runPipeline` emits
+                // `DeployFailed` for *handled* failures (build / launch),
+                // but an *unexpected* throw (orchestrator/scheduler raising,
+                // a serialize error) would otherwise escape this
+                // `Async.Start` and be swallowed — leaving the deploy stuck
+                // in a non-terminal state with no event and no log, i.e. an
+                // operator-blind hang. Wrap the fire so any unhandled throw
+                // terminates the deploy visibly (DeployFailed + Error log).
+                Async.Start(
+                    async {
+                        try
+                            do! runPipeline summary
+                        with ex ->
+                            let failed = {
+                                summary with
+                                    State = DeployFailed("driver", ex.Message)
+                                    StateChangedAt = DateTime.UtcNow
+                            }
+
+                            do! emitState failed
+
+                            logger.Error(
+                                $"[DeployPipeline] event=pipeline_unexpected_error deployId={summary.DeployId}",
+                                Some ex
+                            )
+                    }
+                )
 
                 return Ok deployId
             }
