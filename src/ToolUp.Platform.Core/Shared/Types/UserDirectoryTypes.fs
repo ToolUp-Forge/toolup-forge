@@ -146,8 +146,23 @@ type InvitationNotification = {
 /// Concurrency: stateless, safe to call from multiple threads. The
 /// companion is responsible for sharing one HTTP client / Graph
 /// client across calls.
+/// `ResolveUsers` reverse-resolves a batch of stable user ids back to
+/// `UserSummary` entries (display name + email). It is the inverse of
+/// `SearchUsers`: where the typeahead turns a typed prefix into ids, the
+/// admin tables turn stored ids (team Owners / Admins, Platform Admins)
+/// into human-readable emails. The companion is expected to:
+///   * De-duplicate and trim the id list, dropping blanks.
+///   * Resolve in one batched provider call where the API supports it
+///     (Microsoft Graph `directoryObjects/getByIds` takes up to 1000
+///     ids per request) rather than N round-trips.
+///   * Return only the entries it could resolve — ids the provider
+///     doesn't recognise are silently omitted, NOT surfaced as errors.
+///     Callers pair the result by `UserId` and fall back to rendering
+///     the raw id for anything unresolved.
+///   * Return `Ok []` for an empty input without touching the provider.
 type IUserDirectory =
     abstract member SearchUsers: query: string * take: int -> Async<Result<UserSummary list, string>>
+    abstract member ResolveUsers: ids: string list -> Async<Result<UserSummary list, string>>
     abstract member NotifyInvitation: notification: InvitationNotification -> Async<Result<unit, string>>
 
 /// Fable.Remoting contract surfaced at `/api/IUserDirectoryApi/*`.
@@ -175,4 +190,18 @@ type IUserDirectoryApi = {
     /// under the typeahead input.
     [<RequiresClaim "scope">]
     SearchUsers: string * int -> Async<Result<UserSummary list, string>>
+    /// Reverse-resolve a batch of stable user ids to directory entries
+    /// (display name + email). The inverse of `SearchUsers` — the admin
+    /// tables call this with the ids they hold (team Owners / Admins,
+    /// Platform Admins) to render emails instead of opaque `oid`s.
+    ///
+    /// Returns one `UserSummary` per id the substrate could resolve, in
+    /// no guaranteed order; ids the directory doesn't recognise (or the
+    /// whole list, when no companion is registered) are simply absent —
+    /// the caller joins by `UserId` and falls back to the raw id for
+    /// anything missing. Empty input ⇒ `Ok []` with no provider call.
+    /// `Error` only for a genuine substrate failure (lost credential,
+    /// provider 5xx after retries) so the caller can keep showing ids.
+    [<RequiresClaim "scope">]
+    ResolveUsers: string list -> Async<Result<UserSummary list, string>>
 }

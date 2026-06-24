@@ -18,6 +18,11 @@ open ToolUp.Platform
 //     Requires `User.ReadBasic.All` (or `User.Read.All`) application
 //     permission. Powers the SDK's invitation-form typeahead.
 //
+//   * `ResolveUsers` → `POST /directoryObjects/getByIds`
+//     Reverse batch lookup (id → display name + email) for the
+//     Platform-Management admin tables. Same `User.ReadBasic.All`
+//     permission as SearchUsers; up to 1000 ids per request.
+//
 //   * `NotifyInvitation` → `POST /users/{senderOid}/sendMail`
 //     Requires `Mail.Send` application permission, scoped to the
 //     mailbox identified by `SenderUserId`. Sends a branded
@@ -304,6 +309,102 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
                                         })
 
                         return Ok summaries
+            with
+            | :? OperationCanceledException -> return Error "directory request cancelled"
+            | ex -> return Error(sprintf "directory unavailable: %s" ex.Message)
+        }
+
+        member _.ResolveUsers(ids: string list) = async {
+            // Reverse lookup via Graph `directoryObjects/getByIds` — the
+            // canonical batch id→object endpoint. Accepts up to 1000 ids
+            // per request; we chunk defensively in case a caller passes
+            // more. Needs only `User.ReadBasic.All` (already required for
+            // SearchUsers) — `getByIds` returns the same basic profile
+            // fields. Ids the directory doesn't recognise are simply
+            // absent from the response; we never surface them as errors.
+            try
+                let! ct = Async.CancellationToken
+
+                let distinctIds = ids |> List.choose nonEmpty |> List.distinct
+
+                if List.isEmpty distinctIds then
+                    return Ok []
+                else
+                    let! token = acquireGraphToken ()
+                    let client = GraphState.getClient ()
+                    let url = sprintf "%s/v1.0/directoryObjects/getByIds" normalisedEndpoint
+
+                    // Graph caps getByIds at 1000 ids/request; chunk to be safe.
+                    let chunks = distinctIds |> List.chunkBySize 1000
+
+                    let encStr (s: string) = JsonSerializer.Serialize s
+
+                    let mutable failure: string option = None
+                    let collected = ResizeArray<UserSummary>()
+                    let mutable remaining = chunks
+
+                    while failure.IsNone && not (List.isEmpty remaining) do
+                        let chunk = List.head remaining
+                        remaining <- List.tail remaining
+
+                        // Restrict to user objects so groups / service
+                        // principals sharing an id space don't surface.
+                        let idsJson = chunk |> List.map encStr |> String.concat ","
+
+                        let payload = sprintf """{"ids":[%s],"types":["user"]}""" idsJson
+
+                        use request = new HttpRequestMessage(HttpMethod.Post, url)
+                        request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+                        request.Content <- new StringContent(payload, Encoding.UTF8, "application/json")
+
+                        let! response = client.SendAsync(request, ct) |> Async.AwaitTask
+
+                        if not response.IsSuccessStatusCode then
+                            let! body = response.Content.ReadAsStringAsync ct |> Async.AwaitTask
+
+                            failure <-
+                                Some(
+                                    sprintf
+                                        "directory unavailable: %d %s — %s"
+                                        (int response.StatusCode)
+                                        (if isNull response.ReasonPhrase then
+                                             ""
+                                         else
+                                             response.ReasonPhrase)
+                                        (if isNull body then
+                                             ""
+                                         else
+                                             body.Substring(0, min 200 body.Length))
+                                )
+                        else
+                            let! bodyStream = response.Content.ReadAsStreamAsync ct |> Async.AwaitTask
+
+                            let! parsed =
+                                JsonSerializer
+                                    .DeserializeAsync<GraphUsersResponse>(bodyStream, jsonOptions, ct)
+                                    .AsTask()
+                                |> Async.AwaitTask
+
+                            if not (isNull (box parsed)) && not (isNull (box parsed.value)) then
+                                parsed.value
+                                |> Array.iter (fun u ->
+                                    match nonEmpty u.id with
+                                    | None -> ()
+                                    | Some uid ->
+                                        let email =
+                                            match nonEmpty u.mail with
+                                            | Some _ as m -> m
+                                            | None -> nonEmpty u.userPrincipalName
+
+                                        collected.Add {
+                                            UserId = uid
+                                            DisplayName = nonEmpty u.displayName
+                                            Email = email
+                                        })
+
+                    match failure with
+                    | Some err -> return Error err
+                    | None -> return Ok(List.ofSeq collected)
             with
             | :? OperationCanceledException -> return Error "directory request cancelled"
             | ex -> return Error(sprintf "directory unavailable: %s" ex.Message)

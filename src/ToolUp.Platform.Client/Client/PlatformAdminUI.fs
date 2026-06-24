@@ -105,6 +105,13 @@ type Model = {
     PlatformKnowledgeBase: LoadState<PlatformKnowledgeBaseMode>
     /// Inline error from a SetPlatformKnowledgeBase attempt.
     SettingsError: string option
+    /// Resolved directory entries keyed by user id, populated lazily via
+    /// `IUserDirectoryApi.ResolveUsers` after the admin list / teams
+    /// table load. Lets the UI render emails in place of raw `oid`s; ids
+    /// absent from the map (directory companion unwired, or unresolved)
+    /// render as the raw id. Never errors the UI — a failed resolve just
+    /// leaves the map untouched and the ids show through.
+    Directory: Map<string, UserSummary>
 }
 
 type Msg =
@@ -134,6 +141,7 @@ type Msg =
     | PlatformKnowledgeBaseLoaded of Result<PlatformKnowledgeBaseMode, string>
     | TogglePlatformKnowledgeBase of PlatformKnowledgeBaseMode
     | TogglePlatformKnowledgeBaseResolved of requested: PlatformKnowledgeBaseMode * Result<unit, string>
+    | DirectoryResolved of Result<UserSummary list, string>
 
 // ─── API proxy ───────────────────────────────────────────────────────
 
@@ -143,6 +151,12 @@ let private platformAdminApi: PlatformAdminApi =
 
 let private teamApi: TeamApi =
     Api.makeProxy<TeamApi> (customOptions = UserSession.withRequestHeaders)
+
+// Reverse directory lookup (id → email). Used to render emails instead
+// of raw Entra `oid`s in the admin list + teams table. Returns `Ok []`
+// when no directory companion is wired, so the UI degrades to ids.
+let private directoryApi: IUserDirectoryApi =
+    Api.makeProxy<IUserDirectoryApi> (customOptions = UserSession.withRequestHeaders)
 
 // ─── Init / commands ─────────────────────────────────────────────────
 
@@ -199,6 +213,37 @@ let private deleteTeamCmd (teamId: string) =
     Cmd.OfRemoting.call teamApi.DeleteTeamHard teamId (fun result -> DeleteTeamResolved(teamId, result)) (fun ex ->
         DeleteTeamResolved(teamId, Error ex.Message))
 
+/// Reverse-resolve a batch of user ids to directory entries. No-op for
+/// an empty list. Errors fold to a silent `DirectoryResolved(Error _)`
+/// (the UI keeps showing ids), so this never disrupts the admin tables.
+let private resolveDirectoryCmd (ids: string list) =
+    match ids with
+    | [] -> Cmd.none
+    | _ ->
+        Cmd.OfRemoting.call directoryApi.ResolveUsers ids DirectoryResolved (fun ex ->
+            DirectoryResolved(Error ex.Message))
+
+/// Every user id currently referenced by the loaded admin list + teams
+/// table (Owners + Admins). Used to decide what still needs resolving.
+let private referencedUserIds (model: Model) =
+    let adminIds =
+        match model.Admins with
+        | Loaded xs -> xs
+        | _ -> []
+
+    let teamIds =
+        match model.Teams with
+        | Loaded teams -> teams |> List.collect (fun t -> t.Owners @ t.Admins)
+        | _ -> []
+
+    adminIds @ teamIds |> List.distinct
+
+/// The subset of referenced ids not yet in the resolved-directory map —
+/// the ids a fresh `ResolveUsers` call should fetch.
+let private unresolvedUserIds (model: Model) =
+    referencedUserIds model
+    |> List.filter (fun id -> not (Map.containsKey id model.Directory))
+
 let init () =
     let model = {
         ActiveTab = AdminsTab
@@ -217,6 +262,7 @@ let init () =
         TeamActionError = Map.empty
         PlatformKnowledgeBase = Loading
         SettingsError = None
+        Directory = Map.empty
     }
 
     model, Cmd.batch [ loadAdminsCmd (); loadTeamsCmd (); loadPlatformKnowledgeBaseCmd () ]
@@ -230,11 +276,12 @@ let update (msg: Msg) (model: Model) =
     | RefreshAdmins -> { model with Admins = Loading }, loadAdminsCmd ()
 
     | AdminsLoaded(Ok list) ->
-        {
+        let model = {
             model with
                 Admins = Loaded(list |> List.sort)
-        },
-        Cmd.none
+        }
+
+        model, resolveDirectoryCmd (unresolvedUserIds model)
 
     | AdminsLoaded(Error msg) -> { model with Admins = LoadError msg }, Cmd.none
 
@@ -261,7 +308,14 @@ let update (msg: Msg) (model: Model) =
                     AssignError = None
                     AssignConfirm = Some trimmed
             },
-            Cmd.none
+            // Resolve the target so the confirm modal can echo their email,
+            // not just the raw id. No-op when already in the map.
+            resolveDirectoryCmd (
+                if Map.containsKey trimmed model.Directory then
+                    []
+                else
+                    [ trimmed ]
+            )
 
     | CancelAssignConfirm -> { model with AssignConfirm = None }, Cmd.none
 
@@ -313,12 +367,24 @@ let update (msg: Msg) (model: Model) =
         Cmd.none
 
     | SetNewTeamOwnerUserId userId ->
+        let trimmed = userId.Trim()
+
+        // Resolve once the field holds a full id (Entra `oid`s are 36-char
+        // GUIDs) so the confirmation line can echo the owner's email.
+        // The length gate avoids firing getByIds on every keystroke while
+        // an operator types a raw id manually.
+        let resolveCmd =
+            if trimmed.Length >= 30 && not (Map.containsKey trimmed model.Directory) then
+                resolveDirectoryCmd [ trimmed ]
+            else
+                Cmd.none
+
         {
             model with
                 NewTeamOwnerUserId = userId
                 CreateTeamError = None
         },
-        Cmd.none
+        resolveCmd
 
     | UseSelfAsTeamOwner ->
         let selfId = UserSession.getUserId ()
@@ -380,11 +446,12 @@ let update (msg: Msg) (model: Model) =
     | RefreshTeams -> { model with Teams = Loading }, loadTeamsCmd ()
 
     | TeamsLoaded(Ok teams) ->
-        {
+        let model = {
             model with
                 Teams = Loaded(teams |> List.sortBy (fun t -> t.Name.ToLowerInvariant()))
-        },
-        Cmd.none
+        }
+
+        model, resolveDirectoryCmd (unresolvedUserIds model)
 
     | TeamsLoaded(Error msg) -> { model with Teams = LoadError msg }, Cmd.none
 
@@ -478,6 +545,17 @@ let update (msg: Msg) (model: Model) =
 
     | TogglePlatformKnowledgeBaseResolved(_, Error msg) -> { model with SettingsError = Some msg }, Cmd.none
 
+    | DirectoryResolved(Ok summaries) ->
+        let directory =
+            summaries
+            |> List.fold (fun acc (s: UserSummary) -> Map.add s.UserId s acc) model.Directory
+
+        { model with Directory = directory }, Cmd.none
+
+    // Silent — a directory failure (companion unwired, Graph hiccup) just
+    // leaves the map as-is and the raw ids keep rendering.
+    | DirectoryResolved(Error _) -> model, Cmd.none
+
 // ─── View helpers ────────────────────────────────────────────────────
 
 let private errorBanner (message: string) =
@@ -486,8 +564,23 @@ let private errorBanner (message: string) =
         prop.text message
     ]
 
+/// Human-readable label for a user id: the resolved email when the
+/// directory has it, then the display name, then the raw id as the
+/// last-resort fallback (no companion wired, or unresolved id).
+let private userEmailLabel (model: Model) (userId: string) =
+    match Map.tryFind userId model.Directory with
+    | Some s ->
+        match s.Email with
+        | Some e when not (System.String.IsNullOrWhiteSpace e) -> e
+        | _ ->
+            match s.DisplayName with
+            | Some n when not (System.String.IsNullOrWhiteSpace n) -> n
+            | _ -> userId
+    | None -> userId
+
 let private adminRow (model: Model) (dispatch: Msg -> unit) (userId: string) =
     let revokeError = model.RevokeError |> Map.tryFind userId
+    let label = userEmailLabel model userId
 
     Html.div [
         prop.className "py-2 px-3 border-b border-border last:border-0"
@@ -495,7 +588,18 @@ let private adminRow (model: Model) (dispatch: Msg -> unit) (userId: string) =
             Html.div [
                 prop.className "flex items-center justify-between gap-3"
                 prop.children [
-                    Html.span [ prop.className "text-sm font-mono text-text-primary"; prop.text userId ]
+                    // Email when resolved (raw id on hover for traceability);
+                    // falls back to the id in monospace when unresolved.
+                    Html.span [
+                        prop.className (
+                            if label = userId then
+                                "text-sm font-mono text-text-primary break-all"
+                            else
+                                "text-sm text-text-primary break-all"
+                        )
+                        prop.title userId
+                        prop.text label
+                    ]
                     Html.button [
                         prop.className
                             "px-3 py-1 text-xs font-medium rounded border border-red-300 text-red-700 hover:bg-red-50"
@@ -596,7 +700,10 @@ let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
 /// already used the new role to mutate deployment configuration),
 /// so the confirm step is a deliberate brake on accidental fires —
 /// e.g. an operator typing-Enter on the wrong autocomplete row.
-let private assignConfirmModalView (targetUserId: string) (dispatch: Msg -> unit) =
+let private assignConfirmModalView (model: Model) (targetUserId: string) (dispatch: Msg -> unit) =
+    let label = userEmailLabel model targetUserId
+    let resolved = label <> targetUserId
+
     Html.div [
         prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
         prop.children [
@@ -612,8 +719,26 @@ let private assignConfirmModalView (targetUserId: string) (dispatch: Msg -> unit
                     Html.div [
                         prop.className "rounded border border-border bg-gray-50 px-3 py-2"
                         prop.children [
-                            Html.span [ prop.className "text-xs text-text-secondary"; prop.text "User id: " ]
-                            Html.span [ prop.className "text-sm font-mono text-text-primary"; prop.text targetUserId ]
+                            Html.span [
+                                prop.className "text-xs text-text-secondary"
+                                prop.text (if resolved then "User: " else "User id: ")
+                            ]
+                            Html.span [
+                                prop.className (
+                                    if resolved then
+                                        "text-sm text-text-primary"
+                                    else
+                                        "text-sm font-mono text-text-primary break-all"
+                                )
+                                prop.text label
+                            ]
+                            // Keep the raw id visible for traceability when we
+                            // resolved an email above it.
+                            if resolved then
+                                Html.div [
+                                    prop.className "text-[10px] font-mono text-text-secondary mt-1 break-all"
+                                    prop.text targetUserId
+                                ]
                         ]
                     ]
                     Html.div [
@@ -645,13 +770,30 @@ let private formatDate (d: System.DateTime) =
     // DateTime rendering is unreliable under Fable across runtimes.
     sprintf "%04d-%02d-%02d" d.Year d.Month d.Day
 
-let private userIdList (ids: string list) =
+let private userIdList (model: Model) (ids: string list) =
     match ids with
     | [] -> Html.span [ prop.className "text-text-secondary"; prop.text "—" ]
     | _ ->
-        Html.span [
-            prop.className "font-mono text-xs text-text-primary break-all"
-            prop.text (String.concat ", " ids)
+        // One entry per line — emails read better stacked than comma-joined.
+        // Each resolves id → email (raw id on hover); unresolved ids fall
+        // back to monospace so an opaque `oid` still looks like an id.
+        Html.div [
+            prop.className "flex flex-col gap-0.5"
+            prop.children [
+                for id in ids ->
+                    let label = userEmailLabel model id
+
+                    Html.span [
+                        prop.className (
+                            if label = id then
+                                "font-mono text-xs text-text-primary break-all"
+                            else
+                                "text-xs text-text-primary break-all"
+                        )
+                        prop.title id
+                        prop.text label
+                    ]
+            ]
         ]
 
 let private teamActionButton (label: string) (disabled: bool) (extraClass: string) (onClick: unit -> unit) =
@@ -712,11 +854,11 @@ let private teamRow (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
                     ]
                     Html.td [
                         prop.className "px-3 py-2 align-top max-w-[12rem]"
-                        prop.children [ userIdList team.Owners ]
+                        prop.children [ userIdList model team.Owners ]
                     ]
                     Html.td [
                         prop.className "px-3 py-2 align-top max-w-[12rem]"
-                        prop.children [ userIdList team.Admins ]
+                        prop.children [ userIdList model team.Admins ]
                     ]
                     Html.td [
                         prop.className "px-3 py-2 align-top"
@@ -881,8 +1023,16 @@ let private deleteTeamModalView (model: Model) (teamId: string) (dispatch: Msg -
 
 let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
     let selfId = UserSession.getUserId ()
-    let selfDisplay = UserSession.getDisplayName () |> Option.defaultValue selfId
-    let ownerIsSelf = model.NewTeamOwnerUserId.Trim() = selfId
+
+    // Prefer the operator's email for the "Self" affordance; fall back to
+    // display name, then the raw id.
+    let selfDisplay =
+        UserSession.getEmail ()
+        |> Option.orElse (UserSession.getDisplayName ())
+        |> Option.defaultValue selfId
+
+    let ownerEntered = model.NewTeamOwnerUserId.Trim()
+    let ownerIsSelf = ownerEntered = selfId
 
     Html.div [
         prop.className "p-4 flex flex-col gap-4"
@@ -950,11 +1100,26 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                                     ]
                                 ]
                             ]
+                            // Confirmation line — render the resolved email so
+                            // the operator sees who the entered id belongs to.
+                            // The input itself carries the stable user id (the
+                            // CreateTeamWithOwner API keys on it); this line is
+                            // the human-readable echo.
                             if ownerIsSelf then
                                 Html.span [
                                     prop.className "text-xs text-text-secondary"
                                     prop.text (sprintf "You (%s) will become the team's initial Owner." selfDisplay)
                                 ]
+                            elif ownerEntered <> "" then
+                                let label = userEmailLabel model ownerEntered
+
+                                if label <> ownerEntered then
+                                    Html.span [
+                                        prop.className "text-xs text-text-secondary"
+                                        prop.text (sprintf "%s will become the team's initial Owner." label)
+                                    ]
+                                else
+                                    Html.none
                         ]
                     ]
 
@@ -1138,7 +1303,7 @@ let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> uni
             content
             publicUtilitySection
             match model.AssignConfirm with
-            | Some targetUserId -> assignConfirmModalView targetUserId dispatch
+            | Some targetUserId -> assignConfirmModalView model targetUserId dispatch
             | None -> Html.none
             match model.ConfirmDeleteTeam with
             | Some teamId -> deleteTeamModalView model teamId dispatch

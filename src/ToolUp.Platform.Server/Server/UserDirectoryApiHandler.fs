@@ -87,4 +87,37 @@ let userDirectoryApi (ctx: HttpContext) : IUserDirectoryApi = {
                         return Ok []
                     | Some directory -> return! directory.SearchUsers(trimmed, clampedMax)
         }
+
+    ResolveUsers =
+        fun ids -> async {
+            // Same anonymous gate as SearchUsers — no anonymous directory
+            // enumeration, forward or reverse.
+            let accessContext = resolveAccessContext ctx
+
+            match accessContext.Subject with
+            | AnonymousSession _ -> return Error "authentication required"
+            | _ ->
+                // De-dup + drop blanks before touching the substrate; an
+                // all-blank / empty list short-circuits to Ok [] with no
+                // provider round-trip. The companion clamps batch size to
+                // the provider's per-request ceiling.
+                let cleaned =
+                    ids
+                    |> List.choose (fun id ->
+                        if System.String.IsNullOrWhiteSpace id then
+                            None
+                        else
+                            Some(id.Trim()))
+                    |> List.distinct
+
+                if List.isEmpty cleaned then
+                    return Ok []
+                else
+                    match resolveDirectory ctx with
+                    | None ->
+                        // No companion registered — nothing to resolve. The
+                        // caller renders the raw ids, exactly as before.
+                        return Ok []
+                    | Some directory -> return! directory.ResolveUsers cleaned
+        }
 }

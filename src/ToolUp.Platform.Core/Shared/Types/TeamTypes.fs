@@ -27,9 +27,11 @@ type TeamInfo = {
 /// holding Owner / Admin roles) so a Platform Admin can see, at a
 /// glance, who runs each team. Computed server-side by `ListAllTeams`
 /// from `ITeamStore.ListTeams` + `GetTeamMembers`; the user ids are the
-/// admin-asserted membership principal ids (the default composition has
-/// no `IUserDirectory` reverse-lookup, so they are not resolved to
-/// display names — a deployment that wires a directory can map them).
+/// admin-asserted membership principal ids. They are carried as raw ids
+/// on the wire — a deployment that wires an `IUserDirectory` companion
+/// resolves them to emails client-side via `IUserDirectoryApi.ResolveUsers`
+/// (the Platform-Management table renders the email with the id as a
+/// fallback); deployments without a directory keep showing the ids.
 type TeamSummary = {
     TeamId: string
     Name: string
