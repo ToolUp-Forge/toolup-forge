@@ -103,6 +103,12 @@ type Model = {
     /// Banner under the tab bar: success / error after a save round-
     /// trip. Cleared on the next user interaction or tab switch.
     Banner: (bool * string) option
+    /// Phase 245 — `ClientModuleContext.OnAccessibleModulesChanged`,
+    /// stashed at init. Invoked after a successful `SetModuleExposure`
+    /// so the shell re-fetches its accessible-modules list and the
+    /// sidebar + admin "show hidden modules" toggle update without a
+    /// manual reload. `None` on non-team surfaces / when unwired.
+    OnAccessibleModulesChanged: (unit -> unit) option
 }
 
 type Msg =
@@ -257,7 +263,7 @@ let private saveMemberCmd (teamId: string) (userId: string) (moduleName: string)
         (fun result -> SaveMemberResult(userId, moduleName, result))
         (fun ex -> SaveMemberResult(userId, moduleName, Error ex.Message))
 
-let init () : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
         ActiveTab = TeamDefaultsTab
         Snapshot = Loading
@@ -266,6 +272,7 @@ let init () : Model * Cmd<Msg> =
         EditingMembers = Map.empty
         SaveInFlight = false
         Banner = None
+        OnAccessibleModulesChanged = ctx.OnAccessibleModulesChanged
     }
 
     model, loadSnapshotCmd ()
@@ -579,6 +586,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 "hidden in this team"
             else
                 "visible in this team"
+
+        // Tell the shell to re-fetch its accessible-modules list so the
+        // sidebar (and the admin "show hidden modules" toggle) reflect
+        // the new exposure live, without a manual reload. Mirrors
+        // `TeamManagerUI`'s direct `OnTeamSwitched` invocation.
+        model.OnAccessibleModulesChanged |> Option.iter (fun f -> f ())
 
         {
             model with
@@ -1225,13 +1238,18 @@ let create (config: PermissionsAdminConfig option) : ErasedModule =
     let icon =
         config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.lock
 
+    // `init` is `ClientModuleContext -> Model * Cmd<Msg>` (Phase 245 —
+    // it reads `OnAccessibleModulesChanged`); seed `create` with the
+    // empty context, then override with the real context-aware init via
+    // `withContextInit`, the same wiring `TeamManagerUI` uses.
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.PermissionsAdmin"
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

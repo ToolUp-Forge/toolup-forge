@@ -588,7 +588,7 @@ MappingDataManagerUI+WizardStep+Tags.ReviewData : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewMapping : System.Int32 (literal)
 PermissionsAdminUI (class)
 PermissionsAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionsAdminConfig]) : ToolUp.Platform.ErasedModule
-PermissionsAdminUI.init() : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PermissionsAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PermissionsAdminUI.update(PermissionsAdminUI+Msg, PermissionsAdminUI+Model) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PermissionsAdminUI+LoadState`1 (class)
 PermissionsAdminUI+LoadState`1.IsLoadError : System.Boolean { get }
@@ -608,11 +608,12 @@ PermissionsAdminUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
 PermissionsAdminUI+LoadState`1+Tags.Loading : System.Int32 (literal)
 PermissionsAdminUI+LoadState`1+Tags.NotLoaded : System.Int32 (literal)
 PermissionsAdminUI+Model (class)
-PermissionsAdminUI+Model..ctor(PermissionsAdminUI+Tab, PermissionsAdminUI+LoadState`1[PermissionsAdminUI+TeamView], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Boolean, System.String]])
+PermissionsAdminUI+Model..ctor(PermissionsAdminUI+Tab, PermissionsAdminUI+LoadState`1[PermissionsAdminUI+TeamView], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Boolean, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]])
 PermissionsAdminUI+Model.ActiveTab : PermissionsAdminUI+Tab { get }
 PermissionsAdminUI+Model.Banner : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Boolean, System.String]] { get }
 PermissionsAdminUI+Model.EditingDefaults : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]] { get }
 PermissionsAdminUI+Model.EditingMembers : Microsoft.FSharp.Collections.FSharpMap`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
+PermissionsAdminUI+Model.OnAccessibleModulesChanged : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]] { get }
 PermissionsAdminUI+Model.SaveInFlight : System.Boolean { get }
 PermissionsAdminUI+Model.SelectedMember : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PermissionsAdminUI+Model.Snapshot : PermissionsAdminUI+LoadState`1[PermissionsAdminUI+TeamView] { get }
@@ -2257,6 +2258,7 @@ ToolUp.Platform.Client+Msg.IsModuleMsg : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsModuleSelected : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsMyTeamsLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsPlatformRoleLoaded : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsRefreshAccessibleModules : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsResetModule : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRetryBootLoad : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarGroupToggled : System.Boolean { get }
@@ -2264,6 +2266,7 @@ ToolUp.Platform.Client+Msg.IsSidebarModulePinToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModuleReordered : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsTeamSwitched : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsToggleShowAllModules : System.Boolean { get }
+ToolUp.Platform.Client+Msg.RefreshAccessibleModules : ToolUp.Platform.Client+Msg { get }
 ToolUp.Platform.Client+Msg.Tag : System.Int32 { get }
 ToolUp.Platform.Client+Msg.ToggleShowAllModules : ToolUp.Platform.Client+Msg { get }
 ToolUp.Platform.Client+Msg+AccessibleModulesLoaded (class)
@@ -2332,6 +2335,7 @@ ToolUp.Platform.Client+Msg+Tags.ModuleMsg : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ModuleSelected : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.MyTeamsLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.PlatformRoleLoaded : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.RefreshAccessibleModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ResetModule : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RetryBootLoad : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarGroupToggled : System.Int32 (literal)

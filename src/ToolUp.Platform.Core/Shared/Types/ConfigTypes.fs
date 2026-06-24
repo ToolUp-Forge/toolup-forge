@@ -132,6 +132,17 @@ type ClientModuleContext = {
     /// invokes this from its `ActiveTeamSwitched` and `TeamCreated`
     /// handlers; custom team-management UIs should do the same.
     OnTeamSwitched: (string -> unit) option
+    /// Phase 245 — hook for a module that changes a team's module
+    /// **exposure** (the per-team sidebar-visibility set) to ask the
+    /// shell to re-fetch its `AccessibleModules` so the sidebar (and the
+    /// admin "show hidden modules" toggle) update live, without a manual
+    /// reload. Lighter than `OnTeamSwitched`: it refreshes only the
+    /// accessible-modules list, leaving module states / config / flags
+    /// intact. Set by the shell to `Some (fun () -> dispatch
+    /// RefreshAccessibleModules)` on `Team`-shaped surfaces; `None`
+    /// otherwise. The built-in `PermissionsAdminUI` invokes it after a
+    /// successful `SetModuleExposure`.
+    OnAccessibleModulesChanged: (unit -> unit) option
 }
 
 /// No-op `IModuleQueryBus` used by `ClientModuleContext.empty` and
@@ -156,6 +167,7 @@ module ClientModuleContext =
         TeamId = None
         QueryBus = NoOpModuleQueryBus() :> IModuleQueryBus
         OnTeamSwitched = None
+        OnAccessibleModulesChanged = None
     }
 
 /// Reserved identifiers for the config subsystem.

@@ -1454,9 +1454,10 @@ ToolUp.Platform.ClassifiedFieldWrittenPayload.FieldPath : System.String { get }
 ToolUp.Platform.ClassifiedFieldWrittenPayload.Level : System.String { get }
 ToolUp.Platform.ClassifiedFieldWrittenPayload.UserId : System.String { get }
 ToolUp.Platform.ClientModuleContext (class)
-ToolUp.Platform.ClientModuleContext..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.ClientModuleContext..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]])
 ToolUp.Platform.ClientModuleContext.Config : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ClientModuleContext.Flags : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue] { get }
+ToolUp.Platform.ClientModuleContext.OnAccessibleModulesChanged : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.ClientModuleContext.OnTeamSwitched : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.ClientModuleContext.PlatformConfig : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ClientModuleContext.QueryBus : ToolUp.Platform.IModuleQueryBus { get }

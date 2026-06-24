@@ -198,6 +198,11 @@ module Client =
         | ModuleMsg of obj
         | ModuleSelected of string
         | AccessibleModulesLoaded of AccessibleModulesResponse option
+        /// Phase 245 — re-fetch `AccessibleModules` after a module's
+        /// exposure changed (fired by a module via
+        /// `ClientModuleContext.OnAccessibleModulesChanged`) so the
+        /// sidebar + admin toggle update without a manual reload.
+        | RefreshAccessibleModules
         /// Phase 245 — platform admin toggled the "show all modules"
         /// sidebar escape (reveal/hide the active team's hidden modules).
         | ToggleShowAllModules
@@ -655,6 +660,21 @@ module Client =
         else
             None
 
+    /// Phase 245 — the `OnAccessibleModulesChanged` callback handed to
+    /// modules. Only meaningful where exposure applies (a `Team`-shaped
+    /// surface), so it mirrors `buildOnTeamSwitched`'s gate; `None`
+    /// otherwise. A successful `PermissionsAdminUI.SetModuleExposure`
+    /// invokes it to re-fetch the shell's accessible-modules list.
+    let private buildOnAccessibleModulesChanged (config: ClientConfig) : (unit -> unit) option =
+        if ClientConfig.hasTeamScope config then
+            Some(fun () ->
+                shellDispatcher
+                |> Option.iter (fun d ->
+                    if d.IsActive then
+                        d.Dispatch RefreshAccessibleModules))
+        else
+            None
+
     let private buildContext
         (config: ClientConfig)
         (queryBus: IModuleQueryBus)
@@ -669,6 +689,7 @@ module Client =
             TeamId = model.ActiveTeamId
             QueryBus = queryBus
             OnTeamSwitched = buildOnTeamSwitched config
+            OnAccessibleModulesChanged = buildOnAccessibleModulesChanged config
         }
 
     /// The deployment's default landing surface id — the module the
@@ -1036,6 +1057,7 @@ module Client =
                     TeamId = None
                     QueryBus = queryBus
                     OnTeamSwitched = buildOnTeamSwitched _config
+                    OnAccessibleModulesChanged = buildOnAccessibleModulesChanged _config
                 }
 
                 let state, cmd = moduleImpl.Init seedCtx
@@ -1267,6 +1289,9 @@ module Client =
                         Degradations = BootDegradation.remove "permissions" model.Degradations
                 },
                 Cmd.none
+
+            | RefreshAccessibleModules ->
+                model, bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
 
             | ToggleShowAllModules ->
                 {
