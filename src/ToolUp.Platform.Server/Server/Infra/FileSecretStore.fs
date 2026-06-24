@@ -53,6 +53,13 @@ type FileSecretStore(?baseDir: string, ?path: string) =
     // data. `_platform` has its own entry; each team/user gets its own.
     let mutable cache: Map<string, Map<string, string>> = Map.empty
 
+    // Guards every read/mutation of `cache`. Concurrent first-reads for the
+    // same scope otherwise race on the load-then-store (benign data race);
+    // SetSecret/DeleteSecret invalidations must also be serialised against
+    // in-flight loads. Mirrors the SemaphoreSlim/lock pattern in
+    // SingleKeyResolver + ShareTokenStore.
+    let cacheLock = obj ()
+
     let sanitiseScope (scopeId: string) =
         scopeId.Replace('-', '_').ToUpperInvariant()
 
@@ -111,8 +118,16 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                     | p when scopeId = "_platform" -> loadFile p
                     | _ -> Map.empty
 
-            cache <- cache |> Map.add scopeId secrets
-            secrets
+            // Serialise the cache mutation against concurrent loads and
+            // SetSecret/DeleteSecret invalidations; double-check inside the
+            // lock so a scope another thread populated meanwhile isn't
+            // overwritten (and a concurrent invalidation isn't lost).
+            lock cacheLock (fun () ->
+                match cache |> Map.tryFind scopeId with
+                | Some existing -> existing
+                | None ->
+                    cache <- cache |> Map.add scopeId secrets
+                    secrets)
 
     // Resolve the file path used for writes on a given scope. Writes
     // always target the base directory (never env vars or the user-home
@@ -227,7 +242,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
 
                     // Invalidate the in-memory cache so subsequent
                     // GetSecret calls see the new value.
-                    cache <- cache |> Map.remove scopeId
+                    lock cacheLock (fun () -> cache <- cache |> Map.remove scopeId)
 
                     return Ok()
                 with ex ->
@@ -248,7 +263,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                         writeFile filePath updated
 
                         // Invalidate cache.
-                        cache <- cache |> Map.remove scopeId
+                        lock cacheLock (fun () -> cache <- cache |> Map.remove scopeId)
 
                         return Ok()
                 with ex ->
