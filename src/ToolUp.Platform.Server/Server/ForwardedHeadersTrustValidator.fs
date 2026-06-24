@@ -37,17 +37,32 @@ type ForwardedHeadersTrustValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let requiresAuth = DeploymentConfig.requiresAnyAuth config
             let trustForwarded = config.TrustForwardedHeaders
             let httpsRequired = config.RequireHttps
 
-            if requiresAuth && trustForwarded && not httpsRequired then
+            // Fire whenever forwarded headers are trusted — NOT only in auth
+            // mode and NOT only when RequireHttps = false. `UseForwardedHeaders`
+            // is registered with KnownIPNetworks/KnownProxies cleared, so ANY
+            // peer's X-Forwarded-* is honoured. The X-Forwarded-For spoof
+            // (rate-limit bypass + audit/access-log poisoning) exists in every
+            // mode — including anonymous internet-facing deployments, which the
+            // old `requiresAuth` gate left with no signal at all — and persists
+            // even when RequireHttps = true. The X-Forwarded-Proto / IsHttps
+            // spoof is the additional consequence specific to RequireHttps = false.
+            if not trustForwarded then
+                return Ok
+            else
+                let httpsClause =
+                    if httpsRequired then
+                        ""
+                    else
+                        " With RequireHttps = false, a plain-HTTP request carrying X-Forwarded-Proto: https also makes Request.IsHttps return true, fooling cookie-secure flags / OIDC RedirectUri / any TLS branch — set TOOLUP_REQUIRE_HTTPS=1 if a TLS terminator runs upstream."
+
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s + TrustForwardedHeaders = true + RequireHttps = false. The SDK trusts X-Forwarded-Proto from any peer (KnownIPNetworks is cleared) — an attacker sending plain HTTP with X-Forwarded-Proto: https makes Request.IsHttps return true, fooling cookie-secure flags / OIDC RedirectUri / any code branching on TLS. Set TOOLUP_REQUIRE_HTTPS=1 if your TLS terminator runs upstream and the SDK should refuse plain HTTP. Staging deployments that legitimately run plaintext Kestrel behind upstream TLS can ignore this warning."
+                            "ServerConfig.Surfaces = %s + TrustForwardedHeaders = true, but KnownIPNetworks / KnownProxies are cleared — the SDK trusts X-Forwarded-For / X-Forwarded-Proto from ANY peer, not only your proxy. A caller rotating X-Forwarded-For bypasses IP rate limiting and poisons audit / access logs (rate limiting keys on the post-rewrite RemoteIpAddress); this applies in every mode, including anonymous internet-facing deployments.%s Front the deployment with a single trusted proxy that strips client-supplied X-Forwarded-* headers. A trusted-proxy CIDR allowlist that scopes this trust to known proxies is planned hardening."
                             (DeploymentConfig.surfacesLabel config)
+                            httpsClause
                     )
-            else
-                return Ok
         }

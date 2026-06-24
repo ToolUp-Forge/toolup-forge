@@ -21,9 +21,16 @@ let private validate (config: ServerConfig) : ValidationResult =
 let tests =
     testList "Phase 6l.K — ForwardedHeaders trust validator" [
 
-        test "Anonymous mode + TrustForwardedHeaders + no HTTPS → Ok (anonymous exempt)" {
+        test "Anonymous mode + TrustForwardedHeaders → Warning (rate-limit-bypass signal, no longer exempt)" {
+            // The X-Forwarded-For spoof bypasses IP rate limiting + poisons
+            // logs in anonymous mode too — anonymous deployments must get the
+            // signal, not silence.
             let result = validate (cfg Surfaces.anonymous true false)
-            Expect.equal result Ok "anonymous mode is exempt"
+
+            match result with
+            | Warning msg ->
+                Expect.stringContains msg "X-Forwarded-For" "anonymous mode now gets the rate-limit-bypass signal"
+            | other -> failtestf "expected Warning, got %A" other
         }
 
         test "Individual mode + no TrustForwardedHeaders → Ok (no spoof surface)" {
@@ -31,9 +38,22 @@ let tests =
             Expect.equal result Ok "validator only fires when forwarded headers are trusted"
         }
 
-        test "Individual mode + TrustForwardedHeaders + RequireHttps → Ok (TLS enforced)" {
+        test "Individual mode + TrustForwardedHeaders + RequireHttps → Warning (rate-limit bypass persists)" {
+            // RequireHttps closes the IsHttps spoof but NOT the X-Forwarded-For
+            // rate-limit-bypass / log-poisoning (KnownProxies still cleared).
             let result = validate (cfg Surfaces.individual true true)
-            Expect.equal result Ok "RequireHttps closes the spoof surface"
+
+            match result with
+            | Warning msg ->
+                Expect.stringContains
+                    msg
+                    "X-Forwarded-For"
+                    "the rate-limit-bypass surface is independent of RequireHttps"
+
+                Expect.isFalse
+                    (msg.Contains "TOOLUP_REQUIRE_HTTPS=1")
+                    "no IsHttps clause when HTTPS is already required"
+            | other -> failtestf "expected Warning, got %A" other
         }
 
         test "Individual mode + TrustForwardedHeaders + no HTTPS → Warning" {
