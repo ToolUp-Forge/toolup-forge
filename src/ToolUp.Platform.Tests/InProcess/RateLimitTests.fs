@@ -92,7 +92,12 @@ let tests =
             let cls = RateLimit.classify typeof<ServerRateLimitedApi>
 
             Expect.equal (budgetShapes cls "Capped") [ 2, 60 ] "Capped carries one per-minute budget of 2"
-            Expect.equal (budgetShapes cls "Burst") [ 1, 1; 100, 3600 ] "Burst carries both budgets in declaration order"
+
+            Expect.equal
+                (budgetShapes cls "Burst")
+                [ 1, 1; 100, 3600 ]
+                "Burst carries both budgets in declaration order"
+
             Expect.equal (budgetShapes cls "Unbudgeted") [] "Unbudgeted carries no budget"
         }
 
@@ -110,7 +115,9 @@ let tests =
                 Expect.equal
                     (budgetShapes mirror m)
                     (budgetShapes server m)
-                    (sprintf "%s: the ToolUp.Platform.* mirror must normalise to the same budget as the server-tier family" m)
+                    (sprintf
+                        "%s: the ToolUp.Platform.* mirror must normalise to the same budget as the server-tier family"
+                        m)
         }
 
         test "classifier reflects over non-public records" {
@@ -136,7 +143,8 @@ let tests =
             Expect.equal d2 RateLimitAllowed "second call within budget"
 
             match d3 with
-            | RateLimitDenied retryAfter -> Expect.isGreaterThan retryAfter TimeSpan.Zero "denial carries a positive RetryAfter"
+            | RateLimitDenied retryAfter ->
+                Expect.isGreaterThan retryAfter TimeSpan.Zero "denial carries a positive RetryAfter"
             | RateLimitAllowed -> failtest "third call should exceed the budget of 2"
         }
 
@@ -145,7 +153,10 @@ let tests =
             // 1 call/second AND 100 calls/hour. The per-second cap bites
             // on the second call within the same second; the hourly cap
             // (99 remaining) is irrelevant — AND semantics.
-            let budgets = [ RateLimitAttribute(1, RateLimitWindow.perSecond); RateLimitAttribute(100, RateLimitWindow.perHour) ]
+            let budgets = [
+                RateLimitAttribute(1, RateLimitWindow.perSecond)
+                RateLimitAttribute(100, RateLimitWindow.perHour)
+            ]
 
             let d1 = run (RateLimit.evaluate store "subject:a" "Burst" budgets)
             let d2 = run (RateLimit.evaluate store "subject:a" "Burst" budgets)
@@ -169,7 +180,10 @@ let tests =
             | RateLimitDenied _ -> ()
             | RateLimitAllowed -> failtest "subject:a's second call should be denied"
 
-            Expect.equal bFirst RateLimitAllowed "subject:b's first call must be unaffected by subject:a (security boundary)"
+            Expect.equal
+                bFirst
+                RateLimitAllowed
+                "subject:b's first call must be unaffected by subject:a (security boundary)"
         }
 
         test "deriveSubjectKey prefers the auth subject and falls back to a per-IP key" {
@@ -179,10 +193,19 @@ let tests =
                     member _.HasClaim(_, _) = false
                     member _.HasTenant() = false
                     member _.IsAnonymous() = false
-                    member _.SubjectId = "user:42" }
+                    member _.SubjectId = "user:42"
+                }
 
-            Expect.equal (RateLimit.deriveSubjectKey (Some withSubject) (Some "1.2.3.4")) "subject:user:42" "resolved subject wins"
-            Expect.equal (RateLimit.deriveSubjectKey None (Some "1.2.3.4")) "ip:1.2.3.4" "anonymous falls back to per-IP"
+            Expect.equal
+                (RateLimit.deriveSubjectKey (Some withSubject) (Some "1.2.3.4"))
+                "subject:user:42"
+                "resolved subject wins"
+
+            Expect.equal
+                (RateLimit.deriveSubjectKey None (Some "1.2.3.4"))
+                "ip:1.2.3.4"
+                "anonymous falls back to per-IP"
+
             Expect.equal (RateLimit.deriveSubjectKey None None) "anonymous-unknown" "no IP resolvable"
         }
 
@@ -201,11 +224,24 @@ let tests =
             // annotation by source presence — removal fails the pack.
             let ai = srcSource [ "ToolUp.AI.Core"; "Shared"; "AITypes.fs" ]
             let kb = srcSource [ "ToolUp.KnowledgeBase.Core"; "Shared"; "SharedTypes.fs" ]
-            let platformKb = srcSource [ "ToolUp.KnowledgeBase.Core"; "Shared"; "PlatformKnowledgeApi.fs" ]
 
-            Expect.stringContains ai "[<RateLimit(30, RateLimitSeconds.perMinute)>]" "AIAssistantApi.SubmitMessage is budgeted"
-            Expect.stringContains kb "[<RateLimit(20, RateLimitSeconds.perMinute)>]" "KnowledgeApi.UploadDocument is budgeted"
-            Expect.stringContains platformKb "[<RateLimit(20, RateLimitSeconds.perMinute)>]" "IPlatformKnowledgeApi.UploadPlatformDocument is budgeted"
+            let platformKb =
+                srcSource [ "ToolUp.KnowledgeBase.Core"; "Shared"; "PlatformKnowledgeApi.fs" ]
+
+            Expect.stringContains
+                ai
+                "[<RateLimit(30, RateLimitSeconds.perMinute)>]"
+                "AIAssistantApi.SubmitMessage is budgeted"
+
+            Expect.stringContains
+                kb
+                "[<RateLimit(20, RateLimitSeconds.perMinute)>]"
+                "KnowledgeApi.UploadDocument is budgeted"
+
+            Expect.stringContains
+                platformKb
+                "[<RateLimit(20, RateLimitSeconds.perMinute)>]"
+                "IPlatformKnowledgeApi.UploadPlatformDocument is budgeted"
         }
 
         // ── Dispatcher pre-flight ordering + denial emission (source pins) ──
@@ -220,8 +256,15 @@ let tests =
             Expect.isGreaterThan replayIdx -1 "the idempotency replay path must exist"
             Expect.isGreaterThan rateLimitIdx -1 "the rate-limit pre-flight must exist"
 
-            Expect.isLessThan authIdx rateLimitIdx "auth runs before rate-limit — an unauthorised call must not spend the budget"
-            Expect.isLessThan replayIdx rateLimitIdx "idempotency replay precedes rate-limit — a replayed call must not spend the budget"
+            Expect.isLessThan
+                authIdx
+                rateLimitIdx
+                "auth runs before rate-limit — an unauthorised call must not spend the budget"
+
+            Expect.isLessThan
+                replayIdx
+                rateLimitIdx
+                "idempotency replay precedes rate-limit — a replayed call must not spend the budget"
         }
 
         test "the rate-limit denial branch emits denial telemetry and a RateLimitExceeded audit row" {
@@ -233,6 +276,10 @@ let tests =
 
             Expect.isGreaterThan deniedIdx -1 "the denial branch must exist"
             Expect.isGreaterThan telemetryIdx deniedIdx "denial telemetry is emitted inside the denial branch"
-            Expect.isGreaterThan auditIdx deniedIdx "the RateLimitExceeded audit row is emitted inside the denial branch"
+
+            Expect.isGreaterThan
+                auditIdx
+                deniedIdx
+                "the RateLimitExceeded audit row is emitted inside the denial branch"
         }
     ]

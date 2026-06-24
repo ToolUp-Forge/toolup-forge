@@ -43,12 +43,20 @@ let tests =
             let email = fieldByKey "Email" fields
 
             Expect.isTrue
-                (email.Validators |> List.exists (fun v -> match v with Regex(_, Some "email") -> true | _ -> false))
+                (email.Validators
+                 |> List.exists (fun v ->
+                     match v with
+                     | Regex(_, Some "email") -> true
+                     | _ -> false))
                 "Email maps to a Regex validator tagged 'email'"
 
             let age = fieldByKey "Age" fields
             Expect.equal age.Kind (NumberField(Some 18.0, Some 120.0)) "Range maps to NumberField bounds"
-            Expect.contains age.Validators (NumberRange(Some 18.0, Some 120.0)) "Range also surfaces as a NumberRange validator"
+
+            Expect.contains
+                age.Validators
+                (NumberRange(Some 18.0, Some 120.0))
+                "Range also surfaces as a NumberRange validator"
         }
 
         test "a non-record type yields no fields" {

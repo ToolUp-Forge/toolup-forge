@@ -75,11 +75,12 @@ let fieldsFromRecord (recordType: Type) : FieldSchema list =
         |> Array.toList
         |> List.map (fun pi ->
             let attrs = pi.GetCustomAttributes(true)
-            let has name = attrs |> Array.exists (fun a -> attrName a = name)
+
+            let has name =
+                attrs |> Array.exists (fun a -> attrName a = name)
 
             let pick name reader =
-                attrs
-                |> Array.tryPick (fun a -> if attrName a = name then reader a else None)
+                attrs |> Array.tryPick (fun a -> if attrName a = name then reader a else None)
 
             let minLen = pick "MinLengthAttribute" (fun a -> intProp a "MinLength")
             let maxLen = pick "MaxLengthAttribute" (fun a -> intProp a "MaxLength")
