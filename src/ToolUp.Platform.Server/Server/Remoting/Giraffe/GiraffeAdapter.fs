@@ -592,6 +592,17 @@ module GiraffeUtil =
                     let cachedBodyTextCell: string option ref = ref None
                     let cachedBodyHashCell: string option ref = ref None
 
+                    // INVARIANT: if a POST-DISPATCH stage calls this (audit
+                    // payload, error categorisation), the cache MUST already be
+                    // seeded by a PRE-DISPATCH eager-materialise on the same
+                    // method — because the proxy disposes ctx.Request.Body
+                    // (see the LOAD-BEARING note at Proxy.fs `new StreamReader`).
+                    // A first read here after dispatch hits a disposed
+                    // FileBufferingReadStream → ObjectDisposedException after the
+                    // response started → connection reset → gateway 502 on a
+                    // handler that actually succeeded. The idempotency and audit
+                    // stages each add their own pre-dispatch seed guard; any new
+                    // post-dispatch body reader must do the same.
                     let readCachedBodyBytes () = task {
                         match cachedBodyBytesCell.Value with
                         | Some bytes -> return bytes

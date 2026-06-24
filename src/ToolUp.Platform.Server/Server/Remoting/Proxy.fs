@@ -429,6 +429,23 @@ let makeApiProxy<'impl, 'ctx>
                                         // an empty stream read.
                                         return []
                                     | None ->
+                                        // LOAD-BEARING: this `use` disposes
+                                        // `props.Input` (= ctx.Request.Body, a
+                                        // FileBufferingReadStream) when the proxy
+                                        // finishes. Any dispatcher stage that
+                                        // reads the request body AFTER dispatch
+                                        // (audit payload, idempotency hash, …)
+                                        // MUST pre-seed the body cache
+                                        // (`readCachedBodyBytes` in GiraffeAdapter)
+                                        // BEFORE this point — otherwise its
+                                        // post-dispatch read hits a disposed
+                                        // stream and throws ObjectDisposedException
+                                        // after the response has started, which
+                                        // resets the connection and surfaces as a
+                                        // gateway 502 even though the handler
+                                        // succeeded. See the eager-materialise
+                                        // guards in GiraffeAdapter (idempotency +
+                                        // audit) for the established pattern.
                                         use sr = new StreamReader(props.Input)
                                         let! text = sr.ReadToEndAsync()
 
