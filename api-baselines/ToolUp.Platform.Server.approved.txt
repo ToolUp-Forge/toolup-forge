@@ -928,6 +928,7 @@ ToolUp.Platform.FileNameSanitiser (class)
 ToolUp.Platform.FileNameSanitiser.validate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.FlagEvaluator (class)
 ToolUp.Platform.FlagEvaluator.create(ToolUp.Platform.IFeatureFlagStore, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.FlagEvaluator+FlagEvaluator
+ToolUp.Platform.FlagEvaluator.createWithFlagSources(ToolUp.Platform.IFeatureFlagStore, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IFlagSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.FlagEvaluator+FlagEvaluator
 ToolUp.Platform.FlagEvaluator.createWithSources(ToolUp.Platform.IFeatureFlagStore, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.FeatureFlagSourceRegistry, ToolUp.Platform.IUserClaims, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.FlagEvaluator+FlagEvaluator
 ToolUp.Platform.FlagEvaluator+FlagEvaluator (class)
 ToolUp.Platform.FlagEvaluator+FlagEvaluator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagValue]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.FeatureFlag, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.FlagValue]]])
@@ -1153,6 +1154,8 @@ ToolUp.Platform.IFieldClassifier (interface)
 ToolUp.Platform.IFieldClassifier.Classify(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldClassification]]
 ToolUp.Platform.IFieldClassifier.IsClassified(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.IFieldClassifier.LookupBySubject(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldHit]]
+ToolUp.Platform.IFlagSource (interface)
+ToolUp.Platform.IFlagSource.Resolve(ToolUp.Platform.FeatureFlag, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagValue]]
 ToolUp.Platform.IImageEmbedder (class)
 ToolUp.Platform.IImageEmbedder.ImageRegionDataTypeId : System.String (literal)
 ToolUp.Platform.IImageEmbedder+IImageEmbedder (interface)
@@ -1472,6 +1475,8 @@ ToolUp.Platform.InMemoryNarrativeStore..ctor(System.Int32)
 ToolUp.Platform.InMemoryNarrativeStore..ctor(ToolUp.Platform.Narrative.NarrativeRetentionPolicy)
 ToolUp.Platform.InMemoryOAuthStateStore (class)
 ToolUp.Platform.InMemoryOAuthStateStore..ctor()
+ToolUp.Platform.InMemoryPresenceChannel (class)
+ToolUp.Platform.InMemoryPresenceChannel..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryRateLimitStore (class)
 ToolUp.Platform.InMemoryRateLimitStore.create() : ToolUp.Platform.IRateLimitStore
 ToolUp.Platform.InProcessOAuthTokenRefresher (class)
@@ -1696,6 +1701,9 @@ ToolUp.Platform.ModuleQueryBus+InMemoryModuleQueryBus (class)
 ToolUp.Platform.ModuleQueryBus+InMemoryModuleQueryBus..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleQueryHandler]], ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink)
 ToolUp.Platform.ModuleQueryBus+ModuleQueryHandler (class)
 ToolUp.Platform.ModuleQueryBus+ModuleQueryHandler.typed`2(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleQueryContext, Microsoft.FSharp.Core.FSharpFunc`2[TRequest, Microsoft.FSharp.Control.FSharpAsync`1[TResponse]]]) : ToolUp.Platform.ModuleQueryHandler
+ToolUp.Platform.MultiInstanceAdminCoherenceValidator (class)
+ToolUp.Platform.MultiInstanceAdminCoherenceValidator+MultiInstanceAdminCoherenceValidator (class)
+ToolUp.Platform.MultiInstanceAdminCoherenceValidator+MultiInstanceAdminCoherenceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.NarrativeEntry (class)
 ToolUp.Platform.NarrativeEntry..ctor(System.Guid, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument)
 ToolUp.Platform.NarrativeEntry.Document : ToolUp.Platform.Narrative.NarrativeDocument { get }
@@ -1949,8 +1957,10 @@ ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistr
 ToolUp.Platform.PermissionStore (class)
 ToolUp.Platform.PermissionStore+IPermissionStore (interface)
 ToolUp.Platform.PermissionStore+IPermissionStore.GetEffectivePermissions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]]
+ToolUp.Platform.PermissionStore+IPermissionStore.GetHiddenModules(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]]
 ToolUp.Platform.PermissionStore+IPermissionStore.GetTeamPermissions(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamPermissions]
 ToolUp.Platform.PermissionStore+IPermissionStore.SetMemberPermissions(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.PermissionStore+IPermissionStore.SetModuleExposure(System.String, System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.PermissionStore+IPermissionStore.SetTeamDefaults(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.PermissionStore+IPermissionStore.SetTeamPermissions(System.String, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.PermissionStore+PermissionStore (class)
@@ -2761,12 +2771,12 @@ ToolUp.Platform.VectorStoreErasureHandler+VectorStoreErasureHandler..ctor(ToolUp
 ToolUp.Platform.WebhookApiHandler (class)
 ToolUp.Platform.WebhookApiHandler.webhookApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IWebhookApi
 ToolUp.Platform.WebhookDispatcher (class)
-ToolUp.Platform.WebhookDispatcher.create(ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.IEventStore, System.Net.Http.HttpClient, ToolUp.Platform.WebhookRetryPolicy, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter]) : ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService
+ToolUp.Platform.WebhookDispatcher.create(ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.IEventStore, System.Net.Http.HttpClient, ToolUp.Platform.WebhookRetryPolicy, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter], ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy) : ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService
 ToolUp.Platform.WebhookDispatcher+IWebhookDispatcher (interface)
 ToolUp.Platform.WebhookDispatcher+IWebhookDispatcher.Dispatch(ToolUp.Platform.ModuleEvent) : System.Void
 ToolUp.Platform.WebhookDispatcher+IWebhookDispatcher.TestFire(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookTestResult, System.String]]
 ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService (class)
-ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService..ctor(ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.IEventStore, System.Net.Http.HttpClient, ToolUp.Platform.WebhookRetryPolicy, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter])
+ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService..ctor(ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.IEventStore, System.Net.Http.HttpClient, ToolUp.Platform.WebhookRetryPolicy, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter], ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy)
 ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.WebhookDispatcher+WebhookSignature (class)
 ToolUp.Platform.WebhookDispatcher+WebhookSignature.header(System.DateTime, ToolUp.Platform.WebhookSubscription, System.Byte[]) : System.String

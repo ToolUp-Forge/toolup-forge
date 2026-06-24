@@ -390,7 +390,8 @@ ToolUp.Platform.AIToolDefinition.Parameters : Microsoft.FSharp.Collections.FShar
 ToolUp.Platform.AIToolDefinition.SourceModule : System.String { get }
 ToolUp.Platform.AIToolDefinition.Surface : ToolUp.Platform.AISurfaceFilter { get }
 ToolUp.Platform.AccessContext (class)
-ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole])
+ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole])
+ToolUp.Platform.AccessContext.HiddenModules : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.AccessContext.ModulePermissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.AccessContext.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
 ToolUp.Platform.AccessContext.Subject : ToolUp.Platform.Subject { get }
@@ -407,6 +408,7 @@ ToolUp.Platform.AccessContextModule.inTeamScope(ToolUp.Platform.AccessContext) :
 ToolUp.Platform.AccessContextModule.isAnonymous(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isAuthenticated(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isClaimBearer(ToolUp.Platform.AccessContext) : System.Boolean
+ToolUp.Platform.AccessContextModule.isModuleExposed(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.kindLabel(ToolUp.Platform.AccessContext) : System.String
 ToolUp.Platform.AccessContextModule.unrestricted(ToolUp.Platform.Subject) : ToolUp.Platform.AccessContext
 ToolUp.Platform.AccessibilityApi (class)
@@ -2895,6 +2897,11 @@ ToolUp.Platform.IPlatformTenantApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Syst
 ToolUp.Platform.IPlatformTenantApi.DeprovisionTenant : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.GetLifecycleSummary : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary], System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.ProvisionTenant : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ProvisioningRequest], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]] { get }
+ToolUp.Platform.IPresenceChannel (interface)
+ToolUp.Platform.IPresenceChannel.Heartbeat(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IPresenceChannel.Join(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IPresenceChannel.Leave(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IPresenceChannel.Roster(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry]]
 ToolUp.Platform.IRateLimiter (interface)
 ToolUp.Platform.IRateLimiter.Wait(ToolUp.Platform.RateLimitKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RateLimitDecision]
 ToolUp.Platform.IServiceStatusBoardApi (class)
@@ -2924,9 +2931,11 @@ ToolUp.Platform.ITraceLogger (interface)
 ToolUp.Platform.ITraceLogger.Trace(System.String, System.String) : System.Void
 ToolUp.Platform.IUserDirectory (interface)
 ToolUp.Platform.IUserDirectory.NotifyInvitation(ToolUp.Platform.InvitationNotification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IUserDirectory.ResolveUsers(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]
 ToolUp.Platform.IUserDirectory.SearchUsers(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]
 ToolUp.Platform.IUserDirectoryApi (class)
-ToolUp.Platform.IUserDirectoryApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]])
+ToolUp.Platform.IUserDirectoryApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]])
+ToolUp.Platform.IUserDirectoryApi.ResolveUsers : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]] { get }
 ToolUp.Platform.IUserDirectoryApi.SearchUsers : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String]]] { get }
 ToolUp.Platform.IWebhookApi (class)
 ToolUp.Platform.IWebhookApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateWebhookRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookSubscription], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, ToolUp.Platform.WebhookStatus], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookTestResult, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookDelivery], System.String]]])
@@ -4217,6 +4226,51 @@ ToolUp.Platform.OverallStatus+Tags.DegradedBy : System.Int32 (literal)
 ToolUp.Platform.OverallStatus+Tags.UnhealthyBy : System.Int32 (literal)
 ToolUp.Platform.OverallStatus+UnhealthyBy (class)
 ToolUp.Platform.OverallStatus+UnhealthyBy.sections : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Payments.CheckoutSession (class)
+ToolUp.Platform.Payments.CheckoutSession..ctor(System.String)
+ToolUp.Platform.Payments.CheckoutSession.Url : System.String { get }
+ToolUp.Platform.Payments.IPaymentProvider (interface)
+ToolUp.Platform.Payments.IPaymentProvider.CreateCheckoutSession(ToolUp.Platform.Payments.PaymentCheckoutRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Payments.CheckoutSession, ToolUp.Platform.Payments.PaymentError]]
+ToolUp.Platform.Payments.IPaymentProvider.CreatePortalSession(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Payments.PortalSession, ToolUp.Platform.Payments.PaymentError]]
+ToolUp.Platform.Payments.IPaymentProvider.GetSubscriptionStatus(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Payments.SubscriptionStatus, ToolUp.Platform.Payments.PaymentError]]
+ToolUp.Platform.Payments.PaymentCheckoutRequest (class)
+ToolUp.Platform.Payments.PaymentCheckoutRequest..ctor(System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
+ToolUp.Platform.Payments.PaymentCheckoutRequest.CancelUrl : System.String { get }
+ToolUp.Platform.Payments.PaymentCheckoutRequest.CustomerEmail : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Payments.PaymentCheckoutRequest.CustomerId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Payments.PaymentCheckoutRequest.PriceId : System.String { get }
+ToolUp.Platform.Payments.PaymentCheckoutRequest.Quantity : System.Int32 { get }
+ToolUp.Platform.Payments.PaymentCheckoutRequest.SuccessUrl : System.String { get }
+ToolUp.Platform.Payments.PaymentCheckoutRequest.TenantId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Payments.PaymentError (class)
+ToolUp.Platform.Payments.PaymentError.IsProviderError : System.Boolean { get }
+ToolUp.Platform.Payments.PaymentError.IsProviderNotConfigured : System.Boolean { get }
+ToolUp.Platform.Payments.PaymentError.ProviderNotConfigured : ToolUp.Platform.Payments.PaymentError { get }
+ToolUp.Platform.Payments.PaymentError.Tag : System.Int32 { get }
+ToolUp.Platform.Payments.PaymentError+ProviderError (class)
+ToolUp.Platform.Payments.PaymentError+ProviderError.message : System.String { get }
+ToolUp.Platform.Payments.PaymentError+Tags (class)
+ToolUp.Platform.Payments.PaymentError+Tags.ProviderError : System.Int32 (literal)
+ToolUp.Platform.Payments.PaymentError+Tags.ProviderNotConfigured : System.Int32 (literal)
+ToolUp.Platform.Payments.PortalSession (class)
+ToolUp.Platform.Payments.PortalSession..ctor(System.String)
+ToolUp.Platform.Payments.PortalSession.Url : System.String { get }
+ToolUp.Platform.Payments.SubscriptionStatus (class)
+ToolUp.Platform.Payments.SubscriptionStatus.Canceled : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Platform.Payments.SubscriptionStatus.IsActiveSubscription : System.Boolean { get }
+ToolUp.Platform.Payments.SubscriptionStatus.IsCanceled : System.Boolean { get }
+ToolUp.Platform.Payments.SubscriptionStatus.IsNoSubscription : System.Boolean { get }
+ToolUp.Platform.Payments.SubscriptionStatus.IsPastDue : System.Boolean { get }
+ToolUp.Platform.Payments.SubscriptionStatus.NoSubscription : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Platform.Payments.SubscriptionStatus.PastDue : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Platform.Payments.SubscriptionStatus.Tag : System.Int32 { get }
+ToolUp.Platform.Payments.SubscriptionStatus+ActiveSubscription (class)
+ToolUp.Platform.Payments.SubscriptionStatus+ActiveSubscription.planId : System.String { get }
+ToolUp.Platform.Payments.SubscriptionStatus+Tags (class)
+ToolUp.Platform.Payments.SubscriptionStatus+Tags.ActiveSubscription : System.Int32 (literal)
+ToolUp.Platform.Payments.SubscriptionStatus+Tags.Canceled : System.Int32 (literal)
+ToolUp.Platform.Payments.SubscriptionStatus+Tags.NoSubscription : System.Int32 (literal)
+ToolUp.Platform.Payments.SubscriptionStatus+Tags.PastDue : System.Int32 (literal)
 ToolUp.Platform.PeerCallCompletedPayload (class)
 ToolUp.Platform.PeerCallCompletedPayload..ctor(System.String, System.String, System.String, System.String, System.Boolean, System.String, System.DateTimeOffset)
 ToolUp.Platform.PeerCallCompletedPayload.CallerPeerId : System.String { get }
@@ -4261,9 +4315,10 @@ ToolUp.Platform.PendingInviteStoreError+Tags.Conflict : System.Int32 (literal)
 ToolUp.Platform.PendingInviteStoreError+Tags.NotFound : System.Int32 (literal)
 ToolUp.Platform.PendingInviteStoreError+Tags.StorageFailed : System.Int32 (literal)
 ToolUp.Platform.PermissionApi (class)
-ToolUp.Platform.PermissionApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
+ToolUp.Platform.PermissionApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.Boolean], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.PermissionApi.GetTeamPermissions : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]] { get }
 ToolUp.Platform.PermissionApi.SetMemberPermissions : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.PermissionApi.SetModuleExposure : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.Boolean], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PermissionApi.SetTeamDefaults : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PermissionChangedPayload (class)
 ToolUp.Platform.PermissionChangedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
@@ -4393,6 +4448,21 @@ ToolUp.Platform.PrerenderRoute..ctor(System.String, Microsoft.FSharp.Core.FSharp
 ToolUp.Platform.PrerenderRoute.InitStateKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.PrerenderRoute.Meta : ToolUp.Platform.PrerenderMeta { get }
 ToolUp.Platform.PrerenderRoute.Path : System.String { get }
+ToolUp.Platform.PresenceEntry (class)
+ToolUp.Platform.PresenceEntry..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, ToolUp.Platform.PresenceStatus)
+ToolUp.Platform.PresenceEntry.DisplayName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PresenceEntry.LastSeen : System.DateTime { get }
+ToolUp.Platform.PresenceEntry.PrincipalId : System.String { get }
+ToolUp.Platform.PresenceEntry.Status : ToolUp.Platform.PresenceStatus { get }
+ToolUp.Platform.PresenceStatus (class)
+ToolUp.Platform.PresenceStatus.Away : ToolUp.Platform.PresenceStatus { get }
+ToolUp.Platform.PresenceStatus.IsAway : System.Boolean { get }
+ToolUp.Platform.PresenceStatus.IsOnline : System.Boolean { get }
+ToolUp.Platform.PresenceStatus.Online : ToolUp.Platform.PresenceStatus { get }
+ToolUp.Platform.PresenceStatus.Tag : System.Int32 { get }
+ToolUp.Platform.PresenceStatus+Tags (class)
+ToolUp.Platform.PresenceStatus+Tags.Away : System.Int32 (literal)
+ToolUp.Platform.PresenceStatus+Tags.Online : System.Int32 (literal)
 ToolUp.Platform.ProcessProfile (class)
 ToolUp.Platform.ProcessProfile.AllInOne : ToolUp.Platform.ProcessProfile { get }
 ToolUp.Platform.ProcessProfile.DispatcherOnly : ToolUp.Platform.ProcessProfile { get }
@@ -5479,8 +5549,9 @@ ToolUp.Platform.TeamMembership.Role : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.TeamMembership.TeamId : System.String { get }
 ToolUp.Platform.TeamMembership.UserId : System.String { get }
 ToolUp.Platform.TeamPermissions (class)
-ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]])
+ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
 ToolUp.Platform.TeamPermissions.Defaults : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
+ToolUp.Platform.TeamPermissions.Hidden : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.TeamPermissions.Members : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]] { get }
 ToolUp.Platform.TeamPermissionsModule (class)
 ToolUp.Platform.TeamPermissionsModule.empty : ToolUp.Platform.TeamPermissions { get }

@@ -173,6 +173,11 @@ let registerScopeResolution
                     | true, (:? Map<string, ModulePermission list> as perms) -> perms
                     | _ -> Map.empty
 
+                let hiddenModules =
+                    match ctx.Items.TryGetValue "ToolUp.HiddenModules" with
+                    | true, (:? Set<string> as hidden) -> hidden
+                    | _ -> Set.empty
+
                 let platformRole =
                     match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
                     | true, (:? PlatformRole as role) -> Some role
@@ -203,6 +208,7 @@ let registerScopeResolution
                     TeamId = teamId
                     Subject = subject
                     ModulePermissions = modulePermissions
+                    HiddenModules = hiddenModules
                     PlatformRole = platformRole
                 })
         .AddHttpContextAccessor()

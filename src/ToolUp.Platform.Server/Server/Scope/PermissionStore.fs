@@ -56,6 +56,18 @@ type IPermissionStore =
     abstract SetTeamDefaults:
         teamId: string * defaults: Map<string, ModulePermission list> -> Async<Result<unit, string>>
 
+    /// The set of module Ids the team has hidden from its sidebar (the
+    /// per-team exposure axis). Empty when no document exists or nothing
+    /// is hidden. Read per-request by the scope-resolution middleware to
+    /// populate `AccessContext.HiddenModules`.
+    abstract GetHiddenModules: teamId: string -> Async<Set<string>>
+
+    /// Set whether one module is exposed in the team's sidebar.
+    /// `exposed = false` adds the module Id to the hidden set;
+    /// `exposed = true` removes it. Visibility only — does not touch the
+    /// permission maps.
+    abstract SetModuleExposure: teamId: string * moduleName: string * exposed: bool -> Async<Result<unit, string>>
+
 // ─── JSON serialisation ──────────────────────────────────────────────
 
 module private Json =
@@ -117,6 +129,7 @@ module private Json =
         let dto = {|
             defaults = modulesToObject perms.Defaults
             members = membersDict
+            hidden = perms.Hidden |> Set.toArray
         |}
 
         JsonSerializer.Serialize(dto, options) |> Encoding.UTF8.GetBytes
@@ -146,9 +159,24 @@ module private Json =
                     |> Map.ofList
                 | _ -> Map.empty
 
+            // Back-compat: documents written before the exposure axis
+            // (Phase 245) carry no `hidden` array — absent ⇒ empty set
+            // ⇒ every module exposed, the pre-exposure behaviour.
+            let hidden =
+                match root.TryGetProperty "hidden" with
+                | true, h when h.ValueKind = JsonValueKind.Array ->
+                    [
+                        for elem in h.EnumerateArray() do
+                            if elem.ValueKind = JsonValueKind.String then
+                                elem.GetString()
+                    ]
+                    |> Set.ofList
+                | _ -> Set.empty
+
             Some {
                 Defaults = defaults
                 Members = members
+                Hidden = hidden
             }
         with _ ->
             None
@@ -294,4 +322,21 @@ type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
         member _.SetTeamDefaults(teamId, defaults) = async {
             let! existing = load teamId
             return! save teamId { existing with Defaults = defaults }
+        }
+
+        member _.GetHiddenModules teamId = async {
+            let! perms = load teamId
+            return perms.Hidden
+        }
+
+        member _.SetModuleExposure(teamId, moduleName, exposed) = async {
+            let! existing = load teamId
+
+            let updatedHidden =
+                if exposed then
+                    existing.Hidden |> Set.remove moduleName
+                else
+                    existing.Hidden |> Set.add moduleName
+
+            return! save teamId { existing with Hidden = updatedHidden }
         }

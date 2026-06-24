@@ -619,6 +619,7 @@ PermissionsAdminUI+Model.Snapshot : PermissionsAdminUI+LoadState`1[PermissionsAd
 PermissionsAdminUI+Msg (class)
 PermissionsAdminUI+Msg.DismissBanner : PermissionsAdminUI+Msg { get }
 PermissionsAdminUI+Msg.IsDismissBanner : System.Boolean { get }
+PermissionsAdminUI+Msg.IsExposureResult : System.Boolean { get }
 PermissionsAdminUI+Msg.IsRefreshSnapshot : System.Boolean { get }
 PermissionsAdminUI+Msg.IsResetDefaults : System.Boolean { get }
 PermissionsAdminUI+Msg.IsResetMembers : System.Boolean { get }
@@ -630,12 +631,17 @@ PermissionsAdminUI+Msg.IsSelectMember : System.Boolean { get }
 PermissionsAdminUI+Msg.IsSnapshotLoaded : System.Boolean { get }
 PermissionsAdminUI+Msg.IsSwitchTab : System.Boolean { get }
 PermissionsAdminUI+Msg.IsToggleDefault : System.Boolean { get }
+PermissionsAdminUI+Msg.IsToggleExposure : System.Boolean { get }
 PermissionsAdminUI+Msg.IsToggleMemberColumn : System.Boolean { get }
 PermissionsAdminUI+Msg.IsToggleMemberPermission : System.Boolean { get }
 PermissionsAdminUI+Msg.RefreshSnapshot : PermissionsAdminUI+Msg { get }
 PermissionsAdminUI+Msg.ResetDefaults : PermissionsAdminUI+Msg { get }
 PermissionsAdminUI+Msg.SaveDefaults : PermissionsAdminUI+Msg { get }
 PermissionsAdminUI+Msg.Tag : System.Int32 { get }
+PermissionsAdminUI+Msg+ExposureResult (class)
+PermissionsAdminUI+Msg+ExposureResult.Item3 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+PermissionsAdminUI+Msg+ExposureResult.exposed : System.Boolean { get }
+PermissionsAdminUI+Msg+ExposureResult.moduleName : System.String { get }
 PermissionsAdminUI+Msg+ResetMembers (class)
 PermissionsAdminUI+Msg+ResetMembers.userId : System.String { get }
 PermissionsAdminUI+Msg+SaveDefaultsResult (class)
@@ -654,6 +660,7 @@ PermissionsAdminUI+Msg+SwitchTab (class)
 PermissionsAdminUI+Msg+SwitchTab.Item : PermissionsAdminUI+Tab { get }
 PermissionsAdminUI+Msg+Tags (class)
 PermissionsAdminUI+Msg+Tags.DismissBanner : System.Int32 (literal)
+PermissionsAdminUI+Msg+Tags.ExposureResult : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.RefreshSnapshot : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ResetDefaults : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ResetMembers : System.Int32 (literal)
@@ -665,11 +672,15 @@ PermissionsAdminUI+Msg+Tags.SelectMember : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.SnapshotLoaded : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.SwitchTab : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ToggleDefault : System.Int32 (literal)
+PermissionsAdminUI+Msg+Tags.ToggleExposure : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ToggleMemberColumn : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ToggleMemberPermission : System.Int32 (literal)
 PermissionsAdminUI+Msg+ToggleDefault (class)
 PermissionsAdminUI+Msg+ToggleDefault.Item2 : ToolUp.Platform.ModulePermission { get }
 PermissionsAdminUI+Msg+ToggleDefault.moduleName : System.String { get }
+PermissionsAdminUI+Msg+ToggleExposure (class)
+PermissionsAdminUI+Msg+ToggleExposure.exposed : System.Boolean { get }
+PermissionsAdminUI+Msg+ToggleExposure.moduleName : System.String { get }
 PermissionsAdminUI+Msg+ToggleMemberColumn (class)
 PermissionsAdminUI+Msg+ToggleMemberColumn.add : System.Boolean { get }
 PermissionsAdminUI+Msg+ToggleMemberColumn.level : ToolUp.Platform.ModulePermission { get }
@@ -718,7 +729,7 @@ PlatformAdminUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
 PlatformAdminUI+LoadState`1+Tags.Loading : System.Int32 (literal)
 PlatformAdminUI+LoadState`1+Tags.NotLoaded : System.Int32 (literal)
 PlatformAdminUI+Model (class)
-PlatformAdminUI+Model..ctor(PlatformAdminUI+Tab, PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamSummary]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], PlatformAdminUI+LoadState`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+PlatformAdminUI+Model..ctor(PlatformAdminUI+Tab, PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamSummary]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], PlatformAdminUI+LoadState`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary])
 PlatformAdminUI+Model.ActiveTab : PlatformAdminUI+Tab { get }
 PlatformAdminUI+Model.Admins : PlatformAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 PlatformAdminUI+Model.AssignConfirm : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -727,6 +738,7 @@ PlatformAdminUI+Model.AssignInput : System.String { get }
 PlatformAdminUI+Model.ConfirmDeleteTeam : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PlatformAdminUI+Model.CreateTeamError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PlatformAdminUI+Model.CreateTeamInFlight : System.Boolean { get }
+PlatformAdminUI+Model.Directory : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary] { get }
 PlatformAdminUI+Model.NewTeamName : System.String { get }
 PlatformAdminUI+Model.NewTeamOwnerUserId : System.String { get }
 PlatformAdminUI+Model.PlatformKnowledgeBase : PlatformAdminUI+LoadState`1[ToolUp.Platform.PlatformKnowledgeBaseMode] { get }
@@ -748,6 +760,7 @@ PlatformAdminUI+Msg.IsConfirmAssign : System.Boolean { get }
 PlatformAdminUI+Msg.IsConfirmDeleteTeam : System.Boolean { get }
 PlatformAdminUI+Msg.IsCreateTeamResolved : System.Boolean { get }
 PlatformAdminUI+Msg.IsDeleteTeamResolved : System.Boolean { get }
+PlatformAdminUI+Msg.IsDirectoryResolved : System.Boolean { get }
 PlatformAdminUI+Msg.IsPlatformKnowledgeBaseLoaded : System.Boolean { get }
 PlatformAdminUI+Msg.IsRefreshAdmins : System.Boolean { get }
 PlatformAdminUI+Msg.IsRefreshTeams : System.Boolean { get }
@@ -782,6 +795,8 @@ PlatformAdminUI+Msg+CreateTeamResolved.Item : Microsoft.FSharp.Core.FSharpResult
 PlatformAdminUI+Msg+DeleteTeamResolved (class)
 PlatformAdminUI+Msg+DeleteTeamResolved.Item2 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
 PlatformAdminUI+Msg+DeleteTeamResolved.teamId : System.String { get }
+PlatformAdminUI+Msg+DirectoryResolved (class)
+PlatformAdminUI+Msg+DirectoryResolved.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String] { get }
 PlatformAdminUI+Msg+PlatformKnowledgeBaseLoaded (class)
 PlatformAdminUI+Msg+PlatformKnowledgeBaseLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PlatformKnowledgeBaseMode, System.String] { get }
 PlatformAdminUI+Msg+RequestDeleteTeam (class)
@@ -809,6 +824,7 @@ PlatformAdminUI+Msg+Tags.ConfirmAssign : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.ConfirmDeleteTeam : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.CreateTeamResolved : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.DeleteTeamResolved : System.Int32 (literal)
+PlatformAdminUI+Msg+Tags.DirectoryResolved : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.PlatformKnowledgeBaseLoaded : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.RefreshAdmins : System.Int32 (literal)
 PlatformAdminUI+Msg+Tags.RefreshTeams : System.Int32 (literal)
@@ -2953,6 +2969,22 @@ ToolUp.Platform.PlatformAdminMode+Tags.ExternalPlatformAdmin : System.Int32 (lit
 ToolUp.Platform.PlatformAdminMode+Tags.NoPlatformAdmin : System.Int32 (literal)
 ToolUp.Platform.Premium.PremiumHook (class)
 ToolUp.Platform.Premium.PremiumHook.usePremium() : System.Tuple`2[ToolUp.Platform.PremiumStatus, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]
+ToolUp.Platform.PresenceClient (class)
+ToolUp.Platform.PresenceClient.init() : ToolUp.Platform.PresenceClient+Model
+ToolUp.Platform.PresenceClient.onlineCollaborators(ToolUp.Platform.PresenceClient+Model) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry]
+ToolUp.Platform.PresenceClient.start(ToolUp.Platform.PresenceClient+PresenceTransport, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PresenceClient+Msg, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.PresenceClient.update(ToolUp.Platform.PresenceClient+Msg, ToolUp.Platform.PresenceClient+Model) : ToolUp.Platform.PresenceClient+Model
+ToolUp.Platform.PresenceClient+Model (class)
+ToolUp.Platform.PresenceClient+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry])
+ToolUp.Platform.PresenceClient+Model.Roster : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry] { get }
+ToolUp.Platform.PresenceClient+Msg (class)
+ToolUp.Platform.PresenceClient+Msg.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry] { get }
+ToolUp.Platform.PresenceClient+Msg.Tag : System.Int32 { get }
+ToolUp.Platform.PresenceClient+PresenceTransport (class)
+ToolUp.Platform.PresenceClient+PresenceTransport..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.PresenceClient+PresenceTransport.FetchRoster : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry]]] { get }
+ToolUp.Platform.PresenceClient+PresenceTransport.Heartbeat : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.PresenceClient+PresenceTransport.Leave : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.RegisteredModules (class)
 ToolUp.Platform.RegisteredModules.publish(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RegisteredModules+ModuleEntry]) : System.Void
 ToolUp.Platform.RegisteredModules.snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RegisteredModules+ModuleEntry]

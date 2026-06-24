@@ -72,16 +72,33 @@ module ModulePermission =
 /// Effective permissions for a user on a module: `Members[userId][module]`
 /// if present, else `Defaults[module]`, else no access.
 ///
+/// `Hidden` is the **per-team module-exposure** axis, orthogonal to the
+/// permission maps above. A module Id in `Hidden` is removed from the
+/// team's sidebar for every member (and for a platform admin acting on
+/// the team), regardless of permission level — it is the explicit
+/// "this module is hidden in this team" state behind the "Expose in
+/// team" toggle. Absence ⇒ exposed (the default, so a brand-new team
+/// and every pre-exposure persisted document show every module). It is
+/// a navigation/visibility concern, NOT an authorization boundary —
+/// the per-route permission guard (`canAccessModule` / `hasPermission`)
+/// remains the enforcement. Exposure governs *whether the module is
+/// offered*; permission governs *what a member may do once it is*.
+///
 /// Lives in the shared compilation layer because the client-facing
 /// `PlatformApi` exposes it — team admins read and edit it from the
 /// team-management UI.
 type TeamPermissions = {
     Defaults: Map<string, ModulePermission list>
     Members: Map<string, Map<string, ModulePermission list>>
+    /// Module Ids deliberately hidden from this team's sidebar. Empty ⇒
+    /// every module exposed (default). See the type doc for the
+    /// exposure-vs-permission distinction.
+    Hidden: Set<string>
 }
 
 module TeamPermissions =
     let empty = {
         Defaults = Map.empty
         Members = Map.empty
+        Hidden = Set.empty
     }

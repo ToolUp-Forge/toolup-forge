@@ -121,11 +121,16 @@ type SanitisingPermissionStore(inner: IPermissionStore) =
         member _.SetTeamDefaults(teamId, defaults) =
             guard (validate "teamId" teamId) (fun () -> inner.SetTeamDefaults(teamId, defaults))
 
+        member _.SetModuleExposure(teamId, moduleName, exposed) =
+            guard (validate "teamId" teamId) (fun () -> inner.SetModuleExposure(teamId, moduleName, exposed))
+
         // Reads delegate unchanged.
         member _.GetTeamPermissions(teamId) = inner.GetTeamPermissions(teamId)
 
         member _.GetEffectivePermissions(userId, teamId) =
             inner.GetEffectivePermissions(userId, teamId)
+
+        member _.GetHiddenModules(teamId) = inner.GetHiddenModules(teamId)
 
 // ─── Phase 131 (remainder) — IShareTokenStore resource/scope seam ────
 //

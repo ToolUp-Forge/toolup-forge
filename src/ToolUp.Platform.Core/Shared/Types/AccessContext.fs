@@ -35,6 +35,13 @@ type AccessContext = {
     /// module names and values are permission lists (e.g. `[Read]`,
     /// `[Read; Write]`, `[Admin]`).
     ModulePermissions: Map<string, ModulePermission list>
+    /// Module Ids hidden from the active team's sidebar (the per-team
+    /// **exposure** axis). Loaded for `TeamMember` subjects from the
+    /// team's `TeamPermissions.Hidden`; empty for every other subject
+    /// kind (nothing hidden when there is no team). A visibility/
+    /// navigation concern only — `canAccessModule` / `hasPermission`
+    /// remain the authorization boundary. See `isModuleExposed`.
+    HiddenModules: Set<string>
     /// Platform-wide administrative role, resolved per-request from
     /// `IPlatformAdminStore`. `None` for non-admin users —
     /// this is the default and preserves backward compatibility for
@@ -76,6 +83,7 @@ module AccessContext =
         TeamId = deriveTeamId subject
         Subject = subject
         ModulePermissions = Map.empty
+        HiddenModules = Set.empty
         PlatformRole = None
     }
 
@@ -124,10 +132,21 @@ module AccessContext =
         | TeamMemberKind -> "team"
         | ClaimBearerKind -> "claim-bearer"
 
+    /// Whether a module is **exposed** in the active team's sidebar.
+    /// A module Id present in `HiddenModules` is hidden (the per-team
+    /// exposure axis behind the "Expose in team" toggle); everything
+    /// else is exposed. Independent of permission — this answers "should
+    /// the module be offered at all", not "may the caller use it".
+    /// `HiddenModules` is empty for non-team subjects, so this is `true`
+    /// everywhere RBAC exposure does not apply.
+    let isModuleExposed (moduleName: string) (ctx: AccessContext) =
+        not (ctx.HiddenModules.Contains moduleName)
+
     /// Check whether the context grants any access to a given module.
     /// Empty `ModulePermissions` means unrestricted — every module is
     /// accessible. When populated, the module must be a key in the
-    /// map with at least one permission.
+    /// map with at least one permission. This is the **permission**
+    /// axis; sidebar visibility additionally requires `isModuleExposed`.
     let canAccessModule (moduleName: string) (ctx: AccessContext) =
         ctx.ModulePermissions.IsEmpty
         || (ctx.ModulePermissions

@@ -26,6 +26,7 @@ let private teamCtx (userId: string) (teamId: string) : AccessContext = {
     TeamId = Some teamId
     Subject = TeamMember(userId, teamId)
     ModulePermissions = Map.empty
+    HiddenModules = Set.empty
     PlatformRole = None
 }
 
@@ -34,6 +35,7 @@ let private userCtx (userId: string) (perms: Map<string, ModulePermission list>)
     TeamId = None
     Subject = AuthenticatedUser userId
     ModulePermissions = perms
+    HiddenModules = Set.empty
     PlatformRole = None
 }
 
@@ -311,6 +313,8 @@ let private authorizerTests =
                     member _.GetEffectivePermissions(_, _) = async { return failwith "storage blip" }
                     member _.SetMemberPermissions(_, _, _, _) = async { return Ok() }
                     member _.SetTeamDefaults(_, _) = async { return Ok() }
+                    member _.GetHiddenModules _ = async { return failwith "storage blip" }
+                    member _.SetModuleExposure(_, _, _) = async { return Ok() }
                 }
 
             let auth = PermissionStoreActionAuthorizer.create reportsPolicy throwing None

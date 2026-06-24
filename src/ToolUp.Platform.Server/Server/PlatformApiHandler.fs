@@ -762,6 +762,39 @@ let permissionApiHandler (_config: ServerConfig) =
                         | _ -> return Error "Insufficient permissions"
                     | _ -> return Error "Team management not available in this mode"
                 }
+
+            SetModuleExposure =
+                fun (teamId, moduleName, exposed) -> async {
+                    match teamStore, permStore with
+                    | Some ts, Some ps ->
+                        let! callerRole = ts.GetMemberRole(teamId, userId)
+
+                        match callerRole with
+                        | Some r when TeamRoles.canManageMembers r ->
+                            let! result = ps.SetModuleExposure(teamId, moduleName, exposed)
+
+                            match result with
+                            | Ok() ->
+                                // Exposure is a visibility change, not a
+                                // permission grant — record it on the same
+                                // `PermissionChanged` audit shape with the
+                                // exposure outcome in the permissions slot so
+                                // a reviewer sees the hide/expose decision.
+                                audit
+                                    teamId
+                                    (PermissionChanged {
+                                        UserId = userId
+                                        TeamId = teamId
+                                        AffectedUserId = ""
+                                        ModuleName = moduleName
+                                        Permissions = (if exposed then "exposed" else "hidden")
+                                    })
+                            | Error _ -> ()
+
+                            return result
+                        | _ -> return Error "Insufficient permissions"
+                    | _ -> return Error "Team management not available in this mode"
+                }
         })
 
 // ─── AccessibilityApi — sidebar filter helper (1 method) ────────────
@@ -781,29 +814,31 @@ let permissionApiHandler (_config: ServerConfig) =
 ///      deployment-wide mode, so a mixed-mode deployment serving both
 ///      anonymous and authenticated surfaces resolves each request on
 ///      its own subject.
-///   2. **0.5.3 — `isPlatformAdmin` short-circuit.** Platform admins
-///      are deployment-wide superusers; they need cross-cutting
-///      visibility into every module so they can triage / configure /
-///      audit any tenant's surface. Pre-0.5.3 the team-mode-no-active-
-///      team branch hid every module from a platform admin who hadn't
-///      joined a team, leaving them with only the SDK-built-in
-///      `_sdk.platform-admin.*` group visible — operationally
-///      backwards from the role's purpose. The admin override fires
-///      BEFORE the team-mode branch and grants the full Managed list
-///      regardless of team scope. Per-team RBAC `ModulePermissions`
-///      intersection is bypassed too: a platform admin without an
-///      active team has no per-team permission record by definition,
-///      and the pre-RBAC default ("empty map = unrestricted") already
-///      mirrors this for the active-team path.
+///   2. **`isPlatformAdmin` — respects team exposure (Phase 245).**
+///      Platform admins keep full *permission* visibility (the per-team
+///      RBAC `ModulePermissions` intersection is still bypassed — an
+///      admin sees every module they have rights to), but they now
+///      respect the active team's **exposure** axis: a module the team
+///      has hidden (`AccessContext.HiddenModules`) is filtered out of
+///      the admin's sidebar too, so an operator who hides a module on a
+///      team and then views that team sees the effect. When the admin
+///      has no active team, `HiddenModules` is empty (nothing loaded),
+///      so this naturally degrades to the full Managed list — preserving
+///      the 0.5.3 "admin without a team still sees everything" escape
+///      that keeps a teamless admin from being stranded with only the
+///      SDK-built-in `_sdk.platform-admin.*` group. Exposure is a
+///      navigation filter, not an authorization boundary — the admin can
+///      always un-hide a module via the `PermissionsAdminUI` built-in
+///      (an `_sdk.` module outside `Managed`, never exposure-filtered).
 ///   3. `noActiveTeamInTeamMode` (team-scoped Mode with no active
 ///      team, NOT a platform admin) → Accessible is empty. The freshly-
 ///      signed-up case where every team-scoped API call would fail
 ///      with `NoActiveTeam`; reporting non-team modules as Accessible
 ///      would be confusing click-then-error UX.
-///   4. Default → intersect Managed with the caller's
-///      `AccessContext.ModulePermissions`. Empty permissions map
-///      (pre-RBAC default) is unrestricted per
-///      `AccessContext.canAccessModule`.
+///   4. Default → intersect Managed with the caller's exposure
+///      (`isModuleExposed`) AND permission (`canAccessModule`). A hidden
+///      module disappears regardless of permission; an empty permission
+///      map (pre-RBAC default) is still unrestricted permission-wise.
 let computeAccessibleModules
     (config: ServerConfig)
     (accessCtx: AccessContext)
@@ -814,13 +849,17 @@ let computeAccessibleModules
         if AccessContext.isAnonymous accessCtx then
             config.ModuleNames
         elif isPlatformAdmin then
-            // Branch 2 — platform-admin override.
+            // Branch 2 — platform admin: full permission visibility, but
+            // respect the team's exposure (hidden modules stay hidden).
             config.ModuleNames
+            |> List.filter (fun name -> AccessContext.isModuleExposed name accessCtx)
         elif noActiveTeamInTeamMode then
             []
         else
             config.ModuleNames
-            |> List.filter (fun name -> AccessContext.canAccessModule name accessCtx)
+            |> List.filter (fun name ->
+                AccessContext.isModuleExposed name accessCtx
+                && AccessContext.canAccessModule name accessCtx)
 
     {
         Managed = config.ModuleNames

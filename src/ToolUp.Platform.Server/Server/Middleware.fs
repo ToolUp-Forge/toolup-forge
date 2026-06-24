@@ -356,6 +356,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                         runAsync (permStore.GetEffectivePermissions(user.UserId, scope.ScopeId))
 
                                     ctx.Items["ToolUp.ModulePermissions"] <- box perms
+
+                                    // Phase 245 — the team's per-module exposure
+                                    // (sidebar-visibility) set, alongside the
+                                    // permission map, so the AccessContext factory
+                                    // sees a populated `HiddenModules`.
+                                    let! hidden = runAsync (permStore.GetHiddenModules scope.ScopeId)
+
+                                    ctx.Items["ToolUp.HiddenModules"] <- box hidden
                                 | _ -> ()
 
                             // Phase 4b — resolve PlatformRole per request.

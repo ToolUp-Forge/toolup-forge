@@ -168,3 +168,87 @@ let tests =
             Expect.equal r.Accessible names "Anonymous wins over noActiveTeamInTeamMode"
         }
     ]
+
+// ─── Phase 245 — per-team module exposure ────────────────────────────
+//
+// Pins the exposure axis folded into `computeAccessibleModules`: a
+// module in `AccessContext.HiddenModules` disappears from the sidebar
+// for ordinary members AND for a platform admin acting on the team,
+// while a teamless admin (empty HiddenModules) still sees everything.
+
+let private withHidden (ctx: AccessContext) (hidden: string list) : AccessContext = {
+    ctx with
+        HiddenModules = Set.ofList hidden
+}
+
+[<Tests>]
+let exposureTests =
+    testList "Phase 245 — per-team module exposure" [
+
+        test "Team member: a hidden module is removed from Accessible even with permission" {
+            let names = [ "Sales"; "Marketing" ]
+            let config = cfg Surfaces.team names
+
+            let ctx =
+                withHidden
+                    (restricted
+                        (unrestricted (TeamMember("u", "team-a")))
+                        (Map.ofList [ "Sales", [ ModulePermission.Read ]; "Marketing", [ ModulePermission.Read ] ]))
+                    [ "Marketing" ]
+
+            let r = computeAccessibleModules config ctx false false
+
+            Expect.equal r.Accessible [ "Sales" ] "Marketing is hidden in this team despite holding Read"
+        }
+
+        test "Team member: nothing hidden → exposure is a no-op (default exposed)" {
+            let names = [ "Sales"; "Marketing" ]
+            let config = cfg Surfaces.team names
+
+            let ctx =
+                restricted
+                    (unrestricted (TeamMember("u", "team-a")))
+                    (Map.ofList [ "Sales", [ ModulePermission.Read ]; "Marketing", [ ModulePermission.Read ] ])
+
+            let r = computeAccessibleModules config ctx false false
+
+            Expect.equal r.Accessible names "empty Hidden set ⇒ every permitted module exposed"
+        }
+
+        test "Platform admin WITH an active team respects the team's exposure (the bug fix)" {
+            // The operator's own account. Pre-245 the admin branch
+            // returned every module, so hiding a module had no visible
+            // effect for the admin who configured it. Now the admin
+            // respects the team's exposure.
+            let names = [ "Sales"; "Marketing"; "Finance" ]
+            let config = cfg Surfaces.multiTeam names
+            let ctx = withHidden (unrestricted (TeamMember("admin", "team-a"))) [ "Finance" ]
+
+            let r = computeAccessibleModules config ctx false true
+
+            Expect.equal r.Accessible [ "Sales"; "Marketing" ] "admin no longer sees the team-hidden Finance module"
+        }
+
+        test "Platform admin keeps full permission visibility on exposed modules (no grant needed)" {
+            let names = [ "Sales"; "Marketing" ]
+            let config = cfg Surfaces.multiTeam names
+            // No ModulePermissions, nothing hidden.
+            let ctx = unrestricted (TeamMember("admin", "team-a"))
+
+            let r = computeAccessibleModules config ctx false true
+
+            Expect.equal r.Accessible names "admin sees every exposed module without an explicit permission grant"
+        }
+
+        test "Platform admin with NO active team still sees everything (escape preserved)" {
+            // No team ⇒ HiddenModules is empty ⇒ the admin branch returns
+            // the full Managed list, so a teamless admin is never stranded.
+            let names = [ "Sales"; "Marketing" ]
+            let config = cfg Surfaces.multiTeam names
+            let ctx = unrestricted (AuthenticatedUser "admin")
+
+            let r = computeAccessibleModules config ctx true true
+
+            Expect.equal r.Accessible names "teamless admin sees all managed modules"
+        }
+    ]

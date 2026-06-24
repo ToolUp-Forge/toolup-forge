@@ -77,8 +77,15 @@ type private RecordingPermissionStore() =
 
         member _.SetTeamPermissions(_, _) = async { return Ok() }
         member _.SetTeamDefaults(_, _) = async { return Ok() }
+
+        member _.SetModuleExposure(teamId, _moduleName, _exposed) = async {
+            calls.Add($"SetModuleExposure:{teamId}")
+            return Ok()
+        }
+
         member _.GetTeamPermissions _ = failwith "read not exercised"
         member _.GetEffectivePermissions(_, _) = failwith "read not exercised"
+        member _.GetHiddenModules _ = failwith "read not exercised"
 
 // ─── Cross-store contract bindings (real backends) ──────────────────
 //
