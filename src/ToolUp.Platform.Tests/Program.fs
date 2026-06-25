@@ -193,6 +193,9 @@ let allTests =
         // Phase 245 — tri-state ModuleExposure persistence migration
         // (legacy `hidden[]` → Hidden, dual-write back-compat).
         ModuleExposureMigrationTests.tests
+        // Parameterized no-active-team landing — effective-id precedence,
+        // built-in module factory, prepareModules injection guards.
+        NoActiveTeamLandingTests.tests
         // Phase 112 — scope-isolated live-session host: contract pack,
         // cap refusal, endpoint integration (404 / 429 / SSE frames).
         LiveSessionHostTests.tests

@@ -725,7 +725,7 @@ module Client =
     /// Returns `model.ActiveModuleId` unchanged for every non-gated
     /// deployment.
     let private resolveActiveModuleId (config: ClientConfig) (modules: ErasedModule list) (model: Model) : string =
-        match config.NoActiveTeamLandingModuleId with
+        match ClientConfig.effectiveNoActiveTeamLandingId config with
         | Some landingId when ClientConfig.hasTeamScope config ->
             if model.ActiveTeamId.IsSome then
                 // Gate inactive — only rescue a user stranded on the landing
@@ -2239,7 +2239,9 @@ module Client =
             let kindVisibleModules =
                 adminGroupFiltered |> List.filter (fun m -> m.Visibility resolvedSubjectKind)
 
-            // No-active-team gate (opt-in via `ClientConfig.NoActiveTeamLandingModuleId`).
+            // No-active-team gate (opt-in via `ClientConfig.NoActiveTeamLandingModuleId`
+            // for a custom module, or `ClientConfig.NoActiveTeamLanding` for the
+            // SDK built-in landing — `effectiveNoActiveTeamLandingId` unifies both).
             // When the deployment declares a `Team` surface and the caller
             // has no active team (resolved `SubjectKind = UserKind` — the
             // post-sign-in / pre-team-pick window), collapse the sidebar to
@@ -2256,7 +2258,7 @@ module Client =
             // admin-aware revival of the Phase 55 blanket-hide; GP 12 — UI
             // shape only, the server's `[<TenantScoped>]` gate is authoritative.
             let visibleModules =
-                match config.NoActiveTeamLandingModuleId with
+                match ClientConfig.effectiveNoActiveTeamLandingId config with
                 | Some landingId when ClientConfig.hasTeamScope config && model.ActiveTeamId.IsNone ->
                     let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
 
@@ -2649,6 +2651,21 @@ module Client =
             | true, NoTeamManager
             | _, _ -> []
 
+        // Parameterized SDK built-in no-active-team landing module. Injected
+        // only when (a) the deployment declares a `Team` surface, (b) the
+        // consumer set `ClientConfig.NoActiveTeamLanding` (the copy), and
+        // (c) did NOT supply its own custom module via
+        // `NoActiveTeamLandingModuleId` (which takes precedence and means the
+        // consumer owns the landing). Prepended ahead of `leading` (below)
+        // so its sidebar group sits at the top. The gate
+        // (`effectiveNoActiveTeamLandingId`) resolves to this module's stable
+        // id; `Visibility.visibleTo [ UserKind ]` hides the entry once a team
+        // is active. Off by default (GP 13).
+        let noActiveTeamLanding =
+            match hasTeamSurface, config.NoActiveTeamLandingModuleId, config.NoActiveTeamLanding with
+            | true, None, Some landingCfg -> [ NoActiveTeamLandingUI.create landingCfg ]
+            | _ -> []
+
         // Configuration admin is meaningful when the deployment
         // declares any authenticated surface — Anonymous-only
         // deployments have no persistent scope so every read / write
@@ -2806,7 +2823,7 @@ module Client =
             @ serviceStatusBoard
             @ dataSubjectRequestAdmin
 
-        home @ leading @ workApp @ trailing @ debugApp
+        home @ noActiveTeamLanding @ leading @ workApp @ trailing @ debugApp
 
     /// Aggregate every module's `ClientQueryHandlers` into the per-module
     /// registry of the shared `ClientModuleQueryBus`. Modules are keyed by

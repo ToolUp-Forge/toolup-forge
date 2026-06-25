@@ -1083,6 +1083,22 @@ type ClientConfig = {
     /// classifier + `SurfaceEnforcementMiddleware` remain the authoritative
     /// gate (a no-team caller's tenant-scoped API calls 401 regardless).
     NoActiveTeamLandingModuleId: string option
+    /// Opt-in parameterized no-active-team landing surface — the lightweight
+    /// path that pairs with the same gate as `NoActiveTeamLandingModuleId`.
+    /// When `Some cfg` AND the deployment declares a `Team` surface AND no
+    /// explicit `NoActiveTeamLandingModuleId` is set, the SDK registers a
+    /// built-in landing module (stable id `NoActiveTeamLanding.moduleId`)
+    /// from `cfg`'s copy and wires the no-team gate to it — the consumer
+    /// supplies a few strings instead of hand-rolling an Elmish module.
+    ///
+    /// **Precedence:** `NoActiveTeamLandingModuleId` wins. If a consumer
+    /// sets both, the explicit custom module is used and this built-in is
+    /// NOT injected (the consumer fully owns the landing). Resolved by
+    /// `ClientConfig.effectiveNoActiveTeamLandingId`.
+    ///
+    /// **Default `None`** — no built-in landing (GP 13). Inert on non-team
+    /// surfaces even when set.
+    NoActiveTeamLanding: NoActiveTeamLandingConfig option
     /// Controls the data-ingestion admin (Phase 10b). Active in every
     /// non-Anonymous mode; `NoDataIngestionAdmin` opts out explicitly.
     /// Default: SDK built-in. Pair with `ServerConfig.DataIngestion =
@@ -1342,6 +1358,8 @@ module ClientConfig =
         // Opt-in; off by default so the no-team gate never changes an
         // existing deployment's sidebar (GP 13).
         NoActiveTeamLandingModuleId = None
+        // Opt-in parameterized landing; off by default (GP 13).
+        NoActiveTeamLanding = None
         DataIngestionAdmin = DefaultDataIngestionAdmin
         DataSubjectRequestAdmin = NoDataSubjectRequestAdmin
         ToastCentre = DefaultToastCentre
@@ -1423,6 +1441,17 @@ module ClientConfig =
         match group with
         | Some g -> adminSidebarGroups.Contains g
         | None -> false
+
+    /// The effective module id the no-active-team gate targets, unifying
+    /// the two opt-in paths: an explicit consumer-supplied
+    /// `NoActiveTeamLandingModuleId` (a full custom module) takes
+    /// precedence; otherwise the parameterized `NoActiveTeamLanding` config
+    /// resolves to the SDK built-in landing module's stable id
+    /// (`NoActiveTeamLanding.moduleId`). `None` when neither path is set —
+    /// the gate is then inert. Scope (`hasTeamScope`) is checked at the call
+    /// sites, not here, mirroring the prior direct-field reads.
+    let effectiveNoActiveTeamLandingId (config: ClientConfig) : string option =
+        NoActiveTeamLanding.resolveLandingId config.NoActiveTeamLandingModuleId config.NoActiveTeamLanding
 
     /// Phase 66 Stream B.8 — true iff any declared `Team` surface
     /// requests the header team-switcher UX (the retiring `MultiTeam`

@@ -74,6 +74,11 @@
         <Compile Include="Client\UI\DataProp.fs" />
         <Compile Include="Client\UI\AriaProp.fs" />
         <Compile Include="Client\IAuthBridge.fs" />
+        <!-- Pure no-active-team landing config + gate-target precedence.
+             Ahead of SDK.ClientTypes so the precedence helper carries no
+             AgGrid / Icons / ClientConfig.defaults startup deps and stays
+             .NET-testable; the Feliz factory is NoActiveTeamLandingUI.fs. -->
+        <Compile Include="Client\NoActiveTeamLanding.fs" />
         <Compile Include="Client\SDK.ClientTypes.fs" />
         <!-- Phase 55 — `withGroup` requirement preflight. Pure decision +
              failwithf wrapper used by Client.boot to refuse deployments
@@ -196,6 +201,8 @@
         <Compile Include="Client\UsageDashboard.fs" />
         <!-- Phase 171 — Home / Overview landing module. -->
         <Compile Include="Client\Home.fs" />
+        <!-- Parameterized SDK built-in no-active-team landing module. -->
+        <Compile Include="Client\NoActiveTeamLandingUI.fs" />
         <Compile Include="Client\DataSourceCredentialUI.fs" />
         <Compile Include="Client\DataIngestionUI.fs" />
         <Compile Include="Client\DataSubjectRequestAdminUI.fs" />
