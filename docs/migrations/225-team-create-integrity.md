@@ -25,8 +25,8 @@
 
 **Who must act**
 
-- **Consumers using the default `TeamStore`** (the overwhelming majority,
-  including `toolup-app`): **no action.** The default store implements the
+- **Consumers using the default `TeamStore`** (the overwhelming majority):
+  **no action.** The default store implements the
   new member; ids, validation, and rollback are internal.
 - **Consumers with a custom `ITeamStore` implementation:** add the
   `DeleteTeam` member, or the type no longer satisfies the interface:
