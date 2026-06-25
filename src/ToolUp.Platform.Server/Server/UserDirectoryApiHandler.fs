@@ -56,6 +56,17 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 
         AccessContext.unrestricted (AnonymousSession userId)
 
+/// Resolve the optional forge `ILogger` from DI. Used to surface a
+/// directory failure rather than swallow it — a silently-`Error`
+/// `ResolveUsers` is exactly why a misconfigured directory degraded
+/// every admin / member table to raw GUIDs with no signal. Optional so
+/// a deployment that registers no logger still works (the log is a
+/// no-op).
+let private resolveLogger (ctx: HttpContext) : ILogger option =
+    match ctx.RequestServices.GetService(typeof<ILogger>) with
+    | :? ILogger as l -> Some l
+    | _ -> None
+
 /// Construct the `IUserDirectoryApi` record per-request. Captures the
 /// `HttpContext` for lazy DI resolution inside each method.
 let userDirectoryApi (ctx: HttpContext) : IUserDirectoryApi = {
@@ -118,6 +129,26 @@ let userDirectoryApi (ctx: HttpContext) : IUserDirectoryApi = {
                         // No companion registered — nothing to resolve. The
                         // caller renders the raw ids, exactly as before.
                         return Ok []
-                    | Some directory -> return! directory.ResolveUsers cleaned
+                    | Some directory ->
+                        let! result = directory.ResolveUsers cleaned
+
+                        // Don't let a directory failure vanish: log it so an
+                        // operator can see *why* ids aren't resolving (Graph
+                        // permission, token, endpoint) instead of guessing
+                        // from raw-GUID tables. The Error still flows to the
+                        // client, which degrades to raw ids as before.
+                        match result with
+                        | Error msg ->
+                            resolveLogger ctx
+                            |> Option.iter (fun l ->
+                                l.Warn(
+                                    sprintf
+                                        "IUserDirectory.ResolveUsers failed for %d id(s): %s"
+                                        (List.length cleaned)
+                                        msg
+                                ))
+                        | Ok _ -> ()
+
+                        return result
         }
 }

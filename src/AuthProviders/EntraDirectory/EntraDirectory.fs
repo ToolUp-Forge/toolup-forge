@@ -315,13 +315,18 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
         }
 
         member _.ResolveUsers(ids: string list) = async {
-            // Reverse lookup via Graph `directoryObjects/getByIds` — the
-            // canonical batch id→object endpoint. Accepts up to 1000 ids
-            // per request; we chunk defensively in case a caller passes
-            // more. Needs only `User.ReadBasic.All` (already required for
-            // SearchUsers) — `getByIds` returns the same basic profile
-            // fields. Ids the directory doesn't recognise are simply
-            // absent from the response; we never surface them as errors.
+            // Reverse lookup via per-id Graph `GET /users/{id}` — NOT
+            // `directoryObjects/getByIds`. With an *app-only* token (a
+            // managed identity), `getByIds` requires `Directory.Read.All`
+            // / `User.Read.All`, whereas the single-user read resolves
+            // with the same `User.ReadBasic.All` that `SearchUsers`
+            // already needs. Using `getByIds` therefore silently 403s
+            // under the minimal permission and degrades every admin /
+            // member table to raw GUIDs; the per-id read avoids the trap
+            // (the cost is N small requests, bounded-concurrency below —
+            // these tables are a handful of ids). Ids the directory
+            // doesn't recognise (guests, deleted, non-Entra ids) return
+            // 404 and are simply skipped — never surfaced as an error.
             try
                 let! ct = Async.CancellationToken
 
@@ -332,38 +337,30 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
                 else
                     let! token = acquireGraphToken ()
                     let client = GraphState.getClient ()
-                    let url = sprintf "%s/v1.0/directoryObjects/getByIds" normalisedEndpoint
 
-                    // Graph caps getByIds at 1000 ids/request; chunk to be safe.
-                    let chunks = distinctIds |> List.chunkBySize 1000
+                    // `Ok None` — id absent from the directory (404), skip.
+                    // `Ok (Some s)` — resolved. `Error msg` — a hard
+                    // failure (403 / 5xx / …), surfaced so it is logged
+                    // rather than silently degrading to a raw id.
+                    let resolveOne (id: string) = async {
+                        let url =
+                            sprintf
+                                "%s/v1.0/users/%s?$select=id,displayName,mail,userPrincipalName"
+                                normalisedEndpoint
+                                (Uri.EscapeDataString id)
 
-                    let encStr (s: string) = JsonSerializer.Serialize s
-
-                    let mutable failure: string option = None
-                    let collected = ResizeArray<UserSummary>()
-                    let mutable remaining = chunks
-
-                    while failure.IsNone && not (List.isEmpty remaining) do
-                        let chunk = List.head remaining
-                        remaining <- List.tail remaining
-
-                        // Restrict to user objects so groups / service
-                        // principals sharing an id space don't surface.
-                        let idsJson = chunk |> List.map encStr |> String.concat ","
-
-                        let payload = sprintf """{"ids":[%s],"types":["user"]}""" idsJson
-
-                        use request = new HttpRequestMessage(HttpMethod.Post, url)
+                        use request = new HttpRequestMessage(HttpMethod.Get, url)
                         request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
-                        request.Content <- new StringContent(payload, Encoding.UTF8, "application/json")
 
                         let! response = client.SendAsync(request, ct) |> Async.AwaitTask
 
-                        if not response.IsSuccessStatusCode then
+                        if int response.StatusCode = 404 then
+                            return Ok None
+                        elif not response.IsSuccessStatusCode then
                             let! body = response.Content.ReadAsStringAsync ct |> Async.AwaitTask
 
-                            failure <-
-                                Some(
+                            return
+                                Error(
                                     sprintf
                                         "directory unavailable: %d %s — %s"
                                         (int response.StatusCode)
@@ -380,31 +377,51 @@ type EntraDirectoryUserDirectory(config: EntraDirectoryConfig) =
                             let! bodyStream = response.Content.ReadAsStreamAsync ct |> Async.AwaitTask
 
                             let! parsed =
-                                JsonSerializer
-                                    .DeserializeAsync<GraphUsersResponse>(bodyStream, jsonOptions, ct)
-                                    .AsTask()
+                                JsonSerializer.DeserializeAsync<GraphUser>(bodyStream, jsonOptions, ct).AsTask()
                                 |> Async.AwaitTask
 
-                            if not (isNull (box parsed)) && not (isNull (box parsed.value)) then
-                                parsed.value
-                                |> Array.iter (fun u ->
-                                    match nonEmpty u.id with
-                                    | None -> ()
-                                    | Some uid ->
-                                        let email =
-                                            match nonEmpty u.mail with
-                                            | Some _ as m -> m
-                                            | None -> nonEmpty u.userPrincipalName
+                            if isNull (box parsed) then
+                                return Ok None
+                            else
+                                match nonEmpty parsed.id with
+                                | None -> return Ok None
+                                | Some uid ->
+                                    let email =
+                                        match nonEmpty parsed.mail with
+                                        | Some _ as m -> m
+                                        | None -> nonEmpty parsed.userPrincipalName
 
-                                        collected.Add {
-                                            UserId = uid
-                                            DisplayName = nonEmpty u.displayName
-                                            Email = email
-                                        })
+                                    return
+                                        Ok(
+                                            Some {
+                                                UserId = uid
+                                                DisplayName = nonEmpty parsed.displayName
+                                                Email = email
+                                            }
+                                        )
+                    }
 
-                    match failure with
+                    // Bounded concurrency — cap fan-out so a large team
+                    // doesn't open dozens of simultaneous Graph requests.
+                    let! results = Async.Parallel(distinctIds |> List.map resolveOne, maxDegreeOfParallelism = 8)
+
+                    let firstError =
+                        results
+                        |> Array.tryPick (function
+                            | Error e -> Some e
+                            | _ -> None)
+
+                    match firstError with
                     | Some err -> return Error err
-                    | None -> return Ok(List.ofSeq collected)
+                    | None ->
+                        return
+                            Ok(
+                                results
+                                |> Array.choose (function
+                                    | Ok(Some s) -> Some s
+                                    | _ -> None)
+                                |> Array.toList
+                            )
             with
             | :? OperationCanceledException -> return Error "directory request cancelled"
             | ex -> return Error(sprintf "directory unavailable: %s" ex.Message)

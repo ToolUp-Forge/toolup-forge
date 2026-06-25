@@ -1076,12 +1076,13 @@ TeamManagerUI+IssueByEmailModalState.SubmitError : Microsoft.FSharp.Core.FSharpO
 TeamManagerUI+IssueByEmailModalState.Submitting : System.Boolean { get }
 TeamManagerUI+IssueByEmailModalState.TeamId : System.String { get }
 TeamManagerUI+Model (class)
-TeamManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamManagerUI+View, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.TeamRole, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]]], Microsoft.FSharp.Core.FSharpOption`1[TeamManagerUI+IssueByEmailModalState], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]])
+TeamManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamManagerUI+View, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.TeamRole, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]]], Microsoft.FSharp.Core.FSharpOption`1[TeamManagerUI+IssueByEmailModalState], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary])
 TeamManagerUI+Model.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 TeamManagerUI+Model.AddMemberRole : ToolUp.Platform.TeamRole { get }
 TeamManagerUI+Model.AddMemberSubmitting : System.Boolean { get }
 TeamManagerUI+Model.AddMemberUserId : System.String { get }
 TeamManagerUI+Model.CurrentView : TeamManagerUI+View { get }
+TeamManagerUI+Model.Directory : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary] { get }
 TeamManagerUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 TeamManagerUI+Model.IsPlatformAdmin : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
 TeamManagerUI+Model.IssueByEmailModal : Microsoft.FSharp.Core.FSharpOption`1[TeamManagerUI+IssueByEmailModalState] { get }
@@ -1106,6 +1107,7 @@ TeamManagerUI+Msg.IsCancelRevokeByEmail : System.Boolean { get }
 TeamManagerUI+Msg.IsChangeMemberRole : System.Boolean { get }
 TeamManagerUI+Msg.IsCloseIssueByEmailModal : System.Boolean { get }
 TeamManagerUI+Msg.IsConfirmRevokeByEmail : System.Boolean { get }
+TeamManagerUI+Msg.IsDirectoryResolved : System.Boolean { get }
 TeamManagerUI+Msg.IsDismissError : System.Boolean { get }
 TeamManagerUI+Msg.IsIsPlatformAdminLoaded : System.Boolean { get }
 TeamManagerUI+Msg.IsIssueByEmailSubmitted : System.Boolean { get }
@@ -1149,6 +1151,8 @@ TeamManagerUI+Msg+ChangeMemberRole (class)
 TeamManagerUI+Msg+ChangeMemberRole.newRole : ToolUp.Platform.TeamRole { get }
 TeamManagerUI+Msg+ChangeMemberRole.teamId : System.String { get }
 TeamManagerUI+Msg+ChangeMemberRole.userId : System.String { get }
+TeamManagerUI+Msg+DirectoryResolved (class)
+TeamManagerUI+Msg+DirectoryResolved.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String] { get }
 TeamManagerUI+Msg+IsPlatformAdminLoaded (class)
 TeamManagerUI+Msg+IsPlatformAdminLoaded.Item : System.Boolean { get }
 TeamManagerUI+Msg+IssueByEmailSubmitted (class)
@@ -1208,6 +1212,7 @@ TeamManagerUI+Msg+Tags.CancelRevokeByEmail : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.ChangeMemberRole : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.CloseIssueByEmailModal : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.ConfirmRevokeByEmail : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.DirectoryResolved : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.DismissError : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.IsPlatformAdminLoaded : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.IssueByEmailSubmitted : System.Int32 (literal)

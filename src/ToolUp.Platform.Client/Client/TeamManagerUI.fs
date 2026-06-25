@@ -96,6 +96,13 @@ type Model = {
     /// `Some (teamId, email)` = a confirmation dialog is open for
     /// that team's pending entry.
     RevokeByEmailConfirm: (string * string) option
+    /// Resolved directory entries keyed by user id (id → display name +
+    /// email), populated lazily via `IUserDirectoryApi.ResolveUsers`
+    /// after a team's members load. Ids absent from the map (directory
+    /// companion unwired, or a guest/deleted id) render as the raw id —
+    /// the member list stays functional, just less friendly. Mirrors
+    /// `PlatformAdminUI.Directory`.
+    Directory: Map<string, UserSummary>
 }
 
 type Msg =
@@ -133,6 +140,9 @@ type Msg =
     | CancelRevokeByEmail
     | ConfirmRevokeByEmail
     | RevokeByEmailDone of teamId: string * email: string * Result<unit, string>
+    /// Reverse directory resolution (id → name/email) completed for the
+    /// most recently loaded member set.
+    | DirectoryResolved of Result<UserSummary list, string>
     | ApiError of string
     | DismissError
 
@@ -155,6 +165,24 @@ let private inviteApi: ITeamInviteApi =
         customOptions = UserSession.withRequestHeaders
     )
 
+// Reverse directory lookup (id → email/name) for the member list. No-op
+// for an empty list or when no directory companion is wired (degrades to
+// raw ids). Mirrors `PlatformAdminUI`'s directory wiring.
+let private directoryApi: IUserDirectoryApi =
+    Api.makeProxy<IUserDirectoryApi> (customOptions = UserSession.withRequestHeaders)
+
+/// Errors fold to a silent `DirectoryResolved(Error _)` — a directory
+/// hiccup just leaves the raw ids on screen, never blocks the page.
+let private resolveDirectoryCmd (ids: string list) =
+    let cleaned =
+        ids |> List.filter (fun id -> not (System.String.IsNullOrWhiteSpace id))
+
+    if List.isEmpty cleaned then
+        Cmd.none
+    else
+        Cmd.OfRemoting.call directoryApi.ResolveUsers cleaned DirectoryResolved (fun ex ->
+            DirectoryResolved(Error ex.Message))
+
 // ─── Init ────────────────────────────────────────────────────────────
 
 let init (ctx: ClientModuleContext) =
@@ -173,6 +201,7 @@ let init (ctx: ClientModuleContext) =
         PendingByEmail = Map.empty
         IssueByEmailModal = None
         RevokeByEmailConfirm = None
+        Directory = Map.empty
     }
 
     let loadTeams =
@@ -236,12 +265,21 @@ let update (msg: Msg) (model: Model) =
             | Some r -> model.RoleInTeam |> Map.add teamId r
             | None -> model.RoleInTeam
 
+        // Resolve the member ids we don't already have a directory entry
+        // for (id → name/email). Errors are silent — the list still
+        // renders with raw ids on a directory miss.
+        let unresolved =
+            members
+            |> List.map _.UserId
+            |> List.filter (fun id -> not (Map.containsKey id model.Directory))
+            |> List.distinct
+
         {
             model with
                 Members = model.Members |> Map.add teamId members
                 RoleInTeam = roleMap
         },
-        Cmd.none
+        resolveDirectoryCmd unresolved
 
     | SelectTeam teamId ->
         {
@@ -570,6 +608,17 @@ let update (msg: Msg) (model: Model) =
 
     | RevokeByEmailDone(_, _, Error e) -> { model with Error = Some e }, Cmd.none
 
+    | DirectoryResolved(Ok summaries) ->
+        let directory =
+            summaries
+            |> List.fold (fun acc (s: UserSummary) -> Map.add s.UserId s acc) model.Directory
+
+        { model with Directory = directory }, Cmd.none
+
+    // Silent — a directory failure (companion unwired, Graph hiccup) just
+    // leaves the raw ids on screen; never blocks the member list.
+    | DirectoryResolved(Error _) -> model, Cmd.none
+
     | ApiError message -> { model with Error = Some message }, Cmd.none
 
     | DismissError -> { model with Error = None }, Cmd.none
@@ -675,6 +724,7 @@ let private memberRow
     (teamId: string)
     (selfId: string)
     (callerRole: TeamRole option)
+    (directory: Map<string, UserSummary>)
     (membership: TeamMembership)
     (dispatch: Msg -> unit)
     =
@@ -720,12 +770,11 @@ let private memberRow
             ]
         ]
 
-    // 0.5.6 — render the current user's display name + email when the
-    // JWT carried `name` / `email` (or `preferred_username`) claims.
-    // Other members fall back to the raw UserId — a full per-member
-    // profile-lookup substrate is tracked separately (would require
-    // an `IUserProfileStore` server-side companion that mirrors Entra
-    // Graph or equivalent for the active deployment).
+    // Render the current user's display name + email from the JWT
+    // (`name` / `email` / `preferred_username` claims). Other members
+    // resolve via the directory companion (`IUserDirectoryApi`): display
+    // name + email when known, email alone, else the raw UserId as the
+    // last-resort fallback (no companion wired, or an unresolved id).
     let primaryLabel, secondaryLabel =
         if isSelf then
             let name = UserSession.getDisplayName () |> Option.defaultValue membership.UserId
@@ -733,7 +782,16 @@ let private memberRow
             let email = UserSession.getEmail ()
             name, email
         else
-            membership.UserId, None
+            match Map.tryFind membership.UserId directory with
+            | Some s ->
+                let name = s.DisplayName |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
+                let email = s.Email |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
+
+                match name, email with
+                | Some n, _ -> n, email
+                | None, Some e -> e, None
+                | None, None -> membership.UserId, None
+            | None -> membership.UserId, None
 
     Html.div [
         prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2"
@@ -877,7 +935,7 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
                 else
                     Html.div [
                         for m in members do
-                            memberRow teamId selfId callerRole m dispatch
+                            memberRow teamId selfId callerRole model.Directory m dispatch
                     ]
             ]
 
