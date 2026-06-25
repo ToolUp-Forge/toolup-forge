@@ -196,6 +196,10 @@ let allTests =
         // Parameterized no-active-team landing — effective-id precedence,
         // built-in module factory, prepareModules injection guards.
         NoActiveTeamLandingTests.tests
+        // Phase 227 (task #4) — typed client-side scope-denial
+        // classification (NeedsActiveTeam | NeedsAuthentication | Forbidden)
+        // from SurfaceEnforcementMiddleware rejection bodies.
+        ScopeDenialTests.tests
         // Phase 112 — scope-isolated live-session host: contract pack,
         // cap refusal, endpoint integration (404 / 429 / SSE frames).
         LiveSessionHostTests.tests

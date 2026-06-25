@@ -341,6 +341,10 @@
         <Compile Include="InProcess\ActionAuthorizerTests.fs" />
         <Compile Include="InProcess\ModuleExposureMigrationTests.fs" />
         <Compile Include="InProcess\NoActiveTeamLandingTests.fs" />
+        <!-- Phase 227 (task #4) — typed client-side scope-denial
+             classification from SurfaceEnforcementMiddleware rejection
+             bodies (NeedsActiveTeam | NeedsAuthentication | Forbidden). -->
+        <Compile Include="InProcess\ScopeDenialTests.fs" />
         <!-- Phase 112 — live-session host: contract binding, per-scope
              cap refusal, endpoint integration (path gate, cross-scope
              404, rate-limit 429, SSE frame delivery). -->

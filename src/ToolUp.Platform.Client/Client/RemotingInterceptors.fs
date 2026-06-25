@@ -53,6 +53,96 @@ type RemotingCategorisedException(category: ErrorCategory, errorBody: string, in
     member _.Category = category
     member _.ErrorBody = errorBody
 
+/// Phase 227 (task #4) — typed classification of a server scope /
+/// authorization *denial*, parsed from the `SurfaceEnforcementMiddleware`
+/// rejection body (`{ "error": <code>, "status": <int>, "hint": <code>? }`).
+///
+/// Distinct from `ErrorCategory` above: that classifies a *handler* error
+/// envelope (the call reached the handler, which returned a categorised
+/// `Error`). A `ScopeDenial` describes why the request never reached the
+/// handler at all — the surface gate rejected the resolved `Subject`. The
+/// distinction the client cares about is whether the denial is
+/// *recoverable by the caller*: "pick or join a team" (`NeedsActiveTeam`,
+/// resolved by the no-active-team onboarding surface) versus a genuine
+/// `Forbidden` with no client-actionable next step, versus "must sign in"
+/// (`NeedsAuthentication`). Before this, a module's `ofError` handler had
+/// to scrape the raw status code + error-string to tell "no team yet"
+/// apart from "forbidden".
+///
+/// Purely advisory / additive (GP 11, GP 13) — nothing in the SDK calls
+/// this; the shell detects the no-team state directly from
+/// `ActiveTeamId` / `MyTeams`. A module that issues its own `TenantScoped`
+/// calls opts in:
+/// `match ScopeDenial.ofException ex with Some ScopeDenial.NeedsActiveTeam -> ...`.
+[<RequireQualifiedAccess>]
+type ScopeDenial =
+    /// 403 `team_required` (+ `select_team` hint) — the signed-in caller
+    /// has no active team for a `[<TenantScoped>]` route. Resolvable by
+    /// the no-active-team onboarding surface (create or join a team).
+    | NeedsActiveTeam
+    /// 401 `authentication_required` — no / invalid credentials.
+    | NeedsAuthentication
+    /// Any other surface denial (`user_subject_not_admitted`,
+    /// `team_member_not_admitted`, `claim_bearer_not_admitted`, …) — the
+    /// caller is authenticated but this route is closed to them; no
+    /// client-actionable next step. Carries the raw wire code.
+    | Forbidden of code: string
+
+module ScopeDenial =
+
+    // Wire error-codes / hints emitted by `SurfaceEnforcementMiddleware`
+    // (server: `SurfaceEnforcement.evaluate` → `writeRejection`). Mirrored
+    // here so a server-side rename is a single cross-file grep.
+    [<Literal>]
+    let TeamRequiredCode = "team_required"
+
+    [<Literal>]
+    let SelectTeamHint = "select_team"
+
+    [<Literal>]
+    let AuthenticationRequiredCode = "authentication_required"
+
+    /// Extract a single top-level `"key":"value"` string field from the
+    /// rejection envelope. The body is always machine-written by
+    /// `writeRejection` (`sprintf` over identifier-shaped codes — no
+    /// nested objects, no escaped quotes), so a flat regex is sufficient
+    /// and — unlike `Fable.SimpleJson.parse`, whose parser is
+    /// Fable-runtime-only and throws under .NET — behaves identically on
+    /// both the Fable client and the .NET test harness.
+    let private fieldValue (key: string) (json: string) : string option =
+        let m =
+            System.Text.RegularExpressions.Regex.Match(json, sprintf "\"%s\"\\s*:\\s*\"([^\"]*)\"" key)
+
+        if m.Success then Some m.Groups[1].Value else None
+
+    /// Parse a surface-enforcement rejection body into the typed denial.
+    /// `None` when the body carries no string `error` field — i.e. it is
+    /// not a recognisable rejection envelope, so the caller falls through
+    /// to its generic error path unchanged.
+    let ofResponseBody (responseBody: string) : ScopeDenial option =
+        if String.IsNullOrWhiteSpace responseBody then
+            None
+        else
+            let errorCode = fieldValue "error" responseBody
+            let hint = fieldValue "hint" responseBody
+
+            match errorCode with
+            | Some code when code = AuthenticationRequiredCode -> Some ScopeDenial.NeedsAuthentication
+            | Some code when code = TeamRequiredCode || hint = Some SelectTeamHint -> Some ScopeDenial.NeedsActiveTeam
+            | Some code -> Some(ScopeDenial.Forbidden code)
+            | None -> None
+
+    /// Classify a remoting `exn`. Returns `Some` only for a
+    /// `ProxyRequestException` carrying a 401/403 surface-enforcement
+    /// rejection body; every other exception (transport, timeout, 5xx, a
+    /// 200-with-handler-`Error`) yields `None`, so existing error paths
+    /// are byte-for-byte unaffected.
+    let ofException (ex: exn) : ScopeDenial option =
+        match ex with
+        | :? ProxyRequestException as pex when pex.StatusCode = 401 || pex.StatusCode = 403 ->
+            ofResponseBody pex.ResponseText
+        | _ -> None
+
 /// 0.4.1 — forge-side bridge that registers
 /// `Cmd.OfRemoting.IRemotingInterceptor` instances at boot time. The
 /// `categorisedErrorBridge` parses Phase 69b.E `CategorisedErrorResult`
