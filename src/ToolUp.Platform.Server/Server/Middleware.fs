@@ -106,9 +106,34 @@ module SubjectRequestExtractor =
 ///                          claim itself (`BlobShareTokenStore`
 ///                          semantics).
 module StorageScopeDerivation =
-    let private persistenceFor (surfaces: SurfaceProfile list) (subject: Subject) : bool =
+    /// Stable label for a subject's kind — used in the fail-closed
+    /// undeclared-kind diagnostic. Not the scope id (which can carry a
+    /// client-suppliable session id); just the DU shape.
+    let private subjectKindLabel (subject: Subject) : string =
+        match subject with
+        | AnonymousSession _ -> "Anonymous"
+        | Subject.AuthenticatedUser _ -> "AuthenticatedUser"
+        | TeamMember _ -> "Team"
+        | Subject.ClaimBearer _ -> "ClaimBearer"
+
+    /// Resolve a subject's persistence flag from the declared
+    /// `Surfaces`. Returns `(persist, defaulted)` where `defaulted` is
+    /// `true` when no `SurfaceProfile` matched the subject kind.
+    ///
+    /// Phase 246 — the no-matching-profile fallback is now **fail-closed**
+    /// (`false` / ephemeral). Previously it was `Option.defaultValue true`
+    /// (persistent): a subject kind absent from a deployment's declared
+    /// `Surfaces` (e.g. an `AnonymousSession` fallback in a deployment
+    /// that never declared `Anonymous`) silently landed in a persistent
+    /// `session-{sid}` container keyed on a client-suppliable session id —
+    /// fail-open data retention under an undeclared scope. Failing closed
+    /// makes the secure default the default; the `defaulted` signal lets
+    /// the caller emit a one-time diagnostic so the gap stays visible.
+    let private persistenceFor (surfaces: SurfaceProfile list) (subject: Subject) : bool * bool =
         let pick projector =
-            surfaces |> List.tryPick projector |> Option.defaultValue true
+            match surfaces |> List.tryPick projector with
+            | Some persistent -> persistent, false
+            | None -> false, true // fail closed (ephemeral) + signal the default fired
 
         match subject with
         | AnonymousSession _ ->
@@ -123,29 +148,64 @@ module StorageScopeDerivation =
             pick (function
                 | SurfaceProfile.Team cfg -> Some(cfg.Persistence = Persistent)
                 | _ -> None)
-        | Subject.ClaimBearer _ -> true
+        // A claim carries its own persistent scope (BlobShareTokenStore
+        // semantics) — it is never matched against Surfaces, so it never
+        // "defaults".
+        | Subject.ClaimBearer _ -> true, false
 
-    let fromSubject (config: ServerConfig) (subject: Subject) : StorageScope =
+    /// Subject kinds for which the fail-closed default has already been
+    /// warned this process — so the diagnostic fires once per kind, not
+    /// once per request. A `ConcurrentDictionary` used as a thread-safe
+    /// set; the value is irrelevant.
+    let private undeclaredKindWarned =
+        System.Collections.Concurrent.ConcurrentDictionary<string, bool>()
+
+    let private warnUndeclaredKindOnce (logger: ILogger option) (subject: Subject) (config: ServerConfig) : unit =
+        // Check the logger BEFORE consuming the once-per-kind slot, so a
+        // logger-less call (no observability sink composed) doesn't burn
+        // the slot and suppress the warning for a later logger-bearing call.
+        match logger with
+        | None -> ()
+        | Some log ->
+            let kind = subjectKindLabel subject
+
+            if undeclaredKindWarned.TryAdd(kind, true) then
+                log.Warn(
+                    sprintf
+                        "StorageScopeDerivation: subject kind %s is not declared in ServerConfig.Surfaces (%s), so its storage scope fails closed to EPHEMERAL (Persist = false). The resolver can still produce this kind (e.g. an anonymous fallback in a deployment that never declared Anonymous); declare the matching SurfaceProfile if this kind should persist. (Logged once per kind per process.)"
+                        kind
+                        (DeploymentConfig.surfacesLabel config)
+                )
+
+    /// Derive the storage scope for a subject. `logger` (best-effort)
+    /// receives the one-time fail-closed-default diagnostic when the
+    /// subject's kind is undeclared in `Surfaces` (Phase 246).
+    let fromSubject (logger: ILogger option) (config: ServerConfig) (subject: Subject) : StorageScope =
+        let persist, defaulted = persistenceFor config.Surfaces subject
+
+        if defaulted then
+            warnUndeclaredKindOnce logger subject config
+
         match subject with
         | AnonymousSession sid -> {
             ScopeId = sid
             Container = $"session-{sid}"
-            Persist = persistenceFor config.Surfaces subject
+            Persist = persist
           }
         | Subject.AuthenticatedUser uid -> {
             ScopeId = uid
             Container = $"user-{uid}"
-            Persist = persistenceFor config.Surfaces subject
+            Persist = persist
           }
         | TeamMember(_, tid) -> {
             ScopeId = tid
             Container = $"team-{tid}"
-            Persist = persistenceFor config.Surfaces subject
+            Persist = persist
           }
         | Subject.ClaimBearer claim -> {
             ScopeId = claim.ScopeId
             Container = claim.ScopeId
-            Persist = persistenceFor config.Surfaces subject
+            Persist = persist
           }
 
 /// Map a `SubjectResolutionError` back into the legacy
@@ -159,6 +219,94 @@ module SubjectResolutionErrorBridge =
         | SubjectResolutionError.UnsupportedSubject _ -> NotAuthenticated
         | SubjectResolutionError.NotTeamMember teamId -> NotTeamMember teamId
         | SubjectResolutionError.SubjectResolutionFailed msg -> ScopeResolutionFailed msg
+
+/// Phase 246 — observe an authorization-shaped scope-resolution
+/// downgrade. When `ISubjectResolver.Resolve` returns `Error err`, the
+/// middleware synthesises an anonymous fallback; pre-246 that was silent
+/// (`| Error _ -> ()`), so a user who was removed from their team
+/// (`NotTeamMember`) or whose subject kind the deployment's `Surfaces`
+/// don't serve (`UnsupportedSubject`) produced exactly the same
+/// observable shape as an ordinary anonymous request. Both are *returned*
+/// `Result.Error`s — `DefaultSubjectResolver` never throws them — so the
+/// Phase 234 "A1" throw-catch never sees them.
+///
+/// Emits a distinct structured `Warn` + best-effort audit. The audit
+/// reuses the `AuthScopeResolutionFailed` event with the bridged case
+/// name as `ExceptionKind`, which keeps the change inside this file
+/// (no new audit-DU case → no schema-version bump) while staying
+/// queryable and distinct from both a normal anonymous request (which
+/// emits nothing) and an A1 infra throw (which carries a real .NET
+/// exception type name).
+///
+/// `SubjectResolutionFailed` is **suppressed** here: the resolver already
+/// logs the underlying throw before converting it, and the A1 catch
+/// audits the infra-failure class — a middleware line would duplicate.
+///
+/// Every observability call is wrapped (a logger/audit failure on the
+/// auth path must not bring the request down), mirroring A1.
+///
+/// The decision of *what* to emit (and the `SubjectResolutionFailed`
+/// suppression) is the pure `resolverDowngradeSignal` below — `Some(case
+/// label, detail)` for the two authorization-shaped outcomes, `None` to
+/// suppress. Extracted so the policy is unit-testable without an
+/// `HttpContext` / audit-sink harness.
+let resolverDowngradeSignal (err: SubjectResolutionError) : (string * string) option =
+    match err with
+    | SubjectResolutionError.NotTeamMember teamId ->
+        Some("NotTeamMember", sprintf "active-team pointer set to team '%s' but the user is no longer a member" teamId)
+    | SubjectResolutionError.UnsupportedSubject kind ->
+        Some("UnsupportedSubject", sprintf "the deployment's Surfaces admit no shape for subject kind %A" kind)
+    // Already logged by the resolver + audited by A1 — do not duplicate.
+    | SubjectResolutionError.SubjectResolutionFailed _ -> None
+
+let private observeResolverErrorDowngrade
+    (ctx: HttpContext)
+    (logger: ILogger option)
+    (err: SubjectResolutionError)
+    (userId: string)
+    : unit =
+    match resolverDowngradeSignal err with
+    | None -> ()
+    | Some(caseLabel, detail) ->
+        let methodName = ctx.Request.Method
+        let pathStr = string ctx.Request.Path
+
+        try
+            match logger with
+            | Some log ->
+                log.Warn(
+                    sprintf
+                        "ScopeResolutionMiddleware downgraded to anonymous on %s %s — %s (user '%s': %s). This is NOT an ordinary anonymous request: the subject resolved but its scope was refused. Expected transiently while a user is mid-team-removal; a sustained rate indicates a Surfaces / membership misconfiguration."
+                        methodName
+                        pathStr
+                        caseLabel
+                        userId
+                        detail
+                )
+            | None -> ()
+        with _ ->
+            ()
+
+        try
+            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+            | :? IAuditLog as auditLog ->
+                let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+
+                auditLog.Record(
+                    "_platform",
+                    AuthScopeResolutionFailed {
+                        Method = methodName
+                        Path = pathStr
+                        ExceptionKind = caseLabel
+                        Message = sprintf "scope downgraded to anonymous for user '%s': %s" userId detail
+                        CorrelationId = correlationId
+                        OccurredAt = DateTimeOffset.UtcNow
+                    }
+                )
+                |> Async.Start
+            | _ -> ()
+        with _ ->
+            ()
 
 /// ASP.NET Core middleware that resolves the per-request `Subject`,
 /// `StorageScope`, and authenticated user, stashing all three on
@@ -247,14 +395,28 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                         let! resolved = runAsync (resolver.Resolve request)
 
+                        // Resolved once per request, best-effort: feeds the
+                        // Phase 246 fail-closed-default diagnostic (Ok path)
+                        // and the resolver-Error downgrade observability
+                        // (Error path). `None` when no ILogger is composed.
+                        let loggerOpt =
+                            match ctx.RequestServices.GetService(typeof<ILogger>) with
+                            | :? ILogger as l -> Some l
+                            | _ -> None
+
                         let subject, scopeResult =
                             match resolved with
                             | Ok s ->
-                                let scope = StorageScopeDerivation.fromSubject config s
+                                let scope = StorageScopeDerivation.fromSubject loggerOpt config s
                                 s, Ok scope
                             | Error err ->
                                 let fallback = fallbackAnonymous request
                                 let bridged = SubjectResolutionErrorBridge.toScopeError err
+                                // Phase 246 — make the silent authorization-shaped
+                                // downgrade observable (distinct from a normal
+                                // anonymous request). user.UserId is the resolved
+                                // identity whose scope was refused.
+                                observeResolverErrorDowngrade ctx loggerOpt err user.UserId
                                 fallback, Error bridged
 
                         ctx.Items["ToolUp.Subject"] <- box subject

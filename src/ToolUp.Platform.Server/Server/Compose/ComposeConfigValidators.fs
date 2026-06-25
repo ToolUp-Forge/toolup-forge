@@ -50,6 +50,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (OidcConfigCompletenessValidator.OidcConfigCompletenessValidator()) // refuse auth=oidc with unset issuer; ordered before HeaderAuth so its message lands earlier
     addConfigValidator (OidcAudienceBindingValidator.OidcAudienceBindingValidator(config)) // refuse auth=oidc with unbound audience in authenticated modes (token-reuse; escape hatch)
     addConfigValidator (HeaderAuthProviderModeValidator.HeaderAuthProviderModeValidator(config, auth)) // refuse HeaderAuthProvider in authenticated modes (mTLS escape hatch)
+    addConfigValidator (InviteEmailCapabilityValidator.InviteEmailCapabilityValidator(config, services)) // Phase 247 — warn team invite-by-email surface mounted in an auth mode with no IUserDirectory (emails silently never send; acknowledgement knob)
     addConfigValidator (AutoBootstrapDevAdminModeValidator.AutoBootstrapDevAdminModeValidator(config)) // warn (Error on internet-facing) AutoBootstrapDevAdmin left set in an auth-requiring mode (first sign-in becomes Platform Admin)
     addConfigValidator (CsrfDefaultModeValidator.CsrfDefaultModeValidator(config)) // warn cookie auth (SseAuthMode=CookieRequired) without server-side CSRF (NoSecurityHardening)
     addConfigValidator (AuditLogModeValidator.AuditLogModeValidator(config)) // warn authenticated mode + NoAuditLog

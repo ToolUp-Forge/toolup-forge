@@ -2286,6 +2286,22 @@ type ServerConfig = {
     /// when the deployment knows the risk is acceptable.
     AcceptPendingInviteStoreInMultiInstance: bool
 
+    /// Explicit operator opt-in to running the team invite-by-email
+    /// surface (`ITeamInviteApi.IssuePendingInviteByEmail`) without an
+    /// `IUserDirectory` companion wired. Without a directory the pending
+    /// invite is still recorded (the invitee auto-joins on next sign-in)
+    /// but the invitation email is never sent and the recipient typeahead
+    /// degrades to a free-text box — both silently.
+    ///
+    /// Default `false` — `InviteEmailCapabilityValidator` emits a
+    /// `Warning` (not Error — the auto-join path is unaffected; only the
+    /// notification is missing) when a team-scoped, auth-requiring
+    /// deployment mounts the surface with no directory. Set `true` (or
+    /// `TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY=1`) to acknowledge
+    /// the "operator tells the invitee out of band" posture and silence
+    /// the warning.
+    AcceptInviteByEmailWithoutDirectory: bool
+
     /// Eviction TTL for ephemeral session stores
     /// (Anonymous + AuthenticatedEphemeral modes). Default 60 minutes.
     /// `AuthenticatedEphemeral` deployments supporting trial-account
@@ -2771,6 +2787,7 @@ module ServerConfig =
         AcceptInMemoryOAuthStateInMultiInstance = false
         AcceptInMemoryShareTokenRateLimiterInMultiInstance = false
         AcceptPendingInviteStoreInMultiInstance = false
+        AcceptInviteByEmailWithoutDirectory = false
         EphemeralStoreEvictionMinutes = 60.0
         MaxSseConnectionsPerScope = Some 10
         DataSubjectRequests = DataSubjectRequestMode.Disabled
@@ -3398,6 +3415,7 @@ module ServerConfig =
                 AcceptUnboundAudienceWhenAuthRequired = envFlag "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE"
                 AcceptInMemoryOAuthStateInMultiInstance = envFlag "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE"
                 AcceptPendingInviteStoreInMultiInstance = envFlag "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE"
+                AcceptInviteByEmailWithoutDirectory = envFlag "TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY"
                 // Phase 71.A.3 / 71.A.4 — Port + PublicBaseUrl now resolve
                 // inside the `fromEnv` seam (were compose-only / unread).
                 Port = parseServerPort ()

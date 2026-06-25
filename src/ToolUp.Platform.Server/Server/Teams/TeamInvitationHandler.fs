@@ -138,6 +138,22 @@ let private projectSummary (claim: ShareTokenClaim) : TeamInviteSummary option =
             Revoked = claim.Revoked
         }
 
+// ─── Phase 247 — once-per-process directory-absent signal ────────────
+//
+// The opportunistic-email branch below silently falls through when no
+// `IUserDirectory` is registered (the "operator tells the invitee out of
+// band" posture). A deployment that *started* with a directory and lost
+// the wiring is otherwise undiagnosable from the invite path. Emit one
+// structured `Warn` the first time the skip fires per process — bounded
+// to once so a busy team doesn't flood the log on every invite. The
+// preflight `InviteEmailCapabilityValidator` is the primary signal; this
+// is the runtime backstop for the lose-the-wiring-after-boot case.
+//
+// A plain `bool ref` toggled non-atomically is the lightest once-guard;
+// a benign race at process start logs the Warn at most twice, which is
+// acceptable for a diagnostic (no correctness dependency).
+let private directoryAbsentWarned = ref false
+
 // ─── Per-request API construction ───────────────────────────────────
 
 let teamInvitationApi
@@ -606,8 +622,19 @@ let teamInvitationApi
                                 | _ ->
                                     // No directory companion wired — the
                                     // pre-0.5.7 "operator tells the invitee out
-                                    // of band" path. Nothing to do.
-                                    logger.Info "[invite] IUserDirectory: not registered"
+                                    // of band" path. The pending invite is
+                                    // durable; only the email is skipped.
+                                    // Phase 247 — warn once per process so a
+                                    // deployment that lost its directory wiring
+                                    // is diagnosable from the runtime path too,
+                                    // not just preflight.
+                                    if not directoryAbsentWarned.Value then
+                                        directoryAbsentWarned.Value <- true
+
+                                        logger.Warn
+                                            "[invite] team invite-by-email surface invoked but no IUserDirectory companion is registered — the pending invite was recorded (the invitee auto-joins on next sign-in) but NO invitation email was sent. Wire an IUserDirectory (e.g. EntraDirectory) or set ServerConfig.AcceptInviteByEmailWithoutDirectory / TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY=1 to acknowledge the out-of-band-notification posture. (Logged once per process.)"
+                                    else
+                                        logger.Info "[invite] IUserDirectory: not registered (already warned)"
                             with ex ->
                                 // Defensive — a Graph 5xx, a Network exception,
                                 // a DI surprise — any of these would otherwise

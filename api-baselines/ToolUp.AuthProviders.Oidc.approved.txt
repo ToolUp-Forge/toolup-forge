@@ -8,4 +8,6 @@ ToolUp.AuthProviders.OidcAuthProvider.fromConfigWith(System.Net.Http.HttpClient,
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigWithMetrics(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthValidator (class)
 ToolUp.AuthProviders.OidcAuthValidator.create(System.String) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.AuthProviders.OidcAuthValidator.maxTimeoutMs : System.Int32 (literal)
+ToolUp.AuthProviders.OidcAuthValidator.timeoutEnvVar : System.String (literal)
 ToolUp.AuthProviders.OidcAuthValidator.tryFromEnv() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigValidation+IConfigValidator]

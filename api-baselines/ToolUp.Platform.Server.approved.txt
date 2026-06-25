@@ -1497,6 +1497,9 @@ ToolUp.Platform.InProcessOAuthTokenRefresher+Impl.Recover() : Microsoft.FSharp.C
 ToolUp.Platform.InProcessOAuthTokenRefresher+Impl.TryGetDescriptor(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthRefreshDescriptor]
 ToolUp.Platform.InProcessRateLimiter (class)
 ToolUp.Platform.InProcessRateLimiter..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDescriptor], ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IAuditLog, System.TimeSpan, ToolUp.Platform.ILogger)
+ToolUp.Platform.InviteEmailCapabilityValidator (class)
+ToolUp.Platform.InviteEmailCapabilityValidator+InviteEmailCapabilityValidator (class)
+ToolUp.Platform.InviteEmailCapabilityValidator+InviteEmailCapabilityValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.JobApiHandler (class)
 ToolUp.Platform.JobApiHandler.jobApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.JobApi
 ToolUp.Platform.JobNotifyEventStore (class)
@@ -1682,6 +1685,7 @@ ToolUp.Platform.MetricsEndpoint (class)
 ToolUp.Platform.MetricsEndpoint.handler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.Platform.MetricsEndpoint.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.Platform.Middleware (class)
+ToolUp.Platform.Middleware.resolverDowngradeSignal(ToolUp.Platform.SubjectResolutionError) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Platform.Middleware+RequestIdMiddleware (class)
 ToolUp.Platform.Middleware+RequestIdMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate)
 ToolUp.Platform.Middleware+RequestIdMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task
@@ -1689,7 +1693,7 @@ ToolUp.Platform.Middleware+ScopeResolutionMiddleware (class)
 ToolUp.Platform.Middleware+ScopeResolutionMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
 ToolUp.Platform.Middleware+ScopeResolutionMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task
 ToolUp.Platform.Middleware+StorageScopeDerivation (class)
-ToolUp.Platform.Middleware+StorageScopeDerivation.fromSubject(ToolUp.Platform.ServerConfig, ToolUp.Platform.Subject) : ToolUp.Platform.StorageScope
+ToolUp.Platform.Middleware+StorageScopeDerivation.fromSubject(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.ServerConfig, ToolUp.Platform.Subject) : ToolUp.Platform.StorageScope
 ToolUp.Platform.Middleware+SubjectRequestExtractor (class)
 ToolUp.Platform.Middleware+SubjectRequestExtractor.fromHttpContext(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.Auth+IAuthProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.SubjectResolutionRequest]
 ToolUp.Platform.Middleware+SubjectResolutionErrorBridge (class)

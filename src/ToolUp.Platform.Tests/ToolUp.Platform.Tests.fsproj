@@ -303,6 +303,9 @@
         <Compile Include="InProcess\RateLimitConfigHelpersTests.fs" />
         <Compile Include="InProcess\SseAuthModeValidatorTests.fs" />
         <Compile Include="InProcess\OidcAudienceBindingValidatorTests.fs" />
+        <Compile Include="InProcess\OidcAuthValidatorTimeoutTests.fs" />
+        <Compile Include="InProcess\InviteEmailCapabilityValidatorTests.fs" />
+        <Compile Include="InProcess\SubjectDowngradeObservabilityTests.fs" />
         <Compile Include="InProcess\SecurityHeadersValidatorTests.fs" />
         <Compile Include="InProcess\SecurityHardeningTests.fs" />
         <Compile Include="InProcess\ForwardedHeadersTrustValidatorTests.fs" />
