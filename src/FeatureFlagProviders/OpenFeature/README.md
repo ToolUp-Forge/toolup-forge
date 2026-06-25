@@ -37,3 +37,24 @@ correctly-typed evaluation (`GetBooleanDetailsAsync` for `Bool` flags,
 `GetStringDetailsAsync` for `Variant` flags). It defers to the next layer on any
 `ErrorType` (e.g. the provider doesn't know the flag), so ToolUp's declared default still
 applies.
+
+## Health probe + startup preflight
+
+The companion also ships an `IHealthCheck` and an `IConfigValidator`, both keyed off the
+process-wide `Api.Instance` provider metadata — the only readiness signal the OpenFeature
+.NET surface exposes publicly. Register them alongside the source:
+
+```fsharp
+open ToolUp.FeatureFlagProviders.OpenFeature
+
+app
+|> ServerApp.withHealthCheck (Health.create ())          // /ready: "feature_flags:openfeature"
+|> ServerApp.withConfigValidator (Validator.create ())   // preflight: "openfeature-flag-source"
+```
+
+Both detect the **composed-but-not-wired** case: if the deployment added the source to its
+`FlagEvaluator` but never called `Api.Instance.SetProviderAsync(...)`, `Api.Instance` is still
+the built-in No-op provider and every external resolution silently defers to the ToolUp
+declared default. The probe reports that as `Degraded` (resolution still works, so `/ready`
+stays green); the validator reports it as `Warning` (it never aborts startup — composing the
+companion is byte-for-byte safe, GP 11 / GP 13). A registered provider is `Healthy` / `Ok`.

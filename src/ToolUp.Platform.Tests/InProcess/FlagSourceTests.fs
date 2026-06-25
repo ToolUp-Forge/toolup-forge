@@ -125,4 +125,58 @@ let tests =
             let! unknown = source.Resolve(boolFlag "ff.absent" false, ctx)
             Expect.equal unknown None "unknown flag defers to the declared default"
         }
+
+        // ─── Phase 239 follow-on — companion health probe + preflight ───
+        // Both key off the process-wide `Api.Instance` provider metadata
+        // (the only public readiness signal in OpenFeature .NET 2.3.0).
+        // `ShutdownAsync ()` resets `Api.Instance` to the built-in No-op
+        // provider — the deterministic "composed but not wired" state.
+
+        testCaseAsync "health probe is Degraded when no external provider is registered"
+        <| async {
+            do! Api.Instance.ShutdownAsync() |> Async.AwaitTask // → No-op provider
+            let probe = Health.create ()
+            let! result = probe.Check()
+
+            match result with
+            | HealthChecks.Degraded _ -> ()
+            | other -> failtestf "expected Degraded for the unwired No-op provider, got %A" other
+        }
+
+        testCaseAsync "health probe is Healthy when an external provider is registered"
+        <| async {
+            let flags: IDictionary<string, Flag> =
+                dict [
+                    "ff.h", (Flag<bool>(Dictionary<string, bool>(dict [ "on", true ]), "on") :> Flag)
+                ]
+
+            do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
+            let probe = Health.create ()
+            let! result = probe.Check()
+            Expect.equal result HealthChecks.Healthy "a registered provider is Healthy"
+        }
+
+        testCaseAsync "validator Warns (does not abort) when no external provider is registered"
+        <| async {
+            do! Api.Instance.ShutdownAsync() |> Async.AwaitTask // → No-op provider
+            let validator = Validator.create ()
+            let! result = validator.Validate()
+
+            match result with
+            | ConfigValidation.Warning _ -> ()
+            | other -> failtestf "expected Warning (never Error) for the unwired companion, got %A" other
+        }
+
+        testCaseAsync "validator is Ok when an external provider is registered"
+        <| async {
+            let flags: IDictionary<string, Flag> =
+                dict [
+                    "ff.v", (Flag<bool>(Dictionary<string, bool>(dict [ "on", true ]), "on") :> Flag)
+                ]
+
+            do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
+            let validator = Validator.create ()
+            let! result = validator.Validate()
+            Expect.equal result ConfigValidation.Ok "a registered provider passes preflight"
+        }
     ]
