@@ -102,6 +102,7 @@ Configuration via environment variables (read by the provider at startup):
 - `TOOLUP_OIDC_ISSUER` — required.
 - `TOOLUP_OIDC_AUDIENCE` — required.
 - `TOOLUP_OIDC_CLOCK_SKEW_SECONDS` — optional; default 60.
+- `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` — optional; the reachability-probe deadline in milliseconds (default 5000). Raise it for a cold-start-slow tier whose first outbound HTTPS call exceeds 5s, instead of disabling the probe entirely. Range-guarded — a non-numeric / non-positive / absurd value (> 300000) is rejected at preflight rather than silently defaulted. The probe-timeout error message names this var as the lever.
 
 `OidcAuthValidator` `IConfigValidator` probes `.well-known/openid-configuration` at preflight; refuses startup if unreachable. `ServerConfig.SkipPreflight = true` bypasses.
 
