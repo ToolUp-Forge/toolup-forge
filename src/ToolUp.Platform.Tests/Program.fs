@@ -190,6 +190,9 @@ let allTests =
         // policy matching + PermissionStoreActionAuthorizer semantics +
         // contract binding.
         ActionAuthorizerTests.tests
+        // Phase 245 — tri-state ModuleExposure persistence migration
+        // (legacy `hidden[]` → Hidden, dual-write back-compat).
+        ModuleExposureMigrationTests.tests
         // Phase 112 — scope-isolated live-session host: contract pack,
         // cap refusal, endpoint integration (404 / 429 / SSE frames).
         LiveSessionHostTests.tests
@@ -277,6 +280,10 @@ let allTests =
         UserClaimsTests.tests
         ModuleGroupingValidatorTests.tests
         AnonymousModeContractTests.tests
+        // Phase 245 — per-team module exposure folded into
+        // `computeAccessibleModules` (separate `[<Tests>]` binding that
+        // `runTestsWithCLIArgs` would otherwise leave dormant).
+        AnonymousModeContractTests.exposureTests
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
         BuiltInModuleSurfaceTests.tests

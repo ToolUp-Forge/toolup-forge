@@ -390,8 +390,8 @@ ToolUp.Platform.AIToolDefinition.Parameters : Microsoft.FSharp.Collections.FShar
 ToolUp.Platform.AIToolDefinition.SourceModule : System.String { get }
 ToolUp.Platform.AIToolDefinition.Surface : ToolUp.Platform.AISurfaceFilter { get }
 ToolUp.Platform.AccessContext (class)
-ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole])
-ToolUp.Platform.AccessContext.HiddenModules : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole])
+ToolUp.Platform.AccessContext.ModuleExposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
 ToolUp.Platform.AccessContext.ModulePermissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.AccessContext.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
 ToolUp.Platform.AccessContext.Subject : ToolUp.Platform.Subject { get }
@@ -402,12 +402,14 @@ ToolUp.Platform.AccessContextModule.canAccessModule(System.String, ToolUp.Platfo
 ToolUp.Platform.AccessContextModule.canModifyPlatformConfig(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.claim(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim]
 ToolUp.Platform.AccessContextModule.configScope(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]
+ToolUp.Platform.AccessContextModule.exposureOf(System.String, ToolUp.Platform.AccessContext) : ToolUp.Platform.ModuleExposure
 ToolUp.Platform.AccessContextModule.flagScope(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagScope]
 ToolUp.Platform.AccessContextModule.hasPermission(System.String, ToolUp.Platform.ModulePermission, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.inTeamScope(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isAnonymous(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isAuthenticated(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isClaimBearer(ToolUp.Platform.AccessContext) : System.Boolean
+ToolUp.Platform.AccessContextModule.isModuleAvailable(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isModuleExposed(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.kindLabel(ToolUp.Platform.AccessContext) : System.String
 ToolUp.Platform.AccessContextModule.unrestricted(ToolUp.Platform.Subject) : ToolUp.Platform.AccessContext
@@ -3577,6 +3579,23 @@ ToolUp.Platform.ModuleEvent.OccurredAt : System.DateTime { get }
 ToolUp.Platform.ModuleEvent.Payload : System.String { get }
 ToolUp.Platform.ModuleEvent.ScopeId : System.String { get }
 ToolUp.Platform.ModuleEvent.SourceModule : System.String { get }
+ToolUp.Platform.ModuleExposure (class)
+ToolUp.Platform.ModuleExposure.Available : ToolUp.Platform.ModuleExposure { get }
+ToolUp.Platform.ModuleExposure.Hidden : ToolUp.Platform.ModuleExposure { get }
+ToolUp.Platform.ModuleExposure.IsAvailable : System.Boolean { get }
+ToolUp.Platform.ModuleExposure.IsHidden : System.Boolean { get }
+ToolUp.Platform.ModuleExposure.IsUnavailable : System.Boolean { get }
+ToolUp.Platform.ModuleExposure.Tag : System.Int32 { get }
+ToolUp.Platform.ModuleExposure.Unavailable : ToolUp.Platform.ModuleExposure { get }
+ToolUp.Platform.ModuleExposure+Tags (class)
+ToolUp.Platform.ModuleExposure+Tags.Available : System.Int32 (literal)
+ToolUp.Platform.ModuleExposure+Tags.Hidden : System.Int32 (literal)
+ToolUp.Platform.ModuleExposure+Tags.Unavailable : System.Int32 (literal)
+ToolUp.Platform.ModuleExposureModule (class)
+ToolUp.Platform.ModuleExposureModule.isExposed(ToolUp.Platform.ModuleExposure) : System.Boolean
+ToolUp.Platform.ModuleExposureModule.isMappable(ToolUp.Platform.ModuleExposure) : System.Boolean
+ToolUp.Platform.ModuleExposureModule.ofToken(System.String) : ToolUp.Platform.ModuleExposure
+ToolUp.Platform.ModuleExposureModule.toToken(ToolUp.Platform.ModuleExposure) : System.String
 ToolUp.Platform.ModuleFilter (class)
 ToolUp.Platform.ModuleFilter.apply`1(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, System.String], Microsoft.FSharp.Collections.FSharpList`1[a]) : Microsoft.FSharp.Collections.FSharpList`1[a]
 ToolUp.Platform.ModuleFilter.matches(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : System.Boolean
@@ -4316,10 +4335,10 @@ ToolUp.Platform.PendingInviteStoreError+Tags.Conflict : System.Int32 (literal)
 ToolUp.Platform.PendingInviteStoreError+Tags.NotFound : System.Int32 (literal)
 ToolUp.Platform.PendingInviteStoreError+Tags.StorageFailed : System.Int32 (literal)
 ToolUp.Platform.PermissionApi (class)
-ToolUp.Platform.PermissionApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.Boolean], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
+ToolUp.Platform.PermissionApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.PermissionApi.GetTeamPermissions : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]] { get }
 ToolUp.Platform.PermissionApi.SetMemberPermissions : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
-ToolUp.Platform.PermissionApi.SetModuleExposure : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.Boolean], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.PermissionApi.SetModuleExposure : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PermissionApi.SetTeamDefaults : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PermissionChangedPayload (class)
 ToolUp.Platform.PermissionChangedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
@@ -5550,9 +5569,9 @@ ToolUp.Platform.TeamMembership.Role : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.TeamMembership.TeamId : System.String { get }
 ToolUp.Platform.TeamMembership.UserId : System.String { get }
 ToolUp.Platform.TeamPermissions (class)
-ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure])
 ToolUp.Platform.TeamPermissions.Defaults : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
-ToolUp.Platform.TeamPermissions.Hidden : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.TeamPermissions.Exposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
 ToolUp.Platform.TeamPermissions.Members : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]] { get }
 ToolUp.Platform.TeamPermissionsModule (class)
 ToolUp.Platform.TeamPermissionsModule.empty : ToolUp.Platform.TeamPermissions { get }

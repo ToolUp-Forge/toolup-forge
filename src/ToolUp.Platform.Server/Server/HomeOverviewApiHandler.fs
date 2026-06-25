@@ -58,7 +58,13 @@ let private modeLabel (accessContext: AccessContext) : string =
 /// Build one `ToolSummary` per data-producing module from the
 /// catalog, with scope-correct per-type counts. Empty when no catalog
 /// is registered (a deployment with no data-producing modules).
-let private buildTools (ctx: HttpContext) (scopeId: string) : Async<ToolSummary list> =
+///
+/// Per-team exposure gate (Phase 245 tri-state): a module that is
+/// `Hidden` or `Unavailable` for the caller's team is dropped, so the
+/// Home overview matches the sidebar's visible set. `ModuleExposure`
+/// is empty for non-team subjects, so this is a no-op outside team
+/// scope.
+let private buildTools (ctx: HttpContext) (accessContext: AccessContext) (scopeId: string) : Async<ToolSummary list> =
     match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
     | :? IDataCatalog as catalog -> async {
         let! types = catalog.ListTypes()
@@ -81,6 +87,7 @@ let private buildTools (ctx: HttpContext) (scopeId: string) : Async<ToolSummary 
             |> Array.collect (fun (t, producers, count) ->
                 producers |> List.map (fun m -> (m, (t, count))) |> Array.ofList)
             |> Array.groupBy fst
+            |> Array.filter (fun (moduleName, _) -> AccessContext.isModuleExposed moduleName accessContext)
             |> Array.map (fun (moduleName, entries) ->
                 let counts =
                     entries
@@ -131,7 +138,7 @@ let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
     {
         GetOverview =
             fun () -> async {
-                let! tools = buildTools ctx scopeId
+                let! tools = buildTools ctx accessContext scopeId
                 let! activeAi = buildActiveAi ctx scopeId
                 let! health = buildHealth ctx accessContext
 

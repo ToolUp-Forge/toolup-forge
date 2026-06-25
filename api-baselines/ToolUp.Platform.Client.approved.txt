@@ -450,7 +450,8 @@ MappingDataManagerUI+HeldFile.Headers : Microsoft.FSharp.Collections.FSharpList`
 MappingDataManagerUI+HeldFile.RawContents : System.String { get }
 MappingDataManagerUI+HeldFile.Samples : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 MappingDataManagerUI+Model (class)
-MappingDataManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+MappingDataManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
+MappingDataManagerUI+Model.AllowedTypeIds : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
 MappingDataManagerUI+Model.Busy : System.Boolean { get }
 MappingDataManagerUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 MappingDataManagerUI+Model.Held : Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile] { get }
@@ -460,11 +461,14 @@ MappingDataManagerUI+Model.UploadedFiles : Microsoft.FSharp.Collections.FSharpLi
 MappingDataManagerUI+Model.Wizard : Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard] { get }
 MappingDataManagerUI+Msg (class)
 MappingDataManagerUI+Msg.CancelWizard : MappingDataManagerUI+Msg { get }
+MappingDataManagerUI+Msg.CatalogLoadFailed : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ChangeFormat : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ConfirmMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.DismissError : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.IsApiError : System.Boolean { get }
 MappingDataManagerUI+Msg.IsCancelWizard : System.Boolean { get }
+MappingDataManagerUI+Msg.IsCatalogLoadFailed : System.Boolean { get }
+MappingDataManagerUI+Msg.IsCatalogLoaded : System.Boolean { get }
 MappingDataManagerUI+Msg.IsChangeFormat : System.Boolean { get }
 MappingDataManagerUI+Msg.IsConfirmMapping : System.Boolean { get }
 MappingDataManagerUI+Msg.IsDeleteFile : System.Boolean { get }
@@ -494,6 +498,8 @@ MappingDataManagerUI+Msg.ResetDataStore : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.Tag : System.Int32 { get }
 MappingDataManagerUI+Msg+ApiError (class)
 MappingDataManagerUI+Msg+ApiError.Item : System.String { get }
+MappingDataManagerUI+Msg+CatalogLoaded (class)
+MappingDataManagerUI+Msg+CatalogLoaded.Item : DataManagementTypes+DataCatalogResponse { get }
 MappingDataManagerUI+Msg+DeleteFile (class)
 MappingDataManagerUI+Msg+DeleteFile.Item : System.String { get }
 MappingDataManagerUI+Msg+FileChosen (class)
@@ -533,6 +539,8 @@ MappingDataManagerUI+Msg+StartMapping.fileName : System.String { get }
 MappingDataManagerUI+Msg+Tags (class)
 MappingDataManagerUI+Msg+Tags.ApiError : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.CancelWizard : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.CatalogLoadFailed : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.CatalogLoaded : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ChangeFormat : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ConfirmMapping : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.DeleteFile : System.Int32 (literal)
@@ -629,10 +637,10 @@ PermissionsAdminUI+Msg.IsSaveDefaultsResult : System.Boolean { get }
 PermissionsAdminUI+Msg.IsSaveMemberResult : System.Boolean { get }
 PermissionsAdminUI+Msg.IsSaveMembers : System.Boolean { get }
 PermissionsAdminUI+Msg.IsSelectMember : System.Boolean { get }
+PermissionsAdminUI+Msg.IsSetExposure : System.Boolean { get }
 PermissionsAdminUI+Msg.IsSnapshotLoaded : System.Boolean { get }
 PermissionsAdminUI+Msg.IsSwitchTab : System.Boolean { get }
 PermissionsAdminUI+Msg.IsToggleDefault : System.Boolean { get }
-PermissionsAdminUI+Msg.IsToggleExposure : System.Boolean { get }
 PermissionsAdminUI+Msg.IsToggleMemberColumn : System.Boolean { get }
 PermissionsAdminUI+Msg.IsToggleMemberPermission : System.Boolean { get }
 PermissionsAdminUI+Msg.RefreshSnapshot : PermissionsAdminUI+Msg { get }
@@ -640,9 +648,10 @@ PermissionsAdminUI+Msg.ResetDefaults : PermissionsAdminUI+Msg { get }
 PermissionsAdminUI+Msg.SaveDefaults : PermissionsAdminUI+Msg { get }
 PermissionsAdminUI+Msg.Tag : System.Int32 { get }
 PermissionsAdminUI+Msg+ExposureResult (class)
-PermissionsAdminUI+Msg+ExposureResult.Item3 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
-PermissionsAdminUI+Msg+ExposureResult.exposed : System.Boolean { get }
+PermissionsAdminUI+Msg+ExposureResult.Item4 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+PermissionsAdminUI+Msg+ExposureResult.attempted : ToolUp.Platform.ModuleExposure { get }
 PermissionsAdminUI+Msg+ExposureResult.moduleName : System.String { get }
+PermissionsAdminUI+Msg+ExposureResult.previous : ToolUp.Platform.ModuleExposure { get }
 PermissionsAdminUI+Msg+ResetMembers (class)
 PermissionsAdminUI+Msg+ResetMembers.userId : System.String { get }
 PermissionsAdminUI+Msg+SaveDefaultsResult (class)
@@ -655,6 +664,10 @@ PermissionsAdminUI+Msg+SaveMembers (class)
 PermissionsAdminUI+Msg+SaveMembers.userId : System.String { get }
 PermissionsAdminUI+Msg+SelectMember (class)
 PermissionsAdminUI+Msg+SelectMember.userId : System.String { get }
+PermissionsAdminUI+Msg+SetExposure (class)
+PermissionsAdminUI+Msg+SetExposure.moduleName : System.String { get }
+PermissionsAdminUI+Msg+SetExposure.next : ToolUp.Platform.ModuleExposure { get }
+PermissionsAdminUI+Msg+SetExposure.previous : ToolUp.Platform.ModuleExposure { get }
 PermissionsAdminUI+Msg+SnapshotLoaded (class)
 PermissionsAdminUI+Msg+SnapshotLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[PermissionsAdminUI+TeamView, System.String] { get }
 PermissionsAdminUI+Msg+SwitchTab (class)
@@ -670,18 +683,15 @@ PermissionsAdminUI+Msg+Tags.SaveDefaultsResult : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.SaveMemberResult : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.SaveMembers : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.SelectMember : System.Int32 (literal)
+PermissionsAdminUI+Msg+Tags.SetExposure : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.SnapshotLoaded : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.SwitchTab : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ToggleDefault : System.Int32 (literal)
-PermissionsAdminUI+Msg+Tags.ToggleExposure : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ToggleMemberColumn : System.Int32 (literal)
 PermissionsAdminUI+Msg+Tags.ToggleMemberPermission : System.Int32 (literal)
 PermissionsAdminUI+Msg+ToggleDefault (class)
 PermissionsAdminUI+Msg+ToggleDefault.Item2 : ToolUp.Platform.ModulePermission { get }
 PermissionsAdminUI+Msg+ToggleDefault.moduleName : System.String { get }
-PermissionsAdminUI+Msg+ToggleExposure (class)
-PermissionsAdminUI+Msg+ToggleExposure.exposed : System.Boolean { get }
-PermissionsAdminUI+Msg+ToggleExposure.moduleName : System.String { get }
 PermissionsAdminUI+Msg+ToggleMemberColumn (class)
 PermissionsAdminUI+Msg+ToggleMemberColumn.add : System.Boolean { get }
 PermissionsAdminUI+Msg+ToggleMemberColumn.level : ToolUp.Platform.ModulePermission { get }

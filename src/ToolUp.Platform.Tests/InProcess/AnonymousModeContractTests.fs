@@ -172,13 +172,14 @@ let tests =
 // ─── Phase 245 — per-team module exposure ────────────────────────────
 //
 // Pins the exposure axis folded into `computeAccessibleModules`: a
-// module in `AccessContext.HiddenModules` disappears from the sidebar
-// for ordinary members AND for a platform admin acting on the team,
-// while a teamless admin (empty HiddenModules) still sees everything.
+// module marked `Hidden` (or `Unavailable`) in
+// `AccessContext.ModuleExposure` disappears from the sidebar for
+// ordinary members AND for a platform admin acting on the team, while a
+// teamless admin (empty ModuleExposure) still sees everything.
 
 let private withHidden (ctx: AccessContext) (hidden: string list) : AccessContext = {
     ctx with
-        HiddenModules = Set.ofList hidden
+        ModuleExposure = hidden |> List.map (fun m -> m, ModuleExposure.Hidden) |> Map.ofList
 }
 
 [<Tests>]
@@ -241,7 +242,7 @@ let exposureTests =
         }
 
         test "Platform admin with NO active team still sees everything (escape preserved)" {
-            // No team ⇒ HiddenModules is empty ⇒ the admin branch returns
+            // No team ⇒ ModuleExposure is empty ⇒ the admin branch returns
             // the full Managed list, so a teamless admin is never stranded.
             let names = [ "Sales"; "Marketing" ]
             let config = cfg Surfaces.multiTeam names

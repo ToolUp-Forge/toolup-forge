@@ -63,6 +63,71 @@ module ModulePermission =
         | ModulePermission.SchemaOnly, ModulePermission.SchemaOnly -> true
         | _ -> false
 
+/// Per-team, per-module **exposure** state — the tri-state behind the
+/// team-management "module exposure" control. Orthogonal to the RBAC
+/// permission maps: exposure governs *whether the module is offered to
+/// the team at all*; permission governs *what a member may do once it
+/// is*. Absence from `TeamPermissions.Exposure` ⇒ `Available` (the
+/// default, so a brand-new team and every pre-exposure persisted
+/// document show every module).
+///
+/// `Available` and `Hidden` remain pure visibility/navigation states
+/// (NOT an authorization boundary — the per-route permission guard
+/// `canAccessModule` / `hasPermission` is the enforcement). `Hidden`
+/// preserves the legacy "Expose in team" off behaviour: the module
+/// leaves the sidebar + Home but its data types stay mappable.
+/// `Unavailable` is the stronger *clearance* state: the module leaves
+/// the sidebar + Home AND its data types are no longer offered for
+/// mapping ("this team isn't cleared to use it").
+///
+/// Extensible — a future "visible-but-locked upsell" state is simply a
+/// 4th case rather than a second orthogonal flag.
+[<RequireQualifiedAccess>]
+type ModuleExposure =
+    /// Default. In the sidebar + Home; data types mappable.
+    | Available
+    /// Cosmetically hidden — off the sidebar + Home, but data types
+    /// stay mappable. The legacy "Expose in team" off state.
+    | Hidden
+    /// Not cleared for this team — off the sidebar + Home, AND its data
+    /// types are refused for mapping/detection. Upload still succeeds.
+    | Unavailable
+
+module ModuleExposure =
+    /// Stable wire token for persistence + audit. `Available` is never
+    /// serialised (absence ⇒ Available), so it has no token of its own
+    /// on the write path; included here for completeness.
+    let toToken =
+        function
+        | ModuleExposure.Available -> "available"
+        | ModuleExposure.Hidden -> "hidden"
+        | ModuleExposure.Unavailable -> "unavailable"
+
+    /// Parse a persisted/legacy token. Unknown tokens fall back to the
+    /// safe-but-visible `Available` default rather than throwing — a
+    /// malformed document must not strand a team with no modules.
+    let ofToken (token: string) =
+        match token.Trim().ToLowerInvariant() with
+        | "hidden" -> ModuleExposure.Hidden
+        | "unavailable" -> ModuleExposure.Unavailable
+        | _ -> ModuleExposure.Available
+
+    /// Whether the module is shown in the sidebar + Home. Only
+    /// `Available` is exposed; `Hidden` and `Unavailable` are not.
+    let isExposed =
+        function
+        | ModuleExposure.Available -> true
+        | ModuleExposure.Hidden
+        | ModuleExposure.Unavailable -> false
+
+    /// Whether the module's data types may be mapped/detected. Both
+    /// `Available` and `Hidden` are mappable; only `Unavailable` blocks.
+    let isMappable =
+        function
+        | ModuleExposure.Available
+        | ModuleExposure.Hidden -> true
+        | ModuleExposure.Unavailable -> false
+
 /// Persisted per-team permission document. One per team, stored under
 /// `_platform/permissions/{teamId}.json` by the blob-backed
 /// `PermissionStore`.
@@ -72,17 +137,15 @@ module ModulePermission =
 /// Effective permissions for a user on a module: `Members[userId][module]`
 /// if present, else `Defaults[module]`, else no access.
 ///
-/// `Hidden` is the **per-team module-exposure** axis, orthogonal to the
-/// permission maps above. A module Id in `Hidden` is removed from the
-/// team's sidebar for every member (and for a platform admin acting on
-/// the team), regardless of permission level — it is the explicit
-/// "this module is hidden in this team" state behind the "Expose in
-/// team" toggle. Absence ⇒ exposed (the default, so a brand-new team
-/// and every pre-exposure persisted document show every module). It is
-/// a navigation/visibility concern, NOT an authorization boundary —
-/// the per-route permission guard (`canAccessModule` / `hasPermission`)
-/// remains the enforcement. Exposure governs *whether the module is
-/// offered*; permission governs *what a member may do once it is*.
+/// `Exposure` is the **per-team module-exposure** axis (see
+/// `ModuleExposure`), orthogonal to the permission maps above. A module
+/// absent from the map is `Available`; entries record the non-default
+/// `Hidden` / `Unavailable` states. A `Hidden` / `Unavailable` module
+/// is removed from the team's sidebar + Home for every member (and for
+/// a platform admin acting on the team), regardless of permission
+/// level; `Unavailable` additionally blocks data mapping. Exposure is a
+/// navigation/availability concern, NOT the per-route authorization
+/// boundary.
 ///
 /// Lives in the shared compilation layer because the client-facing
 /// `PlatformApi` exposes it — team admins read and edit it from the
@@ -90,15 +153,16 @@ module ModulePermission =
 type TeamPermissions = {
     Defaults: Map<string, ModulePermission list>
     Members: Map<string, Map<string, ModulePermission list>>
-    /// Module Ids deliberately hidden from this team's sidebar. Empty ⇒
-    /// every module exposed (default). See the type doc for the
+    /// Per-module exposure state. A module absent from the map is
+    /// `Available` (default); entries hold the non-default `Hidden` /
+    /// `Unavailable` states. See the `ModuleExposure` doc for the
     /// exposure-vs-permission distinction.
-    Hidden: Set<string>
+    Exposure: Map<string, ModuleExposure>
 }
 
 module TeamPermissions =
     let empty = {
         Defaults = Map.empty
         Members = Map.empty
-        Hidden = Set.empty
+        Exposure = Map.empty
     }

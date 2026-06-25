@@ -88,6 +88,13 @@ type Model = {
     Wizard: Wizard option
     Busy: bool
     Error: string option
+    /// Phase 245 — the data type ids whose owning module is available
+    /// (mappable) to the caller's team, from the availability-filtered
+    /// `GetDataCatalog`. `None` until the catalog loads (no filtering yet,
+    /// so the wizard never blanks on a slow fetch); `Some ids` filters the
+    /// mapping target picker + the saved-mapping auto-reuse so a module
+    /// the team has marked `Unavailable` is never offered.
+    AllowedTypeIds: Set<DataTypeId> option
 }
 
 type Msg =
@@ -97,6 +104,11 @@ type Msg =
     | SelectFile of Browser.Types.File
     | FileChosen of fileName: string * contents: string
     | MappingsFetched of HeldFile * Conversion list
+    | CatalogLoaded of DataCatalogResponse
+    /// Catalog fetch failed — leave `AllowedTypeIds = None` (unfiltered;
+    /// the server still enforces availability) rather than blanking the
+    /// picker.
+    | CatalogLoadFailed
     | NativeUploaded of FileUploadResult
     | ImportFinished of Result<DataTypeId list, string>
     /// Re-fetch an uploaded file's bytes and open the mapping wizard on it —
@@ -124,6 +136,9 @@ let private fileApi: FileManagementApi =
 
 let private conversionApi: IConversionApi =
     Api.makeProxy<IConversionApi> (customOptions = UserSession.withRequestHeaders)
+
+let private dataCatalogApi: DataCatalogApi =
+    Api.makeProxy<DataCatalogApi> (customOptions = UserSession.withRequestHeaders)
 
 // ─── Mapping helpers (pure) ───────────────────────────────────────
 
@@ -357,6 +372,7 @@ let init () =
         Wizard = None
         Busy = false
         Error = None
+        AllowedTypeIds = None
     },
     Cmd.ofMsg LoadFiles
 
@@ -367,6 +383,12 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         Cmd.batch [
             Cmd.OfRemoting.call fileApi.ListFiles () FilesLoaded (fun ex -> ApiError ex.Message)
             Cmd.OfRemoting.call conversionApi.ListConversionRecords () RecordsLoaded (fun _ -> RecordsLoaded [])
+            // Phase 245 — the availability-filtered catalog. A type whose
+            // owning module the team marked `Unavailable` is absent here, so
+            // it is never offered as a mapping target. A failed fetch leaves
+            // `AllowedTypeIds = None` (no filtering) rather than blanking the
+            // picker.
+            Cmd.OfRemoting.call dataCatalogApi.GetDataCatalog () CatalogLoaded (fun _ -> CatalogLoadFailed)
         ]
 
     | FilesLoaded snapshot ->
@@ -378,6 +400,17 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         Cmd.none
 
     | RecordsLoaded records -> { model with Records = records }, Cmd.none
+
+    | CatalogLoaded response ->
+        let allowed = response.Types |> List.map (fun e -> e.Info.Id) |> Set.ofList
+
+        {
+            model with
+                AllowedTypeIds = Some allowed
+        },
+        Cmd.none
+
+    | CatalogLoadFailed -> model, Cmd.none
 
     | SelectFile file ->
         // Read the file via a direct effect rather than the previous
@@ -424,11 +457,19 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | MappingsFetched(held, saved) ->
         // Frictionless re-import when the structure is already known: apply
         // every saved mapping (skipping ones whose target type is no longer
-        // registered). With none usable, upload the file as-is so the server
-        // attempts native detection — recognised or not, the file then lands
-        // in the list to be mapped later via "New Mapping".
+        // registered, or whose owning module is `Unavailable` to this team
+        // per the availability-filtered catalog). With none usable, upload
+        // the file as-is so the server attempts native detection — recognised
+        // or not, the file then lands in the list to be mapped later via
+        // "New Mapping".
+        let isAvailable (typeId: DataTypeId) =
+            match model.AllowedTypeIds with
+            | Some allowed -> allowed.Contains typeId
+            | None -> true
+
         let importable =
-            saved |> List.filter (fun m -> (schemaFor displays m.TargetTypeId).IsSome)
+            saved
+            |> List.filter (fun m -> (schemaFor displays m.TargetTypeId).IsSome && isAvailable m.TargetTypeId)
 
         if not importable.IsEmpty then
             model,
@@ -1028,7 +1069,7 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
         ]
     ]
 
-let private wizardView (displays: DataTypeDisplay list) (w: Wizard) dispatch =
+let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<DataTypeId> option) (w: Wizard) dispatch =
     let header =
         Html.div [
             prop.className "flex items-center justify-between"
@@ -1046,7 +1087,16 @@ let private wizardView (displays: DataTypeDisplay list) (w: Wizard) dispatch =
         match w.Step with
         | ReviewData -> reviewDataView w dispatch
         | PickTarget ->
-            let tabular = displays |> List.filter (fun d -> d.Info.Schema.IsSome)
+            // Schema-bearing types only, and — once the availability-filtered
+            // catalog has loaded — only those whose owning module is mappable
+            // for this team (a module marked `Unavailable` is never offered).
+            let tabular =
+                displays
+                |> List.filter (fun d ->
+                    d.Info.Schema.IsSome
+                    && (match allowedTypeIds with
+                        | Some allowed -> allowed.Contains d.Info.Id
+                        | None -> true))
 
             Html.div [
                 prop.className "space-y-3"
@@ -1409,7 +1459,7 @@ let private view (displays: DataTypeDisplay list) (model: Model) dispatch =
         Html.div [
             prop.children [
                 match model.Wizard with
-                | Some w -> wizardView displays w dispatch
+                | Some w -> wizardView displays model.AllowedTypeIds w dispatch
                 | None -> Layout.Panel.panel "Imported Files" [ filesView displays model dispatch ]
 
                 match model.Error with

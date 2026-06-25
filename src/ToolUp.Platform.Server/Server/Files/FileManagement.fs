@@ -38,6 +38,17 @@ let detectFileType (dataTypes: DataType list) (contents: string) = async {
         return! tryNext dataTypes
 }
 
+/// Per-team availability gate (Phase 245 tri-state). Drop the data types
+/// whose owning module is `Unavailable` for the caller so neither
+/// detection nor processing can map a file into them — the raw file is
+/// still stored ("upload allowed, mapping blocked"). `blockedTypeIds` is
+/// empty outside team scope, so this is the identity in the common case.
+let private availableFor (blockedTypeIds: Set<string>) (dataTypes: DataType list) =
+    if blockedTypeIds.IsEmpty then
+        dataTypes
+    else
+        dataTypes |> List.filter (fun dt -> not (blockedTypeIds.Contains dt.Id))
+
 // ─── File Processing ──────────────────────────────────────────────
 
 let private emptyProcessedData = { TypeName = ""; Payload = "" }
@@ -631,7 +642,13 @@ type SessionFileStore
 
     do loadPersistedFiles ()
 
-    member _.AddFile(upload: DataFileUpload, createdBy: string) = async {
+    member _.AddFile(upload: DataFileUpload, createdBy: string, ?blockedTypeIds: Set<string>) = async {
+        // Per-team availability gate — detection + the explicit-`dataType`
+        // honour below run against the caller's available types only, so a
+        // file that would map into an Unavailable module lands unrecognised
+        // (stored, but not processed into it).
+        let availableDataTypes =
+            availableFor (defaultArg blockedTypeIds Set.empty) dataTypes
         // Gap audit pass-2 #8 — file-name sanitisation. The filename
         // flows into the blob ObjectId (`_processed_entry__{fileName}`)
         // and into LocalFileStorage's filesystem path. Without this
@@ -657,11 +674,11 @@ type SessionFileStore
             let! detectedType =
                 if
                     upload.dataType <> "UnrecognisedData"
-                    && dataTypes |> List.exists (fun dt -> dt.Id = upload.dataType)
+                    && availableDataTypes |> List.exists (fun dt -> dt.Id = upload.dataType)
                 then
                     async { return upload.dataType }
                 else
-                    detectFileType dataTypes upload.contents
+                    detectFileType availableDataTypes upload.contents
 
             let rowCount = max 0 (upload.contents.Split('\n').Length - 1)
             // Real UTF-8 byte count, not the UTF-16 char count — this value
@@ -735,7 +752,7 @@ type SessionFileStore
                     do! usageLog.Record record
                 | None -> ()
 
-                let! data, entry = processFile dataTypes upload.filename detectedType upload.contents
+                let! data, entry = processFile availableDataTypes upload.filename detectedType upload.contents
 
                 // Retain the heavy parsed payload in memory ONLY when a
                 // post-save hook might consume it. Nothing reads this dict on
@@ -890,12 +907,18 @@ type SessionFileStore
     /// `DataType` was unloaded and is now back, or the detector logic
     /// has changed). Post-save hooks are NOT fired — the raw bytes are
     /// unchanged, so RAG / vectorisation indexing is not invalidated.
-    member _.ReprocessFile(fileName: string, createdBy: string) = async {
+    member _.ReprocessFile(fileName: string, createdBy: string, ?blockedTypeIds: Set<string>) = async {
+        // Re-mapping honours the same per-team availability gate as upload —
+        // a file cannot be reprocessed into a module that is Unavailable to
+        // the caller's team.
+        let availableDataTypes =
+            availableFor (defaultArg blockedTypeIds Set.empty) dataTypes
+
         match files.TryGetValue(fileName) with
         | false, _ -> return Error $"File '{fileName}' not found"
         | true, file ->
-            let! detectedType = detectFileType dataTypes file.Contents
-            let! data, entry = processFile dataTypes fileName detectedType file.Contents
+            let! detectedType = detectFileType availableDataTypes file.Contents
+            let! data, entry = processFile availableDataTypes fileName detectedType file.Contents
 
             processedData.AddOrUpdate(fileName, data, fun _ _ -> data) |> ignore
             processedEntries.AddOrUpdate(fileName, entry, fun _ _ -> entry) |> ignore
@@ -1140,6 +1163,35 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
         | :? AccessContext as ac -> Some ac
         | _ -> None
 
+    // Per-team availability gate (Phase 245 tri-state). The set of data
+    // type ids whose every producing module is `Unavailable` for the
+    // caller — detection/processing skips these so an upload never maps
+    // into an unavailable module. Resolved per request via `IDataCatalog`
+    // (type → producing modules). Short-circuits to empty when there is no
+    // exposure config (the common case) or outside team scope.
+    let computeBlockedTypeIds () : Async<Set<string>> =
+        match accessContext, ctx.RequestServices.GetService(typeof<IDataCatalog>) with
+        | Some ac, (:? IDataCatalog as catalog) when not (Map.isEmpty ac.ModuleExposure) -> async {
+            let! pairs =
+                dataTypes
+                |> List.map (fun dt -> async {
+                    let! producers = catalog.GetProducers dt.Id
+
+                    let blocked =
+                        not (List.isEmpty producers)
+                        && producers |> List.forall (fun m -> not (AccessContext.isModuleAvailable m ac))
+
+                    return (dt.Id, blocked)
+                })
+                |> Async.Parallel
+
+            return
+                pairs
+                |> Array.choose (fun (id, blocked) -> if blocked then Some id else None)
+                |> Set.ofArray
+          }
+        | _ -> async { return Set.empty }
+
     let ensureCanResetDataStore () : Async<Result<unit, string>> = async {
         match accessContext with
         | None ->
@@ -1168,7 +1220,8 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
     {
         UploadFile =
             fun request -> async {
-                let! result = store.AddFile(request.File, userId)
+                let! blockedTypeIds = computeBlockedTypeIds ()
+                let! result = store.AddFile(request.File, userId, blockedTypeIds)
 
                 match result with
                 | Ok response ->
@@ -1204,7 +1257,8 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
             }
         ReprocessFile =
             fun fileName -> async {
-                let! result = store.ReprocessFile(fileName, userId)
+                let! blockedTypeIds = computeBlockedTypeIds ()
+                let! result = store.ReprocessFile(fileName, userId, blockedTypeIds)
 
                 match result with
                 | Ok entry ->

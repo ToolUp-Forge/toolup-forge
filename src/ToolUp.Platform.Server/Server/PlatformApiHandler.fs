@@ -764,22 +764,23 @@ let permissionApiHandler (_config: ServerConfig) =
                 }
 
             SetModuleExposure =
-                fun (teamId, moduleName, exposed) -> async {
+                fun (teamId, moduleName, state) -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
                         let! callerRole = ts.GetMemberRole(teamId, userId)
 
                         match callerRole with
                         | Some r when TeamRoles.canManageMembers r ->
-                            let! result = ps.SetModuleExposure(teamId, moduleName, exposed)
+                            let! result = ps.SetModuleExposure(teamId, moduleName, state)
 
                             match result with
                             | Ok() ->
-                                // Exposure is a visibility change, not a
-                                // permission grant — record it on the same
-                                // `PermissionChanged` audit shape with the
-                                // exposure outcome in the permissions slot so
-                                // a reviewer sees the hide/expose decision.
+                                // Exposure is a visibility/availability change,
+                                // not a permission grant — record it on the same
+                                // `PermissionChanged` audit shape with the new
+                                // exposure state ("available" / "hidden" /
+                                // "unavailable") in the permissions slot so a
+                                // reviewer sees the decision.
                                 audit
                                     teamId
                                     (PermissionChanged {
@@ -787,7 +788,7 @@ let permissionApiHandler (_config: ServerConfig) =
                                         TeamId = teamId
                                         AffectedUserId = ""
                                         ModuleName = moduleName
-                                        Permissions = (if exposed then "exposed" else "hidden")
+                                        Permissions = ModuleExposure.toToken state
                                     })
                             | Error _ -> ()
 
@@ -819,26 +820,28 @@ let permissionApiHandler (_config: ServerConfig) =
 ///      RBAC `ModulePermissions` intersection is still bypassed — an
 ///      admin sees every module they have rights to), but they now
 ///      respect the active team's **exposure** axis: a module the team
-///      has hidden (`AccessContext.HiddenModules`) is filtered out of
-///      the admin's sidebar too, so an operator who hides a module on a
-///      team and then views that team sees the effect. When the admin
-///      has no active team, `HiddenModules` is empty (nothing loaded),
-///      so this naturally degrades to the full Managed list — preserving
-///      the 0.5.3 "admin without a team still sees everything" escape
-///      that keeps a teamless admin from being stranded with only the
-///      SDK-built-in `_sdk.platform-admin.*` group. Exposure is a
-///      navigation filter, not an authorization boundary — the admin can
-///      always un-hide a module via the `PermissionsAdminUI` built-in
-///      (an `_sdk.` module outside `Managed`, never exposure-filtered).
+///      has marked `Hidden` or `Unavailable` (`AccessContext.ModuleExposure`,
+///      via `isModuleExposed`) is filtered out of the admin's sidebar
+///      too, so an operator who hides a module on a team and then views
+///      that team sees the effect. When the admin has no active team,
+///      `ModuleExposure` is empty (nothing loaded), so this naturally
+///      degrades to the full Managed list — preserving the 0.5.3 "admin
+///      without a team still sees everything" escape that keeps a teamless
+///      admin from being stranded with only the SDK-built-in
+///      `_sdk.platform-admin.*` group. Exposure is a navigation filter,
+///      not an authorization boundary — the admin can always re-expose a
+///      module via the `PermissionsAdminUI` built-in (an `_sdk.` module
+///      outside `Managed`, never exposure-filtered).
 ///   3. `noActiveTeamInTeamMode` (team-scoped Mode with no active
 ///      team, NOT a platform admin) → Accessible is empty. The freshly-
 ///      signed-up case where every team-scoped API call would fail
 ///      with `NoActiveTeam`; reporting non-team modules as Accessible
 ///      would be confusing click-then-error UX.
 ///   4. Default → intersect Managed with the caller's exposure
-///      (`isModuleExposed`) AND permission (`canAccessModule`). A hidden
-///      module disappears regardless of permission; an empty permission
-///      map (pre-RBAC default) is still unrestricted permission-wise.
+///      (`isModuleExposed` — `Available` only) AND permission
+///      (`canAccessModule`). A `Hidden` / `Unavailable` module disappears
+///      regardless of permission; an empty permission map (pre-RBAC
+///      default) is still unrestricted permission-wise.
 let computeAccessibleModules
     (config: ServerConfig)
     (accessCtx: AccessContext)
@@ -933,6 +936,18 @@ let dataCatalogApiHandler (_config: ServerConfig) =
                 // richer implementation without touching this handler.
                 let catalog = ctx.RequestServices.GetService(typeof<IDataCatalog>) :?> IDataCatalog
 
+                // Per-team availability gate (Phase 245 tri-state). A data
+                // type whose every producing module is `Unavailable` for the
+                // caller's team is dropped from the catalog, so the
+                // mapping-aware Data Manager never offers it as a target.
+                // Orphan types (no producers) and types with at least one
+                // available producer survive. `ModuleExposure` is empty for
+                // non-team subjects, so this is a no-op outside team scope.
+                let accessCtx =
+                    match ctx.RequestServices.GetService(typeof<AccessContext>) with
+                    | :? AccessContext as ac -> ac
+                    | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+
                 let! types = catalog.ListTypes()
 
                 let! entries =
@@ -944,6 +959,13 @@ let dataCatalogApiHandler (_config: ServerConfig) =
                     })
                     |> Async.Parallel
 
-                return ({ Types = entries |> Array.toList }: DataManagementTypes.DataCatalogResponse)
+                let visible =
+                    entries
+                    |> Array.filter (fun entry ->
+                        List.isEmpty entry.Producers
+                        || entry.Producers
+                           |> List.exists (fun m -> AccessContext.isModuleAvailable m accessCtx))
+
+                return ({ Types = visible |> Array.toList }: DataManagementTypes.DataCatalogResponse)
             }
     })

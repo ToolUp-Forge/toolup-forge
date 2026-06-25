@@ -339,6 +339,7 @@
              grant→Allow, tier gate, cross-scope, fail-closed), contract
              binding. -->
         <Compile Include="InProcess\ActionAuthorizerTests.fs" />
+        <Compile Include="InProcess\ModuleExposureMigrationTests.fs" />
         <!-- Phase 112 — live-session host: contract binding, per-scope
              cap refusal, endpoint integration (path gate, cross-scope
              404, rate-limit 429, SSE frame delivery). -->

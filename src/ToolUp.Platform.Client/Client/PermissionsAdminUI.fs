@@ -29,11 +29,13 @@ open ToolUp.Platform
 //     via `PermissionApi.SetMemberPermissions` (one module at a
 //     time — the backing API takes `(teamId, userId, moduleName,
 //     perms)`, so this is a natural fit).
-//   - **Modules** — per-module **exposure** control (Phase 245): an
-//     "Expose in team" toggle that hides a module from every member's
-//     sidebar (visibility only, orthogonal to permission level), plus
-//     its team-default permissions and the count of members carrying
-//     an explicit override. Exposure round-trips per-toggle through
+//   - **Modules** — per-module **exposure** control (Phase 245): a
+//     tri-state selector (Available / Hidden / Unavailable) orthogonal
+//     to permission level. `Hidden` removes a module from every member's
+//     sidebar + Home (data still mappable); `Unavailable` removes it AND
+//     blocks mapping any data into it. Shown alongside the module's
+//     team-default permissions and the count of members carrying an
+//     explicit override. Exposure round-trips per selection through
 //     `PermissionApi.SetModuleExposure`.
 //
 // **Owner/Admin gating.** Server-side `PermissionApi` already returns
@@ -150,14 +152,15 @@ type Msg =
     /// per-cell round-trip dies with the local-overlay model.
     | SaveMembers of userId: string
     | SaveMemberResult of userId: string * moduleName: string * Result<unit, string>
-    /// Toggle a module's **exposure** in the team's sidebar (the
-    /// "Expose in team" switch). `exposed = false` hides it from every
-    /// member; `exposed = true` re-exposes it. Orthogonal to the
-    /// permission matrix — one round-trip through
-    /// `PermissionApi.SetModuleExposure`. The local `Hidden` set is
-    /// updated optimistically and reverted if the round-trip fails.
-    | ToggleExposure of moduleName: string * exposed: bool
-    | ExposureResult of moduleName: string * exposed: bool * Result<unit, string>
+    /// Set a module's **exposure** state for the team (the exposure
+    /// selector). `Available` shows it; `Hidden` removes it from the
+    /// sidebar + Home but keeps its data types mappable; `Unavailable`
+    /// removes it AND blocks data mapping. Orthogonal to the permission
+    /// matrix — one round-trip through `PermissionApi.SetModuleExposure`.
+    /// The local `Exposure` map is updated optimistically and reverted to
+    /// `previous` if the round-trip fails.
+    | SetExposure of moduleName: string * previous: ModuleExposure * next: ModuleExposure
+    | ExposureResult of moduleName: string * previous: ModuleExposure * attempted: ModuleExposure * Result<unit, string>
     /// Banner dismissal.
     | DismissBanner
 
@@ -206,6 +209,19 @@ let private memberOverrideCount (perms: TeamPermissions) (moduleName: string) =
     |> Seq.filter (fun (_, modMap) -> Map.containsKey moduleName modMap)
     |> Seq.length
 
+/// The exposure state of a module — absence in the map ⇒ `Available`.
+let private exposureOf (perms: TeamPermissions) (moduleName: string) =
+    perms.Exposure
+    |> Map.tryFind moduleName
+    |> Option.defaultValue ModuleExposure.Available
+
+/// Apply an exposure state to the map: `Available` clears the entry (the
+/// default), the other states record it. Mirrors the store's write rule.
+let private applyExposure (moduleName: string) (state: ModuleExposure) (exposure: Map<string, ModuleExposure>) =
+    match state with
+    | ModuleExposure.Available -> exposure |> Map.remove moduleName
+    | s -> exposure |> Map.add moduleName s
+
 let private memberPerms (perms: TeamPermissions) (userId: string) (moduleName: string) =
     match Map.tryFind userId perms.Members with
     | Some modMap ->
@@ -249,12 +265,12 @@ let private saveDefaultsCmd (teamId: string) (defaults: Map<string, ModulePermis
     Cmd.OfRemoting.call permissionApi.SetTeamDefaults (teamId, defaults) SaveDefaultsResult (fun ex ->
         SaveDefaultsResult(Error ex.Message))
 
-let private setExposureCmd (teamId: string) (moduleName: string) (exposed: bool) =
+let private setExposureCmd (teamId: string) (moduleName: string) (previous: ModuleExposure) (next: ModuleExposure) =
     Cmd.OfRemoting.call
         permissionApi.SetModuleExposure
-        (teamId, moduleName, exposed)
-        (fun result -> ExposureResult(moduleName, exposed, result))
-        (fun ex -> ExposureResult(moduleName, exposed, Error ex.Message))
+        (teamId, moduleName, next)
+        (fun result -> ExposureResult(moduleName, previous, next, result))
+        (fun ex -> ExposureResult(moduleName, previous, next, Error ex.Message))
 
 let private saveMemberCmd (teamId: string) (userId: string) (moduleName: string) (perms: ModulePermission list) =
     Cmd.OfRemoting.call
@@ -547,23 +563,17 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         },
         Cmd.none
 
-    | ToggleExposure(moduleName, exposed) ->
+    | SetExposure(moduleName, previous, next) ->
         match snapshotOpt model with
         | None -> model, Cmd.none
         | Some snap ->
-            // Optimistic local update so the toggle responds instantly;
-            // reverted on a failed round-trip (`ExposureResult Error`).
-            let newHidden =
-                if exposed then
-                    snap.Permissions.Hidden |> Set.remove moduleName
-                else
-                    snap.Permissions.Hidden |> Set.add moduleName
-
+            // Optimistic local update so the selector responds instantly;
+            // reverted to `previous` on a failed round-trip.
             let snap' = {
                 snap with
                     Permissions = {
                         snap.Permissions with
-                            Hidden = newHidden
+                            Exposure = applyExposure moduleName next snap.Permissions.Exposure
                     }
             }
 
@@ -572,20 +582,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Snapshot = Loaded snap'
                     Banner = None
             },
-            setExposureCmd snap.TeamId moduleName exposed
+            setExposureCmd snap.TeamId moduleName previous next
 
-    | ExposureResult(moduleName, _exposed, Ok()) ->
+    | ExposureResult(moduleName, _previous, attempted, Ok()) ->
         let verb =
-            if
-                Set.contains
-                    moduleName
-                    (snapshotOpt model
-                     |> Option.map (fun s -> s.Permissions.Hidden)
-                     |> Option.defaultValue Set.empty)
-            then
-                "hidden in this team"
-            else
-                "visible in this team"
+            match attempted with
+            | ModuleExposure.Available -> "available in this team"
+            | ModuleExposure.Hidden -> "hidden — off the sidebar and Home, data still mappable"
+            | ModuleExposure.Unavailable -> "unavailable — off the sidebar and Home, data mapping blocked"
 
         // Tell the shell to re-fetch its accessible-modules list so the
         // sidebar (and the admin "show hidden modules" toggle) reflect
@@ -599,35 +603,26 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         },
         Cmd.none
 
-    | ExposureResult(moduleName, exposed, Error msg) ->
-        // Revert the optimistic change — undo whatever the attempt did.
+    | ExposureResult(moduleName, previous, _attempted, Error msg) ->
+        // Revert the optimistic change back to the prior state.
         let model' =
             match snapshotOpt model with
             | None -> model
-            | Some snap ->
-                let revertedHidden =
-                    if exposed then
-                        // Attempt was "expose" (removed from Hidden) — re-add.
-                        snap.Permissions.Hidden |> Set.add moduleName
-                    else
-                        // Attempt was "hide" (added to Hidden) — remove.
-                        snap.Permissions.Hidden |> Set.remove moduleName
-
-                {
-                    model with
-                        Snapshot =
-                            Loaded {
-                                snap with
-                                    Permissions = {
-                                        snap.Permissions with
-                                            Hidden = revertedHidden
-                                    }
-                            }
-                }
+            | Some snap -> {
+                model with
+                    Snapshot =
+                        Loaded {
+                            snap with
+                                Permissions = {
+                                    snap.Permissions with
+                                        Exposure = applyExposure moduleName previous snap.Permissions.Exposure
+                                }
+                        }
+              }
 
         {
             model' with
-                Banner = Some(false, $"Could not change visibility for {moduleName}: {msg}")
+                Banner = Some(false, $"Could not change exposure for {moduleName}: {msg}")
         },
         Cmd.none
 
@@ -1070,7 +1065,7 @@ let private moduleSummaryRow (snap: TeamView) (dispatch: Msg -> unit) (moduleNam
         Map.tryFind moduleName snap.Permissions.Defaults |> Option.defaultValue []
 
     let overrideCount = memberOverrideCount snap.Permissions moduleName
-    let isHidden = Set.contains moduleName snap.Permissions.Hidden
+    let current = exposureOf snap.Permissions moduleName
 
     let renderPerms (ps: ModulePermission list) =
         if List.isEmpty ps then
@@ -1081,38 +1076,48 @@ let private moduleSummaryRow (snap: TeamView) (dispatch: Msg -> unit) (moduleNam
                 prop.text (ps |> List.map permLabel |> String.concat " · ")
             ]
 
-    // "Expose in team" toggle — visibility only, orthogonal to the
-    // permission level. Hiding removes the module from every member's
-    // sidebar (and a platform admin's, when acting on this team).
-    let exposureToggle =
+    // Exposure selector — a 3-way segmented control, visibility/
+    // availability only, orthogonal to the permission level.
+    //   Available   — in the sidebar + Home, data mappable.
+    //   Hidden      — off the sidebar + Home, data still mappable.
+    //   Unavailable — off the sidebar + Home, AND data mapping blocked.
+    let exposureOption (state: ModuleExposure) (label: string) (activeCls: string) =
+        let isActive = current = state
+
         Html.button [
             prop.className (
-                if isHidden then
-                    "px-2 py-1 text-xs font-medium rounded border border-border bg-gray-100 text-gray-500 hover:bg-gray-200"
+                if isActive then
+                    "px-2 py-1 text-xs font-medium border " + activeCls
                 else
-                    "px-2 py-1 text-xs font-medium rounded border border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                    "px-2 py-1 text-xs font-medium border border-border bg-white text-gray-500 hover:bg-gray-50"
             )
-            prop.text (
-                if isHidden then
-                    "Hidden — click to expose"
-                else
-                    "Visible — click to hide"
-            )
-            // Toggle to the opposite state: a visible module is hidden,
-            // a hidden module is exposed.
-            prop.onClick (fun _ -> dispatch (ToggleExposure(moduleName, isHidden)))
+            prop.text label
+            prop.disabled isActive
+            prop.onClick (fun _ ->
+                if not isActive then
+                    dispatch (SetExposure(moduleName, current, state)))
+        ]
+
+    let exposureSelector =
+        Html.div [
+            prop.className "inline-flex rounded overflow-hidden"
+            prop.children [
+                exposureOption ModuleExposure.Available "Available" "border-green-200 bg-green-50 text-green-700"
+                exposureOption ModuleExposure.Hidden "Hidden" "border-gray-300 bg-gray-100 text-gray-600"
+                exposureOption ModuleExposure.Unavailable "Unavailable" "border-red-200 bg-red-50 text-red-700"
+            ]
         ]
 
     Html.tr [
         prop.className (
-            if isHidden then
-                "border-t border-border bg-gray-50/60"
-            else
+            if current = ModuleExposure.Available then
                 "border-t border-border"
+            else
+                "border-t border-border bg-gray-50/60"
         )
         prop.children [
             Html.td [ prop.className "px-3 py-2 font-medium text-sm"; prop.text moduleName ]
-            Html.td [ prop.className "px-3 py-2"; prop.children [ exposureToggle ] ]
+            Html.td [ prop.className "px-3 py-2"; prop.children [ exposureSelector ] ]
             Html.td [ prop.className "px-3 py-2"; prop.children [ renderPerms defaults ] ]
             Html.td [
                 prop.className "px-3 py-2 text-xs text-gray-700 text-right font-mono"
@@ -1132,7 +1137,7 @@ let private modulesView (snap: TeamView) (dispatch: Msg -> unit) =
                     Html.p [
                         prop.className "text-xs text-gray-500"
                         prop.text
-                            "Toggle whether each module is exposed in this team's sidebar. Hiding a module removes it for every member of the team (visibility only — it does not change permission levels, which you set on the Team Defaults and Members tabs). The Overrides column counts members carrying an explicit per-module permission override."
+                            "Set each module's exposure for this team. Available shows it in the sidebar + Home; Hidden removes it from both but keeps its data formats mappable in Import & Map; Unavailable removes it AND blocks mapping any data into it (\"not cleared for this team\"). Exposure is orthogonal to permission levels, which you set on the Team Defaults and Members tabs. The Overrides column counts members carrying an explicit per-module permission override."
                     ]
                 ]
             ]
@@ -1159,7 +1164,7 @@ let private modulesView (snap: TeamView) (dispatch: Msg -> unit) =
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Visible in team"
+                                                    prop.text "Exposure"
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"

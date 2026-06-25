@@ -274,15 +274,16 @@ type PermissionApi = {
     [<RequiresClaim "scope">]
     [<Audit "PolicyChanged">]
     SetTeamDefaults: string * Map<string, ModulePermission list> -> Async<Result<unit, string>>
-    /// Set whether a module is **exposed** in the team's sidebar
-    /// (`teamId * moduleId * exposed`). `exposed = false` hides the
-    /// module from every member of the team (the "Expose in team"
-    /// toggle); `exposed = true` removes it from the hidden set. A
-    /// visibility concern, orthogonal to the permission maps. Owner/
-    /// Admin only.
+    /// Set a module's **exposure** state for the team
+    /// (`teamId * moduleId * state`). `Available` shows it in the sidebar
+    /// + Home and keeps its data types mappable; `Hidden` removes it from
+    /// the sidebar + Home but keeps mapping; `Unavailable` removes it AND
+    /// blocks data mapping ("not cleared for this team"). An
+    /// availability/visibility concern, orthogonal to the permission
+    /// maps. Owner/Admin only.
     [<RequiresClaim "scope">]
     [<Audit "PolicyChanged">]
-    SetModuleExposure: string * string * bool -> Async<Result<unit, string>>
+    SetModuleExposure: string * string * ModuleExposure -> Async<Result<unit, string>>
 }
 
 /// Sidebar filter helper: the set of modules the platform manages and

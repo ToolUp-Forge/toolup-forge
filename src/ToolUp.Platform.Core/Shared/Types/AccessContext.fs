@@ -35,13 +35,16 @@ type AccessContext = {
     /// module names and values are permission lists (e.g. `[Read]`,
     /// `[Read; Write]`, `[Admin]`).
     ModulePermissions: Map<string, ModulePermission list>
-    /// Module Ids hidden from the active team's sidebar (the per-team
-    /// **exposure** axis). Loaded for `TeamMember` subjects from the
-    /// team's `TeamPermissions.Hidden`; empty for every other subject
-    /// kind (nothing hidden when there is no team). A visibility/
-    /// navigation concern only — `canAccessModule` / `hasPermission`
-    /// remain the authorization boundary. See `isModuleExposed`.
-    HiddenModules: Set<string>
+    /// Per-module exposure state for the active team (the per-team
+    /// **exposure** axis — see `ModuleExposure`). Loaded for `TeamMember`
+    /// subjects from the team's `TeamPermissions.Exposure`; empty for
+    /// every other subject kind (nothing hidden when there is no team).
+    /// A module absent from the map is `Available`. A visibility/
+    /// availability concern only — `canAccessModule` / `hasPermission`
+    /// remain the per-route authorization boundary. See
+    /// `isModuleExposed` (sidebar/Home) and `isModuleAvailable`
+    /// (data mapping).
+    ModuleExposure: Map<string, ModuleExposure>
     /// Platform-wide administrative role, resolved per-request from
     /// `IPlatformAdminStore`. `None` for non-admin users —
     /// this is the default and preserves backward compatibility for
@@ -83,7 +86,7 @@ module AccessContext =
         TeamId = deriveTeamId subject
         Subject = subject
         ModulePermissions = Map.empty
-        HiddenModules = Set.empty
+        ModuleExposure = Map.empty
         PlatformRole = None
     }
 
@@ -132,15 +135,30 @@ module AccessContext =
         | TeamMemberKind -> "team"
         | ClaimBearerKind -> "claim-bearer"
 
-    /// Whether a module is **exposed** in the active team's sidebar.
-    /// A module Id present in `HiddenModules` is hidden (the per-team
-    /// exposure axis behind the "Expose in team" toggle); everything
-    /// else is exposed. Independent of permission — this answers "should
-    /// the module be offered at all", not "may the caller use it".
-    /// `HiddenModules` is empty for non-team subjects, so this is `true`
-    /// everywhere RBAC exposure does not apply.
+    /// The `ModuleExposure` state of a module for the active team.
+    /// A module absent from `ModuleExposure` is `Available` (the
+    /// default), so this is `Available` everywhere RBAC exposure does
+    /// not apply (`ModuleExposure` is empty for non-team subjects).
+    let exposureOf (moduleName: string) (ctx: AccessContext) =
+        ctx.ModuleExposure
+        |> Map.tryFind moduleName
+        |> Option.defaultValue ModuleExposure.Available
+
+    /// Whether a module is **exposed** in the active team's sidebar +
+    /// Home. Only `Available` is exposed; `Hidden` and `Unavailable` are
+    /// both removed from navigation. Independent of permission — this
+    /// answers "should the module be offered at all", not "may the
+    /// caller use it".
     let isModuleExposed (moduleName: string) (ctx: AccessContext) =
-        not (ctx.HiddenModules.Contains moduleName)
+        exposureOf moduleName ctx |> ModuleExposure.isExposed
+
+    /// Whether a module's data types may be **mapped/detected** for the
+    /// active team. `Available` and `Hidden` are both mappable; only
+    /// `Unavailable` (the clearance state) blocks data mapping. Gates
+    /// the Import & Map detection/processing path; the per-route
+    /// permission guard remains separate.
+    let isModuleAvailable (moduleName: string) (ctx: AccessContext) =
+        exposureOf moduleName ctx |> ModuleExposure.isMappable
 
     /// Check whether the context grants any access to a given module.
     /// Empty `ModulePermissions` means unrestricted — every module is

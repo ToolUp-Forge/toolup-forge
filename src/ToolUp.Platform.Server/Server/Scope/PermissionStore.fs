@@ -56,17 +56,20 @@ type IPermissionStore =
     abstract SetTeamDefaults:
         teamId: string * defaults: Map<string, ModulePermission list> -> Async<Result<unit, string>>
 
-    /// The set of module Ids the team has hidden from its sidebar (the
-    /// per-team exposure axis). Empty when no document exists or nothing
-    /// is hidden. Read per-request by the scope-resolution middleware to
-    /// populate `AccessContext.HiddenModules`.
-    abstract GetHiddenModules: teamId: string -> Async<Set<string>>
+    /// The team's per-module exposure map (the per-team exposure axis).
+    /// A module absent from the map is `Available`; entries hold the
+    /// non-default `Hidden` / `Unavailable` states. Empty when no
+    /// document exists or every module is Available. Read per-request by
+    /// the scope-resolution middleware to populate
+    /// `AccessContext.ModuleExposure`.
+    abstract GetModuleExposure: teamId: string -> Async<Map<string, ModuleExposure>>
 
-    /// Set whether one module is exposed in the team's sidebar.
-    /// `exposed = false` adds the module Id to the hidden set;
-    /// `exposed = true` removes it. Visibility only — does not touch the
-    /// permission maps.
-    abstract SetModuleExposure: teamId: string * moduleName: string * exposed: bool -> Async<Result<unit, string>>
+    /// Set one module's exposure state for the team. `Available` clears
+    /// the entry (back to the default); `Hidden` / `Unavailable` record
+    /// it. Visibility/availability only — does not touch the permission
+    /// maps.
+    abstract SetModuleExposure:
+        teamId: string * moduleName: string * state: ModuleExposure -> Async<Result<unit, string>>
 
 // ─── JSON serialisation ──────────────────────────────────────────────
 
@@ -119,6 +122,18 @@ module private Json =
 
         dict
 
+    /// The non-default exposure entries as a `module → token` object.
+    /// `Available` is the default and is never serialised — absence ⇒
+    /// Available on read.
+    let private exposureToObject (exposure: Map<string, ModuleExposure>) =
+        let dict = System.Collections.Generic.Dictionary<string, string>()
+
+        for KeyValue(k, v) in exposure do
+            if v <> ModuleExposure.Available then
+                dict[k] <- ModuleExposure.toToken v
+
+        dict
+
     let serialize (perms: TeamPermissions) : byte[] =
         let membersDict =
             System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string[]>>()
@@ -129,7 +144,16 @@ module private Json =
         let dto = {|
             defaults = modulesToObject perms.Defaults
             members = membersDict
-            hidden = perms.Hidden |> Set.toArray
+            // Tri-state exposure map (Available omitted).
+            exposure = exposureToObject perms.Exposure
+            // Dual-write the legacy `hidden` array (= every non-Available
+            // module, both Hidden and Unavailable) so a pre-tri-state
+            // reader still keeps them off the sidebar. The `exposure` map
+            // wins on read; `hidden` is the back-compat fallback only.
+            hidden =
+                perms.Exposure
+                |> Map.toArray
+                |> Array.choose (fun (k, v) -> if ModuleExposure.isExposed v then None else Some k)
         |}
 
         JsonSerializer.Serialize(dto, options) |> Encoding.UTF8.GetBytes
@@ -159,24 +183,40 @@ module private Json =
                     |> Map.ofList
                 | _ -> Map.empty
 
-            // Back-compat: documents written before the exposure axis
-            // (Phase 245) carry no `hidden` array — absent ⇒ empty set
-            // ⇒ every module exposed, the pre-exposure behaviour.
-            let hidden =
-                match root.TryGetProperty "hidden" with
-                | true, h when h.ValueKind = JsonValueKind.Array ->
+            // Tri-state exposure map. Prefer the `exposure` object when
+            // present; entries that parse back to `Available` are dropped
+            // (absence ⇒ Available). Fall back to the legacy `hidden`
+            // string[] (pre-tri-state documents) by mapping each hidden
+            // module to the cosmetic `Hidden` state — this preserves the
+            // legacy "Expose in team" off behaviour (off the sidebar,
+            // data still mappable). Both absent ⇒ empty ⇒ all Available.
+            let exposure =
+                match root.TryGetProperty "exposure" with
+                | true, e when e.ValueKind = JsonValueKind.Object ->
                     [
-                        for elem in h.EnumerateArray() do
-                            if elem.ValueKind = JsonValueKind.String then
-                                elem.GetString()
+                        for prop in e.EnumerateObject() do
+                            if prop.Value.ValueKind = JsonValueKind.String then
+                                let state = ModuleExposure.ofToken (prop.Value.GetString())
+
+                                if state <> ModuleExposure.Available then
+                                    prop.Name, state
                     ]
-                    |> Set.ofList
-                | _ -> Set.empty
+                    |> Map.ofList
+                | _ ->
+                    match root.TryGetProperty "hidden" with
+                    | true, h when h.ValueKind = JsonValueKind.Array ->
+                        [
+                            for elem in h.EnumerateArray() do
+                                if elem.ValueKind = JsonValueKind.String then
+                                    elem.GetString(), ModuleExposure.Hidden
+                        ]
+                        |> Map.ofList
+                    | _ -> Map.empty
 
             Some {
                 Defaults = defaults
                 Members = members
-                Hidden = hidden
+                Exposure = exposure
             }
         with _ ->
             None
@@ -324,19 +364,22 @@ type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
             return! save teamId { existing with Defaults = defaults }
         }
 
-        member _.GetHiddenModules teamId = async {
+        member _.GetModuleExposure teamId = async {
             let! perms = load teamId
-            return perms.Hidden
+            return perms.Exposure
         }
 
-        member _.SetModuleExposure(teamId, moduleName, exposed) = async {
+        member _.SetModuleExposure(teamId, moduleName, state) = async {
             let! existing = load teamId
 
-            let updatedHidden =
-                if exposed then
-                    existing.Hidden |> Set.remove moduleName
-                else
-                    existing.Hidden |> Set.add moduleName
+            let updatedExposure =
+                match state with
+                | ModuleExposure.Available -> existing.Exposure |> Map.remove moduleName
+                | s -> existing.Exposure |> Map.add moduleName s
 
-            return! save teamId { existing with Hidden = updatedHidden }
+            return!
+                save teamId {
+                    existing with
+                        Exposure = updatedExposure
+                }
         }

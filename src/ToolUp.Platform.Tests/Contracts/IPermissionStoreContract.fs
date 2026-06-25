@@ -121,7 +121,7 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let replacement = {
                 Defaults = Map.ofList [ "X", [ Admin ] ]
                 Members = Map.ofList [ "bob", Map.ofList [ "X", [ Write ] ] ]
-                Hidden = Set.empty
+                Exposure = Map.empty
             }
 
             let! _ = store.SetTeamPermissions(team, replacement)
@@ -150,7 +150,7 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let original = {
                 Defaults = Map.ofList [ "M1", [ Read ]; "M2", [ Read; Write ]; "M3", [ Admin ] ]
                 Members = Map.ofList [ "alice", Map.ofList [ "M1", [ Admin ] ]; "bob", Map.ofList [ "M2", [] ] ]
-                Hidden = Set.ofList [ "M2"; "M3" ]
+                Exposure = Map.ofList [ "M2", ModuleExposure.Hidden; "M3", ModuleExposure.Unavailable ]
             }
 
             let! _ = store.SetTeamPermissions(team, original)
@@ -159,28 +159,41 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             Expect.equal roundTripped original "round-trip preserves the document"
         }
 
-        testCaseAsync "Module exposure (Phase 245): SetModuleExposure toggles the hidden set"
+        testCaseAsync "Module exposure (Phase 245): SetModuleExposure records the tri-state"
         <| async {
             let store = factory ()
             let team = uniqueTeam ()
 
-            // A fresh team hides nothing — everything exposed by default.
-            let! initial = store.GetHiddenModules team
-            Expect.isEmpty initial "fresh team hides no modules (default exposed)"
+            // A fresh team has no exposure overrides — everything Available.
+            let! initial = store.GetModuleExposure team
+            Expect.isEmpty initial "fresh team has no exposure overrides (default Available)"
 
-            // Hide two modules, then re-expose one.
-            let! _ = store.SetModuleExposure(team, "Marketing", false)
-            let! _ = store.SetModuleExposure(team, "Finance", false)
-            let! afterHide = store.GetHiddenModules team
-            Expect.equal afterHide (Set.ofList [ "Marketing"; "Finance" ]) "both modules hidden"
+            // Mark one Hidden and one Unavailable.
+            let! _ = store.SetModuleExposure(team, "Marketing", ModuleExposure.Hidden)
+            let! _ = store.SetModuleExposure(team, "Finance", ModuleExposure.Unavailable)
+            let! afterSet = store.GetModuleExposure team
 
-            let! _ = store.SetModuleExposure(team, "Marketing", true)
-            let! afterExpose = store.GetHiddenModules team
-            Expect.equal afterExpose (Set.ofList [ "Finance" ]) "re-exposing removes only that module"
+            Expect.equal
+                afterSet
+                (Map.ofList [ "Marketing", ModuleExposure.Hidden; "Finance", ModuleExposure.Unavailable ])
+                "both states recorded"
+
+            // Setting a module back to Available clears its entry.
+            let! _ = store.SetModuleExposure(team, "Marketing", ModuleExposure.Available)
+            let! afterClear = store.GetModuleExposure team
+
+            Expect.equal
+                afterClear
+                (Map.ofList [ "Finance", ModuleExposure.Unavailable ])
+                "Available clears only that module's entry"
 
             // Exposure is orthogonal to the permission maps.
             let! _ = store.SetTeamDefaults(team, Map.ofList [ "Finance", [ Read ] ])
-            let! stillHidden = store.GetHiddenModules team
-            Expect.equal stillHidden (Set.ofList [ "Finance" ]) "editing defaults leaves exposure untouched"
+            let! stillSet = store.GetModuleExposure team
+
+            Expect.equal
+                stillSet
+                (Map.ofList [ "Finance", ModuleExposure.Unavailable ])
+                "editing defaults leaves exposure untouched"
         }
     ]
