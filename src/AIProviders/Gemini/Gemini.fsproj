@@ -15,6 +15,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <!-- Phase 253 — the portable wire mapper rides the Phase 251 egress seam:
+         HttpClientTransport lives in ToolUp.AI.Server; ToolUp.AI.Wire
+         (JsonValue / JsonHost / IHttpTransport / ErrorClassifier / RetryRunner)
+         arrives transitively. -->
+    <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
   </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

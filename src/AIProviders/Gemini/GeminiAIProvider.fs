@@ -3,12 +3,11 @@ module GeminiAIProvider
 open System
 open System.IO
 open System.Net.Http
-open System.Text
-open System.Text.Json
 open System.Threading
 open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
 open ToolUp.Platform.AI
 open ToolUp.Platform.Secrets
+open ToolUp.AI.Wire // JsonHost (schema parse over the portable JsonValue)
 open GeminiAIProviderWire
 
 // ─── Provider implementation ─────────────────────────────────────
@@ -53,8 +52,8 @@ let private modelPath (model: string) =
 // per `Resolve` call; without sharing, the prior shape opened a new
 // connection pool per request and exhausted ephemeral ports under
 // sustained load. `BaseAddress` and `Timeout` are stable; Gemini's
-// per-request `?key=` query-string auth rides on the request URI,
-// never on the client.
+// per-request `x-goog-api-key` header rides on the request, never on
+// the client.
 let private sharedClient =
     lazy
         (let c = new HttpClient()
@@ -64,6 +63,124 @@ let private sharedClient =
 
 type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
     let client = sharedClient.Value
+
+    /// Per-request auth header. Gemini reads the key from
+    /// `x-goog-api-key`; the header rides on the request, never on the
+    /// shared client (the key can rotate / vary per BYOK caller).
+    let authHeaders key = [ "x-goog-api-key", key ]
+
+    /// Build the per-call timeout CTS — byte-identical to the prior
+    /// inline construction: a clamped CTS when a per-call timeout is
+    /// supplied, an untimed one otherwise (deferring to the client's
+    /// instance-wide `Timeout`).
+    let newTimeoutCts (retryPolicy: RetryPolicy) : CancellationTokenSource =
+        match retryPolicy.Timeout with
+        | Some t ->
+            let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
+            new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
+        | None -> new CancellationTokenSource()
+
+    /// One buffered (non-streaming) attempt: build the request body,
+    /// post it through the portable transport, classify the result.
+    /// Used by both `SendMessage` (no `onStream`) and
+    /// `SendStructuredMessage` (the `schema` arg differs only in the
+    /// `generationConfig.responseSchema` it injects).
+    let bufferedAttempt
+        key
+        (messages: AIProviderMessage list)
+        (tools: AIProviderToolDef list)
+        (systemPrompt: string option)
+        (schema: JsonValue option)
+        (retryPolicy: RetryPolicy)
+        : Async<Result<AIProviderResponse, AIProviderError>> =
+        async {
+            let body = buildRequestBody messages tools systemPrompt schema
+            let endpoint = sprintf "/v1beta/%s:generateContent" (modelPath model)
+            let request = HttpRequest.post endpoint (authHeaders key) body
+            let transport = HttpClientTransport(client, ?timeout = retryPolicy.Timeout)
+
+            try
+                let! response = (transport :> IHttpTransport).Send(request)
+
+                if HttpResponse.isSuccess response then
+                    match parseResponse response.Body with
+                    | Ok r -> return Ok r
+                    | Error detail -> return Error(MalformedResponse detail)
+                else
+                    return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
+            with
+            | :? OperationCanceledException ->
+                return Error(TransientNetwork $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}")
+            | ex -> return Error(ErrorClassifier.classifyTransportFailure ex.Message)
+        }
+
+    /// One streaming attempt. The egress rides the transport's
+    /// `.NET`-only `SendForStreaming` (`ResponseHeadersRead`); the SSE
+    /// line read + the portable `applyStreamChunk` accumulator stay
+    /// here. A partial-then-failed stream surfaces `StreamingAborted`
+    /// with the text delivered so far.
+    let streamingAttempt
+        key
+        (messages: AIProviderMessage list)
+        (tools: AIProviderToolDef list)
+        (systemPrompt: string option)
+        (onStream: (string -> unit) option)
+        (retryPolicy: RetryPolicy)
+        : Async<Result<AIProviderResponse, AIProviderError>> =
+        async {
+            let body = buildRequestBody messages tools systemPrompt None
+            let endpoint = sprintf "/v1beta/%s:streamGenerateContent?alt=sse" (modelPath model)
+            let request = HttpRequest.post endpoint (authHeaders key) body
+            let transport = HttpClientTransport(client)
+            use cts = newTimeoutCts retryPolicy
+            let state = initialStreamState ()
+
+            try
+                let! response = transport.SendForStreaming(request, cts.Token)
+
+                if not response.IsSuccessStatusCode then
+                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                    return Error(ErrorClassifier.classifyStatus (int response.StatusCode) errorBody)
+                else
+                    let! stream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
+                    use reader = new StreamReader(stream)
+
+                    let mutable reading = true
+
+                    while reading do
+                        let! line = reader.ReadLineAsync(cts.Token).AsTask() |> Async.AwaitTask
+
+                        if isNull line then
+                            reading <- false
+                        elif line.StartsWith("data: ") then
+                            applyStreamChunk state onStream (line.Substring(6))
+
+                    return
+                        Ok {
+                            Content = state.Content
+                            ToolCalls = state.ToolCalls
+                            StopReason = state.StopReason
+                            Usage = state.Usage
+                        }
+            with
+            | :? OperationCanceledException when cts.IsCancellationRequested ->
+                if state.Content <> "" then
+                    return
+                        Error(
+                            StreamingAborted(
+                                state.Content,
+                                $"Timed out after {RetryPolicy.timeoutDescription retryPolicy} with partial content delivered"
+                            )
+                        )
+                else
+                    return
+                        Error(TransientNetwork $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}")
+            | ex ->
+                if state.Content <> "" then
+                    return Error(StreamingAborted(state.Content, ex.Message))
+                else
+                    return Error(TransientNetwork ex.Message)
+        }
 
     /// Construct with an API key provided directly (factory path —
     /// user-supplied or deployment-resolved key).
@@ -106,7 +223,6 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
             if hasImagePart && not (GeminiAIProviderWire.isVisionCapable model) then
                 return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
             else
-
                 let! apiKey = apiKeyFetcher ()
 
                 match apiKey with
@@ -119,155 +235,22 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                             )
                         )
                 | Some key ->
-                    let useStreaming = onStream.IsSome
-
-                    let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
-                        let body = buildRequestBody messages tools systemPrompt None
-
-                        let endpoint =
-                            if useStreaming then
-                                sprintf "/v1beta/%s:streamGenerateContent?alt=sse" (modelPath model)
-                            else
-                                sprintf "/v1beta/%s:generateContent" (modelPath model)
-
-                        let request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-                        request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-                        request.Headers.Add("x-goog-api-key", key)
-
-                        use cts =
-                            match retryPolicy.Timeout with
-                            | Some t ->
-                                let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-                                new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
-                            | None -> new CancellationTokenSource()
-
-                        if useStreaming then
-                            let state = initialStreamState ()
-
-                            try
-                                let! response =
-                                    client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token)
-                                    |> Async.AwaitTask
-
-                                if not response.IsSuccessStatusCode then
-                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
-
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
-                                else
-                                    let! stream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
-                                    use reader = new StreamReader(stream)
-
-                                    let mutable reading = true
-
-                                    while reading do
-                                        let! line = reader.ReadLineAsync(cts.Token).AsTask() |> Async.AwaitTask
-
-                                        if isNull line then
-                                            reading <- false
-                                        elif line.StartsWith("data: ") then
-                                            applyStreamChunk state onStream (line.Substring(6))
-
-                                    return
-                                        Ok {
-                                            Content = state.Content
-                                            ToolCalls = state.ToolCalls
-                                            StopReason = state.StopReason
-                                            Usage = state.Usage
-                                        }
-                            with
-                            | :? OperationCanceledException when cts.IsCancellationRequested ->
-                                if state.Content <> "" then
-                                    return
-                                        Error(
-                                            StreamingAborted(
-                                                state.Content,
-                                                $"Timed out after {RetryPolicy.timeoutDescription retryPolicy} with partial content delivered"
-                                            )
-                                        )
-                                else
-                                    return
-                                        Error(
-                                            TransientNetwork
-                                                $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
-                                        )
-                            | :? HttpRequestException as ex ->
-                                if state.Content <> "" then
-                                    return Error(StreamingAborted(state.Content, ex.Message))
-                                else
-                                    return Error(TransientNetwork ex.Message)
-                            | ex ->
-                                if state.Content <> "" then
-                                    return Error(StreamingAborted(state.Content, ex.Message))
-                                else
-                                    return Error(TransientNetwork ex.Message)
+                    let singleAttempt () =
+                        if onStream.IsSome then
+                            streamingAttempt key messages tools systemPrompt onStream retryPolicy
                         else
-                            try
-                                let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+                            bufferedAttempt key messages tools systemPrompt None retryPolicy
 
-                                if response.IsSuccessStatusCode then
-                                    let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
-                                    try
-                                        return Ok(parseResponse responseBody)
-                                    with ex ->
-                                        return Error(MalformedResponse ex.Message)
-                                else
-                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
-
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
-                            with
-                            | :? OperationCanceledException when cts.IsCancellationRequested ->
-                                return
-                                    Error(
-                                        TransientNetwork
-                                            $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
-                                    )
-                            | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
-                            | ex -> return Error(TransientNetwork ex.Message)
-                    }
-
-                    // Retry loop. Same shape as the Claude + OpenAI
-                    // providers — exponential backoff via
-                    // `RetryPolicy.delayFor` (capped at `MaxBackoff`),
-                    // non-retryable errors propagate immediately, budget
-                    // exhaustion wraps as `RetriesExhausted` unless
-                    // `MaxAttempts = 1` (post-11.C.5 fail-fast contract).
-                    let rec retryLoop attemptsMade = async {
-                        let! result = singleAttempt ()
-                        let attemptsMade = attemptsMade + 1
-
-                        match result with
-                        | Ok r -> return Ok r
-                        | Error err when not (AIProviderError.isRetryable err) -> return Error err
-                        | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
-                            return
-                                if retryPolicy.MaxAttempts = 1 then
-                                    Error err
-                                else
-                                    Error(RetriesExhausted(attemptsMade, err))
-                        | Error _ ->
-                            let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
-                            do! Async.Sleep delay
-                            return! retryLoop attemptsMade
-                    }
-
-                    return! retryLoop 0
+                    // Portable retry loop (Phase 251 `RetryRunner`) — same
+                    // exponential-backoff / fail-fast semantics as the prior
+                    // inline loop, lifted to one shared function.
+                    return! RetryRunner.run retryPolicy singleAttempt
         }
 
         // Phase 67b — schema-respecting structured output. Gemini
         // supports this natively via `generationConfig.responseSchema` +
         // `responseMimeType = "application/json"` — the wire-side
-        // `buildRequestBody` already accepts a `JsonElement option` for
+        // `buildRequestBody` already accepts a `JsonValue option` for
         // exactly this. Non-streaming only (Gemini does support
         // streaming structured output via :streamGenerateContent, but
         // that's deferred to a follow-on phase).
@@ -281,21 +264,15 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
             if hasImagePart && not (GeminiAIProviderWire.isVisionCapable model) then
                 return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
             else
-                // Parse the JSON Schema string into a JsonElement. A
-                // malformed schema is a caller defect — surface as
+                // Parse the JSON Schema string into a portable JsonValue.
+                // A malformed schema is a caller defect — surface as
                 // PermanentClient(0) so the agent loop doesn't waste
                 // retry budget. The error class mirrors the
                 // "API_KEY_NOT_CONFIGURED" precedent: synthetic 0-status
                 // for "request never left the process".
-                let parsedSchema =
-                    try
-                        Ok(JsonSerializer.Deserialize<JsonElement>(schema))
-                    with ex ->
-                        Error(PermanentClient(0, sprintf "structuredOutputSchema is not valid JSON: %s" ex.Message))
-
-                match parsedSchema with
-                | Error e -> return Error e
-                | Ok schemaElement ->
+                match JsonHost.parse schema with
+                | None -> return Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))
+                | Some schemaValue ->
                     let! apiKey = apiKeyFetcher ()
 
                     match apiKey with
@@ -308,75 +285,10 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                 )
                             )
                     | Some key ->
-                        let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
-                            let body = buildRequestBody messages tools systemPrompt (Some schemaElement)
+                        let singleAttempt () =
+                            bufferedAttempt key messages tools systemPrompt (Some schemaValue) retryPolicy
 
-                            let endpoint = sprintf "/v1beta/%s:generateContent" (modelPath model)
-
-                            let request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-                            request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-                            request.Headers.Add("x-goog-api-key", key)
-
-                            use cts =
-                                match retryPolicy.Timeout with
-                                | Some t ->
-                                    let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-                                    new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
-                                | None -> new CancellationTokenSource()
-
-                            try
-                                let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
-
-                                if response.IsSuccessStatusCode then
-                                    let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
-                                    try
-                                        return Ok(parseResponse responseBody)
-                                    with ex ->
-                                        return Error(MalformedResponse ex.Message)
-                                else
-                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
-
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
-                            with
-                            | :? OperationCanceledException when cts.IsCancellationRequested ->
-                                return
-                                    Error(
-                                        TransientNetwork
-                                            $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
-                                    )
-                            | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
-                            | ex -> return Error(TransientNetwork ex.Message)
-                        }
-
-                        // Retry loop mirrors SendMessage's. Same
-                        // semantics: retryable errors honour the policy
-                        // budget; non-retryable propagate.
-                        let rec retryLoop attemptsMade = async {
-                            let! result = singleAttempt ()
-                            let attemptsMade = attemptsMade + 1
-
-                            match result with
-                            | Ok r -> return Ok r
-                            | Error err when not (AIProviderError.isRetryable err) -> return Error err
-                            | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
-                                return
-                                    if retryPolicy.MaxAttempts = 1 then
-                                        Error err
-                                    else
-                                        Error(RetriesExhausted(attemptsMade, err))
-                            | Error _ ->
-                                let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
-                                do! Async.Sleep delay
-                                return! retryLoop attemptsMade
-                        }
-
-                        return! retryLoop 0
+                        return! RetryRunner.run retryPolicy singleAttempt
         }
 
 /// Create using a secret-store read of `GEMINI_API_KEY` on every

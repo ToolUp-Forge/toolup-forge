@@ -27,6 +27,14 @@
         <Compile Include="..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
         <Compile Include="OpenAIWireFixtures.fs" />
         <Compile Include="OpenAIWireTests.fs" />
+        <!-- Phase 253 — the Gemini portable mapper compiled into this pack
+             (source-linked; no provider-package reference, it depends only on
+             ToolUp.AI.Wire) + its golden fixtures + tests. The Fable smoke
+             compiles the same mapper + fixtures, so a green run on each host
+             proves byte-parity. -->
+        <Compile Include="..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />
+        <Compile Include="GeminiWireFixtures.fs" />
+        <Compile Include="GeminiWireTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

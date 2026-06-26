@@ -35,6 +35,12 @@
              over OpenAIWireFixtures.fs (the parity gate). -->
         <Compile Include="..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
         <Compile Include="..\ToolUp.AI.Wire.Tests\OpenAIWireFixtures.fs" />
+        <!-- Phase 253 — the Gemini portable mapper + its golden fixtures,
+             compiled here under Fable. Proves the mapper Fable-compiles and
+             that buildRequestBody / parseResponse match the .NET host over
+             GeminiWireFixtures.fs (the parity gate; seeds Phase 255). -->
+        <Compile Include="..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />
+        <Compile Include="..\ToolUp.AI.Wire.Tests\GeminiWireFixtures.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
