@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.AI.Wire — a portable, Fable-compilable JSON value model: a JsonValue DU with ergonomic builders + total (never-throwing) accessors, and a host-bridged serialization seam (browser JSON under Fable, System.Text.Json on .NET) with byte-stable object key order. Neutral wire-mapping substrate shared by server and browser hosts. FSharp.Core + Fable.Core only — no System.Net.Http, no unguarded System.Text.Json.</Description>
+        <PackageTags>fsharp;fable;sdk;json;wire;portable</PackageTags>
+        <!-- Fable-touching project: nullable reference types stay disabled
+             (forge CLAUDE.md "Nullable reference types — keep disabled on
+             Fable-touching projects"). The Fable ecosystem this compiles
+             against pre-dates F# 10 nullness annotations. -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <!-- Source ships in the nupkg under fable/ so Fable consumers compile
+         the same source the .NET host runs (mirrors ToolUp.AI.Core). -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="JsonValue.fs" />
+        <Compile Include="JsonHost.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Fable.Core supplies the [<Emit>] / JsInterop surface the
+             #if FABLE_COMPILER parse bridge in JsonHost.fs needs. On the
+             .NET host it adds no runtime behaviour. FSharp.Core is implicit
+             via the .NET SDK. -->
+        <PackageReference Include="Fable.Core" />
+    </ItemGroup>
+</Project>

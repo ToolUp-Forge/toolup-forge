@@ -128,3 +128,47 @@ jobs:
           fi
           count=$(echo "${shas}" | wc -l | tr -d ' ')
           echo "All ${count} commit(s) carry a Signed-off-by trailer matching the author."
+
+  # Proves the portable ToolUp.AI.Wire layer compiles under BOTH hosts —
+  # `dotnet build` (.NET) and `dotnet fable` (browser) — and that its
+  # serialize/parse seam round-trips byte-identically on each. A wire layer
+  # that builds clean on .NET but fails Fable would be broken-on-arrival for
+  # the whole point of the package, so the Fable host gets its own gate.
+  fable-wire-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      - name: Build ToolUp.AI.Wire (.NET host)
+        run: dotnet build src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj
+
+      - name: Run .NET (Expecto) host pack
+        run: dotnet run --project src/ToolUp.AI.Wire.Tests/ToolUp.AI.Wire.Tests.fsproj
+
+      - name: Restore Fable tool
+        working-directory: src/ToolUp.AI.Wire.Fable.Tests
+        run: dotnet tool restore
+
+      - name: Compile to Fable (browser host)
+        working-directory: src/ToolUp.AI.Wire.Fable.Tests
+        run: dotnet fable -o output --noCache
+
+      - name: Run Fable smoke under node:test
+        working-directory: src/ToolUp.AI.Wire.Fable.Tests
+        run: node --test output/Program.js

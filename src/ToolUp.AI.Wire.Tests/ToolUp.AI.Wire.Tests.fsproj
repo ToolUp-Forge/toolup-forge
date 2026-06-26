@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.AI.Wire.Tests is the .NET (Expecto) host pack for the portable
+    ToolUp.AI.Wire JSON value model. The Fable host runs the SAME fixture
+    set under node:test in the sibling ToolUp.AI.Wire.Fable.Tests project;
+    a green run on each host proves cross-host byte parity transitively
+    (both emit the identical golden bytes WireFixtures.fs declares).
+
+    Expecto console runner: run it via dotnet run. Do NOT dotnet test
+    (it exits 0 having run nothing). IsPackable=false; ships nothing.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="WireFixtures.fs" />
+        <Compile Include="JsonValueTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

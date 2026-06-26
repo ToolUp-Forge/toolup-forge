@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.AI.Wire.Fable.Tests is the Fable host smoke for ToolUp.AI.Wire.
+    It transpiles via Fable and runs under Node's built-in test runner
+    (node:test), proving the portable JSON value model COMPILES to Fable and
+    that JsonHost.serialize emits bytes identical to the .NET host over the
+    shared WireFixtures.fs golden set.
+
+    Unlike the AI.Client Fable harness, ToolUp.AI.Wire pulls in no React /
+    ag-grid / browser deps, so this project needs no npm devDependencies and
+    no asset loader: the Fable output imports only the bundled fable-library.
+
+    Run procedure (from this directory): dotnet tool restore, then
+    `dotnet fable -o output`, then run node:test against output/Program.js.
+    See docs/platform/testing-conventions.md for the full convention.
+
+    IsPackable=false; ships nothing. Nullable disabled (Fable-touching).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="NodeTest.fs" />
+        <!-- The shared fixture set, compiled into BOTH host packs so the
+             golden bytes are one source of truth. -->
+        <Compile Include="..\ToolUp.AI.Wire.Tests\WireFixtures.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Fable.Core" />
+    </ItemGroup>
+</Project>
