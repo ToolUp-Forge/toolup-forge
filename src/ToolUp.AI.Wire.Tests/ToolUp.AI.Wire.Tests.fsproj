@@ -35,6 +35,15 @@
         <Compile Include="..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />
         <Compile Include="GeminiWireFixtures.fs" />
         <Compile Include="GeminiWireTests.fs" />
+        <!-- Phase 254 — the portable Claude mapper compiled into this pack
+             (its own copy; it depends only on ToolUp.AI.Wire) + its golden
+             fixtures + tests. The streaming state machine is exercised via
+             ToolUp.AI.Wire's ClaudeStreaming (project-referenced). The Fable
+             smoke compiles the same mapper + fixtures, so a green run on each
+             host proves byte-parity. -->
+        <Compile Include="..\AIProviders\Claude\ClaudeAIProvider.Wire.fs" />
+        <Compile Include="ClaudeWireFixtures.fs" />
+        <Compile Include="ClaudeWireTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

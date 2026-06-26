@@ -1,26 +1,23 @@
 module internal ClaudeAIProviderWire
 
-open System
-open System.Text.Json
+open ToolUp.AI.Wire
 open ToolUp.Platform.AI
 
-// ─── JSON helpers ────────────────────────────────────────────────
-
-let private jsonOptions =
-    let opts = JsonSerializerOptions(PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-    opts.DefaultIgnoreCondition <- Serialization.JsonIgnoreCondition.WhenWritingNull
-    opts
-
-let private toJson obj =
-    JsonSerializer.Serialize(obj, jsonOptions)
-
-// ─── Claude API types ────────────────────────────────────────────
-
-type private ContentBlock =
-    | TextBlock of text: string
-    | ToolUseBlock of id: string * name: string * input: JsonElement
-
-type private ClaudeMessage = { Role: string; Content: JsonElement }
+// ─── Portable Claude wire mapping (Wave 32, Phase 254) ───────────
+//
+// The Anthropic Messages API request build + response parse, mapped over
+// the portable `JsonValue` model (`ToolUp.AI.Wire`) instead of
+// `System.Text.Json`. The file depends only on `ToolUp.AI.Wire`
+// (JsonValue / JsonHost + the `ToolUp.Platform.AI` contract types) and
+// FSharp.Core, so the same source compiles to a Fable browser host as
+// well as the .NET server host (GP 12). Object members are built in a
+// fixed order and serialized by the canonical `JsonHost.serialize` writer,
+// so the request bytes are deterministic and byte-stable across hosts —
+// the property the Phase 255 conformance corpus pins.
+//
+// The streaming assembly lives in the shared `ToolUp.AI.Wire.ClaudeStreaming`
+// state machine; this file owns the non-streaming request/response mapping
+// plus the request builder both paths share.
 
 // ─── Response parsing ────────────────────────────────────────────
 
@@ -42,18 +39,14 @@ type private ClaudeMessage = { Role: string; Content: JsonElement }
 /// portion; `CacheCreationTokens` exposes the Anthropic-specific
 /// cache-write count (useful for cost analysis — writes are billed at a
 /// premium over reads).
-let parseUsage (root: JsonElement) : TokenUsage option =
-    match root.TryGetProperty("usage") with
-    | true, usage ->
+let parseUsage (root: JsonValue) : TokenUsage option =
+    match root |> JsonValue.tryField "usage" with
+    | Some usage ->
         let getInt (name: string) =
-            match usage.TryGetProperty(name) with
-            | true, v when v.ValueKind = JsonValueKind.Number -> v.GetInt32()
-            | _ -> 0
-
-        let getOptInt (name: string) =
-            match usage.TryGetProperty(name) with
-            | true, v when v.ValueKind = JsonValueKind.Number -> Some(v.GetInt32())
-            | _ -> None
+            usage
+            |> JsonValue.tryField name
+            |> Option.bind JsonValue.asInt
+            |> Option.defaultValue 0
 
         let inputTokens = getInt "input_tokens"
         let cacheRead = getInt "cache_read_input_tokens"
@@ -64,45 +57,61 @@ let parseUsage (root: JsonElement) : TokenUsage option =
             PromptTokens = inputTokens + cacheRead + cacheCreation
             CachedPromptTokens = cacheRead
             OutputTokens = outputTokens
-            CacheCreationTokens = getOptInt "cache_creation_input_tokens"
+            CacheCreationTokens =
+                (usage
+                 |> JsonValue.tryField "cache_creation_input_tokens"
+                 |> Option.bind JsonValue.asInt)
         }
-    | _ -> None
+    | None -> None
 
+/// Parse a non-streaming Claude response body. Throws on un-parseable JSON
+/// (`JsonHost.parse` returns `None`) so the caller's `try/with` surfaces it
+/// as `MalformedResponse`, preserving the prior `JsonDocument.Parse`
+/// behaviour. `content` is the block array: `text` blocks concatenate into
+/// `Content`; `tool_use` blocks become `ToolCalls` with the raw `input`
+/// JSON re-serialized as the Arguments string.
 let parseResponse (json: string) : AIProviderResponse =
-    let doc = JsonDocument.Parse(json)
-    let root = doc.RootElement
+    match JsonHost.parse json with
+    | None -> failwith "Claude response was not valid JSON"
+    | Some root ->
+        let stopReason =
+            root
+            |> JsonValue.tryField "stop_reason"
+            |> Option.bind JsonValue.asString
+            |> Option.defaultValue "end_turn"
 
-    let stopReason =
-        match root.TryGetProperty("stop_reason") with
-        | true, sr -> sr.GetString()
-        | _ -> "end_turn"
+        let blocks =
+            root
+            |> JsonValue.tryField "content"
+            |> Option.bind JsonValue.asArray
+            |> Option.defaultValue []
 
-    let mutable textContent = ""
-    let mutable toolCalls = []
+        let mutable textContent = ""
+        let mutable toolCalls: AIProviderToolCall list = []
 
-    match root.TryGetProperty("content") with
-    | true, content when content.ValueKind = JsonValueKind.Array ->
-        for block in content.EnumerateArray() do
-            match block.TryGetProperty("type") with
-            | true, t when t.GetString() = "text" ->
-                match block.TryGetProperty("text") with
-                | true, txt -> textContent <- textContent + txt.GetString()
-                | _ -> ()
-            | true, t when t.GetString() = "tool_use" ->
+        for block in blocks do
+            match block |> JsonValue.tryField "type" |> Option.bind JsonValue.asString with
+            | Some "text" ->
+                match block |> JsonValue.tryField "text" |> Option.bind JsonValue.asString with
+                | Some txt -> textContent <- textContent + txt
+                | None -> ()
+            | Some "tool_use" ->
                 let id =
-                    match block.TryGetProperty("id") with
-                    | true, v -> v.GetString()
-                    | _ -> ""
+                    block
+                    |> JsonValue.tryField "id"
+                    |> Option.bind JsonValue.asString
+                    |> Option.defaultValue ""
 
                 let name =
-                    match block.TryGetProperty("name") with
-                    | true, v -> v.GetString()
-                    | _ -> ""
+                    block
+                    |> JsonValue.tryField "name"
+                    |> Option.bind JsonValue.asString
+                    |> Option.defaultValue ""
 
                 let input =
-                    match block.TryGetProperty("input") with
-                    | true, v -> v.GetRawText()
-                    | _ -> "{}"
+                    match block |> JsonValue.tryField "input" with
+                    | Some v -> JsonHost.serialize v
+                    | None -> "{}"
 
                 toolCalls <-
                     toolCalls
@@ -114,14 +123,13 @@ let parseResponse (json: string) : AIProviderResponse =
                         }
                     ]
             | _ -> ()
-    | _ -> ()
 
-    {
-        Content = textContent
-        ToolCalls = toolCalls
-        StopReason = stopReason
-        Usage = parseUsage root
-    }
+        {
+            Content = textContent
+            ToolCalls = toolCalls
+            StopReason = stopReason
+            Usage = parseUsage root
+        }
 
 // ─── Request building ────────────────────────────────────────────
 
@@ -142,7 +150,28 @@ let parseResponse (json: string) : AIProviderResponse =
 /// Sub-threshold prefixes (<1024 tokens for Sonnet/Haiku, <2048 for Opus)
 /// are silently processed without caching — Anthropic does not reject the
 /// request. No client-side guard.
-let private cacheControlMarker: obj = box {| ``type`` = "ephemeral" |}
+let private cacheControlMarker: JsonValue = jobj [ "type", jstr "ephemeral" ]
+
+/// Append a `cache_control` marker onto an object block, preserving member
+/// order (the marker lands last, mirroring the prior dictionary mutation).
+/// A non-object value passes through unchanged.
+let private withCacheControl (v: JsonValue) : JsonValue =
+    match v with
+    | JObject members -> JObject(members @ [ "cache_control", cacheControlMarker ])
+    | other -> other
+
+/// Embed a JSON-Schema / arguments string as JSON structure. Parses the
+/// string through `JsonHost.parse`; a blank or un-parseable string degrades
+/// to an empty object so the request body stays well-formed (the prior STJ
+/// path threw on invalid input — schemas/arguments the SDK assembles are
+/// always valid, so this is only a softer failure mode).
+let private embeddedJson (raw: string) : JsonValue =
+    if System.String.IsNullOrWhiteSpace raw then
+        jobj []
+    else
+        match JsonHost.parse raw with
+        | Some v -> v
+        | None -> jobj []
 
 // ─── Phase 6o vision support ─────────────────────────────────────
 //
@@ -171,46 +200,39 @@ let isVisionCapable (model: string) =
 /// (Anthropic Messages API fetches URLs server-side; the SDK does
 /// NOT fetch — that's a deliberate division so the SDK doesn't take
 /// on URL-fetch network policy / SSRF concerns).
-let private imageBlock (payload: ImagePayload) : obj =
-    let source = System.Collections.Generic.Dictionary<string, obj>()
+let private imageBlock (payload: ImagePayload) : JsonValue =
+    let source =
+        match payload.Source with
+        | Base64Bytes bytes ->
+            jobj [
+                "type", jstr "base64"
+                "media_type", jstr payload.MediaType
+                "data", jstr (System.Convert.ToBase64String bytes)
+            ]
+        | Url u -> jobj [ "type", jstr "url"; "url", jstr u ]
 
-    match payload.Source with
-    | Base64Bytes bytes ->
-        source["type"] <- "base64"
-        source["media_type"] <- payload.MediaType
-        source["data"] <- System.Convert.ToBase64String bytes
-    | Url u ->
-        source["type"] <- "url"
-        source["url"] <- u
-
-    let block = System.Collections.Generic.Dictionary<string, obj>()
-    block["type"] <- "image"
-    block["source"] <- source
-    block :> obj
+    jobj [ "type", jstr "image"; "source", source ]
 
 /// Build the Anthropic content-block array from a non-empty
 /// `Parts` list. Text parts become `{ type: "text", text }`; image
-/// parts become the `image` block via `imageBlock`. Returns the
-/// JsonElement so `buildMessageContent` can plug it in directly.
-let private buildMultipartContent (parts: AIContentPart list) (markForCache: bool) : JsonElement =
+/// parts become the `image` block via `imageBlock`. When `markForCache`
+/// is true the last block carries a `cache_control` marker.
+let private buildMultipartContent (parts: AIContentPart list) (markForCache: bool) : JsonValue =
     let blocks =
         parts
         |> List.map (fun part ->
             match part with
-            | TextPart s ->
-                let d = System.Collections.Generic.Dictionary<string, obj>()
-                d["type"] <- "text"
-                d["text"] <- s
-                d :> obj
+            | TextPart s -> jobj [ "type", jstr "text"; "text", jstr s ]
             | ImagePart payload -> imageBlock payload)
 
-    if markForCache && not blocks.IsEmpty then
-        let last =
-            blocks[blocks.Length - 1] :?> System.Collections.Generic.Dictionary<string, obj>
+    let blocks =
+        if markForCache && not blocks.IsEmpty then
+            let lastIdx = blocks.Length - 1
+            blocks |> List.mapi (fun i b -> if i = lastIdx then withCacheControl b else b)
+        else
+            blocks
 
-        last["cache_control"] <- cacheControlMarker
-
-    JsonSerializer.SerializeToElement(blocks, jsonOptions)
+    jarr blocks
 
 /// Serialise a single message for the Claude request body.
 ///
@@ -229,7 +251,7 @@ let private buildMultipartContent (parts: AIContentPart list) (markForCache: boo
 ///
 /// When `markForCache` is true, the LAST content block of the produced array
 /// (or the single text block, in case 1) carries a `cache_control` marker.
-let private buildMessageContent (msg: AIProviderMessage) (markForCache: bool) : JsonElement =
+let private buildMessageContent (msg: AIProviderMessage) (markForCache: bool) : JsonValue =
     // Phase 6o — multipart content. When `Parts` is populated the
     // message overrides the plain-text path entirely: providers see
     // the per-part wire blocks (text + image) instead of the legacy
@@ -246,17 +268,19 @@ let private buildMessageContent (msg: AIProviderMessage) (markForCache: bool) : 
         let blocks =
             msg.ToolResults
             |> List.mapi (fun i tr ->
-                let d = System.Collections.Generic.Dictionary<string, obj>()
-                d["type"] <- "tool_result"
-                d["tool_use_id"] <- tr.ToolCallId
-                d["content"] <- tr.Content
+                let block =
+                    jobj [
+                        "type", jstr "tool_result"
+                        "tool_use_id", jstr tr.ToolCallId
+                        "content", jstr tr.Content
+                    ]
 
                 if markForCache && i = lastIdx then
-                    d["cache_control"] <- cacheControlMarker
+                    withCacheControl block
+                else
+                    block)
 
-                d :> obj)
-
-        JsonSerializer.SerializeToElement(blocks, jsonOptions)
+        jarr blocks
     elif not msg.ToolCalls.IsEmpty then
         // Case 3 — assistant message with tool_use blocks. Include any text
         // content as a `text` block before the tool_use blocks so the model
@@ -265,67 +289,61 @@ let private buildMessageContent (msg: AIProviderMessage) (markForCache: bool) : 
             if System.String.IsNullOrEmpty msg.Content then
                 []
             else
-                let d = System.Collections.Generic.Dictionary<string, obj>()
-                d["type"] <- "text"
-                d["text"] <- msg.Content
-                [ d :> obj ]
+                [ jobj [ "type", jstr "text"; "text", jstr msg.Content ] ]
 
         let toolUseBlocks =
             msg.ToolCalls
             |> List.map (fun tc ->
-                let inputJson =
-                    if System.String.IsNullOrWhiteSpace tc.Arguments then
-                        JsonSerializer.Deserialize<JsonElement>("{}")
-                    else
-                        JsonSerializer.Deserialize<JsonElement>(tc.Arguments)
-
-                let d = System.Collections.Generic.Dictionary<string, obj>()
-                d["type"] <- "tool_use"
-                d["id"] <- tc.Id
-                d["name"] <- tc.Name
-                d["input"] <- inputJson
-                d :> obj)
+                jobj [
+                    "type", jstr "tool_use"
+                    "id", jstr tc.Id
+                    "name", jstr tc.Name
+                    "input", embeddedJson tc.Arguments
+                ])
 
         let allBlocks = textBlocks @ toolUseBlocks
 
-        if markForCache && not allBlocks.IsEmpty then
-            // Mutate the last block in place to add cache_control.
-            let last =
-                allBlocks[allBlocks.Length - 1] :?> System.Collections.Generic.Dictionary<string, obj>
+        let allBlocks =
+            if markForCache && not allBlocks.IsEmpty then
+                let lastIdx = allBlocks.Length - 1
 
-            last["cache_control"] <- cacheControlMarker
+                allBlocks
+                |> List.mapi (fun i b -> if i = lastIdx then withCacheControl b else b)
+            else
+                allBlocks
 
-        JsonSerializer.SerializeToElement(allBlocks, jsonOptions)
+        jarr allBlocks
     // Case 1 — simple text message. cache_control requires array form, so
     // promote the string to a single text block carrying the marker when
     // markForCache is true; otherwise emit the legacy string shape.
     elif markForCache then
-        let d = System.Collections.Generic.Dictionary<string, obj>()
-        d["type"] <- "text"
-        d["text"] <- msg.Content
-        d["cache_control"] <- cacheControlMarker
-        JsonSerializer.SerializeToElement([ d :> obj ], jsonOptions)
+        jarr [
+            jobj [
+                "type", jstr "text"
+                "text", jstr msg.Content
+                "cache_control", cacheControlMarker
+            ]
+        ]
     else
-        JsonSerializer.SerializeToElement(msg.Content, jsonOptions)
+        jstr msg.Content
 
 /// Build the tool array, marking the last entry with `cache_control` when
 /// any tools are present. Anthropic caches the entire tools array as a
 /// contiguous prefix from the marker position, so a single marker on the
 /// last tool covers all of them.
-let private buildTools (tools: AIProviderToolDef list) =
+let private buildTools (tools: AIProviderToolDef list) : JsonValue list =
     let lastIdx = tools.Length - 1
 
     tools
     |> List.mapi (fun i t ->
-        let d = System.Collections.Generic.Dictionary<string, obj>()
-        d["name"] <- t.Name
-        d["description"] <- t.Description
-        d["input_schema"] <- JsonSerializer.Deserialize<JsonElement>(t.InputSchema)
+        let block =
+            jobj [
+                "name", jstr t.Name
+                "description", jstr t.Description
+                "input_schema", embeddedJson t.InputSchema
+            ]
 
-        if i = lastIdx then
-            d["cache_control"] <- cacheControlMarker
-
-        d :> obj)
+        if i = lastIdx then withCacheControl block else block)
 
 /// Phase 67b — fixed name for the synthesised schema-tool used in
 /// Claude's tool-based structured-output workaround. Anthropic has no
@@ -367,66 +385,56 @@ let normaliseStructuredPayload (schemaJson: string) (payload: string) : string =
     // property? If so, a single-key { "input": ... } payload is (or at
     // least may be) the real response — never unwrap it.
     let schemaDeclaresInput =
-        try
-            use doc = JsonDocument.Parse(schemaJson)
-
-            match doc.RootElement.TryGetProperty("properties") with
-            | true, props when props.ValueKind = JsonValueKind.Object ->
-                match props.TryGetProperty("input") with
-                | true, _ -> true
-                | _ -> false
-            | _ -> false
-        with _ ->
-            false
+        match JsonHost.parse schemaJson with
+        | Some schema ->
+            match schema |> JsonValue.tryField "properties" with
+            | Some props -> (props |> JsonValue.tryField "input").IsSome
+            | None -> false
+        | None -> false
 
     // A JSON string whose content itself parses as a JSON object or
     // array — the string-encoding disease. Scalar-content strings stay
     // strings (a field value of "123" or "true" is plausibly literal).
-    let tryUnstring (el: JsonElement) : JsonElement option =
-        if el.ValueKind = JsonValueKind.String then
-            try
-                use inner = JsonDocument.Parse(el.GetString())
+    let tryUnstring (v: JsonValue) : JsonValue option =
+        match v with
+        | JString s ->
+            match JsonHost.parse s with
+            | Some(JObject _ as inner) -> Some inner
+            | Some(JArray _ as inner) -> Some inner
+            | _ -> None
+        | _ -> None
 
-                match inner.RootElement.ValueKind with
-                | JsonValueKind.Object
-                | JsonValueKind.Array -> Some(inner.RootElement.Clone())
-                | _ -> None
-            with _ ->
-                None
-        else
-            None
-
-    try
-        use doc = JsonDocument.Parse(payload)
-        let mutable el = doc.RootElement.Clone()
-
+    match JsonHost.parse payload with
+    | None -> payload
+    | Some parsed ->
         // Whole payload as a JSON-encoded string.
-        match tryUnstring el with
-        | Some inner -> el <- inner
-        | None -> ()
+        let el =
+            match tryUnstring parsed with
+            | Some inner -> inner
+            | None -> parsed
 
         // Single-key { "input": ... } envelope.
-        if not schemaDeclaresInput && el.ValueKind = JsonValueKind.Object then
-            match el.EnumerateObject() |> Seq.toList with
-            | [ p ] when p.Name = "input" ->
-                let unwrapped =
-                    match tryUnstring p.Value with
-                    | Some inner -> inner
-                    | None -> p.Value
+        let el =
+            if not schemaDeclaresInput then
+                match el with
+                | JObject [ ("input", v) ] ->
+                    let unwrapped =
+                        match tryUnstring v with
+                        | Some inner -> inner
+                        | None -> v
 
-                // Only unwrap to JSON structure — a bare scalar under
-                // "input" is more plausibly a (degenerate) legitimate
-                // payload than the envelope disease.
-                if
-                    unwrapped.ValueKind = JsonValueKind.Object
-                    || unwrapped.ValueKind = JsonValueKind.Array
-                then
-                    el <- unwrapped.Clone()
-            | _ -> ()
+                    // Only unwrap to JSON structure — a bare scalar under
+                    // "input" is more plausibly a (degenerate) legitimate
+                    // payload than the envelope disease.
+                    match unwrapped with
+                    | JObject _
+                    | JArray _ -> unwrapped
+                    | _ -> el
+                | _ -> el
+            else
+                el
 
-        el.GetRawText()
-    with _ ->
-        payload
+        JsonHost.serialize el
 
 let buildRequestBody
     (model: string)
@@ -436,9 +444,10 @@ let buildRequestBody
     (systemPrompt: string option)
     (stream: bool)
     (structuredOutputSchema: string option)
-    =
-    // Build the request as a dictionary to control which fields are included.
-    // Claude API rejects null/unknown fields.
+    : string =
+    // Build the request as an ordered JObject to control which fields are
+    // included (Claude rejects null/unknown fields) and the member order
+    // (so the serialized bytes are deterministic across hosts).
     //
     // Phase 6i.B: mark the second-to-last message for cache_control. On the
     // first turn (length < 2) no message-level breakpoint fires — the
@@ -451,28 +460,24 @@ let buildRequestBody
         messages
         |> List.mapi (fun i m ->
             let markForCache = messageCount >= 2 && i = messageCount - 2
-
-            {|
-                role = m.Role
-                content = buildMessageContent m markForCache
-            |})
-
-    let dict = System.Collections.Generic.Dictionary<string, obj>()
-    dict["model"] <- model
-    dict["max_tokens"] <- maxTokens
-    dict["messages"] <- msgs
+            jobj [ "role", jstr m.Role; "content", buildMessageContent m markForCache ])
 
     // System prompt as array form so the text block can carry a
     // cache_control marker — caches the static system prompt across
     // every request.
-    match systemPrompt with
-    | Some prompt ->
-        let block = System.Collections.Generic.Dictionary<string, obj>()
-        block["type"] <- "text"
-        block["text"] <- prompt
-        block["cache_control"] <- cacheControlMarker
-        dict["system"] <- [ block :> obj ]
-    | None -> ()
+    let systemFields =
+        match systemPrompt with
+        | Some prompt -> [
+            "system",
+            jarr [
+                jobj [
+                    "type", jstr "text"
+                    "text", jstr prompt
+                    "cache_control", cacheControlMarker
+                ]
+            ]
+          ]
+        | None -> []
 
     // Phase 67b — when a schema is supplied, append the synthesised
     // schema-tool to user tools. The `tool_choice` directive below
@@ -509,52 +514,32 @@ let buildRequestBody
 
     let toolDefs = buildTools effectiveTools
 
-    if not toolDefs.IsEmpty then
-        dict["tools"] <- toolDefs
+    let toolFields = if toolDefs.IsEmpty then [] else [ "tools", jarr toolDefs ]
 
     // Phase 67b — force the schema-tool when structured output is
     // requested. `disable_parallel_tool_use` keeps the assistant's
     // turn to exactly one tool call so the response parser picks up
     // a single structured-response payload (the model otherwise may
     // emit multiple tool_use blocks in one turn).
-    match structuredOutputSchema with
-    | Some _ ->
-        dict["tool_choice"] <- {|
-            ``type`` = "tool"
-            name = StructuredResponseToolName
-            disable_parallel_tool_use = true
-        |}
-    | None -> ()
+    let toolChoiceFields =
+        match structuredOutputSchema with
+        | Some _ -> [
+            "tool_choice",
+            jobj [
+                "type", jstr "tool"
+                "name", jstr StructuredResponseToolName
+                "disable_parallel_tool_use", jbool true
+            ]
+          ]
+        | None -> []
 
-    if stream then
-        dict["stream"] <- true
+    let streamFields = if stream then [ "stream", jbool true ] else []
 
-    JsonSerializer.Serialize(dict, jsonOptions)
-
-// ─── Streaming response parsing ──────────────────────────────────
-
-let parseStreamLine (line: string) (onStream: (string -> unit) option) =
-    if line.StartsWith("data: ") then
-        let data = line.Substring(6)
-
-        if data <> "[DONE]" then
-            try
-                let doc = JsonDocument.Parse(data)
-                let root = doc.RootElement
-
-                match root.TryGetProperty("type") with
-                | true, t when t.GetString() = "content_block_delta" ->
-                    match root.TryGetProperty("delta") with
-                    | true, delta ->
-                        match delta.TryGetProperty("type") with
-                        | true, dt when dt.GetString() = "text_delta" ->
-                            match delta.TryGetProperty("text") with
-                            | true, txt ->
-                                let text = txt.GetString()
-                                onStream |> Option.iter (fun cb -> cb text)
-                            | _ -> ()
-                        | _ -> ()
-                    | _ -> ()
-                | _ -> ()
-            with _ ->
-                ()
+    jobj (
+        [ "model", jstr model; "max_tokens", jint maxTokens; "messages", jarr msgs ]
+        @ systemFields
+        @ toolFields
+        @ toolChoiceFields
+        @ streamFields
+    )
+    |> JsonHost.serialize

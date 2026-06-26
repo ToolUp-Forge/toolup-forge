@@ -13,8 +13,19 @@
     <Compile Include="ClaudeAIProviderHealth.fs" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Phase 254 — the portable wire tier: JsonValue / JsonHost for the
+         host-portable mapping, the ClaudeStreaming state machine, and the
+         IHttpTransport seam. ClaudeAIProvider.Wire.fs depends only on this
+         (no System.Text.Json), so it source-compiles into the Fable smoke. -->
+    <ProjectReference Include="..\..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <!-- Phase 254 — the .NET HttpClientTransport companion to the portable
+         IHttpTransport seam lives in ToolUp.AI.Server. AI.Server takes no
+         provider reference, so this is acyclic; the provider already depends
+         on the server tier (Platform.Server), so the footprint is unchanged
+         in kind. -->
+    <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
   </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

@@ -3,11 +3,10 @@ module ClaudeAIProvider
 open System
 open System.IO
 open System.Net.Http
-open System.Text
-open System.Text.Json
 open System.Threading
+open ToolUp.AI.Wire // ClaudeStreaming — the pure SSE state machine (Phase 254)
 open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
-open ToolUp.Platform.AI
+open ToolUp.Platform.AI // IHttpTransport / HttpClientTransport / HttpRequest / ErrorClassifier (Phase 251/254)
 open ToolUp.Platform.Secrets
 open ClaudeAIProviderWire
 
@@ -144,301 +143,96 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                 | Some key ->
                     let useStreaming = onStream.IsSome
 
+                    // The portable wire mapping builds the request body over
+                    // `JsonValue` (Phase 254); the .NET HttpClientTransport
+                    // (Phase 251) reproduces the egress the provider used to
+                    // inline — same shared client, same per-request headers on
+                    // the message, same per-call timeout derived from
+                    // RetryPolicy.Timeout. Status classification is the
+                    // ErrorClassifier's; the streaming assembly is the pure
+                    // ClaudeStreaming state machine.
+                    let transport = HttpClientTransport(client, ?timeout = retryPolicy.Timeout)
+                    let requestHeaders = [ "x-api-key", key; "anthropic-version", "2023-06-01" ]
+
                     // One attempt — whole request lifecycle, including the
                     // per-call timeout and HTTP status classification. Returns
                     // a Result so the retry loop can classify before deciding
                     // to back off or propagate.
                     let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
-                        // Build a fresh request per attempt — HttpRequestMessage
-                        // cannot be reused after being sent.
                         let body =
                             buildRequestBody model maxTokens messages tools systemPrompt useStreaming None
 
-                        let request = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
-                        request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-                        request.Headers.Add("x-api-key", key)
-                        request.Headers.Add("anthropic-version", "2023-06-01")
-
-                        // Per-call timeout. HttpClient.Timeout is instance-wide
-                        // (set to 5 min in the constructor); RetryPolicy.Timeout
-                        // allows the caller to impose a tighter per-request budget.
-                        use cts =
-                            match retryPolicy.Timeout with
-                            | Some t ->
-                                let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-                                new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
-                            | None -> new CancellationTokenSource()
+                        let request = HttpRequest.post "/v1/messages" requestHeaders body
 
                         if useStreaming then
                             // Streaming path: accumulate partial text so that if
                             // the stream aborts mid-delivery we can report what
                             // the client already received. Streaming is NEVER
                             // retried — see StreamingAborted doc in IAIProvider.fs.
+                            // The SSE read loop stays host-specific (it cannot
+                            // ride the portable buffered transport); it feeds each
+                            // `data:` payload to the pure ClaudeStreaming
+                            // processor, which owns the text/tool-call/usage
+                            // assembly and the post-stream `{}` default-fill.
                             let mutable accumulated = ""
 
+                            // Per-call timeout. HttpClient.Timeout is instance-wide
+                            // (5 min in the constructor); RetryPolicy.Timeout lets
+                            // the caller impose a tighter per-request budget, applied
+                            // to both SendForStreaming and the line reads below.
+                            use cts =
+                                match retryPolicy.Timeout with
+                                | Some t ->
+                                    let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
+                                    new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
+                                | None -> new CancellationTokenSource()
+
                             try
-                                let! response =
-                                    client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token)
-                                    |> Async.AwaitTask
+                                use! response = transport.SendForStreaming(request, cts.Token)
 
                                 if not response.IsSuccessStatusCode then
                                     let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
 
                                     // Status-code classification applies to
                                     // streaming requests that fail BEFORE any
                                     // content is delivered (no partial output
-                                    // yet, so TransientServer/PermanentClient
-                                    // still apply — retry budget still meaningful).
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
+                                    // yet, so the transient/permanent split still
+                                    // applies — retry budget still meaningful).
+                                    return Error(ErrorClassifier.classifyStatus (int response.StatusCode) errorBody)
                                 else
                                     let! stream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
                                     use reader = new StreamReader(stream)
 
-                                    let mutable fullText = ""
-                                    let mutable toolCalls: AIProviderToolCall list = []
-                                    let mutable stopReason = "end_turn"
+                                    let mutable state = ClaudeStreaming.initial
                                     let mutable reading = true
-
-                                    // Phase 6i.B usage tracking. Anthropic's
-                                    // streaming protocol reports input/cache
-                                    // tokens on `message_start.message.usage`
-                                    // (initial values; output_tokens starts at
-                                    // 1 for the assistant role marker) and
-                                    // updates the cumulative output_tokens on
-                                    // `message_delta.usage`. We accumulate
-                                    // mutables and build the final TokenUsage
-                                    // after the stream closes.
-                                    let mutable usageSeen = false
-                                    let mutable inputTokens = 0
-                                    let mutable cacheReadTokens = 0
-                                    let mutable cacheCreationTokens = 0
-                                    let mutable cacheCreationSeen = false
-                                    let mutable outputTokens = 0
 
                                     while reading do
                                         // Pass cts.Token so the per-call timeout
-                                        // (RetryPolicy.TimeoutMs) actually cancels
-                                        // a stalled stream. Without the token,
-                                        // ReadLineAsync ignores the CTS — a hung
-                                        // Anthropic stream waits until
-                                        // HttpClient.Timeout (5 min instance-wide)
-                                        // and the agent loop never surfaces the
-                                        // failure as AITaskFailed in time. The
-                                        // ValueTask-returning overload landed in
+                                        // actually cancels a stalled stream. Without
+                                        // the token, ReadLineAsync ignores the CTS —
+                                        // a hung stream waits until HttpClient.Timeout
+                                        // (5 min instance-wide) and the agent loop
+                                        // never surfaces the failure as AITaskFailed
+                                        // in time. The ValueTask overload landed in
                                         // .NET 7; net10 has it.
                                         let! line = reader.ReadLineAsync(cts.Token).AsTask() |> Async.AwaitTask
 
                                         if isNull line then
                                             reading <- false
-                                        else
-                                            parseStreamLine line onStream
+                                        elif line.StartsWith("data: ") then
+                                            let data = line.Substring(6)
 
-                                            if line.StartsWith("data: ") then
-                                                let data = line.Substring(6)
+                                            if data <> "[DONE]" then
+                                                let newState, emitted = ClaudeStreaming.processData state data
+                                                state <- newState
 
-                                                if data <> "[DONE]" then
-                                                    try
-                                                        let doc = JsonDocument.Parse(data)
-                                                        let root = doc.RootElement
+                                                match emitted with
+                                                | Some t ->
+                                                    onStream |> Option.iter (fun cb -> cb t)
+                                                    accumulated <- accumulated + t
+                                                | None -> ()
 
-                                                        match root.TryGetProperty("type") with
-                                                        | true, t when t.GetString() = "content_block_delta" ->
-                                                            // Handle BOTH delta types in a single arm —
-                                                            // previously there were two separate match
-                                                            // arms with identical patterns, which meant
-                                                            // F# picked the first (text_delta only) and
-                                                            // the second (input_json_delta) was dead code.
-                                                            // The consequence was that every tool call's
-                                                            // arguments silently vanished during
-                                                            // streaming — Claude sent the JSON chunks but
-                                                            // the parser never saw them, so tool handlers
-                                                            // received empty input and failed with
-                                                            // "key not present" errors on required
-                                                            // arguments. Keep both handlers here,
-                                                            // dispatched on the inner `delta.type`.
-                                                            match root.TryGetProperty("delta") with
-                                                            | true, delta ->
-                                                                match delta.TryGetProperty("type") with
-                                                                | true, dt when dt.GetString() = "text_delta" ->
-                                                                    match delta.TryGetProperty("text") with
-                                                                    | true, txt ->
-                                                                        let t = txt.GetString()
-                                                                        fullText <- fullText + t
-                                                                        accumulated <- accumulated + t
-                                                                    | _ -> ()
-                                                                | true, dt when dt.GetString() = "input_json_delta" ->
-                                                                    // Append partial_json onto the last
-                                                                    // tool call's Arguments buffer. The
-                                                                    // last tool call is correct when
-                                                                    // there is at most one active tool
-                                                                    // content block at a time — which
-                                                                    // matches Anthropic's streaming
-                                                                    // protocol: a content_block_start
-                                                                    // opens a block, its deltas stream
-                                                                    // in, a content_block_stop closes
-                                                                    // it, and only then does the next
-                                                                    // content_block_start fire.
-                                                                    match delta.TryGetProperty("partial_json") with
-                                                                    | true, pj ->
-                                                                        match toolCalls with
-                                                                        | [] -> ()
-                                                                        | _ ->
-                                                                            let last = toolCalls[toolCalls.Length - 1]
-
-                                                                            toolCalls <-
-                                                                                toolCalls[.. toolCalls.Length - 2]
-                                                                                @ [
-                                                                                    {
-                                                                                        last with
-                                                                                            Arguments =
-                                                                                                last.Arguments
-                                                                                                + pj.GetString()
-                                                                                    }
-                                                                                ]
-                                                                    | _ -> ()
-                                                                | _ -> ()
-                                                            | _ -> ()
-
-                                                        | true, t when t.GetString() = "message_start" ->
-                                                            // Initial usage on `message.usage`. Anthropic
-                                                            // emits input/cache counts here at stream start;
-                                                            // output_tokens starts at 1 (the assistant role
-                                                            // marker) and is replaced by the cumulative
-                                                            // value on the final `message_delta`.
-                                                            match root.TryGetProperty("message") with
-                                                            | true, msg ->
-                                                                match msg.TryGetProperty("usage") with
-                                                                | true, usage ->
-                                                                    let getInt (name: string) =
-                                                                        match usage.TryGetProperty(name) with
-                                                                        | true, v when
-                                                                            v.ValueKind = JsonValueKind.Number
-                                                                            ->
-                                                                            v.GetInt32()
-                                                                        | _ -> 0
-
-                                                                    inputTokens <- getInt "input_tokens"
-                                                                    cacheReadTokens <- getInt "cache_read_input_tokens"
-
-                                                                    match
-                                                                        usage.TryGetProperty(
-                                                                            "cache_creation_input_tokens"
-                                                                        )
-                                                                    with
-                                                                    | true, v when v.ValueKind = JsonValueKind.Number ->
-                                                                        cacheCreationTokens <- v.GetInt32()
-                                                                        cacheCreationSeen <- true
-                                                                    | _ -> ()
-
-                                                                    outputTokens <- getInt "output_tokens"
-                                                                    usageSeen <- true
-                                                                | _ -> ()
-                                                            | _ -> ()
-
-                                                        | true, t when t.GetString() = "message_delta" ->
-                                                            match root.TryGetProperty("delta") with
-                                                            | true, delta ->
-                                                                match delta.TryGetProperty("stop_reason") with
-                                                                | true, sr when sr.ValueKind <> JsonValueKind.Null ->
-                                                                    stopReason <- sr.GetString()
-                                                                | _ -> ()
-                                                            | _ -> ()
-
-                                                            // Cumulative output_tokens on `message_delta.usage`.
-                                                            // Replaces the start-of-stream value with the final
-                                                            // total. Anthropic does not re-report input/cache
-                                                            // tokens here (they are stable from message_start).
-                                                            match root.TryGetProperty("usage") with
-                                                            | true, usage ->
-                                                                match usage.TryGetProperty("output_tokens") with
-                                                                | true, v when v.ValueKind = JsonValueKind.Number ->
-                                                                    outputTokens <- v.GetInt32()
-                                                                    usageSeen <- true
-                                                                | _ -> ()
-                                                            | _ -> ()
-
-                                                        | true, t when t.GetString() = "content_block_start" ->
-                                                            match root.TryGetProperty("content_block") with
-                                                            | true, cb ->
-                                                                match cb.TryGetProperty("type") with
-                                                                | true, cbt when cbt.GetString() = "tool_use" ->
-                                                                    let id =
-                                                                        match cb.TryGetProperty("id") with
-                                                                        | true, v -> v.GetString()
-                                                                        | _ -> ""
-
-                                                                    let name =
-                                                                        match cb.TryGetProperty("name") with
-                                                                        | true, v -> v.GetString()
-                                                                        | _ -> ""
-
-                                                                    // Start with an empty buffer — the streaming
-                                                                    // deltas below append to it. Previously this
-                                                                    // was "{}" as a placeholder and the post-stream
-                                                                    // fix-up stripped the leading two chars, which
-                                                                    // broke the zero-delta case (model calls a
-                                                                    // tool with no input): Arguments became "" and
-                                                                    // downstream JSON deserialisation threw
-                                                                    // "input does not contain any JSON tokens".
-                                                                    // The post-stream default now fills an empty
-                                                                    // buffer with "{}" so an empty-input tool call
-                                                                    // deserialises as an empty object.
-                                                                    toolCalls <-
-                                                                        toolCalls
-                                                                        @ [
-                                                                            {
-                                                                                AIProviderToolCall.Id = id
-                                                                                Name = name
-                                                                                Arguments = ""
-                                                                            }
-                                                                        ]
-                                                                | _ -> ()
-                                                            | _ -> ()
-
-                                                        | _ -> ()
-                                                    with _ ->
-                                                        ()
-
-                                    // Default empty arguments to "{}" so tools that
-                                    // the model called without providing any input
-                                    // (no `input_json_delta` chunks arrived)
-                                    // deserialise as an empty object rather than
-                                    // failing with "input does not contain any JSON
-                                    // tokens". Non-empty Arguments pass through
-                                    // unchanged — the streaming deltas have already
-                                    // assembled valid JSON.
-                                    let fixedToolCalls =
-                                        toolCalls
-                                        |> List.map (fun tc ->
-                                            if System.String.IsNullOrWhiteSpace tc.Arguments then
-                                                { tc with Arguments = "{}" }
-                                            else
-                                                tc)
-
-                                    let usage =
-                                        if usageSeen then
-                                            Some {
-                                                PromptTokens = inputTokens + cacheReadTokens + cacheCreationTokens
-                                                CachedPromptTokens = cacheReadTokens
-                                                OutputTokens = outputTokens
-                                                CacheCreationTokens =
-                                                    if cacheCreationSeen then Some cacheCreationTokens else None
-                                            }
-                                        else
-                                            None
-
-                                    return
-                                        Ok {
-                                            Content = fullText
-                                            ToolCalls = fixedToolCalls
-                                            StopReason = stopReason
-                                            Usage = usage
-                                        }
+                                    return Ok(ClaudeStreaming.finalize state)
                             with
                             | :? OperationCanceledException when cts.IsCancellationRequested ->
                                 // Cancelled by our per-call timeout. If we already
@@ -472,28 +266,20 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                 else
                                     return Error(TransientNetwork ex.Message)
                         else
-                            // Non-streaming path.
+                            // Non-streaming path — buffered request/response over
+                            // the portable IHttpTransport seam.
                             try
-                                let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+                                let! response = (transport :> IHttpTransport).Send(request)
 
-                                if response.IsSuccessStatusCode then
-                                    let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
+                                if HttpResponse.isSuccess response then
                                     try
-                                        return Ok(parseResponse responseBody)
+                                        return Ok(parseResponse response.Body)
                                     with ex ->
                                         return Error(MalformedResponse ex.Message)
                                 else
-                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
-
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
+                                    return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
                             with
-                            | :? OperationCanceledException when cts.IsCancellationRequested ->
+                            | :? OperationCanceledException ->
                                 return
                                     Error(
                                         TransientNetwork
@@ -597,27 +383,20 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                             )
                         )
                 | Some key ->
+                    let transport = HttpClientTransport(client, ?timeout = retryPolicy.Timeout)
+                    let requestHeaders = [ "x-api-key", key; "anthropic-version", "2023-06-01" ]
+
                     let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
                         let body =
                             buildRequestBody model maxTokens messages tools systemPrompt false (Some schema)
 
-                        let request = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
-                        request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-                        request.Headers.Add("x-api-key", key)
-                        request.Headers.Add("anthropic-version", "2023-06-01")
-
-                        use cts =
-                            match retryPolicy.Timeout with
-                            | Some t ->
-                                let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-                                new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
-                            | None -> new CancellationTokenSource()
+                        let request = HttpRequest.post "/v1/messages" requestHeaders body
 
                         try
-                            let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+                            let! response = (transport :> IHttpTransport).Send(request)
 
-                            if response.IsSuccessStatusCode then
-                                let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                            if HttpResponse.isSuccess response then
+                                let responseBody = response.Body
 
                                 try
                                     let parsed = parseResponse responseBody
@@ -685,16 +464,9 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                 with ex ->
                                     return Error(MalformedResponse ex.Message)
                             else
-                                let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                let code = int response.StatusCode
-
-                                return
-                                    if code = 429 || code >= 500 then
-                                        Error(TransientServer(code, errorBody))
-                                    else
-                                        Error(PermanentClient(code, errorBody))
+                                return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
                         with
-                        | :? OperationCanceledException when cts.IsCancellationRequested ->
+                        | :? OperationCanceledException ->
                             return
                                 Error(
                                     TransientNetwork

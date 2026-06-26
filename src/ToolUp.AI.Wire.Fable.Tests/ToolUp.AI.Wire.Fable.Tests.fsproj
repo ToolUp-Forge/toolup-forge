@@ -41,6 +41,14 @@
              GeminiWireFixtures.fs (the parity gate; seeds Phase 255). -->
         <Compile Include="..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />
         <Compile Include="..\ToolUp.AI.Wire.Tests\GeminiWireFixtures.fs" />
+        <!-- Phase 254 — the Claude portable mapper + its golden fixtures,
+             compiled here under Fable. Proves the mapper Fable-compiles and
+             that buildRequestBody / parseResponse match the .NET host, and
+             that the pure ClaudeStreaming machine assembles a canned SSE
+             chunk sequence identically on this host (the parity gate; seeds
+             Phase 255). -->
+        <Compile Include="..\AIProviders\Claude\ClaudeAIProvider.Wire.fs" />
+        <Compile Include="..\ToolUp.AI.Wire.Tests\ClaudeWireFixtures.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

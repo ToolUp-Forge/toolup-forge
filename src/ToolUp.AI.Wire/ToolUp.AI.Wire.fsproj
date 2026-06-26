@@ -38,6 +38,11 @@
         <Compile Include="Transport\IHttpTransport.fs" />
         <Compile Include="Transport\ErrorClassifier.fs" />
         <Compile Include="Transport\RetryRunner.fs" />
+        <!-- Phase 254 — the pure SSE streaming state machine. Depends on
+             JsonValue/JsonHost (parse) + Contract (AIProviderResponse), so it
+             compiles after them. Shared home for per-provider stream
+             processors (Claude first; OpenAI folds in later). -->
+        <Compile Include="Streaming.fs" />
     </ItemGroup>
     <ItemGroup>
         <!-- Fable.Core supplies the [<Emit>] / JsInterop surface the
