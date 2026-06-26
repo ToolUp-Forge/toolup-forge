@@ -4,4 +4,7 @@ open Expecto
 
 [<EntryPoint>]
 let main argv =
-    runTestsWithCLIArgs [] argv (testList "ToolUp.AI.Wire.Tests" [ JsonValueTests.tests; TransportTests.tests ])
+    runTestsWithCLIArgs
+        []
+        argv
+        (testList "ToolUp.AI.Wire.Tests" [ JsonValueTests.tests; TransportTests.tests; OpenAIWireTests.tests ])

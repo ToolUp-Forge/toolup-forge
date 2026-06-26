@@ -3,15 +3,24 @@ module OpenAIProvider
 open System
 open System.IO
 open System.Net.Http
-open System.Text
-open System.Text.Json
 open System.Threading
+open ToolUp.AI.Wire // JsonHost (portable schema parse)
 open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
 open ToolUp.Platform.AI
 open ToolUp.Platform.Secrets
 open OpenAIProviderWire
 
 // ─── Provider implementation ─────────────────────────────────────
+//
+// Phase 252 (Wave 32): the wire mapping now runs through the portable
+// `JsonValue` layer (`OpenAIProvider.Wire.fs`), and the HTTP egress is
+// injected via the Phase 251 `IHttpTransport` seam — the .NET
+// `HttpClientTransport` (buffered `Send` for the non-streaming + structured
+// paths; `SendForStreaming` for the SSE read loop). The retry/backoff loop
+// and the status→error classification are the shared portable
+// `RetryRunner` / `ErrorClassifier`. Behaviour is identical to the prior
+// inline egress (GP 11); the mapper is now host-portable (GP 12) and
+// Fable-compiles (GP 8).
 
 /// Default OpenAI model. Paired with `KnownModels` + `ProviderId` when
 /// the app constructs an `AIProviderDescriptor` for this provider.
@@ -98,19 +107,16 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                         )
                 | Some key ->
                     let useStreaming = onStream.IsSome
+                    // Inject the .NET egress (Phase 251). The per-call timeout
+                    // (`RetryPolicy.Timeout`) is applied inside the transport's
+                    // buffered `Send`; the streaming path drives its own CTS so
+                    // the read loop can cancel a stalled stream.
+                    let transport = HttpClientTransport(client, ?timeout = retryPolicy.Timeout)
 
                     let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
                         let body = buildRequestBody model messages tools systemPrompt useStreaming None
-                        let request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
-                        request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-                        request.Headers.Add("Authorization", $"Bearer {key}")
-
-                        use cts =
-                            match retryPolicy.Timeout with
-                            | Some t ->
-                                let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-                                new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
-                            | None -> new CancellationTokenSource()
+                        let headers = [ "Authorization", $"Bearer {key}" ]
+                        let request = HttpRequest.post "/v1/chat/completions" headers body
 
                         if useStreaming then
                             let state = {
@@ -120,20 +126,21 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                                 Usage = None
                             }
 
+                            use cts =
+                                match retryPolicy.Timeout with
+                                | Some t ->
+                                    let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
+                                    new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
+                                | None -> new CancellationTokenSource()
+
                             try
-                                let! response =
-                                    client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token)
-                                    |> Async.AwaitTask
+                                // ResponseHeadersRead lives inside SendForStreaming —
+                                // the byte-identical streaming egress the transport owns.
+                                let! response = transport.SendForStreaming(request, cts.Token)
 
                                 if not response.IsSuccessStatusCode then
                                     let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
-
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
+                                    return Error(ErrorClassifier.classifyStatus (int response.StatusCode) errorBody)
                                 else
                                     let! stream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
                                     use reader = new StreamReader(stream)
@@ -142,7 +149,7 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
 
                                     while reading do
                                         // Pass cts.Token so the per-call timeout
-                                        // (RetryPolicy.TimeoutMs) actually cancels
+                                        // (RetryPolicy.Timeout) actually cancels
                                         // a stalled stream. Without the token,
                                         // ReadLineAsync ignores the CTS — a hung
                                         // OpenAI stream waits until
@@ -193,62 +200,33 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                                     return Error(TransientNetwork ex.Message)
                         else
                             try
-                                let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+                                let! response = (transport :> IHttpTransport).Send request
 
-                                if response.IsSuccessStatusCode then
-                                    let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
+                                if HttpResponse.isSuccess response then
                                     try
-                                        return Ok(parseResponse responseBody)
+                                        return Ok(parseResponse response.Body)
                                     with ex ->
                                         return Error(MalformedResponse ex.Message)
                                 else
-                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
-
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
+                                    return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
                             with
-                            | :? OperationCanceledException when cts.IsCancellationRequested ->
+                            | :? OperationCanceledException ->
                                 return
                                     Error(
                                         TransientNetwork
                                             $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                     )
-                            | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
-                            | ex -> return Error(TransientNetwork ex.Message)
+                            | :? HttpRequestException as ex ->
+                                return Error(ErrorClassifier.classifyTransportFailure ex.Message)
+                            | ex -> return Error(ErrorClassifier.classifyTransportFailure ex.Message)
                     }
 
-                    // Retry loop. Same shape as ClaudeAIProvider — exponential
-                    // backoff via `RetryPolicy.delayFor` (capped at
-                    // `MaxBackoff`), non-retryable errors propagate
-                    // immediately, budget exhaustion wraps as
-                    // `RetriesExhausted` unless `MaxAttempts = 1`
-                    // (the post-11.C.5 fail-fast contract — `MaxAttempts`
-                    // counts the first attempt itself, so 1 = no retries).
-                    let rec retryLoop attemptsMade = async {
-                        let! result = singleAttempt ()
-                        let attemptsMade = attemptsMade + 1
-
-                        match result with
-                        | Ok r -> return Ok r
-                        | Error err when not (AIProviderError.isRetryable err) -> return Error err
-                        | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
-                            return
-                                if retryPolicy.MaxAttempts = 1 then
-                                    Error err
-                                else
-                                    Error(RetriesExhausted(attemptsMade, err))
-                        | Error _ ->
-                            let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
-                            do! Async.Sleep delay
-                            return! retryLoop attemptsMade
-                    }
-
-                    return! retryLoop 0
+                    // Portable retry loop (Phase 251) — exponential backoff,
+                    // non-retryable errors propagate immediately, budget
+                    // exhaustion wraps as `RetriesExhausted` unless
+                    // `MaxAttempts = 1` (fail-fast). Byte-identical to the
+                    // prior inline loop.
+                    return! RetryRunner.run retryPolicy singleAttempt
         }
 
         // Phase 67b — native structured output via OpenAI's
@@ -267,19 +245,18 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
             if hasImagePart && not (OpenAIProviderWire.isVisionCapable model) then
                 return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
             else
-                // Parse the JSON Schema string into a JsonElement. A
+                // Parse the JSON Schema string into a portable `JsonValue`. A
                 // malformed schema is a caller defect — surface as
                 // PermanentClient(0). Same precedent as the Gemini
                 // structured path.
                 let parsedSchema =
-                    try
-                        Ok(JsonSerializer.Deserialize<JsonElement>(schema))
-                    with ex ->
-                        Error(PermanentClient(0, sprintf "structuredOutputSchema is not valid JSON: %s" ex.Message))
+                    match JsonHost.parse schema with
+                    | Some v -> Ok v
+                    | None -> Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))
 
                 match parsedSchema with
                 | Error e -> return Error e
-                | Ok schemaElement ->
+                | Ok schemaValue ->
                     let! apiKey = apiKeyFetcher ()
 
                     match apiKey with
@@ -292,71 +269,38 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                                 )
                             )
                     | Some key ->
+                        let transport = HttpClientTransport(client, ?timeout = retryPolicy.Timeout)
+
                         let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
                             let body =
-                                buildRequestBody model messages tools systemPrompt false (Some schemaElement)
+                                buildRequestBody model messages tools systemPrompt false (Some schemaValue)
 
-                            let request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
-                            request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-                            request.Headers.Add("Authorization", $"Bearer {key}")
-
-                            use cts =
-                                match retryPolicy.Timeout with
-                                | Some t ->
-                                    let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-                                    new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
-                                | None -> new CancellationTokenSource()
+                            let headers = [ "Authorization", $"Bearer {key}" ]
+                            let request = HttpRequest.post "/v1/chat/completions" headers body
 
                             try
-                                let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+                                let! response = (transport :> IHttpTransport).Send request
 
-                                if response.IsSuccessStatusCode then
-                                    let! responseBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
+                                if HttpResponse.isSuccess response then
                                     try
-                                        return Ok(parseResponse responseBody)
+                                        return Ok(parseResponse response.Body)
                                     with ex ->
                                         return Error(MalformedResponse ex.Message)
                                 else
-                                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                                    let code = int response.StatusCode
-
-                                    return
-                                        if code = 429 || code >= 500 then
-                                            Error(TransientServer(code, errorBody))
-                                        else
-                                            Error(PermanentClient(code, errorBody))
+                                    return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
                             with
-                            | :? OperationCanceledException when cts.IsCancellationRequested ->
+                            | :? OperationCanceledException ->
                                 return
                                     Error(
                                         TransientNetwork
                                             $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                     )
-                            | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
-                            | ex -> return Error(TransientNetwork ex.Message)
+                            | :? HttpRequestException as ex ->
+                                return Error(ErrorClassifier.classifyTransportFailure ex.Message)
+                            | ex -> return Error(ErrorClassifier.classifyTransportFailure ex.Message)
                         }
 
-                        let rec retryLoop attemptsMade = async {
-                            let! result = singleAttempt ()
-                            let attemptsMade = attemptsMade + 1
-
-                            match result with
-                            | Ok r -> return Ok r
-                            | Error err when not (AIProviderError.isRetryable err) -> return Error err
-                            | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
-                                return
-                                    if retryPolicy.MaxAttempts = 1 then
-                                        Error err
-                                    else
-                                        Error(RetriesExhausted(attemptsMade, err))
-                            | Error _ ->
-                                let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
-                                do! Async.Sleep delay
-                                return! retryLoop attemptsMade
-                        }
-
-                        return! retryLoop 0
+                        return! RetryRunner.run retryPolicy singleAttempt
         }
 
 /// Create using a secret-store read of `OPENAI_API_KEY` on every

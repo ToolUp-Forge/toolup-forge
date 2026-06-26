@@ -34,6 +34,22 @@ let tests =
                 Expect.isNone (JsonHost.parse "[1,2,") "truncated array")
         ]
 
+        // Phase 252 — the OpenAI portable mapper Fable-compiles; assert
+        // buildRequestBody emits bytes identical to the .NET host over the
+        // shared golden fixtures (the byte-parity gate) and parseResponse
+        // reifies identical AIProviderResponse shapes.
+        testList "OpenAI wire mapping (Fable host)" [
+            testList "buildRequestBody (byte-stable golden)" [
+                for name, actual, golden in OpenAIWireFixtures.requestFixtures do
+                    testCase (sprintf "request %s" name) (fun () -> Expect.equal actual golden "request body bytes")
+            ]
+
+            testList "parseResponse (shape parity)" [
+                for name, parsed, expected in OpenAIWireFixtures.responseFixtures do
+                    testCase (sprintf "response %s" name) (fun () -> Expect.equal parsed expected "parsed response")
+            ]
+        ]
+
         // Phase 251 — the egress classifier is pure and portable; assert it
         // maps statuses identically on the Fable host (the same rule the
         // .NET TransportTests pin), proving Transport/ Fable-compiles + runs.

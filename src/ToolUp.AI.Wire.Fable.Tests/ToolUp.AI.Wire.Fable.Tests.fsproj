@@ -29,6 +29,12 @@
         <!-- The shared fixture set, compiled into BOTH host packs so the
              golden bytes are one source of truth. -->
         <Compile Include="..\ToolUp.AI.Wire.Tests\WireFixtures.fs" />
+        <!-- Phase 252 — the OpenAI portable mapper + its golden fixtures,
+             compiled here under Fable. Proves the mapper Fable-compiles and
+             that buildRequestBody emits bytes identical to the .NET host
+             over OpenAIWireFixtures.fs (the parity gate). -->
+        <Compile Include="..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
+        <Compile Include="..\ToolUp.AI.Wire.Tests\OpenAIWireFixtures.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

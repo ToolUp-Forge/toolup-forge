@@ -15,6 +15,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <!-- Phase 252 — the .NET `HttpClientTransport` (Phase 251) injected into
+         the provider's egress lives in ToolUp.AI.Server. No cycle:
+         ToolUp.AI.Server references only Platform.Core / Platform.Server /
+         AI.Core, none of which reference this companion. -->
+    <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
   </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

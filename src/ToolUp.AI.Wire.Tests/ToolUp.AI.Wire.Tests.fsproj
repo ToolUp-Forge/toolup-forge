@@ -20,6 +20,13 @@
         <Compile Include="JsonValueTests.fs" />
         <!-- Phase 251 — portable egress: error classifier + retry runner. -->
         <Compile Include="TransportTests.fs" />
+        <!-- Phase 252 — the OpenAI portable mapper compiled into this pack
+             (its own copy; no provider-package reference) + its golden
+             fixtures + tests. The Fable smoke compiles the same mapper +
+             fixtures, so a green run on each host proves byte-parity. -->
+        <Compile Include="..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
+        <Compile Include="OpenAIWireFixtures.fs" />
+        <Compile Include="OpenAIWireTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
