@@ -14,6 +14,10 @@ let allTests =
         BootDegradationTests.tests
         // Phase 159 — ConsentBanner MVU core (Platform.Client tier).
         ConsentBannerTests.tests
+        // Phase 171 — Home/Overview landing selection: prepareModules
+        // head-injection behind ClientConfig.HomeModule (Platform.Client
+        // tier; ClientConfig.defaults only resolves under Fable).
+        HomeLandingTests.tests
     ]
 
 [<EntryPoint>]

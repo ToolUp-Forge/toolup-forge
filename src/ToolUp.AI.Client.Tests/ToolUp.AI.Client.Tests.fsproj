@@ -58,6 +58,10 @@
         <!-- Phase 159 — ConsentBanner MVU core (Platform.Client tier,
              reached transitively; pure init/update/toConsentState). -->
         <Compile Include="ConsentBannerTests.fs" />
+        <!-- Phase 171 — Home/Overview landing-selection (prepareModules
+             head-injection in Platform.Client; needs ClientConfig.defaults,
+             which only resolves under Fable — see HomeLandingTests.fs). -->
+        <Compile Include="HomeLandingTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

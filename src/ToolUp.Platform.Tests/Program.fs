@@ -294,6 +294,15 @@ let allTests =
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
         BuiltInModuleSurfaceTests.tests
+        // Phase 171 — Home/Overview verification (separate `[<Tests>]`
+        // bindings that `runTestsWithCLIArgs` would otherwise leave
+        // dormant): the server-side CountObjects affordance + the
+        // GetOverview scope-correctness + ActiveAi-absence handler check.
+        // The client-tier landing-selection test lives in the Fable
+        // harness (ToolUp.AI.Client.Tests/HomeLandingTests.fs) — see the
+        // note in HomeOverviewTests.fs for why it can't run in-process.
+        HomeOverviewTests.countAffordanceTests
+        HomeOverviewTests.overviewScopeAiTests
         SurfaceCoherenceValidatorTests.tests
         CsrfPrefetchAnonymousGateTests.tests
         SubjectKindClientFlowTests.tests

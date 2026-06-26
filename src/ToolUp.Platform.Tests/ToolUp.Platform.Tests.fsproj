@@ -487,6 +487,11 @@
              declared `teamScoped` per design §3.3's "Per-endpoint
              overrides" caveat on the `PlatformApi` row. -->
         <Compile Include="InProcess\BuiltInModuleSurfaceTests.fs" />
+        <!-- Phase 171 — Home/Overview landing-surface verification:
+             count-affordance (IObjectCounter fast-path vs ListObjects
+             default), prepareModules head-injection landing selection,
+             and GetOverview scope-correctness + ActiveAi absence. -->
+        <Compile Include="InProcess\HomeOverviewTests.fs" />
         <!-- Phase 66 Stream B.8 — client identity flow keyed on
              SubjectKind. Pins the textual shape of UserSession.configure
              (now takes SubjectKind), AuthUIProvider.gate (now takes
