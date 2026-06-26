@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- Tool-manifest-installable `dotnet tool`. `dotnet tool install
+         ToolUp.Cli` then exposes the `toolup` command. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>toolup</ToolCommandName>
+    <PackageId>ToolUp.Cli</PackageId>
+    <Description>The `dotnet toolup` admin CLI for the ToolUp Platform SDK — a thin, dependency-free command host. Ships `version` and `docker emit`; further subcommands plug in additively.</Description>
+    <PackageTags>fsharp;cli;dotnet-tool;toolup;dockerfile</PackageTags>
+    <!-- A globally-installed tool may run on any patch of the pinned
+         major; roll forward so a 10.0.x host need not match exactly. -->
+    <RollForward>latestMinor</RollForward>
+  </PropertyGroup>
+
+  <!-- The four platformsdk-docker template files, embedded so the
+       `docker emit` command re-emits them with no on-disk template
+       dependency. Single source of truth stays templates/; LogicalName
+       pins the resource id readEmbedded looks up (otherwise MSBuild
+       derives an id from the `..\..` path). -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\templates\platformsdk-docker\Dockerfile.template">
+      <LogicalName>docker/Dockerfile.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-docker\dockerignore.template">
+      <LogicalName>docker/dockerignore.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-docker\compose.yml.template">
+      <LogicalName>docker/compose.yml.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-docker\healthcheck.sh">
+      <LogicalName>docker/healthcheck.sh</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Cli\Dispatch.fs" />
+    <Compile Include="Cli\Templating.fs" />
+    <Compile Include="Cli\VersionCommand.fs" />
+    <Compile Include="Cli\DockerEmitCommand.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>

@@ -28,6 +28,9 @@ let config = {
             TestPack.create
                 "RemotingAnalyzers"
                 "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj"
+            // Phase 167 — `toolup` CLI substrate (dispatch + docker-emit
+            // token substitution). Pure-BCL host; no env gating.
+            TestPack.create "Cli" "src/ToolUp.Cli.Tests/ToolUp.Cli.Tests.fsproj"
         ]
 }
 
@@ -105,5 +108,36 @@ let main args =
         else
             Trace.tracefn "No admin list to remove (already empty / no LocalFileStorage data)."
             Trace.tracefn "Path checked: %s" adminListPath)
+
+    // Phase 167 — pack the `toolup` CLI as a tool-manifest-installable
+    // `dotnet tool` into the shared local feed. The standard `Pack`
+    // target (in ToolUp.Platform.Build) already walks `src/**/*.fsproj`
+    // and picks up ToolUp.Cli too — `PackCli` is the fast single-package
+    // path for iterating on the CLI and then `dotnet tool install
+    // --add-source ../../local-nuget-feed ToolUp.Cli`.
+    //
+    // Usage: `dotnet run -- PackCli`
+    Target.create "PackCli" (fun _ ->
+        let dotnet args dir =
+            CreateProcess.fromRawCommand "dotnet" args
+            |> CreateProcess.withWorkingDirectory dir
+            |> CreateProcess.ensureExitCode
+
+        let outputDir = Path.getFullName "../../local-nuget-feed"
+        Directory.ensure outputDir
+
+        dotnet
+            [
+                "pack"
+                "src/ToolUp.Cli/ToolUp.Cli.fsproj"
+                "-c"
+                "Release"
+                "-o"
+                outputDir
+                "--nologo"
+            ]
+            "."
+        |> Proc.run
+        |> ignore)
 
     execute args

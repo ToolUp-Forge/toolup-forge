@@ -91,7 +91,19 @@ The companion is purely additive — there is nothing to revert in your SDK comp
 ## Caveats
 
 - **`WorkerOnly` + multi-replica.** Phase 9i (`IDistributedLock`) is unshipped; a `WorkerOnly` (or `DispatcherOnly`) silo with `ReplicaCount > 1` duplicate-fires scheduler ticks. Pin `ReplicaCount = 1` on those silos. Web silos scale freely.
-- **CLI command `dotnet toolup docker emit` deferred.** Phase 16b's task list includes a `toolup-admin` CLI command for re-emitting a customised Dockerfile after changing the deployment's companion set. The CLI substrate (`toolup-admin`) is unshipped today; the command lands in a follow-up phase once the CLI is in place. Until then, re-emit via `dotnet new platformsdk-docker --force` (which overwrites at the solution root).
+- **CLI command `dotnet toolup docker emit` shipped (Phase 167).** Re-emit a customised Dockerfile + the other three artefacts after changing the deployment's companion set with the `toolup` CLI tool (`src/ToolUp.Cli`, packaged as the `ToolUp.Cli` `dotnet tool`):
+
+  ```bash
+  dotnet tool install ToolUp.Cli      # or --global
+  toolup docker emit \
+      --server-project MyApp-Server \
+      --server-dll MyApp-Server \
+      --image-name myapp \
+      --host-port 8080 \
+      --force                          # overwrite the existing artefacts
+  ```
+
+  The CLI embeds the same four `platformsdk-docker` template files, so the output is identical to the template's. The interim `dotnet new platformsdk-docker --force` path still works for consumers that have not installed the tool.
 - **No image signing / SBOM step.** The Dockerfile produces an OCI image; signing (cosign / Notary v2) and SBOM generation (`syft`, `dotnet sbom-tool`) are consumer responsibilities. Long-term forge phase.
 - **Streaming.** SSE works through the standard Kestrel-on-Docker stack with no special config — pass-through behaviour, unlike `ToolUp.Hosts.AwsLambda` where buffered-response is the default and streaming is a separate code path.
 
