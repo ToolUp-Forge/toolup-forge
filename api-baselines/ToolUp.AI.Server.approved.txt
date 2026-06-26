@@ -319,3 +319,6 @@ ToolUp.AI.UIDecodeErrorHandler+UIDecodeErrorReport.DecoderError : System.String 
 ToolUp.AI.UIDecodeErrorHandler+UIDecodeErrorReport.FieldName : System.String { get }
 ToolUp.AI.UIDecodeErrorHandler+UIDecodeErrorReport.ModuleId : System.String { get }
 ToolUp.AI.UIDecodeErrorHandler+UIDecodeErrorReport.RawPayload : System.String { get }
+ToolUp.Platform.AI.HttpClientTransport (class)
+ToolUp.Platform.AI.HttpClientTransport..ctor(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.AI.HttpClientTransport.SendForStreaming(ToolUp.Platform.AI.HttpRequest, System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[System.Net.Http.HttpResponseMessage]

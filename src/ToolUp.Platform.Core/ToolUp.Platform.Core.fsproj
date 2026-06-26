@@ -88,10 +88,16 @@
         <Compile Include="Shared\Interfaces\ISecretStore.fs" />
         <!-- Phase 11.C.5 Tier 3 — unified RetryPolicy (replaces the
              AI-side `{ MaxRetries; BackoffMs; TimeoutMs }` and
-             audit-side `AuditReplicatorRetryPolicy` shapes). Compiled
-             before IAIProvider.fs so the provider interface references
-             the unified record. -->
-        <Compile Include="Shared\Types\RetryPolicy.fs" />
+             audit-side `AuditReplicatorRetryPolicy` shapes). Phase 251
+             relocated it DOWN into the Fable-safe ToolUp.AI.Wire tier
+             (Transport/RetryPolicy.fs) under the unchanged
+             `namespace ToolUp.Platform`, so the portable retry runner +
+             error classifier can reference it without a circular dep on
+             Core. Every Core file (IAIProvider.fs and below) still sees
+             `ToolUp.Platform.RetryPolicy` via the ToolUp.AI.Wire project
+             reference — the namespace is preserved, only the assembly
+             changed (GP 11; same byte-stable relocation pattern Phase 250
+             used for the connector contract value types). -->
         <Compile Include="Shared\Interfaces\IAIProvider.fs" />
         <Compile Include="Shared\Types\StorageScope.fs" />
         <Compile Include="Shared\EncryptionTypes.fs" />

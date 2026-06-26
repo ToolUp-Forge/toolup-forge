@@ -24,6 +24,10 @@
         <None Include="..\ToolUp.AI\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Phase 251 — the .NET HttpClient transport implementing the
+             portable ToolUp.AI.Wire IHttpTransport seam. No deps on other
+             AI.Server files; placed first. -->
+        <Compile Include="Server\HttpClientTransport.fs" />
         <Compile Include="Server\SystemPromptBuilder.fs" />
         <Compile Include="Server\ToolContext.fs" />
         <Compile Include="Server\ToolHelpers.fs" />

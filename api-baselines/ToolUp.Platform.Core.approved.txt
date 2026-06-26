@@ -4716,20 +4716,6 @@ ToolUp.Platform.ResultStoreMode+Tags (class)
 ToolUp.Platform.ResultStoreMode+Tags.InMemoryResultStore : System.Int32 (literal)
 ToolUp.Platform.ResultStoreMode+Tags.NoResultStore : System.Int32 (literal)
 ToolUp.Platform.ResultStoreMode+Tags.PersistentResultStore : System.Int32 (literal)
-ToolUp.Platform.RetryPolicy (class)
-ToolUp.Platform.RetryPolicy..ctor(System.Int32, System.TimeSpan, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.Platform.RetryPolicy.InitialBackoff : System.TimeSpan { get }
-ToolUp.Platform.RetryPolicy.MaxAttempts : System.Int32 { get }
-ToolUp.Platform.RetryPolicy.MaxBackoff : System.TimeSpan { get }
-ToolUp.Platform.RetryPolicy.Timeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
-ToolUp.Platform.RetryPolicyModule (class)
-ToolUp.Platform.RetryPolicyModule.MaxTimeoutMs : System.Int32 (literal)
-ToolUp.Platform.RetryPolicyModule.MinTimeoutMs : System.Int32 (literal)
-ToolUp.Platform.RetryPolicyModule.clampTimeoutMs(System.Int32) : System.Int32
-ToolUp.Platform.RetryPolicyModule.defaults : ToolUp.Platform.RetryPolicy { get }
-ToolUp.Platform.RetryPolicyModule.delayFor(ToolUp.Platform.RetryPolicy, System.Int32) : System.TimeSpan
-ToolUp.Platform.RetryPolicyModule.noRetry : ToolUp.Platform.RetryPolicy { get }
-ToolUp.Platform.RetryPolicyModule.timeoutDescription(ToolUp.Platform.RetryPolicy) : System.String
 ToolUp.Platform.RouteLimit (class)
 ToolUp.Platform.RouteLimit..ctor(System.String, ToolUp.Platform.RateLimitKeyKind, ToolUp.Platform.RateLimitWindow, System.Int32, ToolUp.Platform.RateLimitOnExceeded)
 ToolUp.Platform.RouteLimit.Key : ToolUp.Platform.RateLimitKeyKind { get }

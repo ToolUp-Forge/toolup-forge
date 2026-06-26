@@ -147,6 +147,26 @@ ToolUp.Platform.AI.AIProviderToolResult (class)
 ToolUp.Platform.AI.AIProviderToolResult..ctor(System.String, System.String)
 ToolUp.Platform.AI.AIProviderToolResult.Content : System.String { get }
 ToolUp.Platform.AI.AIProviderToolResult.ToolCallId : System.String { get }
+ToolUp.Platform.AI.ErrorClassifier (class)
+ToolUp.Platform.AI.ErrorClassifier.classifyStatus(System.Int32, System.String) : ToolUp.Platform.AI.AIProviderError
+ToolUp.Platform.AI.ErrorClassifier.classifyTransportFailure(System.String) : ToolUp.Platform.AI.AIProviderError
+ToolUp.Platform.AI.HttpRequest (class)
+ToolUp.Platform.AI.HttpRequest..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.AI.HttpRequest.Body : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AI.HttpRequest.Headers : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.AI.HttpRequest.Method : System.String { get }
+ToolUp.Platform.AI.HttpRequest.Url : System.String { get }
+ToolUp.Platform.AI.HttpRequestModule (class)
+ToolUp.Platform.AI.HttpRequestModule.post(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String) : ToolUp.Platform.AI.HttpRequest
+ToolUp.Platform.AI.HttpResponse (class)
+ToolUp.Platform.AI.HttpResponse..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String)
+ToolUp.Platform.AI.HttpResponse.Body : System.String { get }
+ToolUp.Platform.AI.HttpResponse.Headers : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.AI.HttpResponse.StatusCode : System.Int32 { get }
+ToolUp.Platform.AI.HttpResponseModule (class)
+ToolUp.Platform.AI.HttpResponseModule.isSuccess(ToolUp.Platform.AI.HttpResponse) : System.Boolean
+ToolUp.Platform.AI.IHttpTransport (interface)
+ToolUp.Platform.AI.IHttpTransport.Send(ToolUp.Platform.AI.HttpRequest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AI.HttpResponse]
 ToolUp.Platform.AI.ImagePayload (class)
 ToolUp.Platform.AI.ImagePayload..ctor(System.String, ToolUp.Platform.AI.ImageSource)
 ToolUp.Platform.AI.ImagePayload.MediaType : System.String { get }
@@ -162,9 +182,25 @@ ToolUp.Platform.AI.ImageSource+Tags.Base64Bytes : System.Int32 (literal)
 ToolUp.Platform.AI.ImageSource+Tags.Url : System.Int32 (literal)
 ToolUp.Platform.AI.ImageSource+Url (class)
 ToolUp.Platform.AI.ImageSource+Url.Item : System.String { get }
+ToolUp.Platform.AI.RetryRunner (class)
+ToolUp.Platform.AI.RetryRunner.run`1(ToolUp.Platform.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]
 ToolUp.Platform.AI.TokenUsage (class)
 ToolUp.Platform.AI.TokenUsage..ctor(System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.AI.TokenUsage.CacheCreationTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.AI.TokenUsage.CachedPromptTokens : System.Int32 { get }
 ToolUp.Platform.AI.TokenUsage.OutputTokens : System.Int32 { get }
 ToolUp.Platform.AI.TokenUsage.PromptTokens : System.Int32 { get }
+ToolUp.Platform.RetryPolicy (class)
+ToolUp.Platform.RetryPolicy..ctor(System.Int32, System.TimeSpan, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.RetryPolicy.InitialBackoff : System.TimeSpan { get }
+ToolUp.Platform.RetryPolicy.MaxAttempts : System.Int32 { get }
+ToolUp.Platform.RetryPolicy.MaxBackoff : System.TimeSpan { get }
+ToolUp.Platform.RetryPolicy.Timeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.Platform.RetryPolicyModule (class)
+ToolUp.Platform.RetryPolicyModule.MaxTimeoutMs : System.Int32 (literal)
+ToolUp.Platform.RetryPolicyModule.MinTimeoutMs : System.Int32 (literal)
+ToolUp.Platform.RetryPolicyModule.clampTimeoutMs(System.Int32) : System.Int32
+ToolUp.Platform.RetryPolicyModule.defaults : ToolUp.Platform.RetryPolicy { get }
+ToolUp.Platform.RetryPolicyModule.delayFor(ToolUp.Platform.RetryPolicy, System.Int32) : System.TimeSpan
+ToolUp.Platform.RetryPolicyModule.noRetry : ToolUp.Platform.RetryPolicy { get }
+ToolUp.Platform.RetryPolicyModule.timeoutDescription(ToolUp.Platform.RetryPolicy) : System.String

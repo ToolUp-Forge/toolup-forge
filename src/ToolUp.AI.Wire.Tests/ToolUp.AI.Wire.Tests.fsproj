@@ -18,6 +18,8 @@
     <ItemGroup>
         <Compile Include="WireFixtures.fs" />
         <Compile Include="JsonValueTests.fs" />
+        <!-- Phase 251 — portable egress: error classifier + retry runner. -->
+        <Compile Include="TransportTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

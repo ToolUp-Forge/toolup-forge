@@ -24,6 +24,20 @@
              Depends only on FSharp.Core (+ Fable-supported System.Uri); does
              not consume JsonValue, so order is independent. -->
         <Compile Include="Contract.fs" />
+        <!-- Phase 251 — the portable egress seam. RetryPolicy relocated
+             from ToolUp.Platform.Core (namespace ToolUp.Platform preserved);
+             IHttpTransport + the pure error classifier + the pure retry
+             runner factor the HTTP egress out of the per-provider mappers so
+             they can stay 100% pure (the host injects how bytes travel).
+             FSharp.Core + Fable-supported System.TimeSpan only — no
+             System.Net.Http (that lives in the server-side HttpClientTransport
+             companion). RetryRunner depends on both RetryPolicy (delayFor /
+             MaxAttempts) and Contract (AIProviderError / RetriesExhausted), so
+             it is compiled last. -->
+        <Compile Include="Transport\RetryPolicy.fs" />
+        <Compile Include="Transport\IHttpTransport.fs" />
+        <Compile Include="Transport\ErrorClassifier.fs" />
+        <Compile Include="Transport\RetryRunner.fs" />
     </ItemGroup>
     <ItemGroup>
         <!-- Fable.Core supplies the [<Emit>] / JsInterop surface the
