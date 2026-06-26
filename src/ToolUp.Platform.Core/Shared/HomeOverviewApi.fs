@@ -80,6 +80,15 @@ type HomeOverview = {
     Deployment: DeploymentContext
     /// UTC timestamp the snapshot was assembled.
     GeneratedAt: DateTime
+    /// Phase 217 — scope-correct data bag for module-contributed Home
+    /// widgets, populated by the optional `IHomeWidgetDataProvider` DI
+    /// seam. A contributed widget reads its values from here (via
+    /// `HomeWidgetContext.Data`) rather than issuing a second round
+    /// trip. Empty (`Map.empty`) when no provider is composed — the
+    /// default — so the overview is byte-for-byte the Phase 171 shape
+    /// for a deployment with no widget contributors (GP 13). Keys are
+    /// contributor-namespaced (e.g. `"my-widget.total"`).
+    WidgetData: Map<string, string>
 }
 
 /// Fable.Remoting surface for the Home/Overview landing module.

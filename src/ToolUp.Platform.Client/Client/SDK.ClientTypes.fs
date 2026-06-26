@@ -699,6 +699,62 @@ type HomeModuleMode =
     /// landing surface).
     | ExternalHomeModule of ErasedModule
 
+// ─── Module-contributed home widgets (Phase 217) ─────────────────
+//
+// A module can surface a custom widget (a chart, a recents list, a
+// call-to-action) on the Home / Overview landing surface (Phase 171)
+// without `Platform.Client` ever naming it (GP 9). It exports an
+// `IHomeWidgetContributor` value; the consumer adds it to
+// `ClientConfig.Handlers.HomeWidgetContributors`. The built-in `Home`
+// module collects every contributor's widgets, sorts by `Weight`, and
+// renders them below the built-in tool / Active-AI / deployment cards.
+// Click-through reuses `NavigationRequest.request` (Phase 6g.C) — a
+// widget body calls it directly, so no new navigation primitive.
+//
+// Default-off by absence (GP 13): no contributor ⇒ Home renders
+// byte-for-byte as Phase 171.
+
+/// Render context handed to a contributed widget's body. Carries the
+/// server-composed, scope-correct data bag a widget may need
+/// (`HomeOverview.WidgetData`, populated by the optional
+/// `IHomeWidgetDataProvider` DI seam — Phase 217). Empty unless a
+/// provider populated it; a widget that needs no server data ignores
+/// it. Contributors namespace their keys (e.g. `"my-widget.total"`)
+/// since the bag is shared across every widget.
+type HomeWidgetContext = { Data: Map<string, string> }
+
+/// One module-contributed Home widget. The body is a function of the
+/// render context so a data-driven widget reads its scope-correct
+/// values from `ctx.Data`; a static widget ignores the argument.
+type HomeWidget = {
+    /// Stable widget id — used as the React key and as the namespace
+    /// prefix convention for `HomeWidgetContext.Data` keys. Unique
+    /// across all contributors (duplicates are surfaced at
+    /// `Client.run`).
+    Id: string
+    /// Human-readable widget heading.
+    Title: string
+    /// Leading icon rendered beside the title.
+    Icon: ReactElement
+    /// Sort key — widgets render in ascending `Weight` order; ties
+    /// fall back to registration order (stable sort).
+    Weight: int
+    /// Widget content. Receives the scope-correct render context.
+    Body: HomeWidgetContext -> ReactElement
+}
+
+/// Client-side erased-module seam (GP 9). A module exports a value of
+/// this type declaring the widgets it contributes to Home; the SDK
+/// never names the contributing module. Mirrors the value-handler
+/// registration pattern used for auth / data-source UIs — consumers
+/// add contributors to `ClientConfig.Handlers.HomeWidgetContributors`
+/// at compose time (no module-load side effects).
+type IHomeWidgetContributor =
+    /// The widgets this contributor surfaces on Home. Called once at
+    /// boot; the result is flattened across contributors, sorted by
+    /// `Weight`, and cached.
+    abstract Widgets: unit -> HomeWidget list
+
 /// Branding for the data-ingestion admin module (Phase 10b). Auto-
 /// injected in any non-Anonymous mode unless `NoDataIngestionAdmin`.
 type DataIngestionAdminConfig = { Name: string; Icon: ReactElement }
@@ -910,6 +966,13 @@ type ClientHandlerRegistry = {
     /// surface a "credential UI not registered" placeholder).
     DataSourceCredentialHandlers: (string * DataSourceCredentialHandler) list
 
+    /// Phase 217 — module-contributed Home widgets. Each contributor
+    /// declares the widgets it surfaces on the built-in Home / Overview
+    /// landing module; the SDK never names a contributing module (GP 9).
+    /// Default: empty — no contributor ⇒ Home renders byte-for-byte as
+    /// Phase 171 (GP 13).
+    HomeWidgetContributors: IHomeWidgetContributor list
+
     /// "Save to Knowledge Base" broker. `Some` when the
     /// KnowledgeBase companion is wired in. `NarrativeRenderer`
     /// reads this to decide whether to show the Save-to-KB button.
@@ -940,6 +1003,7 @@ module ClientHandlerRegistry =
     let empty: ClientHandlerRegistry = {
         AuthUIHandlers = []
         DataSourceCredentialHandlers = []
+        HomeWidgetContributors = []
         NarrativeCommitHandler = None
         SignOutHandler = None
     }

@@ -199,6 +199,9 @@
         <Compile Include="Client\PlatformAdminUI.fs" />
         <Compile Include="Client\PermissionsAdminUI.fs" />
         <Compile Include="Client\UsageDashboard.fs" />
+        <!-- Phase 217 — module-contributed Home-widget registry (read by
+             Home.fs; populated at boot by SDK.Client.program). -->
+        <Compile Include="Client\HomeWidget.fs" />
         <!-- Phase 171 — Home / Overview landing module. -->
         <Compile Include="Client\Home.fs" />
         <!-- Parameterized SDK built-in no-active-team landing module. -->

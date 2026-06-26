@@ -18,6 +18,10 @@ let allTests =
         // head-injection behind ClientConfig.HomeModule (Platform.Client
         // tier; ClientConfig.defaults only resolves under Fable).
         HomeLandingTests.tests
+        // Phase 217 — module-contributed Home-widget seam: the
+        // HomeWidgetRegistry contract (flatten + weight-sort) in
+        // Platform.Client.
+        HomeWidgetContributorTests.tests
     ]
 
 [<EntryPoint>]

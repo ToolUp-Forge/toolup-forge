@@ -2892,6 +2892,19 @@ module Client =
                 "ClientConfig.Handlers.DataSourceCredentialHandlers contains duplicate Kind(s): %A. Each Kind must be unique."
                 credDupes
 
+        // Phase 217 — module-contributed Home-widget ids must be unique
+        // across every contributor (the id is the React key + the
+        // namespace prefix for `HomeWidgetContext.Data`).
+        let widgetIdDupes =
+            config.Handlers.HomeWidgetContributors
+            |> List.collect (fun c -> c.Widgets() |> List.map (fun w -> (w.Id, ())))
+            |> dupes
+
+        if not (List.isEmpty widgetIdDupes) then
+            failwithf
+                "ClientConfig.Handlers.HomeWidgetContributors contributes duplicate widget id(s): %A. Each HomeWidget.Id must be unique across all contributors."
+                widgetIdDupes
+
     /// Fail-loud check on header-provider collisions; one-time
     /// `console.warn` on names outside the reserved `X-ToolUp-*`
     /// prefix.
@@ -3160,6 +3173,8 @@ module Client =
         // effects).
         AuthUIProvider.setHandlers config.Handlers.AuthUIHandlers
         DataSourceCredentialUIRegistry.setHandlers config.Handlers.DataSourceCredentialHandlers
+        // Phase 217 — collect module-contributed Home widgets once.
+        HomeWidgetRegistry.setContributors config.Handlers.HomeWidgetContributors
         Toolup.NarrativeCommit.setHandler config.Handlers.NarrativeCommitHandler
 
         // Phase 13a — validate explicit composition against declared

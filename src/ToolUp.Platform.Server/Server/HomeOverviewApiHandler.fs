@@ -150,6 +150,10 @@ let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
                         Health = health
                     }
                     GeneratedAt = DateTime.UtcNow
+                    // Phase 217 — populated by the optional
+                    // `IHomeWidgetDataProvider` DI seam; empty (the
+                    // default) when no provider is composed (GP 13).
+                    WidgetData = Map.empty
                 }
             }
     }

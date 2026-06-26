@@ -181,6 +181,42 @@ let private ToolsGrid (tools: ToolSummary list) =
         prop.children (augmented |> List.map renderToolCard)
     ]
 
+/// One module-contributed widget (Phase 217). A titled card whose body
+/// is the contributor's own `ReactElement`, rendered with the
+/// scope-correct `HomeWidgetContext` built from the overview's
+/// `WidgetData` bag. Click-through is the widget's own concern — its
+/// body calls `NavigationRequest.request` directly (no new primitive).
+let private renderWidget (ctx: HomeWidgetContext) (widget: HomeWidget) =
+    Html.div [
+        prop.key widget.Id
+        prop.className "p-4 bg-white border border-gray-200 rounded-lg"
+        prop.children [
+            Html.div [
+                prop.className "flex items-center gap-2 mb-2"
+                prop.children [
+                    Html.span [ prop.className "text-gray-500"; prop.children [ widget.Icon ] ]
+                    Html.span [ prop.className "text-sm font-semibold text-gray-800"; prop.text widget.Title ]
+                ]
+            ]
+            widget.Body ctx
+        ]
+    ]
+
+/// The module-contributed widget section. Renders nothing when no
+/// contributor is wired in, so Home is byte-for-byte the Phase 171
+/// surface (GP 13). Widgets arrive pre-sorted by `Weight` from the
+/// registry.
+let private renderContributedWidgets (ov: HomeOverview) =
+    match HomeWidgetRegistry.widgets () with
+    | [] -> Html.none
+    | widgets ->
+        let ctx: HomeWidgetContext = { Data = ov.WidgetData }
+
+        Html.div [
+            prop.className "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            prop.children (widgets |> List.map (renderWidget ctx))
+        ]
+
 let private renderOverview (ov: HomeOverview) =
     Html.div [
         prop.className "space-y-6"
@@ -214,6 +250,11 @@ let private renderOverview (ov: HomeOverview) =
                         ToolsGrid ov.Tools
                 ]
             ]
+
+            // Phase 217 — module-contributed widgets, below the
+            // built-in cards. `Html.none` when no contributor is wired
+            // in, so the render is identical to Phase 171 (GP 13).
+            renderContributedWidgets ov
         ]
     ]
 
