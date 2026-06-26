@@ -1,0 +1,12 @@
+{
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=20 || >=22 || >=24 || >=25"
+    },
+    "scripts": {
+        "test": "node --test output/ProgramFable.js"
+    },
+    "//1": "Zero deps. ToolUp.AI.Wire + the three provider mappers pull in no React / ag-grid / browser imports, so the Fable output imports only the bundled fable-library — nothing to npm install. The runner is Node's built-in node:test (stable in Node 20+).",
+    "//2": "The Fable-side facade is NodeTest.fs; its signatures mirror Expecto so the shared ConformanceSuite.fs compiles against either host."
+}

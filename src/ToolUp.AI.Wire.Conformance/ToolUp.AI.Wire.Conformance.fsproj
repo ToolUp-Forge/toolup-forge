@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.AI.Wire.Conformance (.NET host) — the convergence gate that
+    closes Wave 32 (Phase 255). It consolidates the three per-provider wire
+    smokes (seeded by Phases 252 / 253 / 254) into ONE dual-run conformance
+    pack: the portable ToolUp.AI.Wire layer + all three provider mappers,
+    asserted to produce byte-identical request JSON and an identical parsed
+    AIProviderResponse across the .NET and Fable backends.
+
+    This .fsproj is the .NET (Expecto) host. The sibling Fable/ subfolder
+    transpiles the SAME shared suite (Corpus.fs + ConformanceSuite.fs) via
+    Fable and runs it under node:test. A green run on EACH host is the
+    byte-parity / structural-parity gate (GP 12) — see PORTABILITY.md.
+
+    Expecto console runner: run via `dotnet run`. Do NOT `dotnet test`
+    (exits 0 having run nothing). IsPackable=false; ships nothing.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The three portable provider mappers (their own copies; they
+             depend only on ToolUp.AI.Wire) + their shared golden fixtures.
+             The Fable runner compiles the identical source set, so a green
+             run on each host proves byte-parity. The golden DATA lives in
+             ToolUp.AI.Wire.Tests (one source of truth) — source-linked here,
+             not duplicated. -->
+        <Compile Include="..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
+        <Compile Include="..\ToolUp.AI.Wire.Tests\OpenAIWireFixtures.fs" />
+        <Compile Include="..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />
+        <Compile Include="..\ToolUp.AI.Wire.Tests\GeminiWireFixtures.fs" />
+        <Compile Include="..\AIProviders\Claude\ClaudeAIProvider.Wire.fs" />
+        <Compile Include="..\ToolUp.AI.Wire.Tests\ClaudeWireFixtures.fs" />
+        <!-- The consolidated corpus + the ONE shared dual-run harness. Kept
+             in Shared/ (a subdir, not the project root) so the Fable host can
+             reference them as `..\Shared\*.fs` — a same-or-deeper relative
+             path that Fable keeps under its `output/` dir. An immediate-parent
+             `..\*.fs` reference instead rebases the transpiled .js ABOVE
+             output/ into the tracked project dir (a stray-artifact trap). -->
+        <Compile Include="Shared\Corpus.fs" />
+        <Compile Include="Shared\ConformanceSuite.fs" />
+        <Compile Include="ProgramNet.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

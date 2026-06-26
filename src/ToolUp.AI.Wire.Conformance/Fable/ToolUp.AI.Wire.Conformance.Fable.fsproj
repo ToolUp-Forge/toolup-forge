@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.AI.Wire.Conformance.Fable — the Fable (browser) host of the
+    Wave 32 conformance pack (Phase 255). It transpiles via Fable and runs
+    the SAME shared suite (..\Corpus.fs + ..\ConformanceSuite.fs) the .NET
+    Expecto host runs, under Node's built-in test runner (node:test). A
+    green run on BOTH hosts is the byte-parity / structural-parity gate —
+    proving a browser host reuses forge's exact connector mappings. See
+    ..\PORTABILITY.md.
+
+    Lives in this subfolder (not alongside the .NET .fsproj) so the two
+    projects don't share an obj/ + bin/. Zero npm deps: ToolUp.AI.Wire pulls
+    in no React / ag-grid / browser imports, so the Fable output imports only
+    the bundled fable-library and the runner is Node's built-in node:test.
+
+    CONFORMANCE_NODE makes ..\ConformanceSuite.fs open the node:test facade
+    even under a plain `dotnet build` (which doesn't define FABLE_COMPILER),
+    so this project never needs an Expecto reference: `dotnet build
+    ToolUp.Forge.sln` compiles it cleanly while `dotnet fable` runs it.
+
+    Run procedure (from this directory): `dotnet tool restore`, then
+    `dotnet fable -o output` (no-cache), then run node:test against
+    `output/ProgramFable.js` (the README + PORTABILITY.md give the exact
+    invocation). IsPackable=false; ships nothing. Nullable disabled.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <DefineConstants>CONFORMANCE_NODE</DefineConstants>
+        <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The node:test facade — its signatures mirror Expecto so the
+             shared suite compiles unchanged against it. -->
+        <Compile Include="NodeTest.fs" />
+        <!-- The same provider mappers + golden fixtures the .NET host
+             compiles (one source of truth in ToolUp.AI.Wire.Tests). -->
+        <Compile Include="..\..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
+        <Compile Include="..\..\ToolUp.AI.Wire.Tests\OpenAIWireFixtures.fs" />
+        <Compile Include="..\..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />
+        <Compile Include="..\..\ToolUp.AI.Wire.Tests\GeminiWireFixtures.fs" />
+        <Compile Include="..\..\AIProviders\Claude\ClaudeAIProvider.Wire.fs" />
+        <Compile Include="..\..\ToolUp.AI.Wire.Tests\ClaudeWireFixtures.fs" />
+        <!-- The consolidated corpus + the ONE shared dual-run harness,
+             source-linked from ..\Shared\ so both hosts run identical
+             assertion logic. Referenced via ..\Shared\ (NOT ..\) so Fable
+             keeps the transpiled .js under output/ — an immediate-parent
+             ..\*.fs reference rebases the .js above output/ into the tracked
+             tree (a stray-artifact trap). -->
+        <Compile Include="..\Shared\Corpus.fs" />
+        <Compile Include="..\Shared\ConformanceSuite.fs" />
+        <Compile Include="ProgramFable.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Fable.Core" />
+    </ItemGroup>
+</Project>
