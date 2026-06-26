@@ -246,5 +246,18 @@
         <Compile Include="Shared\Remoting\MsgPack\Write.fs" />
         <Compile Include="Shared\Remoting\MsgPack\Read.fs" />
     </ItemGroup>
+    <!-- Phase 250 — the connector contract value types (AIProviderMessage,
+         AIProviderError, AIContentPart, …) relocated to the Fable-safe
+         ToolUp.AI.Wire tier under the unchanged ToolUp.Platform.AI namespace.
+         IAIProvider.fs (the interface, which references the server-tier
+         RetryPolicy) stays in Core and resolves those types via this
+         reference; the de-guarded structured-output fallback routes through
+         ToolUp.AI.Wire.JsonHost.parse. ToolUp.AI.Wire is FSharp.Core +
+         Fable.Core only, so it preserves Core's "minimum viable consumer
+         floor" with no server/client dependency, and ships its source under
+         fable/ alongside Core's. -->
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+    </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

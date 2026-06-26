@@ -20,6 +20,15 @@ browser host without re-deriving the translation.
   canonical writer, identical on every host) and `JsonHost.parse` (bridged
   to the browser's `JSON.parse` under Fable, to `System.Text.Json`
   otherwise), returning `JsonValue option`.
+- **The connector contract** (`Contract.fs`, namespace `ToolUp.Platform.AI`)
+  — the portable `IAIProvider` value types a browser host can reference
+  directly: `AIProviderMessage` / `AIProviderToolCall` /
+  `AIProviderToolResult` / `AIProviderToolDef` / `AIProviderResponse` /
+  `TokenUsage` / `AIProviderCapabilities` / `AIProviderError` /
+  `AIContentPart` (+ `ImageSource` / `ImagePayload`) and their companion
+  modules. They keep the `ToolUp.Platform.AI` namespace so a `ToolUp.Platform`
+  consumer sees them unchanged; the `IAIProvider` interface itself stays in
+  `ToolUp.Platform.Core` (it references the server-tier `RetryPolicy`).
 
 ## Example
 

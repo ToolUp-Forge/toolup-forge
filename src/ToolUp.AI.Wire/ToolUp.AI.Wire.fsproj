@@ -18,12 +18,23 @@
     <ItemGroup>
         <Compile Include="JsonValue.fs" />
         <Compile Include="JsonHost.fs" />
+        <!-- Phase 250 — the portable connector contract value types
+             (relocated from ToolUp.Platform.Core's IAIProvider.fs, namespace
+             ToolUp.Platform.AI preserved so consumers see no change).
+             Depends only on FSharp.Core (+ Fable-supported System.Uri); does
+             not consume JsonValue, so order is independent. -->
+        <Compile Include="Contract.fs" />
     </ItemGroup>
     <ItemGroup>
         <!-- Fable.Core supplies the [<Emit>] / JsInterop surface the
              #if FABLE_COMPILER parse bridge in JsonHost.fs needs. On the
-             .NET host it adds no runtime behaviour. FSharp.Core is implicit
-             via the .NET SDK. -->
+             .NET host it adds no runtime behaviour. -->
         <PackageReference Include="Fable.Core" />
+        <!-- Phase 250 — pin the managed FSharp.Core (10.1.300 via CPM)
+             explicitly. Contract.fs uses string interpolation
+             (AIProviderError.toMessage), which needs FSharp.Core 5.0+; left
+             implicit, the project resolved the compiler's older bundled copy
+             and FS3349 fired. Mirrors ToolUp.AI.Wire.Fable.Tests. -->
+        <PackageReference Include="FSharp.Core" />
     </ItemGroup>
 </Project>
