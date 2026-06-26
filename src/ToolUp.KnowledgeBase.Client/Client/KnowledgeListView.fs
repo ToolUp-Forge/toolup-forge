@@ -142,6 +142,29 @@ type DateRange =
     | Last90Days
     | OlderThan90Days
 
+/// Coarse size buckets — a filter axis over `SizeBytes`, mirroring the
+/// `DateRange` dropdown rather than asking the user to type byte counts.
+type SizeRange =
+    | AllSizes
+    | UnderOneMb
+    | OneToTenMb
+    | OverTenMb
+
+/// Which column the table is ordered by. Default is `SortByAdded` /
+/// `Descending`, preserving the historical newest-first ordering.
+type SortKey =
+    | SortByName
+    | SortByType
+    | SortBySource
+    | SortByUploader
+    | SortBySize
+    | SortByAdded
+    | SortByStatus
+
+type SortDir =
+    | Ascending
+    | Descending
+
 /// Source-kind key used for both the filter chip and the group section
 /// header. Narratives are bucketed per ModuleId so a team with N modules
 /// surfaces N narrative buckets, not one undifferentiated "Narrative".
@@ -172,6 +195,26 @@ let private dateRangeContains (range: DateRange) (uploadedAt: DateTimeOffset) =
     | Last30Days -> days <= 30.0
     | Last90Days -> days <= 90.0
     | OlderThan90Days -> days > 90.0
+
+let private oneMb = 1024L * 1024L
+
+let private sizeRangeContains (range: SizeRange) (bytes: int64) =
+    match range with
+    | AllSizes -> true
+    | UnderOneMb -> bytes < oneMb
+    | OneToTenMb -> bytes >= oneMb && bytes <= 10L * oneMb
+    | OverTenMb -> bytes > 10L * oneMb
+
+/// Human-readable byte count for the Size column (B / KB / MB / GB).
+let private formatSize (bytes: int64) =
+    if bytes < 1024L then
+        sprintf "%d B" bytes
+    elif bytes < oneMb then
+        sprintf "%.0f KB" (float bytes / 1024.0)
+    elif bytes < 1024L * oneMb then
+        sprintf "%.1f MB" (float bytes / float oneMb)
+    else
+        sprintf "%.1f GB" (float bytes / float (1024L * oneMb))
 
 // ─── Chip helpers ──────────────────────────────────────────────────
 
@@ -233,7 +276,10 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
     let statusFilter, setStatusFilter = React.useState (Set.empty: Set<string>)
     let uploaderFilter, setUploaderFilter = React.useState (Set.empty: Set<string>)
     let dateRange, setDateRange = React.useState AllDates
+    let sizeRange, setSizeRange = React.useState AllSizes
     let groupBy, setGroupBy = React.useState NoGrouping
+    let sortKey, setSortKey = React.useState SortByAdded
+    let sortDir, setSortDir = React.useState Descending
 
     if documents.IsEmpty then
         Html.div [
@@ -261,11 +307,18 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
         let availableUploaders =
             documents |> List.map _.UploadedBy |> List.distinct |> List.sort
 
+        // Searches file name, uploader, and source kind (e.g. "Narrative ·
+        // Forecasts") — not just the file name, so "uploaded by Sam" or a
+        // module name finds documents too. Content-body search would need a
+        // server-side index and is out of this component's scope.
         let matchesSearch (doc: KnowledgeDocument) =
             if String.IsNullOrWhiteSpace search then
                 true
             else
-                doc.FileName.ToLowerInvariant().Contains(search.Trim().ToLowerInvariant())
+                let needle = search.Trim().ToLowerInvariant()
+
+                [ doc.FileName; doc.UploadedBy; sourceKindKey doc.Source ]
+                |> List.exists (fun field -> field.ToLowerInvariant().Contains needle)
 
         let matchesFileType (doc: KnowledgeDocument) =
             fileTypeFilter.IsEmpty || fileTypeFilter.Contains doc.FileType
@@ -279,6 +332,24 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
         let matchesUploader (doc: KnowledgeDocument) =
             uploaderFilter.IsEmpty || uploaderFilter.Contains doc.UploadedBy
 
+        // Sort ascending on the chosen key, then reverse for descending. The
+        // key types differ per column, so each arm sorts in its own type;
+        // `List.rev` flips direction uniformly without a polymorphic key.
+        let sortDocuments (docs: KnowledgeDocument list) =
+            let ascending =
+                match sortKey with
+                | SortByName -> docs |> List.sortBy (fun d -> d.FileName.ToLowerInvariant())
+                | SortByType -> docs |> List.sortBy _.FileType
+                | SortBySource -> docs |> List.sortBy (fun d -> sourceKindKey d.Source)
+                | SortByUploader -> docs |> List.sortBy (fun d -> d.UploadedBy.ToLowerInvariant())
+                | SortBySize -> docs |> List.sortBy _.SizeBytes
+                | SortByAdded -> docs |> List.sortBy _.UploadedAt
+                | SortByStatus -> docs |> List.sortBy (fun d -> statusKey d.Status)
+
+            match sortDir with
+            | Ascending -> ascending
+            | Descending -> List.rev ascending
+
         let filtered =
             documents
             |> List.filter (fun d ->
@@ -287,8 +358,9 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                 && matchesSource d
                 && matchesStatus d
                 && matchesUploader d
-                && dateRangeContains dateRange d.UploadedAt)
-            |> List.sortByDescending _.UploadedAt
+                && dateRangeContains dateRange d.UploadedAt
+                && sizeRangeContains sizeRange d.SizeBytes)
+            |> sortDocuments
 
         let groupOf (doc: KnowledgeDocument) =
             match groupBy with
@@ -321,11 +393,62 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                     Html.td [ prop.className "px-4 py-3"; prop.children [ Badges.sourceBadge doc.Source ] ]
                     Html.td [ prop.className "px-4 py-3 text-xs text-gray-500"; prop.text doc.UploadedBy ]
                     Html.td [
+                        prop.className "px-4 py-3 text-xs text-gray-500 tabular-nums whitespace-nowrap"
+                        prop.text (formatSize doc.SizeBytes)
+                    ]
+                    Html.td [
                         prop.className "px-4 py-3 text-xs text-gray-500"
                         prop.text (doc.UploadedAt.ToString("yyyy-MM-dd HH:mm"))
                     ]
                     Html.td [ prop.className "px-4 py-3"; prop.children [ Badges.statusBadge doc.Status ] ]
                     actionCell
+                ]
+            ]
+
+        // Date / size columns read best newest-first / biggest-first, so they
+        // default to descending the first time you click them; text columns
+        // default to A–Z. Clicking the active column flips its direction.
+        let defaultDirFor key =
+            match key with
+            | SortByAdded
+            | SortBySize -> Descending
+            | _ -> Ascending
+
+        let sortableHeader (label: string) (key: SortKey) =
+            let isActive = sortKey = key
+
+            let arrow =
+                if not isActive then
+                    ""
+                else
+                    match sortDir with
+                    | Ascending -> " ▲"
+                    | Descending -> " ▼"
+
+            let onClick () =
+                if isActive then
+                    setSortDir (
+                        match sortDir with
+                        | Ascending -> Descending
+                        | Descending -> Ascending
+                    )
+                else
+                    setSortKey key
+                    setSortDir (defaultDirFor key)
+
+            Html.th [
+                prop.className "px-4 py-2 text-left text-xs font-medium"
+                prop.children [
+                    Html.button [
+                        prop.className (
+                            if isActive then
+                                "inline-flex items-center font-medium text-gray-700 hover:text-gray-900"
+                            else
+                                "inline-flex items-center font-medium text-gray-500 hover:text-gray-700"
+                        )
+                        prop.text (label + arrow)
+                        prop.onClick (fun _ -> onClick ())
+                    ]
                 ]
             ]
 
@@ -335,30 +458,13 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                 prop.children [
                     Html.tr [
                         prop.children [
-                            Html.th [
-                                prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                prop.text "File"
-                            ]
-                            Html.th [
-                                prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                prop.text "Type"
-                            ]
-                            Html.th [
-                                prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                prop.text "Source"
-                            ]
-                            Html.th [
-                                prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                prop.text "Uploader"
-                            ]
-                            Html.th [
-                                prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                prop.text "Added"
-                            ]
-                            Html.th [
-                                prop.className "px-4 py-2 text-left text-xs font-medium text-gray-500"
-                                prop.text "Status"
-                            ]
+                            sortableHeader "File" SortByName
+                            sortableHeader "Type" SortByType
+                            sortableHeader "Source" SortBySource
+                            sortableHeader "Uploader" SortByUploader
+                            sortableHeader "Size" SortBySize
+                            sortableHeader "Added" SortByAdded
+                            sortableHeader "Status" SortByStatus
                             if config.RowAction.IsSome then
                                 Html.th [ prop.className "px-4 py-2" ]
                         ]
@@ -491,12 +597,47 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                 ]
             ]
 
+        let sizeRangeLabel range =
+            match range with
+            | AllSizes -> "Any size"
+            | UnderOneMb -> "Under 1 MB"
+            | OneToTenMb -> "1–10 MB"
+            | OverTenMb -> "Over 10 MB"
+
+        let sizeRangeValue =
+            match sizeRange with
+            | AllSizes -> "all"
+            | UnderOneMb -> "small"
+            | OneToTenMb -> "medium"
+            | OverTenMb -> "large"
+
+        let parseSizeRange =
+            function
+            | "small" -> UnderOneMb
+            | "medium" -> OneToTenMb
+            | "large" -> OverTenMb
+            | _ -> AllSizes
+
+        let sizeRangeSelect =
+            Html.select [
+                prop.className "text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                prop.value sizeRangeValue
+                prop.onChange (fun (s: string) -> setSizeRange (parseSizeRange s))
+                prop.children [
+                    Html.option [ prop.value "all"; prop.text (sizeRangeLabel AllSizes) ]
+                    Html.option [ prop.value "small"; prop.text (sizeRangeLabel UnderOneMb) ]
+                    Html.option [ prop.value "medium"; prop.text (sizeRangeLabel OneToTenMb) ]
+                    Html.option [ prop.value "large"; prop.text (sizeRangeLabel OverTenMb) ]
+                ]
+            ]
+
         let activeFilterCount =
             (fileTypeFilter.Count
              + sourceFilter.Count
              + statusFilter.Count
              + uploaderFilter.Count)
             + (if dateRange = AllDates then 0 else 1)
+            + (if sizeRange = AllSizes then 0 else 1)
             + (if String.IsNullOrWhiteSpace search then 0 else 1)
 
         let clearAll () =
@@ -506,6 +647,7 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
             setStatusFilter Set.empty
             setUploaderFilter Set.empty
             setDateRange AllDates
+            setSizeRange AllSizes
 
         let header =
             Html.div [
@@ -564,13 +706,25 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                              chip u (uploaderFilter.Contains u) (fun () ->
                                  setUploaderFilter (toggleMember uploaderFilter u))))
                     Html.div [
-                        prop.className "flex items-center gap-2"
+                        prop.className "flex items-center gap-4 flex-wrap"
                         prop.children [
-                            Html.span [
-                                prop.className "text-xs text-gray-500 font-medium min-w-[60px]"
-                                prop.text "Added"
+                            Html.div [
+                                prop.className "flex items-center gap-2"
+                                prop.children [
+                                    Html.span [
+                                        prop.className "text-xs text-gray-500 font-medium min-w-[60px]"
+                                        prop.text "Added"
+                                    ]
+                                    dateRangeSelect
+                                ]
                             ]
-                            dateRangeSelect
+                            Html.div [
+                                prop.className "flex items-center gap-2"
+                                prop.children [
+                                    Html.span [ prop.className "text-xs text-gray-500 font-medium"; prop.text "Size" ]
+                                    sizeRangeSelect
+                                ]
+                            ]
                         ]
                     ]
                 ]
