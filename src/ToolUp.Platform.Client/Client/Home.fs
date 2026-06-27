@@ -27,11 +27,22 @@ type LoadState<'T> =
     | Loaded of 'T
     | LoadError of string
 
-type Model = { Overview: LoadState<HomeOverview> }
+type Model = {
+    Overview: LoadState<HomeOverview>
+    // Phase 217 — recents/pinning. `Recents` mirrors
+    // `ClientConfig.HomeRecents` (captured at module creation); when
+    // false the surface is byte-for-byte Phase 171 (GP 13).
+    Recents: bool
+    Pinning: HomePinningState
+}
 
 type Msg =
     | Refresh
     | OverviewLoaded of Result<HomeOverview, string>
+    // Phase 217 — recents/pinning.
+    | PinningLoaded of HomePinningState
+    | OpenTool of string
+    | TogglePin of moduleId: string * pinned: bool
 
 // ─── API proxy ───────────────────────────────────────────────────
 
@@ -49,26 +60,70 @@ let private loadOverviewCmd =
     Cmd.OfRemoting.call homeApi.GetOverview () (fun ov -> OverviewLoaded(Ok ov)) (fun e ->
         OverviewLoaded(Error e.Message))
 
-let init () = { Overview = Loading }, loadOverviewCmd
+let private loadPinningCmd =
+    Cmd.OfRemoting.call homeApi.GetPinning () PinningLoaded (fun _ -> PinningLoaded HomePinningState.empty)
+
+/// `recents` is partially applied at module creation from
+/// `ClientConfig.HomeRecents`. Pinning is only fetched when opted in,
+/// so a non-recents deployment makes exactly the Phase 171 call set.
+let init (recents: bool) () =
+    let model = {
+        Overview = Loading
+        Recents = recents
+        Pinning = HomePinningState.empty
+    }
+
+    let cmd =
+        if recents then
+            Cmd.batch [ loadOverviewCmd; loadPinningCmd ]
+        else
+            loadOverviewCmd
+
+    model, cmd
 
 let update msg model =
     match msg with
-    | Refresh -> { model with Overview = Loading }, loadOverviewCmd
+    | Refresh ->
+        let cmd =
+            if model.Recents then
+                Cmd.batch [ loadOverviewCmd; loadPinningCmd ]
+            else
+                loadOverviewCmd
+
+        { model with Overview = Loading }, cmd
     | OverviewLoaded(Ok ov) -> { model with Overview = Loaded ov }, Cmd.none
     | OverviewLoaded(Error err) -> { model with Overview = LoadError err }, Cmd.none
+    | PinningLoaded p -> { model with Pinning = p }, Cmd.none
+    | OpenTool moduleId ->
+        // Navigate the same way a sidebar click does, and record the
+        // visit (best-effort; failure keeps the current pinning state).
+        NavigationRequest.request moduleId
+
+        let recordCmd =
+            if model.Recents then
+                Cmd.OfRemoting.call homeApi.RecordVisit moduleId PinningLoaded (fun _ -> PinningLoaded model.Pinning)
+            else
+                Cmd.none
+
+        model, recordCmd
+    | TogglePin(moduleId, pinned) ->
+        model,
+        Cmd.OfRemoting.call homeApi.SetPinned { ModuleId = moduleId; Pinned = pinned } PinningLoaded (fun _ ->
+            PinningLoaded model.Pinning)
 
 // ─── View ────────────────────────────────────────────────────────
 
 let private formatCount (n: int) : string = n.ToString "N0"
 
 /// One tool card. Clickable when the producing module is reachable as
-/// a sidebar id — navigation goes through the shell's NavigationRequest
-/// hook, the same path a sidebar click takes.
-let private renderToolCard (tool: ToolSummary) =
+/// a sidebar id — `onOpen` navigates (and, when recents is on, records
+/// the visit) through the shell's NavigationRequest hook, the same path
+/// a sidebar click takes.
+let private renderToolCard (onOpen: string -> unit) (tool: ToolSummary) =
     Html.button [
         prop.className
             "text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition w-full"
-        prop.onClick (fun _ -> NavigationRequest.request tool.ModuleId)
+        prop.onClick (fun _ -> onOpen tool.ModuleId)
         prop.children [
             Html.div [
                 prop.className "flex items-baseline justify-between mb-2"
@@ -152,7 +207,7 @@ let private renderContext (ctx: DeploymentContext) =
 /// background data fetch lands — so the home reflects loaded data without a
 /// Data Manager visit, even though the server overview's catalog count is 0.
 [<ReactComponent>]
-let private ToolsGrid (tools: ToolSummary list) =
+let private ToolsGrid (onOpen: string -> unit) (tools: ToolSummary list) =
     let processed = React.useContext ProcessedDataContext.Context
 
     let fileCountFor typeId =
@@ -178,7 +233,7 @@ let private ToolsGrid (tools: ToolSummary list) =
 
     Html.div [
         prop.className "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-        prop.children (augmented |> List.map renderToolCard)
+        prop.children (augmented |> List.map (renderToolCard onOpen))
     ]
 
 /// One module-contributed widget (Phase 217). A titled card whose body
@@ -217,7 +272,69 @@ let private renderContributedWidgets (ov: HomeOverview) =
             prop.children (widgets |> List.map (renderWidget ctx))
         ]
 
-let private renderOverview (ov: HomeOverview) =
+/// Phase 217 — the built-in "Pinned / Recent" widget. One clickable
+/// chip per pinned / recently-visited tool, each with a pin toggle.
+/// `Html.none` unless recents is on AND there is something to show, so
+/// a recents-off (or empty) deployment is byte-for-byte Phase 171
+/// (GP 13). Tool ids resolve to names via the overview's tool list;
+/// an id with no matching tool falls back to the raw id.
+let private renderRecentsPinned (dispatch: Msg -> unit) (pinning: HomePinningState) (tools: ToolSummary list) =
+    let nameOf (moduleId: string) =
+        tools
+        |> List.tryFind (fun t -> t.ModuleId = moduleId)
+        |> Option.map _.Name
+        |> Option.defaultValue moduleId
+
+    let chip (pinned: bool) (moduleId: string) =
+        Html.div [
+            prop.key (sprintf "%b-%s" pinned moduleId)
+            prop.className
+                "inline-flex items-center gap-1 pl-3 pr-1 py-1 bg-gray-50 border border-gray-200 rounded-full text-xs"
+            prop.children [
+                Html.button [
+                    prop.className "text-gray-700 hover:text-blue-600 font-medium"
+                    prop.onClick (fun _ -> dispatch (OpenTool moduleId))
+                    prop.text (nameOf moduleId)
+                ]
+                Html.button [
+                    prop.className "px-1 text-gray-400 hover:text-amber-500"
+                    prop.title (if pinned then "Unpin" else "Pin")
+                    prop.onClick (fun _ -> dispatch (TogglePin(moduleId, not pinned)))
+                    prop.text (if pinned then "★" else "☆")
+                ]
+            ]
+        ]
+
+    // Recents exclude already-pinned tools to avoid a duplicate chip.
+    let recent =
+        pinning.Recent |> List.filter (fun m -> not (List.contains m pinning.Pinned))
+
+    if List.isEmpty pinning.Pinned && List.isEmpty recent then
+        Html.none
+    else
+        Html.div [
+            prop.className "p-4 bg-white border border-gray-200 rounded-lg space-y-3"
+            prop.children [
+                Html.div [
+                    prop.className "text-xs uppercase tracking-wider text-gray-500"
+                    prop.text "Pinned & recent"
+                ]
+                if not (List.isEmpty pinning.Pinned) then
+                    Html.div [
+                        prop.className "flex flex-wrap gap-2"
+                        prop.children (pinning.Pinned |> List.map (chip true))
+                    ]
+                if not (List.isEmpty recent) then
+                    Html.div [
+                        prop.className "flex flex-wrap gap-2"
+                        prop.children (recent |> List.map (chip false))
+                    ]
+            ]
+        ]
+
+let private renderOverview (model: Model) (dispatch: Msg -> unit) (ov: HomeOverview) =
+    let onOpen (moduleId: string) = dispatch (OpenTool moduleId)
+
     Html.div [
         prop.className "space-y-6"
         prop.children [
@@ -233,6 +350,13 @@ let private renderOverview (ov: HomeOverview) =
                 ]
             ]
 
+            // Phase 217 — built-in "Pinned / Recent" widget. `Html.none`
+            // unless recents is on with something to show (GP 13).
+            if model.Recents then
+                renderRecentsPinned dispatch model.Pinning ov.Tools
+            else
+                Html.none
+
             // Tools grid.
             Html.div [
                 prop.children [
@@ -247,7 +371,7 @@ let private renderOverview (ov: HomeOverview) =
                             prop.text "No data-producing tools are registered in this deployment yet."
                         ]
                     else
-                        ToolsGrid ov.Tools
+                        ToolsGrid onOpen ov.Tools
                 ]
             ]
 
@@ -284,7 +408,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
             match model.Overview with
             | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
-            | Loaded ov -> renderOverview ov
+            | Loaded ov -> renderOverview model dispatch ov
             | LoadError err ->
                 Html.div [
                     prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
@@ -300,15 +424,18 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 /// head of the sidebar when `ClientConfig.HomeModule` is
 /// `EnabledHomeModule` / `ConfiguredHomeModule`, and lands on it by
 /// default (unless `ActiveModule` names another module). Ungrouped so
-/// it renders as the leading sidebar entry.
-let create (config: HomeModuleConfig option) : ErasedModule =
+/// it renders as the leading sidebar entry. `recents` is
+/// `ClientConfig.HomeRecents` — captured here and threaded into `init`
+/// so the per-user recents/pinning fetch + widget only activate when
+/// opted in (GP 13).
+let create (recents: bool) (config: HomeModuleConfig option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Home"
 
     let icon =
         config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.home
 
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = init recents
         Update = update
         Name = name
         Icon = icon

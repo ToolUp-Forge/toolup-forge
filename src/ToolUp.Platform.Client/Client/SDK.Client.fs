@@ -2599,8 +2599,8 @@ module Client =
         let home =
             match config.HomeModule with
             | NoHomeModule -> []
-            | EnabledHomeModule -> [ Home.create None ]
-            | ConfiguredHomeModule cfg -> [ Home.create (Some cfg) ]
+            | EnabledHomeModule -> [ Home.create config.HomeRecents None ]
+            | ConfiguredHomeModule cfg -> [ Home.create config.HomeRecents (Some cfg) ]
             | ExternalHomeModule custom -> [ custom ]
 
         // Leading SDK module — DataManager (Knowledge group). Prepended

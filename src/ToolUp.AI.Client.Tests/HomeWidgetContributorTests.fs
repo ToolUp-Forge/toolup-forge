@@ -52,6 +52,9 @@ let tests =
                 (List.isEmpty ClientConfig.defaults.Handlers.HomeWidgetContributors)
                 "ClientConfig.defaults.Handlers.HomeWidgetContributors is empty"
 
+        testCase "recents/pinning is off by default (GP 13)"
+        <| fun () -> Expect.isFalse ClientConfig.defaults.HomeRecents "ClientConfig.defaults.HomeRecents is false"
+
         testCase "one contributor ⇒ its widget is present"
         <| fun () ->
             HomeWidgetRegistry.setContributors [ contributor [ widget "solo" 0 ] ]

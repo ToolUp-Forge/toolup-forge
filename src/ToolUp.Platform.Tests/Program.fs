@@ -305,6 +305,8 @@ let allTests =
         HomeOverviewTests.overviewScopeAiTests
         // Phase 217 — IHomeWidgetDataProvider merge + scope-correctness.
         HomeOverviewTests.widgetDataTests
+        // Phase 217 — recents/pinning per-user round-trip + scope isolation.
+        HomeOverviewTests.pinningTests
         SurfaceCoherenceValidatorTests.tests
         CsrfPrefetchAnonymousGateTests.tests
         SubjectKindClientFlowTests.tests

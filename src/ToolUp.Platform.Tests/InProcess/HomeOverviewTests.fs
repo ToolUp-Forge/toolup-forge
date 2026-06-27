@@ -316,3 +316,119 @@ let widgetDataTests =
             Expect.isTrue (Map.isEmpty overview.WidgetData) "absent provider ⇒ empty bag"
         }
     ]
+
+// ─── Phase 217 — recents/pinning per-user round-trip + isolation ─────
+
+/// A ctx sharing one `IConfigStore` (over in-memory blob storage) so two
+/// callers can be checked for cross-user leakage on the same store.
+let private ctxWithConfigStore (accessContext: AccessContext) (store: IConfigStore) : HttpContext =
+    let services = ServiceCollection()
+    services.AddSingleton<AccessContext>(accessContext) |> ignore
+    services.AddSingleton<IConfigStore>(store) |> ignore
+    let sp = services.BuildServiceProvider() :> IServiceProvider
+    let ctx = DefaultHttpContext() :> HttpContext
+    ctx.RequestServices <- sp
+    ctx
+
+[<Tests>]
+let pinningTests =
+    testList "Phase 217 — Home recents/pinning" [
+
+        testCaseAsync "RecordVisit + SetPinned round-trip per user (most-recent-first, dedup)"
+        <| async {
+            let blob =
+                InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+
+            let store = ToolUp.Platform.ConfigStore.create blob
+
+            let ctx =
+                ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-a")) store
+
+            let api = HomeOverviewApiHandler.homeOverviewApi ctx
+
+            // Fresh user — empty.
+            let! initial = api.GetPinning()
+            Expect.equal initial HomePinningState.empty "fresh user has no recents/pinning"
+
+            // Visits accumulate most-recent-first.
+            let! _ = api.RecordVisit "Sales"
+            let! _ = api.RecordVisit "Inventory"
+            let! afterVisits = api.RecordVisit "Sales" // re-visit moves to front, no dup
+            Expect.equal afterVisits.Recent [ "Sales"; "Inventory" ] "recents are most-recent-first and deduped"
+
+            // Pin / unpin.
+            let! afterPin =
+                api.SetPinned {
+                    ModuleId = "Inventory"
+                    Pinned = true
+                }
+
+            Expect.equal afterPin.Pinned [ "Inventory" ] "pinning adds the tool"
+
+            let! afterUnpin =
+                api.SetPinned {
+                    ModuleId = "Inventory"
+                    Pinned = false
+                }
+
+            Expect.equal afterUnpin.Pinned [] "unpinning removes the tool"
+
+            // Durable: a fresh handler over the same store reads it back.
+            let api2 =
+                HomeOverviewApiHandler.homeOverviewApi (
+                    ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-a")) store
+                )
+
+            let! reloaded = api2.GetPinning()
+            Expect.equal reloaded.Recent [ "Sales"; "Inventory" ] "recents persist across handler instances"
+        }
+
+        testCaseAsync "recents/pinning never leaks across users (GP 4)"
+        <| async {
+            let blob =
+                InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+
+            let store = ToolUp.Platform.ConfigStore.create blob
+
+            // User A records a visit on the shared store.
+            let apiA =
+                HomeOverviewApiHandler.homeOverviewApi (
+                    ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-a")) store
+                )
+
+            let! _ = apiA.RecordVisit "Sales"
+
+            // User B, same store, sees nothing of A's.
+            let apiB =
+                HomeOverviewApiHandler.homeOverviewApi (
+                    ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-b")) store
+                )
+
+            let! bState = apiB.GetPinning()
+            Expect.equal bState HomePinningState.empty "user B does not see user A's recents"
+        }
+
+        testCaseAsync "a team member's recents are per-user, not team-shared (GP 4)"
+        <| async {
+            let blob =
+                InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+
+            let store = ToolUp.Platform.ConfigStore.create blob
+
+            // Two members of the SAME team must not share recents.
+            let apiU1 =
+                HomeOverviewApiHandler.homeOverviewApi (
+                    ctxWithConfigStore (AccessContext.unrestricted (TeamMember("u1", "team-x"))) store
+                )
+
+            let! _ = apiU1.RecordVisit "Sales"
+
+            let apiU2 =
+                HomeOverviewApiHandler.homeOverviewApi (
+                    ctxWithConfigStore (AccessContext.unrestricted (TeamMember("u2", "team-x"))) store
+                )
+
+            let! u2State = apiU2.GetPinning()
+            Expect.equal u2State HomePinningState.empty "a team-mate does not inherit another member's recents"
+        }
+    ]

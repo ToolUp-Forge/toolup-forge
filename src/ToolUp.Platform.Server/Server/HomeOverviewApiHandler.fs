@@ -148,6 +148,121 @@ let private buildWidgetData (ctx: HttpContext) (scopeId: string) : Async<Map<str
             return maps |> Array.collect Map.toArray |> Map.ofArray
         }
 
+// ─── Phase 217 — per-user recents/pinning persistence ────────────
+//
+// Persisted through the existing per-user config/store seam
+// (`IConfigStore`) under a reserved module key, in the caller's *user*
+// scope — so recents/pinning is per-user and never leaks across users,
+// even in Team mode (GP 4). Stored as two `String` fields, each holding
+// a JSON-encoded id list (the config store's `String` validator stores
+// a JSON-quoted string, so the list is JSON-encoded into that string).
+
+/// Reserved config module key for the Home recents/pinning document.
+let private pinningModuleKey = "_sdk.home.pinning"
+
+/// Recents cap — the most-recently-visited N tools are kept.
+let private recentsCap = 8
+
+[<Literal>]
+let private pinnedField = "pinned"
+
+[<Literal>]
+let private recentField = "recent"
+
+/// Two `String` fields, each defaulting to an empty JSON array string.
+let private pinningSchema: ModuleConfigSchema = {
+    Fields = [
+        {
+            Key = pinnedField
+            DisplayName = "Pinned tools"
+            Description = None
+            Kind = ConfigFieldKind.String None
+            Required = false
+            DefaultJson = "\"[]\""
+        }
+        {
+            Key = recentField
+            DisplayName = "Recent tools"
+            Description = None
+            Kind = ConfigFieldKind.String None
+            Required = false
+            DefaultJson = "\"[]\""
+        }
+    ]
+}
+
+/// Per-*user* scope for the pinning document — keyed by the user id for
+/// every non-anonymous subject (a team member's recents follow the user,
+/// never the team), `None` for anonymous callers (no durable per-user
+/// store).
+let private userPinningScope (accessContext: AccessContext) : StorageScope option =
+    match accessContext.Subject with
+    | AnonymousSession _ -> None
+    | _ ->
+        Some {
+            ScopeId = accessContext.UserId
+            Container = $"user-{accessContext.UserId}"
+            Persist = true
+        }
+
+/// Decode an id list from a stored `String`-field value. The persisted
+/// value is a JSON-quoted string whose content is a JSON array of ids;
+/// any decode failure degrades to an empty list (never throws).
+let private decodeIds (rawQuoted: string) : string list =
+    try
+        let inner = System.Text.Json.JsonSerializer.Deserialize<string> rawQuoted
+        System.Text.Json.JsonSerializer.Deserialize<string[]> inner |> List.ofArray
+    with _ -> []
+
+/// Encode an id list for a `String` config field. The config-store
+/// validator requires the field value to itself be a JSON string, so
+/// the id array is serialised to JSON array text and that text is then
+/// JSON-quoted — `["a","b"]` ⇒ `"[\"a\",\"b\"]"` — the exact shape
+/// `decodeIds` reverses on read.
+let private encodeIds (ids: string list) : string =
+    let arrayText = System.Text.Json.JsonSerializer.Serialize(List.toArray ids)
+    System.Text.Json.JsonSerializer.Serialize arrayText
+
+let private resolveConfigStore (ctx: HttpContext) : IConfigStore option =
+    match ctx.RequestServices.GetService(typeof<IConfigStore>) with
+    | :? IConfigStore as cs -> Some cs
+    | _ -> None
+
+/// Read the caller's recents/pinning state. `empty` when anonymous, no
+/// config store, or nothing stored yet.
+let private loadPinning (ctx: HttpContext) (accessContext: AccessContext) : Async<HomePinningState> =
+    match resolveConfigStore ctx, userPinningScope accessContext with
+    | Some store, Some scope -> async {
+        let! raw = store.GetRaw(scope, pinningModuleKey)
+
+        let ids key =
+            raw |> Map.tryFind key |> Option.map decodeIds |> Option.defaultValue []
+
+        return {
+            Pinned = ids pinnedField
+            Recent = ids recentField
+        }
+      }
+    | _ -> async { return HomePinningState.empty }
+
+/// Persist the caller's recents/pinning state, then return it. A write
+/// failure (or anonymous / no-store) is swallowed — the in-memory state
+/// is still returned so the client reflects the user's action.
+let private savePinning
+    (ctx: HttpContext)
+    (accessContext: AccessContext)
+    (state: HomePinningState)
+    : Async<HomePinningState> =
+    match resolveConfigStore ctx, userPinningScope accessContext with
+    | Some store, Some scope -> async {
+        let values =
+            Map [ pinnedField, encodeIds state.Pinned; recentField, encodeIds state.Recent ]
+
+        let! _ = store.SetRaw(scope, pinningModuleKey, values, pinningSchema)
+        return state
+      }
+    | _ -> async { return state }
+
 /// Build the `IHomeOverviewApi` Fable.Remoting handler.
 let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
     let accessContext = resolveAccessContext ctx
@@ -174,5 +289,35 @@ let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
                     // none is composed (GP 13).
                     WidgetData = widgetData
                 }
+            }
+
+        // Phase 217 — per-user recents/pinning.
+        GetPinning = fun () -> loadPinning ctx accessContext
+
+        RecordVisit =
+            fun moduleId -> async {
+                let! current = loadPinning ctx accessContext
+                // Most-recent-first, deduped, bounded.
+                let recent =
+                    moduleId :: (current.Recent |> List.filter (fun m -> m <> moduleId))
+                    |> List.truncate recentsCap
+
+                return! savePinning ctx accessContext { current with Recent = recent }
+            }
+
+        SetPinned =
+            fun req -> async {
+                let! current = loadPinning ctx accessContext
+
+                let pinned =
+                    if req.Pinned then
+                        if List.contains req.ModuleId current.Pinned then
+                            current.Pinned
+                        else
+                            current.Pinned @ [ req.ModuleId ]
+                    else
+                        current.Pinned |> List.filter (fun m -> m <> req.ModuleId)
+
+                return! savePinning ctx accessContext { current with Pinned = pinned }
             }
     }

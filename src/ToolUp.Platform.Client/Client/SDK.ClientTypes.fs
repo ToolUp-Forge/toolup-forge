@@ -1120,6 +1120,13 @@ type ClientConfig = {
     /// the sidebar and becomes the default landing surface unless
     /// `ActiveModule` names a specific module.
     HomeModule: HomeModuleMode
+    /// Phase 217 — opt in to the built-in "Pinned / Recent" widget on the
+    /// Home surface (a small per-user store of recently-visited + pinned
+    /// tools, persisted through the per-user config store). **Default:
+    /// `false`** — off, so a Home deployment that doesn't opt in renders
+    /// byte-for-byte as Phase 171 (GP 13). Only meaningful when
+    /// `HomeModule` is enabled; ignored otherwise.
+    HomeRecents: bool
     /// Opt-in no-active-team gate. When `Some moduleId` AND the deployment
     /// declares a `Team` surface AND the caller has no active team
     /// (`ActiveTeamId = None`, i.e. the resolved `SubjectKind` is
@@ -1419,6 +1426,8 @@ module ClientConfig =
         // Phase 171 — off by default (GP 13); existing deployments
         // keep their first-registered module as the landing surface.
         HomeModule = NoHomeModule
+        // Phase 217 — recents/pinning off by default (GP 13).
+        HomeRecents = false
         // Opt-in; off by default so the no-team gate never changes an
         // existing deployment's sidebar (GP 13).
         NoActiveTeamLandingModuleId = None

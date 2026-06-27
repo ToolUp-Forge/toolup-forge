@@ -91,6 +91,33 @@ type HomeOverview = {
     WidgetData: Map<string, string>
 }
 
+/// Phase 217 — per-user recents/pinning state for the optional
+/// "Pinned / Recent" Home widget. `Recent` is most-recently-visited
+/// first; `Pinned` is the user's pinned tool ids. Both are module ids
+/// (matching `ToolSummary.ModuleId` so the widget navigates via
+/// `NavigationRequest.request`). **Per-user, never cross-scope (GP 4):**
+/// persisted under the caller's *user* scope even in Team mode, so a
+/// team-mate never sees another member's recents.
+type HomePinningState = {
+    /// Tool ids the user has pinned, in pin order.
+    Pinned: string list
+    /// Recently-visited tool ids, most-recent-first (bounded).
+    Recent: string list
+}
+
+module HomePinningState =
+    /// Nothing pinned, nothing visited — the default a fresh user (and
+    /// every deployment with recents/pinning off) sees.
+    let empty: HomePinningState = { Pinned = []; Recent = [] }
+
+/// A pin/unpin request for the recents/pinning surface.
+type PinRequest = {
+    /// The tool (module id) to pin or unpin.
+    ModuleId: string
+    /// `true` to pin, `false` to unpin.
+    Pinned: bool
+}
+
 /// Fable.Remoting surface for the Home/Overview landing module.
 /// Scoped server-side from `AccessContext.ScopeId`; requires a
 /// resolved scope (no anonymous access — an Anonymous caller has no
@@ -100,6 +127,19 @@ type IHomeOverviewApi = {
     /// record counts + active-AI summary + deployment context.
     [<RequiresClaim "scope">]
     GetOverview: unit -> Async<HomeOverview>
+    /// Phase 217 — read the caller's per-user recents/pinning state.
+    /// `HomePinningState.empty` when nothing is stored yet.
+    [<RequiresClaim "scope">]
+    GetPinning: unit -> Async<HomePinningState>
+    /// Phase 217 — record that the caller opened a tool; prepends it to
+    /// `Recent` (dedup, bounded) and returns the updated state so the
+    /// client refreshes without a second read.
+    [<RequiresClaim "scope">]
+    RecordVisit: string -> Async<HomePinningState>
+    /// Phase 217 — pin or unpin a tool for the caller; returns the
+    /// updated state.
+    [<RequiresClaim "scope">]
+    SetPinned: PinRequest -> Async<HomePinningState>
 }
 
 /// Optional DI seam (GP 1 / GP 13). The AI companion (`ToolUp.AI`)
