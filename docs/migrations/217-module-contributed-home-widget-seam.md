@@ -1,6 +1,6 @@
 # Phase 217 — module-contributed home-widget seam
 
-**Forge commits:** `e9c7057` (client seam + render + tests), `a99ad53` (server widget-data seam)
+**Forge commits:** `e9c7057` (client seam + render + tests), `a99ad53` (server widget-data seam), `87b6180` (per-user recents/pinning)
 
 Composes additively onto [Phase 171](171-home-overview-module.md). A deployment
 that never registers a contributor sees Home render **byte-for-byte as Phase
@@ -97,6 +97,33 @@ namespace.
 - **Navigation.** Widget bodies call `NavigationRequest.request` (Phase 6g.C)
   directly — no new navigation primitive, no dependency on the shell `Msg` type.
 
+## Recents / pinning (sub-feature, `87b6180`)
+
+A built-in **"Pinned / Recent"** Home widget, opt-in via
+`ClientConfig.HomeRecents = true` (default `false`, GP 13). It stores a small
+per-user set of recently-visited + pinned tool ids, persisted through the
+existing `IConfigStore` seam under a reserved `_sdk.home.pinning` key.
+
+- **Per-user, never cross-scope (GP 4).** Persisted in the caller's *user*
+  scope even in Team mode, so a team-mate never inherits another member's
+  recents. `IHomeOverviewApi` gains three `[<RequiresClaim "scope">]` methods:
+  `GetPinning` / `RecordVisit` / `SetPinned`.
+- **Recents** are most-recent-first, deduped, bounded (8). A visit is recorded
+  when a tool is opened from the Home surface; click-through reuses
+  `NavigationRequest.request` (no new primitive).
+- **Default-off parity.** With `HomeRecents = false` the Home module makes
+  exactly the Phase 171 call set (no `GetPinning`) and renders no widget.
+
+```fsharp
+let clientConfig =
+    { ClientConfig.defaults with
+        HomeModule  = EnabledHomeModule
+        HomeRecents = true }     // opt in to the Pinned / Recent widget
+```
+
+No server wiring is needed — the recents/pinning routes ride the auto-mounted
+`IHomeOverviewApi` and persist through the default `IConfigStore`.
+
 ## Verification steps
 
 1. `dotnet build ToolUp.Forge.sln` — additive; build stays green.
@@ -104,10 +131,11 @@ namespace.
    — zero contributors, default-off, single contributor, weight order, stable
    ties, last-wins re-set.
 3. In-process `ToolUp.Platform.Tests/InProcess/HomeOverviewTests.fs` (Phase 217
-   list) — multiple `IHomeWidgetDataProvider`s merge scope-correctly; no
-   provider ⇒ empty bag.
-4. With no contributor registered, confirm Home is byte-for-byte the Phase 171
-   surface (GP 13).
+   lists) — multiple `IHomeWidgetDataProvider`s merge scope-correctly; no
+   provider ⇒ empty bag; recents/pinning round-trip + cross-user +
+   cross-team-member isolation.
+4. With no contributor registered and `HomeRecents = false`, confirm Home is
+   byte-for-byte the Phase 171 surface (GP 13).
 
 ## Rollback
 
