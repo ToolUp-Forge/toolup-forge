@@ -76,6 +76,22 @@ type PlatformInfo = { RequiresAuth: bool }
 /// setting. The policy gates one specific action (team creation)
 /// against the same admin-role read.
 ///
+/// **Post Platform-Management refactor (2026-06-04) — still load-bearing,
+/// not dead substrate.** The SDK's own team-creation affordances moved
+/// into the Platform-Management module, which calls
+/// `TeamApi.CreateTeamWithOwner` (Platform-Admin-gated) — so no
+/// SDK-shipped UI calls the legacy `TeamApi.CreateTeam` or
+/// `TeamApi.GetTeamCreationPolicy` any more. This policy nonetheless
+/// remains the gate `CreateTeam` honours for deployments that either
+/// (a) configure a non-default policy (e.g. a self-service deployment
+/// setting `AnyAuthenticatedUser`), or (b) ship their own team UI via
+/// `ClientConfig.TeamManager = ExternalTeamManager …` that calls
+/// `TeamApi.CreateTeam` directly and relies on the server-side gate. A
+/// 2026-06-27 consumer audit found at least one in-tree configurer
+/// (`cookbook-apps/expense-receipt-tracker` sets `AnyAuthenticatedUser`),
+/// so dropping the legacy `CreateTeam` / `GetTeamCreationPolicy` surface
+/// would be a breaking change, not a cleanup — keep it.
+///
 /// Lives in `TeamTypes.fs` (not next to the other `ServerConfig`
 /// modes in `SDK.Shared.fs`) because `TeamApi.GetTeamCreationPolicy`
 /// returns it and `TeamApi` is declared further down in this same
@@ -215,6 +231,11 @@ type TeamApi = {
     /// `PlatformAdminApi.IsPlatformAdmin` to decide whether the caller
     /// would clear the server-side gate; the server-side gate inside
     /// `CreateTeam` is the real enforcement.
+    ///
+    /// No SDK-shipped UI calls this post the 2026-06-04 Platform-Management
+    /// refactor (that module uses `CreateTeamWithOwner`); retained for
+    /// `ExternalTeamManager` consumers that render their own team-create
+    /// affordance — see the `TeamCreationPolicy` DU docstring.
     [<AllowAnonymous>]
     GetTeamCreationPolicy: unit -> Async<TeamCreationPolicy>
     /// Platform-Admin only — enumerate every team on the deployment
