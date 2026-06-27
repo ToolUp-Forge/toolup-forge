@@ -237,4 +237,132 @@ let tests =
             | Ok map -> Expect.isTrue (Map.isEmpty map) "no manifest → no bindings"
             | Error e -> failtestf "absent manifest should be Ok empty, got Error %s" e
         }
+
+        // ── Phase 216 — SBOM minting round-trip (CLI ↔ verifier) ─────────
+        test "an SBOM minted by `toolup stamp` verifies under the server verifier" {
+            let manifest = tempPath ()
+            let assetA = tempPath () + ".dll"
+            let assetB = tempPath () + ".dll"
+
+            try
+                File.WriteAllText(assetA, "contents of assembly A")
+                File.WriteAllText(assetB, "contents of assembly B")
+                let key = RandomNumberGenerator.GetBytes 32
+
+                let code =
+                    StampCommand.command.Run [
+                        "--manifest"
+                        manifest
+                        "--module"
+                        "Sales"
+                        "--key-id"
+                        "k1"
+                        "--mac-key"
+                        Convert.ToBase64String key
+                        "--sbom-file"
+                        assetA
+                        "--sbom-file"
+                        assetB
+                        "--sbom-package"
+                        "ToolUp.Platform.Server@0.9.4"
+                    ]
+
+                Expect.equal code ExitOk "stamp with SBOM succeeds"
+
+                // The stamp itself still verifies (the SBOM is additive).
+                Expect.equal
+                    (verify [ SymmetricAnchor("k1", key) ] "Sales" (loadStamp manifest "Sales"))
+                    Allowed
+                    "stamp verifies"
+
+                // The SBOM read back through the server reader verifies under
+                // the same anchor — the CLI's BCL minting matches the verifier.
+                match ModuleBindingManifest.loadSboms manifest with
+                | Error e -> failtestf "loadSboms failed: %s" e
+                | Ok map ->
+                    match Map.tryFind "Sales" map with
+                    | None -> failtest "no SBOM recovered for 'Sales'"
+                    | Some sbom ->
+                        Expect.equal sbom.Sbom.Components.Length 3 "two files + one package = three components"
+
+                        Expect.equal
+                            (DefaultModuleBindingVerifier.verifySbom [ SymmetricAnchor("k1", key) ] "Sales" sbom)
+                            Allowed
+                            "the CLI-minted SBOM verifies under the server verifier"
+
+                        Expect.notEqual
+                            (DefaultModuleBindingVerifier.verifySbom
+                                [ SymmetricAnchor("k1", RandomNumberGenerator.GetBytes 32) ]
+                                "Sales"
+                                sbom)
+                            Allowed
+                            "a wrong anchor fails closed"
+            finally
+                File.Delete manifest
+                File.Delete assetA
+                File.Delete assetB
+        }
+
+        test "re-stamping with a new SBOM regenerates it (old content stops verifying)" {
+            let manifest = tempPath ()
+            let asset = tempPath () + ".dll"
+
+            try
+                let key = RandomNumberGenerator.GetBytes 32
+                File.WriteAllText(asset, "version one")
+
+                StampCommand.command.Run [
+                    "--manifest"
+                    manifest
+                    "--module"
+                    "Sales"
+                    "--key-id"
+                    "k1"
+                    "--mac-key"
+                    Convert.ToBase64String key
+                    "--sbom-file"
+                    asset
+                ]
+                |> ignore
+
+                let firstHash =
+                    match ModuleBindingManifest.loadSboms manifest with
+                    | Ok m -> (Map.find "Sales" m).Sbom.Components.Head.Sha256
+                    | Error e -> failtestf "loadSboms failed: %s" e
+
+                // Change the asset content and re-stamp — the SBOM regenerates.
+                File.WriteAllText(asset, "version two — different bytes")
+
+                StampCommand.command.Run [
+                    "--manifest"
+                    manifest
+                    "--module"
+                    "Sales"
+                    "--key-id"
+                    "k1"
+                    "--mac-key"
+                    Convert.ToBase64String key
+                    "--sbom-file"
+                    asset
+                ]
+                |> ignore
+
+                match ModuleBindingManifest.loadSboms manifest with
+                | Error e -> failtestf "loadSboms failed: %s" e
+                | Ok m ->
+                    let sbom = Map.find "Sales" m
+
+                    Expect.notEqual
+                        sbom.Sbom.Components.Head.Sha256
+                        firstHash
+                        "the re-stamp recomputed the content hash"
+
+                    Expect.equal
+                        (DefaultModuleBindingVerifier.verifySbom [ SymmetricAnchor("k1", key) ] "Sales" sbom)
+                        Allowed
+                        "the regenerated SBOM verifies"
+            finally
+                File.Delete manifest
+                File.Delete asset
+        }
     ]

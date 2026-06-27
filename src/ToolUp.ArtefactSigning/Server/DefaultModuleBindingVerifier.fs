@@ -43,6 +43,39 @@ type ModuleBindingAnchor =
     /// checks the right one first; `key` is the shared HMAC-SHA256 secret.
     | SymmetricAnchor of keyId: string * key: byte[]
 
+// ─── Phase 216 — module-SBOM canonical bytes ────────────────────────────
+//
+// The bytes an SBOM signature covers. A single source of truth shared by the
+// verifier (here) and any deploy-time stamper that mints an SBOM stamp (e.g.
+// the `toolup stamp --sbom-*` path, which replicates this with pure BCL and
+// is pinned to it by a round-trip test). Order-independent (components are
+// sorted) and unambiguous (control-character separators), so re-ordering or
+// re-serialising the SBOM does not change the signed bytes, but altering any
+// component field does.
+module ModuleSbomSigning =
+    // ASCII control-character separators so a component field can never collide
+    // with one: 0x1f unit (between a component's fields), 0x1d group (between
+    // components), 0x1e record (module id vs the SBOM body).
+    let private unitSep = string (char 0x1f)
+    let private groupSep = string (char 0x1d)
+    let private recordSep = string (char 0x1e)
+
+    /// Canonical bytes the SBOM signature is computed over: the module id, then
+    /// the sorted components, each rendered Name/Version/Sha256 and joined.
+    /// Bound to `moduleId` so an SBOM stamp minted for one module cannot be
+    /// replayed onto another.
+    let canonicalBytes (moduleId: string) (sbom: ModuleSbom) : byte[] =
+        let render (c: ModuleSbomComponent) =
+            String.concat unitSep [ c.Name; c.Version; c.Sha256 ]
+
+        let body =
+            sbom.Components
+            |> List.map render
+            |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+            |> String.concat groupSep
+
+        Encoding.UTF8.GetBytes(moduleId + recordSep + body)
+
 /// Default `IModuleBindingVerifier`. Construct over the deployment's trust
 /// anchors (`DefaultModuleBindingVerifier.create anchors`). Stateless and
 /// synchronous — every `Verify` re-checks the presented stamp against the
@@ -76,18 +109,17 @@ type DefaultModuleBindingVerifier
             | SymmetricAnchor(keyId, key) -> Some(keyId, key)
             | AsymmetricAnchor _ -> None)
 
-    let cryptoRejected =
-        "no configured trust anchor verifies the module-binding stamp"
+    let cryptoRejected = "no configured trust anchor verifies the module-binding stamp"
 
     /// Try every asymmetric anchor whose algorithm matches the JWS header
-    /// against the decoded detached JWS. On success returns the *verifying*
-    /// anchor's key id (for the revocation check + transparency record).
-    let verifyJws (moduleId: string) (detachedJws: string) : BindingOutcome * string option =
+    /// against the decoded detached JWS over `bytes`. On success returns the
+    /// *verifying* anchor's key id (for the revocation check + transparency
+    /// record). `bytes` is the signed payload — the module-id canonical bytes
+    /// for a module stamp, or the SBOM canonical bytes for an SBOM stamp.
+    let verifyJws (bytes: byte[]) (detachedJws: string) : BindingOutcome * string option =
         match Jws.decode detachedJws with
         | Error _ -> Rejected "module-binding stamp is not a well-formed detached JWS", None
         | Ok decoded ->
-            let bytes = canonicalBytes moduleId
-
             let verifyingKeyId =
                 asymmetricAnchors
                 |> List.tryPick (fun (keyId, alg, pk) ->
@@ -110,9 +142,7 @@ type DefaultModuleBindingVerifier
     /// `keyId`, then any remaining symmetric anchor (so a tag minted under a
     /// rotated id still verifies if its key is still anchored). On success
     /// returns the *verifying* anchor's key id.
-    let verifyMac (moduleId: string) (keyId: string) (tag: string) : BindingOutcome * string option =
-        let expected = canonicalBytes moduleId
-
+    let verifyMac (expected: byte[]) (keyId: string) (tag: string) : BindingOutcome * string option =
         let presented =
             try
                 Some(JwsBuilder.base64UrlDecode tag)
@@ -148,6 +178,14 @@ type DefaultModuleBindingVerifier
             | Some id -> Allowed, Some id
             | None -> Rejected cryptoRejected, None
 
+    /// Verify any `ModuleBindingStamp` over the given signed `bytes` against
+    /// the anchor set — the shared primitive behind both the module-id stamp
+    /// (Phase 165) and the SBOM stamp (Phase 216).
+    let verifyStamp (bytes: byte[]) (stamp: ModuleBindingStamp) : BindingOutcome * string option =
+        match stamp with
+        | JwsStamp detachedJws -> verifyJws bytes detachedJws
+        | MacStamp(keyId, tag) -> verifyMac bytes keyId tag
+
     interface IModuleBindingVerifier with
         member _.Verify(moduleId: string, stamp: ModuleBindingStamp option) : BindingOutcome =
             // Crypto outcome + the verifying anchor's key id (None on an
@@ -158,8 +196,7 @@ type DefaultModuleBindingVerifier
             let cryptoOutcome, anchorId =
                 match stamp with
                 | None -> Allowed, None
-                | Some(JwsStamp detachedJws) -> verifyJws moduleId detachedJws
-                | Some(MacStamp(keyId, tag)) -> verifyMac moduleId keyId tag
+                | Some s -> verifyStamp (canonicalBytes moduleId) s
 
             match revocation, transparencyLog with
             // GP 13 zero-cost path: neither seam configured ⇒ byte-for-byte
@@ -200,6 +237,18 @@ type DefaultModuleBindingVerifier
 
                 finalOutcome
 
+    // ─── Phase 216 — SBOM verification ──────────────────────────────────
+    interface IModuleSbomVerifier with
+        member _.VerifySbom(moduleId: string, sbom: ModuleSbomStamp) : BindingOutcome =
+            // The SBOM signature is the same stamp shape, minted under the same
+            // anchor set, over the SBOM's canonical bytes — so tampering with
+            // any component (name / version / hash) alters the bytes and the
+            // signature fails. Reuses the exact module-stamp verify primitive.
+            let outcome, _ =
+                verifyStamp (ModuleSbomSigning.canonicalBytes moduleId sbom.Sbom) sbom.Signature
+
+            outcome
+
 module DefaultModuleBindingVerifier =
     /// Construct a verifier over the deployment's trust anchors. An empty
     /// anchor set admits unstamped modules but rejects every stamped one
@@ -219,6 +268,14 @@ module DefaultModuleBindingVerifier =
         (transparencyLog: IBindingTransparencyLog)
         : IModuleBindingVerifier =
         DefaultModuleBindingVerifier(anchors, revocation, transparencyLog) :> IModuleBindingVerifier
+
+    /// Phase 216 — verify a module's signed SBOM against the anchor set.
+    /// `Allowed` when the SBOM signature verifies over its canonical bytes,
+    /// `Rejected` when it is tampered or no anchor verifies it. Independent of
+    /// the module-stamp gate: a deployment can verify an SBOM with the same
+    /// anchors it gates module loads with.
+    let verifySbom (anchors: ModuleBindingAnchor list) (moduleId: string) (sbom: ModuleSbomStamp) : BindingOutcome =
+        (DefaultModuleBindingVerifier(anchors) :> IModuleSbomVerifier).VerifySbom(moduleId, sbom)
 
 // ─── Phase 215 — signed revocation-list loader ──────────────────────────
 //

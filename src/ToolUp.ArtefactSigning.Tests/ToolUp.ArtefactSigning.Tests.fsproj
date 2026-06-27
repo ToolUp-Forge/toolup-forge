@@ -15,6 +15,7 @@
         <Compile Include="InProcess\ModuleBindingVerifierTests.fs" />
         <Compile Include="InProcess\ModuleBindingTrustResolverTests.fs" />
         <Compile Include="InProcess\BindingRevocationContractTests.fs" />
+        <Compile Include="InProcess\ModuleSbomManifestTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

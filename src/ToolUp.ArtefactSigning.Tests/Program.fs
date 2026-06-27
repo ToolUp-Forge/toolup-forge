@@ -15,6 +15,7 @@ let allTests =
         ModuleBindingVerifierTests.tests
         ModuleBindingTrustResolverTests.tests
         BindingRevocationContractTests.tests
+        ModuleSbomManifestTests.tests
     ]
 
 [<EntryPoint>]

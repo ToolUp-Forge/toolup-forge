@@ -208,3 +208,67 @@ module BindingTransparencyLog =
         { new IBindingTransparencyLog with
             member _.Record(_) = async { return () }
         }
+
+// ─── Phase 216 — module SBOM inside the stamp manifest ───────────────────
+//
+// Sign+verify (165/166) binds *that* a module is stamped; it says nothing
+// about *what's in it*. Phase 216 embeds an optional SBOM (software
+// bill-of-materials) in the same detachable stamp manifest entry: the
+// assemblies / package references / per-component content hashes that make
+// up the bound module. The SBOM carries its own binding stamp — the SAME
+// shape (`JwsStamp` / `MacStamp`) minted under the SAME anchor as the
+// module's own stamp — over the SBOM's canonical bytes, so it is
+// tamper-evident and verified as a unit with the stamp by the
+// `DefaultModuleBindingVerifier` (Phase 165). Tampering with any component
+// hash changes the canonical bytes and the SBOM signature fails to verify.
+//
+// **Purely additive (GP 11 / GP 13):** a manifest entry with no `sbom`
+// section produces no `ModuleSbomStamp` and verifies byte-for-byte as a
+// Phase-166 stamp-only entry. These are tier-shared contracts (BCL-pure,
+// Fable-safe) — just records + an interface, no crypto. The canonical-bytes
+// derivation + verification live server-side in `ToolUp.ArtefactSigning`
+// (beside the default verifier), since they reuse the Phase 40 JWS verify
+// primitives; the crypto-free manifest parser lives in the
+// `ModuleBindingManifest` reader (`ToolUp.Platform.Server`).
+
+/// One component of a module SBOM — an assembly, a package reference, or any
+/// content-addressed artefact inside the bound module.
+type ModuleSbomComponent = {
+    /// Component name: an assembly file name (`Sales.dll`) or a package id
+    /// (`ToolUp.Platform.Server`).
+    Name: string
+    /// Version string, or `""` for a component recorded by content hash with
+    /// no version (e.g. a hashed asset file).
+    Version: string
+    /// base64url SHA-256 of the component's content, or `""` for a package
+    /// reference recorded by name+version with no local artefact to hash.
+    Sha256: string
+}
+
+/// A module SBOM: the set of components that make up the bound module. The
+/// canonical-bytes derivation is order-independent (the verifier sorts), so
+/// two SBOMs with the same components in a different order verify identically.
+type ModuleSbom = { Components: ModuleSbomComponent list }
+
+/// A module's optional signed SBOM, as carried in a stamp-manifest entry.
+type ModuleSbomStamp = {
+    /// The SBOM payload.
+    Sbom: ModuleSbom
+    /// The binding stamp over the SBOM's canonical bytes — the SAME stamp
+    /// shape (`JwsStamp` / `MacStamp`) minted under the SAME anchor as the
+    /// module's own binding stamp, so the SBOM is verified as a unit with it.
+    Signature: ModuleBindingStamp
+}
+
+/// Opt-in verifier of a module's signed SBOM (Phase 216), implemented by
+/// `DefaultModuleBindingVerifier`. Separate from `IModuleBindingVerifier` so
+/// the Phase 165 interface stays unchanged: a deployment that never stamps an
+/// SBOM never touches this surface.
+///
+/// **Verification rule:** the SBOM signature MUST verify under some configured
+/// anchor over the SBOM's canonical bytes, else `Rejected`. Tampering with any
+/// component (name / version / hash) alters the canonical bytes and fails the
+/// check.
+type IModuleSbomVerifier =
+    /// Decide whether `moduleId`'s presented signed SBOM verifies.
+    abstract VerifySbom: moduleId: string * sbom: ModuleSbomStamp -> BindingOutcome

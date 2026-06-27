@@ -99,6 +99,93 @@ module ModuleBindingManifest =
         with ex ->
             Error(sprintf "module-binding manifest is not valid JSON: %s" ex.Message)
 
+    // ─── Phase 216 — optional per-entry SBOM ────────────────────────────
+    //
+    // A manifest entry may additionally carry a signed SBOM describing what's
+    // *inside* the bound module: a `sbom` object (`components`: name / version
+    // / sha256) plus a `sbomSig` object of the SAME stamp shape (`kind` mac /
+    // jws) as the module stamp, covering the SBOM's canonical bytes. The
+    // reader only parses — verification (the crypto) lives in the
+    // `DefaultModuleBindingVerifier` (`ToolUp.ArtefactSigning`), as it does
+    // for the module stamp. An entry with no `sbom` section yields nothing
+    // here, so a stamp-only manifest is byte-for-byte the Phase-166 reader.
+
+    let private parseSbomComponent (moduleId: string) (el: JsonElement) : Result<ModuleSbomComponent, string> =
+        if el.ValueKind <> JsonValueKind.Object then
+            Error(sprintf "SBOM component for '%s' must be a JSON object" moduleId)
+        else
+            let str (name: string) =
+                match el.TryGetProperty name with
+                | true, v when v.ValueKind = JsonValueKind.String -> v.GetString()
+                | _ -> "" // version / sha256 are optional per component
+
+            match el.TryGetProperty "name" with
+            | true, n when n.ValueKind = JsonValueKind.String ->
+                Ok {
+                    Name = n.GetString()
+                    Version = str "version"
+                    Sha256 = str "sha256"
+                }
+            | _ -> Error(sprintf "an SBOM component for '%s' is missing the string field 'name'" moduleId)
+
+    /// Parse the optional SBOM section of one entry. `Ok None` when the entry
+    /// carries no `sbom` (the stamp-only path); `Ok(Some _)` when both `sbom`
+    /// and its `sbomSig` parse; `Error` when `sbom` is present but malformed
+    /// or its signature is missing (fail-closed, never silently dropped).
+    let private parseSbomEntry (moduleId: string) (entry: JsonElement) : Result<ModuleSbomStamp option, string> =
+        match entry.TryGetProperty "sbom" with
+        | false, _ -> Ok None
+        | true, sbom when sbom.ValueKind <> JsonValueKind.Object ->
+            Error(sprintf "binding for '%s' has a non-object 'sbom' section" moduleId)
+        | true, sbom ->
+            let components =
+                match sbom.TryGetProperty "components" with
+                | true, c when c.ValueKind = JsonValueKind.Array ->
+                    (Ok [], c.EnumerateArray())
+                    ||> Seq.fold (fun acc el ->
+                        match acc with
+                        | Error _ -> acc
+                        | Ok xs -> parseSbomComponent moduleId el |> Result.map (fun comp -> xs @ [ comp ]))
+                | true, _ -> Error(sprintf "SBOM 'components' for '%s' must be a JSON array" moduleId)
+                | false, _ -> Ok [] // an SBOM with no components is valid (empty bill)
+
+            match components with
+            | Error e -> Error e
+            | Ok comps ->
+                match entry.TryGetProperty "sbomSig" with
+                | true, sig' when sig'.ValueKind = JsonValueKind.Object ->
+                    parseEntry moduleId sig'
+                    |> Result.map (fun signature ->
+                        Some {
+                            Sbom = { Components = comps }
+                            Signature = signature
+                        })
+                | _ -> Error(sprintf "binding for '%s' carries an 'sbom' but no 'sbomSig' signature object" moduleId)
+
+    /// Parse a manifest document into the `moduleId → signed-SBOM` map. Only
+    /// entries that carry an `sbom` section appear; a stamp-only manifest
+    /// yields an empty map.
+    let parseSboms (json: string) : Result<Map<string, ModuleSbomStamp>, string> =
+        try
+            use doc = JsonDocument.Parse json
+            let root = doc.RootElement
+
+            match root.TryGetProperty "bindings" with
+            | true, bindings when bindings.ValueKind = JsonValueKind.Object ->
+                (Ok Map.empty, bindings.EnumerateObject())
+                ||> Seq.fold (fun acc prop ->
+                    match acc with
+                    | Error _ -> acc
+                    | Ok m ->
+                        match parseSbomEntry prop.Name prop.Value with
+                        | Ok None -> Ok m
+                        | Ok(Some sbom) -> Ok(Map.add prop.Name sbom m)
+                        | Error e -> Error e)
+            | true, _ -> Error "module-binding manifest 'bindings' must be a JSON object"
+            | false, _ -> Ok Map.empty
+        with ex ->
+            Error(sprintf "module-binding manifest is not valid JSON: %s" ex.Message)
+
     /// Load a manifest from `path`. An absent file yields an empty map (the
     /// GP-13 "no manifest" path); a present-but-malformed file is an
     /// `Error` the caller fails closed on rather than silently ignoring.
@@ -114,6 +201,23 @@ module ModuleBindingManifest =
     /// Load the conventional `module-bindings.json` from a directory.
     let loadFromDir (dir: string) : Result<Map<string, ModuleBindingStamp>, string> =
         load (Path.Combine(dir, DefaultFileName))
+
+    /// Load the `moduleId → signed-SBOM` map from `path` (Phase 216). An
+    /// absent file yields an empty map; a present-but-malformed file is an
+    /// `Error` the caller fails closed on.
+    let loadSboms (path: string) : Result<Map<string, ModuleSbomStamp>, string> =
+        if not (File.Exists path) then
+            Ok Map.empty
+        else
+            try
+                parseSboms (File.ReadAllText path)
+            with ex ->
+                Error(sprintf "failed to read module-binding manifest '%s': %s" path ex.Message)
+
+    /// Load the SBOM map from the conventional `module-bindings.json` in a
+    /// directory.
+    let loadSbomsFromDir (dir: string) : Result<Map<string, ModuleSbomStamp>, string> =
+        loadSboms (Path.Combine(dir, DefaultFileName))
 
     /// Apply a manifest to one module: attach the stamp filed under the
     /// module's name, or leave the module unchanged when it has no entry.
