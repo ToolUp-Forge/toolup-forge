@@ -35,6 +35,10 @@ type DsrAuditEventKind =
     | ErasureCompleted
     | ErasureFailed
     | ExportCompleted
+    /// Phase 162 — a `DownloadSignedExport` produced a detached JWS over a
+    /// completed export envelope. Carries the artefact SHA-256 + key id,
+    /// never the bytes.
+    | ExportSigned
 
 type DsrAuditEvent = {
     RequestId: DataSubjectRequestId
@@ -186,6 +190,7 @@ let auditToLog (auditLog: IAuditLog) : AuditOnDsr =
                 | ErasureCompleted -> "ErasureCompleted"
                 | ErasureFailed -> "ErasureFailed"
                 | ExportCompleted -> "ExportCompleted"
+                | ExportSigned -> "ExportSigned"
             SubjectUserId = ev.SubjectUserId
             Actor = ev.Actor
             Reason = ev.Reason
@@ -203,6 +208,14 @@ type DsrAsyncDeps = {
     Store: IBackgroundExportStore
     Scheduler: IJobScheduler
     Notify: ExportTicket -> ExportStatus -> Async<unit>
+    /// Phase 162 — export-envelope signer (the `ToolUp.ArtefactSigning`
+    /// `SignedExportBundle` adapter over an `IArtefactSigner`), resolved
+    /// from DI when `DataSubjectRequestConfig.SignExports = true`. `None`
+    /// leaves `DownloadSignedExport` returning a clear "not enabled" error
+    /// (a compose-time `IConfigValidator` refuses startup on the
+    /// `SignExports = true` + no-signer mismatch, so a correctly-composed
+    /// signed-export deployment never reaches that error).
+    Signer: IExportEnvelopeSigner option
 }
 
 /// Build a scoped `IDataSubjectRequestApi`. Caller supplies the
@@ -462,6 +475,58 @@ let create
                         | Result.Ok bytes -> return Result.Ok bytes
                         | Result.Error status ->
                             return Result.Error $"Export not downloadable: {ExportStatus.name status}"
+            }
+
+        // ─── Phase 162 — signed (tamper-evident) export download ────────
+        DownloadSignedExport =
+            fun ticket -> async {
+                if denyNonAdmin () then
+                    return Result.Error "platform admin role required"
+                else
+
+                    match asyncDeps with
+                    | None -> return Result.Error "Async DSR export is not enabled."
+                    | Some deps ->
+                        match deps.Signer with
+                        | None ->
+                            return
+                                Result.Error
+                                    "Signed DSR export is not enabled — set DataSubjectRequests = Enabled { SignExports = true } and compose an export-envelope signer (ToolUp.ArtefactSigning SignedExportBundle over an IArtefactSigner)."
+                        | Some signer ->
+                            match! deps.Store.Download ticket with
+                            | Result.Error status ->
+                                return Result.Error $"Export not downloadable: {ExportStatus.name status}"
+                            | Result.Ok bytes ->
+                                match! signer.SignEnvelope bytes with
+                                | Result.Error err -> return Result.Error $"Export signing failed: {err}"
+                                | Result.Ok signature ->
+                                    // Audit the signing, citing the artefact
+                                    // SHA-256 (lowercase hex) — never the bytes.
+                                    let sha256 =
+                                        System.Security.Cryptography.SHA256.HashData bytes |> Convert.ToHexStringLower
+
+                                    do!
+                                        audit {
+                                            RequestId = ticket
+                                            Kind = ExportSigned
+                                            SubjectUserId = ""
+                                            ScopeId = scopeId
+                                            Actor = actorUserId
+                                            Reason = "signed export download"
+                                            Properties =
+                                                Map [
+                                                    "ticket", ticket
+                                                    "keyId", signature.SigningKeyId
+                                                    "artefactSha256", sha256
+                                                    "totalBytes", string bytes.Length
+                                                ]
+                                        }
+
+                                    return
+                                        Result.Ok {
+                                            Envelope = bytes
+                                            Signature = signature
+                                        }
             }
 
         CancelExport =

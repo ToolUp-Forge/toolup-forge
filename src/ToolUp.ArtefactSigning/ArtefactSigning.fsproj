@@ -25,6 +25,11 @@
     <Compile Include="Server\DefaultModuleBindingVerifier.fs" />
     <Compile Include="Server\SigningKeyHandler.fs" />
     <Compile Include="Server\Helpers.fs" />
+    <!-- Phase 162 — signed compliance export bundle: adapts IArtefactSigner
+         onto the neutral IExportEnvelopeSigner seam in ToolUp.Platform.Server
+         (the dependency runs ArtefactSigning -> Platform.Server, so the glue
+         lives here, not in Platform.Server). -->
+    <Compile Include="Server\SignedExportBundle.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

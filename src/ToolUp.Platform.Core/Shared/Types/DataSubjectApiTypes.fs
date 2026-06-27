@@ -153,6 +153,17 @@ type IDataSubjectRequestApi = {
     [<Audit "DataExported">]
     DownloadExport: ExportTicket -> Async<Result<byte[], string>>
 
+    /// Phase 162 — download a `Ready` background-export envelope together
+    /// with a detached JWS over its exact bytes (tamper-evident export).
+    /// `Envelope` is byte-identical to `DownloadExport`; `Signature`
+    /// carries the JWS + the public-key URL so a verifying party confirms
+    /// tamper-evidence offline. `Error` when the ticket isn't `Ready`, or
+    /// when the deployment did not enable signed exports
+    /// (`DataSubjectRequestConfig.SignExports = false` / no signer composed).
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "DataExported">]
+    DownloadSignedExport: ExportTicket -> Async<Result<SignedExportEnvelope, string>>
+
     /// Phase 9h.A — cancel an in-flight background export. Flips the
     /// ticket to `Cancelled`; the background job observes the cancelled
     /// ticket before `Complete` and skips writing the envelope, so the

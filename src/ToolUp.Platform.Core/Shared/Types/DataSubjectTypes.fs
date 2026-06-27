@@ -79,19 +79,47 @@ type DataSubjectRequestConfig = {
     /// adds the async surface. Default `false` preserves the Phase 9h
     /// MVP behaviour byte-for-byte (GP 11).
     Async: bool
+    /// Phase 162 — when `true`, the async-export download surface also
+    /// exposes `DownloadSignedExport`, returning the envelope alongside a
+    /// detached JWS over its exact bytes so an Article-15 export ships
+    /// tamper-evident. Requires an export-envelope signer composed (the
+    /// `ToolUp.ArtefactSigning` `SignedExportBundle` adapter over an
+    /// `IArtefactSigner`); a compose-time `IConfigValidator` refuses
+    /// startup if `true` with no signer composed. Default `false` leaves
+    /// the Phase 9h.A export output byte-for-byte unchanged (GP 11).
+    SignExports: bool
 }
 
 module DataSubjectRequestConfig =
     /// Synchronous (Phase 9h MVP) configuration for `policy` —
     /// `Async = false`. The ergonomic default when a deployment only
     /// needs the on-thread `RequestExport`.
-    let sync (policy: ErasurePolicy) : DataSubjectRequestConfig = { Policy = policy; Async = false }
+    let sync (policy: ErasurePolicy) : DataSubjectRequestConfig = {
+        Policy = policy
+        Async = false
+        SignExports = false
+    }
 
     /// Background-job configuration for `policy` — `Async = true`. Pairs
     /// with `JobScheduler = InProcessJobScheduler` (or a distributed
     /// scheduler companion); a `Disabled` scheduler falls back to the
     /// synchronous path with a compose-time warning.
-    let background (policy: ErasurePolicy) : DataSubjectRequestConfig = { Policy = policy; Async = true }
+    let background (policy: ErasurePolicy) : DataSubjectRequestConfig = {
+        Policy = policy
+        Async = true
+        SignExports = false
+    }
+
+    /// Phase 162 — background-job configuration that also signs completed
+    /// export envelopes (`Async = true`, `SignExports = true`). Pairs with
+    /// an export-envelope signer composed via the `ToolUp.ArtefactSigning`
+    /// `SignedExportBundle` adapter; preflight refuses startup if the
+    /// signer is absent.
+    let signedBackground (policy: ErasurePolicy) : DataSubjectRequestConfig = {
+        Policy = policy
+        Async = true
+        SignExports = true
+    }
 
 /// Per-deployment opt-in for the data-subject-request substrate.
 /// Defaults to `Disabled` — apps that don't need DSR endpoints pay
@@ -151,6 +179,37 @@ module ExportStatus =
         | ExportStatus.Cancelled -> "Cancelled"
         | ExportStatus.Expired -> "Expired"
         | ExportStatus.Unknown -> "Unknown"
+
+// ─── Phase 162 — signed export bundle (tamper-evident DSR export) ───────
+//
+// The detached-JWS half of a signed export download. Carried on the
+// `IDataSubjectRequestApi.DownloadSignedExport` contract method (so it
+// crosses the Fable client/server boundary, hence Core). The signature is
+// detached — `Envelope` is the exact bytes `DownloadExport` would return,
+// and `DetachedJws` verifies over those bytes against the public key the
+// `SigningKeyUrl` serves. Assembled server-side from the neutral
+// `IExportEnvelopeSigner` seam an `IArtefactSigner` fills.
+
+/// Phase 162 — the detached-signature half of a signed export.
+type ExportSignature = {
+    /// Detached JWS (`base64url(header)..base64url(signature)`) over the
+    /// envelope bytes — empty payload segment, the artefact is not embedded.
+    DetachedJws: string
+    /// Signing-key id stamped into the JWS header `kid`.
+    SigningKeyId: string
+    /// URL the public verification key is served from
+    /// (`/_platform/signing-key/{keyId}`) so a verifying party can confirm
+    /// tamper-evidence offline. Relative to the deployment origin.
+    SigningKeyUrl: string
+}
+
+/// Phase 162 — a downloaded export envelope plus its detached signature.
+/// `Envelope` is byte-identical to the `DownloadExport` payload for the
+/// same ticket; `Signature` verifies over those exact bytes.
+type SignedExportEnvelope = {
+    Envelope: byte[]
+    Signature: ExportSignature
+}
 
 /// One data-subject request. Created by an admin via the API
 /// handler; persisted as an audit event before any work begins

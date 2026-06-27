@@ -11,6 +11,7 @@ let allTests =
         DefaultArtefactSignerTests.tests
         JwsBuilderTests.tests
         CloudKmsArtefactSignerTests.tests
+        SignedExportBundleTests.tests
         ModuleBindingVerifierTests.tests
     ]
 

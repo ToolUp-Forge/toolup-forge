@@ -61,3 +61,26 @@ type IBackgroundExportStore =
     /// not `Ready` (still `Preparing`, `Failed`, `Cancelled`, `Expired`,
     /// or `Unknown`).
     abstract Download: ticket: ExportTicket -> Async<Result<byte[], ExportStatus>>
+
+// ─── Phase 162 — neutral export-envelope signing seam ───────────────────
+//
+// `ToolUp.Platform.Server` must stay free of any artefact-signing /
+// vendor type — `ToolUp.ArtefactSigning` already references *this* project
+// (the signer + JWS builder sit a layer above), so the dependency cannot
+// run the other way. This interface is the type-neutral seam the DSR
+// download surface signs through: it takes raw envelope bytes and returns
+// the detached-JWS signature triple (`ExportSignature`, a Core wire type).
+// The `ToolUp.ArtefactSigning` `SignedExportBundle` adapter implements it
+// over an `IArtefactSigner` and the deployment registers it in DI; the DSR
+// handler resolves it (optional) exactly as it resolves `IBackgroundExportStore`.
+//
+// Six portability rules (GP 12): identity-by-value (`byte[]` in, an
+// `ExportSignature` record out), async at the boundary, retry-as-data
+// (`Result.Error string`), stateless between calls.
+
+/// Phase 162 — signs a DSR export envelope's bytes, returning the
+/// detached-JWS signature + public-key URL. Implemented by the
+/// `ToolUp.ArtefactSigning` `SignedExportBundle` adapter over an
+/// `IArtefactSigner`; the SDK core carries no signer dependency (GP 1).
+type IExportEnvelopeSigner =
+    abstract SignEnvelope: envelope: byte[] -> Async<Result<ExportSignature, string>>

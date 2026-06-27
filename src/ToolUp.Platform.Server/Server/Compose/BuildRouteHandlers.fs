@@ -552,10 +552,23 @@ let buildRouteHandlers
                                         return ()
                             }
 
+                            // Phase 162 — optional export-envelope signer.
+                            // Present when the deployment composed a
+                            // `SignedExportBundle` adapter (over an
+                            // `IArtefactSigner`). Absent leaves
+                            // `DownloadSignedExport` returning "not enabled";
+                            // the compose-time validator refuses startup on
+                            // the `SignExports = true` + no-signer mismatch.
+                            let signer =
+                                match ctx.RequestServices.GetService(typeof<IExportEnvelopeSigner>) with
+                                | :? IExportEnvelopeSigner as s -> Some s
+                                | _ -> None
+
                             Some {
                                 DataSubjectRequestApiHandler.DsrAsyncDeps.Store = store
                                 Scheduler = scheduler
                                 Notify = notify
+                                Signer = signer
                             }
                         | _ -> None
                     else

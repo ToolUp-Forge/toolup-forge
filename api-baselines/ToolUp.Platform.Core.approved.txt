@@ -1896,10 +1896,11 @@ ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput.Reason : System.String 
 ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput.SubjectUserId : System.String { get }
 ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi (class)
-ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ErasureRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSubjectRequestApi+ErasurePreview, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSubjectRequestApi+ErasureRunResult, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportStatus, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
+ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ErasureRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSubjectRequestApi+ErasurePreview, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSubjectRequestApi+ErasureRunResult, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportStatus, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SignedExportEnvelope, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.CancelExport : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.ConfirmErasure : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSubjectRequestApi+ErasureRunResult, System.String]]] { get }
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.DownloadExport : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]] { get }
+ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.DownloadSignedExport : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SignedExportEnvelope, System.String]]] { get }
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.GetExportStatus : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportStatus, System.String]]] { get }
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.PreviewErasure : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ErasureRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSubjectRequestApi+ErasurePreview, System.String]]] { get }
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.RequestExport : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]] { get }
@@ -1913,11 +1914,13 @@ ToolUp.Platform.DataSubjectRequestAuditPayload.Reason : System.String { get }
 ToolUp.Platform.DataSubjectRequestAuditPayload.RequestId : System.String { get }
 ToolUp.Platform.DataSubjectRequestAuditPayload.SubjectUserId : System.String { get }
 ToolUp.Platform.DataSubjectRequestConfig (class)
-ToolUp.Platform.DataSubjectRequestConfig..ctor(ToolUp.Platform.ErasurePolicy, System.Boolean)
+ToolUp.Platform.DataSubjectRequestConfig..ctor(ToolUp.Platform.ErasurePolicy, System.Boolean, System.Boolean)
 ToolUp.Platform.DataSubjectRequestConfig.Async : System.Boolean { get }
 ToolUp.Platform.DataSubjectRequestConfig.Policy : ToolUp.Platform.ErasurePolicy { get }
+ToolUp.Platform.DataSubjectRequestConfig.SignExports : System.Boolean { get }
 ToolUp.Platform.DataSubjectRequestConfigModule (class)
 ToolUp.Platform.DataSubjectRequestConfigModule.background(ToolUp.Platform.ErasurePolicy) : ToolUp.Platform.DataSubjectRequestConfig
+ToolUp.Platform.DataSubjectRequestConfigModule.signedBackground(ToolUp.Platform.ErasurePolicy) : ToolUp.Platform.DataSubjectRequestConfig
 ToolUp.Platform.DataSubjectRequestConfigModule.sync(ToolUp.Platform.ErasurePolicy) : ToolUp.Platform.DataSubjectRequestConfig
 ToolUp.Platform.DataSubjectRequestKind (class)
 ToolUp.Platform.DataSubjectRequestKind.Erase : ToolUp.Platform.DataSubjectRequestKind { get }
@@ -2465,6 +2468,11 @@ ToolUp.Platform.ExportSegment..ctor(System.String, System.String, System.Byte[])
 ToolUp.Platform.ExportSegment.Body : System.Byte[] { get }
 ToolUp.Platform.ExportSegment.MimeType : System.String { get }
 ToolUp.Platform.ExportSegment.Name : System.String { get }
+ToolUp.Platform.ExportSignature (class)
+ToolUp.Platform.ExportSignature..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ExportSignature.DetachedJws : System.String { get }
+ToolUp.Platform.ExportSignature.SigningKeyId : System.String { get }
+ToolUp.Platform.ExportSignature.SigningKeyUrl : System.String { get }
 ToolUp.Platform.ExportStatus (class)
 ToolUp.Platform.ExportStatus.Cancelled : ToolUp.Platform.ExportStatus { get }
 ToolUp.Platform.ExportStatus.Expired : ToolUp.Platform.ExportStatus { get }
@@ -2679,11 +2687,12 @@ ToolUp.Platform.HealthStateChangedPayload.ObservedAt : System.DateTime { get }
 ToolUp.Platform.HealthStateChangedPayload.ProbeName : System.String { get }
 ToolUp.Platform.HealthStateChangedPayload.ToStatus : System.String { get }
 ToolUp.Platform.HomeOverview (class)
-ToolUp.Platform.HomeOverview..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolSummary], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ActiveAiSummary], ToolUp.Platform.DeploymentContext, System.DateTime)
+ToolUp.Platform.HomeOverview..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolSummary], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ActiveAiSummary], ToolUp.Platform.DeploymentContext, System.DateTime, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.HomeOverview.ActiveAi : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ActiveAiSummary] { get }
 ToolUp.Platform.HomeOverview.Deployment : ToolUp.Platform.DeploymentContext { get }
 ToolUp.Platform.HomeOverview.GeneratedAt : System.DateTime { get }
 ToolUp.Platform.HomeOverview.Tools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolSummary] { get }
+ToolUp.Platform.HomeOverview.WidgetData : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.HomeOverviewApi (class)
 ToolUp.Platform.HomeOverviewApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Platform.I18nDefaults (class)
@@ -2748,6 +2757,8 @@ ToolUp.Platform.IHealthMonitorApi.GetPreflightSnapshot : Microsoft.FSharp.Core.F
 ToolUp.Platform.IHomeOverviewApi (class)
 ToolUp.Platform.IHomeOverviewApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HomeOverview]])
 ToolUp.Platform.IHomeOverviewApi.GetOverview : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HomeOverview]] { get }
+ToolUp.Platform.IHomeWidgetDataProvider (interface)
+ToolUp.Platform.IHomeWidgetDataProvider.Describe(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.IJobSchedulerTelemetry (interface)
 ToolUp.Platform.IJobSchedulerTelemetry.Snapshot() : ToolUp.Platform.JobSchedulerTelemetrySnapshot
 ToolUp.Platform.ILocaleResolver (interface)
@@ -5055,6 +5066,10 @@ ToolUp.Platform.SignedArtifact..ctor(ToolUp.Platform.ArtifactManifest, System.By
 ToolUp.Platform.SignedArtifact.Manifest : ToolUp.Platform.ArtifactManifest { get }
 ToolUp.Platform.SignedArtifact.Payload : System.Byte[] { get }
 ToolUp.Platform.SignedArtifact.Signature : System.Byte[] { get }
+ToolUp.Platform.SignedExportEnvelope (class)
+ToolUp.Platform.SignedExportEnvelope..ctor(System.Byte[], ToolUp.Platform.ExportSignature)
+ToolUp.Platform.SignedExportEnvelope.Envelope : System.Byte[] { get }
+ToolUp.Platform.SignedExportEnvelope.Signature : ToolUp.Platform.ExportSignature { get }
 ToolUp.Platform.SigningKeyRotatedPayload (class)
 ToolUp.Platform.SigningKeyRotatedPayload..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
 ToolUp.Platform.SigningKeyRotatedPayload.Actor : System.String { get }

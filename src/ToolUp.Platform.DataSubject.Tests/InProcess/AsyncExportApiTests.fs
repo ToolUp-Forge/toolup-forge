@@ -84,6 +84,8 @@ let private mkAsyncApi (exporters: IDataExporter list) =
         Store = store
         Scheduler = scheduler
         Notify = fun _ _ -> async { return () }
+        // Phase 162 — these tests exercise the unsigned async-export path.
+        Signer = None
     }
 
     let api =

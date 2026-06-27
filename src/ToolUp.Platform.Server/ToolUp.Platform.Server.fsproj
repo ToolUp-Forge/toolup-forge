@@ -343,6 +343,7 @@
         <Compile Include="Server\ShareTokenSigningKeyProvenanceValidator.fs" />
         <Compile Include="Server\JobSchedulerInstanceValidator.fs" />
         <Compile Include="Server\DeployPlaneDepsValidator.fs" />
+        <Compile Include="Server\SignedExportDepsValidator.fs" />
         <Compile Include="Server\PublicBaseUrlFormatValidator.fs" />
         <Compile Include="Server\OAuthStateStoreInstanceValidator.fs" />
         <Compile Include="Server\RateLimitModeValidator.fs" />
@@ -572,7 +573,6 @@
         <Compile Include="Server\ServerApp.fs" />
         <!-- Phase 166 — detachable module-binding manifest reader. After
              ServerApp (it applies stamps onto ServerModule). -->
-        <Compile Include="Server\ModuleBindingManifest.fs" />
         <!-- Phase 112 — live-session compose surface: options + SSE
              subscribe endpoint (scope-isolated, rate-limited) +
              LiveSessionsCompose.withLiveSessions. After ServerApp (the
