@@ -181,6 +181,10 @@
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
         <Compile Include="Server\JobScheduler.fs" />
+        <!-- Phase 164 — opt-in TTL sweep for BlobIdempotencyStore. After the
+             job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;
+             the shared layout stays in Remoting/Idempotency.fs. -->
+        <Compile Include="Server\IdempotencySweepJob.fs" />
         <Compile Include="Server\JobSchedulerDiagnosticsContributor.fs" />
         <Compile Include="Server\JobNotifyEventStore.fs" />
         <!-- Phase 26 — single-node default IBuildOrchestrator over IJobScheduler.

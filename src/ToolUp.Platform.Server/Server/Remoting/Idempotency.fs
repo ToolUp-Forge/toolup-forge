@@ -116,6 +116,32 @@ type InMemoryIdempotencyStore(?maxEntries: int) =
 
 // -----------------------------------------------------------------------------
 
+/// Phase 164 — shared layout for the blob-backed idempotency store, so the
+/// TTL sweep job (`IdempotencySweepJob`, compiled after the job substrate)
+/// enumerates + parses the same blobs `BlobIdempotencyStore` writes without
+/// duplicating the container / prefix / envelope-shape knowledge.
+module BlobIdempotencyLayout =
+    /// Reserved SDK-level container the idempotency envelopes live under.
+    [<Literal>]
+    let DefaultContainer = "_platform"
+
+    /// Blob-name prefix shared by every idempotency envelope (the `List`
+    /// argument the sweep enumerates).
+    [<Literal>]
+    let BlobPrefix = "idem/"
+
+    /// Read the absolute expiry (UTC ticks) from a stored envelope; `None`
+    /// when the blob is corrupt / not an idempotency envelope — the sweep
+    /// then leaves it untouched rather than crashing or mis-deleting.
+    let tryReadExpiryTicks (bytes: byte[]) : int64 option =
+        try
+            use doc = System.Text.Json.JsonDocument.Parse(System.ReadOnlyMemory<byte>(bytes))
+            Some(doc.RootElement.GetProperty("ExpiryUtcTicks").GetInt64())
+        with _ ->
+            None
+
+// -----------------------------------------------------------------------------
+
 /// Phase 69f.C — distributed `IIdempotencyStore` over `IBlobStorage`.
 /// Memoised entries are JSON blobs under the `_platform` container (the
 /// reserved SDK-level scope), named by a SHA-256 of `{scope}|{key}` so
@@ -135,13 +161,13 @@ type InMemoryIdempotencyStore(?maxEntries: int) =
 /// once-only semantics wire a store with a compare-and-set primitive
 /// (Redis SETNX / DynamoDB conditional put) against the same contract.
 type BlobIdempotencyStore(blobStorage: ToolUp.Platform.BlobStorage.IBlobStorage, ?container: string) =
-    let container = defaultArg container "_platform"
+    let container = defaultArg container BlobIdempotencyLayout.DefaultContainer
 
     let blobName (scope: string) (key: string) : string =
         use sha = System.Security.Cryptography.SHA256.Create()
         let bytes = System.Text.Encoding.UTF8.GetBytes(scope + "|" + key)
         let hash = System.Convert.ToHexString(sha.ComputeHash bytes).ToLowerInvariant()
-        "idem/" + hash + ".json"
+        BlobIdempotencyLayout.BlobPrefix + hash + ".json"
 
     // Serialise the envelope with `Utf8JsonWriter` / read it with
     // `JsonDocument` — no reflection over an F# record type, so the

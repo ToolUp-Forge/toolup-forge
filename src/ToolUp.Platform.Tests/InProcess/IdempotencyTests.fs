@@ -65,6 +65,66 @@ let tests =
 
             BlobIdempotencyStore(blob) :> IIdempotencyStore)
 
+        // ── Phase 164 — TTL sweep job ──
+        testCaseAsync "IdempotencySweepJob removes only TTL-expired entries; live entries still replay"
+        <| async {
+            let tempDir =
+                Path.Combine(Path.GetTempPath(), "toolup-idem-sweep-" + Guid.NewGuid().ToString("N"))
+
+            Directory.CreateDirectory tempDir |> ignore
+
+            let blob =
+                LocalFileStorage.LocalFileStorage(tempDir) :> ToolUp.Platform.BlobStorage.IBlobStorage
+
+            let store = BlobIdempotencyStore(blob)
+            let istore = store :> IIdempotencyStore
+
+            let resp: MemoisedResponse = {
+                Body = [| 1uy; 2uy; 3uy |]
+                StatusCode = 200
+                ContentType = "application/json"
+                RequestBodyHash = ""
+            }
+
+            // One live entry (+1h) and one already-expired entry (-1h); the
+            // store stamps absolute expiry, so a negative TTL writes a
+            // past-expiry envelope without waiting.
+            do! istore.Store("live", "s", resp, TimeSpan.FromHours 1.0)
+            do! istore.Store("expired", "s", resp, TimeSpan.FromHours -1.0)
+
+            let! before = blob.List(BlobIdempotencyLayout.DefaultContainer, BlobIdempotencyLayout.BlobPrefix)
+            Expect.equal before.Length 2 "both envelopes are on disk before the sweep"
+
+            // Build a throwaway JobContext — the sweep ignores it (rule 4:
+            // all state read from the store each run).
+            let ctx: ToolUp.Platform.JobContext = {
+                JobId = Guid.NewGuid()
+                ScopeId = BlobIdempotencyLayout.DefaultContainer
+                AccessContext = ToolUp.Platform.AccessContext.unrestricted (ToolUp.Platform.AuthenticatedUser "_system")
+                Attempt = 1
+                Trigger = ToolUp.Platform.Trigger.Manual
+                TriggerSource = ToolUp.Platform.TriggerSource.ScheduledManually "_system"
+                ScheduledAt = DateTime.UtcNow
+                RunningAt = DateTime.UtcNow
+                Payload = ""
+                DeadLetterDestination = None
+            }
+
+            let! result = (IdempotencySweep.handler blob).Execute ctx
+            Expect.equal result ToolUp.Platform.JobResult.Success "sweep completes successfully"
+
+            // Only the expired blob is gone — proved by the on-disk count,
+            // not a TryGet (which would itself lazily evict the expired one).
+            let! after = blob.List(BlobIdempotencyLayout.DefaultContainer, BlobIdempotencyLayout.BlobPrefix)
+            Expect.equal after.Length 1 "the sweep removed exactly the expired envelope"
+
+            let! liveGet = istore.TryGet("live", "s")
+            Expect.isSome liveGet "the live entry still replays after the sweep"
+
+            let! expiredGet = istore.TryGet("expired", "s")
+            Expect.isNone expiredGet "the expired entry is gone"
+        }
+
         // ── Classification ──
         test "server-family and mirror-family [<Idempotent>] classify identically" {
             let server = Idempotency.classify typeof<ServerIdempotentApi>

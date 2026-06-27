@@ -42,6 +42,17 @@ Clients attach the header per call (one UUID per logical operation, reused acros
 
 **Concurrency note.** `IBlobStorage` exposes no conditional-write / ETag surface, so two requests racing the *same* key both miss-then-store and the second overwrites the first (last-write-wins). The handler is idempotent by contract, so both writes carry the same response and the race is benign for *replay* correctness — but it does not guarantee exactly-once *handler invocation* under a concurrent race (neither does the in-process default — that needs a conditional-write the interface doesn't model). Deployments needing stricter once-only semantics wire a store with a compare-and-set primitive (Redis `SETNX`, DynamoDB conditional put) against the same `IIdempotencyStore` contract — validate it with the `IIdempotencyStoreContract` conformance pack.
 
+**TTL sweep (Phase 164).** `BlobIdempotencyStore` enforces TTL **lazily on read** — an expired envelope is read as a miss and best-effort deleted. Correct for replay semantics, but an entry written once and never read again is never reclaimed, so dead `_platform`-container blobs accumulate on write-heavy idempotent endpoints. Phase 164 closes that documented deferral with `IdempotencySweep` (`src/ToolUp.Platform.Server/Server/IdempotencySweepJob.fs`): an `IJobScheduler`-backed handler that enumerates the idempotency container and deletes past-expiry envelopes. **Opt-in, default off (GP 11 / GP 13)** — a deployment adds the declaration to its scheduled jobs to enable it; one that doesn't keeps lazy-TTL-on-read and pays nothing.
+
+```fsharp
+// Reclaim expired idempotency envelopes hourly (only meaningful with a
+// BlobIdempotencyStore composed). Add to the deployment's scheduled-job
+// declarations:
+IdempotencySweep.declaration "0 * * * *" blobStorage
+```
+
+The handler is stateless between runs (GP 12 rule 4 — every tick re-reads the full blob set) and concurrency-safe: it deletes only entries it has just read as past-expiry, and the lazy read path re-checks expiry on every `TryGet`, so a sweep racing a live read/replay never strands a still-valid entry (last-write-wins on `Delete` is benign). Verified by the `IdempotencySweepJob` case in `InProcess/IdempotencyTests.fs` (seed one live + one expired entry, sweep, assert only the expired blob is removed and the live entry still replays).
+
 ## Verification
 
 1. `dotnet build` — clean.
