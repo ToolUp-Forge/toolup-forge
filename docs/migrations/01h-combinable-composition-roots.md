@@ -32,6 +32,22 @@ duplicating AI's DI registrations inline (see the existing comment in
 before that refactor would force the duplication into the additive
 surface.
 
+**Update — RAG half landed.** The gating refactor + `withRAG` now ship:
+the positional `composeWithRAG` is **removed** and replaced by
+`composeRAG : RAGServerApp -> ServerApp`, which composes *over*
+`composeAI` (so RAG inherits every AI DI registration / handler / dev
+endpoint / validator instead of hand-copying them). `RAGServerApp.run`
+is now `composeRAG >> ServerApp.run`; `RAGServerApp.createFrom factory
+providerProfile embedder baseApp` lifts an existing `ServerApp`; and
+`RAGCompose.withRAG factory providerProfile embedder configure app`
+stacks RAG (and the AI assistant it composes over) onto a `ServerApp`
+pipeline alongside `withForms` / `withAI`. Existing `RAGServerApp.run`
+consumers need **no change** — behaviour is preserved, with one strictly
+additive gain: RAG deployments now register the Phase 171
+`IActiveAiProbe` (previously AI-only; the hand-copied RAG DI block had
+fallen behind), so the platform Home overview surfaces the active AI
+provider/model for RAG apps too. See the `composeRAG` § below.
+
 **Update — conflict validator + sample landed.** Two of the three
 follow-up items now ship alongside this doc:
 
@@ -61,9 +77,63 @@ follow-up items now ship alongside this doc:
   `docs/platform/composition-roots.md` carries a matching
   "Combining companions on one pipeline (Phase 1h)" section.
 
-The remaining `withRAG` work is still gated on the `composeWithRAG`
-→ `composeAI` lift described above and is deferred to a follow-up
-pass.
+The `withRAG` work described above has now landed (see "Update — RAG
+half landed"); the `composeRAG` § below documents the new seams.
+
+---
+
+## `composeRAG` / `withRAG` (RAG half)
+
+`ToolUp.RAG.RAGCompose.composeRAG : RAGServerApp -> ServerApp` mirrors
+`composeForms` / `composeAI`: it applies every RAG contribution onto the
+inner `ServerApp` and returns the composed result without driving it.
+Internally it builds the RAG-aware system-prompt layers (framing +
+retrieval builder + strict-grounding guard), folds them into the AI
+assistant config, runs `composeAI` for the AI half, then layers the RAG
+DI (vector store / sparse index / pipeline / ingestion + reembedding
+hosted services / citation normaliser), the `/health/rag` +
+`/dev/rag-citation` routes, and the RAG config validators on top. Marked
+`[<EditorBrowsable(Never)>]` — consumers use `RAGServerApp.run` or
+`withRAG`.
+
+The old positional `composeWithRAG` (also `[<EditorBrowsable(Never)>]`)
+is **removed**; nothing in-tree called it externally (`RAGServerApp.run`
+was its only caller), and `composeRAG` is the only seam the additive
+extension needs.
+
+```fsharp
+// ToolUp.RAG.RAGCompose
+val composeRAG : RAGServerApp -> ServerApp
+
+val withRAG :
+    IAIProviderFactory ->
+    IProviderProfile ->
+    IEmbeddingProvider ->
+    (RAGServerApp -> RAGServerApp) ->
+    ServerApp ->
+    ServerApp
+
+// ToolUp.RAG.RAGCompose.RAGServerApp
+val createFrom :
+    IAIProviderFactory -> IProviderProfile -> IEmbeddingProvider -> ServerApp -> RAGServerApp
+```
+
+Combined Forms + RAG on one pipeline:
+
+```fsharp
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withStorage storage
+|> FormsCompose.withForms (fun f ->
+    f |> FormsServerApp.withFormSchema mySchema)
+|> RAGCompose.withRAG factory providerProfile embedder (fun rag ->
+    rag
+    |> RAGServerApp.withAIConfig assistant
+    |> RAGServerApp.withGroundingMode StrictlyGrounded)
+|> ServerApp.run
+```
+
+Production code using `RAGServerApp.run` requires **no change**.
 
 ---
 

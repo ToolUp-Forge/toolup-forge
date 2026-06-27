@@ -393,730 +393,6 @@ let private makeNullBlobStorage () : IBlobStorage =
         }
     }
 
-// ─── composeWithRAG ───────────────────────────────────────────────
-
-/// Drop-in replacement for `composeWithAI` for applications that add RAG.
-///
-/// Wires up:
-/// - `IVectorStore` — `InMemoryVectorStore` backed by `IBlobStorage`
-/// - `IEmbeddingProvider` — supplied by the caller
-/// - `IRetrievalPipeline` — `RetrievalPipeline` composing the two above
-/// - `IngestionQueue` — unbounded channel for background chunk indexing
-/// - `IngestionBackgroundService` — `IHostedService` dequeuing and embedding
-/// - Post-save hook on `SessionFileStore` — enqueues chunks after each file upload
-/// - `withRetrieval` builder — appended to the AI system prompt chain
-///
-/// `vectorisationHandlers` is the list of per-module `VectorisationHandler`
-/// declarations. Modules that want their processed data vectorised register one;
-/// modules that don't register nothing (non-breaking).
-/// **Advanced.** Apps should use `RAGServerApp.run` instead.
-/// `composeWithRAG` is the low-level entry point and its positional
-/// signature changes whenever new SDK features land. Hidden from
-/// IntelliSense via `[<EditorBrowsable>]`.
-[<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
-let composeWithRAG
-    (handlers: HttpHandler list)
-    (dataTypes: DataType list)
-    (vectorisationHandlers: VectorisationHandler list)
-    (ingestionObservers: IIngestionStatusObserver list)
-    (config: ServerConfig)
-    (authProvider: IAuthProvider option)
-    (baseExtensions: ComposeExtensions)
-    (embeddingProvider: IEmbeddingProvider)
-    (aiProviderFactory: IAIProviderFactory)
-    (providerProfile: IProviderProfile)
-    (moduleTools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list)
-    (aiConfig: AIAssistantServerConfig option)
-    (moduleAIContexts: ModuleAIContext list)
-    (logger: ILogger option)
-    (blobStorage: IBlobStorage option)
-    (notificationChannel: INotificationChannel option)
-    (queryHandlers: (string * ModuleQueryHandler) list)
-    (dataTypeRegistrations: (string * DataType) list)
-    (reranker: IReranker option)
-    (enableMmr: bool)
-    (mmrLambda: float)
-    (vectorStoreOverride: IVectorStore option)
-    (retrievalFraming: string)
-    (ingestionConcurrency: int)
-    (ingestionQueueCapacity: int)
-    (telemetryOverride: IRagTelemetry option)
-    (retrievalDefaults: RetrievalDefaults)
-    (groundingMode: GroundingMode)
-    (enableDocumentSummaries: bool)
-    (transactionalSinks: INotificationSink list)
-    (healthChecks: HealthChecks.IHealthCheck list)
-    (configValidators: ConfigValidation.IConfigValidator list)
-    (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
-    (entityRegistrations: (EntityStore.EntityRegistry -> unit) list)
-    (quotaPolicyOverride: ITeamQuotaPolicy option)
-    (companionMetricsSinks: Metrics.IMetricsSink list)
-    (auditSinks: IAuditSink list)
-    (auditReplicatorOptions: AuditReplicatorOptions option)
-    (moduleMetricRegistrations: Metrics.MetricRegistration list)
-    (activitySinkOverride: Tracing.IActivitySink option)
-    (rateLimitDescriptors: RateLimitDescriptor list)
-    (smokeTests: SmokeTests.ISmokeTest list)
-    (citationPolicy: CitationNormaliser.RagCitationPolicy)
-    (maxChunkBytes: int option)
-    (maxDocumentBytes: int option)
-    (pendingInviteStoreOverride: IPendingInviteStore option)
-    (subjectMigratorOverride: IAnonymousSessionMigrator option)
-    (shareTokenStoreDecorators: (IShareTokenStore -> IShareTokenStore) list)
-    (moduleSurfaceDefaults: (string * SurfaceRequirement) list)
-    (routeSurfaceOverrides: ((string * string) * SurfaceRequirement) list)
-    (scheduledJobDeclarations: ScheduledJobDeclaration list)
-    // Phase 70 — Platform AI keys substrate. `platformKeyStoreOverride`
-    // mirrors AIServerApp.PlatformKeyStore (None → auto-promote
-    // BlobPlatformAIKeyStore from the registered ISecretStore).
-    // `platformProviders` mirrors AIServerApp.PlatformProviders and
-    // drives the A.5 declaration-vs-factory validator below; an empty
-    // list disables the validator (back-compat for consumers that
-    // haven't adopted withPlatformProvider).
-    (platformKeyStoreOverride: IPlatformAIKeyStore option)
-    (platformProviders: DefaultAIProviderFactory.AIPlatformProvider list)
-    // Phase 176 — transient-fault resilience opt-in, forwarded to the
-    // base `compose` so a RAG deployment's storage / secret store inherits
-    // the same retry/breaker/timeout decorator. `NoResilience` (default)
-    // leaves them un-decorated.
-    (storageResilience: ResilienceMode)
-    (secretResilience: ResilienceMode)
-    =
-
-    // Phase 70 A.5 — verify the consumer-declared platform-provider
-    // accumulator matches the factory's PlatformDescriptors. A
-    // divergence means the consumer wired providers via
-    // AIServerApp.withPlatformProvider but passed a different list
-    // (or none) to DefaultAIProviderFactory.create — caught here,
-    // before any request runs, rather than as a mysterious
-    // NoProviderConfigured at first request. Mirrors AICompose.fs.
-    if not platformProviders.IsEmpty then
-        let declaredIds = platformProviders |> List.map _.Descriptor.Id
-
-        let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map _.Id
-
-        if Set.ofList declaredIds <> Set.ofList factoryIds then
-            failwithf
-                "AI platform-provider declaration mismatch. AIServerApp.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
-                (System.String.Join(", ", declaredIds))
-                (System.String.Join(", ", factoryIds))
-
-    let queue = IngestionQueue(ingestionQueueCapacity)
-
-    // Default to a 60-second rolling-window telemetry sink so `/health/rag`
-    // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel
-    // export pass their own `IRagTelemetry` via `withTelemetry` — the
-    // override branch returns it untouched.
-    let telemetry =
-        telemetryOverride
-        |> Option.defaultWith (fun () -> ToolUp.RAG.RagTelemetry.createDefault ())
-
-    // Resolve a logger once — used for the null-blob warning, IngestionService,
-    // the vector store flush loop, and the post-save vectorisation hook.
-    // Falls back to `ConsoleLogger` so that callers who don't pass one still
-    // see warnings and errors rather than a silent crash. Matches the
-    // fallback pattern in `SDK.Server.compose`.
-    let ragLogger =
-        logger
-        |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
-
-    // EventStore reference — filled in the service config callback below.
-    // The post-save hook captures it lazily so handler-skip and oversize-
-    // doc rejections can write `RAG.*` events alongside ingestion / RBAC /
-    // file-op audit events. Deferred-ref pattern (same as `pipelineRef` /
-    // `tracerRef` below) because the hook is built before `serviceConfig`
-    // runs and we don't want to build a throwaway DI provider here.
-    let eventStoreRef: IEventStore option ref = ref None
-
-    // Register the post-save vectorisation hook so `SessionFileStore.AddFile`
-    // enqueues chunks after every successful file upload.
-    if not vectorisationHandlers.IsEmpty then
-        configurePostSaveHooks [
-            makeVectorisationHook
-                vectorisationHandlers
-                queue
-                telemetry
-                enableDocumentSummaries
-                maxChunkBytes
-                maxDocumentBytes
-                eventStoreRef
-                ragLogger
-        ]
-
-    // Pipeline + tracer references — filled in the service config callback
-    // below, before any request arrives. The prompt builder reads both
-    // lazily at request time so the miss-diagnostic path resolves the same
-    // tracer the pipeline writes its `KnowledgeRetrieved` events through.
-    let pipelineRef: IRetrievalPipeline option ref = ref None
-    let tracerRef: IRetrievalTracer option ref = ref None
-
-    let ragBuilder: SystemPromptBuilder =
-        fun ctx -> async {
-            match pipelineRef.Value with
-            | Some pipeline ->
-                let! block = (withRetrieval retrievalDefaults (Some telemetry) tracerRef.Value pipeline) ctx
-
-                // Server-side strict-grounding guard. `withRetrieval`
-                // has populated `ctx.RetrievedSources` with whatever
-                // cleared `MinScore`. Under `StrictlyGrounded`, an
-                // empty set means "knowledge base had nothing relevant"
-                // — refuse the turn WITHOUT a provider call rather than
-                // relying solely on the prompt directive (which a model
-                // can ignore or be jailbroken past). This is the
-                // "server-side guard" the grounding contract promises;
-                // it pairs with `strictlyGroundedDirective`.
-                if groundingMode = StrictlyGrounded && List.isEmpty ctx.RetrievedSources.Value then
-                    ctx.ShortCircuit.Value <- Some "I don't have information on that in your knowledge base."
-
-                return block
-            | None -> return ""
-        }
-
-    // Framing preamble: explains to the model what the KB is, that retrieval
-    // has already run for the current turn, and how to behave when nothing
-    // was found. The `GroundingMode` further shapes the directive —
-    // `Permissive` opts out entirely, `Preferred` uses the supplied framing,
-    // `StrictlyGrounded` appends the strict directive that pairs with the
-    // server-side miss guard.
-    let resolvedFraming = resolveFraming groundingMode retrievalFraming
-
-    let framingBuilder: SystemPromptBuilder option =
-        if System.String.IsNullOrWhiteSpace resolvedFraming then
-            None
-        else
-            Some(SystemPromptBuilder.fromStatic resolvedFraming)
-
-    // Extend the AI config to include the framing preamble (if any) and the
-    // retrieval builder. Order matters: the model sees framing *before* the
-    // retrieved chunks so it knows what they are when it reads them.
-    let resolvedAiConfig =
-        let ragLayers = [ yield! framingBuilder |> Option.toList; yield ragBuilder ]
-
-        match aiConfig with
-        | None ->
-            Some {
-                Branding = {
-                    Name = "AI Assistant"
-                    Icon = ""
-                    ShowSidePanel = true
-                }
-                SystemPrompt = Some(SystemPromptBuilder.compose ragLayers)
-                MaxHistoryMessages = None
-            }
-        | Some cfg ->
-            let composedBuilder =
-                match cfg.SystemPrompt with
-                | Some existing -> SystemPromptBuilder.compose (existing :: ragLayers)
-                | None -> SystemPromptBuilder.compose ragLayers
-
-            Some {
-                cfg with
-                    SystemPrompt = Some composedBuilder
-            }
-
-    // Build the AI handlers (mirrors AICompose.fs). `SSEConnectionManager`
-    // is registered by core `compose` and resolved per-request from DI —
-    // RAG and AI share the same instance with the generic notification
-    // channel at `/api/notifications`.
-    let resolveManager (ctx: HttpContext) =
-        ctx.RequestServices.GetService(typeof<SSEConnectionManager>) :?> SSEConnectionManager
-
-    // Validate tool name uniqueness across modules AND against the
-    // platform-reserved `NarrativeTools.builtInTools` names. Same shape
-    // as `composeWithAI` — duplicates fail loudly here at compose time.
-    let builtInToolNames = NarrativeTools.builtInTools |> List.map _.Definition.Name
-
-    let moduleToolNames = moduleTools |> List.map (fun (def, _) -> def.Name)
-
-    let duplicateNames =
-        (builtInToolNames @ moduleToolNames)
-        |> List.groupBy id
-        |> List.choose (fun (n, occurrences) -> if occurrences.Length > 1 then Some n else None)
-
-    if not duplicateNames.IsEmpty then
-        failwithf
-            "AI tool name collision: %s. Each tool must have a unique Name across the deployment. The SDK reserves the built-in NarrativeTools names [%s] — rename any module-declared tools that collide."
-            (System.String.Join(", ", duplicateNames))
-            (System.String.Join(", ", builtInToolNames))
-
-    let registeredModuleTools =
-        moduleTools
-        |> List.map (fun (def, exec) -> ToolUp.AI.AIToolRegistry.createTool def exec)
-
-    let registry = AIToolRegistry()
-    registry.RegisterAll(NarrativeTools.builtInTools @ registeredModuleTools)
-
-    let moduleAIContextMap =
-        moduleAIContexts |> List.map (fun c -> c.ModuleName, c) |> Map.ofList
-
-    // Phase 6g.A / 6h singletons. Forked from AICompose.fs — see the
-    // note in `serviceConfig` below. Both must be `let`-bound here so
-    // the route handlers (`clientToolResultHandler`, `cancelHandler`)
-    // and the DI container resolve the same instances `aiAssistantApi`
-    // suspends agent-loop tool calls and registers cancellation tokens
-    // against.
-    let dispatchRegistry = ToolUp.AI.ClientToolDispatch.ClientToolDispatchRegistry()
-    let cancellationRegistry = ToolUp.AI.AICancellationRegistry.AICancellationRegistry()
-
-    // Phase 6q follow-up C — /dev/rag-citation rolling-window stats.
-    // Master gate is `ServerConfig.EnableDevEndpoints`; the per-endpoint
-    // `ServerConfig.EnableCitationDevEndpoint` override can only
-    // suppress, never force-on (Investigate gaps 2026-06-12, RAG Gap 8
-    // — deliberately reverses Phase 14s Gap #4's force-on arm).
-    // `/dev/rag-citation` is the most privacy-sensitive dev endpoint:
-    // `RecentRewrites` carries conversation-derived text, the handler
-    // has no auth gate of its own, and this registration site carries
-    // no compile-time gate, so it registers live in Release builds.
-    // The "master off ⇒ no dev surface" audit invariant therefore
-    // holds for it unconditionally: `Some true` collapses to
-    // follow-master, and `CitationDevEndpointValidator` warns at
-    // startup when the now-inert force-on shape is configured. If the
-    // citation-only-probe use case ever materialises, reintroduce it
-    // as a named capability-as-type DU case with auth on the endpoint
-    // — trigger-gated, not preserved speculatively.
-    let citationEndpointEnabled =
-        match config.EnableCitationDevEndpoint with
-        | Some explicit -> explicit && config.EnableDevEndpoints
-        | None -> config.EnableDevEndpoints
-
-    // Startup visibility: one line naming the dev endpoints this
-    // composition actually registered, so an operator audits the live
-    // dev surface from the log instead of re-deriving the gate logic.
-    // The default-off shape stays log-silent.
-    do
-        let active = [
-            if config.EnableDevEndpoints then
-                yield "/dev/ai-fastpath"
-                yield "/dev/ai-latency"
-            if citationEndpointEnabled then
-                yield "/dev/rag-citation"
-        ]
-
-        if not active.IsEmpty then
-            ragLogger.Info(sprintf "[RAGCompose] Dev endpoints registered: %s" (String.concat ", " active))
-
-    let aiHandlers = [
-        // `aiAssistantApi` returns a 2-tuple of API records (legacy
-        // SubmitMessage + the Phase 69c.tail typed streaming companion
-        // StreamChatV2). Both halves must be mounted as separate APIs —
-        // mirrors AICompose.fs. Passing the whole tuple to a single
-        // `makeApi` raises "Protocol definition must be encoded as a record
-        // type. The input type 'Tuple`2'" at startup (RAGCompose ⊕ AICompose
-        // drift — RAGServerApp.run is the canonical commercial-app shape, so
-        // this path must stay in lockstep with AICompose).
-        makeApi (fun ctx ->
-            ToolUp.AI.AIAssistantHandler.aiAssistantApi resolvedAiConfig moduleAIContextMap (resolveManager ctx) ctx
-            |> fst)
-        makeApi (fun ctx ->
-            ToolUp.AI.AIAssistantHandler.aiAssistantApi resolvedAiConfig moduleAIContextMap (resolveManager ctx) ctx
-            |> snd)
-        makeApi (ToolUp.AI.AISettingsHandler.aiSettingsApi aiProviderFactory providerProfile)
-        // Phase 70 — Platform Admin AI keys API. Every method is
-        // gated server-side on canModifyPlatformConfig; the client-
-        // side module is hidden from non-admin sidebars by
-        // ClientModule.Visibility.platformAdminOnly. Forked in to
-        // match AICompose.fs — the route was previously only
-        // mounted for AIServerApp.run, so any RAG-using deployment
-        // (RAGServerApp.run is the canonical commercial-app shape)
-        // 404'd on /api/PlatformAIKeysApi/* even though the SDK
-        // shipped the handler.
-        makeApi (ToolUp.AI.PlatformAIKeysHandler.platformAIKeysApi aiProviderFactory)
-        route "/api/ai/events"
-        >=> fun next ctx -> ToolUp.AI.SSEHandler.sseHandler (resolveManager ctx) config.SseAuthMode next ctx
-        // Phase 6g.A: client-resident tool result POST endpoint.
-        POST
-        >=> route "/api/ai/tool-result"
-        >=> ToolUp.AI.ClientToolDispatch.clientToolResultHandler
-        // Phase 6h: cancel-mid-stream endpoint.
-        POST
-        >=> routef "/api/ai/cancel/%O" ToolUp.AI.AICancellationRegistry.cancelHandler
-        // Phase 6j.A: fast-path audit beacon.
-        POST
-        >=> route "/api/ai/fastpath/beacon"
-        >=> ToolUp.AI.FastPathBeaconHandler.beaconHandler
-        // Phase 6j.G: sequenced fast-path beacons.
-        POST
-        >=> route "/api/ai/fastpath/sequenced-clause-beacon"
-        >=> ToolUp.AI.FastPathBeaconHandler.sequencedClauseBeaconHandler
-        POST
-        >=> route "/api/ai/fastpath/sequence-outcome-beacon"
-        >=> ToolUp.AI.FastPathBeaconHandler.sequenceOutcomeBeaconHandler
-        // Phase 6h.A: conversation-export audit beacon.
-        POST
-        >=> route "/api/ai/conversation/export-audit"
-        >=> ToolUp.AI.ConversationExportAuditHandler.exportAuditHandler
-        // Phase 6g.E: client UI decoder-error sink.
-        POST
-        >=> route "/api/ai/ui-decode-error"
-        >=> ToolUp.AI.UIDecodeErrorHandler.uiDecodeErrorHandler
-        ToolUp.RAG.RagHealthHandler.route
-        // Phase 6j.A + 6i.A: dev-only AI telemetry endpoints. Runtime-
-        // gated via `ServerConfig.EnableDevEndpoints` (default `false`)
-        // — mirrors AICompose.fs's `fastPathDevHandlers` block. Two
-        // endpoints share the gate:
-        //   * `/dev/ai-fastpath` — Phase 6j.A Tier-1 hit-rate stats
-        //   * `/dev/ai-latency`  — Phase 6i.A per-turn latency rollup
-        if config.EnableDevEndpoints then
-            yield! ToolUp.AI.FastPathTelemetryHandler.routes
-            yield! ToolUp.AI.AILatencyHandler.routes
-        // Phase 6q follow-up C — /dev/rag-citation rolling-window stats.
-        // Gate resolved above (`citationEndpointEnabled`): master switch
-        // ANDed with the suppress-only per-endpoint override.
-        if citationEndpointEnabled then
-            yield! ToolUp.RAG.RAGCitationDevEndpoint.routes
-    ]
-
-    // Service config: registers both AI services and RAG services.
-    // Mirrors the AI registration in AICompose.fs, then adds RAG on top.
-    // `SSEConnectionManager` is registered by core `compose` — not here.
-    //
-    // KEEP IN SYNC WITH AICompose.fs. RAGCompose was forked from
-    // AICompose during the RAG extraction (Phase 14a) and the two
-    // have drifted whenever AI added new infrastructure — Phase 6g.A
-    // (ClientToolDispatchRegistry + /api/ai/tool-result route) and
-    // Phase 6h (AICancellationRegistry + /api/ai/cancel/{taskId}
-    // route) both shipped against AICompose only and silently broke
-    // RAG-using deployments. A future refactor should have RAGCompose
-    // call composeWithAI internally instead of duplicating its
-    // registrations; until then, every AI infrastructure addition
-    // needs a matching edit here.
-    // Phase 6q follow-up — ICitationNormaliser seam.
-    // Always register the rolling-window counter store (the dev
-    // endpoint resolves it unconditionally); register the normaliser
-    // implementation only when the policy isn't Off so the AI
-    // handler can resolve `null` and skip the pass on Off
-    // deployments (byte-for-byte pre-Phase-6q behaviour).
-    let citationCounters: ICitationCounters =
-        ToolUp.RAG.CitationNormaliserImpl.RollingCitationCounters() :> _
-
-    let citationNormaliserOpt: ICitationNormaliser option =
-        if citationPolicy = CitationNormaliser.Off then
-            None
-        else
-            Some(ToolUp.RAG.CitationNormaliserImpl.create citationPolicy citationCounters)
-
-    let serviceConfig (s: IServiceCollection) =
-        // AI services. The `IAIProviderFactory` registration flows
-        // through the shared Metering+Quota wrap helper so RAG-using
-        // deployments retain Phase 9d usage metering and Phase 9
-        // compute-quota enforcement on AI calls. Earlier this branch
-        // registered the raw factory and silently bypassed both
-        // subsystems even when the deployment opted into metering.
-        let s =
-            s
-                .AddSingleton<IAIProviderFactory>(
-                    ToolUp.AI.AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
-                )
-                .AddSingleton<IProviderProfile>(providerProfile)
-                // Phase 70 — register the Platform-Admin-managed AI key
-                // store. When the consumer passed `withPlatformAIKeyStore`
-                // explicitly, register that instance directly. When
-                // omitted, register a Func-resolver that lazily builds
-                // `BlobPlatformAIKeyStore.create secretStore` from
-                // whichever `ISecretStore` is in DI at request time.
-                // Mirrors AICompose.fs.
-                .AddSingleton<IPlatformAIKeyStore>(
-                    System.Func<System.IServiceProvider, IPlatformAIKeyStore>(fun sp ->
-                        match platformKeyStoreOverride with
-                        | Some store -> store
-                        | None ->
-                            let secretStore =
-                                sp.GetService(typeof<ToolUp.Platform.Secrets.ISecretStore>)
-                                :?> ToolUp.Platform.Secrets.ISecretStore
-
-                            ToolUp.AI.BlobPlatformAIKeyStore.create secretStore)
-                )
-                .AddSingleton<AIToolRegistry>(registry)
-                .AddSingleton<ToolUp.AI.ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)
-                .AddSingleton<ToolUp.AI.AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
-                // Warn at startup when AI runs multi-instance with the
-                // in-process cancel / client-tool-dispatch registries
-                // (no cross-instance routing yet). Mirrors AICompose.fs.
-                .AddSingleton<ConfigValidation.IConfigValidator>(
-                    ToolUp.AI.AICancellationDispatchInstanceValidator.AICancellationDispatchInstanceValidator(config)
-                    :> ConfigValidation.IConfigValidator
-                )
-                // Phase 9m.A — catch operator-typo'd TOOLUP_AI_PROVIDER /
-                // TOOLUP_AI_MODEL env vars at startup. Both validators
-                // self-skip with Ok when the corresponding env var is
-                // unset (GP 13 — zero cost when not opted into).
-                .AddSingleton<ConfigValidation.IConfigValidator>(
-                    ToolUp.AI.AIProviderEnvValidator.create aiProviderFactory
-                )
-                .AddSingleton<ConfigValidation.IConfigValidator>(ToolUp.AI.AIModelEnvValidator.create aiProviderFactory)
-                .AddSingleton<ICitationCounters>(citationCounters)
-
-        // Phase 9m.A — opt-in startup probe (default OFF). Registered
-        // only when TOOLUP_AI_PROBE_ON_STARTUP=1 — pays nothing for
-        // deployments that haven't opted in (GP 13). When enabled,
-        // probes the resolved provider's models endpoint with the
-        // API key from the provider's documented env var
-        // (ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY).
-        let s =
-            match ToolUp.AI.AIProviderProbeValidator.tryFromEnv aiProviderFactory with
-            | None -> s
-            | Some probe -> s.AddSingleton<ConfigValidation.IConfigValidator>(probe)
-
-        // Phase 6q follow-up — citation normaliser. Registered only
-        // when the policy isn't Off; non-RAG callers (composeWithAI)
-        // never register and the AI handler resolves null.
-        let s =
-            match citationNormaliserOpt with
-            | Some normaliser -> s.AddSingleton<ICitationNormaliser>(normaliser)
-            | None -> s
-
-        // RAG services
-        let blobStorageForRag =
-            match blobStorage with
-            | Some bs -> bs
-            | None ->
-                ragLogger.Warn
-                    "[RAGCompose] No IBlobStorage supplied — vector index persistence is disabled. Ingested chunks will be lost across process restart. Pass `Some storage` to composeWithRAG for a durable deployment."
-
-                makeNullBlobStorage ()
-
-        let vectorStore: IVectorStore =
-            vectorStoreOverride
-            |> Option.defaultWith (fun () ->
-                new InMemoryVectorStore(blobStorageForRag, logger = ragLogger, telemetry = telemetry) :> IVectorStore)
-
-        let sparseIndex: ISparseIndex =
-            new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex
-
-        // Wrap the supplied embedder so repeated query / chunk text hits hit
-        // an in-memory LRU cache rather than the underlying provider. Cache
-        // key includes provider + model + dimensions so a model swap
-        // automatically invalidates entries (no need to flush on upgrade).
-        let embeddingCache: IEmbeddingCache =
-            new InMemoryEmbeddingCache() :> IEmbeddingCache
-
-        let cachedEmbedder: IEmbeddingProvider =
-            CachingEmbeddingProvider.create embeddingProvider embeddingCache
-
-        let pipelineOptions: RetrievalPipelineOptions = {
-            Reranker = reranker
-            EnableMmr = enableMmr
-            MmrLambda = mmrLambda
-            ActiveModuleBoost = RetrievalPipelineOptions.defaults.ActiveModuleBoost
-            SummaryBoost = RetrievalPipelineOptions.defaults.SummaryBoost
-        }
-
-        // Build the probe provider ONCE and resolve every
-        // pre-composeWithRAG registration from it. Calling
-        // `s.BuildServiceProvider()` per lookup (as before) built a
-        // separate throwaway container each time, so each resolved
-        // service could be a different singleton instance than the one
-        // the running app uses (e.g. a custom IEventStore / tracer),
-        // and every call leaked duplicate singletons. One probe = one
-        // consistent view. Not disposed: the resolved instances are
-        // captured below for the process lifetime (same lifetime the
-        // original per-call providers had).
-        let probe = s.BuildServiceProvider()
-
-        // Resolve event store first so the retrieval tracer can write
-        // `KnowledgeRetrieved` audit events alongside ingestion / RBAC /
-        // file-op audit events. Same DI fallback shape as below so the
-        // tracer wiring is independent of caller config order.
-        let eventStore =
-            match probe.GetService(typeof<IEventStore>) with
-            | :? IEventStore as es -> es
-            | _ -> ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
-
-        // Hand the resolved event store to the post-save hook so handler-
-        // skip and oversize-doc rejections emit `RAG.*` audit events.
-        eventStoreRef.Value <- Some eventStore
-
-        // Pick the registered tracer if any; default to the event-store
-        // tracer so retrieval traces are persisted out-of-the-box. A
-        // deployment that wants to disable tracing entirely registers
-        // `NoOpRetrievalTracer` ahead of `composeWithRAG`.
-        let retrievalTracer: IRetrievalTracer =
-            match probe.GetService(typeof<IRetrievalTracer>) with
-            | :? IRetrievalTracer as t -> t
-            | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
-
-        let pipeline: IRetrievalPipeline =
-            // Phase 4b commit 5 + runtime-toggle follow-up — wire a
-            // snapshot thunk that reads the live `IPlatformRuntimeConfigStore`
-            // value when registered, otherwise falls back to the static
-            // `ServerConfig.PlatformKnowledgeBase` value. Runtime toggle
-            // mutations land in the store and take effect on the next
-            // retrieval call without rebuilding the pipeline.
-            let runtimeStoreOpt =
-                match probe.GetService(typeof<IPlatformRuntimeConfigStore>) with
-                | :? IPlatformRuntimeConfigStore as rc -> Some rc
-                | _ -> None
-
-            let snapshot () =
-                match runtimeStoreOpt with
-                | Some rc -> rc.Snapshot()
-                | None -> config.PlatformKnowledgeBase
-
-            RetrievalPipeline(
-                vectorStore,
-                cachedEmbedder,
-                sparseIndex,
-                pipelineOptions,
-                retrievalTracer,
-                platformKnowledgeBaseSnapshot = snapshot,
-                // Phase 122 — same instance the `/health/rag` endpoint
-                // resolves, so per-stage P50/P95 surface in the snapshot.
-                telemetry = telemetry
-            )
-            :> IRetrievalPipeline
-
-        // Fill the deferred pipeline + tracer references so the prompt builder
-        // works at request time. Both share the same tracer instance so traces
-        // and miss diagnostics land in the same event-store stream.
-        pipelineRef.Value <- Some pipeline
-        tracerRef.Value <- Some retrievalTracer
-
-        // Resolve usage-metering + quota substrate from the single
-        // probe (G10). Core compose always registers these (NoOp when
-        // metering is off), so embedding spend is attributed per scope
-        // and pre-flight-gated like AI provider calls. Defensive NoOp
-        // fallback keeps ingestion working if either is somehow absent.
-        let ingestionUsageLog =
-            match probe.GetService(typeof<IUsageLog>) with
-            | :? IUsageLog as u -> u
-            | _ -> NoOpUsageLog() :> IUsageLog
-
-        let ingestionQuota =
-            match probe.GetService(typeof<ITeamQuotaPolicy>) with
-            | :? ITeamQuotaPolicy as q -> q
-            | _ -> NoOpTeamQuotaPolicy() :> ITeamQuotaPolicy
-
-        let ingestionSvc =
-            create
-                queue
-                pipeline
-                cachedEmbedder
-                eventStore
-                ingestionObservers
-                ingestionConcurrency
-                ragLogger
-                telemetry
-                ingestionUsageLog
-                ingestionQuota
-
-        // Background re-embedding: when a deployment swaps the embedding
-        // model, chunks indexed under the old `EmbeddingVersion` are
-        // detected by `ReembeddingBackgroundService` and re-indexed via
-        // `IRetrievalPipeline.Index` (which stamps the current version).
-        // The service does an initial drain on startup and then loops on
-        // the queue, so admin endpoints can push specific scopes after a
-        // model swap.
-        let reembedQueue = ToolUp.RAG.ReembeddingService.ReembeddingQueue()
-
-        let reembedSvc =
-            ToolUp.RAG.ReembeddingService.create reembedQueue vectorStore pipeline cachedEmbedder eventStore ragLogger
-
-        // Document-understanding defaults: register no-ops so the KB
-        // extractor (and any future consumer) can resolve them from DI
-        // unconditionally. Companion packages override by registering
-        // their concrete `IOcrProvider` / `ITableExtractor` *before*
-        // composeWithRAG runs — `AddSingleton` here only takes effect if
-        // nothing else is already registered. `IImageEmbedder` has no
-        // honest no-op (image vectors require a real model), so it's
-        // intentionally not defaulted; consumers do `GetService` and
-        // check for null.
-        let ocrProvider: IOcrProvider =
-            match probe.GetService(typeof<IOcrProvider>) with
-            | :? IOcrProvider as p -> p
-            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
-
-        let tableExtractor: ITableExtractor =
-            match probe.GetService(typeof<ITableExtractor>) with
-            | :? ITableExtractor as t -> t
-            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
-
-        // Phase 115 — the unified index-lifecycle seam over every index
-        // tier this composition fuses. KB resolves it via
-        // `KnowledgeApiDeps` so its deletion paths fan out across the
-        // vector store AND the sparse index (pre-115 they looped
-        // `vs.DeleteChunk` only, leaving deleted content retrievable
-        // through the hybrid sparse leg and at rest in bm25.json).
-        let indexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle =
-            ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(
-                vectorStore,
-                Some sparseIndex,
-                Some embeddingCache,
-                ragLogger
-            )
-
-        let s =
-            s
-                .AddSingleton<IVectorStore>(vectorStore)
-                .AddSingleton<ISparseIndex>(sparseIndex)
-                .AddSingleton<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>(indexLifecycle)
-                .AddSingleton<IEmbeddingProvider>(cachedEmbedder)
-                .AddSingleton<IEmbeddingCache>(embeddingCache)
-                .AddSingleton<IRetrievalPipeline>(pipeline)
-                .AddSingleton<IngestionQueue>(queue)
-                .AddSingleton<ToolUp.RAG.ReembeddingService.ReembeddingQueue>(reembedQueue)
-                .AddSingleton<IHostedService>(ingestionSvc)
-                .AddSingleton<IHostedService>(reembedSvc)
-                .AddSingleton<IOcrProvider>(ocrProvider)
-                .AddSingleton<ITableExtractor>(tableExtractor)
-                .AddSingleton<IRagTelemetry>(telemetry)
-
-        match reranker with
-        | Some r -> s.AddSingleton<IReranker>(r)
-        | None -> s
-
-    // Merge AI + RAG contributions onto whatever the base
-    // `ServerApp.Extensions` already accumulated (Phase 1f). Pre/post
-    // middleware thunks the consumer registered via
-    // `ServerApp.withPreMiddleware` / `withPostMiddleware` flow through
-    // unchanged; AI/RAG handlers / DI / notification consumers append.
-    let extensions: ComposeExtensions = {
-        Handlers = baseExtensions.Handlers @ aiHandlers
-        ServiceConfig =
-            match baseExtensions.ServiceConfig with
-            | None -> Some serviceConfig
-            | Some baseFn -> Some(fun s -> serviceConfig (baseFn s))
-        // Phase 1g — both the AI assistant (chat / tool completions)
-        // and the RAG pipeline (ingestion-status updates, retrieval
-        // miss notifications) publish through `INotificationChannel`.
-        // Declaring the dependency here flips `compose`'s
-        // `NotificationsAuto` resolution to `InMemoryNotifications`.
-        NotificationConsumers = baseExtensions.NotificationConsumers @ [ "AI"; "RAG" ]
-        PreMiddleware = baseExtensions.PreMiddleware
-        PostMiddleware = baseExtensions.PostMiddleware
-    }
-
-    compose
-        handlers
-        dataTypes
-        config
-        authProvider
-        extensions
-        logger
-        blobStorage
-        notificationChannel
-        queryHandlers
-        dataTypeRegistrations
-        transactionalSinks
-        healthChecks
-        configValidators
-        encryptionKeyResolver
-        entityRegistrations
-        quotaPolicyOverride
-        companionMetricsSinks
-        auditSinks
-        auditReplicatorOptions
-        moduleMetricRegistrations
-        activitySinkOverride
-        rateLimitDescriptors
-        smokeTests
-        pendingInviteStoreOverride
-        subjectMigratorOverride
-        shareTokenStoreDecorators
-        moduleSurfaceDefaults
-        routeSurfaceOverrides
-        scheduledJobDeclarations
-        storageResilience
-        secretResilience
 
 // ─── RAGServerApp — record-based wrapper around `AIServerApp` + RAG ──
 //
@@ -1267,6 +543,447 @@ type RAGServerApp = {
     MaxDocumentBytes: int option
 }
 
+// ─── composeRAG ───────────────────────────────────────────────────
+//
+// Phase 1h seam (RAG half). `composeRAG : RAGServerApp -> ServerApp`
+// composes *over* `composeAI`: it builds the RAG-aware system-prompt
+// layers (framing preamble + retrieval builder + strict-grounding
+// guard), folds them into the AI assistant config, runs `composeAI` to
+// lift every AI contribution (agent-loop handlers, tool registry, AI
+// DI registrations, dev endpoints, tool-name + platform-provider
+// validation) onto the inner `ServerApp`, then layers the RAG-specific
+// contributions (vector store / sparse index / pipeline / ingestion +
+// reembedding hosted services, citation normaliser, the `/health/rag`
+// + `/dev/rag-citation` routes, the RAG config validators) on top.
+//
+// This replaces the former positional `composeWithRAG`, which inlined a
+// verbatim copy of every AI DI registration and drifted from
+// `AICompose.fs` whenever AI added infrastructure (Phase 6g.A / 6h both
+// shipped AI-only and silently broke RAG deployments). Composing over
+// `composeAI` makes that drift structurally impossible — RAG inherits
+// every AI registration for free, including ones the hand-copy had
+// fallen behind on (e.g. the Phase 171 `IActiveAiProbe`).
+//
+// `AIServerApp.run` is `composeAI >> ServerApp.run`; `RAGServerApp.run`
+// is now likewise `composeRAG >> ServerApp.run`, and the additive
+// `withRAG` extension calls `composeRAG` from inside a `ServerApp`-
+// shaped pipeline so RAG contributions stack with Forms / AI / future
+// companions on one composition root.
+
+/// Apply every RAG-specific contribution onto the inner `ServerApp`
+/// (composing over `composeAI` for the AI half), returning the composed
+/// result without driving it. `RAGServerApp.run` calls this then
+/// `ServerApp.run`; the additive `withRAG` extension calls it from
+/// inside a `ServerApp`-shaped pipeline so RAG stacks with Forms / AI
+/// contributions onto one composition root (Phase 1h goal).
+///
+/// **Advanced.** Consumers should use `RAGServerApp.run` unless they are
+/// stacking multiple companion supersets — in which case use the
+/// `withRAG` additive extension. Hidden from IntelliSense via
+/// `[<EditorBrowsable>]`.
+[<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
+let composeRAG (app: RAGServerApp) : ServerApp =
+    let ai = app.AI
+    let b = ai.Base
+    let config = b.Config
+
+    let queue = IngestionQueue(app.IngestionQueueCapacity)
+
+    // Default to a 60-second rolling-window telemetry sink so `/health/rag`
+    // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel
+    // export pass their own `IRagTelemetry` via `withTelemetry`.
+    let telemetry =
+        app.Telemetry
+        |> Option.defaultWith (fun () -> ToolUp.RAG.RagTelemetry.createDefault ())
+
+    // Resolve a logger once — used for the null-blob warning, IngestionService,
+    // the vector store flush loop, and the post-save vectorisation hook. Falls
+    // back to `ConsoleLogger` so callers who don't pass one still see warnings.
+    let ragLogger =
+        b.Logger
+        |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+    // EventStore reference — filled in the RAG service config callback below.
+    // The post-save hook captures it lazily so handler-skip and oversize-doc
+    // rejections can write `RAG.*` events. Deferred-ref pattern (same as
+    // `pipelineRef` / `tracerRef`) because the hook is built before the
+    // service config runs.
+    let eventStoreRef: IEventStore option ref = ref None
+
+    // Register the post-save vectorisation hook so `SessionFileStore.AddFile`
+    // enqueues chunks after every successful file upload.
+    if not b.VectorisationHandlers.IsEmpty then
+        configurePostSaveHooks [
+            makeVectorisationHook
+                b.VectorisationHandlers
+                queue
+                telemetry
+                app.EnableDocumentSummaries
+                app.MaxChunkBytes
+                app.MaxDocumentBytes
+                eventStoreRef
+                ragLogger
+        ]
+
+    // Pipeline + tracer references — filled in the RAG service config callback
+    // below, before any request arrives. The prompt builder reads both lazily
+    // at request time so the miss-diagnostic path resolves the same tracer the
+    // pipeline writes its `KnowledgeRetrieved` events through.
+    let pipelineRef: IRetrievalPipeline option ref = ref None
+    let tracerRef: IRetrievalTracer option ref = ref None
+
+    let ragBuilder: SystemPromptBuilder =
+        fun ctx -> async {
+            match pipelineRef.Value with
+            | Some pipeline ->
+                let! block = (withRetrieval app.RetrievalDefaults (Some telemetry) tracerRef.Value pipeline) ctx
+
+                // Server-side strict-grounding guard. Under `StrictlyGrounded`,
+                // an empty retrieved set means "knowledge base had nothing
+                // relevant" — refuse the turn WITHOUT a provider call rather
+                // than relying solely on the prompt directive (which a model
+                // can ignore or be jailbroken past). Pairs with
+                // `strictlyGroundedDirective`.
+                if app.GroundingMode = StrictlyGrounded && List.isEmpty ctx.RetrievedSources.Value then
+                    ctx.ShortCircuit.Value <- Some "I don't have information on that in your knowledge base."
+
+                return block
+            | None -> return ""
+        }
+
+    // Framing preamble: explains to the model what the KB is, that retrieval
+    // has already run for the current turn, and how to behave when nothing was
+    // found. The `GroundingMode` further shapes the directive.
+    let resolvedFraming = resolveFraming app.GroundingMode app.RetrievalFraming
+
+    let framingBuilder: SystemPromptBuilder option =
+        if System.String.IsNullOrWhiteSpace resolvedFraming then
+            None
+        else
+            Some(SystemPromptBuilder.fromStatic resolvedFraming)
+
+    // Extend the AI config to include the framing preamble (if any) and the
+    // retrieval builder. Order matters: the model sees framing *before* the
+    // retrieved chunks so it knows what they are when it reads them.
+    let resolvedAiConfig =
+        let ragLayers = [ yield! framingBuilder |> Option.toList; yield ragBuilder ]
+
+        match ai.AIConfig with
+        | None ->
+            Some {
+                Branding = {
+                    Name = "AI Assistant"
+                    Icon = ""
+                    ShowSidePanel = true
+                }
+                SystemPrompt = Some(SystemPromptBuilder.compose ragLayers)
+                MaxHistoryMessages = None
+            }
+        | Some cfg ->
+            let composedBuilder =
+                match cfg.SystemPrompt with
+                | Some existing -> SystemPromptBuilder.compose (existing :: ragLayers)
+                | None -> SystemPromptBuilder.compose ragLayers
+
+            Some {
+                cfg with
+                    SystemPrompt = Some composedBuilder
+            }
+
+    // Lift every AI contribution onto the inner `ServerApp` via `composeAI`,
+    // injecting the RAG-augmented assistant config so the agent loop sees the
+    // framing preamble + retrieval block. `composeAI` owns all AI DI
+    // registrations, the agent-loop handlers, the tool registry, the AI dev
+    // endpoints, and the tool-name + platform-provider validation — RAG no
+    // longer duplicates any of them.
+    let aiComposed: ServerApp = composeAI { ai with AIConfig = resolvedAiConfig }
+
+    // Phase 6q follow-up C — /dev/rag-citation rolling-window stats. Master
+    // gate is `ServerConfig.EnableDevEndpoints`; the per-endpoint
+    // `EnableCitationDevEndpoint` override can only suppress, never force-on.
+    let citationEndpointEnabled =
+        match config.EnableCitationDevEndpoint with
+        | Some explicit -> explicit && config.EnableDevEndpoints
+        | None -> config.EnableDevEndpoints
+
+    // Startup visibility: one line naming the dev endpoints this composition
+    // actually exposes (AI dev endpoints are registered by `composeAI`; the
+    // citation endpoint is RAG-owned). The default-off shape stays log-silent.
+    do
+        let active = [
+            if config.EnableDevEndpoints then
+                yield "/dev/ai-fastpath"
+                yield "/dev/ai-latency"
+            if citationEndpointEnabled then
+                yield "/dev/rag-citation"
+        ]
+
+        if not active.IsEmpty then
+            ragLogger.Info(sprintf "[RAGCompose] Dev endpoints registered: %s" (String.concat ", " active))
+
+    // Phase 6q follow-up — ICitationNormaliser seam. Always register the
+    // rolling-window counter store (the dev endpoint resolves it
+    // unconditionally); register the normaliser implementation only when the
+    // policy isn't Off so the AI handler can resolve `null` and skip the pass
+    // on Off deployments (byte-for-byte pre-Phase-6q behaviour).
+    let citationCounters: ICitationCounters =
+        ToolUp.RAG.CitationNormaliserImpl.RollingCitationCounters() :> _
+
+    let citationNormaliserOpt: ICitationNormaliser option =
+        if app.CitationPolicy = CitationNormaliser.Off then
+            None
+        else
+            Some(ToolUp.RAG.CitationNormaliserImpl.create app.CitationPolicy citationCounters)
+
+    // RAG-owned routes layered on top of the AI handlers `composeAI` mounted.
+    let ragHandlers = [
+        ToolUp.RAG.RagHealthHandler.route
+        if citationEndpointEnabled then
+            yield! ToolUp.RAG.RAGCitationDevEndpoint.routes
+    ]
+
+    let ragServiceConfig (s: IServiceCollection) =
+        // Citation seam — RAG-specific (composeWithAI callers never register
+        // these; the AI handler resolves `null` and skips the pass).
+        let s = s.AddSingleton<ICitationCounters>(citationCounters)
+
+        let s =
+            match citationNormaliserOpt with
+            | Some normaliser -> s.AddSingleton<ICitationNormaliser>(normaliser)
+            | None -> s
+
+        // RAG services
+        let blobStorageForRag =
+            match b.Storage with
+            | Some bs -> bs
+            | None ->
+                ragLogger.Warn
+                    "[RAGCompose] No IBlobStorage supplied — vector index persistence is disabled. Ingested chunks will be lost across process restart. Pass `Some storage` (RAGServerApp.withStorage) for a durable deployment."
+
+                makeNullBlobStorage ()
+
+        let vectorStore: IVectorStore =
+            app.VectorStore
+            |> Option.defaultWith (fun () ->
+                new InMemoryVectorStore(blobStorageForRag, logger = ragLogger, telemetry = telemetry) :> IVectorStore)
+
+        let sparseIndex: ISparseIndex =
+            new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex
+
+        // Wrap the supplied embedder so repeated query / chunk text hits an
+        // in-memory LRU cache rather than the underlying provider. Cache key
+        // includes provider + model + dimensions so a model swap automatically
+        // invalidates entries.
+        let embeddingCache: IEmbeddingCache =
+            new InMemoryEmbeddingCache() :> IEmbeddingCache
+
+        let cachedEmbedder: IEmbeddingProvider =
+            CachingEmbeddingProvider.create app.EmbeddingProvider embeddingCache
+
+        let pipelineOptions: RetrievalPipelineOptions = {
+            Reranker = app.Reranker
+            EnableMmr = app.EnableMmr
+            MmrLambda = app.MmrLambda
+            ActiveModuleBoost = RetrievalPipelineOptions.defaults.ActiveModuleBoost
+            SummaryBoost = RetrievalPipelineOptions.defaults.SummaryBoost
+        }
+
+        // Build the probe provider ONCE and resolve every pre-pipeline
+        // registration from it. One probe = one consistent view (calling
+        // `BuildServiceProvider` per lookup leaked duplicate singletons and
+        // could resolve a different instance than the running app uses).
+        let probe = s.BuildServiceProvider()
+
+        // Resolve event store first so the retrieval tracer can write
+        // `KnowledgeRetrieved` audit events alongside ingestion / RBAC /
+        // file-op audit events.
+        let eventStore =
+            match probe.GetService(typeof<IEventStore>) with
+            | :? IEventStore as es -> es
+            | _ -> ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+        // Hand the resolved event store to the post-save hook so handler-skip
+        // and oversize-doc rejections emit `RAG.*` audit events.
+        eventStoreRef.Value <- Some eventStore
+
+        // Pick the registered tracer if any; default to the event-store tracer
+        // so retrieval traces are persisted out-of-the-box.
+        let retrievalTracer: IRetrievalTracer =
+            match probe.GetService(typeof<IRetrievalTracer>) with
+            | :? IRetrievalTracer as t -> t
+            | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
+
+        let pipeline: IRetrievalPipeline =
+            // Phase 4b commit 5 + runtime-toggle follow-up — wire a snapshot
+            // thunk that reads the live `IPlatformRuntimeConfigStore` value
+            // when registered, otherwise falls back to the static
+            // `ServerConfig.PlatformKnowledgeBase` value.
+            let runtimeStoreOpt =
+                match probe.GetService(typeof<IPlatformRuntimeConfigStore>) with
+                | :? IPlatformRuntimeConfigStore as rc -> Some rc
+                | _ -> None
+
+            let snapshot () =
+                match runtimeStoreOpt with
+                | Some rc -> rc.Snapshot()
+                | None -> config.PlatformKnowledgeBase
+
+            RetrievalPipeline(
+                vectorStore,
+                cachedEmbedder,
+                sparseIndex,
+                pipelineOptions,
+                retrievalTracer,
+                platformKnowledgeBaseSnapshot = snapshot,
+                // Phase 122 — same instance the `/health/rag` endpoint resolves,
+                // so per-stage P50/P95 surface in the snapshot.
+                telemetry = telemetry
+            )
+            :> IRetrievalPipeline
+
+        // Fill the deferred pipeline + tracer references so the prompt builder
+        // works at request time. Both share the same tracer instance so traces
+        // and miss diagnostics land in the same event-store stream.
+        pipelineRef.Value <- Some pipeline
+        tracerRef.Value <- Some retrievalTracer
+
+        // Resolve usage-metering + quota substrate from the single probe (G10)
+        // so embedding spend is attributed per scope and pre-flight-gated like
+        // AI provider calls. Defensive NoOp fallback keeps ingestion working if
+        // either is somehow absent.
+        let ingestionUsageLog =
+            match probe.GetService(typeof<IUsageLog>) with
+            | :? IUsageLog as u -> u
+            | _ -> NoOpUsageLog() :> IUsageLog
+
+        let ingestionQuota =
+            match probe.GetService(typeof<ITeamQuotaPolicy>) with
+            | :? ITeamQuotaPolicy as q -> q
+            | _ -> NoOpTeamQuotaPolicy() :> ITeamQuotaPolicy
+
+        let ingestionSvc =
+            create
+                queue
+                pipeline
+                cachedEmbedder
+                eventStore
+                app.IngestionObservers
+                app.IngestionConcurrency
+                ragLogger
+                telemetry
+                ingestionUsageLog
+                ingestionQuota
+
+        // Background re-embedding: when a deployment swaps the embedding model,
+        // chunks indexed under the old `EmbeddingVersion` are detected and
+        // re-indexed via `IRetrievalPipeline.Index`.
+        let reembedQueue = ToolUp.RAG.ReembeddingService.ReembeddingQueue()
+
+        let reembedSvc =
+            ToolUp.RAG.ReembeddingService.create reembedQueue vectorStore pipeline cachedEmbedder eventStore ragLogger
+
+        // Document-understanding defaults: register no-ops so the KB extractor
+        // can resolve them from DI unconditionally. Companion packages override
+        // by registering their concrete provider *before* `composeRAG` runs.
+        let ocrProvider: IOcrProvider =
+            match probe.GetService(typeof<IOcrProvider>) with
+            | :? IOcrProvider as p -> p
+            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
+
+        let tableExtractor: ITableExtractor =
+            match probe.GetService(typeof<ITableExtractor>) with
+            | :? ITableExtractor as t -> t
+            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
+
+        // Phase 115 — the unified index-lifecycle seam over every index tier
+        // this composition fuses, so KB deletion paths fan out across the
+        // vector store AND the sparse index.
+        let indexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle =
+            ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(
+                vectorStore,
+                Some sparseIndex,
+                Some embeddingCache,
+                ragLogger
+            )
+
+        let s =
+            s
+                .AddSingleton<IVectorStore>(vectorStore)
+                .AddSingleton<ISparseIndex>(sparseIndex)
+                .AddSingleton<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>(indexLifecycle)
+                .AddSingleton<IEmbeddingProvider>(cachedEmbedder)
+                .AddSingleton<IEmbeddingCache>(embeddingCache)
+                .AddSingleton<IRetrievalPipeline>(pipeline)
+                .AddSingleton<IngestionQueue>(queue)
+                .AddSingleton<ToolUp.RAG.ReembeddingService.ReembeddingQueue>(reembedQueue)
+                .AddSingleton<IHostedService>(ingestionSvc)
+                .AddSingleton<IHostedService>(reembedSvc)
+                .AddSingleton<IOcrProvider>(ocrProvider)
+                .AddSingleton<ITableExtractor>(tableExtractor)
+                .AddSingleton<IRagTelemetry>(telemetry)
+
+        match app.Reranker with
+        | Some r -> s.AddSingleton<IReranker>(r)
+        | None -> s
+
+    // RAG config validators (mirrors the set the former `composeWithRAG` /
+    // `RAGServerApp.run` built). Constructed against the module-merged config
+    // so team-mode / replica / persistence checks see the deployment shape.
+    let finalConfig = {
+        b.Config with
+            ModuleNames =
+                if b.Config.ModuleNames.IsEmpty then
+                    b.ModuleNames
+                else
+                    b.Config.ModuleNames
+            ModuleConfigs = b.Config.ModuleConfigs @ b.ModuleConfigs
+    }
+
+    let ragValidators: ConfigValidation.IConfigValidator list = [
+        // Phase 4b commit 3 — IDF-leak warning when LocalEmbeddingProvider is
+        // active in Team / MultiTeam mode.
+        ToolUp.RAG.RagConfigValidator.TeamModeLocalEmbedderValidator(finalConfig, app.EmbeddingProvider)
+        // Refuse (persistent) / warn (ephemeral) when RAG has no durable backing.
+        ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(finalConfig, b.Storage.IsSome, app.VectorStore.IsSome)
+        // Phase 9j follow-up — refuse the in-process ingestion queue under
+        // ReplicaCount > 1 (no leasing/redelivery ⇒ silent corpus loss).
+        ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator finalConfig
+        // Wave 2A Gap #1 — warn when default InMemoryEmbeddingCache is active
+        // under multi-instance Team mode (cache key has no tenant component).
+        ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator finalConfig
+        // Wave 2A Gap #9 — surface the clamp log so silent clamping of
+        // operator-supplied values is visible at startup.
+        ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator app.RetrievalDefaultsClampLog
+        // Investigate gaps 2026-06-12 (RAG Gap 8) — warn when the citation-dev-
+        // endpoint override is configured as the retired force-on shape.
+        ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator finalConfig
+    ]
+
+    // Merge RAG handlers + service config + the "RAG" notification-consumer
+    // declaration onto whatever `composeAI` already accumulated. `composeAI`
+    // declared "AI"; appending "RAG" reproduces the former combined
+    // `[ "AI"; "RAG" ]` declaration.
+    let baseExt = aiComposed.Extensions
+
+    let mergedExt: ComposeExtensions = {
+        baseExt with
+            Handlers = baseExt.Handlers @ ragHandlers
+            ServiceConfig =
+                match baseExt.ServiceConfig with
+                | None -> Some ragServiceConfig
+                | Some baseFn -> Some(fun s -> ragServiceConfig (baseFn s))
+            NotificationConsumers = baseExt.NotificationConsumers @ [ "RAG" ]
+    }
+
+    let withValidators =
+        ragValidators
+        |> List.fold (fun a v -> ServerApp.withConfigValidator v a) aiComposed
+
+    {
+        withValidators with
+            Extensions = mergedExt
+    }
+
 module RAGServerApp =
     /// Construct a `RAGServerApp` with the three required dependencies:
     /// AI provider factory, the canonical platform `IProviderProfile`
@@ -1282,6 +999,42 @@ module RAGServerApp =
         : RAGServerApp =
         {
             AI = AIServerApp.create factory providerProfile
+            EmbeddingProvider = embedder
+            IngestionObservers = []
+            Reranker = None
+            EnableMmr = false
+            MmrLambda = 0.5
+            VectorStore = None
+            RetrievalFraming = defaultRetrievalFraming
+            IngestionConcurrency = 8
+            IngestionQueueCapacity = 5000
+            Telemetry = None
+            RetrievalDefaults = RetrievalDefaults.defaults
+            IndexConversations = false
+            GroundingMode = Preferred
+            EnableDocumentSummaries = true
+            CitationPolicy = ToolUp.RAG.CitationNormaliser.Strict
+            RetrievalDefaultsClampLog = []
+            MaxChunkBytes = None
+            MaxDocumentBytes = None
+        }
+
+    /// Phase 1h composition seam — lift an existing `ServerApp` into a
+    /// `RAGServerApp` so the additive `withRAG` extension can stack RAG
+    /// (and AI) contributions onto whatever the input `ServerApp`
+    /// already carries. The input `ServerApp` becomes the AI layer's
+    /// `Base` (via `AIServerApp.createFrom`); all RAG-specific fields
+    /// initialise to the same defaults as `create`. Required deps
+    /// (`factory`, `providerProfile`, `embedder`) are constructor
+    /// parameters, matching `create`.
+    let createFrom
+        (factory: IAIProviderFactory)
+        (providerProfile: IProviderProfile)
+        (embedder: IEmbeddingProvider)
+        (baseApp: ServerApp)
+        : RAGServerApp =
+        {
+            AI = AIServerApp.createFrom factory providerProfile baseApp
             EmbeddingProvider = embedder
             IngestionObservers = []
             Reranker = None
@@ -1754,136 +1507,61 @@ module RAGServerApp =
     /// Drive the final composition. Returns the process exit code. All
     /// required dependencies (`AIProviderFactory`, `ProviderProfile`,
     /// `EmbeddingProvider`) are guaranteed at compile time by
-    /// `RAGServerApp.create`.
-    let run (app: RAGServerApp) : int =
-        let ai = app.AI
-        let b = ai.Base
+    /// `RAGServerApp.create`. Phase 1h — implementation is now
+    /// `composeRAG >> ServerApp.run`; the RAG config validators and the
+    /// AI/RAG DI + handler contributions all live in `composeRAG`, which
+    /// composes over `composeAI`. Consumers needing to stack RAG with
+    /// Forms / AI companions on one composition root use the additive
+    /// `withRAG` extension instead.
+    let run (app: RAGServerApp) : int = composeRAG app |> ServerApp.run
 
-        let finalConfig = {
-            b.Config with
-                ModuleNames =
-                    if b.Config.ModuleNames.IsEmpty then
-                        b.ModuleNames
-                    else
-                        b.Config.ModuleNames
-                ModuleConfigs = b.Config.ModuleConfigs @ b.ModuleConfigs
-        }
+// ─── Additive companion-set extension `withRAG` (Phase 1h) ──────────
+//
+// Stack RAG contributions (and the AI assistant they compose over) onto
+// an existing `ServerApp` pipeline alongside Forms / future companions,
+// without forcing the deployment to commit to `RAGServerApp.run` as the
+// terminal call.
 
-        // Phase 4b commit 3: auto-register the team-mode local-embedder
-        // preflight validator. Surfaces the IDF-leak concern as a startup
-        // Warning when LocalEmbeddingProvider is active in Team / MultiTeam
-        // mode. No-op for stateless embedders or non-team modes. Phase 14z
-        // structurally closes the leak via per-team IDF, at which point
-        // this validator becomes redundant.
-        let teamModeEmbedderValidator =
-            ToolUp.RAG.RagConfigValidator.TeamModeLocalEmbedderValidator(finalConfig, app.EmbeddingProvider)
-            :> ConfigValidation.IConfigValidator
-
-        // Refuse (persistent modes) / warn (ephemeral modes) when RAG
-        // has no durable backing at all — the in-memory store over the
-        // null blob store silently loses the entire corpus on restart.
-        let persistenceValidator =
-            ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(finalConfig, b.Storage.IsSome, app.VectorStore.IsSome)
-            :> ConfigValidation.IConfigValidator
-
-        // Phase 9j follow-up — refuse the in-process ingestion queue
-        // under ReplicaCount > 1 (no leasing/redelivery ⇒ silent corpus
-        // loss on the wrong replica / a crash). Mirrors
-        // JobSchedulerInstanceValidator; explicit escape hatch for
-        // deployments that accept best-effort per-instance ingestion.
-        let ingestionInstanceValidator =
-            ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator finalConfig :> ConfigValidation.IConfigValidator
-
-        // Wave 2A Gap #1 — warn when default InMemoryEmbeddingCache is
-        // active under multi-instance Team mode. Cache key has no
-        // tenant component, so replicas diverge on hit/miss.
-        let sharedCacheValidator =
-            ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator finalConfig
-            :> ConfigValidation.IConfigValidator
-
-        // Wave 2A Gap #9 — surface the clamp log from
-        // withTopK / withMinScore / withSnippetCharLimit / withMmrLambda /
-        // withRetrievalDefaults so silent clamping of operator-supplied
-        // values is visible at startup.
-        let retrievalDefaultsValidator =
-            ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator app.RetrievalDefaultsClampLog
-            :> ConfigValidation.IConfigValidator
-
-        // Investigate gaps 2026-06-12 (RAG Gap 8) — warn when the
-        // citation-dev-endpoint override is configured as the retired
-        // force-on shape (Some true under a disabled master switch),
-        // which composeWithRAG now resolves to suppressed.
-        let citationDevEndpointValidator =
-            ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator finalConfig :> ConfigValidation.IConfigValidator
-
-        let configValidatorsWithTeamModeCheck =
-            teamModeEmbedderValidator
-            :: persistenceValidator
-            :: ingestionInstanceValidator
-            :: sharedCacheValidator
-            :: retrievalDefaultsValidator
-            :: citationDevEndpointValidator
-            :: b.ConfigValidators
-
-        // Phase 16 — `composeWithRAG` returns `IServerHost`. Chain
-        // `RunBlocking()` to preserve `int` exit-code semantics for
-        // the Kestrel default.
-        let host =
-            composeWithRAG
-                b.Handlers
-                b.DataTypes
-                b.VectorisationHandlers
-                app.IngestionObservers
-                finalConfig
-                b.Auth
-                b.Extensions
-                app.EmbeddingProvider
-                ai.AIProviderFactory
-                ai.ProviderProfile
-                b.AITools
-                ai.AIConfig
-                ai.ModuleAIContexts
-                b.Logger
-                b.Storage
-                b.Notifications
-                b.QueryHandlerRegistrations
-                b.DataTypeRegistrations
-                app.Reranker
-                app.EnableMmr
-                app.MmrLambda
-                app.VectorStore
-                app.RetrievalFraming
-                app.IngestionConcurrency
-                app.IngestionQueueCapacity
-                app.Telemetry
-                app.RetrievalDefaults
-                app.GroundingMode
-                app.EnableDocumentSummaries
-                b.TransactionalSinks
-                b.HealthChecks
-                configValidatorsWithTeamModeCheck
-                b.EncryptionKeyResolver
-                b.EntityRegistrations
-                b.QuotaPolicy
-                b.MetricsSinks
-                b.AuditSinks
-                b.AuditReplicator
-                b.MetricRegistrations
-                b.ActivitySink
-                b.RateLimitDescriptors
-                b.SmokeTests
-                app.CitationPolicy
-                app.MaxChunkBytes
-                app.MaxDocumentBytes
-                b.PendingInviteStore
-                b.SubjectMigrator
-                b.ShareTokenStoreDecorators
-                b.ModuleSurfaceDefaults
-                b.RouteSurfaceOverrides
-                b.ScheduledJobs
-                ai.PlatformKeyStore
-                ai.PlatformProviders
-                b.StorageResilience
-                b.SecretResilience
-
-        host.RunBlocking()
+/// Phase 1h — stack the RAG pipeline (and the AI assistant it composes
+/// over) onto an existing `ServerApp` pipeline. Consumes the required
+/// RAG dependency (`embedder`) plus the required AI dependencies
+/// (`factory` + `providerProfile`) and a `configure` function that
+/// builds RAG-specific state (retrieval knobs, grounding mode,
+/// ingestion observers, citation policy, AI assistant config) on a fresh
+/// `RAGServerApp` whose AI layer's `Base` is the input `ServerApp`.
+///
+/// The configurator should call only RAG/AI-specific helpers
+/// (`RAGServerApp.withGroundingMode` / `withTopK` / `withAIConfig` / …);
+/// the delegating helpers (`withConfig` / `withAuth` / …) exist on
+/// `RAGServerApp` for backcompat but calling them inside the
+/// configurator overwrites the base `ServerApp`'s existing
+/// configuration. Set base configuration on the outer pipeline before
+/// calling `withRAG`.
+///
+/// Calling `withRAG` twice on the same pipeline re-composes AI + RAG
+/// (re-appends `AILatencyMetrics.registrations`, re-registers the DI
+/// services, re-mounts the routes); the existing duplicate-detection
+/// paths surface the misuse — most loudly at metric-sink construction.
+///
+/// Example — Forms + RAG in one composition root:
+///
+///     ServerApp.empty
+///     |> ServerApp.withConfig config
+///     |> ServerApp.withStorage storage
+///     |> FormsCompose.withForms (fun f ->
+///         f |> FormsServerApp.withFormSchema mySchema)
+///     |> RAGCompose.withRAG factory providerProfile embedder (fun rag ->
+///         rag
+///         |> RAGServerApp.withAIConfig assistant
+///         |> RAGServerApp.withGroundingMode StrictlyGrounded)
+///     |> ServerApp.run
+let withRAG
+    (factory: IAIProviderFactory)
+    (providerProfile: IProviderProfile)
+    (embedder: IEmbeddingProvider)
+    (configure: RAGServerApp -> RAGServerApp)
+    (app: ServerApp)
+    : ServerApp =
+    RAGServerApp.createFrom factory providerProfile embedder app
+    |> configure
+    |> composeRAG
