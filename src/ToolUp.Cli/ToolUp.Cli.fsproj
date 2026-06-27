@@ -40,6 +40,7 @@
     <Compile Include="Cli\Templating.fs" />
     <Compile Include="Cli\VersionCommand.fs" />
     <Compile Include="Cli\DockerEmitCommand.fs" />
+    <Compile Include="Cli\StampCommand.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

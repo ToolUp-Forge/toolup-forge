@@ -31,6 +31,36 @@ toolup docker emit --help
 |---|---|
 | `version` | Prints the installed CLI version. |
 | `docker emit` | Re-emits the maintained Docker host artefacts (`Dockerfile`, `.dockerignore`, `healthcheck.sh`, `compose.yml`) at a solution root, substituting the deployment's project / image / port tokens. |
+| `stamp` | Writes/refreshes a module-binding manifest (`module-bindings.json`) — the deploy-time stamper for the module-binding gate. |
+
+#### `stamp`
+
+```bash
+# Symmetric (HMAC) anchor
+toolup stamp --manifest module-bindings.json --module Sales --key-id anchor-1 --mac-key-file anchor.key
+
+# Asymmetric (ES256) anchor
+toolup stamp --manifest module-bindings.json --module Inventory --key-id ec-1 --ec-key-file signing.pem
+
+# Re-bind (re-run with a different key) / unbind
+toolup stamp --manifest module-bindings.json --module Sales --unbind
+```
+
+Mints each named module's binding stamp over the module's identifier bytes and merges it into the
+manifest (other modules untouched). A module's binding is a **deployment** property: the same module
+artefact ships unbound, bound to deployment A, or re-bound to B with no rebuild. The host reads the
+manifest at startup and the module-binding gate verifies each stamp against the deployment's
+configured trust anchors. Crypto is pure BCL (HMAC-SHA256 / ES256 over a NIST P-256 key); Ed25519
+*minting* is not yet exposed here (the verifier already accepts Ed25519 anchors).
+
+| Option | Meaning |
+|---|---|
+| `--manifest <path>` | The `module-bindings.json` to create/update (required). |
+| `--module <Name>` | A module to stamp; repeatable (required). |
+| `--key-id <id>` | Anchor key id recorded with the stamp (required to stamp). |
+| `--mac-key-file <f>` / `--mac-key <base64>` | Base64 HMAC-SHA256 key (symmetric anchor). |
+| `--ec-key-file <pem>` | PEM P-256 EC private key (asymmetric / ES256 anchor). |
+| `--unbind` | Remove the named modules' entries instead of stamping. |
 
 #### `docker emit`
 

@@ -8,10 +8,17 @@
   <ItemGroup>
     <Compile Include="DispatchTests.fs" />
     <Compile Include="DockerEmitTests.fs" />
+    <Compile Include="StampRoundTripTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Cli\ToolUp.Cli.fsproj" />
+    <!-- Phase 166 — the stamp round-trip test reads a CLI-written manifest
+         through the server-side reader and verifies it with the shipped
+         DefaultModuleBindingVerifier (the anti-drift guarantee). Test-only
+         references — the `toolup` CLI itself stays pure-BCL. -->
+    <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\ToolUp.ArtefactSigning\ArtefactSigning.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
