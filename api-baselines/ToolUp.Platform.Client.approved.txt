@@ -407,8 +407,8 @@ HealthMonitorUI+Tab+Tags (class)
 HealthMonitorUI+Tab+Tags.LiveHealthTab : System.Int32 (literal)
 HealthMonitorUI+Tab+Tags.PreflightTab : System.Int32 (literal)
 Home (class)
-Home.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HomeModuleConfig]) : ToolUp.Platform.ErasedModule
-Home.init() : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+Home.create(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HomeModuleConfig]) : ToolUp.Platform.ErasedModule
+Home.init(System.Boolean, Microsoft.FSharp.Core.Unit) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 Home.update(Home+Msg, Home+Model) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 Home.view(Home+Model, Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Home+LoadState`1 (class)
@@ -426,18 +426,33 @@ Home+LoadState`1+Tags.LoadError : System.Int32 (literal)
 Home+LoadState`1+Tags.Loaded : System.Int32 (literal)
 Home+LoadState`1+Tags.Loading : System.Int32 (literal)
 Home+Model (class)
-Home+Model..ctor(Home+LoadState`1[ToolUp.Platform.HomeOverview])
+Home+Model..ctor(Home+LoadState`1[ToolUp.Platform.HomeOverview], System.Boolean, ToolUp.Platform.HomePinningState)
 Home+Model.Overview : Home+LoadState`1[ToolUp.Platform.HomeOverview] { get }
+Home+Model.Pinning : ToolUp.Platform.HomePinningState { get }
+Home+Model.Recents : System.Boolean { get }
 Home+Msg (class)
+Home+Msg.IsOpenTool : System.Boolean { get }
 Home+Msg.IsOverviewLoaded : System.Boolean { get }
+Home+Msg.IsPinningLoaded : System.Boolean { get }
 Home+Msg.IsRefresh : System.Boolean { get }
+Home+Msg.IsTogglePin : System.Boolean { get }
 Home+Msg.Refresh : Home+Msg { get }
 Home+Msg.Tag : System.Int32 { get }
+Home+Msg+OpenTool (class)
+Home+Msg+OpenTool.Item : System.String { get }
 Home+Msg+OverviewLoaded (class)
 Home+Msg+OverviewLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HomeOverview, System.String] { get }
+Home+Msg+PinningLoaded (class)
+Home+Msg+PinningLoaded.Item : ToolUp.Platform.HomePinningState { get }
 Home+Msg+Tags (class)
+Home+Msg+Tags.OpenTool : System.Int32 (literal)
 Home+Msg+Tags.OverviewLoaded : System.Int32 (literal)
+Home+Msg+Tags.PinningLoaded : System.Int32 (literal)
 Home+Msg+Tags.Refresh : System.Int32 (literal)
+Home+Msg+Tags.TogglePin : System.Int32 (literal)
+Home+Msg+TogglePin (class)
+Home+Msg+TogglePin.moduleId : System.String { get }
+Home+Msg+TogglePin.pinned : System.Boolean { get }
 MappingDataManagerUI (class)
 MappingDataManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerConfig]) : ToolUp.Platform.ErasedModule
 MappingDataManagerUI.init() : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -2361,7 +2376,7 @@ ToolUp.Platform.Client+Msg+Tags.ToggleShowAllModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+TeamSwitched (class)
 ToolUp.Platform.Client+Msg+TeamSwitched.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AppLogo : System.String { get }
@@ -2380,6 +2395,7 @@ ToolUp.Platform.ClientConfig.GridModules : ToolUp.Platform.AgGrid+AgGridModuleCo
 ToolUp.Platform.ClientConfig.Handlers : ToolUp.Platform.ClientHandlerRegistry { get }
 ToolUp.Platform.ClientConfig.HealthMonitor : ToolUp.Platform.HealthMonitorMode { get }
 ToolUp.Platform.ClientConfig.HomeModule : ToolUp.Platform.HomeModuleMode { get }
+ToolUp.Platform.ClientConfig.HomeRecents : System.Boolean { get }
 ToolUp.Platform.ClientConfig.InputsPaneWidth : ToolUp.Platform.InputsPaneWidth { get }
 ToolUp.Platform.ClientConfig.LoadingIndicator : ToolUp.Platform.LoadingIndicatorMode { get }
 ToolUp.Platform.ClientConfig.ModuleFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -2442,9 +2458,10 @@ ToolUp.Platform.ClientConfigModule.isClaimBearerOnly(ToolUp.Platform.ClientConfi
 ToolUp.Platform.ClientConfigModule.requiresAnyAuth(ToolUp.Platform.ClientConfig) : System.Boolean
 ToolUp.Platform.ClientConfigModule.resolveSubjectKind(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ClientConfig) : ToolUp.Platform.SubjectKind
 ToolUp.Platform.ClientHandlerRegistry (class)
-ToolUp.Platform.ClientHandlerRegistry..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement]]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceCredentialUIContext, Fable.React.ReactElement]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NarrativeCommitHandler], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.ClientHandlerRegistry..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement]]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceCredentialUIContext, Fable.React.ReactElement]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IHomeWidgetContributor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NarrativeCommitHandler], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]])
 ToolUp.Platform.ClientHandlerRegistry.AuthUIHandlers : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement]]]] { get }
 ToolUp.Platform.ClientHandlerRegistry.DataSourceCredentialHandlers : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceCredentialUIContext, Fable.React.ReactElement]]] { get }
+ToolUp.Platform.ClientHandlerRegistry.HomeWidgetContributors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IHomeWidgetContributor] { get }
 ToolUp.Platform.ClientHandlerRegistry.NarrativeCommitHandler : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NarrativeCommitHandler] { get }
 ToolUp.Platform.ClientHandlerRegistry.SignOutHandler : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.ClientHandlerRegistryModule (class)
@@ -2755,6 +2772,20 @@ ToolUp.Platform.HomeModuleMode+Tags.ConfiguredHomeModule : System.Int32 (literal
 ToolUp.Platform.HomeModuleMode+Tags.EnabledHomeModule : System.Int32 (literal)
 ToolUp.Platform.HomeModuleMode+Tags.ExternalHomeModule : System.Int32 (literal)
 ToolUp.Platform.HomeModuleMode+Tags.NoHomeModule : System.Int32 (literal)
+ToolUp.Platform.HomeWidget (class)
+ToolUp.Platform.HomeWidget..ctor(System.String, System.String, Fable.React.ReactElement, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HomeWidgetContext, Fable.React.ReactElement])
+ToolUp.Platform.HomeWidget.Body : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HomeWidgetContext, Fable.React.ReactElement] { get }
+ToolUp.Platform.HomeWidget.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.HomeWidget.Id : System.String { get }
+ToolUp.Platform.HomeWidget.Title : System.String { get }
+ToolUp.Platform.HomeWidget.Weight : System.Int32 { get }
+ToolUp.Platform.HomeWidgetContext (class)
+ToolUp.Platform.HomeWidgetContext..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.HomeWidgetContext.Data : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.HomeWidgetRegistry (class)
+ToolUp.Platform.HomeWidgetRegistry.registeredIds() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.HomeWidgetRegistry.setContributors(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IHomeWidgetContributor]) : System.Void
+ToolUp.Platform.HomeWidgetRegistry.widgets() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HomeWidget]
 ToolUp.Platform.I18n (class)
 ToolUp.Platform.I18n.formatCurrency(System.String, System.Double) : System.String
 ToolUp.Platform.I18n.formatDate(System.DateTime) : System.String
@@ -2770,6 +2801,8 @@ ToolUp.Platform.IAuthBridge (interface)
 ToolUp.Platform.IAuthBridge.GetJwt() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.IAuthBridge.GetUserId() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.IAuthBridge.ProviderName : System.String { get }
+ToolUp.Platform.IHomeWidgetContributor (interface)
+ToolUp.Platform.IHomeWidgetContributor.Widgets() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HomeWidget]
 ToolUp.Platform.Icon (class)
 ToolUp.Platform.Icon.ofImport(System.Object) : Fable.React.ReactElement
 ToolUp.Platform.Icon.ofUrl(System.String) : Fable.React.ReactElement
@@ -3035,6 +3068,25 @@ ToolUp.Platform.RemotingCategorisedException.Category : ToolUp.Platform.ErrorCat
 ToolUp.Platform.RemotingCategorisedException.ErrorBody : System.String { get }
 ToolUp.Platform.RemotingInterceptors (class)
 ToolUp.Platform.RemotingInterceptors.install(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]) : System.Void
+ToolUp.Platform.ScopeDenial (class)
+ToolUp.Platform.ScopeDenial.IsForbidden : System.Boolean { get }
+ToolUp.Platform.ScopeDenial.IsNeedsActiveTeam : System.Boolean { get }
+ToolUp.Platform.ScopeDenial.IsNeedsAuthentication : System.Boolean { get }
+ToolUp.Platform.ScopeDenial.NeedsActiveTeam : ToolUp.Platform.ScopeDenial { get }
+ToolUp.Platform.ScopeDenial.NeedsAuthentication : ToolUp.Platform.ScopeDenial { get }
+ToolUp.Platform.ScopeDenial.Tag : System.Int32 { get }
+ToolUp.Platform.ScopeDenial+Forbidden (class)
+ToolUp.Platform.ScopeDenial+Forbidden.code : System.String { get }
+ToolUp.Platform.ScopeDenial+Tags (class)
+ToolUp.Platform.ScopeDenial+Tags.Forbidden : System.Int32 (literal)
+ToolUp.Platform.ScopeDenial+Tags.NeedsActiveTeam : System.Int32 (literal)
+ToolUp.Platform.ScopeDenial+Tags.NeedsAuthentication : System.Int32 (literal)
+ToolUp.Platform.ScopeDenialModule (class)
+ToolUp.Platform.ScopeDenialModule.AuthenticationRequiredCode : System.String (literal)
+ToolUp.Platform.ScopeDenialModule.SelectTeamHint : System.String (literal)
+ToolUp.Platform.ScopeDenialModule.TeamRequiredCode : System.String (literal)
+ToolUp.Platform.ScopeDenialModule.ofException(System.Exception) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeDenial]
+ToolUp.Platform.ScopeDenialModule.ofResponseBody(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeDenial]
 ToolUp.Platform.ServiceStatusBoardConfig (class)
 ToolUp.Platform.ServiceStatusBoardConfig..ctor(System.String, Fable.React.ReactElement)
 ToolUp.Platform.ServiceStatusBoardConfig.Icon : Fable.React.ReactElement { get }

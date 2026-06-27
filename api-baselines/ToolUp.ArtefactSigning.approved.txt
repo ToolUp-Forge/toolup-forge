@@ -29,9 +29,10 @@ ToolUp.ArtefactSigning.DefaultArtefactVerifier..ctor(ToolUp.Platform.Secrets+ISe
 ToolUp.ArtefactSigning.DefaultArtefactVerifierModule (class)
 ToolUp.ArtefactSigning.DefaultArtefactVerifierModule.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.ArtefactSigning.IArtefactVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifier (class)
-ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor])
+ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingRevocationList], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingTransparencyLog])
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule (class)
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleBindingVerifier
+ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.createWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], ToolUp.Platform.IBindingRevocationList, ToolUp.Platform.IBindingTransparencyLog) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.IArtefactSigner (interface)
 ToolUp.ArtefactSigning.IArtefactSigner.KeyId() : System.String
 ToolUp.ArtefactSigning.IArtefactSigner.Sign(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.ArtefactSignature, ToolUp.ArtefactSigning.SigningError]]
@@ -59,12 +60,22 @@ ToolUp.ArtefactSigning.ModuleBindingAnchor+SymmetricAnchor.keyId : System.String
 ToolUp.ArtefactSigning.ModuleBindingAnchor+Tags (class)
 ToolUp.ArtefactSigning.ModuleBindingAnchor+Tags.AsymmetricAnchor : System.Int32 (literal)
 ToolUp.ArtefactSigning.ModuleBindingAnchor+Tags.SymmetricAnchor : System.Int32 (literal)
+ToolUp.ArtefactSigning.ModuleBindingTrustResolver (class)
+ToolUp.ArtefactSigning.ModuleBindingTrustResolver.resolve(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IModuleBindingVerifier, System.String]]
+ToolUp.ArtefactSigning.ModuleBindingTrustValidator (class)
+ToolUp.ArtefactSigning.ModuleBindingTrustValidator..ctor(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.ArtefactSigning.PublicKeyMetadata (class)
 ToolUp.ArtefactSigning.PublicKeyMetadata..ctor(System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String)
 ToolUp.ArtefactSigning.PublicKeyMetadata.Algorithm : ToolUp.ArtefactSigning.SigningAlgorithm { get }
 ToolUp.ArtefactSigning.PublicKeyMetadata.Jwk : System.String { get }
 ToolUp.ArtefactSigning.PublicKeyMetadata.KeyId : System.String { get }
 ToolUp.ArtefactSigning.PublicKeyMetadata.Pem : System.String { get }
+ToolUp.ArtefactSigning.SignedExportBundle (class)
+ToolUp.ArtefactSigning.SignedExportBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.IExportEnvelopeSigner
+ToolUp.ArtefactSigning.SignedExportBundle.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.IArtefactSigner) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.ArtefactSigning.SignedRevocationList (class)
+ToolUp.ArtefactSigning.SignedRevocationList.loadSigned(System.Byte[], ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IBindingRevocationList, System.String]
+ToolUp.ArtefactSigning.SignedRevocationList.verifyAndParse(System.Byte[], ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IBindingRevocationList, System.String]
 ToolUp.ArtefactSigning.SigningAlgorithm (class)
 ToolUp.ArtefactSigning.SigningAlgorithm.EcdsaP256 : ToolUp.ArtefactSigning.SigningAlgorithm { get }
 ToolUp.ArtefactSigning.SigningAlgorithm.Ed25519 : ToolUp.ArtefactSigning.SigningAlgorithm { get }
