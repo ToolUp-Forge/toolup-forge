@@ -37,6 +37,10 @@ type WizardStep =
     | ReviewData
     | PickTarget
     | ReviewMapping
+    /// Phase 218 — dry-run validation preview shown after the mapping is
+    /// confirmed and before commit: per-row / per-cell errors of the
+    /// *mapped* CSV under the chosen schema.
+    | ReviewValidation
 
 type Wizard = {
     FileName: string
@@ -61,6 +65,13 @@ type Wizard = {
     Overrides: Map<string, string option>
     ReusedSaved: bool
     Saving: bool
+    /// Phase 218 — the dry-run validation report for the confirmed
+    /// mapping (populated on the `ReviewValidation` step). `None` until
+    /// the mapping is confirmed and validated.
+    Validation: DryRunReport option
+    /// `true` while the dry-run `ValidateConversion` round-trip is in
+    /// flight (drives the "Validating…" affordance on confirm).
+    Validating: bool
 }
 
 /// The CSV the mapping wizard is currently working on. Populated when a
@@ -122,7 +133,13 @@ type Msg =
     | ChangeFormat
     | OverrideColumn of field: string * column: string option
     | CancelWizard
+    /// Confirm the mapping → run the dry-run validation (no commit yet).
     | ConfirmMapping
+    | ValidationFinished of Result<DryRunReport, string>
+    /// Return from the validation preview to revise the mapping.
+    | BackToMapping
+    /// Commit the validated conversion (save recipe + import the object).
+    | CommitConversion
     | DeleteFile of string
     | ReprocessFile of string
     | Reprocessed of Result<ProcessedFileEntry, string>
@@ -254,7 +271,26 @@ let private wizardFor (held: HeldFile) : Wizard =
         Overrides = Map.empty
         ReusedSaved = false
         Saving = false
+        Validation = None
+        Validating = false
     }
+
+/// The confirmed conversion recipe for the wizard's current state — the
+/// field mapping + data-quality remediation for the chosen target type.
+/// Pure over wizard state, so both the dry-run validate and the commit
+/// derive the identical recipe (the validated shape is the committed
+/// shape). `None` until a target type is chosen.
+let private buildConversion (w: Wizard) : Conversion option =
+    w.TargetTypeId
+    |> Option.map (fun typeId -> {
+        Fingerprint = w.Fingerprint
+        TargetTypeId = typeId
+        Mapping = effectiveMapping w
+        Remediation = wizardTransforms w
+        SourceHeaders = w.Headers
+        CreatedBy = ""
+        CreatedAt = System.DateTime.UtcNow
+    })
 
 /// Disambiguate the uploaded file name per target type so several mapped
 /// imports of one source file land as distinct data objects rather than
@@ -662,32 +698,87 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         Cmd.none
 
     | ConfirmMapping ->
+        // Phase 218 — confirm no longer commits directly: it runs the
+        // dry-run validation first (rewrite → schema validate, no write,
+        // no `DataType.Process`) and shows the per-row/per-cell report.
         match model.Wizard, model.Held with
         | Some w, Some held when w.TargetTypeId.IsSome ->
-            let typeId = w.TargetTypeId.Value
-
-            match schemaFor displays typeId with
-            | Some _ ->
-                let conversion: Conversion = {
-                    Fingerprint = w.Fingerprint
-                    TargetTypeId = typeId
-                    Mapping = effectiveMapping w
-                    Remediation = wizardTransforms w
-                    SourceHeaders = w.Headers
-                    CreatedBy = ""
-                    CreatedAt = System.DateTime.UtcNow
+            match schemaFor displays w.TargetTypeId.Value, buildConversion w with
+            | Some _, Some conversion ->
+                let request: DryRunValidationRequest = {
+                    Conversion = conversion
+                    RawCsv = held.RawContents
                 }
 
-                // Save the conversion recipe (additive — keyed by
-                // fingerprint+type), then import this one as its own data
-                // object (recording provenance).
+                {
+                    model with
+                        Wizard = Some { w with Validating = true }
+                        Error = None
+                },
+                Cmd.OfAsync.either conversionApi.ValidateConversion request ValidationFinished (fun ex ->
+                    ApiError ex.Message)
+            | _ ->
+                {
+                    model with
+                        Error = Some "The selected data type publishes no schema."
+                },
+                Cmd.none
+        | _ -> model, Cmd.none
+
+    | ValidationFinished(Ok report) ->
+        match model.Wizard with
+        | Some w ->
+            {
+                model with
+                    Wizard =
+                        Some {
+                            w with
+                                Validating = false
+                                Validation = Some report
+                                Step = ReviewValidation
+                        }
+            },
+            Cmd.none
+        | None -> model, Cmd.none
+
+    | ValidationFinished(Error msg) ->
+        {
+            model with
+                Wizard = model.Wizard |> Option.map (fun w -> { w with Validating = false })
+                Error = Some msg
+        },
+        Cmd.none
+
+    | BackToMapping ->
+        {
+            model with
+                Wizard =
+                    model.Wizard
+                    |> Option.map (fun w -> {
+                        w with
+                            Step = ReviewMapping
+                            Validation = None
+                    })
+        },
+        Cmd.none
+
+    | CommitConversion ->
+        // The validated conversion is committed: save the recipe (additive —
+        // keyed by fingerprint+type), then import it as its own data object
+        // (recording provenance). The conversion is rebuilt from the same
+        // pure wizard state that was validated, so the committed shape is the
+        // validated shape.
+        match model.Wizard, model.Held with
+        | Some w, Some held when w.TargetTypeId.IsSome ->
+            match schemaFor displays w.TargetTypeId.Value, buildConversion w with
+            | Some _, Some conversion ->
                 {
                     model with
                         Wizard = Some { w with Saving = true }
                 },
                 Cmd.OfAsync.either (saveAndImport displays held) conversion ImportFinished (fun ex ->
                     ApiError ex.Message)
-            | None ->
+            | _ ->
                 {
                     model with
                         Error = Some "The selected data type publishes no schema."
@@ -754,7 +845,13 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         Cmd.none
 
     | ApiError errorMsg ->
-        let wizard = model.Wizard |> Option.map (fun w -> { w with Saving = false })
+        let wizard =
+            model.Wizard
+            |> Option.map (fun w -> {
+                w with
+                    Saving = false
+                    Validating = false
+            })
 
         {
             model with
@@ -1069,6 +1166,118 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
         ]
     ]
 
+// ─── ReviewValidation step (Phase 218) ────────────────────────────
+
+/// The dry-run validation preview. Reuses the data-quality review's
+/// severity vocabulary (`ColumnIssue` / `Safe` / `NeedsChoice`): a
+/// policy-blocked commit reads like a `NeedsChoice` blocker (red, must
+/// act), a warn-only failure reads like a non-`Safe` advisory (amber,
+/// proceed at your discretion), and a clean report reads as `Safe`
+/// (green). Errors are grouped by column to match the mapping-review
+/// surface.
+let private validationView (report: DryRunReport) (saving: bool) dispatch =
+    let hasFailures = report.FailedRows > 0 || not report.RowIssues.IsEmpty
+
+    let summaryBadge =
+        if not hasFailures then
+            "border-green-200 bg-green-50 text-green-800",
+            sprintf "All %d row%s validated cleanly." report.TotalRows (if report.TotalRows = 1 then "" else "s")
+        elif report.CommitBlocked then
+            "border-red-200 bg-red-50 text-red-800",
+            sprintf
+                "%d of %d row%s would fail — commit is blocked until the mapping or source is fixed."
+                report.FailedRows
+                report.TotalRows
+                (if report.TotalRows = 1 then "" else "s")
+        else
+            "border-amber-200 bg-amber-50 text-amber-800",
+            sprintf
+                "%d of %d row%s would fail. You can fix the mapping or import anyway."
+                report.FailedRows
+                report.TotalRows
+                (if report.TotalRows = 1 then "" else "s")
+
+    let badgeClass, summaryText = summaryBadge
+
+    let byColumn = report.CellIssues |> List.groupBy _.Column
+
+    let columnCard (column: string, issues: DryRunCellIssue list) =
+        Html.div [
+            prop.className "p-3 rounded border border-amber-200 bg-amber-50 space-y-1"
+            prop.children [
+                Html.div [
+                    prop.className "text-sm font-medium text-amber-800"
+                    prop.text (
+                        sprintf "%s — %d failing cell%s" column issues.Length (if issues.Length = 1 then "" else "s")
+                    )
+                ]
+                for issue in issues |> List.truncate 5 do
+                    let reason =
+                        match issue.Violation with
+                        | Some v -> v
+                        | None -> sprintf "expected %s" issue.Expected
+
+                    Html.div [
+                        prop.className "text-xs text-amber-700"
+                        prop.text (sprintf "row %d: \"%s\" — %s" issue.Row issue.Actual reason)
+                    ]
+            ]
+        ]
+
+    Html.div [
+        prop.className "space-y-3"
+        prop.children [
+            Html.div [
+                prop.className $"p-3 rounded border text-sm {badgeClass}"
+                prop.text summaryText
+            ]
+
+            for issue in report.RowIssues do
+                Html.div [ prop.className "text-sm text-red-700"; prop.text issue.Detail ]
+
+            for group in byColumn do
+                columnCard group
+
+            if report.Truncated then
+                Html.div [
+                    prop.className "text-xs text-gray-500"
+                    prop.text "Showing a sample of the failing cells — more exist than are listed here."
+                ]
+
+            Html.div [
+                prop.className "flex items-center gap-3 pt-1"
+                prop.children [
+                    Html.button [
+                        prop.className [
+                            "px-4 py-2 rounded-lg text-sm"
+                            Tokens.Typography.buttonText
+                            if (not report.CommitBlocked) && not saving then
+                                Tokens.Colours.brand
+                                + " "
+                                + Tokens.Colours.brandText
+                                + " hover:bg-brand-dark cursor-pointer"
+                            else
+                                "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        ]
+                        prop.disabled (report.CommitBlocked || saving)
+                        prop.text (if saving then "Importing…" else "Import")
+                        prop.onClick (fun _ ->
+                            if (not report.CommitBlocked) && not saving then
+                                dispatch CommitConversion)
+                    ]
+                    Html.button [
+                        prop.className "text-sm text-gray-600 hover:text-gray-900 hover:underline"
+                        prop.disabled saving
+                        prop.text "Back to mapping"
+                        prop.onClick (fun _ ->
+                            if not saving then
+                                dispatch BackToMapping)
+                    ]
+                ]
+            ]
+        ]
+    ]
+
 let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<DataTypeId> option) (w: Wizard) dispatch =
     let header =
         Html.div [
@@ -1085,6 +1294,10 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
 
     let body =
         match w.Step with
+        | ReviewValidation ->
+            match w.Validation with
+            | Some report -> validationView report w.Saving dispatch
+            | None -> Html.none
         | ReviewData -> reviewDataView w dispatch
         | PickTarget ->
             // Schema-bearing types only, and — once the availability-filtered
@@ -1189,7 +1402,7 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                                     prop.className [
                                         "px-4 py-2 rounded-lg text-sm"
                                         Tokens.Typography.buttonText
-                                        if blockers.IsEmpty && not w.Saving then
+                                        if blockers.IsEmpty && not w.Validating then
                                             Tokens.Colours.brand
                                             + " "
                                             + Tokens.Colours.brandText
@@ -1197,15 +1410,15 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                                         else
                                             "bg-gray-200 text-gray-500 cursor-not-allowed"
                                     ]
-                                    prop.disabled (not blockers.IsEmpty || w.Saving)
-                                    prop.text (if w.Saving then "Importing…" else "Confirm & import")
+                                    prop.disabled (not blockers.IsEmpty || w.Validating)
+                                    prop.text (if w.Validating then "Validating…" else "Confirm & validate")
                                     prop.onClick (fun _ ->
-                                        if blockers.IsEmpty && not w.Saving then
+                                        if blockers.IsEmpty && not w.Validating then
                                             dispatch ConfirmMapping)
                                 ]
                                 Html.span [
                                     prop.className "text-xs text-gray-500"
-                                    prop.text "The mapping is saved and reused for CSVs with the same columns."
+                                    prop.text "We check every row against the format before importing."
                                 ]
                             ]
                         ]

@@ -186,3 +186,73 @@ type ConversionRecord = {
     ConvertedBy: string
     ConvertedAt: DateTime
 }
+
+// ─── Dry-run validation (Phase 218) ───────────────────────────────
+
+/// One failing cell in a dry-run validation, flattened to wire-safe
+/// primitives so the report crosses `IConversionApi` to the Fable
+/// wizard without dragging the server-only validation engine's types
+/// into the client. Mirrors the errors-as-data shape of the platform's
+/// per-cell validation report (GP 12.3) — a failing cell is data, not a
+/// thrown exception.
+type DryRunCellIssue = {
+    /// 1-based row number as the user sees it in a spreadsheet — the
+    /// canonical header is row 1, so the first data row is row 2.
+    Row: int
+    /// The target schema field whose mapped cell failed.
+    Column: string
+    /// Human-readable statement of what the schema expected
+    /// (e.g. "a number", "a date").
+    Expected: string
+    /// The cell text (post-remediation, pre-commit) that failed.
+    Actual: string
+    /// The specific constraint violated (e.g. "required value
+    /// missing"), or `None` when the value simply isn't the declared
+    /// type.
+    Violation: string option
+}
+
+/// One structural failure (something wrong with a whole row, or a
+/// mapped-away required column) surfaced by a dry-run validation.
+type DryRunRowIssue = {
+    /// 1-based row number; `0` for a header / schema-level structural
+    /// problem that isn't tied to a single data row.
+    Row: int
+    Detail: string
+}
+
+/// The value-typed dry-run validation report shown between confirm-
+/// mapping and commit: pass/fail counts plus a capped sample of failing
+/// cells (the UI groups them by column). Wire-safe + Fable-friendly — no
+/// server-only types cross the boundary. `CommitBlocked` carries the
+/// server-side policy verdict so the wizard's commit honours it.
+type DryRunReport = {
+    TargetTypeId: DataTypeId
+    /// Data rows examined (excludes the header).
+    TotalRows: int
+    /// Rows where every mapped cell bound cleanly — would commit.
+    PassedRows: int
+    /// Rows with at least one failing cell or a structural failure.
+    FailedRows: int
+    /// Capped sample of failing cells — the "here's why and where"
+    /// detail behind the `FailedRows` tally.
+    CellIssues: DryRunCellIssue list
+    /// Capped sample of structural row failures.
+    RowIssues: DryRunRowIssue list
+    /// `true` when more failing cells exist than the sample carries, so
+    /// `CellIssues` is a prefix, not the whole file's.
+    Truncated: bool
+    /// Server-side policy verdict (`ServerConfig.MappingDryRun`):
+    /// `true` = the configured policy blocks commit because rows would
+    /// fail. The default policy is warn-only, so this is `false` unless
+    /// a deployment opted into blocking.
+    CommitBlocked: bool
+}
+
+/// The dry-run request: the confirmed conversion recipe (mapping +
+/// remediation + target type) plus the raw source CSV whose *mapped*
+/// shape is validated. Crosses `IConversionApi.ValidateConversion`.
+type DryRunValidationRequest = {
+    Conversion: Conversion
+    RawCsv: string
+}

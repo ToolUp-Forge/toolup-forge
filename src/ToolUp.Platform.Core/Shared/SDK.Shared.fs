@@ -320,6 +320,20 @@ type ColumnMappingMode =
     /// `ClientConfig.DataManager = MappingDataManager`.
     | EnabledColumnMapping
 
+/// Phase 218 — policy for the mapping-aware Data Manager's dry-run
+/// validation step (the per-row/per-cell error preview shown before a
+/// mapped CSV is committed). Read only when `ColumnMapping =
+/// EnabledColumnMapping`; the report is always shown, the policy only
+/// decides whether failing rows BLOCK the commit or merely WARN.
+type MappingDryRunPolicy =
+    /// Default — the dry-run report is advisory: failing rows are
+    /// surfaced but the user may still commit (GP 11: prior behaviour,
+    /// where commit was unconditional, is preserved).
+    | WarnOnValidationFailure
+    /// The dry-run report blocks commit when any row would fail
+    /// validation — the user must fix the mapping or the source first.
+    | BlockOnValidationFailure
+
 /// Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate.
 /// Selects whether `compose` registers `IOAuthTokenRefresher` +
 /// `OAuthRefreshJobHandler` (`_platform.oauth.refresh`). Default:
@@ -1863,6 +1877,12 @@ type ServerConfig = {
     /// CSV-column→schema-field map is persisted per storage scope,
     /// keyed by the source CSV's column-structure fingerprint.
     ColumnMapping: ColumnMappingMode
+    /// Phase 218 — policy for the mapping-aware Data Manager's dry-run
+    /// validation preview. Default: `WarnOnValidationFailure` — failing
+    /// rows are surfaced before commit but do not block it (GP 11). Set
+    /// `BlockOnValidationFailure` to refuse commit while any row would
+    /// fail. Read only when `ColumnMapping = EnabledColumnMapping`.
+    MappingDryRun: MappingDryRunPolicy
     /// Phase 10h — generic OAuth 2.0 refresh-token lifecycle
     /// substrate. Default: `NoOAuthRefresher` — no
     /// `IOAuthTokenRefresher` registered; OAuth-using connectors
@@ -2800,6 +2820,7 @@ module ServerConfig =
         PublicBaseUrl = None
         DataIngestion = NoDataIngestion
         ColumnMapping = NoColumnMapping
+        MappingDryRun = WarnOnValidationFailure
         OAuthRefresher = NoOAuthRefresher
         EntityStore = NoEntityStore
         TimeSeriesStore = NoTimeSeriesStore
@@ -3546,6 +3567,13 @@ module ServerConfig =
                         NoColumnMapping
                         EnabledColumnMapping
                         defaults.ColumnMapping
+                MappingDryRun =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_MAPPING_DRYRUN_BLOCK"
+                        WarnOnValidationFailure
+                        BlockOnValidationFailure
+                        defaults.MappingDryRun
                 OAuthRefresher =
                     parseEnabledDisabled
                         logger

@@ -147,6 +147,10 @@
         <Compile Include="Server\DataObjectStore.fs" />
         <Compile Include="Server\IColumnMappingStore.fs" />
         <Compile Include="Server\ColumnMappingStore.fs" />
+        <!-- Phase 218 — mapping dry-run validation seam + default BCL-only
+             validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
+        <Compile Include="Server\IMappingDryRunValidator.fs" />
+        <Compile Include="Server\MappingDryRunValidator.fs" />
         <Compile Include="Server\IEntityStore.fs" />
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />

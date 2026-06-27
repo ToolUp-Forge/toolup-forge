@@ -52,4 +52,12 @@ type IConversionApi = {
     /// file list to mark which objects were converted, with their steps).
     [<AllowAnonymous>]
     ListConversionRecords: unit -> Async<ConversionRecord list>
+    /// Dry-run validate a confirmed conversion BEFORE commit: rewrite the
+    /// raw CSV into the target type's canonical schema shape and run it
+    /// through the server's schema validator, returning a per-row /
+    /// per-cell error report as data — no write, no `DataType.Process`
+    /// (GP 12.3). `Error` only for a non-validatable target (unknown type
+    /// / no published schema).
+    [<AllowAnonymous>]
+    ValidateConversion: DryRunValidationRequest -> Async<Result<DryRunReport, string>>
 }

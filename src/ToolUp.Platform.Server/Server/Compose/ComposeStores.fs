@@ -1,6 +1,7 @@
 module ToolUp.Platform.ComposeStores
 
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.FileProcessor
@@ -198,6 +199,13 @@ let registerColumnMappingStore (services: IServiceCollection) (config: ServerCon
                 | _ -> None
 
             ColumnMappingStore.create dos logger)
+        |> ignore
+
+        // Phase 218 — default dry-run validator (BCL-only coarse type /
+        // required-cell checks). `TryAddSingleton` so a deployment can
+        // compose a richer `IMappingDryRunValidator` (e.g. ToolUp.Tabular-
+        // backed) ahead of this default and have it win.
+        services.TryAddSingleton<IMappingDryRunValidator>(MappingDryRunValidator.create ())
         |> ignore
     | NoColumnMapping -> ()
 
