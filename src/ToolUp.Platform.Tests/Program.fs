@@ -12,6 +12,7 @@ let allTests =
         PersistentEventStoreTests.tests
         DataObjectStoreTests.tests
         IngestionStatusTests.tests
+        IngestionRetryTests.tests
         ColumnMatcherTests.tests
         // Phase 218 — CSV-mapping dry-run validation preview.
         MappingDryRunValidationTests.tests

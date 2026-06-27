@@ -25,6 +25,9 @@ type Model = {
     /// `DataManagerIngestionStatusKey` notifications (Phase 173). Empty
     /// when no RAG is composed ⇒ the status column is not rendered.
     IngestionStatus: Map<string, FileIngestionStatus>
+    /// Client-side filter over the file list by ingestion status
+    /// (Phase 220). `AllFiles` by default.
+    StatusFilter: IngestionStatusFilter
     ErrorMessage: string option
     /// True while the initial (or post-delete refresh) `ListFiles` call
     /// is in flight. Drives the configured loading indicator in the
@@ -65,6 +68,12 @@ type Msg =
     /// named file's ingestion badge in place (no refetch). Fired from the
     /// `IngestionStatusSubscriber` component's notification handler.
     | IngestionStatusChanged of fileName: string * status: FileIngestionStatus
+    /// Phase 220 — one-click re-ingest of a `Failed` file. No optimistic
+    /// state change: the badge re-renders from the store via the live
+    /// `Pending → Indexed` notification.
+    | RetryIngestion of ApiCall<string, Result<unit, string>>
+    /// Phase 220 — narrow the file list to one ingestion status (client-side).
+    | SetStatusFilter of IngestionStatusFilter
     | ApiError of string
     | DismissError
 
@@ -78,6 +87,7 @@ let init () =
         CurrentUpload = NotStarted
         ProcessedData = []
         IngestionStatus = Map.empty
+        StatusFilter = AllFiles
         ErrorMessage = None
         FilesLoading = true
     },
@@ -239,6 +249,24 @@ let update msg model =
         },
         Cmd.none
 
+    | RetryIngestion(Start fileName) ->
+        model,
+        Cmd.OfRemoting.call fileApi.RetryIngestion fileName (Finished >> RetryIngestion) (fun ex -> ApiError ex.Message)
+
+    | RetryIngestion(Finished(Ok())) ->
+        // No optimistic state — the server transitions the store to
+        // `Pending` and the live notification flips the badge.
+        model, Cmd.none
+
+    | RetryIngestion(Finished(Error msg)) ->
+        {
+            model with
+                ErrorMessage = Some(sprintf "Re-ingestion failed: %s" msg)
+        },
+        Cmd.none
+
+    | SetStatusFilter filter -> { model with StatusFilter = filter }, Cmd.none
+
     | ApiError errorMsg ->
         {
             model with
@@ -368,6 +396,38 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
 
     Html.none
 
+/// Phase 220 — status-filter dropdown over the file list. Labels match
+/// the badge vocabulary so the filter reads the same as what it selects.
+let private filterLabel =
+    function
+    | AllFiles -> "All"
+    | OnlyIndexed -> "Indexed"
+    | OnlyPending -> "Indexing"
+    | OnlyFailed -> "Not indexed"
+    | OnlyNotIndexed -> "Not attempted"
+
+let private allFilters = [ AllFiles; OnlyIndexed; OnlyPending; OnlyFailed; OnlyNotIndexed ]
+
+let private statusFilterControl (model: Model) dispatch =
+    Html.div [
+        prop.className "flex items-center gap-2 mb-3"
+        prop.children [
+            Html.span [ prop.className "text-sm text-gray-600"; prop.text "Filter by index status:" ]
+            Html.select [
+                prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
+                prop.value (filterLabel model.StatusFilter)
+                prop.onChange (fun (v: string) ->
+                    match allFilters |> List.tryFind (fun f -> filterLabel f = v) with
+                    | Some f -> dispatch (SetStatusFilter f)
+                    | None -> ())
+                prop.children [
+                    for f in allFilters do
+                        Html.option [ prop.value (filterLabel f); prop.text (filterLabel f) ]
+                ]
+            ]
+        ]
+    ]
+
 let private view (displays: DataTypeDisplay list) model dispatch =
     let inputPanel =
         Layout.Panel.panel "Data Upload" [
@@ -417,15 +477,36 @@ let private view (displays: DataTypeDisplay list) model dispatch =
                 files |> List.map (fun info -> { DataType = dataType; Info = info }))
             |> Array.ofList
 
+        // Phase 220 — client-side status filter over the already-fetched
+        // status set (no round trip). `AllFiles` (and the no-RAG case,
+        // where every status is `None`) passes everything through.
+        let filteredFiles =
+            allFiles
+            |> Array.filter (fun row ->
+                FileIngestionStatus.matchesFilter
+                    model.StatusFilter
+                    (model.IngestionStatus |> Map.tryFind row.Info.FileName))
+
         Layout.Panel.panel "Uploaded Files" [
             // Owns the ingestion-status live-update subscription (renders
             // nothing); mounted unconditionally so it subscribes even when
             // the file list is momentarily empty.
             IngestionStatusSubscriber dispatch
 
-            match allFiles with
+            // Phase 220 — status filter (only when RAG is composed and there
+            // is at least one file to filter).
+            if not (Map.isEmpty model.IngestionStatus) && allFiles.Length > 0 then
+                statusFilterControl model dispatch
+
+            match filteredFiles with
             | [||] when model.FilesLoading -> LoadingSlot()
-            | [||] -> Html.p [ prop.className "text-gray-500"; prop.text "No files uploaded yet." ]
+            | [||] when allFiles.Length = 0 ->
+                Html.p [ prop.className "text-gray-500"; prop.text "No files uploaded yet." ]
+            | [||] ->
+                Html.p [
+                    prop.className "text-gray-500"
+                    prop.text "No files match the selected index-status filter."
+                ]
             | rows ->
                 Html.div [
                     prop.className ThemeClass.Balham
@@ -473,9 +554,27 @@ let private view (displays: DataTypeDisplay list) model dispatch =
                                         ColumnDef.cellRenderer (fun (p: ICellRendererParams<UploadedFileRow, obj>) ->
                                             match p.data with
                                             | Some row ->
-                                                match model.IngestionStatus |> Map.tryFind row.Info.FileName with
-                                                | Some status -> ingestionBadge status
-                                                | None -> Html.none
+                                                let status = model.IngestionStatus |> Map.tryFind row.Info.FileName
+
+                                                Html.div [
+                                                    prop.className "flex items-center gap-2"
+                                                    prop.children [
+                                                        match status with
+                                                        | Some s -> ingestionBadge s
+                                                        | None -> Html.none
+                                                        // Phase 220 — one-click re-ingest on a Failed file.
+                                                        if FileIngestionStatus.isRetryable status then
+                                                            Html.button [
+                                                                prop.className
+                                                                    "text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                                                prop.title
+                                                                    "Re-run vectorisation for this file's persisted bytes."
+                                                                prop.text "Retry"
+                                                                prop.onClick (fun _ ->
+                                                                    dispatch (RetryIngestion(Start row.Info.FileName)))
+                                                            ]
+                                                    ]
+                                                ]
                                             | None -> Html.none)
                                     ]
                                 ColumnDef.create [

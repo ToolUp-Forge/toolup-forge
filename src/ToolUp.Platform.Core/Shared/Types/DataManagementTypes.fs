@@ -137,3 +137,39 @@ type DataManagerIngestionUpdate = {
     FileName: string
     Status: FileIngestionStatus
 }
+
+/// Client-side filter over the Data Manager file list by ingestion
+/// status (Phase 220). `AllFiles` is the default no-op; the others
+/// narrow to a single status. Filtering is purely client-side over the
+/// already-fetched status set — no extra round trip.
+type IngestionStatusFilter =
+    | AllFiles
+    | OnlyIndexed
+    | OnlyPending
+    | OnlyFailed
+    | OnlyNotIndexed
+
+/// Pure predicates over `FileIngestionStatus` shared by the Data Manager
+/// UIs and the test pack (Phase 220) — the retry affordance and the
+/// status filter are derived from the same logic on both sides.
+module FileIngestionStatus =
+    /// A file is retryable iff its ingestion outright `Failed`. An
+    /// in-flight `Pending` is not (idempotency — re-ingesting would just
+    /// duplicate the work); an `Indexed` file needs no retry; a file with
+    /// no status entry (`None` / `NotIngested`) was never a RAG-ingested
+    /// Data Manager file.
+    let isRetryable (status: FileIngestionStatus option) : bool =
+        match status with
+        | Some(Failed _) -> true
+        | _ -> false
+
+    /// Whether a file with the given status passes a status filter. A
+    /// file with no entry reads as `NotIngested`.
+    let matchesFilter (filter: IngestionStatusFilter) (status: FileIngestionStatus option) : bool =
+        match filter, status with
+        | AllFiles, _ -> true
+        | OnlyIndexed, Some Indexed -> true
+        | OnlyPending, Some Pending -> true
+        | OnlyFailed, Some(Failed _) -> true
+        | OnlyNotIndexed, (None | Some NotIngested) -> true
+        | _ -> false

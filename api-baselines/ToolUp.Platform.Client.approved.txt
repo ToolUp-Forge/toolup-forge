@@ -276,12 +276,13 @@ FileManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.D
 FileManagerUI.init() : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 FileManagerUI.update(FileManagerUI+Msg, FileManagerUI+Model) : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 FileManagerUI+Model (class)
-FileManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]], ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+FileManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]], ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], DataManagementTypes+IngestionStatusFilter, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
 FileManagerUI+Model.CurrentUpload : ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo] { get }
 FileManagerUI+Model.ErrorMessage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 FileManagerUI+Model.FilesLoading : System.Boolean { get }
 FileManagerUI+Model.IngestionStatus : Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus] { get }
 FileManagerUI+Model.ProcessedData : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
+FileManagerUI+Model.StatusFilter : DataManagementTypes+IngestionStatusFilter { get }
 FileManagerUI+Model.UploadedFiles : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]] { get }
 FileManagerUI+Msg (class)
 FileManagerUI+Msg.DismissError : FileManagerUI+Msg { get }
@@ -292,7 +293,9 @@ FileManagerUI+Msg.IsIngestionStatusChanged : System.Boolean { get }
 FileManagerUI+Msg.IsLoadFiles : System.Boolean { get }
 FileManagerUI+Msg.IsReprocessFile : System.Boolean { get }
 FileManagerUI+Msg.IsResetDataStore : System.Boolean { get }
+FileManagerUI+Msg.IsRetryIngestion : System.Boolean { get }
 FileManagerUI+Msg.IsSelectFile : System.Boolean { get }
+FileManagerUI+Msg.IsSetStatusFilter : System.Boolean { get }
 FileManagerUI+Msg.IsUploadFile : System.Boolean { get }
 FileManagerUI+Msg.Tag : System.Int32 { get }
 FileManagerUI+Msg+ApiError (class)
@@ -308,8 +311,12 @@ FileManagerUI+Msg+ReprocessFile (class)
 FileManagerUI+Msg+ReprocessFile.Item : ToolUp.Platform.ApiCall`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String]] { get }
 FileManagerUI+Msg+ResetDataStore (class)
 FileManagerUI+Msg+ResetDataStore.Item : ToolUp.Platform.ApiCall`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String]] { get }
+FileManagerUI+Msg+RetryIngestion (class)
+FileManagerUI+Msg+RetryIngestion.Item : ToolUp.Platform.ApiCall`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]] { get }
 FileManagerUI+Msg+SelectFile (class)
 FileManagerUI+Msg+SelectFile.Item : ToolUp.Platform.ApiCall`2[Browser.Types.File, DataManagementTypes+DataFileUpload] { get }
+FileManagerUI+Msg+SetStatusFilter (class)
+FileManagerUI+Msg+SetStatusFilter.Item : DataManagementTypes+IngestionStatusFilter { get }
 FileManagerUI+Msg+Tags (class)
 FileManagerUI+Msg+Tags.ApiError : System.Int32 (literal)
 FileManagerUI+Msg+Tags.DeleteFile : System.Int32 (literal)
@@ -318,7 +325,9 @@ FileManagerUI+Msg+Tags.IngestionStatusChanged : System.Int32 (literal)
 FileManagerUI+Msg+Tags.LoadFiles : System.Int32 (literal)
 FileManagerUI+Msg+Tags.ReprocessFile : System.Int32 (literal)
 FileManagerUI+Msg+Tags.ResetDataStore : System.Int32 (literal)
+FileManagerUI+Msg+Tags.RetryIngestion : System.Int32 (literal)
 FileManagerUI+Msg+Tags.SelectFile : System.Int32 (literal)
+FileManagerUI+Msg+Tags.SetStatusFilter : System.Int32 (literal)
 FileManagerUI+Msg+Tags.UploadFile : System.Int32 (literal)
 FileManagerUI+Msg+UploadFile (class)
 FileManagerUI+Msg+UploadFile.Item : ToolUp.Platform.ApiCall`2[DataManagementTypes+DataFileUpload, Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+FileUploadResponse, System.String]] { get }
@@ -471,7 +480,7 @@ MappingDataManagerUI+HeldFile.Headers : Microsoft.FSharp.Collections.FSharpList`
 MappingDataManagerUI+HeldFile.RawContents : System.String { get }
 MappingDataManagerUI+HeldFile.Samples : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 MappingDataManagerUI+Model (class)
-MappingDataManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
+MappingDataManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], DataManagementTypes+IngestionStatusFilter, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
 MappingDataManagerUI+Model.AllowedTypeIds : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
 MappingDataManagerUI+Model.Busy : System.Boolean { get }
 MappingDataManagerUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -479,6 +488,7 @@ MappingDataManagerUI+Model.Held : Microsoft.FSharp.Core.FSharpOption`1[MappingDa
 MappingDataManagerUI+Model.IngestionStatus : Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus] { get }
 MappingDataManagerUI+Model.ProcessedData : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
 MappingDataManagerUI+Model.Records : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord] { get }
+MappingDataManagerUI+Model.StatusFilter : DataManagementTypes+IngestionStatusFilter { get }
 MappingDataManagerUI+Model.UploadedFiles : Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo] { get }
 MappingDataManagerUI+Model.Wizard : Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard] { get }
 MappingDataManagerUI+Msg (class)
@@ -516,9 +526,12 @@ MappingDataManagerUI+Msg.IsReprocessFile : System.Boolean { get }
 MappingDataManagerUI+Msg.IsReprocessed : System.Boolean { get }
 MappingDataManagerUI+Msg.IsResetDataStore : System.Boolean { get }
 MappingDataManagerUI+Msg.IsResetDone : System.Boolean { get }
+MappingDataManagerUI+Msg.IsRetryIngestionDone : System.Boolean { get }
+MappingDataManagerUI+Msg.IsRetryIngestionMsg : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSelectFile : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSelectTarget : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSetDateOrder : System.Boolean { get }
+MappingDataManagerUI+Msg.IsSetStatusFilter : System.Boolean { get }
 MappingDataManagerUI+Msg.IsStartMapping : System.Boolean { get }
 MappingDataManagerUI+Msg.IsToggleColumnFixes : System.Boolean { get }
 MappingDataManagerUI+Msg.IsValidationFinished : System.Boolean { get }
@@ -564,6 +577,10 @@ MappingDataManagerUI+Msg+Reprocessed (class)
 MappingDataManagerUI+Msg+Reprocessed.Item : Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String] { get }
 MappingDataManagerUI+Msg+ResetDone (class)
 MappingDataManagerUI+Msg+ResetDone.Item : Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String] { get }
+MappingDataManagerUI+Msg+RetryIngestionDone (class)
+MappingDataManagerUI+Msg+RetryIngestionDone.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+MappingDataManagerUI+Msg+RetryIngestionMsg (class)
+MappingDataManagerUI+Msg+RetryIngestionMsg.fileName : System.String { get }
 MappingDataManagerUI+Msg+SelectFile (class)
 MappingDataManagerUI+Msg+SelectFile.Item : Browser.Types.File { get }
 MappingDataManagerUI+Msg+SelectTarget (class)
@@ -571,6 +588,8 @@ MappingDataManagerUI+Msg+SelectTarget.Item : System.String { get }
 MappingDataManagerUI+Msg+SetDateOrder (class)
 MappingDataManagerUI+Msg+SetDateOrder.column : System.String { get }
 MappingDataManagerUI+Msg+SetDateOrder.order : ColumnMappingTypes+DateOrder { get }
+MappingDataManagerUI+Msg+SetStatusFilter (class)
+MappingDataManagerUI+Msg+SetStatusFilter.Item : DataManagementTypes+IngestionStatusFilter { get }
 MappingDataManagerUI+Msg+StartMapping (class)
 MappingDataManagerUI+Msg+StartMapping.fileName : System.String { get }
 MappingDataManagerUI+Msg+Tags (class)
@@ -601,9 +620,12 @@ MappingDataManagerUI+Msg+Tags.ReprocessFile : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.Reprocessed : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ResetDataStore : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ResetDone : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.RetryIngestionDone : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.RetryIngestionMsg : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SelectFile : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SelectTarget : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SetDateOrder : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.SetStatusFilter : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.StartMapping : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ToggleColumnFixes : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ValidationFinished : System.Int32 (literal)

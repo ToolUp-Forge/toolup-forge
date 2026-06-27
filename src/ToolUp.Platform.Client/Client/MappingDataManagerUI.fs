@@ -101,6 +101,9 @@ type Model = {
     /// `DataManagerIngestionStatusKey` notifications (Phase 173). Empty
     /// when no RAG is composed ⇒ no status column.
     IngestionStatus: Map<string, FileIngestionStatus>
+    /// Client-side filter over the file list by ingestion status
+    /// (Phase 220). `AllFiles` by default.
+    StatusFilter: IngestionStatusFilter
     /// Per-object conversion provenance, joined to the file list to mark
     /// which objects were produced by a conversion (+ their steps).
     Records: ConversionRecord list
@@ -126,6 +129,13 @@ type Msg =
     /// A `DataManagerIngestionStatusKey` notification arrived — patch the
     /// named file's ingestion badge in place (no refetch).
     | IngestionStatusChanged of fileName: string * status: FileIngestionStatus
+    /// Phase 220 — one-click re-ingest of a `Failed` file. No optimistic
+    /// state change: the badge re-renders from the store via the live
+    /// notification.
+    | RetryIngestionMsg of fileName: string
+    | RetryIngestionDone of Result<unit, string>
+    /// Phase 220 — narrow the file list to one ingestion status (client-side).
+    | SetStatusFilter of IngestionStatusFilter
     | SelectFile of Browser.Types.File
     | FileChosen of fileName: string * contents: string
     | MappingsFetched of HeldFile * Conversion list
@@ -448,6 +458,7 @@ let init () =
         UploadedFiles = []
         ProcessedData = []
         IngestionStatus = Map.empty
+        StatusFilter = AllFiles
         Records = []
         Held = None
         Wizard = None
@@ -489,6 +500,22 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 IngestionStatus = model.IngestionStatus |> Map.add fileName status
         },
         Cmd.none
+
+    | RetryIngestionMsg fileName ->
+        model, Cmd.OfRemoting.call fileApi.RetryIngestion fileName RetryIngestionDone (fun ex -> ApiError ex.Message)
+
+    // No optimistic state — the server transitions the store to `Pending`
+    // and the live notification flips the badge.
+    | RetryIngestionDone(Ok()) -> model, Cmd.none
+
+    | RetryIngestionDone(Error msg) ->
+        {
+            model with
+                Error = Some(sprintf "Re-ingestion failed: %s" msg)
+        },
+        Cmd.none
+
+    | SetStatusFilter filter -> { model with StatusFilter = filter }, Cmd.none
 
     | CatalogLoaded response ->
         let allowed = response.Types |> List.map (fun e -> e.Info.Id) |> Set.ofList
@@ -1788,6 +1815,37 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
 
     Html.none
 
+/// Phase 220 — status-filter dropdown over the file list.
+let private filterLabel =
+    function
+    | AllFiles -> "All"
+    | OnlyIndexed -> "Indexed"
+    | OnlyPending -> "Indexing"
+    | OnlyFailed -> "Not indexed"
+    | OnlyNotIndexed -> "Not attempted"
+
+let private allFilters = [ AllFiles; OnlyIndexed; OnlyPending; OnlyFailed; OnlyNotIndexed ]
+
+let private statusFilterControl (model: Model) dispatch =
+    Html.div [
+        prop.className "flex items-center gap-2 mb-3"
+        prop.children [
+            Html.span [ prop.className "text-sm text-gray-600"; prop.text "Filter by index status:" ]
+            Html.select [
+                prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
+                prop.value (filterLabel model.StatusFilter)
+                prop.onChange (fun (v: string) ->
+                    match allFilters |> List.tryFind (fun f -> filterLabel f = v) with
+                    | Some f -> dispatch (SetStatusFilter f)
+                    | None -> ())
+                prop.children [
+                    for f in allFilters do
+                        Html.option [ prop.value (filterLabel f); prop.text (filterLabel f) ]
+                ]
+            ]
+        ]
+    ]
+
 let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
     // Show genuine uploads only — a confirmed mapping uploads its rewritten
     // CSV as a produced file (`X__Type.csv`); that belongs in the data-object
@@ -1799,12 +1857,28 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
         model.UploadedFiles
         |> List.filter (fun f -> not (producedNames.Contains f.FileName))
 
+    // Phase 220 — client-side status filter over the already-fetched status
+    // set. `AllFiles` (and the no-RAG case) passes everything through.
+    let displayFiles =
+        rawFiles
+        |> List.filter (fun f ->
+            FileIngestionStatus.matchesFilter model.StatusFilter (model.IngestionStatus |> Map.tryFind f.FileName))
+
     match rawFiles with
     | [] -> Html.p [ prop.className "text-gray-500"; prop.text "No files imported yet." ]
-    | files ->
+    | _ ->
         Html.div [
             prop.className "space-y-4"
             prop.children [
+                if not (Map.isEmpty model.IngestionStatus) then
+                    statusFilterControl model dispatch
+
+                if displayFiles.IsEmpty then
+                    Html.p [
+                        prop.className "text-gray-500"
+                        prop.text "No files match the selected index-status filter."
+                    ]
+
                 Html.table [
                     prop.className "w-full text-sm border-collapse"
                     prop.children [
@@ -1826,7 +1900,7 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                         ]
                         Html.tbody [
                             prop.children [
-                                for f in files do
+                                for f in displayFiles do
                                     // An upload that has produced no data object — neither a
                                     // natively-recognised entry of its own nor any mapped
                                     // conversion derived from it — is flagged so the user maps
@@ -1880,12 +1954,30 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                             Html.td [ prop.className "py-2 pr-3"; prop.text (string f.RowCount) ]
                                             Html.td [ prop.className "py-2 pr-3"; prop.text (formatSize f.SizeBytes) ]
                                             if not (Map.isEmpty model.IngestionStatus) then
+                                                let status = model.IngestionStatus |> Map.tryFind f.FileName
+
                                                 Html.td [
                                                     prop.className "py-2 pr-3"
                                                     prop.children [
-                                                        match model.IngestionStatus |> Map.tryFind f.FileName with
-                                                        | Some status -> ingestionBadge status
-                                                        | None -> Html.none
+                                                        Html.div [
+                                                            prop.className "flex items-center gap-2"
+                                                            prop.children [
+                                                                match status with
+                                                                | Some s -> ingestionBadge s
+                                                                | None -> Html.none
+                                                                // Phase 220 — one-click re-ingest on Failed.
+                                                                if FileIngestionStatus.isRetryable status then
+                                                                    Html.button [
+                                                                        prop.className
+                                                                            "text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                                                        prop.title
+                                                                            "Re-run vectorisation for this file's persisted bytes."
+                                                                        prop.text "Retry"
+                                                                        prop.onClick (fun _ ->
+                                                                            dispatch (RetryIngestionMsg f.FileName))
+                                                                    ]
+                                                            ]
+                                                        ]
                                                     ]
                                                 ]
                                             Html.td [

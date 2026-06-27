@@ -288,9 +288,30 @@ DataManagementTypes+FileIngestionStatus+Tags.Failed : System.Int32 (literal)
 DataManagementTypes+FileIngestionStatus+Tags.Indexed : System.Int32 (literal)
 DataManagementTypes+FileIngestionStatus+Tags.NotIngested : System.Int32 (literal)
 DataManagementTypes+FileIngestionStatus+Tags.Pending : System.Int32 (literal)
+DataManagementTypes+FileIngestionStatusModule (class)
+DataManagementTypes+FileIngestionStatusModule.isRetryable(Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+FileIngestionStatus]) : System.Boolean
+DataManagementTypes+FileIngestionStatusModule.matchesFilter(DataManagementTypes+IngestionStatusFilter, Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+FileIngestionStatus]) : System.Boolean
 DataManagementTypes+FileUploadRequest (class)
 DataManagementTypes+FileUploadRequest..ctor(DataManagementTypes+DataFileUpload)
 DataManagementTypes+FileUploadRequest.File : DataManagementTypes+DataFileUpload { get }
+DataManagementTypes+IngestionStatusFilter (class)
+DataManagementTypes+IngestionStatusFilter.AllFiles : DataManagementTypes+IngestionStatusFilter { get }
+DataManagementTypes+IngestionStatusFilter.IsAllFiles : System.Boolean { get }
+DataManagementTypes+IngestionStatusFilter.IsOnlyFailed : System.Boolean { get }
+DataManagementTypes+IngestionStatusFilter.IsOnlyIndexed : System.Boolean { get }
+DataManagementTypes+IngestionStatusFilter.IsOnlyNotIndexed : System.Boolean { get }
+DataManagementTypes+IngestionStatusFilter.IsOnlyPending : System.Boolean { get }
+DataManagementTypes+IngestionStatusFilter.OnlyFailed : DataManagementTypes+IngestionStatusFilter { get }
+DataManagementTypes+IngestionStatusFilter.OnlyIndexed : DataManagementTypes+IngestionStatusFilter { get }
+DataManagementTypes+IngestionStatusFilter.OnlyNotIndexed : DataManagementTypes+IngestionStatusFilter { get }
+DataManagementTypes+IngestionStatusFilter.OnlyPending : DataManagementTypes+IngestionStatusFilter { get }
+DataManagementTypes+IngestionStatusFilter.Tag : System.Int32 { get }
+DataManagementTypes+IngestionStatusFilter+Tags (class)
+DataManagementTypes+IngestionStatusFilter+Tags.AllFiles : System.Int32 (literal)
+DataManagementTypes+IngestionStatusFilter+Tags.OnlyFailed : System.Int32 (literal)
+DataManagementTypes+IngestionStatusFilter+Tags.OnlyIndexed : System.Int32 (literal)
+DataManagementTypes+IngestionStatusFilter+Tags.OnlyNotIndexed : System.Int32 (literal)
+DataManagementTypes+IngestionStatusFilter+Tags.OnlyPending : System.Int32 (literal)
 DataManagementTypes+UploadedFileInfo (class)
 DataManagementTypes+UploadedFileInfo..ctor(System.String, System.String, System.Int64, System.Int32, System.DateTime)
 DataManagementTypes+UploadedFileInfo.DataType : System.String { get }
@@ -308,12 +329,13 @@ ProcessedDataTypes+FileListSnapshot.Files : Microsoft.FSharp.Collections.FSharpL
 ProcessedDataTypes+FileListSnapshot.Ingestion : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, DataManagementTypes+FileIngestionStatus]] { get }
 ProcessedDataTypes+FileListSnapshot.Processed : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
 ProcessedDataTypes+FileManagementApi (class)
-ProcessedDataTypes+FileManagementApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[DataManagementTypes+FileUploadRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+FileUploadResponse, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+FileListSnapshot]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[DataManagementTypes+DataFileUpload, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String]]])
+ProcessedDataTypes+FileManagementApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[DataManagementTypes+FileUploadRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+FileUploadResponse, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+FileListSnapshot]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[DataManagementTypes+DataFileUpload, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String]]])
 ProcessedDataTypes+FileManagementApi.DeleteFile : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ProcessedDataTypes+FileManagementApi.GetFileContent : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[DataManagementTypes+DataFileUpload, System.String]]] { get }
 ProcessedDataTypes+FileManagementApi.ListFiles : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+FileListSnapshot]] { get }
 ProcessedDataTypes+FileManagementApi.ReprocessFile : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String]]] { get }
 ProcessedDataTypes+FileManagementApi.ResetDataStore : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String]]] { get }
+ProcessedDataTypes+FileManagementApi.RetryIngestion : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ProcessedDataTypes+FileManagementApi.UploadFile : Microsoft.FSharp.Core.FSharpFunc`2[DataManagementTypes+FileUploadRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+FileUploadResponse, System.String]]] { get }
 ProcessedDataTypes+FileUploadResponse (class)
 ProcessedDataTypes+FileUploadResponse..ctor(DataManagementTypes+UploadedFileInfo, ProcessedDataTypes+ProcessedFileEntry)

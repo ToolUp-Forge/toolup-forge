@@ -149,6 +149,9 @@
         <!-- Phase 173 — ingestion-status store contract + Data Manager
              observer transitions. -->
         <Compile Include="InProcess\IngestionStatusTests.fs" />
+        <!-- Phase 220 — ingestion retry-eligibility + status-filter predicates
+             + store re-cycle. -->
+        <Compile Include="InProcess\IngestionRetryTests.fs" />
         <Compile Include="InProcess\ColumnMatcherTests.fs" />
         <Compile Include="InProcess\MappingDryRunValidationTests.fs" />
         <Compile Include="InProcess\DerivedColumnEvalTests.fs" />

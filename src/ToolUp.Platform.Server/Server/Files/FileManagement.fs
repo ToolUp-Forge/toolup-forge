@@ -937,6 +937,52 @@ type SessionFileStore
             return Ok entry
     }
 
+    /// Phase 220 — re-fire the post-save hooks (RAG vectorisation, audit
+    /// publishers, …) for an already-uploaded file, so a `Failed`
+    /// ingestion can be retried without a re-upload. Re-derives the
+    /// processed data from the persisted bytes (a restart may have dropped
+    /// the in-memory cache), then fires the same hook set `AddFile` does,
+    /// fire-and-forget — the ingestion-status store transitions back
+    /// through `Pending` to its terminal state, surfaced live on the
+    /// badge. `Error` when the file is absent, its processing fails, or no
+    /// post-save hooks are composed (nothing to re-ingest).
+    member _.RetryIngestion(fileName: string, createdBy: string, ?blockedTypeIds: Set<string>) = async {
+        if runtime.PostSaveHooks.IsEmpty then
+            return Error "Re-ingestion is not available — no vectorisation is configured for this deployment."
+        else
+            match files.TryGetValue fileName with
+            | false, _ -> return Error $"File '{fileName}' not found"
+            | true, file ->
+                let availableDataTypes =
+                    availableFor (defaultArg blockedTypeIds Set.empty) dataTypes
+
+                let! detectedType = detectFileType availableDataTypes file.Contents
+                let! data, entry = processFile availableDataTypes fileName detectedType file.Contents
+
+                processedData.AddOrUpdate(fileName, data, fun _ _ -> data) |> ignore
+                processedEntries.AddOrUpdate(fileName, entry, fun _ _ -> entry) |> ignore
+
+                if entry.Error.IsSome then
+                    return Error $"File '{fileName}' cannot be re-ingested — processing failed: {entry.Error.Value}"
+                else
+                    let safeHook hook = async {
+                        try
+                            do! hook (data, entry, scope, createdBy)
+                        with ex ->
+                            match runtime.PostSaveHooksLogger with
+                            | Some logger -> logger.Error($"Post-save hook failed on retry for '{fileName}'", Some ex)
+                            | None -> eprintfn "Post-save hook failed on retry for '%s': %O" fileName ex
+                    }
+
+                    runtime.PostSaveHooks
+                    |> List.map safeHook
+                    |> Async.Parallel
+                    |> Async.Ignore
+                    |> Async.Start
+
+                    return Ok()
+    }
+
     /// Owner / Admin escape hatch — wipe every uploaded file plus its
     /// `_processed_entry__` sidecar in this scope. Iterates the in-
     /// memory `files` snapshot (the same set the caller saw via
@@ -1295,6 +1341,24 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
                 | Error _ -> ()
 
                 return result
+            }
+        RetryIngestion =
+            fun fileName -> async {
+                // Idempotency — a file whose ingestion is already in flight
+                // (`Pending`) is a no-op `Ok`, so a double-click doesn't
+                // enqueue the document twice. Any other state (or no status
+                // store ⇒ no RAG) falls through to the re-fire, which itself
+                // errors when no post-save hooks are composed.
+                let! current =
+                    match ingestionStatusStore with
+                    | Some s -> s.Get(statusContainer, fileName)
+                    | None -> async { return None }
+
+                match current with
+                | Some FileIngestionStatus.Pending -> return Ok()
+                | _ ->
+                    let! blockedTypeIds = computeBlockedTypeIds ()
+                    return! store.RetryIngestion(fileName, userId, blockedTypeIds)
             }
         ResetDataStore =
             fun () -> async {

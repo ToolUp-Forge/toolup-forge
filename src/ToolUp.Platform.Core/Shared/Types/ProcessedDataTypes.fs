@@ -99,6 +99,16 @@ type FileManagementApi = {
     /// unchanged, so RAG / vectorisation indexing is not invalidated.
     [<AllowAnonymous>]
     ReprocessFile: string -> Async<Result<ProcessedFileEntry, string>>
+    /// Phase 220 — re-run the RAG vectorisation path for a single
+    /// previously-uploaded file whose ingestion `Failed`, re-firing the
+    /// post-save hooks against its persisted bytes so the ingestion-status
+    /// store transitions back through `Pending` to its terminal state.
+    /// Idempotent against a still-in-flight retry (a `Pending` file is a
+    /// no-op `Ok`). `Error` when the file is absent or no vectorisation is
+    /// composed (no RAG ⇒ nothing to re-ingest). Scope-isolated like every
+    /// other method here — a caller can only retry files in its own scope.
+    [<AllowAnonymous>]
+    RetryIngestion: string -> Async<Result<unit, string>>
     /// Owner / Admin escape hatch — wipe every uploaded file plus its
     /// `_processed_entry__` sidecar in the caller's storage scope.
     /// Returns the count of files removed (zero on an empty store is
