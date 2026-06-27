@@ -104,6 +104,7 @@ let allTests =
         ErrorConfigValidatorTests.tests
         ConfigValidatorAggregatorTests.tests
         ConfigReferenceTests.tests
+        ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests

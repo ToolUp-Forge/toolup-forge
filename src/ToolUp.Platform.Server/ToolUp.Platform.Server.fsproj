@@ -582,6 +582,10 @@
              After the hooks + handler it references; before SDK.Server
              (which calls registerTenantLifecycle). -->
         <Compile Include="Server\Compose\ComposeTenantLifecycle.fs" />
+        <!-- Phase 214 — opt-in print-config / validate-config startup modes.
+             After ComposeBootstrap (returns IServerHost) + ConfigKeyDescriptor
+             registry; consumed by SDK.Server.compose's tail. -->
+        <Compile Include="Server\StartupModes.fs" />
         <Compile Include="Server\SDK.Server.fs" />
         <Compile Include="Server\ServerApp.fs" />
         <!-- Phase 166 — detachable module-binding manifest reader. After

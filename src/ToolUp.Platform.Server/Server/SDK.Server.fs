@@ -901,43 +901,74 @@ let compose
 
     let devRoutes = routeHandlers.DevDiagnosticsRoutes devDiagnosticsCapture
 
-    // Phase 9m — companion config preflight (extracted to
-    // `ComposeBootstrap.runConfigPreflight`). Runs every registered
-    // `IConfigValidator` in parallel and registers the outcome
-    // `PreflightSnapshot` singleton. Must run after every companion has
-    // had a chance to call `services.AddSingleton<IConfigValidator>(...)`
-    // and before `HealthCheckAggregator.register`.
-    runConfigPreflight services config resolvedLogger
+    // Phase 214 — opt-in config-introspection startup modes. Both run an
+    // introspection task and `exit` the process WITHOUT binding a listener;
+    // a normal boot (neither flag present) runs the unchanged sequence in
+    // the `NormalBoot` arm below, byte-for-byte (GP 13). `exit` has type
+    // `'T`, so the two early-exit arms type-check as the `IServerHost`
+    // result alongside `buildAndRunHost`.
+    match StartupModes.current () with
+    | StartupModes.PrintConfig ->
+        // Print BEFORE preflight so a config that would fail validation is
+        // still dumped — diagnosing a bad config is the whole point. No
+        // server boot; secrets redacted via the descriptor's IsSecret flag.
+        StartupModes.printEffectiveConfig resolvedLogger ConfigKeys.all
+        exit 0
 
-    // Phase 9j — CSP aggregate registration (extracted to
-    // `ComposeBootstrap.registerCspAggregate`). Must run after the
-    // `extensions.ServiceConfig` hook (companions registered) and
-    // before `builder.Build()` seals the collection.
-    registerCspAggregate services config
+    | StartupModes.ValidateConfig ->
+        // Phase 9m preflight over every registered `IConfigValidator` (the
+        // first-party `ComposeConfigValidators` set + companion validators).
+        // On success: print the per-validator summary + exit 0. On any
+        // `Error`, `runConfigPreflight` raises `ConfigPreflightFailedException`
+        // (whose message IS the failure summary) — catch it, print the
+        // summary, and exit 1 deterministically rather than letting an
+        // unhandled exception unwind the stack. Either way no listener binds.
+        try
+            let outcomes = runConfigPreflight services config resolvedLogger
+            StartupModes.printValidationSummary resolvedLogger outcomes
+            exit 0
+        with :? ConfigValidatorAggregator.ConfigPreflightFailedException as ex ->
+            resolvedLogger.Error(ex.Message, None)
+            exit 1
 
-    // Phase 9k — flush every registered `IHealthCheck` (first-party +
-    // companion-contributed) into BCL's `AddHealthChecks` pipeline.
-    // Must run after every companion has had a chance to call
-    // `services.AddSingleton<IHealthCheck>(...)` and before
-    // `builder.Build()` (which makes the service collection
-    // immutable).
-    HealthCheckAggregator.register services
+    | StartupModes.NormalBoot ->
+        // Phase 9m — companion config preflight (extracted to
+        // `ComposeBootstrap.runConfigPreflight`). Runs every registered
+        // `IConfigValidator` in parallel and registers the outcome
+        // `PreflightSnapshot` singleton. Must run after every companion has
+        // had a chance to call `services.AddSingleton<IConfigValidator>(...)`
+        // and before `HealthCheckAggregator.register`.
+        runConfigPreflight services config resolvedLogger |> ignore
 
-    // Phase 16a — `Build()` branch by `ProcessProfile` + post-Build
-    // ConfigDrift + configurePipeline + IServerHost return (extracted
-    // to `ComposeBootstrap.buildAndRunHost`). The shared `ILogger`
-    // resolution assertion + `ConfigDriftDetector` invocation run on
-    // both branches; the Web path drives the middleware pipeline via
-    // `configurePipeline` and returns `createWebHost`; the worker
-    // path skips the pipeline and returns `createWorkerHost`.
-    buildAndRunHost
-        config
-        webBuilder
-        workerBuilder
-        resolvedBlobStorage
-        auditLog
-        resolvedLogger
-        resolvedMetricsSink
-        extensions
-        routeHandlers.Router
-        devRoutes
+        // Phase 9j — CSP aggregate registration (extracted to
+        // `ComposeBootstrap.registerCspAggregate`). Must run after the
+        // `extensions.ServiceConfig` hook (companions registered) and
+        // before `builder.Build()` seals the collection.
+        registerCspAggregate services config
+
+        // Phase 9k — flush every registered `IHealthCheck` (first-party +
+        // companion-contributed) into BCL's `AddHealthChecks` pipeline.
+        // Must run after every companion has had a chance to call
+        // `services.AddSingleton<IHealthCheck>(...)` and before
+        // `builder.Build()` (which makes the service collection
+        // immutable).
+        HealthCheckAggregator.register services
+
+        // Phase 16a — `Build()` branch by `ProcessProfile` + post-Build
+        // ConfigDrift + configurePipeline + IServerHost return (extracted
+        // to `ComposeBootstrap.buildAndRunHost`). The shared `ILogger`
+        // resolution assertion + `ConfigDriftDetector` invocation run on
+        // both branches; the Web path drives the middleware pipeline via
+        // `configurePipeline` and returns `createWebHost`; the worker
+        // path skips the pipeline and returns `createWorkerHost`.
+        buildAndRunHost
+            config
+            webBuilder
+            workerBuilder
+            resolvedBlobStorage
+            auditLog
+            resolvedLogger
+            resolvedMetricsSink
+            extensions
+            routeHandlers.Router
+            devRoutes
