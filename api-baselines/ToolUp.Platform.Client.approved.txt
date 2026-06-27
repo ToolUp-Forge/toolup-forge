@@ -475,16 +475,20 @@ MappingDataManagerUI+Model.Records : Microsoft.FSharp.Collections.FSharpList`1[C
 MappingDataManagerUI+Model.UploadedFiles : Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo] { get }
 MappingDataManagerUI+Model.Wizard : Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard] { get }
 MappingDataManagerUI+Msg (class)
+MappingDataManagerUI+Msg.BackToMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.CancelWizard : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.CatalogLoadFailed : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ChangeFormat : MappingDataManagerUI+Msg { get }
+MappingDataManagerUI+Msg.CommitConversion : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ConfirmMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.DismissError : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.IsApiError : System.Boolean { get }
+MappingDataManagerUI+Msg.IsBackToMapping : System.Boolean { get }
 MappingDataManagerUI+Msg.IsCancelWizard : System.Boolean { get }
 MappingDataManagerUI+Msg.IsCatalogLoadFailed : System.Boolean { get }
 MappingDataManagerUI+Msg.IsCatalogLoaded : System.Boolean { get }
 MappingDataManagerUI+Msg.IsChangeFormat : System.Boolean { get }
+MappingDataManagerUI+Msg.IsCommitConversion : System.Boolean { get }
 MappingDataManagerUI+Msg.IsConfirmMapping : System.Boolean { get }
 MappingDataManagerUI+Msg.IsDeleteFile : System.Boolean { get }
 MappingDataManagerUI+Msg.IsDismissError : System.Boolean { get }
@@ -507,6 +511,7 @@ MappingDataManagerUI+Msg.IsSelectTarget : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSetDateOrder : System.Boolean { get }
 MappingDataManagerUI+Msg.IsStartMapping : System.Boolean { get }
 MappingDataManagerUI+Msg.IsToggleColumnFixes : System.Boolean { get }
+MappingDataManagerUI+Msg.IsValidationFinished : System.Boolean { get }
 MappingDataManagerUI+Msg.LoadFiles : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ProceedToMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ResetDataStore : MappingDataManagerUI+Msg { get }
@@ -553,10 +558,12 @@ MappingDataManagerUI+Msg+StartMapping (class)
 MappingDataManagerUI+Msg+StartMapping.fileName : System.String { get }
 MappingDataManagerUI+Msg+Tags (class)
 MappingDataManagerUI+Msg+Tags.ApiError : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.BackToMapping : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.CancelWizard : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.CatalogLoadFailed : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.CatalogLoaded : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ChangeFormat : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.CommitConversion : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ConfirmMapping : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.DeleteFile : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.DismissError : System.Int32 (literal)
@@ -579,10 +586,13 @@ MappingDataManagerUI+Msg+Tags.SelectTarget : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SetDateOrder : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.StartMapping : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ToggleColumnFixes : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.ValidationFinished : System.Int32 (literal)
 MappingDataManagerUI+Msg+ToggleColumnFixes (class)
 MappingDataManagerUI+Msg+ToggleColumnFixes.column : System.String { get }
+MappingDataManagerUI+Msg+ValidationFinished (class)
+MappingDataManagerUI+Msg+ValidationFinished.Item : Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+DryRunReport, System.String] { get }
 MappingDataManagerUI+Wizard (class)
-MappingDataManagerUI+Wizard..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, MappingDataManagerUI+WizardStep, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnProfile], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ColumnMappingTypes+DateOrder], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+MappingSuggestion], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], System.Boolean, System.Boolean)
+MappingDataManagerUI+Wizard..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, MappingDataManagerUI+WizardStep, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnProfile], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ColumnMappingTypes+DateOrder], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+MappingSuggestion], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+DryRunReport], System.Boolean)
 MappingDataManagerUI+Wizard.DateOrders : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ColumnMappingTypes+DateOrder] { get }
 MappingDataManagerUI+Wizard.DisabledFixes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 MappingDataManagerUI+Wizard.FileName : System.String { get }
@@ -597,18 +607,23 @@ MappingDataManagerUI+Wizard.Saving : System.Boolean { get }
 MappingDataManagerUI+Wizard.Step : MappingDataManagerUI+WizardStep { get }
 MappingDataManagerUI+Wizard.Suggestion : Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+MappingSuggestion] { get }
 MappingDataManagerUI+Wizard.TargetTypeId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+MappingDataManagerUI+Wizard.Validating : System.Boolean { get }
+MappingDataManagerUI+Wizard.Validation : Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+DryRunReport] { get }
 MappingDataManagerUI+WizardStep (class)
 MappingDataManagerUI+WizardStep.IsPickTarget : System.Boolean { get }
 MappingDataManagerUI+WizardStep.IsReviewData : System.Boolean { get }
 MappingDataManagerUI+WizardStep.IsReviewMapping : System.Boolean { get }
+MappingDataManagerUI+WizardStep.IsReviewValidation : System.Boolean { get }
 MappingDataManagerUI+WizardStep.PickTarget : MappingDataManagerUI+WizardStep { get }
 MappingDataManagerUI+WizardStep.ReviewData : MappingDataManagerUI+WizardStep { get }
 MappingDataManagerUI+WizardStep.ReviewMapping : MappingDataManagerUI+WizardStep { get }
+MappingDataManagerUI+WizardStep.ReviewValidation : MappingDataManagerUI+WizardStep { get }
 MappingDataManagerUI+WizardStep.Tag : System.Int32 { get }
 MappingDataManagerUI+WizardStep+Tags (class)
 MappingDataManagerUI+WizardStep+Tags.PickTarget : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewData : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewMapping : System.Int32 (literal)
+MappingDataManagerUI+WizardStep+Tags.ReviewValidation : System.Int32 (literal)
 PermissionsAdminUI (class)
 PermissionsAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionsAdminConfig]) : ToolUp.Platform.ErasedModule
 PermissionsAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]

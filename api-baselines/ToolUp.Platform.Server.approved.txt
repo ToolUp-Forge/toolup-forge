@@ -1232,6 +1232,8 @@ ToolUp.Platform.ILiveSessionHost.OpenSession(ToolUp.Platform.StorageScope) : Mic
 ToolUp.Platform.ILiveSessionHost.Subscribe(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
 ToolUp.Platform.ILiveSessionHost.TryGetChannel(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILiveChannel]]
 ToolUp.Platform.ILiveSessionHost.Unsubscribe(System.String, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IMappingDryRunValidator (interface)
+ToolUp.Platform.IMappingDryRunValidator.Validate(DataManagementTypes+DataTypeSchema, System.String) : ColumnMappingTypes+DryRunReport
 ToolUp.Platform.INarrativePagePublisher (interface)
 ToolUp.Platform.INarrativePagePublisher.PublishAsync(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.SlugCollisionPolicy, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativePublishOutcome]
 ToolUp.Platform.INarrativeStore (interface)
@@ -1656,6 +1658,9 @@ ToolUp.Platform.LoggerScope.push(Microsoft.FSharp.Collections.FSharpList`1[Syste
 ToolUp.Platform.LoggerScope.withScope`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, a]) : a
 ToolUp.Platform.MaintenanceApiHandler (class)
 ToolUp.Platform.MaintenanceApiHandler.maintenanceApi(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]]]], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.MaintenanceApi
+ToolUp.Platform.MappingDryRunValidator (class)
+ToolUp.Platform.MappingDryRunValidator.commitBlocked(ToolUp.Platform.MappingDryRunPolicy, ColumnMappingTypes+DryRunReport) : System.Boolean
+ToolUp.Platform.MappingDryRunValidator.create() : ToolUp.Platform.IMappingDryRunValidator
 ToolUp.Platform.MaxRequestBodyBytesValidator (class)
 ToolUp.Platform.MaxRequestBodyBytesValidator+MaxRequestBodyBytesValidator (class)
 ToolUp.Platform.MaxRequestBodyBytesValidator+MaxRequestBodyBytesValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -2489,6 +2494,8 @@ ToolUp.Platform.SseScopeResolution+SseScopeResult+Tags.SseUnauthenticated : Syst
 ToolUp.Platform.SseTraceContributor (class)
 ToolUp.Platform.SseTraceContributor+SseTraceContributor (class)
 ToolUp.Platform.SseTraceContributor+SseTraceContributor..ctor(ToolUp.Platform.SSEConnectionManager)
+ToolUp.Platform.StartupModes.printValidationSummary(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : System.Void
+ToolUp.Platform.StartupModes.renderValidationSummary(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : System.String
 ToolUp.Platform.StaticPathBehaviourValidator (class)
 ToolUp.Platform.StaticPathBehaviourValidator+StaticPathBehaviourValidator (class)
 ToolUp.Platform.StaticPathBehaviourValidator+StaticPathBehaviourValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
