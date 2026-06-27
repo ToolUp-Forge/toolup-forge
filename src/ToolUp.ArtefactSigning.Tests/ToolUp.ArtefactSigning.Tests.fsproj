@@ -10,6 +10,7 @@
         <Compile Include="Contracts\IArtefactSignerContract.fs" />
         <Compile Include="InProcess\DefaultArtefactSignerTests.fs" />
         <Compile Include="InProcess\JwsBuilderTests.fs" />
+        <Compile Include="InProcess\CloudKmsArtefactSignerTests.fs" />
         <Compile Include="InProcess\ModuleBindingVerifierTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>

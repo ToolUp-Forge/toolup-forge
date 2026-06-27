@@ -10,6 +10,7 @@ let allTests =
     testList "ToolUp.ArtefactSigning.Tests" [
         DefaultArtefactSignerTests.tests
         JwsBuilderTests.tests
+        CloudKmsArtefactSignerTests.tests
         ModuleBindingVerifierTests.tests
     ]
 
