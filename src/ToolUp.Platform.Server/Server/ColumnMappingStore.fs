@@ -115,6 +115,17 @@ let private saveObjectIn (store: IDataObjectStore) scopeId objectId tag createdB
 /// Create the default store over an `IDataObjectStore`. `logger` routes
 /// the deserialise / read-failure warnings to the structured log; `None`
 /// (test harnesses) falls back to stderr.
+/// Coerce a deserialised recipe's `Derived` field from `null` to `[]`. A
+/// pre-Phase-219 sidecar lacks the field, which the record deserialiser
+/// fills with `null` (F# `[]` is a real object, not null); normalising here
+/// keeps every recipe handed to the handler / sent over the wire safe to
+/// iterate, so an old recipe re-imports as "no derived columns".
+let private normaliseConversion (c: Conversion) : Conversion =
+    if isNull (box c.Derived) then
+        { c with Derived = [] }
+    else
+        c
+
 let create (store: IDataObjectStore) (logger: ILogger option) : IConversionStore =
     { new IConversionStore with
         member _.Save(scopeId, conversion) =
@@ -128,11 +139,17 @@ let create (store: IDataObjectStore) (logger: ILogger option) : IConversionStore
 
         member _.GetByFingerprint(scopeId, fingerprint) = async {
             let! all = readAllOf<Conversion> store logger RecipeDataType scopeId
-            return all |> List.filter (fun c -> c.Fingerprint = fingerprint)
+
+            return
+                all
+                |> List.filter (fun c -> c.Fingerprint = fingerprint)
+                |> List.map normaliseConversion
         }
 
-        member _.List(scopeId) =
-            readAllOf<Conversion> store logger RecipeDataType scopeId
+        member _.List(scopeId) = async {
+            let! all = readAllOf<Conversion> store logger RecipeDataType scopeId
+            return all |> List.map normaliseConversion
+        }
 
         member _.Delete(scopeId, fingerprint, targetTypeId) = async {
             match! store.Delete(scopeId, objectIdFor fingerprint targetTypeId) with

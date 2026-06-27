@@ -482,6 +482,7 @@ MappingDataManagerUI+Msg.ChangeFormat : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.CommitConversion : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ConfirmMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.DismissError : MappingDataManagerUI+Msg { get }
+MappingDataManagerUI+Msg.IsAddDerivedColumn : System.Boolean { get }
 MappingDataManagerUI+Msg.IsApiError : System.Boolean { get }
 MappingDataManagerUI+Msg.IsBackToMapping : System.Boolean { get }
 MappingDataManagerUI+Msg.IsCancelWizard : System.Boolean { get }
@@ -502,6 +503,7 @@ MappingDataManagerUI+Msg.IsNativeUploaded : System.Boolean { get }
 MappingDataManagerUI+Msg.IsOverrideColumn : System.Boolean { get }
 MappingDataManagerUI+Msg.IsProceedToMapping : System.Boolean { get }
 MappingDataManagerUI+Msg.IsRecordsLoaded : System.Boolean { get }
+MappingDataManagerUI+Msg.IsRemoveDerivedColumn : System.Boolean { get }
 MappingDataManagerUI+Msg.IsReprocessFile : System.Boolean { get }
 MappingDataManagerUI+Msg.IsReprocessed : System.Boolean { get }
 MappingDataManagerUI+Msg.IsResetDataStore : System.Boolean { get }
@@ -516,6 +518,8 @@ MappingDataManagerUI+Msg.LoadFiles : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ProceedToMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ResetDataStore : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.Tag : System.Int32 { get }
+MappingDataManagerUI+Msg+AddDerivedColumn (class)
+MappingDataManagerUI+Msg+AddDerivedColumn.Item : ColumnMappingTypes+DerivedColumn { get }
 MappingDataManagerUI+Msg+ApiError (class)
 MappingDataManagerUI+Msg+ApiError.Item : System.String { get }
 MappingDataManagerUI+Msg+CatalogLoaded (class)
@@ -541,6 +545,8 @@ MappingDataManagerUI+Msg+OverrideColumn.column : Microsoft.FSharp.Core.FSharpOpt
 MappingDataManagerUI+Msg+OverrideColumn.field : System.String { get }
 MappingDataManagerUI+Msg+RecordsLoaded (class)
 MappingDataManagerUI+Msg+RecordsLoaded.Item : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord] { get }
+MappingDataManagerUI+Msg+RemoveDerivedColumn (class)
+MappingDataManagerUI+Msg+RemoveDerivedColumn.field : System.String { get }
 MappingDataManagerUI+Msg+ReprocessFile (class)
 MappingDataManagerUI+Msg+ReprocessFile.Item : System.String { get }
 MappingDataManagerUI+Msg+Reprocessed (class)
@@ -557,6 +563,7 @@ MappingDataManagerUI+Msg+SetDateOrder.order : ColumnMappingTypes+DateOrder { get
 MappingDataManagerUI+Msg+StartMapping (class)
 MappingDataManagerUI+Msg+StartMapping.fileName : System.String { get }
 MappingDataManagerUI+Msg+Tags (class)
+MappingDataManagerUI+Msg+Tags.AddDerivedColumn : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ApiError : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.BackToMapping : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.CancelWizard : System.Int32 (literal)
@@ -577,6 +584,7 @@ MappingDataManagerUI+Msg+Tags.NativeUploaded : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.OverrideColumn : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ProceedToMapping : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.RecordsLoaded : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.RemoveDerivedColumn : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ReprocessFile : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.Reprocessed : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ResetDataStore : System.Int32 (literal)
@@ -592,8 +600,9 @@ MappingDataManagerUI+Msg+ToggleColumnFixes.column : System.String { get }
 MappingDataManagerUI+Msg+ValidationFinished (class)
 MappingDataManagerUI+Msg+ValidationFinished.Item : Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+DryRunReport, System.String] { get }
 MappingDataManagerUI+Wizard (class)
-MappingDataManagerUI+Wizard..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, MappingDataManagerUI+WizardStep, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnProfile], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ColumnMappingTypes+DateOrder], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+MappingSuggestion], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+DryRunReport], System.Boolean)
+MappingDataManagerUI+Wizard..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String, MappingDataManagerUI+WizardStep, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnProfile], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ColumnMappingTypes+DateOrder], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+MappingSuggestion], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+DryRunReport], System.Boolean)
 MappingDataManagerUI+Wizard.DateOrders : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ColumnMappingTypes+DateOrder] { get }
+MappingDataManagerUI+Wizard.Derived : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn] { get }
 MappingDataManagerUI+Wizard.DisabledFixes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 MappingDataManagerUI+Wizard.FileName : System.String { get }
 MappingDataManagerUI+Wizard.Fingerprint : System.String { get }

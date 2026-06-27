@@ -14,6 +14,8 @@ let allTests =
         ColumnMatcherTests.tests
         // Phase 218 — CSV-mapping dry-run validation preview.
         MappingDryRunValidationTests.tests
+        // Phase 219 — derived/computed columns in CSV mapping.
+        DerivedColumnEvalTests.tests
         IColumnMappingStoreContract.tests
         DataCatalogTests.tests
         ResultStoreTests.tests

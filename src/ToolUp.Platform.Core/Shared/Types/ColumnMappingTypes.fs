@@ -145,12 +145,63 @@ type ColumnProfile = {
     Issues: ColumnIssue list
 }
 
+// ─── Derived / computed columns (Phase 219) ───────────────────────
+
+/// A small, Fable-safe expression that produces one schema field's value
+/// from zero, one, or several *source* CSV columns — the engine behind a
+/// derived/computed column. Every case evaluates with no reflection and no
+/// server-only API, so the same evaluator runs in the browser wizard and
+/// server-side. Leaves reference source columns by name (`SourceColumn`) or
+/// carry a literal (`Constant`); the recursive cases compose them.
+type ColumnExpr =
+    /// The (remediation-cleaned) value of a source CSV column, by name. An
+    /// unbound reference (no such column) evaluates to "".
+    | SourceColumn of column: string
+    /// A literal constant — the same value for every row.
+    | Constant of value: string
+    /// Concatenate each part's value, separated by `separator`.
+    | Concat of parts: ColumnExpr list * separator: string
+    /// Split the inner value on `delimiter` and take the `index`-th part
+    /// (0-based). Out-of-range / absent → "".
+    | SplitTake of source: ColumnExpr * delimiter: string * index: int
+    /// Fill a template, substituting `{0}`, `{1}`, … with the evaluated
+    /// args in order. Unreferenced placeholders are left as-is.
+    | Format of template: string * args: ColumnExpr list
+    /// A bounds-safe substring of the inner value (`start`, `length`);
+    /// clamped to the string, never throws.
+    | Substring of source: ColumnExpr * start: int * length: int
+
+/// One derived/computed schema field: the target field id plus the
+/// `ColumnExpr` that produces it. Persisted inside the `Conversion` exactly
+/// like a `CellTransform` list, so a re-import of the same fingerprint
+/// re-derives automatically. Distinct from a 1:1 `Mapping` entry — a field
+/// is produced by *either* a mapped source column (+ remediation) or a
+/// derived expression, never both (the derived expression wins).
+type DerivedColumn = {
+    /// The target schema field this expression produces.
+    Field: string
+    Expr: ColumnExpr
+}
+
+/// One failed derived-column validation, surfaced as data (no throw,
+/// GP 12.3) at map-confirm time — an unbound source reference, or a
+/// derived expression that references another derived target field (the
+/// only vector for a cycle, since `SourceColumn` otherwise names raw CSV
+/// columns).
+type DerivedColumnError = {
+    /// The derived target field whose expression is invalid.
+    Field: string
+    /// Human-readable statement of the problem.
+    Detail: string
+}
+
 /// A reusable **conversion recipe** — the saved, replayable definition of
 /// how a CSV of a given column-structure is turned into a platform data
-/// type. It is more than a column mapping: it bundles the two named parts
-/// of the ingestion/conversion stage — the field **Mapping** and the
-/// data-quality **Remediation**. Keyed by `(Fingerprint, TargetTypeId)`
-/// within a storage scope; crosses the wire via `IConversionApi`.
+/// type. It is more than a column mapping: it bundles the named parts
+/// of the ingestion/conversion stage — the field **Mapping**, the
+/// **Derived** computed columns, and the data-quality **Remediation**.
+/// Keyed by `(Fingerprint, TargetTypeId)` within a storage scope; crosses
+/// the wire via `IConversionApi`.
 type Conversion = {
     Fingerprint: string
     TargetTypeId: DataTypeId
@@ -162,6 +213,12 @@ type Conversion = {
     /// The source CSV's header set at save time — kept for display and
     /// to detect when a re-used fingerprint's headers have drifted.
     SourceHeaders: string list
+    /// Derived/computed schema fields produced from a `ColumnExpr` rather
+    /// than a 1:1 source-column map. Empty (the common case) ⇒ byte-for-byte
+    /// Phase-172 behaviour (GP 13). A pre-Phase-219 persisted recipe lacks
+    /// this field; it deserialises to the empty list (F# `[]` is `null`), so
+    /// old recipes re-apply unchanged.
+    Derived: DerivedColumn list
     CreatedBy: string
     CreatedAt: DateTime
 }

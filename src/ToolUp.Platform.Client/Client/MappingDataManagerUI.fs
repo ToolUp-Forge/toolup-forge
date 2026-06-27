@@ -63,6 +63,11 @@ type Wizard = {
     /// (`None` = explicitly unmapped). Fields absent from the map use
     /// the suggestion's `SuggestedColumn`.
     Overrides: Map<string, string option>
+    /// Phase 219 — derived/computed columns the user has added: a schema
+    /// field produced from a `ColumnExpr` over source columns rather than a
+    /// 1:1 map. Auto-suggestion never produces these (explicit user intent),
+    /// so they start empty and only grow via the derived-column builder.
+    Derived: DerivedColumn list
     ReusedSaved: bool
     Saving: bool
     /// Phase 218 — the dry-run validation report for the confirmed
@@ -132,6 +137,11 @@ type Msg =
     | SelectTarget of DataTypeId
     | ChangeFormat
     | OverrideColumn of field: string * column: string option
+    /// Phase 219 — add a derived/computed column (replaces any existing
+    /// derived column for the same target field).
+    | AddDerivedColumn of DerivedColumn
+    /// Phase 219 — drop the derived column for a target field.
+    | RemoveDerivedColumn of field: string
     | CancelWizard
     /// Confirm the mapping → run the dry-run validation (no commit yet).
     | ConfirmMapping
@@ -170,22 +180,38 @@ let private chosenColumn (w: Wizard) (field: FieldSuggestion) : string option =
     | Some ov -> ov
     | None -> field.SuggestedColumn
 
+/// The schema fields produced by a derived expression (so they're not also
+/// drawn from a 1:1 mapped column — derived wins).
+let private derivedFieldSet (w: Wizard) : Set<string> =
+    w.Derived |> List.map _.Field |> Set.ofList
+
 /// field name → source column, for every field that resolves to a column.
+/// Derived fields are excluded — their value comes from the `ColumnExpr`,
+/// not a 1:1 map.
 let private effectiveMapping (w: Wizard) : Map<string, string> =
     match w.Suggestion with
     | None -> Map.empty
     | Some s ->
+        let derived = derivedFieldSet w
+
         s.Fields
+        |> List.filter (fun f -> not (derived.Contains f.Field.Name))
         |> List.choose (fun f -> chosenColumn w f |> Option.map (fun c -> f.Field.Name, c))
         |> Map.ofList
 
-/// Required fields that still have no column — block confirmation.
+/// Required fields that still have no column AND no derived expression —
+/// block confirmation. A derived column satisfies a required field.
 let private unresolvedRequired (w: Wizard) : string list =
     match w.Suggestion with
     | None -> []
     | Some s ->
+        let derived = derivedFieldSet w
+
         s.Fields
-        |> List.filter (fun f -> f.Field.Required && (chosenColumn w f).IsNone)
+        |> List.filter (fun f ->
+            f.Field.Required
+            && (chosenColumn w f).IsNone
+            && not (derived.Contains f.Field.Name))
         |> List.map _.Field.Name
 
 // ─── Data-quality (ReviewData step) helpers ───────────────────────
@@ -269,6 +295,7 @@ let private wizardFor (held: HeldFile) : Wizard =
         TargetTypeId = None
         Suggestion = None
         Overrides = Map.empty
+        Derived = []
         ReusedSaved = false
         Saving = false
         Validation = None
@@ -288,6 +315,7 @@ let private buildConversion (w: Wizard) : Conversion option =
         Mapping = effectiveMapping w
         Remediation = wizardTransforms w
         SourceHeaders = w.Headers
+        Derived = w.Derived
         CreatedBy = ""
         CreatedAt = System.DateTime.UtcNow
     })
@@ -307,9 +335,16 @@ let private importedFileName (baseName: string) (typeId: DataTypeId) : string =
 /// Human-readable per-column remediation steps for a conversion's
 /// provenance record.
 let private remediationSteps (conversion: Conversion) : string list =
-    conversion.Remediation
-    |> Map.toList
-    |> List.choose (fun (col, ts) -> ColumnMapping.describeColumnRemediation col ts)
+    let remediation =
+        conversion.Remediation
+        |> Map.toList
+        |> List.choose (fun (col, ts) -> ColumnMapping.describeColumnRemediation col ts)
+
+    let derived =
+        conversion.Derived
+        |> List.map (fun d -> "derived " + ColumnMapping.describeDerivedColumn d)
+
+    remediation @ derived
 
 /// Rewrite + upload each conversion as its own data object, then record
 /// its provenance (`RecordConversion`). Returns the target-type ids
@@ -329,7 +364,7 @@ let private importConversions
                 match schemaFor displays c.TargetTypeId with
                 | Some schema ->
                     let rewritten =
-                        ColumnMapping.rewriteCsv schema c.Mapping c.Remediation held.RawContents
+                        ColumnMapping.rewriteCsvWithDerived schema c.Mapping c.Remediation c.Derived held.RawContents
 
                     let producedFile = importedFileName held.FileName c.TargetTypeId
 
@@ -644,6 +679,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                         TargetTypeId = Some typeId
                         Suggestion = Some suggestion
                         Overrides = Map.empty
+                        Derived = []
                         ReusedSaved = false
                         Step = ReviewMapping
                 }
@@ -669,6 +705,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                                 TargetTypeId = None
                                 Suggestion = None
                                 Overrides = Map.empty
+                                Derived = []
                                 ReusedSaved = false
                         }
             },
@@ -684,6 +721,40 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                         Some {
                             w with
                                 Overrides = Map.add field col w.Overrides
+                        }
+            },
+            Cmd.none
+        | None -> model, Cmd.none
+
+    | AddDerivedColumn derived ->
+        match model.Wizard with
+        | Some w ->
+            // Replace any existing derived column for the same field, then
+            // clear a now-stale 1:1 override for it (derived wins).
+            let next =
+                (w.Derived |> List.filter (fun d -> d.Field <> derived.Field)) @ [ derived ]
+
+            {
+                model with
+                    Wizard =
+                        Some {
+                            w with
+                                Derived = next
+                                Overrides = Map.add derived.Field None w.Overrides
+                        }
+            },
+            Cmd.none
+        | None -> model, Cmd.none
+
+    | RemoveDerivedColumn field ->
+        match model.Wizard with
+        | Some w ->
+            {
+                model with
+                    Wizard =
+                        Some {
+                            w with
+                                Derived = w.Derived |> List.filter (fun d -> d.Field <> field)
                         }
             },
             Cmd.none
@@ -1124,6 +1195,8 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
                             for f in suggestion.Fields do
                                 let badgeText, badgeClass, _ = flagBadge f.Flag
 
+                                let derivedFor = w.Derived |> List.tryFind (fun d -> d.Field = f.Field.Name)
+
                                 Html.tr [
                                     prop.className "border-b border-gray-100 align-top"
                                     prop.children [
@@ -1145,16 +1218,32 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
                                         ]
                                         Html.td [
                                             prop.className "py-2 pr-3 min-w-48"
-                                            prop.children [ columnSelect w f dispatch ]
+                                            prop.children [
+                                                match derivedFor with
+                                                | Some d ->
+                                                    Html.span [
+                                                        prop.className "text-xs font-mono text-blue-800"
+                                                        prop.text (ColumnMapping.describeColumnExpr d.Expr)
+                                                    ]
+                                                | None -> columnSelect w f dispatch
+                                            ]
                                         ]
                                         Html.td [
                                             prop.className "py-2 pr-3"
                                             prop.children [
-                                                Html.span [
-                                                    prop.className
-                                                        $"inline-block px-2 py-0.5 rounded border text-xs {badgeClass}"
-                                                    prop.text badgeText
-                                                ]
+                                                match derivedFor with
+                                                | Some _ ->
+                                                    Html.span [
+                                                        prop.className
+                                                            "inline-block px-2 py-0.5 rounded border text-xs text-blue-700 bg-blue-50 border-blue-200"
+                                                        prop.text "Derived"
+                                                    ]
+                                                | None ->
+                                                    Html.span [
+                                                        prop.className
+                                                            $"inline-block px-2 py-0.5 rounded border text-xs {badgeClass}"
+                                                        prop.text badgeText
+                                                    ]
                                             ]
                                         ]
                                     ]
@@ -1163,6 +1252,182 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
                     ]
                 ]
             ]
+        ]
+    ]
+
+// ─── Derived-column builder (Phase 219) ───────────────────────────
+
+/// The expression kinds the minimal builder offers. Each draws from source
+/// columns only (leaves are `SourceColumn` / `Constant`) — the persisted
+/// `ColumnExpr` supports nesting, but the builder keeps to the flat common
+/// cases (split a "Full Name", join a composite key, a literal column).
+let private derivedKinds = [
+    "concat", "Join columns"
+    "splittake", "Split & take part"
+    "substring", "Substring"
+    "constant", "Constant value"
+]
+
+[<ReactComponent>]
+let private DerivedColumnBuilder (fields: string list) (headers: string list) (onAdd: DerivedColumn -> unit) =
+    let field, setField = React.useState ""
+    let kind, setKind = React.useState "concat"
+    let colA, setColA = React.useState ""
+    let colB, setColB = React.useState ""
+    // separator (concat) / delimiter (splittake) / unused (substring/constant)
+    let textParam, setTextParam = React.useState " "
+    // literal value for the Constant kind.
+    let constValue, setConstValue = React.useState ""
+    let numA, setNumA = React.useState "0" // split index / substring start
+    let numB, setNumB = React.useState "1" // substring length
+
+    let parseInt (s: string) =
+        match System.Int32.TryParse s with
+        | true, v -> v
+        | _ -> 0
+
+    let buildExpr () : ColumnExpr option =
+        match kind with
+        | "constant" -> Some(Constant constValue)
+        | "concat" when colA <> "" && colB <> "" -> Some(Concat([ SourceColumn colA; SourceColumn colB ], textParam))
+        | "splittake" when colA <> "" -> Some(SplitTake(SourceColumn colA, textParam, parseInt numA))
+        | "substring" when colA <> "" -> Some(Substring(SourceColumn colA, parseInt numA, parseInt numB))
+        | _ -> None
+
+    let canAdd = field <> "" && (buildExpr ()).IsSome
+
+    let labelledSelect
+        (label: string)
+        (value: string)
+        (placeholder: string)
+        (options: string list)
+        (onPick: string -> unit)
+        =
+        Html.label [
+            prop.className "flex flex-col gap-0.5 text-xs text-gray-600"
+            prop.children [
+                Html.span [ prop.text label ]
+                Html.select [
+                    prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
+                    prop.value value
+                    prop.onChange onPick
+                    prop.children [
+                        Html.option [ prop.value ""; prop.text placeholder ]
+                        for o in options do
+                            Html.option [ prop.value o; prop.text o ]
+                    ]
+                ]
+            ]
+        ]
+
+    let textInput (label: string) (value: string) (onType: string -> unit) =
+        Html.label [
+            prop.className "flex flex-col gap-0.5 text-xs text-gray-600"
+            prop.children [
+                Html.span [ prop.text label ]
+                Html.input [
+                    prop.className "border border-gray-300 rounded px-2 py-1 text-sm w-28"
+                    prop.value value
+                    prop.onChange onType
+                ]
+            ]
+        ]
+
+    Html.div [
+        prop.className "mt-3 p-3 rounded border border-gray-200 bg-gray-50 space-y-2"
+        prop.children [
+            Html.div [
+                prop.className "text-sm font-medium text-gray-700"
+                prop.text "Add a derived column"
+            ]
+            Html.div [
+                prop.className "flex flex-wrap items-end gap-3"
+                prop.children [
+                    labelledSelect "Target field" field "— field —" fields setField
+                    labelledSelect "From" kind "" (derivedKinds |> List.map fst) setKind
+                    // Per-kind inputs.
+                    match kind with
+                    | "constant" -> textInput "Value" constValue setConstValue
+                    | "concat" ->
+                        labelledSelect "Column A" colA "— column —" headers setColA
+                        labelledSelect "Column B" colB "— column —" headers setColB
+                        textInput "Separator" textParam setTextParam
+                    | "splittake" ->
+                        labelledSelect "Column" colA "— column —" headers setColA
+                        textInput "Delimiter" textParam setTextParam
+                        textInput "Part #" numA setNumA
+                    | "substring" ->
+                        labelledSelect "Column" colA "— column —" headers setColA
+                        textInput "Start" numA setNumA
+                        textInput "Length" numB setNumB
+                    | _ -> Html.none
+
+                    Html.button [
+                        prop.className [
+                            "px-3 py-1.5 rounded text-sm"
+                            Tokens.Typography.buttonText
+                            if canAdd then
+                                Tokens.Colours.brand
+                                + " "
+                                + Tokens.Colours.brandText
+                                + " hover:bg-brand-dark cursor-pointer"
+                            else
+                                "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        ]
+                        prop.disabled (not canAdd)
+                        prop.text "Add"
+                        prop.onClick (fun _ ->
+                            match field, buildExpr () with
+                            | f, Some expr when f <> "" ->
+                                onAdd { Field = f; Expr = expr }
+                                // reset the per-kind inputs, keep the kind selected
+                                setField ""
+                                setColA ""
+                                setColB ""
+                                setConstValue ""
+                            | _ -> ())
+                    ]
+                ]
+            ]
+            Html.div [
+                prop.className "text-xs text-gray-400"
+                prop.text "Derived columns draw from source columns only and re-derive automatically on re-import."
+            ]
+        ]
+    ]
+
+/// Lists the derived columns already added (with a remove affordance) and
+/// the builder. Shown on the mapping-review step beneath the field grid.
+let private derivedColumnsView (w: Wizard) (suggestion: MappingSuggestion) dispatch =
+    let fieldNames = suggestion.Fields |> List.map _.Field.Name
+
+    Html.div [
+        prop.className "space-y-2"
+        prop.children [
+            if not w.Derived.IsEmpty then
+                Html.div [
+                    prop.className "space-y-1"
+                    prop.children [
+                        for d in w.Derived do
+                            Html.div [
+                                prop.className
+                                    "flex items-center justify-between gap-3 p-2 rounded border border-blue-200 bg-blue-50 text-sm"
+                                prop.children [
+                                    Html.span [
+                                        prop.className "text-blue-800 font-mono text-xs"
+                                        prop.text (ColumnMapping.describeDerivedColumn d)
+                                    ]
+                                    Html.button [
+                                        prop.className "text-xs text-red-600 hover:text-red-800 hover:underline"
+                                        prop.text "Remove"
+                                        prop.onClick (fun _ -> dispatch (RemoveDerivedColumn d.Field))
+                                    ]
+                                ]
+                            ]
+                    ]
+                ]
+
+            DerivedColumnBuilder fieldNames w.Headers (fun dc -> dispatch (AddDerivedColumn dc))
         ]
     ]
 
@@ -1356,6 +1621,8 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
             | None -> Html.none
             | Some suggestion ->
                 let blockers = unresolvedRequired w
+                let derivedErrors = ColumnMapping.validateDerivedColumns w.Headers w.Derived
+                let canConfirm = blockers.IsEmpty && derivedErrors.IsEmpty && not w.Validating
 
                 Html.div [
                     prop.className "space-y-3"
@@ -1383,6 +1650,7 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
 
                         reviewListView suggestion
                         mappingGridView w suggestion dispatch
+                        derivedColumnsView w suggestion dispatch
 
                         if not blockers.IsEmpty then
                             Html.div [
@@ -1395,6 +1663,12 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                                 )
                             ]
 
+                        for e in derivedErrors do
+                            Html.div [
+                                prop.className "text-sm text-red-700"
+                                prop.text (sprintf "Derived column %s %s" e.Field e.Detail)
+                            ]
+
                         Html.div [
                             prop.className "flex items-center gap-3 pt-1"
                             prop.children [
@@ -1402,7 +1676,7 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                                     prop.className [
                                         "px-4 py-2 rounded-lg text-sm"
                                         Tokens.Typography.buttonText
-                                        if blockers.IsEmpty && not w.Validating then
+                                        if canConfirm then
                                             Tokens.Colours.brand
                                             + " "
                                             + Tokens.Colours.brandText
@@ -1410,10 +1684,10 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                                         else
                                             "bg-gray-200 text-gray-500 cursor-not-allowed"
                                     ]
-                                    prop.disabled (not blockers.IsEmpty || w.Validating)
+                                    prop.disabled (not canConfirm)
                                     prop.text (if w.Validating then "Validating…" else "Confirm & validate")
                                     prop.onClick (fun _ ->
-                                        if blockers.IsEmpty && not w.Validating then
+                                        if canConfirm then
                                             dispatch ConfirmMapping)
                                 ]
                                 Html.span [

@@ -668,19 +668,135 @@ let suggest
         Fingerprint = Fingerprint.ofHeaders headers
     }
 
+// ─── Derived / computed columns (Phase 219) ───────────────────────
+
+/// Null-safe view of a possibly-deserialised `DerivedColumn list`. A
+/// pre-Phase-219 persisted `Conversion` has no `Derived` field; the record
+/// deserialiser fills the absent field with `null` (F# `[]` is a real
+/// object, NOT null — a null list NREs on every list operation), so coerce
+/// before iterating so an old recipe re-imports as "no derived columns".
+let private derivedSafe (derived: DerivedColumn list) : DerivedColumn list =
+    if isNull (box derived) then [] else derived
+
+/// Evaluate a `ColumnExpr` for one row. `cell` resolves a source column
+/// name to its already-remediated value (an unbound name → ""). Pure,
+/// Fable-safe, and total — every case yields a string rather than throwing,
+/// so a malformed expression degrades to "" instead of failing a row.
+/// Composes with `CellTransform` cleaning through the `cell` resolver, which
+/// applies the source column's transforms before the value enters the
+/// expression.
+let rec evalColumnExpr (cell: string -> string) (expr: ColumnExpr) : string =
+    match expr with
+    | SourceColumn col -> cell col
+    | Constant v -> v
+    | Concat(parts, separator) -> parts |> List.map (evalColumnExpr cell) |> String.concat separator
+    | SplitTake(source, delimiter, index) ->
+        let s = evalColumnExpr cell source
+
+        if delimiter = "" then
+            // An empty delimiter can't split; `String.Split` treats it as
+            // "split on whitespace", which would surprise. Take the whole
+            // value at index 0, nothing elsewhere.
+            if index = 0 then s else ""
+        else
+            let parts = s.Split([| delimiter |], StringSplitOptions.None)
+
+            if index >= 0 && index < parts.Length then
+                parts[index]
+            else
+                ""
+    | Format(template, args) ->
+        args
+        |> List.mapi (fun i a -> i, evalColumnExpr cell a)
+        |> List.fold (fun (acc: string) (i, v) -> acc.Replace("{" + string i + "}", v)) template
+    | Substring(source, start, length) ->
+        let s = evalColumnExpr cell source
+        let st = max 0 (min start s.Length)
+        let len = max 0 (min length (s.Length - st))
+        s.Substring(st, len)
+
+/// The source columns a `ColumnExpr` reads (for validation + UI summaries).
+let rec columnExprRefs (expr: ColumnExpr) : string list =
+    match expr with
+    | SourceColumn col -> [ col ]
+    | Constant _ -> []
+    | Concat(parts, _) -> parts |> List.collect columnExprRefs
+    | SplitTake(source, _, _) -> columnExprRefs source
+    | Format(_, args) -> args |> List.collect columnExprRefs
+    | Substring(source, _, _) -> columnExprRefs source
+
+/// Validate derived-column expressions against the available source
+/// headers — errors-as-data (GP 12.3), never throws. Flags an unbound
+/// source reference (a `SourceColumn` naming a header that isn't present)
+/// and a reference to another derived target field (the only cycle vector,
+/// since the rewrite resolves each derived column from raw source columns
+/// only — derived columns never chain off one another).
+let validateDerivedColumns (headers: string list) (derived: DerivedColumn list) : DerivedColumnError list =
+    let derived = derivedSafe derived
+    let headerSet = headers |> List.map _.Trim().ToLower() |> Set.ofList
+    let derivedFields = derived |> List.map _.Field.Trim().ToLower() |> Set.ofList
+
+    derived
+    |> List.collect (fun d ->
+        columnExprRefs d.Expr
+        |> List.choose (fun col ->
+            let key = col.Trim().ToLower()
+
+            if derivedFields.Contains key then
+                Some {
+                    Field = d.Field
+                    Detail =
+                        sprintf
+                            "references derived column \"%s\" — a derived column can only draw from source columns, not another derived one."
+                            col
+                }
+            elif not (headerSet.Contains key) then
+                Some {
+                    Field = d.Field
+                    Detail = sprintf "references unknown source column \"%s\"." col
+                }
+            else
+                None))
+
+/// One-line human-readable description of a `ColumnExpr` (builder UI
+/// summary + conversion provenance).
+let rec describeColumnExpr (expr: ColumnExpr) : string =
+    match expr with
+    | SourceColumn col -> col
+    | Constant v -> sprintf "\"%s\"" v
+    | Concat(parts, separator) ->
+        let joined = parts |> List.map describeColumnExpr |> String.concat ", "
+        sprintf "join(%s) on \"%s\"" joined separator
+    | SplitTake(source, delimiter, index) ->
+        sprintf "%s split on \"%s\" [%d]" (describeColumnExpr source) delimiter index
+    | Format(template, args) ->
+        let joined = args |> List.map describeColumnExpr |> String.concat ", "
+        sprintf "format \"%s\" with (%s)" template joined
+    | Substring(source, start, length) -> sprintf "%s substring(%d, %d)" (describeColumnExpr source) start length
+
+/// `<field> = <expr>` one-line description of a derived column.
+let describeDerivedColumn (d: DerivedColumn) : string =
+    sprintf "%s = %s" d.Field (describeColumnExpr d.Expr)
+
 // ─── CSV rewrite ──────────────────────────────────────────────────
 
-/// Rewrite the raw CSV into the target schema's canonical shape: header
-/// row = schema field names (in schema order), one column per mapped
-/// field, body cells pulled from the mapped source column with that
-/// column's `transforms` (data-quality remediation) applied first.
-/// Columns the mapping doesn't cover are dropped — "minimally, just the
-/// required data". The result is fed to the existing `DataType.Process`
-/// for the chosen target type.
-let rewriteCsv
+/// Rewrite the raw CSV into the target schema's canonical shape, with
+/// derived/computed columns: header row = schema field names (in schema
+/// order); each emitted field's body cell is produced by *either* its
+/// `derived` `ColumnExpr` (explicit user intent — wins when a field is in
+/// both maps) or its 1:1 `fieldToColumn` source column with that column's
+/// `transforms` (data-quality remediation) applied first. Columns covered
+/// by neither are dropped — "minimally, just the required data". The result
+/// is fed to the existing `DataType.Process` for the chosen target type.
+///
+/// With `derived = []` this is byte-for-byte identical to the Phase-172
+/// rewrite (GP 13) — the derived branch is never taken, so the mapped path
+/// resolves each column's source index + transforms exactly as before.
+let rewriteCsvWithDerived
     (schema: DataTypeSchema)
     (fieldToColumn: Map<string, string>)
     (transforms: Map<string, CellTransform list>)
+    (derived: DerivedColumn list)
     (rawCsv: string)
     : string =
     let lines = splitLines rawCsv StringSplitOptions.None
@@ -690,28 +806,44 @@ let rewriteCsv
     else
         let srcHeaders = splitCsvLine lines[0]
 
-        let srcIndex (name: string) =
-            let target = name.Trim().ToLower()
-            srcHeaders |> List.tryFindIndex (fun h -> h.Trim().ToLower() = target)
+        // header(lower) → index, built once so the per-row derived-column
+        // `cell` resolver is O(1) rather than a List scan per reference. The
+        // earliest column wins a duplicate name (matches `List.tryFindIndex`):
+        // `Map.ofList` keeps the last entry, so reverse first.
+        let srcIndexMap =
+            srcHeaders
+            |> List.mapi (fun i h -> h.Trim().ToLower(), i)
+            |> List.rev
+            |> Map.ofList
 
-        // schema columns that have a mapping AND resolve to a real source
-        // column. Pre-resolve each one's source index + transforms ONCE so the
-        // per-row loop does no Map lookups.
+        let srcIndex (name: string) =
+            srcIndexMap |> Map.tryFind (name.Trim().ToLower())
+
+        let derivedByField =
+            derivedSafe derived |> List.map (fun d -> d.Field, d.Expr) |> Map.ofList
+
+        // Per emitted schema column, pre-resolve how its cell is produced: a
+        // derived expression (Choice1) or a 1:1 mapped source index + that
+        // column's transforms (Choice2). Columns with neither are dropped.
         let emitted =
             schema.Columns
             |> List.choose (fun col ->
-                match fieldToColumn |> Map.tryFind col.Name with
-                | Some src ->
-                    srcIndex src
-                    |> Option.map (fun idx -> col.Name, idx, (transforms |> Map.tryFind src |> Option.defaultValue []))
-                | None -> None)
+                match derivedByField |> Map.tryFind col.Name with
+                | Some expr -> Some(col.Name, Choice1Of2 expr)
+                | None ->
+                    match fieldToColumn |> Map.tryFind col.Name with
+                    | Some src ->
+                        srcIndex src
+                        |> Option.map (fun idx ->
+                            col.Name, Choice2Of2(idx, transforms |> Map.tryFind src |> Option.defaultValue []))
+                    | None -> None)
 
         // Build the output with a StringBuilder over the line ARRAY — no
         // 50k-element `string list`, no `String.concat` over every row (the
         // shape that overflows the Fable call stack on "Confirm & import").
         let sb = System.Text.StringBuilder()
 
-        sb.Append(emitted |> List.map (fun (name, _, _) -> writeCell name) |> String.concat ",")
+        sb.Append(emitted |> List.map (fun (name, _) -> writeCell name) |> String.concat ",")
         |> ignore
 
         for i in 1 .. lines.Length - 1 do
@@ -720,13 +852,38 @@ let rewriteCsv
             if r.Trim() <> "" then
                 let cells = splitCsvLine r |> List.toArray
 
+                // Source-column resolver for derived expressions: the cell's
+                // value with that column's remediation transforms applied, so
+                // derived columns compose with the data-quality cleaning.
+                let cellOf (name: string) =
+                    match srcIndex name with
+                    | Some idx when idx < cells.Length ->
+                        let ts = transforms |> Map.tryFind name |> Option.defaultValue []
+                        applyTransforms ts cells[idx]
+                    | _ -> ""
+
                 let rowOut =
                     emitted
-                    |> List.map (fun (_, idx, ts) ->
-                        let raw = if idx >= 0 && idx < cells.Length then cells[idx] else ""
-                        applyTransforms ts raw |> writeCell)
+                    |> List.map (fun (_, how) ->
+                        match how with
+                        | Choice1Of2 expr -> evalColumnExpr cellOf expr |> writeCell
+                        | Choice2Of2(idx, ts) ->
+                            let raw = if idx >= 0 && idx < cells.Length then cells[idx] else ""
+                            applyTransforms ts raw |> writeCell)
                     |> String.concat ","
 
                 sb.Append('\n').Append(rowOut) |> ignore
 
         sb.ToString()
+
+/// Phase-172 rewrite (1:1 mapping + remediation, no derived columns).
+/// Retained as the stable public entry point; delegates to
+/// `rewriteCsvWithDerived` with no derived columns — byte-for-byte-identical
+/// output to the original (GP 13).
+let rewriteCsv
+    (schema: DataTypeSchema)
+    (fieldToColumn: Map<string, string>)
+    (transforms: Map<string, CellTransform list>)
+    (rawCsv: string)
+    : string =
+    rewriteCsvWithDerived schema fieldToColumn transforms [] rawCsv

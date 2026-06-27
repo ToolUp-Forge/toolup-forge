@@ -148,6 +148,7 @@
         <Compile Include="InProcess\DataObjectStoreTests.fs" />
         <Compile Include="InProcess\ColumnMatcherTests.fs" />
         <Compile Include="InProcess\MappingDryRunValidationTests.fs" />
+        <Compile Include="InProcess\DerivedColumnEvalTests.fs" />
         <Compile Include="InProcess\DataCatalogTests.fs" />
         <Compile Include="InProcess\ResultStoreTests.fs" />
         <Compile Include="InProcess\ConversationStoreTests.fs" />

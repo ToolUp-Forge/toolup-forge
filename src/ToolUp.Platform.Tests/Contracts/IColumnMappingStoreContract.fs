@@ -80,6 +80,7 @@ let private mk fingerprint typeId pairs : Conversion = {
     Mapping = Map.ofList pairs
     Remediation = Map.empty
     SourceHeaders = pairs |> List.map snd
+    Derived = []
     CreatedBy = "tester"
     CreatedAt = DateTime.UtcNow
 }

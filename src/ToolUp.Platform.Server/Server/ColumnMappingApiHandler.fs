@@ -61,7 +61,12 @@ let columnMappingApi (ctx: HttpContext) : IConversionApi =
                     // Rewrite raw → canonical shape (pure, Core) then validate
                     // the mapped CSV. No write, no `DataType.Process`.
                     let mappedCsv =
-                        ColumnMapping.rewriteCsv schema conversion.Mapping conversion.Remediation request.RawCsv
+                        ColumnMapping.rewriteCsvWithDerived
+                            schema
+                            conversion.Mapping
+                            conversion.Remediation
+                            conversion.Derived
+                            request.RawCsv
 
                     let report = validator.Validate(schema, mappedCsv)
 

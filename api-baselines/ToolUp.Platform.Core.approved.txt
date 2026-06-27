@@ -4,14 +4,20 @@
 ColumnMapping (class)
 ColumnMapping.applyTransform(ColumnMappingTypes+CellTransform, System.String) : System.String
 ColumnMapping.applyTransforms(Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform], System.String) : System.String
+ColumnMapping.columnExprRefs(ColumnMappingTypes+ColumnExpr) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ColumnMapping.describeColumnExpr(ColumnMappingTypes+ColumnExpr) : System.String
 ColumnMapping.describeColumnRemediation(System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ColumnMapping.describeDerivedColumn(ColumnMappingTypes+DerivedColumn) : System.String
+ColumnMapping.evalColumnExpr(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], ColumnMappingTypes+ColumnExpr) : System.String
 ColumnMapping.inferColumnType(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : DataManagementTypes+ColumnType
 ColumnMapping.nameSimilarity(System.String, System.String) : System.Double
 ColumnMapping.parsePreview(System.Int32, System.String) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]]
 ColumnMapping.profileColumn(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ColumnMappingTypes+ColumnProfile
 ColumnMapping.rewriteCsv(DataManagementTypes+DataTypeSchema, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]], System.String) : System.String
+ColumnMapping.rewriteCsvWithDerived(DataManagementTypes+DataTypeSchema, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn], System.String) : System.String
 ColumnMapping.suggest(System.String, DataManagementTypes+DataTypeSchema, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ColumnMappingTypes+MappingSuggestion
 ColumnMapping.toIsoDate(ColumnMappingTypes+DateOrder, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ColumnMapping.validateDerivedColumns(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn]) : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumnError]
 ColumnMapping+Fingerprint (class)
 ColumnMapping+Fingerprint.ofHeaders(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ColumnMappingApi (class)
@@ -58,6 +64,39 @@ ColumnMappingTypes+CellTransform+Tags.StripLeadingApostrophe : System.Int32 (lit
 ColumnMappingTypes+CellTransform+Tags.StripPercent : System.Int32 (literal)
 ColumnMappingTypes+CellTransform+Tags.StripThousandsSeparators : System.Int32 (literal)
 ColumnMappingTypes+CellTransform+Tags.Trim : System.Int32 (literal)
+ColumnMappingTypes+ColumnExpr (class)
+ColumnMappingTypes+ColumnExpr.IsConcat : System.Boolean { get }
+ColumnMappingTypes+ColumnExpr.IsConstant : System.Boolean { get }
+ColumnMappingTypes+ColumnExpr.IsFormat : System.Boolean { get }
+ColumnMappingTypes+ColumnExpr.IsSourceColumn : System.Boolean { get }
+ColumnMappingTypes+ColumnExpr.IsSplitTake : System.Boolean { get }
+ColumnMappingTypes+ColumnExpr.IsSubstring : System.Boolean { get }
+ColumnMappingTypes+ColumnExpr.Tag : System.Int32 { get }
+ColumnMappingTypes+ColumnExpr+Concat (class)
+ColumnMappingTypes+ColumnExpr+Concat.parts : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnExpr] { get }
+ColumnMappingTypes+ColumnExpr+Concat.separator : System.String { get }
+ColumnMappingTypes+ColumnExpr+Constant (class)
+ColumnMappingTypes+ColumnExpr+Constant.value : System.String { get }
+ColumnMappingTypes+ColumnExpr+Format (class)
+ColumnMappingTypes+ColumnExpr+Format.args : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnExpr] { get }
+ColumnMappingTypes+ColumnExpr+Format.template : System.String { get }
+ColumnMappingTypes+ColumnExpr+SourceColumn (class)
+ColumnMappingTypes+ColumnExpr+SourceColumn.column : System.String { get }
+ColumnMappingTypes+ColumnExpr+SplitTake (class)
+ColumnMappingTypes+ColumnExpr+SplitTake.delimiter : System.String { get }
+ColumnMappingTypes+ColumnExpr+SplitTake.index : System.Int32 { get }
+ColumnMappingTypes+ColumnExpr+SplitTake.source : ColumnMappingTypes+ColumnExpr { get }
+ColumnMappingTypes+ColumnExpr+Substring (class)
+ColumnMappingTypes+ColumnExpr+Substring.length : System.Int32 { get }
+ColumnMappingTypes+ColumnExpr+Substring.source : ColumnMappingTypes+ColumnExpr { get }
+ColumnMappingTypes+ColumnExpr+Substring.start : System.Int32 { get }
+ColumnMappingTypes+ColumnExpr+Tags (class)
+ColumnMappingTypes+ColumnExpr+Tags.Concat : System.Int32 (literal)
+ColumnMappingTypes+ColumnExpr+Tags.Constant : System.Int32 (literal)
+ColumnMappingTypes+ColumnExpr+Tags.Format : System.Int32 (literal)
+ColumnMappingTypes+ColumnExpr+Tags.SourceColumn : System.Int32 (literal)
+ColumnMappingTypes+ColumnExpr+Tags.SplitTake : System.Int32 (literal)
+ColumnMappingTypes+ColumnExpr+Tags.Substring : System.Int32 (literal)
 ColumnMappingTypes+ColumnIssue (class)
 ColumnMappingTypes+ColumnIssue..ctor(ColumnMappingTypes+IssueKind, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform], System.Boolean, System.Boolean)
 ColumnMappingTypes+ColumnIssue.Detail : System.String { get }
@@ -91,9 +130,10 @@ ColumnMappingTypes+ColumnProfile.DetectedUnit : Microsoft.FSharp.Core.FSharpOpti
 ColumnMappingTypes+ColumnProfile.InferredType : DataManagementTypes+ColumnType { get }
 ColumnMappingTypes+ColumnProfile.Issues : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnIssue] { get }
 ColumnMappingTypes+Conversion (class)
-ColumnMappingTypes+Conversion..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTime)
+ColumnMappingTypes+Conversion..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn], System.String, System.DateTime)
 ColumnMappingTypes+Conversion.CreatedAt : System.DateTime { get }
 ColumnMappingTypes+Conversion.CreatedBy : System.String { get }
+ColumnMappingTypes+Conversion.Derived : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn] { get }
 ColumnMappingTypes+Conversion.Fingerprint : System.String { get }
 ColumnMappingTypes+Conversion.Mapping : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ColumnMappingTypes+Conversion.Remediation : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]] { get }
@@ -121,6 +161,14 @@ ColumnMappingTypes+DateOrder+Tags (class)
 ColumnMappingTypes+DateOrder+Tags.DayFirst : System.Int32 (literal)
 ColumnMappingTypes+DateOrder+Tags.MonthFirst : System.Int32 (literal)
 ColumnMappingTypes+DateOrder+Tags.YearFirst : System.Int32 (literal)
+ColumnMappingTypes+DerivedColumn (class)
+ColumnMappingTypes+DerivedColumn..ctor(System.String, ColumnMappingTypes+ColumnExpr)
+ColumnMappingTypes+DerivedColumn.Expr : ColumnMappingTypes+ColumnExpr { get }
+ColumnMappingTypes+DerivedColumn.Field : System.String { get }
+ColumnMappingTypes+DerivedColumnError (class)
+ColumnMappingTypes+DerivedColumnError..ctor(System.String, System.String)
+ColumnMappingTypes+DerivedColumnError.Detail : System.String { get }
+ColumnMappingTypes+DerivedColumnError.Field : System.String { get }
 ColumnMappingTypes+DryRunCellIssue (class)
 ColumnMappingTypes+DryRunCellIssue..ctor(System.Int32, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ColumnMappingTypes+DryRunCellIssue.Actual : System.String { get }
@@ -1187,6 +1235,14 @@ ToolUp.Platform.BeaconRejectedPayload.Caller : System.String { get }
 ToolUp.Platform.BeaconRejectedPayload.ConversationId : System.Guid { get }
 ToolUp.Platform.BeaconRejectedPayload.Owner : System.String { get }
 ToolUp.Platform.BeaconRejectedPayload.Surface : System.String { get }
+ToolUp.Platform.BindingDecision (class)
+ToolUp.Platform.BindingDecision..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.BindingDecision.Admitted : System.Boolean { get }
+ToolUp.Platform.BindingDecision.AnchorId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.BindingDecision.ModuleId : System.String { get }
+ToolUp.Platform.BindingDecision.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.BindingDecision.StampId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.BindingDecision.TimestampUtc : System.DateTimeOffset { get }
 ToolUp.Platform.BindingOutcome (class)
 ToolUp.Platform.BindingOutcome.Allowed : ToolUp.Platform.BindingOutcome { get }
 ToolUp.Platform.BindingOutcome.IsAllowed : System.Boolean { get }
@@ -1197,6 +1253,10 @@ ToolUp.Platform.BindingOutcome+Rejected.reason : System.String { get }
 ToolUp.Platform.BindingOutcome+Tags (class)
 ToolUp.Platform.BindingOutcome+Tags.Allowed : System.Int32 (literal)
 ToolUp.Platform.BindingOutcome+Tags.Rejected : System.Int32 (literal)
+ToolUp.Platform.BindingRevocationList (class)
+ToolUp.Platform.BindingRevocationList.none : ToolUp.Platform.IBindingRevocationList { get }
+ToolUp.Platform.BindingTransparencyLog (class)
+ToolUp.Platform.BindingTransparencyLog.none : ToolUp.Platform.IBindingTransparencyLog { get }
 ToolUp.Platform.BlobStorage (class)
 ToolUp.Platform.BlobStorage.eraseByPrefix(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.BlobStorage+BlobMetadata (class)
@@ -2742,6 +2802,10 @@ ToolUp.Platform.IAuditLog.GetAuditTrail(System.String, Microsoft.FSharp.Core.FSh
 ToolUp.Platform.IAuditLog.Record(System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IAuthAuditHook (interface)
 ToolUp.Platform.IAuthAuditHook.RecordDenial(ToolUp.Platform.AuthDenial) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IBindingRevocationList (interface)
+ToolUp.Platform.IBindingRevocationList.IsRevoked(System.String, System.String) : System.Boolean
+ToolUp.Platform.IBindingTransparencyLog (interface)
+ToolUp.Platform.IBindingTransparencyLog.Record(ToolUp.Platform.BindingDecision) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IConfigApi (class)
 ToolUp.Platform.IConfigApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModuleConfigView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.IConfigApi.ClearModuleConfig : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
@@ -2810,6 +2874,8 @@ ToolUp.Platform.IModuleQueryBus.Ask(ToolUp.Platform.AccessContext, ToolUp.Platfo
 ToolUp.Platform.IModuleQueryBusApi (class)
 ToolUp.Platform.IModuleQueryBusApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleQueryRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModuleQueryResponse, ToolUp.Platform.ModuleQueryError]]]])
 ToolUp.Platform.IModuleQueryBusApi.Ask : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleQueryRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModuleQueryResponse, ToolUp.Platform.ModuleQueryError]]]] { get }
+ToolUp.Platform.IModuleSbomVerifier (interface)
+ToolUp.Platform.IModuleSbomVerifier.VerifySbom(System.String, ToolUp.Platform.ModuleSbomStamp) : ToolUp.Platform.BindingOutcome
 ToolUp.Platform.INotificationChannel (interface)
 ToolUp.Platform.INotificationChannel.Publish(System.String, ToolUp.Platform.Notification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.INotificationChannel.Subscribe(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.NotificationEnvelope, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Guid]
@@ -3613,6 +3679,18 @@ ToolUp.Platform.ModuleQueryRequest.TargetModule : System.String { get }
 ToolUp.Platform.ModuleQueryResponse (class)
 ToolUp.Platform.ModuleQueryResponse..ctor(System.String)
 ToolUp.Platform.ModuleQueryResponse.Payload : System.String { get }
+ToolUp.Platform.ModuleSbom (class)
+ToolUp.Platform.ModuleSbom..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSbomComponent])
+ToolUp.Platform.ModuleSbom.Components : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSbomComponent] { get }
+ToolUp.Platform.ModuleSbomComponent (class)
+ToolUp.Platform.ModuleSbomComponent..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ModuleSbomComponent.Name : System.String { get }
+ToolUp.Platform.ModuleSbomComponent.Sha256 : System.String { get }
+ToolUp.Platform.ModuleSbomComponent.Version : System.String { get }
+ToolUp.Platform.ModuleSbomStamp (class)
+ToolUp.Platform.ModuleSbomStamp..ctor(ToolUp.Platform.ModuleSbom, ToolUp.Platform.ModuleBindingStamp)
+ToolUp.Platform.ModuleSbomStamp.Sbom : ToolUp.Platform.ModuleSbom { get }
+ToolUp.Platform.ModuleSbomStamp.Signature : ToolUp.Platform.ModuleBindingStamp { get }
 ToolUp.Platform.Narrative.AudioSpec (class)
 ToolUp.Platform.Narrative.AudioSpec..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.MediaSource], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.MediaTrack], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Narrative.AudioSpec.Caption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
