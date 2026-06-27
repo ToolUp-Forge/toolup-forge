@@ -1654,6 +1654,13 @@ type ServerConfig = {
     /// `None` / empty keeps every module registered. Keeps single-module
     /// dev runs consistent with the client's `ClientConfig.ModuleFilter`.
     ModuleFilter: string option
+    /// Phase 170 — module-binding trust configuration (anchor descriptors +
+    /// the unbound-allowed policy bit). Default = no anchors + `AllowUnbound`
+    /// = `true` (binding off; byte-for-byte the pre-binding pipeline, GP 13).
+    /// Populated from `TOOLUP_MODULE_BINDING_*` by `fromEnv`; resolved into a
+    /// verifier at compose time by `ToolUp.ArtefactSigning`'s resolver
+    /// (symmetric key material via `ISecretStore`, never plaintext config).
+    ModuleBindingTrust: ModuleBindingTrustConfig
     /// Register `app.UseHttpsRedirection()` ahead of the scope-resolution
     /// middleware. Default `false` — local dev runs over HTTP. Production
     /// deployments behind a TLS-terminating load balancer should set this
@@ -2734,6 +2741,7 @@ module ServerConfig =
         IncludePlatformDefaults = true
         FeatureFlags = []
         ModuleFilter = None
+        ModuleBindingTrust = ModuleBindingTrustConfig.defaults
         RequireHttps = false
         TrustForwardedHeaders = true
         StaticPathBehaviour = Warn
@@ -3332,11 +3340,45 @@ module ServerConfig =
 
         let logLevel, traceCategories = parseLogLevel ()
 
+        // Phase 170 — module-binding trust anchors from the environment.
+        // `TOOLUP_MODULE_BINDING_ALLOW_UNBOUND` is the policy bit (default
+        // matches the off-by-default config); `TOOLUP_MODULE_BINDING_ANCHORS`
+        // is a `;`-separated list of `mac:<keyId>:<scope>:<key>` (symmetric;
+        // key resolved via ISecretStore at compose time) or
+        // `asym:<keyId>:<alg>:<base64pubkey>` (asymmetric). A malformed entry
+        // is warned + skipped; an unresolvable symmetric secret is the
+        // compose-time validator's fail-closed concern (Phase 170 validator).
+        let moduleBindingTrust =
+            let allowUnbound =
+                envFlagOrFail "TOOLUP_MODULE_BINDING_ALLOW_UNBOUND" ModuleBindingTrustConfig.defaults.AllowUnbound
+
+            let anchors =
+                match envVar "TOOLUP_MODULE_BINDING_ANCHORS" with
+                | None -> []
+                | Some raw ->
+                    raw.Split([| ';' |], StringSplitOptions.RemoveEmptyEntries)
+                    |> Array.choose (fun entry ->
+                        match entry.Trim().Split(':') with
+                        | [| "mac"; keyId; scope; key |] -> Some(SymmetricAnchorRef(keyId, scope, key))
+                        | [| "asym"; keyId; alg; pub |] -> Some(AsymmetricAnchorRef(keyId, alg, pub))
+                        | _ ->
+                            logger.Warn
+                                $"TOOLUP_MODULE_BINDING_ANCHORS entry '{entry}' is malformed (expected 'mac:<keyId>:<scope>:<key>' or 'asym:<keyId>:<alg>:<base64pubkey>'); skipped."
+
+                            None)
+                    |> Array.toList
+
+            {
+                Anchors = anchors
+                AllowUnbound = allowUnbound
+            }
+
         {
             defaults with
                 PublicPath = resolvePublicPath overrides // Phase 71.A.5
                 Surfaces = surfaces
                 ModuleFilter = envVar "TOOLUP_MODULE"
+                ModuleBindingTrust = moduleBindingTrust
                 RequireHttps = envFlag "TOOLUP_REQUIRE_HTTPS"
                 TrustForwardedHeaders = envFlagOrFail "TOOLUP_TRUST_FORWARDED_HEADERS" defaults.TrustForwardedHeaders
                 StaticPathBehaviour = parseStaticPathBehaviour logger

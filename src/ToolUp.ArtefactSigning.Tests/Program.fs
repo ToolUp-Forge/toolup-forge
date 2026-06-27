@@ -13,6 +13,7 @@ let allTests =
         CloudKmsArtefactSignerTests.tests
         SignedExportBundleTests.tests
         ModuleBindingVerifierTests.tests
+        ModuleBindingTrustResolverTests.tests
     ]
 
 [<EntryPoint>]

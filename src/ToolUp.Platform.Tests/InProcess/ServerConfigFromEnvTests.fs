@@ -462,5 +462,52 @@ let tests =
                             (fun () -> ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty |> ignore)
                             $"{envName}=enabled must fail loud (payload not env-expressible)")
             }
+
+            // ── Phase 170 — module-binding trust anchors ──
+            test "ModuleBindingTrust: unset → no anchors + AllowUnbound true (GP 13 default)" {
+                withEnv
+                    [
+                        "TOOLUP_MODULE_BINDING_ANCHORS", None
+                        "TOOLUP_MODULE_BINDING_ALLOW_UNBOUND", None
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.isEmpty cfg.ModuleBindingTrust.Anchors "no anchors by default"
+                        Expect.isTrue cfg.ModuleBindingTrust.AllowUnbound "AllowUnbound defaults true (binding off)")
+            }
+
+            test "ModuleBindingTrust: ANCHORS parses mac + asym entries; ALLOW_UNBOUND=false flips the bit" {
+                withEnv
+                    [
+                        "TOOLUP_MODULE_BINDING_ANCHORS", Some "mac:k1:_platform:mac-secret-1;asym:k2:EcdsaP256:QUJD"
+                        "TOOLUP_MODULE_BINDING_ALLOW_UNBOUND", Some "false"
+                    ]
+                    (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.isFalse cfg.ModuleBindingTrust.AllowUnbound "AllowUnbound=false"
+
+                        Expect.equal
+                            cfg.ModuleBindingTrust.Anchors
+                            [
+                                SymmetricAnchorRef("k1", "_platform", "mac-secret-1")
+                                AsymmetricAnchorRef("k2", "EcdsaP256", "QUJD")
+                            ]
+                            "both anchor kinds parsed in order")
+            }
+
+            test "ModuleBindingTrust: a malformed anchor entry warns and is skipped" {
+                withEnv [ "TOOLUP_MODULE_BINDING_ANCHORS", Some "mac:only-two;mac:k1:_platform:s1" ] (fun () ->
+                    let logger, warnings = capturingLogger ()
+                    let cfg = ServerConfig.fromEnv logger ServerConfigOverrides.empty
+
+                    Expect.equal
+                        cfg.ModuleBindingTrust.Anchors
+                        [ SymmetricAnchorRef("k1", "_platform", "s1") ]
+                        "only the well-formed entry survives"
+
+                    Expect.isTrue
+                        (warnings |> Seq.exists (fun w -> w.Contains "MODULE_BINDING_ANCHORS"))
+                        "must warn on the malformed entry")
+            }
         ]
     )

@@ -23,6 +23,10 @@
          Jws verify primitives + BouncyCastle without widening any public
          surface, and so the crypto stays off the Fable client tier. -->
     <Compile Include="Server\DefaultModuleBindingVerifier.fs" />
+    <!-- Phase 170 — trust-anchor config → verifier + fail-closed preflight
+         validator (resolves symmetric secrets via ISecretStore). After the
+         default verifier it builds on. -->
+    <Compile Include="Server\ModuleBindingTrustResolver.fs" />
     <Compile Include="Server\SigningKeyHandler.fs" />
     <Compile Include="Server\Helpers.fs" />
     <!-- Phase 162 — signed compliance export bundle: adapts IArtefactSigner
