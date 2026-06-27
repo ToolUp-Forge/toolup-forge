@@ -116,6 +116,27 @@ type IActiveAiProbe =
     /// when no provider is configured/resolvable for that scope.
     abstract Describe: scopeId: string -> Async<ActiveAiSummary option>
 
+/// Optional DI seam for a module-contributed Home widget that needs
+/// scope-correct server data (Phase 217). A module registers an
+/// implementation so its widget's values ride the single
+/// `GetOverview` aggregation call (`HomeOverview.WidgetData`) rather
+/// than issuing a second round trip. Resolved as a *collection* —
+/// every registered provider runs, and the handler merges their maps;
+/// absent entirely (the default) → `WidgetData` is empty and Home is
+/// the byte-for-byte Phase 171 shape (GP 13). The SDK never names a
+/// providing module (GP 9 / GP 1).
+///
+/// **Scope-correct by construction (GP 4).** The handler passes the
+/// caller's resolved `scopeId`; a provider reads only that scope's
+/// data, never an arbitrary one. **Namespacing:** a provider keys its
+/// values under its widget id prefix (e.g. `"my-widget.total"`) so
+/// providers don't collide in the shared bag.
+type IHomeWidgetDataProvider =
+    /// Scope-correct data for this provider's widget(s), keyed by
+    /// contributor-namespaced keys. Empty map when the provider has
+    /// nothing to contribute for `scopeId`.
+    abstract Describe: scopeId: string -> Async<Map<string, string>>
+
 module HomeOverviewApi =
     /// Fable.Remoting route builder. Mirrors `UsageQueryApi`'s shape —
     /// a fixed `/api/_platform/home/*` prefix so the Home client proxy

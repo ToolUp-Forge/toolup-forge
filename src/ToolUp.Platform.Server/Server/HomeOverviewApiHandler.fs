@@ -130,6 +130,24 @@ let private buildActiveAi (ctx: HttpContext) (scopeId: string) : Async<ActiveAiS
     | :? IActiveAiProbe as probe -> probe.Describe scopeId
     | _ -> async { return None }
 
+/// Phase 217 — scope-correct widget data via the optional
+/// `IHomeWidgetDataProvider` DI seam. Resolved as a collection: every
+/// registered provider runs in parallel for the caller's scope and the
+/// maps are merged into one bag (contributor-namespaced keys avoid
+/// collisions). Empty when no provider is composed (GP 13) — the
+/// overview is then the byte-for-byte Phase 171 shape.
+let private buildWidgetData (ctx: HttpContext) (scopeId: string) : Async<Map<string, string>> =
+    let providers =
+        ctx.RequestServices.GetServices<IHomeWidgetDataProvider>() |> List.ofSeq
+
+    if providers.IsEmpty then
+        async { return Map.empty }
+    else
+        async {
+            let! maps = providers |> List.map (fun p -> p.Describe scopeId) |> Async.Parallel
+            return maps |> Array.collect Map.toArray |> Map.ofArray
+        }
+
 /// Build the `IHomeOverviewApi` Fable.Remoting handler.
 let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
     let accessContext = resolveAccessContext ctx
@@ -141,6 +159,7 @@ let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
                 let! tools = buildTools ctx accessContext scopeId
                 let! activeAi = buildActiveAi ctx scopeId
                 let! health = buildHealth ctx accessContext
+                let! widgetData = buildWidgetData ctx scopeId
 
                 return {
                     Tools = tools
@@ -150,10 +169,10 @@ let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
                         Health = health
                     }
                     GeneratedAt = DateTime.UtcNow
-                    // Phase 217 — populated by the optional
-                    // `IHomeWidgetDataProvider` DI seam; empty (the
-                    // default) when no provider is composed (GP 13).
-                    WidgetData = Map.empty
+                    // Phase 217 — merged from every registered
+                    // `IHomeWidgetDataProvider`; empty (the default) when
+                    // none is composed (GP 13).
+                    WidgetData = widgetData
                 }
             }
     }

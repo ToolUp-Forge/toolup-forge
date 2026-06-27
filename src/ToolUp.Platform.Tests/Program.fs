@@ -303,6 +303,8 @@ let allTests =
         // note in HomeOverviewTests.fs for why it can't run in-process.
         HomeOverviewTests.countAffordanceTests
         HomeOverviewTests.overviewScopeAiTests
+        // Phase 217 — IHomeWidgetDataProvider merge + scope-correctness.
+        HomeOverviewTests.widgetDataTests
         SurfaceCoherenceValidatorTests.tests
         CsrfPrefetchAnonymousGateTests.tests
         SubjectKindClientFlowTests.tests

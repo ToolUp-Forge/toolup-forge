@@ -248,5 +248,71 @@ let overviewScopeAiTests =
             | None -> failtest "expected a SalesAnalysis tool in the overview"
 
             Expect.isNone overview.ActiveAi "ActiveAi is None when no IActiveAiProbe is registered"
+            // Phase 217 — no IHomeWidgetDataProvider registered ⇒ the
+            // widget-data bag is empty, so the overview is the
+            // byte-for-byte Phase 171 shape (GP 13).
+            Expect.isTrue (Map.isEmpty overview.WidgetData) "WidgetData is empty without a provider"
+        }
+    ]
+
+// ─── Phase 217 — IHomeWidgetDataProvider merge + scope-correctness ───
+
+/// A widget-data provider that echoes the scope id back under a fixed
+/// key — lets the test assert the handler passes the *caller's* scope
+/// (GP 4) and merges every provider's map (GP 9 / GP 1: the SDK never
+/// names the providing module).
+type private StubWidgetDataProvider(entries: string -> Map<string, string>) =
+    interface IHomeWidgetDataProvider with
+        member _.Describe scopeId = async { return entries scopeId }
+
+let private ctxWithProviders (accessContext: AccessContext) (providers: IHomeWidgetDataProvider list) : HttpContext =
+    let services = ServiceCollection()
+    services.AddSingleton<AccessContext>(accessContext) |> ignore
+
+    for p in providers do
+        services.AddSingleton<IHomeWidgetDataProvider>(p) |> ignore
+
+    let sp = services.BuildServiceProvider() :> IServiceProvider
+    let ctx = DefaultHttpContext() :> HttpContext
+    ctx.RequestServices <- sp
+    ctx
+
+[<Tests>]
+let widgetDataTests =
+    testList "Phase 217 — Home widget-data seam" [
+
+        testCaseAsync "registered providers merge into WidgetData, scoped to the caller"
+        <| async {
+            let p1 =
+                StubWidgetDataProvider(fun scope -> Map [ "w1.scope", scope; "w1.k", "a" ]) :> IHomeWidgetDataProvider
+
+            let p2 =
+                StubWidgetDataProvider(fun _ -> Map [ "w2.k", "b" ]) :> IHomeWidgetDataProvider
+
+            let accessContext = AccessContext.unrestricted (AuthenticatedUser "scope-a")
+            let ctx = ctxWithProviders accessContext [ p1; p2 ]
+
+            let api = HomeOverviewApiHandler.homeOverviewApi ctx
+            let! overview = api.GetOverview()
+
+            Expect.equal
+                (Map.tryFind "w1.scope" overview.WidgetData)
+                (Some "scope-a")
+                "provider sees the caller's scope (GP 4)"
+
+            Expect.equal (Map.tryFind "w1.k" overview.WidgetData) (Some "a") "first provider's data is present"
+            Expect.equal (Map.tryFind "w2.k" overview.WidgetData) (Some "b") "second provider's data is merged in"
+            Expect.equal overview.WidgetData.Count 3 "every namespaced key from both providers is merged"
+        }
+
+        testCaseAsync "no provider ⇒ WidgetData is empty (GP 13)"
+        <| async {
+            let accessContext = AccessContext.unrestricted (AuthenticatedUser "scope-a")
+            let ctx = ctxWithProviders accessContext []
+
+            let api = HomeOverviewApiHandler.homeOverviewApi ctx
+            let! overview = api.GetOverview()
+
+            Expect.isTrue (Map.isEmpty overview.WidgetData) "absent provider ⇒ empty bag"
         }
     ]
