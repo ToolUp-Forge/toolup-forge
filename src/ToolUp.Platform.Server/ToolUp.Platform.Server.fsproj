@@ -580,6 +580,11 @@
         <!-- Phase 166 — detachable module-binding manifest reader. After
              ServerApp (it applies stamps onto ServerModule). -->
         <Compile Include="Server\ModuleBindingManifest.fs" />
+        <!-- Phase 215 — module-binding revocation list (crypto-free format +
+             parser + stampId) + file-backed transparency log. The signed
+             loader lives in ToolUp.ArtefactSigning (reuses the JWS verify
+             primitives). Core types only — order-independent. -->
+        <Compile Include="Server\ModuleBindingRevocation.fs" />
         <!-- Phase 112 — live-session compose surface: options + SSE
              subscribe endpoint (scope-isolated, rate-limited) +
              LiveSessionsCompose.withLiveSessions. After ServerApp (the

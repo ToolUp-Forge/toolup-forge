@@ -114,3 +114,97 @@ type ModuleBindingTrustConfig = {
 
 module ModuleBindingTrustConfig =
     let defaults = { Anchors = []; AllowUnbound = true }
+
+// ─── Phase 215 — revocation list + transparency log ─────────────────────
+//
+// Sign+verify (165/166) proves a stamp was minted under a trusted anchor,
+// but a *compromised* anchor key has no kill switch — every stamp it ever
+// minted keeps verifying — and there is no append-only record of what the
+// gate admitted. These two seams close that gap, both **off by default** so
+// a deployment configuring neither is byte-for-byte unchanged (GP 13):
+//
+//   * `IBindingRevocationList` — consulted by the verifier *after* a stamp
+//     verifies cryptographically and *before* it returns `Allowed`. A
+//     revoked anchor (whole-key kill) or a revoked individual stamp denies
+//     regardless of a valid signature. An empty / absent list admits
+//     exactly as today.
+//   * `IBindingTransparencyLog` — an append-only sink the verifier records
+//     every admit/deny decision into, so "what did this deployment let
+//     load, and when?" is answerable after the fact.
+//
+// Both are tier-shared contracts (BCL-pure, Fable-safe) living beside
+// `IModuleBindingVerifier`. The crypto-free file format + parser + the
+// `stampId` derivation + a file-backed transparency log live server-side in
+// `ModuleBindingRevocation` (`ToolUp.Platform.Server`); the *signed*
+// revocation-list loader (detached-JWS-verified, fail-closed) lives in
+// `ToolUp.ArtefactSigning` beside the default verifier, since it reuses the
+// Phase 40 JWS verify primitives.
+
+/// An append-only record of one binding-gate decision, written to an
+/// `IBindingTransparencyLog`. `AnchorId` / `StampId` are present only when a
+/// stamp was presented and identified (an absent-stamp admit records
+/// neither); `Reason` carries the neutral denial diagnostic on a `Rejected`
+/// outcome.
+type BindingDecision = {
+    ModuleId: string
+    /// The trust anchor that admitted the stamp (its key id), when a stamp
+    /// verified; `None` for an absent-stamp admit or a stamp no anchor
+    /// verified.
+    AnchorId: string option
+    /// A stable identifier for the presented stamp (see
+    /// `ModuleBindingRevocation.stampId`); `None` when no stamp was present.
+    StampId: string option
+    /// `true` when the module was admitted, `false` when the gate denied it.
+    Admitted: bool
+    /// Neutral denial diagnostic on a deny; `None` on an admit.
+    Reason: string option
+    /// Wall-clock at the decision.
+    TimestampUtc: System.DateTimeOffset
+}
+
+/// Opt-in revocation list the verifier consults after a stamp verifies
+/// cryptographically and before it admits the module. A `true` from
+/// `IsRevoked` denies a stamp that is otherwise valid — the kill switch a
+/// compromised anchor key needs. The default (`BindingRevocationList.none`)
+/// revokes nothing, so a deployment that configures no list admits exactly
+/// as it did pre-215.
+///
+/// `IsRevoked` is synchronous and side-effect-free — the list is a
+/// deploy-time artefact resolved into memory at compose time, so the check
+/// fits the verifier's synchronous `Verify` shape with no I/O.
+type IBindingRevocationList =
+    /// Is the stamp identified by (`anchorId`, `stampId`) revoked? A list
+    /// may revoke a whole anchor (every stamp under `anchorId`) or one
+    /// specific `stampId`.
+    abstract IsRevoked: anchorId: string * stampId: string -> bool
+
+/// Opt-in append-only transparency log the verifier records every gate
+/// decision into. The default (`BindingTransparencyLog.none`) records
+/// nothing and costs nothing; a deployment opts in by composing a real
+/// sink (e.g. the file-backed `FileBindingTransparencyLog` in
+/// `ModuleBindingRevocation`, or a custom blob-backed implementation).
+///
+/// `Record` is `Async` so a real sink can append to a file / blob without
+/// blocking on the I/O shape; the verifier awaits it at the (startup-time,
+/// not hot-path) gate so a recorded decision is durable before the module
+/// loads.
+type IBindingTransparencyLog =
+    /// Append one decision to the log.
+    abstract Record: decision: BindingDecision -> Async<unit>
+
+/// The no-op revocation list (revokes nothing) — the GP-13 default.
+module BindingRevocationList =
+    /// A revocation list that revokes nothing; the verifier admits exactly
+    /// as it did pre-215.
+    let none =
+        { new IBindingRevocationList with
+            member _.IsRevoked(_, _) = false
+        }
+
+/// The no-op transparency log (records nothing) — the GP-13 default.
+module BindingTransparencyLog =
+    /// A transparency log that records nothing and costs nothing.
+    let none =
+        { new IBindingTransparencyLog with
+            member _.Record(_) = async { return () }
+        }

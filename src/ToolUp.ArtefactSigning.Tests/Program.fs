@@ -14,6 +14,7 @@ let allTests =
         SignedExportBundleTests.tests
         ModuleBindingVerifierTests.tests
         ModuleBindingTrustResolverTests.tests
+        BindingRevocationContractTests.tests
     ]
 
 [<EntryPoint>]
