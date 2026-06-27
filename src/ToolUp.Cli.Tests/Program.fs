@@ -6,7 +6,12 @@ module ToolUp.Cli.Tests.Program
 open Expecto
 
 let allTests =
-    testList "ToolUp.Cli.Tests" [ DispatchTests.tests; DockerEmitTests.tests; StampRoundTripTests.tests ]
+    testList "ToolUp.Cli.Tests" [
+        DispatchTests.tests
+        DockerEmitTests.tests
+        StampRoundTripTests.tests
+        ModuleAddRemoveTests.tests
+    ]
 
 [<EntryPoint>]
 let main argv = runTestsWithCLIArgs [] argv allTests

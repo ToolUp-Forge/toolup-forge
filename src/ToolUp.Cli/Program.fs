@@ -11,6 +11,12 @@ open ToolUp.Cli
 
 [<EntryPoint>]
 let main argv =
-    let commands = [ VersionCommand.command; DockerEmitCommand.command; StampCommand.command ]
+    let commands = [
+        VersionCommand.command
+        DockerEmitCommand.command
+        StampCommand.command
+        ModuleCommand.addCommand
+        ModuleCommand.removeCommand
+    ]
 
     Dispatch.run commands argv

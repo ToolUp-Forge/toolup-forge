@@ -9,6 +9,7 @@
     <Compile Include="DispatchTests.fs" />
     <Compile Include="DockerEmitTests.fs" />
     <Compile Include="StampRoundTripTests.fs" />
+    <Compile Include="ModuleAddRemoveTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

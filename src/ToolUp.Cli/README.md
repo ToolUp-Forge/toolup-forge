@@ -32,6 +32,27 @@ toolup docker emit --help
 | `version` | Prints the installed CLI version. |
 | `docker emit` | Re-emits the maintained Docker host artefacts (`Dockerfile`, `.dockerignore`, `healthcheck.sh`, `compose.yml`) at a solution root, substituting the deployment's project / image / port tokens. |
 | `stamp` | Writes/refreshes a module-binding manifest (`module-bindings.json`) — the deploy-time stamper for the module-binding gate. |
+| `module add` / `module remove` | Transactionally scaffold + register a module into an app, or reverse it byte-for-byte. |
+
+#### `module add` / `module remove`
+
+```bash
+toolup module add --name Sales --app-root . \
+    --register src/App-Server/App-Server.fsproj \
+    --register src/App-Client/Client.fs
+
+toolup module remove --name Sales --app-root .
+```
+
+`module add` scaffolds the four-file module under `<app-root>/Modules/<Name>/` and **append-only**
+registers it into each `--register` file at a `toolup:modules` marker (`<!-- toolup:modules -->` in
+`.fsproj`/`.props` gets a `<ProjectReference>`; `// toolup:modules` in a `.fs` gets a
+`ClientView.register()` call), recording every edit in a per-module ledger under
+`<app-root>/.toolup/modules/`. `module remove` replays that ledger in reverse — deleting exactly the
+inserted lines and the scaffolded folder — so the tree returns **byte-for-byte** to its pre-add
+state. Registration is append-only (never edits an existing line), so concurrent adds merge cleanly.
+A `--register` target that lacks the marker is refused before anything is written (the add is
+all-or-nothing).
 
 #### `stamp`
 

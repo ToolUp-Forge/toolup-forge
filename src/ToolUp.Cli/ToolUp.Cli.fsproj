@@ -35,12 +35,36 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- Phase 168 — the six platformsdk-module template files, embedded so
+       `module add` scaffolds with no on-disk template dependency. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\templates\platformsdk-module\MyModule\SharedTypes.fs">
+      <LogicalName>module/SharedTypes.fs</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-module\MyModule\Server.fs">
+      <LogicalName>module/Server.fs</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-module\MyModule\ClientModel.fs">
+      <LogicalName>module/ClientModel.fs</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-module\MyModule\ClientView.fs">
+      <LogicalName>module/ClientView.fs</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-module\MyModule\MyModule.fsproj">
+      <LogicalName>module/MyModule.fsproj</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-module\MyModule\MyModule.Client.props">
+      <LogicalName>module/MyModule.Client.props</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Include="Cli\Dispatch.fs" />
     <Compile Include="Cli\Templating.fs" />
     <Compile Include="Cli\VersionCommand.fs" />
     <Compile Include="Cli\DockerEmitCommand.fs" />
     <Compile Include="Cli\StampCommand.fs" />
+    <Compile Include="Cli\ModuleCommand.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
