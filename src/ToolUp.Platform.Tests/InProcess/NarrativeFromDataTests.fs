@@ -244,6 +244,7 @@ let tests =
                         Error = Some "detector mismatch"
                     }
                 ]
+                Ingestion = []
             }
 
             match NarrativeFromData.fromFileSnapshot snapshot with
@@ -262,7 +263,13 @@ let tests =
         }
 
         test "fromFileSnapshot degrades to an empty-state callout when no files exist" {
-            match NarrativeFromData.fromFileSnapshot { Files = []; Processed = [] } with
+            match
+                NarrativeFromData.fromFileSnapshot {
+                    Files = []
+                    Processed = []
+                    Ingestion = []
+                }
+            with
             | [ Callout(Info, _) ] -> ()
             | other -> failtestf "expected an Info empty-state callout, got %A" other
         }

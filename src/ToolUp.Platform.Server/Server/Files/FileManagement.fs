@@ -1137,6 +1137,22 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
         | Some s -> s.ScopeId
         | None -> userId
 
+    // Phase 173 — per-file RAG ingestion status. Resolved only when RAG
+    // composed the store (a deployment with no `VectorisationHandler`s
+    // never registers it ⇒ `None` ⇒ the snapshot's `Ingestion` stays
+    // empty ⇒ the client renders no status column; GP 13). Keyed by the
+    // storage container, matching how `ProcessedEntryStore` keys the file
+    // sidecars it sits alongside.
+    let ingestionStatusStore =
+        match ctx.RequestServices.GetService(typeof<IIngestionStatusStore>) with
+        | :? IIngestionStatusStore as s -> Some s
+        | _ -> None
+
+    let statusContainer =
+        match scope with
+        | Some s -> s.Container
+        | None -> scopeId
+
     // Audit log is best-effort: emission is fire-and-forget via `Async.Start`
     // and `EventStoreAuditLog.Record` swallows write failures itself, so a
     // missing or failing `IAuditLog` never blocks file operations.
@@ -1239,9 +1255,15 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
             }
         ListFiles =
             fun () -> async {
+                let! ingestion =
+                    match ingestionStatusStore with
+                    | Some s -> s.List statusContainer
+                    | None -> async { return [] }
+
                 return {
                     Files = store.GetFiles()
                     Processed = store.GetProcessedData()
+                    Ingestion = ingestion
                 }
             }
         GetFileContent = fun fileName -> async { return store.GetFile(fileName) }

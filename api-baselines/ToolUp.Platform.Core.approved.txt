@@ -225,6 +225,7 @@ ColumnMappingTypes+MappingSuggestion.Fields : Microsoft.FSharp.Collections.FShar
 ColumnMappingTypes+MappingSuggestion.Fingerprint : System.String { get }
 ColumnMappingTypes+MappingSuggestion.TargetTypeId : System.String { get }
 DataManagementTypes (class)
+DataManagementTypes.DataManagerIngestionStatusKey : System.String (literal)
 DataManagementTypes+ColumnType (class)
 DataManagementTypes+ColumnType.BooleanColumn : DataManagementTypes+ColumnType { get }
 DataManagementTypes+ColumnType.DateColumn : DataManagementTypes+ColumnType { get }
@@ -248,6 +249,10 @@ DataManagementTypes+DataFileUpload..ctor(System.String, System.String, System.St
 DataManagementTypes+DataFileUpload.contents : System.String { get }
 DataManagementTypes+DataFileUpload.dataType : System.String { get }
 DataManagementTypes+DataFileUpload.filename : System.String { get }
+DataManagementTypes+DataManagerIngestionUpdate (class)
+DataManagementTypes+DataManagerIngestionUpdate..ctor(System.String, DataManagementTypes+FileIngestionStatus)
+DataManagementTypes+DataManagerIngestionUpdate.FileName : System.String { get }
+DataManagementTypes+DataManagerIngestionUpdate.Status : DataManagementTypes+FileIngestionStatus { get }
 DataManagementTypes+DataTypeCatalogEntry (class)
 DataManagementTypes+DataTypeCatalogEntry..ctor(DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 DataManagementTypes+DataTypeCatalogEntry.Info : DataManagementTypes+DataTypeInfo { get }
@@ -267,6 +272,22 @@ DataManagementTypes+DataTypeSchema (class)
 DataManagementTypes+DataTypeSchema..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+DataTypeColumn])
 DataManagementTypes+DataTypeSchema.Columns : Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+DataTypeColumn] { get }
 DataManagementTypes+DataTypeSchema.Description : System.String { get }
+DataManagementTypes+FileIngestionStatus (class)
+DataManagementTypes+FileIngestionStatus.Indexed : DataManagementTypes+FileIngestionStatus { get }
+DataManagementTypes+FileIngestionStatus.IsFailed : System.Boolean { get }
+DataManagementTypes+FileIngestionStatus.IsIndexed : System.Boolean { get }
+DataManagementTypes+FileIngestionStatus.IsNotIngested : System.Boolean { get }
+DataManagementTypes+FileIngestionStatus.IsPending : System.Boolean { get }
+DataManagementTypes+FileIngestionStatus.NotIngested : DataManagementTypes+FileIngestionStatus { get }
+DataManagementTypes+FileIngestionStatus.Pending : DataManagementTypes+FileIngestionStatus { get }
+DataManagementTypes+FileIngestionStatus.Tag : System.Int32 { get }
+DataManagementTypes+FileIngestionStatus+Failed (class)
+DataManagementTypes+FileIngestionStatus+Failed.reason : System.String { get }
+DataManagementTypes+FileIngestionStatus+Tags (class)
+DataManagementTypes+FileIngestionStatus+Tags.Failed : System.Int32 (literal)
+DataManagementTypes+FileIngestionStatus+Tags.Indexed : System.Int32 (literal)
+DataManagementTypes+FileIngestionStatus+Tags.NotIngested : System.Int32 (literal)
+DataManagementTypes+FileIngestionStatus+Tags.Pending : System.Int32 (literal)
 DataManagementTypes+FileUploadRequest (class)
 DataManagementTypes+FileUploadRequest..ctor(DataManagementTypes+DataFileUpload)
 DataManagementTypes+FileUploadRequest.File : DataManagementTypes+DataFileUpload { get }
@@ -282,8 +303,9 @@ ProcessedDataTypes+DataSourceOption (class)
 ProcessedDataTypes+DataSourceOption..ctor(System.String)
 ProcessedDataTypes+DataSourceOption.FileName : System.String { get }
 ProcessedDataTypes+FileListSnapshot (class)
-ProcessedDataTypes+FileListSnapshot..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry])
+ProcessedDataTypes+FileListSnapshot..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, DataManagementTypes+FileIngestionStatus]])
 ProcessedDataTypes+FileListSnapshot.Files : Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo] { get }
+ProcessedDataTypes+FileListSnapshot.Ingestion : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, DataManagementTypes+FileIngestionStatus]] { get }
 ProcessedDataTypes+FileListSnapshot.Processed : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
 ProcessedDataTypes+FileManagementApi (class)
 ProcessedDataTypes+FileManagementApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[DataManagementTypes+FileUploadRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+FileUploadResponse, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+FileListSnapshot]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[DataManagementTypes+DataFileUpload, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String]]])

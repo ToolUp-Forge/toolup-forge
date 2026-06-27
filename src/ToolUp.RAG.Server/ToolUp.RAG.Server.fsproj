@@ -43,6 +43,9 @@
         <Compile Include="Server\RAGCitationDevEndpoint.fs" />
         <Compile Include="Server\RagHealthHandler.fs" />
         <Compile Include="Server\RagConfigValidator.fs" />
+        <!-- Phase 173 — Data Manager ingestion-status observer (drives the
+             platform-tier IIngestionStatusStore from chunk-completion events). -->
+        <Compile Include="Server\DataManagerIngestionObserver.fs" />
         <Compile Include="Server\RAGCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server +

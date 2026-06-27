@@ -23,6 +23,7 @@ module MappingDataManagerUI
 
 open ToolUp.Elmish
 open Feliz
+open Fable.SimpleJson
 open Toolup.UIToolkit
 open DataManagementTypes
 open ProcessedDataTypes
@@ -95,6 +96,11 @@ type HeldFile = {
 type Model = {
     UploadedFiles: UploadedFileInfo list
     ProcessedData: ProcessedFileEntry list
+    /// Per-file RAG ingestion status (fileName → status), hydrated from
+    /// `FileListSnapshot.Ingestion` and patched live via
+    /// `DataManagerIngestionStatusKey` notifications (Phase 173). Empty
+    /// when no RAG is composed ⇒ no status column.
+    IngestionStatus: Map<string, FileIngestionStatus>
     /// Per-object conversion provenance, joined to the file list to mark
     /// which objects were produced by a conversion (+ their steps).
     Records: ConversionRecord list
@@ -117,6 +123,9 @@ type Msg =
     | LoadFiles
     | FilesLoaded of FileListSnapshot
     | RecordsLoaded of ConversionRecord list
+    /// A `DataManagerIngestionStatusKey` notification arrived — patch the
+    /// named file's ingestion badge in place (no refetch).
+    | IngestionStatusChanged of fileName: string * status: FileIngestionStatus
     | SelectFile of Browser.Types.File
     | FileChosen of fileName: string * contents: string
     | MappingsFetched of HeldFile * Conversion list
@@ -438,6 +447,7 @@ let init () =
     {
         UploadedFiles = []
         ProcessedData = []
+        IngestionStatus = Map.empty
         Records = []
         Held = None
         Wizard = None
@@ -467,10 +477,18 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             model with
                 UploadedFiles = snapshot.Files
                 ProcessedData = snapshot.Processed
+                IngestionStatus = Map.ofList snapshot.Ingestion
         },
         Cmd.none
 
     | RecordsLoaded records -> { model with Records = records }, Cmd.none
+
+    | IngestionStatusChanged(fileName, status) ->
+        {
+            model with
+                IngestionStatus = model.IngestionStatus |> Map.add fileName status
+        },
+        Cmd.none
 
     | CatalogLoaded response ->
         let allowed = response.Types |> List.map (fun e -> e.Info.Id) |> Set.ofList
@@ -1724,6 +1742,52 @@ let private processedDataSection (displays: DataTypeDisplay list) (entries: Proc
         ]
     ]
 
+/// Per-file ingestion-status badge (Phase 173) — parity with the
+/// built-in `FileManagerUI` and KB. `NotIngested` renders nothing.
+let private ingestionBadge (status: FileIngestionStatus) =
+    match status with
+    | FileIngestionStatus.Indexed ->
+        Html.span [
+            prop.className
+                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
+            prop.title "Indexed — searchable from the knowledge base."
+            prop.text "Indexed"
+        ]
+    | FileIngestionStatus.Pending ->
+        Html.span [
+            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
+            prop.title "Vectorisation in progress — not yet searchable."
+            prop.text "Indexing…"
+        ]
+    | FileIngestionStatus.Failed reason ->
+        Html.span [
+            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
+            prop.title reason
+            prop.text "Not indexed"
+        ]
+    | FileIngestionStatus.NotIngested -> Html.none
+
+/// Owns the live-update subscription for ingestion-status badges
+/// (renders nothing). Mirrors KB's `KbStatusBanner` `useEffectOnce`
+/// subscribe/dispose lifecycle.
+[<ReactComponent>]
+let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
+    React.useEffectOnce (fun () ->
+        let dispose =
+            NotificationClient.subscribe (fun envelope ->
+                match envelope.Notification with
+                | Notification.CustomNotification(key, json) when key = DataManagerIngestionStatusKey ->
+                    try
+                        let update = Json.parseAs<DataManagerIngestionUpdate> json
+                        dispatch (IngestionStatusChanged(update.FileName, update.Status))
+                    with _ ->
+                        ()
+                | _ -> ())
+
+        FsReact.createDisposable dispose)
+
+    Html.none
+
 let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
     // Show genuine uploads only — a confirmed mapping uploads its rewritten
     // CSV as a produced file (`X__Type.csv`); that belongs in the data-object
@@ -1752,6 +1816,10 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                     Html.th [ prop.className "py-2 pr-3"; prop.text "File Name" ]
                                     Html.th [ prop.className "py-2 pr-3"; prop.text "Rows" ]
                                     Html.th [ prop.className "py-2 pr-3"; prop.text "Size" ]
+                                    // Ingestion-status column header — only when
+                                    // RAG is composed (the snapshot carries status).
+                                    if not (Map.isEmpty model.IngestionStatus) then
+                                        Html.th [ prop.className "py-2 pr-3"; prop.text "Search index" ]
                                     Html.th [ prop.className "py-2 pr-3"; prop.text "" ]
                                 ]
                             ]
@@ -1811,6 +1879,15 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                             ]
                                             Html.td [ prop.className "py-2 pr-3"; prop.text (string f.RowCount) ]
                                             Html.td [ prop.className "py-2 pr-3"; prop.text (formatSize f.SizeBytes) ]
+                                            if not (Map.isEmpty model.IngestionStatus) then
+                                                Html.td [
+                                                    prop.className "py-2 pr-3"
+                                                    prop.children [
+                                                        match model.IngestionStatus |> Map.tryFind f.FileName with
+                                                        | Some status -> ingestionBadge status
+                                                        | None -> Html.none
+                                                    ]
+                                                ]
                                             Html.td [
                                                 prop.className "py-2 pr-3"
                                                 prop.children [
@@ -1945,6 +2022,11 @@ let private view (displays: DataTypeDisplay list) (model: Model) dispatch =
     let outputPanel =
         Html.div [
             prop.children [
+                // Owns the ingestion-status live-update subscription (renders
+                // nothing); mounted unconditionally so it subscribes even
+                // while the wizard is open or the list is empty.
+                IngestionStatusSubscriber dispatch
+
                 match model.Wizard with
                 | Some w -> wizardView displays model.AllowedTypeIds w dispatch
                 | None -> Layout.Panel.panel "Imported Files" [ filesView displays model dispatch ]

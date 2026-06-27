@@ -6,6 +6,7 @@ module FileManagerUI
 open ToolUp.Elmish
 open Feliz
 open Fable.Core.JsInterop
+open Fable.SimpleJson
 open Toolup.UIToolkit
 open DataManagementTypes
 open ProcessedDataTypes
@@ -19,6 +20,11 @@ type Model = {
     UploadedFiles: Map<DataTypeId, UploadedFileInfo list>
     CurrentUpload: RemoteData<UploadedFileInfo>
     ProcessedData: ProcessedFileEntry list
+    /// Per-file RAG ingestion status (fileName → status), hydrated from
+    /// `FileListSnapshot.Ingestion` and patched live via
+    /// `DataManagerIngestionStatusKey` notifications (Phase 173). Empty
+    /// when no RAG is composed ⇒ the status column is not rendered.
+    IngestionStatus: Map<string, FileIngestionStatus>
     ErrorMessage: string option
     /// True while the initial (or post-delete refresh) `ListFiles` call
     /// is in flight. Drives the configured loading indicator in the
@@ -55,6 +61,10 @@ type Msg =
     /// in `ErrorMessage`. Confirmation dialog fires before the
     /// `Start` action lands here.
     | ResetDataStore of ApiCall<unit, Result<int, string>>
+    /// A `DataManagerIngestionStatusKey` notification arrived — patch the
+    /// named file's ingestion badge in place (no refetch). Fired from the
+    /// `IngestionStatusSubscriber` component's notification handler.
+    | IngestionStatusChanged of fileName: string * status: FileIngestionStatus
     | ApiError of string
     | DismissError
 
@@ -67,6 +77,7 @@ let init () =
         UploadedFiles = Map.empty
         CurrentUpload = NotStarted
         ProcessedData = []
+        IngestionStatus = Map.empty
         ErrorMessage = None
         FilesLoading = true
     },
@@ -153,6 +164,7 @@ let update msg model =
             model with
                 UploadedFiles = grouped
                 ProcessedData = snapshot.Processed
+                IngestionStatus = Map.ofList snapshot.Ingestion
                 FilesLoading = false
         },
         Cmd.none
@@ -217,6 +229,13 @@ let update msg model =
         {
             model with
                 ErrorMessage = Some(sprintf "Reset failed: %s" msg)
+        },
+        Cmd.none
+
+    | IngestionStatusChanged(fileName, status) ->
+        {
+            model with
+                IngestionStatus = model.IngestionStatus |> Map.add fileName status
         },
         Cmd.none
 
@@ -300,6 +319,55 @@ let private processedDataSection (displays: DataTypeDisplay list) (entries: Proc
         ]
     ]
 
+/// Per-file ingestion-status badge (Phase 173) — mirrors Knowledge
+/// Base's per-document badge so a Data Manager file that isn't
+/// searchable shows *why*. `NotIngested` renders nothing (absence ⇒
+/// no badge), which is also the no-RAG case.
+let private ingestionBadge (status: FileIngestionStatus) =
+    match status with
+    | FileIngestionStatus.Indexed ->
+        Html.span [
+            prop.className
+                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
+            prop.title "Indexed — searchable from the knowledge base."
+            prop.text "Indexed"
+        ]
+    | FileIngestionStatus.Pending ->
+        Html.span [
+            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
+            prop.title "Vectorisation in progress — not yet searchable."
+            prop.text "Indexing…"
+        ]
+    | FileIngestionStatus.Failed reason ->
+        Html.span [
+            prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
+            prop.title reason
+            prop.text "Not indexed"
+        ]
+    | FileIngestionStatus.NotIngested -> Html.none
+
+/// Owns the live-update subscription for ingestion-status badges.
+/// `React.useEffectOnce` subscribes on mount and disposes on unmount
+/// (mirrors KB's `KbStatusBanner` lifecycle) so the badge flips
+/// `Indexing… → Indexed` without a manual refresh. Renders nothing.
+[<ReactComponent>]
+let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
+    React.useEffectOnce (fun () ->
+        let dispose =
+            NotificationClient.subscribe (fun envelope ->
+                match envelope.Notification with
+                | Notification.CustomNotification(key, json) when key = DataManagerIngestionStatusKey ->
+                    try
+                        let update = Json.parseAs<DataManagerIngestionUpdate> json
+                        dispatch (IngestionStatusChanged(update.FileName, update.Status))
+                    with _ ->
+                        ()
+                | _ -> ())
+
+        FsReact.createDisposable dispose)
+
+    Html.none
+
 let private view (displays: DataTypeDisplay list) model dispatch =
     let inputPanel =
         Layout.Panel.panel "Data Upload" [
@@ -350,6 +418,11 @@ let private view (displays: DataTypeDisplay list) model dispatch =
             |> Array.ofList
 
         Layout.Panel.panel "Uploaded Files" [
+            // Owns the ingestion-status live-update subscription (renders
+            // nothing); mounted unconditionally so it subscribes even when
+            // the file list is momentarily empty.
+            IngestionStatusSubscriber dispatch
+
             match allFiles with
             | [||] when model.FilesLoading -> LoadingSlot()
             | [||] -> Html.p [ prop.className "text-gray-500"; prop.text "No files uploaded yet." ]
@@ -390,6 +463,21 @@ let private view (displays: DataTypeDisplay list) model dispatch =
                                         | Some bytes -> formatSize bytes
                                         | None -> "")
                                 ]
+                                // Ingestion-status column (Phase 173) — only
+                                // when the deployment composes RAG (the snapshot
+                                // then carries status). Absent ⇒ no column, so a
+                                // non-RAG deployment renders exactly as before.
+                                if not (Map.isEmpty model.IngestionStatus) then
+                                    ColumnDef.create [
+                                        ColumnDef.headerName "Search index"
+                                        ColumnDef.cellRenderer (fun (p: ICellRendererParams<UploadedFileRow, obj>) ->
+                                            match p.data with
+                                            | Some row ->
+                                                match model.IngestionStatus |> Map.tryFind row.Info.FileName with
+                                                | Some status -> ingestionBadge status
+                                                | None -> Html.none
+                                            | None -> Html.none)
+                                    ]
                                 ColumnDef.create [
                                     ColumnDef.headerName ""
                                     ColumnDef.cellRenderer (fun (p: ICellRendererParams<UploadedFileRow, obj>) ->

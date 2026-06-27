@@ -30,6 +30,7 @@ open ToolUp.Platform.FileManagement
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.AI
 open ProcessedDataTypes
+open DataManagementTypes
 open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.AI.AIToolRegistry
@@ -151,10 +152,39 @@ let private makeVectorisationHook
     (maxChunkBytes: int option)
     (maxDocumentBytes: int option)
     (eventStoreRef: IEventStore option ref)
+    (ingestionStatusStoreRef: IIngestionStatusStore option ref)
     (logger: ILogger)
     : ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit> =
 
     let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+
+    // Phase 173 — write the per-file ingestion status alongside the
+    // `DocumentVectorisation{Skipped,Rejected,Dropped}` events these arms
+    // already emit, so the Data Manager badge surfaces *why* a file
+    // isn't searchable. Best-effort (mirrors `writeEvent`): a status-store
+    // outage degrades to a missing badge, never an escaping exception on
+    // the fire-and-forget post-save path. No store composed ⇒ no-op.
+    let setStatus (scopeId: string) (documentId: string) (status: FileIngestionStatus) = async {
+        match ingestionStatusStoreRef.Value with
+        | None -> ()
+        | Some s ->
+            try
+                do! s.Set(scopeId, documentId, status)
+            with ex ->
+                logger.Warn(sprintf "[RAGCompose] ingestion-status write failed for %s: %s" documentId ex.Message)
+    }
+
+    let setPending (scopeId: string) (documentId: string) (totalChunks: int) = async {
+        match ingestionStatusStoreRef.Value with
+        | None -> ()
+        | Some s ->
+            try
+                do! s.SetPending(scopeId, documentId, totalChunks)
+            with ex ->
+                logger.Warn(
+                    sprintf "[RAGCompose] ingestion-status pending write failed for %s: %s" documentId ex.Message
+                )
+    }
 
     let writeEvent (scopeId: string) (eventName: string) (payload: obj) = async {
         match eventStoreRef.Value with
@@ -198,6 +228,12 @@ let private makeVectorisationHook
                     Reason = "no VectorisationHandler registered for this DataType"
                     Container = scope.Container
                 |}
+
+            do!
+                setStatus
+                    scope.Container
+                    entry.FileName
+                    (FileIngestionStatus.Failed(sprintf "no handler for type %s" entry.DataType))
         | Some handler ->
             let chunks = handler.Vectorise processedData
 
@@ -302,6 +338,8 @@ let private makeVectorisationHook
                             MaxDocumentBytes = maxDocumentBytes
                             Reason = reason
                         |}
+
+                    do! setStatus scope.Container entry.FileName (FileIngestionStatus.Failed reason)
                 else
 
                     let job: DocumentIngestionJob = {
@@ -345,6 +383,12 @@ let private makeVectorisationHook
                     let! accepted = tryEnqueue enqueueRetryDelaysMs
                     telemetry.RecordEnqueue(queue.Count, queue.Capacity, accepted)
 
+                    if accepted then
+                        // Mark the file `Pending` with its chunk total so the
+                        // ingestion observer can flip it to `Indexed` once the
+                        // last chunk lands (Phase 173).
+                        do! setPending scope.Container entry.FileName (List.length chunkPairs)
+
                     if not accepted then
                         // Retries exhausted — permanent data loss for this
                         // document's searchability. Log at Error so it trips
@@ -370,6 +414,12 @@ let private makeVectorisationHook
                                 Attempts = attempts
                                 Reason = "ingestion queue full after bounded retry"
                             |}
+
+                        do!
+                            setStatus
+                                scope.Container
+                                entry.FileName
+                                (FileIngestionStatus.Failed "ingestion queue full after bounded retry")
     }
 
 // ─── Null blob storage for when no storage is configured ─────────
@@ -610,6 +660,15 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // service config runs.
     let eventStoreRef: IEventStore option ref = ref None
 
+    // Phase 173 — the per-file ingestion-status store. Built in the
+    // service-config callback below (where the `IDataObjectStore` probe
+    // is available) and captured here by deferred ref, same pattern as
+    // `eventStoreRef`. The post-save hook writes `Pending` / `Failed`
+    // through it; the ingestion observer writes `Indexed`; `FileManagement`
+    // reads it to badge the file list. `None` until the callback runs ⇒
+    // the hook's status writes are no-ops if a file somehow ingests first.
+    let ingestionStatusStoreRef: IIngestionStatusStore option ref = ref None
+
     // Register the post-save vectorisation hook so `SessionFileStore.AddFile`
     // enqueues chunks after every successful file upload.
     if not b.VectorisationHandlers.IsEmpty then
@@ -622,6 +681,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 app.MaxChunkBytes
                 app.MaxDocumentBytes
                 eventStoreRef
+                ingestionStatusStoreRef
                 ragLogger
         ]
 
@@ -806,6 +866,33 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // and oversize-doc rejections emit `RAG.*` audit events.
         eventStoreRef.Value <- Some eventStore
 
+        // Phase 173 — per-file ingestion-status store + Data Manager
+        // observer. Durable over `IDataObjectStore` when present (status
+        // survives a restart), in-memory otherwise (ephemeral / test
+        // scopes). ONE instance is shared three ways: the post-save hook
+        // (writes `Pending` / `Failed`) and the observer (writes `Indexed`)
+        // capture it directly; `FileManagement` resolves the same singleton
+        // (registered below) to badge the file list. Only built here, when
+        // RAG is composed — a no-RAG deployment never registers it, so the
+        // file list shows no status column (GP 13).
+        let ingestionStatusStore: IIngestionStatusStore =
+            match probe.GetService(typeof<IDataObjectStore>) with
+            | :? IDataObjectStore as dos -> IngestionStatusStore.create dos (Some ragLogger)
+            | _ -> IngestionStatusStore.createInMemory ()
+
+        ingestionStatusStoreRef.Value <- Some ingestionStatusStore
+
+        // Live-badge notifications are published only when a channel is
+        // composed; `None` ⇒ the badge still refreshes on the next
+        // `ListFiles` (GP 13).
+        let ingestionNotificationChannel =
+            match probe.GetService(typeof<INotificationChannel>) with
+            | :? INotificationChannel as ch -> Some ch
+            | _ -> None
+
+        let dataManagerIngestionObserver =
+            ToolUp.RAG.DataManagerIngestionObserver.create ingestionStatusStore ingestionNotificationChannel ragLogger
+
         // Pick the registered tracer if any; default to the event-store tracer
         // so retrieval traces are persisted out-of-the-box.
         let retrievalTracer: IRetrievalTracer =
@@ -861,13 +948,19 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             | :? ITeamQuotaPolicy as q -> q
             | _ -> NoOpTeamQuotaPolicy() :> ITeamQuotaPolicy
 
+        // Append the Data Manager ingestion-status observer (Phase 173) to
+        // whatever observers the app registered (e.g. KB's). Append-only —
+        // KB's observer is untouched; each fires independently and scopes
+        // itself by the documents it tracks.
+        let ingestionObservers = app.IngestionObservers @ [ dataManagerIngestionObserver ]
+
         let ingestionSvc =
             create
                 queue
                 pipeline
                 cachedEmbedder
                 eventStore
-                app.IngestionObservers
+                ingestionObservers
                 app.IngestionConcurrency
                 ragLogger
                 telemetry
@@ -921,6 +1014,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 .AddSingleton<IOcrProvider>(ocrProvider)
                 .AddSingleton<ITableExtractor>(tableExtractor)
                 .AddSingleton<IRagTelemetry>(telemetry)
+                // Phase 173 — register the SAME store instance the hook +
+                // observer write through, so `FileManagement.ListFiles`
+                // resolves it and joins status onto the file-list read.
+                .AddSingleton<IIngestionStatusStore>(ingestionStatusStore)
 
         match app.Reranker with
         | Some r -> s.AddSingleton<IReranker>(r)

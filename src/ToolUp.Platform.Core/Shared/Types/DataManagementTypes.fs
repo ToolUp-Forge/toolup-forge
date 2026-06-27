@@ -91,3 +91,49 @@ type DataTypeCatalogEntry = {
 /// producer-module names. Surfaces in admin UIs and AI-tool
 /// discovery.
 type DataCatalogResponse = { Types: DataTypeCatalogEntry list }
+
+// ─── Ingestion-status surfacing (Phase 173) ──────────────────────
+
+/// Per-file RAG ingestion status surfaced on the Data Manager file
+/// lists (the built-in `FileManagerUI` and the mapping-aware
+/// `MappingDataManagerUI`). Mirrors Knowledge Base's per-document
+/// status badge so a Data Manager upload that the post-save
+/// vectorisation hook skipped / rejected / dropped shows *why* it
+/// isn't searchable, instead of looking indexed.
+///
+/// Identity-by-value, Fable-safe (no framework types) — round-trips
+/// over the wire via `FableConverters` (server) / Fable.SimpleJson
+/// (client) exactly like KB's `IngestionStatus` DU. A deployment that
+/// composes no `VectorisationHandler`s never writes any of these, so
+/// the file list renders with no status column (GP 13).
+type FileIngestionStatus =
+    /// No ingestion was attempted for this file — either no RAG is
+    /// composed, or the file predates the status store. Rendered as
+    /// "no badge" by the client (absence ⇒ unchanged layout).
+    | NotIngested
+    /// The document's chunks are enqueued / in flight; not yet fully
+    /// searchable.
+    | Pending
+    /// Every chunk of the document has been indexed — fully searchable.
+    | Indexed
+    /// Ingestion will not / did not complete; `reason` carries the
+    /// human-facing cause (e.g. "no handler for type X", "document too
+    /// large", "ingestion queue full", or an `OnChunkFailed` error).
+    | Failed of reason: string
+
+/// Wire-format key for the per-file Data-Manager ingestion-status
+/// `CustomNotification`, mirroring KB's `"KnowledgeBase.IngestionStatus"`.
+/// Published by the SDK on each terminal transition (`Indexed` /
+/// `Failed`) so the Data Manager badge updates live without a manual
+/// refresh; the client subscribes to it via `NotificationClient`.
+[<Literal>]
+let DataManagerIngestionStatusKey = "DataManager.IngestionStatus"
+
+/// Payload carried by the `DataManagerIngestionStatusKey`
+/// `CustomNotification` — the file whose status changed and its new
+/// terminal status. Serialised to JSON on the server and parsed on the
+/// client to patch that file's badge in place.
+type DataManagerIngestionUpdate = {
+    FileName: string
+    Status: FileIngestionStatus
+}

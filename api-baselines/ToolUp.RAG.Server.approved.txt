@@ -80,6 +80,8 @@ ToolUp.RAG.CitationNormaliserImpl+CitationNormaliserImpl (class)
 ToolUp.RAG.CitationNormaliserImpl+CitationNormaliserImpl..ctor(ToolUp.RAG.CitationNormaliser+RagCitationPolicy, ToolUp.AI.ICitationCounters)
 ToolUp.RAG.CitationNormaliserImpl+RollingCitationCounters (class)
 ToolUp.RAG.CitationNormaliserImpl+RollingCitationCounters..ctor()
+ToolUp.RAG.DataManagerIngestionObserver (class)
+ToolUp.RAG.DataManagerIngestionObserver.create(ToolUp.Platform.IIngestionStatusStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.RAG.IngestionTypes+IIngestionStatusObserver
 ToolUp.RAG.InMemoryBM25Index (class)
 ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index (class)
 ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])

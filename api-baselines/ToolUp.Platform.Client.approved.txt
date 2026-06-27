@@ -276,10 +276,11 @@ FileManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.D
 FileManagerUI.init() : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 FileManagerUI.update(FileManagerUI+Msg, FileManagerUI+Model) : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 FileManagerUI+Model (class)
-FileManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]], ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+FileManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]], ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
 FileManagerUI+Model.CurrentUpload : ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo] { get }
 FileManagerUI+Model.ErrorMessage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 FileManagerUI+Model.FilesLoading : System.Boolean { get }
+FileManagerUI+Model.IngestionStatus : Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus] { get }
 FileManagerUI+Model.ProcessedData : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
 FileManagerUI+Model.UploadedFiles : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]] { get }
 FileManagerUI+Msg (class)
@@ -287,6 +288,7 @@ FileManagerUI+Msg.DismissError : FileManagerUI+Msg { get }
 FileManagerUI+Msg.IsApiError : System.Boolean { get }
 FileManagerUI+Msg.IsDeleteFile : System.Boolean { get }
 FileManagerUI+Msg.IsDismissError : System.Boolean { get }
+FileManagerUI+Msg.IsIngestionStatusChanged : System.Boolean { get }
 FileManagerUI+Msg.IsLoadFiles : System.Boolean { get }
 FileManagerUI+Msg.IsReprocessFile : System.Boolean { get }
 FileManagerUI+Msg.IsResetDataStore : System.Boolean { get }
@@ -297,6 +299,9 @@ FileManagerUI+Msg+ApiError (class)
 FileManagerUI+Msg+ApiError.Item : System.String { get }
 FileManagerUI+Msg+DeleteFile (class)
 FileManagerUI+Msg+DeleteFile.Item : ToolUp.Platform.ApiCall`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]] { get }
+FileManagerUI+Msg+IngestionStatusChanged (class)
+FileManagerUI+Msg+IngestionStatusChanged.fileName : System.String { get }
+FileManagerUI+Msg+IngestionStatusChanged.status : DataManagementTypes+FileIngestionStatus { get }
 FileManagerUI+Msg+LoadFiles (class)
 FileManagerUI+Msg+LoadFiles.Item : ToolUp.Platform.ApiCall`2[Microsoft.FSharp.Core.Unit, ProcessedDataTypes+FileListSnapshot] { get }
 FileManagerUI+Msg+ReprocessFile (class)
@@ -309,6 +314,7 @@ FileManagerUI+Msg+Tags (class)
 FileManagerUI+Msg+Tags.ApiError : System.Int32 (literal)
 FileManagerUI+Msg+Tags.DeleteFile : System.Int32 (literal)
 FileManagerUI+Msg+Tags.DismissError : System.Int32 (literal)
+FileManagerUI+Msg+Tags.IngestionStatusChanged : System.Int32 (literal)
 FileManagerUI+Msg+Tags.LoadFiles : System.Int32 (literal)
 FileManagerUI+Msg+Tags.ReprocessFile : System.Int32 (literal)
 FileManagerUI+Msg+Tags.ResetDataStore : System.Int32 (literal)
@@ -465,11 +471,12 @@ MappingDataManagerUI+HeldFile.Headers : Microsoft.FSharp.Collections.FSharpList`
 MappingDataManagerUI+HeldFile.RawContents : System.String { get }
 MappingDataManagerUI+HeldFile.Samples : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 MappingDataManagerUI+Model (class)
-MappingDataManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
+MappingDataManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile], Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+Wizard], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
 MappingDataManagerUI+Model.AllowedTypeIds : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
 MappingDataManagerUI+Model.Busy : System.Boolean { get }
 MappingDataManagerUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 MappingDataManagerUI+Model.Held : Microsoft.FSharp.Core.FSharpOption`1[MappingDataManagerUI+HeldFile] { get }
+MappingDataManagerUI+Model.IngestionStatus : Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus] { get }
 MappingDataManagerUI+Model.ProcessedData : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
 MappingDataManagerUI+Model.Records : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord] { get }
 MappingDataManagerUI+Model.UploadedFiles : Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo] { get }
@@ -497,6 +504,7 @@ MappingDataManagerUI+Msg.IsFileChosen : System.Boolean { get }
 MappingDataManagerUI+Msg.IsFileContentLoaded : System.Boolean { get }
 MappingDataManagerUI+Msg.IsFilesLoaded : System.Boolean { get }
 MappingDataManagerUI+Msg.IsImportFinished : System.Boolean { get }
+MappingDataManagerUI+Msg.IsIngestionStatusChanged : System.Boolean { get }
 MappingDataManagerUI+Msg.IsLoadFiles : System.Boolean { get }
 MappingDataManagerUI+Msg.IsMappingsFetched : System.Boolean { get }
 MappingDataManagerUI+Msg.IsNativeUploaded : System.Boolean { get }
@@ -535,6 +543,9 @@ MappingDataManagerUI+Msg+FilesLoaded (class)
 MappingDataManagerUI+Msg+FilesLoaded.Item : ProcessedDataTypes+FileListSnapshot { get }
 MappingDataManagerUI+Msg+ImportFinished (class)
 MappingDataManagerUI+Msg+ImportFinished.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String] { get }
+MappingDataManagerUI+Msg+IngestionStatusChanged (class)
+MappingDataManagerUI+Msg+IngestionStatusChanged.fileName : System.String { get }
+MappingDataManagerUI+Msg+IngestionStatusChanged.status : DataManagementTypes+FileIngestionStatus { get }
 MappingDataManagerUI+Msg+MappingsFetched (class)
 MappingDataManagerUI+Msg+MappingsFetched.Item1 : MappingDataManagerUI+HeldFile { get }
 MappingDataManagerUI+Msg+MappingsFetched.Item2 : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+Conversion] { get }
@@ -578,6 +589,7 @@ MappingDataManagerUI+Msg+Tags.FileChosen : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.FileContentLoaded : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.FilesLoaded : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.ImportFinished : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.IngestionStatusChanged : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.LoadFiles : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.MappingsFetched : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.NativeUploaded : System.Int32 (literal)

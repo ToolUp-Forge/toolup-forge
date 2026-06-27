@@ -147,6 +147,11 @@
         <Compile Include="Server\DataObjectStore.fs" />
         <Compile Include="Server\IColumnMappingStore.fs" />
         <Compile Include="Server\ColumnMappingStore.fs" />
+        <!-- Phase 173 — per-file RAG ingestion-status store (seam +
+             IDataObjectStore-backed + in-memory default). Platform-tier so
+             FileManagement can join status onto the file-list read; RAG owns
+             the writes. -->
+        <Compile Include="Server\IngestionStatusStore.fs" />
         <!-- Phase 218 — mapping dry-run validation seam + default BCL-only
              validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
         <Compile Include="Server\IMappingDryRunValidator.fs" />

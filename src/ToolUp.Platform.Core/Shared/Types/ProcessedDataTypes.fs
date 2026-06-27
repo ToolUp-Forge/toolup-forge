@@ -60,9 +60,16 @@ type FileUploadResult = Result<FileUploadResponse, string>
 /// always present in `Files`, but `Processed` may carry an `Error` and
 /// no `Info` if the original `DataType.Process` call failed or its
 /// `DataType` is no longer registered.
+/// `Ingestion` (Phase 173) joins per-file RAG ingestion status
+/// (fileName → status) onto the same round trip so the Data Manager
+/// renders a status badge without a second read. Empty (`[]`) when no
+/// RAG / ingestion-status store is composed — the client then renders
+/// no status column, so a non-RAG deployment is byte-for-byte
+/// unchanged (GP 13).
 type FileListSnapshot = {
     Files: UploadedFileInfo list
     Processed: ProcessedFileEntry list
+    Ingestion: (string * FileIngestionStatus) list
 }
 
 /// File Management API contract. Data-path methods are dispatcher-
