@@ -93,6 +93,13 @@
         <Compile Include="Server\IActivitySink.fs" />
         <Compile Include="Server\Logger.fs" />
         <Compile Include="Server\LoggerScope.fs" />
+        <!-- Phase 214 — central config-key registry (env-var name / type /
+             default / description / secret flag). Compiled early so the
+             `*FromEnv` readers reference `ConfigKeys.Names.*` instead of
+             inlining env-var string literals. Source of truth for the
+             generated docs/reference/config-reference.md + the print-config
+             startup mode. -->
+        <Compile Include="Server\ConfigKeyDescriptor.fs" />
         <Compile Include="Server\Infra\ConsoleLogger.fs" />
         <Compile Include="Server\Infra\JsonConsoleLogger.fs" />
         <Compile Include="Server\Api.fs" />

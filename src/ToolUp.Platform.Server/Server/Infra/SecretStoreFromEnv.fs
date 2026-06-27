@@ -75,7 +75,7 @@ let fromEnv (logger: ILogger) (cloudResolvers: CloudSecretStoreResolver list) : 
 
             defaultStore ()
 
-    let chosen = envVar "TOOLUP_SECRET_STORE" |> Option.map _.ToLowerInvariant()
+    let chosen = envVar ConfigKeys.Names.secretStore |> Option.map _.ToLowerInvariant()
 
     match chosen with
     | None

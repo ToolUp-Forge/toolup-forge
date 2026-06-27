@@ -103,6 +103,7 @@ let allTests =
         WarningConfigValidatorTests.tests
         ErrorConfigValidatorTests.tests
         ConfigValidatorAggregatorTests.tests
+        ConfigReferenceTests.tests
         HealthStateTrackerTests.tests
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests

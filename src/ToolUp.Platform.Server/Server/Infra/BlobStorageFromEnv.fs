@@ -61,7 +61,7 @@ let fromEnv (logger: ILogger) (cloudResolvers: CloudBlobStorageResolver list) : 
 
             defaultLocal ()
 
-    let chosen = envVar "TOOLUP_BLOB_STORAGE" |> Option.map _.ToLowerInvariant()
+    let chosen = envVar ConfigKeys.Names.blobStorage |> Option.map _.ToLowerInvariant()
 
     match chosen with
     | None

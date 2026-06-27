@@ -57,7 +57,7 @@ let private unrecognisedModeMessage (other: string) =
 /// `BearerHeader`-only behaviour — deployments that don't use SSE pay
 /// nothing for the fallback (GP 11 + GP 13).
 let private tokenLocationFromEnv () : TokenLocation =
-    match envVar "TOOLUP_SSE_AUTH" |> Option.map _.ToLowerInvariant() with
+    match envVar ConfigKeys.Names.sseAuth |> Option.map _.ToLowerInvariant() with
     | Some "cookie"
     | Some "cookies"
     | Some "cookieonly" ->
@@ -122,14 +122,14 @@ let private buildAuthConfig (issuer: string) (audience: string option) : AuthCon
 /// metrics. Use `fromEnvMetered` to thread an `IMetricsSink` resolved
 /// from the compose-time service collection into the OIDC builder.
 let fromEnv (logger: ILogger) (oidcBuilder: OidcAuthBuilder) : IAuthProvider =
-    match envVar "TOOLUP_AUTH_MODE" |> Option.map _.ToLowerInvariant() with
+    match envVar ConfigKeys.Names.authMode |> Option.map _.ToLowerInvariant() with
     | Some "oidc" ->
-        match envVar "TOOLUP_OIDC_ISSUER" with
+        match envVar ConfigKeys.Names.oidcIssuer with
         | None ->
             logger.Error(missingIssuerMessage, None)
             invalidOp missingIssuerMessage
         | Some issuer ->
-            let audience = envVar "TOOLUP_OIDC_AUDIENCE"
+            let audience = envVar ConfigKeys.Names.oidcAudience
             let authConfig = buildAuthConfig issuer audience
             let audienceLabel = audience |> Option.defaultValue "(any)"
             logger.Info $"Auth provider: OIDC (issuer={issuer}, audience={audienceLabel})"
@@ -156,14 +156,14 @@ let fromEnvMetered
     (metrics: IMetricsSink option)
     (oidcBuilder: OidcAuthBuilderMetered)
     : IAuthProvider =
-    match envVar "TOOLUP_AUTH_MODE" |> Option.map _.ToLowerInvariant() with
+    match envVar ConfigKeys.Names.authMode |> Option.map _.ToLowerInvariant() with
     | Some "oidc" ->
-        match envVar "TOOLUP_OIDC_ISSUER" with
+        match envVar ConfigKeys.Names.oidcIssuer with
         | None ->
             logger.Error(missingIssuerMessage, None)
             invalidOp missingIssuerMessage
         | Some issuer ->
-            let audience = envVar "TOOLUP_OIDC_AUDIENCE"
+            let audience = envVar ConfigKeys.Names.oidcAudience
             let authConfig = buildAuthConfig issuer audience
             let audienceLabel = audience |> Option.defaultValue "(any)"
             logger.Info $"Auth provider: OIDC (issuer={issuer}, audience={audienceLabel})"
