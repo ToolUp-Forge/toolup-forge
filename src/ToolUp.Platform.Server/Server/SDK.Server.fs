@@ -541,6 +541,12 @@ let compose
     // registration is prepended automatically.
     registerEntityStore services config entityRegistrations
 
+    // Phase 161 — time-series substrate. Conditional on
+    // `ServerConfig.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips
+    // registration entirely; `CustomTimeSeriesStore` leaves the consumer's
+    // companion singleton in place.
+    registerTimeSeriesStore services config
+
     // Column-mapping substrate (mapping-aware Data Manager). Conditional
     // on `ServerConfig.ColumnMapping`; `NoColumnMapping` (default) skips
     // registration entirely.

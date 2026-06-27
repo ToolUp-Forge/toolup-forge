@@ -154,6 +154,20 @@ let registerEntityStore
         |> ignore
     | NoEntityStore -> ()
 
+/// Phase 161 — register the time-series store when
+/// `ServerConfig.TimeSeriesStore` selects a backend. `InMemoryTimeSeries`
+/// registers the dev/test in-memory default; `CustomTimeSeriesStore`
+/// registers nothing, leaving the consumer's own `ITimeSeriesStore`
+/// singleton in DI; `NoTimeSeriesStore` (the default) registers nothing —
+/// the substrate costs zero runtime when unused (GP 13).
+let registerTimeSeriesStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.TimeSeriesStore with
+    | NoTimeSeriesStore -> ()
+    | CustomTimeSeriesStore -> () // consumer composed its own ITimeSeriesStore singleton
+    | InMemoryTimeSeries ->
+        services.AddSingleton<ITimeSeriesStore>(InMemoryTimeSeriesStore.create ())
+        |> ignore
+
 /// Register the `IColumnMappingStore` substrate when
 /// `ServerConfig.ColumnMapping = EnabledColumnMapping`. The default
 /// store (`ColumnMappingStore.create`) wraps the resolved

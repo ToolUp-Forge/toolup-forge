@@ -128,6 +128,8 @@
         <!-- Phase 11.G — `AuthProvider.fromEnv` (env-var-driven dispatch). -->
         <Compile Include="Auth\AuthProviderFromEnv.fs" />
         <Compile Include="Server\Infra\LocalFileStorage.fs" />
+        <!-- Phase 161 — dev/test in-memory ITimeSeriesStore default. -->
+        <Compile Include="Server\Infra\InMemoryTimeSeriesStore.fs" />
         <!-- Phase 11.G — `BlobStorage.fromEnv` (env-var-driven dispatch).
              Module name is `BlobStorageEnv` because `BlobStorage` is
              reserved in Core for the interface module. -->

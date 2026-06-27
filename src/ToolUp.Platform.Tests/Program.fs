@@ -83,6 +83,8 @@ let allTests =
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests
         SignedExportTests.tests
+        TimeSeriesStoreTests.tests
+        TimescaleTimeSeriesStoreTests.tests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests
         TransactionalDispatcherTests.tests

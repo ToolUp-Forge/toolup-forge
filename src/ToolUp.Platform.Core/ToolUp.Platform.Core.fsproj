@@ -85,6 +85,7 @@
         <Compile Include="Shared\Types\DataSubjectTypes.fs" />
         <Compile Include="Shared\Types\DataSubjectApiTypes.fs" />
         <Compile Include="Shared\Interfaces\IBlobStorage.fs" />
+        <Compile Include="Shared\Interfaces\ITimeSeriesStore.fs" />
         <Compile Include="Shared\Interfaces\ISecretStore.fs" />
         <!-- Phase 11.C.5 Tier 3 — unified RetryPolicy (replaces the
              AI-side `{ MaxRetries; BackoffMs; TimeoutMs }` and

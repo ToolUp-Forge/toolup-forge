@@ -368,6 +368,23 @@ type EntityStoreMode =
     /// via `ServerApp.withEntity<'T> registration`.
     | EnabledEntityStore
 
+/// Phase 161 — selects the time-series storage backend (`ITimeSeriesStore`)
+/// for high-frequency numeric/analytical series. Default:
+/// `NoTimeSeriesStore` — no `ITimeSeriesStore` registered, zero cost.
+type TimeSeriesStoreMode =
+    /// No time-series substrate registered (default). A deployment with no
+    /// high-frequency series pays nothing (GP 13).
+    | NoTimeSeriesStore
+    /// Register the dev/test in-memory `ITimeSeriesStore` — unbounded
+    /// in-memory retention, no durability. For local dev / single-instance
+    /// demos only.
+    | InMemoryTimeSeries
+    /// A companion-provided `ITimeSeriesStore` (e.g.
+    /// `ToolUp.TimeSeriesStores.Timescale`) is registered in DI by the
+    /// deployment; `compose` registers no default and leaves the consumer's
+    /// singleton in place.
+    | CustomTimeSeriesStore
+
 /// Selects whether `compose` registers the usage-metering substrate.
 /// Default: `NoUsageMetering` — `IUsageLog` resolves to
 /// `NoOpUsageLog` so emission sites (`SessionFileStore`, the AI
@@ -1853,6 +1870,12 @@ type ServerConfig = {
     /// with `EnabledEntityStore` to activate the substrate; entity
     /// types register via `ServerApp.withEntity<'T> registration`.
     EntityStore: EntityStoreMode
+    /// Phase 161 — time-series storage selection. Default:
+    /// `NoTimeSeriesStore` — no `ITimeSeriesStore` registered, zero cost.
+    /// `InMemoryTimeSeries` registers the dev/test in-memory default;
+    /// `CustomTimeSeriesStore` leaves a companion-registered singleton
+    /// (e.g. `ToolUp.TimeSeriesStores.Timescale`) in place.
+    TimeSeriesStore: TimeSeriesStoreMode
     /// Usage-metering selection. Default: `NoUsageMetering`
     /// — `IUsageLog` and `ITeamQuotaPolicy` resolve to no-op defaults
     /// so emission sites are free at runtime. Enable with
@@ -2762,6 +2785,7 @@ module ServerConfig =
         ColumnMapping = NoColumnMapping
         OAuthRefresher = NoOAuthRefresher
         EntityStore = NoEntityStore
+        TimeSeriesStore = NoTimeSeriesStore
         UsageMetering = NoUsageMetering
         MetricsEndpoint = NoMetricsEndpoint
         MetricsSink = MetricsSinkConfig.defaults

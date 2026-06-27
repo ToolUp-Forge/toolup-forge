@@ -137,6 +137,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "HashiCorpVault", "src\Secre
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Secrets.GcpSecretManager", "src\Secrets\GcpSecretManager\ToolUp.Secrets.GcpSecretManager.fsproj", "{8B2F0C71-9D5E-4A2C-B6F0-2B3A4C5D6E7F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TimeSeriesStores", "TimeSeriesStores", "{A1611000-0000-4161-9000-000000000161}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TimescaleTimeSeriesStore", "src\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj", "{A1612000-0000-4161-9000-000000000162}"
+EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Reporting.Core", "src\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj", "{F094186D-7B02-43DF-B5E1-7BA6566ACDC6}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Reporting.Server", "src\ToolUp.Reporting.Server\ToolUp.Reporting.Server.fsproj", "{E9A08620-B6FC-468B-B732-B7BB2DA2645A}"
@@ -1843,11 +1847,24 @@ Global
 		{8E7E2776-5CEB-44EC-BD75-0C9E219747A7}.Release|x64.Build.0 = Release|Any CPU
 		{8E7E2776-5CEB-44EC-BD75-0C9E219747A7}.Release|x86.ActiveCfg = Release|Any CPU
 		{8E7E2776-5CEB-44EC-BD75-0C9E219747A7}.Release|x86.Build.0 = Release|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Debug|x64.Build.0 = Debug|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Debug|x86.Build.0 = Debug|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Release|x64.ActiveCfg = Release|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Release|x64.Build.0 = Release|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Release|x86.ActiveCfg = Release|Any CPU
+		{A1612000-0000-4161-9000-000000000162}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{A1612000-0000-4161-9000-000000000162} = {A1611000-0000-4161-9000-000000000161}
 		{0BB381DE-2C5B-40BA-9AEE-B7BB81B02D9C} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{4C0DF0B0-84D2-446D-A715-98493F28B477} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{02786FC7-0BEC-4C7E-AFF5-CB94F9213069} = {4C0DF0B0-84D2-446D-A715-98493F28B477}
