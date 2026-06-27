@@ -385,6 +385,18 @@ type TimeSeriesStoreMode =
     /// singleton in place.
     | CustomTimeSeriesStore
 
+/// Phase 163 — selects the end-user product-telemetry sink (`ITelemetrySink`).
+/// Default: `NoTelemetrySink` — the `NoOpTelemetrySink` (a true no-op) is
+/// registered, so `Track` emission sites are free at runtime (GP 13).
+type TelemetrySinkMode =
+    /// Register the `NoOpTelemetrySink` (default) — a true no-op; analytics
+    /// events go nowhere and cost nothing.
+    | NoTelemetrySink
+    /// A companion-provided `ITelemetrySink` (e.g.
+    /// `ToolUp.TelemetrySinks.Ga4`) is registered in DI by the deployment;
+    /// `compose` registers no default and leaves the consumer's sink in place.
+    | CustomTelemetrySink
+
 /// Selects whether `compose` registers the usage-metering substrate.
 /// Default: `NoUsageMetering` — `IUsageLog` resolves to
 /// `NoOpUsageLog` so emission sites (`SessionFileStore`, the AI
@@ -1876,6 +1888,11 @@ type ServerConfig = {
     /// `CustomTimeSeriesStore` leaves a companion-registered singleton
     /// (e.g. `ToolUp.TimeSeriesStores.Timescale`) in place.
     TimeSeriesStore: TimeSeriesStoreMode
+    /// Phase 163 — end-user product-telemetry sink selection. Default:
+    /// `NoTelemetrySink` — the `NoOpTelemetrySink` is registered (a true
+    /// no-op). `CustomTelemetrySink` leaves a companion-registered sink
+    /// (e.g. `ToolUp.TelemetrySinks.Ga4`) in place.
+    TelemetrySink: TelemetrySinkMode
     /// Usage-metering selection. Default: `NoUsageMetering`
     /// — `IUsageLog` and `ITeamQuotaPolicy` resolve to no-op defaults
     /// so emission sites are free at runtime. Enable with
@@ -2786,6 +2803,7 @@ module ServerConfig =
         OAuthRefresher = NoOAuthRefresher
         EntityStore = NoEntityStore
         TimeSeriesStore = NoTimeSeriesStore
+        TelemetrySink = NoTelemetrySink
         UsageMetering = NoUsageMetering
         MetricsEndpoint = NoMetricsEndpoint
         MetricsSink = MetricsSinkConfig.defaults

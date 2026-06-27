@@ -168,6 +168,16 @@ let registerTimeSeriesStore (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ITimeSeriesStore>(InMemoryTimeSeriesStore.create ())
         |> ignore
 
+/// Phase 163 — register the end-user telemetry sink. `NoTelemetrySink`
+/// (the default) registers the `NoOpTelemetrySink` (a true no-op), so
+/// `ITelemetrySink` always resolves and emission sites are free at runtime
+/// (GP 13); `CustomTelemetrySink` registers nothing, leaving the consumer's
+/// companion sink (e.g. `ToolUp.TelemetrySinks.Ga4`) in DI.
+let registerTelemetrySink (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.TelemetrySink with
+    | CustomTelemetrySink -> () // consumer composed its own ITelemetrySink singleton
+    | NoTelemetrySink -> services.AddSingleton<ITelemetrySink>(NoOpTelemetrySink()) |> ignore
+
 /// Register the `IColumnMappingStore` substrate when
 /// `ServerConfig.ColumnMapping = EnabledColumnMapping`. The default
 /// store (`ColumnMappingStore.create`) wraps the resolved

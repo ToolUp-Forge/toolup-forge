@@ -85,6 +85,7 @@ let allTests =
         SignedExportTests.tests
         TimeSeriesStoreTests.tests
         TimescaleTimeSeriesStoreTests.tests
+        TelemetrySinkTests.tests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests
         TransactionalDispatcherTests.tests

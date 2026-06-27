@@ -547,6 +547,11 @@ let compose
     // companion singleton in place.
     registerTimeSeriesStore services config
 
+    // Phase 163 — end-user telemetry sink. NoTelemetrySink (default)
+    // registers the NoOpTelemetrySink; CustomTelemetrySink leaves the
+    // consumer's companion sink in place.
+    registerTelemetrySink services config
+
     // Column-mapping substrate (mapping-aware Data Manager). Conditional
     // on `ServerConfig.ColumnMapping`; `NoColumnMapping` (default) skips
     // registration entirely.

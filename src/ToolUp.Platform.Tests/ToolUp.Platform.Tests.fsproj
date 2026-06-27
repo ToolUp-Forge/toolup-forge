@@ -98,6 +98,7 @@
              (round-trip + per-subject / per-scope isolation + withdraw). -->
         <Compile Include="Contracts\IConsentStateStoreContract.fs" />
         <Compile Include="Contracts\ITimeSeriesStoreContract.fs" />
+        <Compile Include="Contracts\ITelemetrySinkContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
         <Compile Include="Contracts\IUserClaimsContract.fs" />
@@ -193,6 +194,7 @@
         <Compile Include="InProcess\SignedExportTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />
+        <Compile Include="InProcess\TelemetrySinkTests.fs" />
         <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelTests.fs" />
         <Compile Include="InProcess\TransactionalDispatcherTests.fs" />
@@ -650,6 +652,8 @@
         <ProjectReference Include="..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
         <!-- Phase 161 — Timescale time-series companion (env-gated live contract pack). -->
         <ProjectReference Include="..\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj" />
+        <!-- Phase 163 — GA4 telemetry companion (env-gated live contract pack). -->
+        <ProjectReference Include="..\TelemetrySinks\Ga4\Ga4TelemetrySink.fsproj" />
         <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
         <ProjectReference Include="..\Storage\AwsS3Storage\AwsS3Storage.fsproj" />
         <ProjectReference Include="..\Storage\GoogleCloudStorage\GoogleCloudStorage.fsproj" />
