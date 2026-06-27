@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.FlagSourceTests
 open System
 open System.Collections.Generic
 open System.IO
+open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -47,6 +48,42 @@ let private stubSource (resolve: FeatureFlag -> FlagValue option) =
     }
 
 let private ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+
+// A minimal OpenFeature provider that reports the built-in No-op
+// provider's metadata name ("No-op Provider") and resolves every flag to
+// its supplied default. Registering it via `Api.Instance.SetProviderAsync`
+// reproduces the deterministic "composed but not wired" state the Health
+// probe + Validator key off — WITHOUT `Api.Instance.ShutdownAsync ()`,
+// which is one-shot per process: it completes the singleton's internal
+// event channel, so a second call (the other unwired test) throws
+// `ChannelClosedException`. See `setUnwired`.
+type private NoOpNamedProvider() =
+    inherit FeatureProvider()
+
+    override _.GetMetadata() =
+        OpenFeature.Model.Metadata "No-op Provider"
+
+    override _.ResolveBooleanValueAsync(flagKey, defaultValue, _ctx, _ct) =
+        Task.FromResult(OpenFeature.Model.ResolutionDetails<bool>(flagKey, defaultValue))
+
+    override _.ResolveStringValueAsync(flagKey, defaultValue, _ctx, _ct) =
+        Task.FromResult(OpenFeature.Model.ResolutionDetails<string>(flagKey, defaultValue))
+
+    override _.ResolveIntegerValueAsync(flagKey, defaultValue, _ctx, _ct) =
+        Task.FromResult(OpenFeature.Model.ResolutionDetails<int>(flagKey, defaultValue))
+
+    override _.ResolveDoubleValueAsync(flagKey, defaultValue, _ctx, _ct) =
+        Task.FromResult(OpenFeature.Model.ResolutionDetails<float>(flagKey, defaultValue))
+
+    override _.ResolveStructureValueAsync(flagKey, defaultValue, _ctx, _ct) =
+        Task.FromResult(OpenFeature.Model.ResolutionDetails<OpenFeature.Model.Value>(flagKey, defaultValue))
+
+/// Reset the process-wide `Api.Instance` to the deterministic "composed
+/// but not wired" state (metadata name "No-op Provider") by registering
+/// `NoOpNamedProvider`. Channel-safe and repeatable — unlike
+/// `Api.Instance.ShutdownAsync ()`, which can only run once per process.
+let private setUnwired () =
+    Api.Instance.SetProviderAsync(NoOpNamedProvider()) |> Async.AwaitTask
 
 let tests =
     testList "FlagSource (Phase 239)" [
@@ -111,72 +148,86 @@ let tests =
             Expect.equal v "dark" "source variant resolved over declared default"
         }
 
-        testCaseAsync "OpenFeature adapter resolves via a provider + defers on unknown"
-        <| async {
-            let variants = Dictionary<string, bool>(dict [ "on", true; "off", false ])
+        // ─── Process-global `Api.Instance` cases (serialized) ───────────
+        // The cases below mutate the process-wide OpenFeature `Api.Instance`
+        // singleton, so they must not run concurrently with each other —
+        // otherwise one case's `SetProviderAsync` races another's metadata
+        // read. `testSequencedGroup` serialises this sub-list against itself
+        // while staying parallel to the rest of the pack. Each case fully
+        // establishes its own `Api.Instance` state at the top, so their
+        // relative order does not matter.
+        //
+        // The "composed but not wired" cases reach that state via
+        // `setUnwired ()` (registers a No-op-named provider) rather than the
+        // one-shot `Api.Instance.ShutdownAsync ()`, which completes the
+        // singleton's event channel and throws `ChannelClosedException` on a
+        // second call.
+        testSequencedGroup "openfeature-api-instance"
+        <| testList "Api.Instance (process-global)" [
+            testCaseAsync "OpenFeature adapter resolves via a provider + defers on unknown"
+            <| async {
+                let variants = Dictionary<string, bool>(dict [ "on", true; "off", false ])
 
-            let flags: IDictionary<string, Flag> =
-                dict [ "ff.on", (Flag<bool>(variants, "on") :> Flag) ]
+                let flags: IDictionary<string, Flag> =
+                    dict [ "ff.on", (Flag<bool>(variants, "on") :> Flag) ]
 
-            do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
-            let source = OpenFeatureFlagSource() :> IFlagSource
-            let! known = source.Resolve(boolFlag "ff.on" false, ctx)
-            Expect.equal known (Some(FlagValue.Bool true)) "OpenFeature resolves the known flag"
-            let! unknown = source.Resolve(boolFlag "ff.absent" false, ctx)
-            Expect.equal unknown None "unknown flag defers to the declared default"
-        }
+                do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
+                let source = OpenFeatureFlagSource() :> IFlagSource
+                let! known = source.Resolve(boolFlag "ff.on" false, ctx)
+                Expect.equal known (Some(FlagValue.Bool true)) "OpenFeature resolves the known flag"
+                let! unknown = source.Resolve(boolFlag "ff.absent" false, ctx)
+                Expect.equal unknown None "unknown flag defers to the declared default"
+            }
 
-        // ─── Phase 239 follow-on — companion health probe + preflight ───
-        // Both key off the process-wide `Api.Instance` provider metadata
-        // (the only public readiness signal in OpenFeature .NET 2.3.0).
-        // `ShutdownAsync ()` resets `Api.Instance` to the built-in No-op
-        // provider — the deterministic "composed but not wired" state.
+            // ─── Phase 239 follow-on — companion health probe + preflight ─
+            // Both key off the process-wide `Api.Instance` provider metadata
+            // (the only public readiness signal in OpenFeature .NET 2.3.0).
+            testCaseAsync "health probe is Degraded when no external provider is registered"
+            <| async {
+                do! setUnwired () // → No-op provider (metadata name "No-op Provider")
+                let probe = Health.create ()
+                let! result = probe.Check()
 
-        testCaseAsync "health probe is Degraded when no external provider is registered"
-        <| async {
-            do! Api.Instance.ShutdownAsync() |> Async.AwaitTask // → No-op provider
-            let probe = Health.create ()
-            let! result = probe.Check()
+                match result with
+                | HealthChecks.Degraded _ -> ()
+                | other -> failtestf "expected Degraded for the unwired No-op provider, got %A" other
+            }
 
-            match result with
-            | HealthChecks.Degraded _ -> ()
-            | other -> failtestf "expected Degraded for the unwired No-op provider, got %A" other
-        }
+            testCaseAsync "health probe is Healthy when an external provider is registered"
+            <| async {
+                let flags: IDictionary<string, Flag> =
+                    dict [
+                        "ff.h", (Flag<bool>(Dictionary<string, bool>(dict [ "on", true ]), "on") :> Flag)
+                    ]
 
-        testCaseAsync "health probe is Healthy when an external provider is registered"
-        <| async {
-            let flags: IDictionary<string, Flag> =
-                dict [
-                    "ff.h", (Flag<bool>(Dictionary<string, bool>(dict [ "on", true ]), "on") :> Flag)
-                ]
+                do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
+                let probe = Health.create ()
+                let! result = probe.Check()
+                Expect.equal result HealthChecks.Healthy "a registered provider is Healthy"
+            }
 
-            do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
-            let probe = Health.create ()
-            let! result = probe.Check()
-            Expect.equal result HealthChecks.Healthy "a registered provider is Healthy"
-        }
+            testCaseAsync "validator Warns (does not abort) when no external provider is registered"
+            <| async {
+                do! setUnwired () // → No-op provider (metadata name "No-op Provider")
+                let validator = Validator.create ()
+                let! result = validator.Validate()
 
-        testCaseAsync "validator Warns (does not abort) when no external provider is registered"
-        <| async {
-            do! Api.Instance.ShutdownAsync() |> Async.AwaitTask // → No-op provider
-            let validator = Validator.create ()
-            let! result = validator.Validate()
+                match result with
+                | ConfigValidation.Warning _ -> ()
+                | other -> failtestf "expected Warning (never Error) for the unwired companion, got %A" other
+            }
 
-            match result with
-            | ConfigValidation.Warning _ -> ()
-            | other -> failtestf "expected Warning (never Error) for the unwired companion, got %A" other
-        }
+            testCaseAsync "validator is Ok when an external provider is registered"
+            <| async {
+                let flags: IDictionary<string, Flag> =
+                    dict [
+                        "ff.v", (Flag<bool>(Dictionary<string, bool>(dict [ "on", true ]), "on") :> Flag)
+                    ]
 
-        testCaseAsync "validator is Ok when an external provider is registered"
-        <| async {
-            let flags: IDictionary<string, Flag> =
-                dict [
-                    "ff.v", (Flag<bool>(Dictionary<string, bool>(dict [ "on", true ]), "on") :> Flag)
-                ]
-
-            do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
-            let validator = Validator.create ()
-            let! result = validator.Validate()
-            Expect.equal result ConfigValidation.Ok "a registered provider passes preflight"
-        }
+                do! Api.Instance.SetProviderAsync(InMemoryProvider flags) |> Async.AwaitTask
+                let validator = Validator.create ()
+                let! result = validator.Validate()
+                Expect.equal result ConfigValidation.Ok "a registered provider passes preflight"
+            }
+        ]
     ]
