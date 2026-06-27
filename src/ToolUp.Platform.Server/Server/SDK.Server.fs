@@ -918,13 +918,18 @@ let compose
     | StartupModes.ValidateConfig ->
         // Phase 9m preflight over every registered `IConfigValidator` (the
         // first-party `ComposeConfigValidators` set + companion validators).
-        // On success: print the per-validator summary + exit 0. On any
-        // `Error`, `runConfigPreflight` raises `ConfigPreflightFailedException`
-        // (whose message IS the failure summary) — catch it, print the
-        // summary, and exit 1 deterministically rather than letting an
-        // unhandled exception unwind the stack. Either way no listener binds.
+        // Calls `ConfigValidatorAggregator.validate` directly (the same call
+        // `runConfigPreflight` wraps) so we hold the outcomes to print — the
+        // snapshot-singleton registration `runConfigPreflight` also does is
+        // moot here, since we exit before the service provider is built. On
+        // success: print the per-validator summary + exit 0. On any `Error`,
+        // `validate` raises `ConfigPreflightFailedException` (whose message
+        // IS the failure summary) — catch it, print the summary, and exit 1
+        // deterministically rather than unwinding the stack. No listener binds.
         try
-            let outcomes = runConfigPreflight services config resolvedLogger
+            let outcomes =
+                ConfigValidatorAggregator.validate services (Some resolvedLogger) config.SkipPreflight
+
             StartupModes.printValidationSummary resolvedLogger outcomes
             exit 0
         with :? ConfigValidatorAggregator.ConfigPreflightFailedException as ex ->
@@ -938,7 +943,7 @@ let compose
         // `PreflightSnapshot` singleton. Must run after every companion has
         // had a chance to call `services.AddSingleton<IConfigValidator>(...)`
         // and before `HealthCheckAggregator.register`.
-        runConfigPreflight services config resolvedLogger |> ignore
+        runConfigPreflight services config resolvedLogger
 
         // Phase 9j — CSP aggregate registration (extracted to
         // `ComposeBootstrap.registerCspAggregate`). Must run after the

@@ -79,16 +79,7 @@ let buildHostBuilder
 ///
 /// Registers a `PreflightSnapshot` singleton so the dev-diagnostics
 /// inspector can surface the outcome list at `/dev/inspect`.
-///
-/// Phase 214 — returns the outcome list so the `--validate-config` startup
-/// mode can print the summary without re-resolving the snapshot from a
-/// (deliberately un-built) service provider. The normal-boot caller
-/// ignores the return.
-let runConfigPreflight
-    (services: IServiceCollection)
-    (config: ServerConfig)
-    (resolvedLogger: ILogger)
-    : ConfigValidatorAggregator.ValidatorOutcome list =
+let runConfigPreflight (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
     let preflightOutcomes =
         ConfigValidatorAggregator.validate services (Some resolvedLogger) config.SkipPreflight
 
@@ -99,8 +90,6 @@ let runConfigPreflight
         preflightSnapshot :> ConfigValidatorAggregator.IPreflightSnapshot
     )
     |> ignore
-
-    preflightOutcomes
 
 /// Phase 9j — fold every registered `ICspContributor` (first-party
 /// + companion, the latter via `ComposeExtensions.ServiceConfig` /
