@@ -430,6 +430,9 @@ let allTests =
         // closed (the inverse of the Phase 69d/69h happy-path coverage), plus
         // audit-omission observability + the PII-redaction default.
         AdversarialFailClosedTests.tests
+        // Phase 169 — module-load startup observability (the addModule
+        // outcome accumulator emitted through the startup logger).
+        ModuleLoadOutcomeTests.tests
     ]
 
 [<EntryPoint>]

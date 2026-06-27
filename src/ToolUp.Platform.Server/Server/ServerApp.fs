@@ -342,6 +342,33 @@ module ServerModule =
             BindingStamp = Some stamp
     }
 
+// ─── Phase 169 — module-load startup observability ───────────────────
+//
+// `addModule` resolves each module to exactly one outcome. The outcome is
+// accumulated by value on `ServerApp` during the (pure) composition pass
+// and emitted through `app.Logger` at `run` — a logger is reliably set by
+// then, whereas at `addModule` time the composition order does not
+// guarantee one. Quiet by default (GP 13): a normally-registered module
+// logs at `Debug`, so a stock deployment (nothing filtered, no binding
+// gate) prints nothing at the default `Info` level; only a *drop*
+// (`ModuleFiltered` / `ModuleBindingRejected`) raises an `Info`/`Warn`.
+
+/// How `addModule` resolved a single module. Machine-readable — a test
+/// asserts on the accumulated `(moduleId, outcome)` list directly rather
+/// than scraping log text.
+type ModuleLoadOutcome =
+    /// Passed the name filter and the binding gate (no gate active, or a
+    /// stamp that verified) → registered.
+    | ModuleRegistered
+    /// Dropped by `ModuleFilter`; carries the active filter string.
+    | ModuleFiltered of filter: string
+    /// A binding verifier was configured, the module carried no stamp, and
+    /// the verifier admitted it under its unbound policy.
+    | ModuleUnboundAllowed
+    /// Dropped by the binding gate; carries the neutral rejection reason
+    /// (from the Phase 165 `BindingOutcome`).
+    | ModuleBindingRejected of reason: string
+
 // ─── ServerApp — record form of the `compose` arguments ──────────────
 //
 // `ServerApp` is a drop-in replacement for calling `compose` positionally.
@@ -654,6 +681,11 @@ type ServerApp = {
     /// (the default) leaves the secret store un-decorated. Wired via
     /// `ServerApp.withSecretResilience`.
     SecretResilience: ResilienceMode
+    /// Phase 169 — per-module load outcome, accumulated in `addModule`
+    /// order and emitted through `Logger` at `run`. Empty until the first
+    /// `addModule`; a stock deployment accumulates only `ModuleRegistered`
+    /// entries that log at `Debug` (silent at the default level — GP 13).
+    ModuleLoadOutcomes: (string * ModuleLoadOutcome) list
 }
 
 module ServerApp =
@@ -699,6 +731,7 @@ module ServerApp =
         ModuleBindingVerifier = None
         StorageResilience = NoResilience
         SecretResilience = NoResilience
+        ModuleLoadOutcomes = []
     }
 
     /// Phase 1h companion-conflict validator. Companion compose seams
@@ -1362,9 +1395,20 @@ module ServerApp =
     /// Honours `app.Config.ModuleFilter` — modules whose name doesn't match
     /// are skipped silently, so `withConfig` should run before `addModules`
     /// (the documented pipeline order).
+    /// Phase 169 — append a module-load outcome to the startup-observability
+    /// accumulator (emitted through `Logger` at `run`).
+    let private recordOutcome (moduleId: string) (outcome: ModuleLoadOutcome) (app: ServerApp) : ServerApp = {
+        app with
+            ModuleLoadOutcomes = app.ModuleLoadOutcomes @ [ moduleId, outcome ]
+    }
+
     let addModule (m: ServerModule) (app: ServerApp) : ServerApp =
         if not (ModuleFilter.matches app.Config.ModuleFilter m.Name) then
-            app
+            // Phase 169 — a name-filtered module is dropped, but the drop is
+            // now observable: record the active filter so "why didn't my
+            // module load?" is answerable from the startup log.
+            let activeFilter = app.Config.ModuleFilter |> Option.defaultValue "(none)"
+            recordOutcome m.Name (ModuleFiltered activeFilter) app
         else
             // Phase 165 — opt-in module-binding gate, the second check after
             // the name filter. The common case (no verifier configured AND
@@ -1385,12 +1429,25 @@ module ServerApp =
                 | Rejected _ -> true
                 | Allowed -> false
 
-            // Drop a module that failed the binding gate. (Phase 169 will
-            // emit a module-load startup event here when it ships; for now
-            // the drop is silent, matching the name-filter skip above.)
+            // Drop a module that failed the binding gate. Phase 169 — the
+            // drop now records its neutral reason for the startup log.
             if bindingRejected then
-                app
+                let reason =
+                    match bindingOutcome with
+                    | Rejected r -> r
+                    | Allowed -> "" // unreachable — bindingRejected implies Rejected
+
+                recordOutcome m.Name (ModuleBindingRejected reason) app
             else
+
+                // Phase 169 — registered vs. unbound-allowed. A configured
+                // verifier admitting an unstamped module is the distinct
+                // "unbound-allowed" outcome; everything else loading is a
+                // plain "registered".
+                let loadOutcome =
+                    match app.ModuleBindingVerifier, m.BindingStamp with
+                    | Some _, None -> ModuleUnboundAllowed
+                    | _ -> ModuleRegistered
 
                 let moduleConfigs =
                     match m.ConfigSchema with
@@ -1446,6 +1503,9 @@ module ServerApp =
                         // is the empty list and behaviour stays byte-
                         // identical.
                         ScheduledJobs = app.ScheduledJobs @ m.JobHandlers
+                        // Phase 169 — record the load outcome (registered /
+                        // unbound-allowed) for the startup log.
+                        ModuleLoadOutcomes = app.ModuleLoadOutcomes @ [ m.Name, loadOutcome ]
                         Config = {
                             app.Config with
                                 SlowRequestThresholdOverrides = mergedSlowRequestOverrides
@@ -1459,6 +1519,20 @@ module ServerApp =
     /// configs) and invoke the underlying `compose`. Returns the process exit
     /// code — `0` for graceful shutdown. Suitable as the body of an `[<EntryPoint>]`.
     let run (app: ServerApp) : int =
+        // Phase 169 — emit the accumulated module-load outcomes through the
+        // startup logger. Registered / unbound-allowed log at Debug (silent
+        // at the default Info level — GP 13); a name-filter drop logs Info,
+        // a binding rejection logs Warn, so a "missing module" is visible.
+        app.Logger
+        |> Option.iter (fun logger ->
+            for moduleId, outcome in app.ModuleLoadOutcomes do
+                match outcome with
+                | ModuleRegistered -> logger.Debug(sprintf "module-load: %s registered" moduleId)
+                | ModuleUnboundAllowed -> logger.Debug(sprintf "module-load: %s unbound-allowed" moduleId)
+                | ModuleFiltered filter -> logger.Info(sprintf "module-load: %s filtered (filter: %s)" moduleId filter)
+                | ModuleBindingRejected reason ->
+                    logger.Warn(sprintf "module-load: %s binding-rejected: %s" moduleId reason))
+
         let config = {
             app.Config with
                 ModuleNames =

@@ -630,6 +630,7 @@
              69l/69m perf packs). Test-only; no production source changed. -->
         <Compile Include="Contracts\FailClosedContract.fs" />
         <Compile Include="InProcess\AdversarialFailClosedTests.fs" />
+        <Compile Include="InProcess\ModuleLoadOutcomeTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
