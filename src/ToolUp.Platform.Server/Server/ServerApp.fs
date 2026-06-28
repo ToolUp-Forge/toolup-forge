@@ -1563,6 +1563,85 @@ module ServerApp =
     let addModules (modules: ServerModule list) (app: ServerApp) : ServerApp =
         modules |> List.fold (fun a m -> addModule m a) app
 
+    /// Phase 280 — project the live composition registry into a read-only,
+    /// machine-readable `CompositionManifest`: every registered module,
+    /// companion slot, datatype, and tool by its stable Phase 279
+    /// `ComponentId`, plus the config knobs that shaped composition.
+    ///
+    /// Derived entirely from the accumulators `addModule` and the `with*`
+    /// builders populate on this record — the same live registry the
+    /// config-drift detector snapshots — never a separately-declared list,
+    /// so the manifest cannot drift from what was actually composed.
+    ///
+    /// Pure + on demand: a deployment that never calls this builds no
+    /// manifest and pays nothing (GP 13); an app that adds the call is
+    /// byte-for-byte unchanged until it does (GP 11). Companion slots are
+    /// enumerated from the substrate the consumer explicitly composed onto
+    /// the record — single-impl optionals contribute one slot entry when
+    /// populated; multi-impl lists contribute one entry per impl, keyed by
+    /// the impl's own sub-id (sink `Name` / `Kind`), never its position.
+    let compositionManifest (app: ServerApp) : CompositionManifest =
+        let modules = app.ModuleComponentIds |> List.map CompositionManifest.moduleEntry
+
+        let dataTypes =
+            app.DataTypeRegistrations
+            |> List.map (fun (_, dt) -> CompositionManifest.dataTypeEntry dt.Id)
+            |> List.distinct
+
+        let tools =
+            app.AITools
+            |> List.map (fun (def, _) -> CompositionManifest.toolEntry def.Name)
+            |> List.distinct
+
+        let companionSlots = [
+            match app.Auth with
+            | Some _ -> CompositionManifest.companionSlotEntry "IAuthProvider"
+            | None -> ()
+            match app.Storage with
+            | Some _ -> CompositionManifest.companionSlotEntry "IBlobStorage"
+            | None -> ()
+            match app.Notifications with
+            | Some _ -> CompositionManifest.companionSlotEntry "INotificationChannel"
+            | None -> ()
+            match app.ProviderProfile with
+            | Some _ -> CompositionManifest.companionSlotEntry "IProviderProfile"
+            | None -> ()
+            match app.UserDirectory with
+            | Some _ -> CompositionManifest.companionSlotEntry "IUserDirectory"
+            | None -> ()
+
+            for sink in app.AuditSinks do
+                CompositionManifest.companionImplEntry "IAuditSink" sink.Name
+            for sink in app.TransactionalSinks do
+                CompositionManifest.companionImplEntry
+                    "INotificationSink"
+                    (NotificationKind.SinkKind.toWireString sink.Kind)
+            for check in app.HealthChecks do
+                CompositionManifest.companionImplEntry "IHealthCheck" check.Name
+            for validator in app.ConfigValidators do
+                CompositionManifest.companionImplEntry "IConfigValidator" validator.Name
+            for smoke in app.SmokeTests do
+                CompositionManifest.companionImplEntry "ISmokeTest" smoke.Name
+        ]
+
+        // The `ServerConfig` switches that change *what* gets composed.
+        // String-rendered DU case names — a stable, human-readable summary
+        // for drift detection / dashboards without duplicating the config.
+        let configKnobs = [
+            CompositionManifest.knob "ProcessProfile" (string app.Config.ProcessProfile)
+            CompositionManifest.knob "ConfigDriftDetection" (string app.Config.ConfigDriftDetection)
+            CompositionManifest.knob "JobScheduler" (string app.Config.JobScheduler)
+            CompositionManifest.knob "EntityStore" (string app.Config.EntityStore)
+            CompositionManifest.knob "UsageMetering" (string app.Config.UsageMetering)
+            CompositionManifest.knob "MetricsEndpoint" (string app.Config.MetricsEndpoint)
+            CompositionManifest.knob "RateLimiter" (string app.Config.RateLimiter)
+            CompositionManifest.knob "SmokeTest" (string app.Config.SmokeTest)
+            CompositionManifest.knob "DataSubjectRequests" (string app.Config.DataSubjectRequests)
+            CompositionManifest.knob "PeerSubstrate" (string app.Config.PeerSubstrate)
+        ]
+
+        CompositionManifest.build modules companionSlots dataTypes tools configKnobs
+
     /// Assemble the final `ServerConfig` (merging accumulated module names and
     /// configs) and invoke the underlying `compose`. Returns the process exit
     /// code — `0` for graceful shutdown. Suitable as the body of an `[<EntryPoint>]`.

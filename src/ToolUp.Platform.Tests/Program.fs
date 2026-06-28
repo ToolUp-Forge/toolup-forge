@@ -111,6 +111,8 @@ let allTests =
         ConfigValidatorAggregatorTests.tests
         // Phase 279 — stable component identity (ComponentId).
         ComponentIdentityTests.tests
+        // Phase 280 — introspectable composition manifest.
+        CompositionManifestTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests

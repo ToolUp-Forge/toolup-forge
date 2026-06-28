@@ -601,6 +601,13 @@
              registry; consumed by SDK.Server.compose's tail. -->
         <Compile Include="Server\StartupModes.fs" />
         <Compile Include="Server\SDK.Server.fs" />
+        <!-- Phase 280 — introspectable composition manifest: generic
+             read-only enumeration of the composed surface (modules,
+             companion slots, datatypes, tools) by stable ComponentId.
+             Types + element constructors only (depends on ComponentId);
+             the ServerApp.compositionManifest projector lives in ServerApp
+             (next), so this must compile before it. -->
+        <Compile Include="Server\CompositionManifest.fs" />
         <Compile Include="Server\ServerApp.fs" />
         <!-- Phase 166 — detachable module-binding manifest reader. After
              ServerApp (it applies stamps onto ServerModule). -->

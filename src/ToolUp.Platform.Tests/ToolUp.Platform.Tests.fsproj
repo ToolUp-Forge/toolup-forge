@@ -234,6 +234,11 @@
              default-derived determinism, duplicate explicit id rejected at
              compose, companion-slot derivation. -->
         <Compile Include="InProcess\ComponentIdentityTests.fs" />
+        <!-- Phase 280 — introspectable composition manifest: modules,
+             companion slots, datatypes, tools enumerated by stable
+             ComponentId from the live registry; empty pipeline → empty
+             manifest (GP 13). -->
+        <Compile Include="InProcess\CompositionManifestTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->
