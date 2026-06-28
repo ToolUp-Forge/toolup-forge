@@ -1834,6 +1834,36 @@ type ClassifiedFieldWrittenPayload = {
     Level: string
 }
 
+/// Phase 188 — a classified field was redacted or blocked at an egress
+/// boundary (export payload / RPC response / audit-or-log sink) by the
+/// `EgressGate` because the active `EgressPolicy` returned a non-`Allow`
+/// decision for its `ClassificationLevel`. Reserved
+/// `SourceModule = "_platform.classification"` (same module as the
+/// read/write gate). Value-free by design — records *that* a classified
+/// field was stopped at egress, never the field value. One row per
+/// non-`Allow` decision, so a deny is observable and never silent
+/// (GP 12).
+type EgressBlockedPayload = {
+    /// Acting subject the egress was destined for (`EgressContext.Actor`)
+    /// — a recipient user id, peer id, or sink name.
+    Actor: string
+    /// Entity type the field belongs to.
+    EntityName: string
+    /// Dotted field path that was redacted / dropped.
+    FieldPath: string
+    /// `ClassificationLevel.name` of the field.
+    Level: string
+    /// The gate's decision — `"Redact"` or `"Block"` (`Allow` is never
+    /// audited).
+    Decision: string
+    /// The egress boundary the field was leaving — `"ExportPayload"` /
+    /// `"RpcResponse"` / `"AuditSink"` / `"LogSink"` / a custom label.
+    Boundary: string
+    /// Optional concrete destination label (`EgressContext.Destination`)
+    /// — a sink name, a peer URL, a file path. `None` when unspecified.
+    Destination: string option
+}
+
 // ─── Phase 54 — tenant-lifecycle substrate audit payloads ──────────────
 //
 // Emitted by `TenantLifecycleAggregator` for the
@@ -2333,6 +2363,11 @@ type AuditEvent =
     /// KB-destructive). One queryable trail keyed by route/requirement/scope
     /// (GP 6); coalesced under a per-`(route, subject)` flood guard.
     | AuthorizationDenied of AuthorizationDeniedPayload
+    /// Phase 188 — a classified field was redacted / blocked at an egress
+    /// boundary (export / RPC response / sink) by the `EgressGate`.
+    /// Reserved `SourceModule = "_platform.classification"`. Value-free;
+    /// one row per non-`Allow` decision so a DLP deny is never silent.
+    | EgressBlocked of EgressBlockedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2437,6 +2472,7 @@ module AuditEvent =
         | RemotingMethodAudited _ -> "RemotingMethodAudited"
         | KnowledgeScopeErased _ -> "KnowledgeScopeErased"
         | AuthorizationDenied _ -> "AuthorizationDenied"
+        | EgressBlocked _ -> "EgressBlocked"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

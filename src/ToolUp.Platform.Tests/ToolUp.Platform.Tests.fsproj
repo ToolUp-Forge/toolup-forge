@@ -117,6 +117,9 @@
         <!-- Phase 18e — non-F# peer SDK: schema export + TypeScript /
              Python generator emit-correctness. -->
         <Compile Include="Contracts\IPeerNonFSharpSdkContract.fs" />
+        <!-- Wave 8 (Epoch 2) — Compliance-edition substrate contracts. -->
+        <Compile Include="Contracts\IEgressGateContract.fs" />
+        <Compile Include="Contracts\IEvidencePackGeneratorContract.fs" />
         <!-- Phase 174 — architecture-fitness gate helpers (reflection
              over the compiled tier graph + source-tree open scans). -->
         <Compile Include="Contracts\ArchitectureFitness.fs" />

@@ -417,6 +417,16 @@ let allTests =
         // record flattening, schema JSON round-trip, generated source
         // declarations + JSON-RPC POST skeleton).
         IPeerNonFSharpSdkContract.tests
+        // Wave 8 (Epoch 2) Phase 188 — field-classification egress / DLP
+        // gate: permissive default is a pure pass-through (GP 13), opt-in
+        // deny rules redact / block the matching ClassificationLevel, and
+        // every non-Allow decision emits exactly one EgressBlocked audit row.
+        IEgressGateContract.tests
+        // Wave 8 (Epoch 2) Phase 187 — compliance evidence-pack generator:
+        // deterministic signed manifest over composed audit / classification
+        // / DSR substrate, classification sidecar fidelity, and the disabled
+        // (NoEvidencePackGenerator) default.
+        IEvidencePackGeneratorContract.tests
         // Phase 174 — architecture-fitness dependency-direction gate.
         // Reflection over the compiled ToolUp.Platform.{Core,Server,Client}
         // assembly graph (no Server→Client / Client→Server / Core→upward

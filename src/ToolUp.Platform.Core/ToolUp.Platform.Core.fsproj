@@ -84,6 +84,10 @@
         <Compile Include="Shared\Auth\AuthMetrics.fs" />
         <Compile Include="Shared\Types\DataSubjectTypes.fs" />
         <Compile Include="Shared\Types\DataSubjectApiTypes.fs" />
+        <!-- Wave 8 (Epoch 2) Phase 187 — compliance evidence-pack request /
+             manifest / result + the IEvidencePackGenerator seam. After
+             DataSubjectTypes.fs (uses ExportSegment + ExportSignature). -->
+        <Compile Include="Shared\Types\EvidencePackTypes.fs" />
         <Compile Include="Shared\Interfaces\IBlobStorage.fs" />
         <Compile Include="Shared\Interfaces\ITimeSeriesStore.fs" />
         <Compile Include="Shared\Interfaces\ITelemetrySink.fs" />

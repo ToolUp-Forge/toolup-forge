@@ -942,6 +942,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> AuthorizationDenied(fromAuditJson<AuthorizationDeniedPayload> j)
     }
+    // Phase 188 — field-classification egress/DLP gate deny row (append-only registration).
+    {
+        EventType = "EgressBlocked"
+        TryEncode =
+            (function
+            | EgressBlocked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EgressBlocked(fromAuditJson<EgressBlockedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

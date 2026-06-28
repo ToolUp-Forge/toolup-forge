@@ -284,6 +284,11 @@
              (DsrAsyncDeps) names it. The interface depends only on Core
              types (DataSubjectRequest + ExportTicket/ExportStatus). -->
         <Compile Include="Server\IBackgroundExportStore.fs" />
+        <!-- Wave 8 (Epoch 2) Phase 187 — compliance evidence-pack generator.
+             Pure orchestration over IEventStore (audit) + IDataExporter
+             (DSR) + IFieldClassifier (classification) + IExportEnvelopeSigner
+             (manifest signing); needs all four declared first. -->
+        <Compile Include="Server\EvidencePackGenerator.fs" />
         <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
         <!-- Phase 9h.A — IJobScheduler-backed DSR export/erasure substrate.
              After DataSubjectRequestApiHandler (reuses serialiseSegments +
