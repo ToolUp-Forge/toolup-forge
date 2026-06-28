@@ -109,6 +109,8 @@ let allTests =
         WarningConfigValidatorTests.tests
         ErrorConfigValidatorTests.tests
         ConfigValidatorAggregatorTests.tests
+        // Phase 279 — stable component identity (ComponentId).
+        ComponentIdentityTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests

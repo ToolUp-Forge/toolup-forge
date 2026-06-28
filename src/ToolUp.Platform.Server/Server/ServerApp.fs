@@ -129,6 +129,16 @@ type ServerModule = {
     /// module is dropped. Populated by a deploy-time stamper; forge only
     /// reads it here.
     BindingStamp: ModuleBindingStamp option
+    /// Phase 279 — optional explicit stable `ComponentId` for this
+    /// module. `None` (the default) derives the id from `Name` at first
+    /// registration (`ComponentId.ofModule Name`, GP 11) — byte-for-byte
+    /// unchanged for a module that declares nothing. `Some id` (set via
+    /// `ServerModule.withComponentId`) makes the id independent of the
+    /// display `Name`, so renaming `Name` does not churn the identity
+    /// telemetry / introspection surfaces correlate against. Either way
+    /// the resolved id is accumulated onto `ServerApp` and checked for
+    /// uniqueness at compose time.
+    ComponentId: ComponentId option
 }
 
 module ServerModule =
@@ -147,6 +157,7 @@ module ServerModule =
         RouteSurfaceRequirements = []
         JobHandlers = []
         BindingStamp = None
+        ComponentId = None
     }
 
     /// Attach a permission-guarded Fable.Remoting api factory. Uses the
@@ -340,6 +351,21 @@ module ServerModule =
     let withBindingStamp (stamp: ModuleBindingStamp) (m: ServerModule) : ServerModule = {
         m with
             BindingStamp = Some stamp
+    }
+
+    /// Phase 279 — declare an explicit stable `ComponentId` for this
+    /// module. `declaredId` is a bare token (e.g. `"orders-service"`); it
+    /// is namespaced under the `module:` slot via `ComponentId.ofModule`,
+    /// so the resolved id is independent of the module's display `Name`.
+    /// Declaring an explicit id lets a deployment rename the sidebar /
+    /// header `Name` without churning the identity that telemetry
+    /// correlation, hot-reload, and config-diffing key against. Omitting
+    /// the call leaves the id name-derived (GP 11) — byte-for-byte
+    /// unchanged. A duplicate resolved id across modules fails at compose
+    /// time (`ServerApp.run`) with a readable error.
+    let withComponentId (declaredId: string) (m: ServerModule) : ServerModule = {
+        m with
+            ComponentId = Some(ComponentId.ofModule declaredId)
     }
 
 // ─── Phase 169 — module-load startup observability ───────────────────
@@ -686,6 +712,15 @@ type ServerApp = {
     /// `addModule`; a stock deployment accumulates only `ModuleRegistered`
     /// entries that log at `Debug` (silent at the default level — GP 13).
     ModuleLoadOutcomes: (string * ModuleLoadOutcome) list
+    /// Phase 279 — resolved `(moduleName, ComponentId)` for every
+    /// registered module, accumulated in `addModule` order. The id is the
+    /// module's explicit `ComponentId` when declared (via
+    /// `ServerModule.withComponentId`), else the name-derived default
+    /// (`ComponentId.ofModule Name`). `run` checks this set for
+    /// uniqueness at compose time — a duplicate resolved id is a
+    /// compose-time failure, not a runtime surprise. Empty until the
+    /// first `addModule`.
+    ModuleComponentIds: (string * ComponentId) list
 }
 
 module ServerApp =
@@ -732,6 +767,7 @@ module ServerApp =
         StorageResilience = NoResilience
         SecretResilience = NoResilience
         ModuleLoadOutcomes = []
+        ModuleComponentIds = []
     }
 
     /// Phase 1h companion-conflict validator. Companion compose seams
@@ -1484,6 +1520,15 @@ module ServerApp =
                 let surfaceDefaultsForModule =
                     m.RoutePrefixes |> List.map (fun prefix -> prefix, m.DefaultSurfaceRequirement)
 
+                // Phase 279 — resolve the module's stable ComponentId
+                // (explicit when declared, else name-derived) and
+                // accumulate it for the compose-time uniqueness check in
+                // `run`. A module that declares nothing resolves to
+                // `ComponentId.ofModule Name`, byte-for-byte the pre-279
+                // identity (GP 11).
+                let resolvedComponentId =
+                    m.ComponentId |> Option.defaultValue (ComponentId.ofModule m.Name)
+
                 {
                     app with
                         Handlers = app.Handlers @ m.Handlers
@@ -1506,6 +1551,9 @@ module ServerApp =
                         // Phase 169 — record the load outcome (registered /
                         // unbound-allowed) for the startup log.
                         ModuleLoadOutcomes = app.ModuleLoadOutcomes @ [ m.Name, loadOutcome ]
+                        // Phase 279 — accumulate the resolved stable id for
+                        // the compose-time uniqueness check in `run`.
+                        ModuleComponentIds = app.ModuleComponentIds @ [ m.Name, resolvedComponentId ]
                         Config = {
                             app.Config with
                                 SlowRequestThresholdOverrides = mergedSlowRequestOverrides
@@ -1519,6 +1567,14 @@ module ServerApp =
     /// configs) and invoke the underlying `compose`. Returns the process exit
     /// code — `0` for graceful shutdown. Suitable as the body of an `[<EntryPoint>]`.
     let run (app: ServerApp) : int =
+        // Phase 279 — fail fast on a duplicate module ComponentId before
+        // anything binds. Identity collisions break every introspection /
+        // telemetry-correlation surface that keys on the id, so they are a
+        // compose-time error, not a runtime surprise. A pre-279 app whose
+        // module ids are all distinct (the universal case — the id is the
+        // permission / sidebar key) passes silently (GP 11).
+        ComponentId.ensureUnique "module composition" (app.ModuleComponentIds |> List.map snd)
+
         // Phase 169 — emit the accumulated module-load outcomes through the
         // startup logger. Registered / unbound-allowed log at Debug (silent
         // at the default Info level — GP 13); a name-filter drop logs Info,

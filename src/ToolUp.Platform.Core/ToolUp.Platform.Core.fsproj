@@ -48,6 +48,12 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\LogLevel.fs" />
+        <!-- Phase 279 — stable component identity (ComponentId): a
+             value-typed string wrapper + deterministic per-kind
+             derivation + duplicate detection. Standalone (string-only),
+             placed early so module / companion / datatype / tool
+             registration surfaces in every later tier can reference it. -->
+        <Compile Include="Shared\ComponentId.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
              Phase 69d markers in ToolUp.Remoting.Server). Placed early so
              every later API record file can annotate its fields. The SDK's

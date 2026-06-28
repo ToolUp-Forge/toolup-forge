@@ -104,6 +104,15 @@ type PageConfig = {
 /// "SkuAnalysis", "KnowledgeBase"). Must be unique across the module
 /// list. Never shown to users.
 ///
+/// Phase 279 — `Id` *is* the module's stable component identity: it is
+/// declared and independent of `Name`, so renaming the display `Name`
+/// never changes it. It lifts losslessly to a `ComponentId` via
+/// `ComponentId.ofModule Id` for the introspection / telemetry-
+/// correlation surfaces that address composed units by value. The server
+/// registration surface declares the same identity explicitly via
+/// `ServerModule.withComponentId`; on the client the existing `Id` field
+/// already carries it, so no field changes here (GP 11).
+///
 /// `Name` is the display name rendered in the sidebar and page header.
 /// Free-form, human-readable, localisable. Duplicates are tolerated
 /// (the Id is the real key) but should be avoided for UX.

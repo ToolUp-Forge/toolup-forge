@@ -223,6 +223,11 @@
         <Compile Include="InProcess\WarningConfigValidatorTests.fs" />
         <Compile Include="InProcess\ErrorConfigValidatorTests.fs" />
         <Compile Include="InProcess\ConfigValidatorAggregatorTests.fs" />
+        <!-- Phase 279 — stable component identity (ComponentId): derivation
+             determinism, module id stable across rename + re-order,
+             default-derived determinism, duplicate explicit id rejected at
+             compose, companion-slot derivation. -->
+        <Compile Include="InProcess\ComponentIdentityTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->
