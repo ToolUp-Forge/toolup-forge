@@ -62,13 +62,48 @@ type ToyEvent =
     /// (→ `Call`).
     | CallEcho of input: string
 
-/// The toy typed-tree. Three constructors — text, element (a tag plus
-/// children), and an event wrapper that turns any subtree into an
-/// interaction site. That is the whole language.
+/// The toy typed-tree. Four constructors — text, a data binding (a key
+/// resolved against the host's projected `HostBindingSources`), element
+/// (a tag plus children), and an event wrapper that turns any subtree
+/// into an interaction site. That is the whole language.
 type ToyNode =
     | Text of string
+    /// A data binding: at render time `key` is resolved against the
+    /// host-projected `HostBindingSources` (Phase 264 read-side). The toy
+    /// names only its own key — the seam knows nothing toy-specific.
+    | Bind of key: string
     | Element of tag: string * children: ToyNode list
     | OnClick of event: ToyEvent * child: ToyNode
+
+// ─── Read-side — resolve `Bind` against `HostBindingSources` ───────────
+//
+// The read-side half of the neutrality proof (Phase 264). `route` (in
+// Binding.fs) binds the toy's ACTION vocabulary onto the four capability
+// hooks; `resolve` binds the toy's DATA vocabulary onto the host's
+// projected namespace. Both halves prove the same thing: the seam is
+// renderer-neutral — a stranger tree language binds it without the seam
+// knowing anything tree-specific.
+//
+// `resolve` is tier-neutral (no Feliz), so the .NET test runner resolves
+// a tree against a CSR-projected and an SSR-projected namespace
+// identically — one tree language, both projection paths.
+
+/// Resolve every `Bind key` node against a host-projected
+/// `HostBindingSources`, rewriting it to a `Text` node carrying the
+/// resolved value's `string` form. `QueryResults` wins over `State` (the
+/// shared resolution rule, via `HostBindingSources.tryResolve`); an
+/// unbound key renders a stable `{unbound:key}` marker rather than
+/// throwing, so a partial projection degrades visibly instead of
+/// crashing the render.
+let rec resolve (sources: HostBindingSources) (node: ToyNode) : ToyNode =
+    match node with
+    | Bind key ->
+        match HostBindingSources.tryResolve key sources with
+        | Some value -> Text(string value)
+        | None -> Text $"{{unbound:{key}}}"
+    | Text _ -> node
+    | Element(tag, children) -> Element(tag, children |> List.map (resolve sources))
+    | OnClick(event, child) -> OnClick(event, resolve sources child)
 
 // ─── Client lowering — `ReactElement` (Fable surface) ─────────────────
 
@@ -89,6 +124,10 @@ let private elementOf (tag: string) : ReactElement list -> ReactElement =
 let rec lower (onEvent: ToyEvent -> unit) (node: ToyNode) : ReactElement =
     match node with
     | Text s -> Html.text s
+    // An unresolved binding — `resolve` rewrites `Bind` to `Text` before
+    // lowering, so reaching this arm means the tree was lowered without a
+    // projection; render the stable miss marker rather than throwing.
+    | Bind key -> Html.text $"{{unbound:{key}}}"
     | Element(tag, children) -> elementOf tag (children |> List.map (lower onEvent))
     | OnClick(event, child) ->
         Html.span [ prop.onClick (fun _ -> onEvent event); prop.children [ lower onEvent child ] ]
@@ -115,6 +154,8 @@ let eventLabel (event: ToyEvent) : string =
 let rec lowerToHtml (node: ToyNode) : string =
     match node with
     | Text s -> escape s
+    // Unresolved binding (see `lower`) — `resolve` rewrites it first.
+    | Bind key -> escape $"{{unbound:{key}}}"
     | Element(tag, children) ->
         let inner = children |> List.map lowerToHtml |> String.concat ""
         $"<{tag}>{inner}</{tag}>"

@@ -126,6 +126,12 @@
              loader, content-api impl, and NarrativeFeedConfig; precedes
              only the compose that consumes it. -->
         <Compile Include="Server\MultiSite.fs" />
+        <!-- Phase 264 — SSR host-state projection: ServerHostStateProjection
+             projects Phase 112 authoritative live-session state into the
+             neutral HostBindingSources namespace, scope-bound by
+             construction (GP 4). Standalone (depends only on Core +
+             Server types); placed before the compose root by convention. -->
+        <Compile Include="Server\HostStateProjection.fs" />
         <Compile Include="Server\PublicRenderingCompose.fs" />
     </ItemGroup>
 </Project>

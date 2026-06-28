@@ -112,6 +112,11 @@
              used for the connector contract value types). -->
         <Compile Include="Shared\Interfaces\IAIProvider.fs" />
         <Compile Include="Shared\Types\StorageScope.fs" />
+        <!-- Phase 264 — neutral host-state binding-source namespace
+             (HostBindingSources). Shared floor (not client-side-only)
+             because the CSR projection (Platform.Client) and the SSR
+             projection (PublicRendering) produce the same type; GP 10. -->
+        <Compile Include="Shared\HostBindingSources.fs" />
         <Compile Include="Shared\EncryptionTypes.fs" />
         <Compile Include="Shared\EntityTypes.fs" />
         <Compile Include="Shared\EntityQueryTypes.fs" />

@@ -217,6 +217,10 @@ let allTests =
         // Phase 112 — scope-isolated live-session host: contract pack,
         // cap refusal, endpoint integration (404 / 429 / SSE frames).
         LiveSessionHostTests.tests
+        // Phase 264 — host-state binding-source projection seam: CSR
+        // projection round-trip, SSR scope-isolation, GP 13 zero-cost,
+        // toy read-side resolves on both projection paths, OSS grep-guard.
+        HostStateProjectionTests.tests
         PublicRenderingTests.tests
         // Phase 149/150/157 — sitemap conditional-GET + sharding + search index.
         SitemapSearchIndexTests.tests

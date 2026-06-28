@@ -136,6 +136,12 @@
              shipped concretes it re-exposes) and SDK.ClientTypes (the
              ClientModule builder it extends). -->
         <Compile Include="Client\ClientHostBridge.fs" />
+        <!-- Phase 264 — host-state projection read-side (CSR):
+             IHostStateProjection + ClientBoundHostView.withBoundElementView,
+             the data-binding complement to Phase 110's action seam. After
+             ClientHostBridge (it extends withElementView's shape) and the
+             Core HostBindingSources type. -->
+        <Compile Include="Client\HostStateProjection.fs" />
         <!-- Cross-module client event bus. Publish/subscribe seam letting
              one module broadcast a named event that sibling modules react
              to without importing each other. Same sanctioned-mutable-global
