@@ -472,6 +472,13 @@ let allTests =
         // renderer-neutral (fragment / live channel / action authorizer)
         // + the open-core grep-guard + the client-binding shape pin.
         SecondBindingNeutralityTests.tests
+        // Phase 265 — reusable ClientHostCapabilities conformance bar:
+        // the four-capability host-bridge seam (Navigate / Notify /
+        // Dispatch / Call) asserted against the in-tree default and the
+        // Phase 202 ToyNode second binding, so neutrality is asserted by
+        // contract not by a one-off sample. A routing regression fails
+        // this pack (and `Build.fsproj -- VerifyAll`).
+        ClientHostCapabilitiesContract.tests
     ]
 
 [<EntryPoint>]

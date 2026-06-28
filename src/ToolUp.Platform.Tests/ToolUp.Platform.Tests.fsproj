@@ -81,6 +81,12 @@
         <!-- Phase 113 — host-neutral action-authorizer conformance bar
              (decision invariants over a fixture's allowed/denied calls). -->
         <Compile Include="Contracts\IActionAuthorizerContract.fs" />
+        <!-- Phase 265 — reusable ClientHostCapabilities conformance bar
+             (the four-capability host-bridge seam from Phase 110): the
+             in-tree default + the Phase 202 ToyNode second binding as the
+             first non-substrate conformance witness. References the toy
+             sample project (ProjectReference below) for the witness. -->
+        <Compile Include="Contracts\ClientHostCapabilitiesContract.fs" />
         <Compile Include="Contracts\IClientToolDispatchContract.fs" />
         <!-- Phase 112 — scope-isolated live-session host conformance bar
              (structural cross-scope denial, single-session ordering,
