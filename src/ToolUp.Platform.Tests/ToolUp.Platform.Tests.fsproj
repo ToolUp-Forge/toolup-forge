@@ -651,6 +651,12 @@
         <Compile Include="InProcess\ModuleLoadOutcomeTests.fs" />
         <!-- Phase 203 — hydration-parity conformance harness pack. -->
         <Compile Include="InProcess\HydrationParityTests.fs" />
+        <!-- Phase 202 — second in-tree reference tree-binding (neutrality
+             proof): the samples/ToyTreeBinding toy bound against the Phase
+             111 fragment source, the Phase 112 live channel, and the Phase
+             113 action authorizer (default-deny intact), plus the open-core
+             grep-guard + the all-four-capabilities client-binding shape pin. -->
+        <Compile Include="InProcess\SecondBindingNeutralityTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -741,6 +747,12 @@
              above ships under the same pattern (client-tier project
              referenced into Tests for the .NET-reachable subset). -->
         <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <!-- Phase 202 — second in-tree reference tree-binding (neutrality
+             proof). The toy sample is a Fable-verify target (not in the .sln,
+             mirroring MinimalClient); referencing it here pulls it into the
+             .NET build so the neutrality pack can drive its tier-neutral
+             lowerings against the server-side seams the runner can reach. -->
+        <ProjectReference Include="..\..\samples\ToyTreeBinding\ToyTreeBinding.fsproj" />
         <!-- Phase 57 follow-up — Build package reference brings in
              `ToolUp.Platform.Prerender.serialiseRoutes` /
              `nodeScript` / `PrerenderTargetOptions.defaults` for the

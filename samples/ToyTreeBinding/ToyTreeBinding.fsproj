@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToyTreeBinding — a SECOND in-tree reference tree-binding (neutrality proof).
+
+    A deliberately tiny, hand-rolled typed-tree UI language (`ToyNode`)
+    that binds the host-neutral client seam (`ClientHostCapabilities` /
+    `withElementView`) as a stranger to the substrate. It proves the seam
+    is renderer-neutral by being a SECOND consumer of it — the SDK's own
+    "attempt a second implementation before declaring an interface stable"
+    discipline.
+
+    Like MinimalClient, this is NOT in ToolUp.Forge.sln on purpose: the
+    sample is a Fable-verify target, and Fable-only concerns stay out of
+    the main `dotnet build ToolUp.Forge.sln` path. It is pulled into the
+    .NET build transitively as a ProjectReference of ToolUp.Platform.Tests
+    (which exercises the toy's tier-neutral lowerings against the
+    server-side seams the .NET runner can reach), so the solution build
+    still compiles it.
+
+    Fable verification (drives the toy + the full Client tier through the
+    Fable compiler, from this directory): dotnet tool restore, then
+    dotnet fable into an output dir with the no-cache switch. See the
+    sample README for the exact invocation.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+    <!-- Fable-touching project: nullable reference types stay disabled
+         per CLAUDE.md (Feliz / the in-tree Elmish runtime pre-date F# 10
+         nullness; enabling it would cascade inconsistency errors). -->
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ToyNode.fs" />
+    <Compile Include="Binding.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- ProjectReference to ToolUp.Platform.Client gives the toy the
+         client seam under test (ClientHostCapabilities / withElementView)
+         plus Feliz / the in-tree Elmish runtime, and drives the full
+         Client-tier source tree through Fable when this sample is
+         compiled. -->
+    <ProjectReference Include="..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

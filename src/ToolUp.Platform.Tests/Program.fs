@@ -451,6 +451,11 @@ let allTests =
         // CSR mount structural normalisation + node-naming diff (gates the
         // silent hydration-mismatch class at build time, not the console).
         HydrationParityTests.tests
+        // Phase 202 — second in-tree reference tree-binding: the
+        // samples/ToyTreeBinding toy proves the Wave-16 seams are
+        // renderer-neutral (fragment / live channel / action authorizer)
+        // + the open-core grep-guard + the client-binding shape pin.
+        SecondBindingNeutralityTests.tests
     ]
 
 [<EntryPoint>]
