@@ -447,6 +447,10 @@ let allTests =
         // Phase 169 — module-load startup observability (the addModule
         // outcome accumulator emitted through the startup logger).
         ModuleLoadOutcomeTests.tests
+        // Phase 203 — hydration-parity conformance harness: SSR fragment vs
+        // CSR mount structural normalisation + node-naming diff (gates the
+        // silent hydration-mismatch class at build time, not the console).
+        HydrationParityTests.tests
     ]
 
 [<EntryPoint>]

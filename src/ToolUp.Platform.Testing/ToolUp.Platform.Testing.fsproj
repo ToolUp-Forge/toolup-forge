@@ -18,6 +18,8 @@
         <Compile Include="Testing\ServerHarness.fs" />
         <Compile Include="Testing\DataTypeTestKit.fs" />
         <Compile Include="Testing\ModuleHotReload.fs" />
+        <!-- Phase 203 — hydration-parity conformance harness (BCL-only). -->
+        <Compile Include="Testing\HydrationParity.fs" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

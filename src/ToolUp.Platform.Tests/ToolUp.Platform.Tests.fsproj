@@ -649,6 +649,8 @@
         <Compile Include="Contracts\FailClosedContract.fs" />
         <Compile Include="InProcess\AdversarialFailClosedTests.fs" />
         <Compile Include="InProcess\ModuleLoadOutcomeTests.fs" />
+        <!-- Phase 203 — hydration-parity conformance harness pack. -->
+        <Compile Include="InProcess\HydrationParityTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
