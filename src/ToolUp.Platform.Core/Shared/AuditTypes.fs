@@ -1955,6 +1955,53 @@ type TenantDataExportedPayload = {
     SegmentCount: int
 }
 
+// ─── Phase 54i — offboard confirmation-gate audit payloads ─────────────
+//
+// Emitted by `PlatformTenantApiHandler` when `TenantOffboardConfirmation`
+// is `TokenConfirmation` / `TwoPersonRule`. Reserved
+// `SourceModule = "_platform.tenant"` (the same trail as the offboard
+// itself). Metadata-only: scope, the requesting/redeeming admin ids, and
+// the refusal reason — never tenant data, never the token secret.
+
+/// A confirmation token was minted for a pending offboard
+/// (`RequestDeprovisionToken`). The durable record that an admin asked to
+/// arm a destructive offboard — the request itself touches no tenant data.
+type TenantOffboardConfirmationRequestedPayload = {
+    ScopeId: string
+    /// Platform-Admin who requested the token.
+    RequestedBy: string
+    /// Operator-supplied reason for the offboard.
+    Reason: string
+    /// Token expiry — the window within which the redemption must happen.
+    ExpiresAt: System.DateTimeOffset
+}
+
+/// A pending offboard's confirmation token was accepted and the
+/// destructive offboard proceeded (`DeprovisionTenantConfirmed`). Under
+/// `TwoPersonRule`, `ApprovedBy` differs from the original `RequestedBy`.
+type TenantOffboardConfirmationApprovedPayload = {
+    ScopeId: string
+    /// Platform-Admin who requested the token (`ShareTokenClaim.IssuedBy`).
+    RequestedBy: string
+    /// Platform-Admin who redeemed the token and executed the offboard.
+    ApprovedBy: string
+}
+
+/// A confirmation-gated offboard was refused at the gate (before any
+/// destruction): a token-less destructive call under a confirmation mode,
+/// a missing/expired/wrong-scope token, or a same-admin redemption under
+/// `TwoPersonRule`. One row per refusal so a blocked teardown is never
+/// silent (GP 6).
+type TenantOffboardConfirmationRefusedPayload = {
+    ScopeId: string
+    /// Platform-Admin whose offboard attempt was refused.
+    Actor: string
+    /// Human-readable refusal cause (`"confirmation required"`,
+    /// `"token expired"`, `"token scope mismatch"`,
+    /// `"two-person rule: requester cannot self-approve"`, …).
+    Reason: string
+}
+
 /// Phase 69h.tail — uniform-shape audit row emitted by the ToolUp.Remoting
 /// dispatcher for `[<Audit>]`-annotated API record methods. One payload
 /// shape for every annotated method: the dispatcher knows the method
@@ -2362,6 +2409,19 @@ type AuditEvent =
     /// before the erasure sweep (export-then-erase, fail-closed). Reserved
     /// `SourceModule = "_platform.tenant"`.
     | TenantDataExported of TenantDataExportedPayload
+    /// Phase 54i — a confirmation token was minted for a pending offboard
+    /// (`RequestDeprovisionToken`). Reserved
+    /// `SourceModule = "_platform.tenant"`.
+    | TenantOffboardConfirmationRequested of TenantOffboardConfirmationRequestedPayload
+    /// Phase 54i — a confirmation token was accepted and the destructive
+    /// offboard proceeded (`DeprovisionTenantConfirmed`). Reserved
+    /// `SourceModule = "_platform.tenant"`.
+    | TenantOffboardConfirmationApproved of TenantOffboardConfirmationApprovedPayload
+    /// Phase 54i — a confirmation-gated offboard was refused at the gate
+    /// before any destruction (missing/expired/wrong-scope token, or a
+    /// same-admin redemption under `TwoPersonRule`). Reserved
+    /// `SourceModule = "_platform.tenant"`.
+    | TenantOffboardConfirmationRefused of TenantOffboardConfirmationRefusedPayload
     /// Phase 107 — an original ingested document was fetched from the
     /// Knowledge Base via `GetOriginalDocument`. Sensitive-read audit,
     /// distinct from the upload event (GP 6).
@@ -2492,6 +2552,9 @@ module AuditEvent =
         | TenantDeprovisioned _ -> "TenantDeprovisioned"
         | TenantLifecycleHookFailed _ -> "TenantLifecycleHookFailed"
         | TenantDataExported _ -> "TenantDataExported"
+        | TenantOffboardConfirmationRequested _ -> "TenantOffboardConfirmationRequested"
+        | TenantOffboardConfirmationApproved _ -> "TenantOffboardConfirmationApproved"
+        | TenantOffboardConfirmationRefused _ -> "TenantOffboardConfirmationRefused"
         | KnowledgeOriginalRetrieved _ -> "KnowledgeOriginalRetrieved"
         | KnowledgeOriginalRetrievalDenied _ -> "KnowledgeOriginalRetrievalDenied"
         | RemotingMethodAudited _ -> "RemotingMethodAudited"

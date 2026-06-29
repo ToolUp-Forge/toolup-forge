@@ -900,6 +900,43 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> TenantLifecycleHookFailed(fromAuditJson<TenantLifecycleHookFailedPayload> j)
     }
+    // Phase 54j — export-then-erase archive marker (codec registration was
+    // omitted when the case shipped; added here so the case round-trips
+    // through the registry and external sinks, per the Phase 114 gate).
+    {
+        EventType = "TenantDataExported"
+        TryEncode =
+            (function
+            | TenantDataExported p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantDataExported(fromAuditJson<TenantDataExportedPayload> j)
+    }
+    // Phase 54i — offboard confirmation-gate audit events (append-only).
+    {
+        EventType = "TenantOffboardConfirmationRequested"
+        TryEncode =
+            (function
+            | TenantOffboardConfirmationRequested p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode =
+            fun j -> TenantOffboardConfirmationRequested(fromAuditJson<TenantOffboardConfirmationRequestedPayload> j)
+    }
+    {
+        EventType = "TenantOffboardConfirmationApproved"
+        TryEncode =
+            (function
+            | TenantOffboardConfirmationApproved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantOffboardConfirmationApproved(fromAuditJson<TenantOffboardConfirmationApprovedPayload> j)
+    }
+    {
+        EventType = "TenantOffboardConfirmationRefused"
+        TryEncode =
+            (function
+            | TenantOffboardConfirmationRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantOffboardConfirmationRefused(fromAuditJson<TenantOffboardConfirmationRefusedPayload> j)
+    }
     {
         EventType = "KnowledgeOriginalRetrieved"
         TryEncode =

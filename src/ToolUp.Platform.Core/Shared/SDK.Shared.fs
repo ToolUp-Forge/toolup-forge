@@ -531,6 +531,44 @@ type TenantLifecycleMode =
     /// `SourceModule = "_platform.tenant"`.
     | EnabledTenantLifecycle
 
+/// Phase 54i — confirmation gate in front of the destructive
+/// tenant-offboard surface. Default `NoConfirmation` preserves Phase 54's
+/// one-call behaviour byte-for-byte (GP 11); the two stronger modes
+/// require an out-of-band confirmation token (minted via
+/// `IPlatformTenantApi.RequestDeprovisionToken`, backed by
+/// `IShareTokenStore`) before any token-less destructive offboard
+/// (`DeprovisionTenant` / `…Sync` / `…Async` / `ExportThenDeprovision`)
+/// is allowed — those token-less paths are refused under a confirmation
+/// mode, and the operator must instead call `DeprovisionTenantConfirmed`
+/// with a valid token. Opt-in per deployment (GP 13).
+type OffboardConfirmationMode =
+    /// No confirmation gate. The token-less destructive offboard
+    /// surface behaves exactly as Phase 54 — a single Owner /
+    /// Platform-Admin call shreds the tenant. Default.
+    | NoConfirmation
+    /// A short-lived confirmation token (minted by
+    /// `RequestDeprovisionToken`) is required: a token-less offboard is
+    /// refused with `Error "offboard confirmation required"`, and
+    /// `DeprovisionTenantConfirmed` proceeds only with a valid, in-scope,
+    /// unexpired token. Guards against fat-finger single-click teardown.
+    | TokenConfirmation
+    /// As `TokenConfirmation`, plus a two-person rule: the admin who
+    /// *redeems* the token (executes `DeprovisionTenantConfirmed`) must be
+    /// a *different* Platform-Admin than the one who requested it
+    /// (`ShareTokenClaim.IssuedBy`). Same-admin redemption is refused.
+    /// Guards against single-insider destruction.
+    | TwoPersonRule
+
+module OffboardConfirmationMode =
+    /// `true` when the mode requires a confirmation token before a
+    /// destructive offboard (everything except `NoConfirmation`). The
+    /// handler refuses every token-less destructive path when this holds.
+    let requiresToken =
+        function
+        | NoConfirmation -> false
+        | TokenConfirmation
+        | TwoPersonRule -> true
+
 /// Sink-level cardinality cap configuration. The
 /// `MetricDefinition.Tags` allowlist is the structural defence
 /// against caller-side cardinality explosions; this knob is the
@@ -2584,6 +2622,18 @@ type ServerConfig = {
     /// call with per-hook isolation + audit. Zero cost when not enabled
     /// (GP 13).
     TenantLifecycle: TenantLifecycleMode
+    /// Phase 54i — confirmation gate in front of the destructive tenant
+    /// offboard. Default `NoConfirmation` preserves Phase 54's one-call
+    /// behaviour byte-for-byte (GP 11). `TokenConfirmation` requires a
+    /// short-lived `RequestDeprovisionToken` before any token-less
+    /// destructive path runs; `TwoPersonRule` additionally requires the
+    /// redeeming admin to differ from the requester. Only consulted when
+    /// `TenantLifecycle = EnabledTenantLifecycle`; the token modes need an
+    /// `IShareTokenStore` composed (the Phase 21b share-token substrate) —
+    /// if absent, `RequestDeprovisionToken` / `DeprovisionTenantConfirmed`
+    /// return a clear "requires an IShareTokenStore" error. Zero cost when
+    /// not enabled (GP 13).
+    TenantOffboardConfirmation: OffboardConfirmationMode
     /// Phase 177 — opt-in deployment-readiness scorecard. Default
     /// `NoReadinessReport` (GP 11/13) leaves the
     /// `IDeploymentReadinessApi` route unmounted (the surface 404s, the
@@ -2883,6 +2933,7 @@ module ServerConfig =
         NarrativeRetention = NarrativeRetentionPolicy.defaults
         PeerSubstrate = NoPeerSubstrate
         TenantLifecycle = NoTenantLifecycle
+        TenantOffboardConfirmation = NoConfirmation
         DeploymentReadiness = NoReadinessReport
     }
 

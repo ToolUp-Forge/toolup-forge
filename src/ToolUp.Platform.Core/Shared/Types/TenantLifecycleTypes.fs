@@ -338,3 +338,31 @@ type ExportThenDeprovisionResult = {
     /// The export archive written before erasure.
     Archive: LifecycleExportArchive
 }
+
+/// Phase 54i — a minted offboard-confirmation token, returned by
+/// `IPlatformTenantApi.RequestDeprovisionToken`. The opaque `Token`
+/// string is handed back to the operator (a second admin under
+/// `TwoPersonRule`) and replayed into `DeprovisionTenantConfirmed`. The
+/// echoed `ScopeId` / `ExpiresAt` / `RequestedBy` let the admin UI render
+/// a countdown + "requested by X" banner without re-parsing the token.
+/// Carries no secret beyond `Token` itself; the durable claim lives in
+/// `IShareTokenStore`.
+type OffboardConfirmation = {
+    /// Opaque confirmation token — replay verbatim into
+    /// `DeprovisionTenantConfirmed`. Never construct manually.
+    Token: string
+    /// Tenant scope the token authorises an offboard for. A token minted
+    /// for one scope can never authorise another (scope is bound in the
+    /// underlying `ShareTokenClaim`).
+    ScopeId: string
+    /// Operator-supplied reason captured at request time (echoed for the
+    /// approval UI / audit).
+    Reason: string
+    /// Platform-Admin who requested the token. Under `TwoPersonRule` the
+    /// redeeming admin must differ from this id.
+    RequestedBy: string
+    /// When the token expires; after this a redemption is refused as
+    /// `Error "offboard confirmation required"` (the token re-mint flow
+    /// restarts).
+    ExpiresAt: System.DateTimeOffset
+}

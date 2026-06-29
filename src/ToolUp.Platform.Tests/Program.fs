@@ -134,6 +134,7 @@ let allTests =
         EncryptedBlobStorageTests.tests
         TenantLifecycleAggregatorTests.tests
         LifecycleSummaryStoreTests.tests
+        OffboardConfirmationTests.tests
         ITenantLifecycleContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests

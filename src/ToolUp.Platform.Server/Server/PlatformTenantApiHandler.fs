@@ -49,6 +49,32 @@ type TenantLifecycleSnapshot() =
 /// `PlatformAdminApi` banner so the client surfaces one consistent error.
 let adminError = "platform admin role required"
 
+// ─── Phase 54i — offboard confirmation gate constants ────────────────
+
+/// Uniform refusal surfaced to the client whenever a confirmation-gated
+/// offboard is blocked at the gate (token-less call under a confirmation
+/// mode, or a missing/expired/wrong-scope/self-approved token). The
+/// specific cause goes to the audit trail; the client sees one banner so
+/// it can't enumerate which tokens exist (mirrors the share-token
+/// "indistinguishable failure" posture).
+let offboardConfirmationRequired = "offboard confirmation required"
+
+/// Clear error when a confirmation mode is configured but no
+/// `IShareTokenStore` is composed to mint/redeem tokens.
+let offboardConfirmationNoStore =
+    "offboard confirmation requires an IShareTokenStore (compose the share-token substrate)"
+
+/// `ResourceKind` the confirmation tokens are minted under. Namespaced so
+/// a confirmation token can never be confused with a Forms / share-link
+/// token even within the same `IShareTokenStore`.
+[<Literal>]
+let offboardResourceKind = "_platform.tenant-offboard"
+
+/// Confirmation-token validity window. Short by design — long enough to
+/// fetch a second admin under `TwoPersonRule`, short enough that a minted
+/// token isn't a standing armed-teardown capability.
+let offboardConfirmationWindow = System.TimeSpan.FromMinutes 15.0
+
 /// Build the `IPlatformTenantApi` for one request.
 let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     let services = ctx.RequestServices
@@ -89,6 +115,22 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     let scheduler =
         match services.GetService(typeof<IJobScheduler>) with
         | :? IJobScheduler as s -> Some s
+        | _ -> None
+
+    // Phase 54i — offboard confirmation gate. `confirmationMode` reads the
+    // deployment's `ServerConfig` (default `NoConfirmation` when absent —
+    // minimal/test wiring, which then behaves exactly as Phase 54).
+    // `shareTokens` is `None` unless the Phase 21b share-token substrate is
+    // composed; under a confirmation mode the mint / redeem methods then
+    // return `offboardConfirmationNoStore`.
+    let confirmationMode =
+        match services.GetService(typeof<ServerConfig>) with
+        | :? ServerConfig as c -> c.TenantOffboardConfirmation
+        | _ -> NoConfirmation
+
+    let shareTokens =
+        match services.GetService(typeof<IShareTokenStore>) with
+        | :? IShareTokenStore as s -> Some s
         | _ -> None
 
     // Phase 54b — completed-step offboard ledger. A fresh provision of a
@@ -164,6 +206,56 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
             | None -> return None
     }
 
+    // Phase 54i — emit a refusal audit row + return the uniform refusal
+    // *message* (the caller wraps it in `Error`). The specific `reason`
+    // goes to the audit trail; the returned banner is uniform.
+    let refuseOffboard (scopeId: string) (reason: string) : Async<string> = async {
+        do!
+            emitAudit
+                scopeId
+                (AuditEvent.TenantOffboardConfirmationRefused {
+                    ScopeId = scopeId
+                    Actor = actor
+                    Reason = reason
+                })
+
+        return offboardConfirmationRequired
+    }
+
+    // Phase 54i — the gate the token-less destructive paths consult. Under
+    // a confirmation mode every token-less destructive call is refused
+    // (the operator must mint a token + use `DeprovisionTenantConfirmed`);
+    // under `NoConfirmation` it is a pass-through (`None` = proceed).
+    let confirmationGate (scopeId: string) : Async<string option> = async {
+        if OffboardConfirmationMode.requiresToken confirmationMode then
+            let! banner = refuseOffboard scopeId "confirmation required (token-less offboard blocked)"
+            return Some banner
+        else
+            return None
+    }
+
+    // Phase 54i — map a share-token validation failure to an audit reason.
+    let validationReason =
+        function
+        | ShareTokenError.Expired -> "token expired"
+        | ShareTokenError.RevokedToken -> "token revoked"
+        | ShareTokenError.UseLimitExceeded -> "token already used"
+        | ShareTokenError.NotFound
+        | ShareTokenError.InvalidSignature
+        | ShareTokenError.Malformed -> "token invalid"
+        | ShareTokenError.RateLimited -> "token rate-limited"
+        | ShareTokenError.StorageFailed _ -> "token store unavailable"
+
+    // Phase 54i — run the (already-authorised, already-confirmed) offboard
+    // inline and persist, returning the summary. Shared by the confirmed
+    // path; identical aggregator call to `DeprovisionTenant`.
+    let runConfirmedOffboard (scopeId: string) = async {
+        let! summary = TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Deprovisioning scopeId actor
+
+        do! persist scopeId summary
+        return summary
+    }
+
     {
         ProvisionTenant =
             fun (scopeId, _wireActor, _request) -> async {
@@ -185,11 +277,11 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 if not isAdmin then
                     return Error adminError
                 else
-                    let! summary =
-                        TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Deprovisioning scopeId actor
-
-                    do! persist scopeId summary
-                    return Ok summary
+                    match! confirmationGate scopeId with
+                    | Some banner -> return Error banner
+                    | None ->
+                        let! summary = runConfirmedOffboard scopeId
+                        return Ok summary
             }
 
         GetLifecycleSummary =
@@ -209,11 +301,11 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 if not isAdmin then
                     return Error adminError
                 else
-                    let! summary =
-                        TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Deprovisioning scopeId actor
-
-                    do! persist scopeId summary
-                    return Ok summary
+                    match! confirmationGate scopeId with
+                    | Some banner -> return Error banner
+                    | None ->
+                        let! summary = runConfirmedOffboard scopeId
+                        return Ok summary
             }
 
         // Phase 54a — background offboard. Enqueues + fires a lifecycle
@@ -225,12 +317,15 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 if not isAdmin then
                     return Error adminError
                 else
-                    match scheduler with
+                    match! confirmationGate scopeId with
+                    | Some banner -> return Error banner
                     | None ->
-                        return
-                            Error
-                                "background offboard requires an IJobScheduler (compose JobScheduler = InProcessJobScheduler); use DeprovisionTenant / DeprovisionTenantSync for the inline path"
-                    | Some sch -> return! TenantLifecycleAggregator.enqueue sch Deprovisioning scopeId actor
+                        match scheduler with
+                        | None ->
+                            return
+                                Error
+                                    "background offboard requires an IJobScheduler (compose JobScheduler = InProcessJobScheduler); use DeprovisionTenant / DeprovisionTenantSync for the inline path"
+                        | Some sch -> return! TenantLifecycleAggregator.enqueue sch Deprovisioning scopeId actor
             }
 
         // Phase 54c — read-only offboard preview. No mutation, no
@@ -253,20 +348,125 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 if not isAdmin then
                     return Error adminError
                 else
-                    let runExport () =
-                        DataSubjectRequestLifecycle.exportArchive services scopeId
+                    match! confirmationGate scopeId with
+                    | Some banner -> return Error banner
+                    | None ->
+                        let runExport () =
+                            DataSubjectRequestLifecycle.exportArchive services scopeId
 
-                    match!
-                        TenantLifecycleAggregator.exportThenDeprovision
-                            emitAudit
-                            runExport
-                            (resolveHooks ())
-                            scopeId
-                            actor
-                    with
-                    | Error e -> return Error e
-                    | Ok result ->
-                        do! persist scopeId result.Summary
-                        return Ok result
+                        match!
+                            TenantLifecycleAggregator.exportThenDeprovision
+                                emitAudit
+                                runExport
+                                (resolveHooks ())
+                                scopeId
+                                actor
+                        with
+                        | Error e -> return Error e
+                        | Ok result ->
+                            do! persist scopeId result.Summary
+                            return Ok result
+            }
+
+        // Phase 54i — mint a short-lived confirmation token (one-time,
+        // in-scope) for a pending offboard. Requires the share-token
+        // substrate; emits `TenantOffboardConfirmationRequested`.
+        RequestDeprovisionToken =
+            fun (scopeId, reason) -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    match shareTokens with
+                    | None -> return Error offboardConfirmationNoStore
+                    | Some store ->
+                        let request: ShareTokenIssueRequest = {
+                            ScopeId = scopeId
+                            ResourceKind = offboardResourceKind
+                            ResourceId = scopeId
+                            // The reason rides the attributed-handle slot so
+                            // the redeeming admin / audit can recover it.
+                            AttributedHandle = Some reason
+                            IssuedBy = actor
+                            ExpiresAt = Some(System.DateTimeOffset.UtcNow.Add offboardConfirmationWindow)
+                            UseLimit = Some(Some 1)
+                            RateLimit = None
+                        }
+
+                        match! store.Issue request with
+                        | Error e -> return Error(sprintf "failed to mint offboard confirmation token: %A" e)
+                        | Ok token ->
+                            do!
+                                emitAudit
+                                    scopeId
+                                    (AuditEvent.TenantOffboardConfirmationRequested {
+                                        ScopeId = scopeId
+                                        RequestedBy = actor
+                                        Reason = reason
+                                        ExpiresAt = token.Claim.ExpiresAt
+                                    })
+
+                            return
+                                Ok {
+                                    Token = token.Token
+                                    ScopeId = scopeId
+                                    Reason = reason
+                                    RequestedBy = actor
+                                    ExpiresAt = token.Claim.ExpiresAt
+                                }
+            }
+
+        // Phase 54i — redeem a confirmation token and run the offboard.
+        // Validates scope + freshness + (under TwoPersonRule) requester ≠
+        // redeemer, consumes the one-time token, then runs the same
+        // offboard as `DeprovisionTenant`. Every refusal is audited before
+        // any destruction.
+        DeprovisionTenantConfirmed =
+            fun (scopeId, _wireActor, _reason, confirmationToken) -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    match shareTokens with
+                    | None -> return Error offboardConfirmationNoStore
+                    | Some store ->
+                        match! store.Validate confirmationToken with
+                        | Error e ->
+                            let! banner = refuseOffboard scopeId (validationReason e)
+                            return Error banner
+                        | Ok claim ->
+                            // Scope-binding: the token must have been minted
+                            // for THIS scope's offboard, not reused from
+                            // another scope / another surface.
+                            if
+                                claim.ScopeId <> scopeId
+                                || claim.ResourceKind <> offboardResourceKind
+                                || claim.ResourceId <> scopeId
+                            then
+                                let! banner = refuseOffboard scopeId "token scope mismatch"
+                                return Error banner
+                            elif confirmationMode = TwoPersonRule && claim.IssuedBy = actor then
+                                let! banner = refuseOffboard scopeId "two-person rule: requester cannot self-approve"
+
+                                return Error banner
+                            else
+                                // Consume the one-time token BEFORE the
+                                // destructive run so a concurrent / replayed
+                                // redemption of the same token is rejected.
+                                match! store.MarkUsed(claim.ScopeId, claim.TokenId) with
+                                | Error e ->
+                                    let! banner = refuseOffboard scopeId (validationReason e)
+                                    return Error banner
+                                | Ok() ->
+                                    let! summary = runConfirmedOffboard scopeId
+
+                                    do!
+                                        emitAudit
+                                            scopeId
+                                            (AuditEvent.TenantOffboardConfirmationApproved {
+                                                ScopeId = scopeId
+                                                RequestedBy = claim.IssuedBy
+                                                ApprovedBy = actor
+                                            })
+
+                                    return Ok summary
             }
     }

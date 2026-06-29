@@ -273,6 +273,9 @@
         <!-- Phase 54e — durable last-LifecycleSummary store (blob round-trip,
              restart survival, corrupt-blob tolerance). -->
         <Compile Include="InProcess\LifecycleSummaryStoreTests.fs" />
+        <!-- Phase 54i — confirmation-gated offboard (token gate, one-time
+             token, scope binding, two-person rule). -->
+        <Compile Include="InProcess\OffboardConfirmationTests.fs" />
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />

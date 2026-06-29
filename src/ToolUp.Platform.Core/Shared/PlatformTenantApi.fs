@@ -126,6 +126,43 @@ type IPlatformTenantApi = {
     [<RequiresRole "PlatformAdmin">]
     [<Audit "TenantDeleted">]
     ExportThenDeprovision: string * string * string -> Async<Result<ExportThenDeprovisionResult, string>>
+
+    // ─── Phase 54i — confirmation-gated offboard (append-only) ───────
+    //
+    // When `ServerConfig.TenantOffboardConfirmation` is `TokenConfirmation`
+    // / `TwoPersonRule`, the token-less destructive methods above
+    // (`DeprovisionTenant` / `…Sync` / `…Async` / `ExportThenDeprovision`)
+    // are refused with `Error "offboard confirmation required"`, and an
+    // offboard must go through the two methods below. Under the default
+    // `NoConfirmation` the token-less methods behave exactly as Phase 54
+    // (GP 11) and these two are still callable (the confirmed path always
+    // works; the gate just isn't required).
+
+    /// Phase 54i — mint a short-lived confirmation token for a pending
+    /// offboard of `scopeId`, capturing the operator's `reason`. Backed by
+    /// `IShareTokenStore`; the returned `OffboardConfirmation.Token` is
+    /// replayed into `DeprovisionTenantConfirmed`. Returns
+    /// `Error "offboard confirmation requires an IShareTokenStore…"` when
+    /// no share-token substrate is composed. Owner / Platform-Admin only;
+    /// emits `TenantOffboardConfirmationRequested` (no destruction).
+    [<RequiresRole "PlatformAdmin">]
+    RequestDeprovisionToken: string * string -> Async<Result<OffboardConfirmation, string>>
+
+    /// Phase 54i — execute a confirmation-gated offboard: validate the
+    /// `confirmationToken` (in-scope, unexpired, unused) and, under
+    /// `TwoPersonRule`, that the redeeming admin differs from the
+    /// requester; then run the same offboard as `DeprovisionTenant` and
+    /// return the `LifecycleSummary`. A missing/expired/wrong-scope token,
+    /// or a same-admin redemption under `TwoPersonRule`, is refused with
+    /// `Error "offboard confirmation required"` (and a
+    /// `TenantOffboardConfirmationRefused` audit row) before any
+    /// destruction. On success the token is consumed (one-time) and
+    /// `TenantOffboardConfirmationApproved` is audited. Tuple:
+    /// `(scopeId, actorUserId, reason, confirmationToken)`. Owner /
+    /// Platform-Admin only.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "TenantDeleted">]
+    DeprovisionTenantConfirmed: string * string * string * string -> Async<Result<LifecycleSummary, string>>
 }
 
 module PlatformTenantApi =
