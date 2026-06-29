@@ -46,6 +46,9 @@
         <!-- Phase 173 — Data Manager ingestion-status observer (drives the
              platform-tier IIngestionStatusStore from chunk-completion events). -->
         <Compile Include="Server\DataManagerIngestionObserver.fs" />
+        <!-- Phase 54d — RAG vector-store offboard purge hook. Before
+             RAGCompose, which registers it under EnabledTenantLifecycle. -->
+        <Compile Include="Server\RagVectorStoreLifecycle.fs" />
         <Compile Include="Server\RAGCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server +

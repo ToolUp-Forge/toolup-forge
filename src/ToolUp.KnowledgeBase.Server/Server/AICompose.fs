@@ -4,6 +4,7 @@ open System
 open System.Text
 open System.Text.Json
 open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.AI.AICompose
@@ -250,4 +251,28 @@ let register (app: AIServerApp) : AIServerApp =
             (KnowledgeBaseIndexInstanceValidator(baseWithTools.Config) :> ConfigValidation.IConfigValidator)
             baseWithTools
 
-    { app with Base = baseWithValidator }
+    // Phase 54d — register the KB offboard-purge hook when the deployment
+    // opted into the tenant-lifecycle substrate. Threaded through the
+    // shared `Extensions.ServiceConfig` seam (the same idiom
+    // `ServerApp.withCspContributor` uses), gated on the same
+    // `TenantLifecycle = EnabledTenantLifecycle` switch the core
+    // `ComposeTenantLifecycle` gates on. The hook self-`Skipped`s when no
+    // `IBlobStorage` is composed, so the gate is the only condition.
+    let registerLifecycleHook (s: IServiceCollection) : IServiceCollection =
+        match baseWithValidator.Config.TenantLifecycle with
+        | EnabledTenantLifecycle ->
+            s.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> KnowledgeBaseLifecycle.create sp)
+        | NoTenantLifecycle -> s
+
+    let baseWithLifecycle = {
+        baseWithValidator with
+            Extensions = {
+                baseWithValidator.Extensions with
+                    ServiceConfig =
+                        match baseWithValidator.Extensions.ServiceConfig with
+                        | None -> Some registerLifecycleHook
+                        | Some baseFn -> Some(fun s -> registerLifecycleHook (baseFn s))
+            }
+    }
+
+    { app with Base = baseWithLifecycle }

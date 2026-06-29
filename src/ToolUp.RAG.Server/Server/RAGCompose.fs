@@ -1019,9 +1019,22 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // resolves it and joins status onto the file-list read.
                 .AddSingleton<IIngestionStatusStore>(ingestionStatusStore)
 
-        match app.Reranker with
-        | Some r -> s.AddSingleton<IReranker>(r)
-        | None -> s
+        let s =
+            match app.Reranker with
+            | Some r -> s.AddSingleton<IReranker>(r)
+            | None -> s
+
+        // Phase 54d — RAG vector-store offboard purge hook, gated on the
+        // same `TenantLifecycle = EnabledTenantLifecycle` switch the core
+        // `ComposeTenantLifecycle` gates on. Additive `AddSingleton` —
+        // the aggregator resolves the full `seq<ITenantLifecycle>`, so this
+        // stacks with the core first-party hooks. Self-`Skipped`s when no
+        // `IVectorStore` is composed (here it always is), so the gate is
+        // the only condition.
+        match config.TenantLifecycle with
+        | EnabledTenantLifecycle ->
+            s.AddSingleton<ITenantLifecycle>(fun (sp: System.IServiceProvider) -> RagVectorStoreLifecycle.create sp)
+        | NoTenantLifecycle -> s
 
     // RAG config validators (mirrors the set the former `composeWithRAG` /
     // `RAGServerApp.run` built). Constructed against the module-merged config
