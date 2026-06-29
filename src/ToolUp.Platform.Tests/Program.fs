@@ -133,6 +133,7 @@ let allTests =
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
         TenantLifecycleAggregatorTests.tests
+        LifecycleSummaryStoreTests.tests
         ITenantLifecycleContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests

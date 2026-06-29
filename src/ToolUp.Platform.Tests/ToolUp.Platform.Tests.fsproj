@@ -270,6 +270,9 @@
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
         <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
+        <!-- Phase 54e — durable last-LifecycleSummary store (blob round-trip,
+             restart survival, corrupt-blob tolerance). -->
+        <Compile Include="InProcess\LifecycleSummaryStoreTests.fs" />
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />
