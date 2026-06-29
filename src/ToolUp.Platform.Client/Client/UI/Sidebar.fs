@@ -55,6 +55,17 @@ let PinnedKey = "_pinned"
 [<Literal>]
 let OtherKey = "_other"
 
+/// Reserved key for the always-visible Home section.
+[<Literal>]
+let HomeKey = "_home"
+
+/// The SDK Home module's reserved id (see `Home.create` →
+/// `ClientModule.withId "_sdk.home"`). The sidebar lifts it into a
+/// dedicated leading section that is always visible and never
+/// collapsed, rather than letting it fall into `_other` at the bottom.
+[<Literal>]
+let HomeId = "_sdk.home"
+
 // Vite's default-export of a non-`?react` asset import is the file's
 // built URL — usable directly as an `<img src>`. The shell sidebar
 // is permanently dark (slate-900-ish background), so we ship the
@@ -96,7 +107,25 @@ let private applyOrder (order: string list) (modules: SidebarModule list) : Side
 /// 3. `_other` — ungrouped modules, always last.
 let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferences) : SidebarSection list =
     let pinnedSet = Set.ofList prefs.PinnedModuleIds
-    let byId = modules |> List.map (fun m -> m.Id, m) |> Map.ofList
+
+    // Home is special — always-visible, never grouped, pinned, or
+    // collapsed. Lift it into a dedicated leading section before any
+    // bucketing so it can't fall into `_other` or hide behind a
+    // collapsed group. Everything else feeds the buckets below.
+    let homeSection =
+        modules
+        |> List.tryFind (fun m -> m.Id = HomeId)
+        |> Option.map (fun home -> {
+            Key = HomeKey
+            Title = None
+            IsCollapsed = false
+            IsPinnedSection = false
+            Modules = [ toSidebarModule pinnedSet home ]
+        })
+        |> Option.toList
+
+    let groupable = modules |> List.filter (fun m -> m.Id <> HomeId)
+    let byId = groupable |> List.map (fun m -> m.Id, m) |> Map.ofList
 
     let pinnedSection =
         let pinnedModules =
@@ -119,7 +148,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
 
     // Non-pinned modules — everything not in the pinned set. This is
     // the set that gets partitioned into declared groups + "_other".
-    let nonPinned = modules |> List.filter (fun m -> not (pinnedSet.Contains m.Id))
+    let nonPinned = groupable |> List.filter (fun m -> not (pinnedSet.Contains m.Id))
 
     // Preserve first-occurrence order of group names across `modules`.
     // Set-based dedupe would lose ordering; fold keeps it.
@@ -189,7 +218,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
                 }
             ]
 
-    pinnedSection @ declaredSections @ otherSection
+    homeSection @ pinnedSection @ declaredSections @ otherSection
 
 /// Flatten a section list to the ordered module id sequence — used
 /// by consumers that need to resolve the currently-selected id
@@ -362,7 +391,9 @@ let private renderModuleButton
             // Absolute-positioned so it overlays the button without
             // shifting layout; pointer-events-auto inside a pointer-
             // events-none parent would also work but this is simpler.
-            if isExpanded then
+            // Pin affordance — suppressed for Home, which lives in its
+            // own always-visible leading section and is never pinnable.
+            if isExpanded && m.Id <> HomeId then
                 Html.button [
                     prop.className [
                         // `bg-transparent` — same consumer-global-button
@@ -441,11 +472,14 @@ let private renderSectionHeader (onGroupToggled: string -> unit) (section: Sideb
         ]
     ]
 
-/// Sidebar. Renders a pinned overlay (if any pinned modules exist),
-/// each declared group as a collapsible section, and the "_other"
-/// section last. Section headers appear only when the sidebar is
-/// hover-expanded; in narrow mode (w-20) the sidebar is icons-only
-/// but still respects per-section collapse state.
+/// Sidebar. Renders the always-visible Home entry first, then a pinned
+/// overlay (if any pinned modules exist), each declared group as a
+/// collapsible section, and the "_other" section last. Section headers
+/// appear only when the sidebar is hover-expanded; in narrow mode (w-20)
+/// the sidebar is icons-only and mirrors per-section collapse state — a
+/// collapsed group shows a single default icon (its lead module's,
+/// click-to-expand) instead of its full icon set, while Home and the
+/// pinned overlay always stay fully visible.
 ///
 /// Drag-to-reorder is scoped per-section: each section wraps its
 /// modules in a `SortableContext`, and dropping across sections is
@@ -529,29 +563,57 @@ let Sidebar
 
         ReactLegacy.createElement (unbox<ReactElement> DndKit.SortableContext, sortableContextProps, [| inner |])
 
+    // Single representative icon for a collapsed group in the narrow
+    // (at-rest) rail — the group's "default icon", derived from its lead
+    // module so each group reads distinctly. Clicking toggles the group
+    // open (also the only way to drive collapse state on touch, where
+    // there's no hover-to-expand). Rendered muted so it reads as a group
+    // affordance rather than an active module entry.
+    let renderCollapsedGroupIcon (section: SidebarSection) =
+        match section.Modules with
+        | [] -> Html.none
+        | lead :: _ ->
+            Html.button [
+                prop.key (section.Key + "__groupicon")
+                prop.className [
+                    "w-full flex items-center justify-center py-3 transition-colors rounded-[var(--radius)] bg-transparent"
+                    "text-white/60 hover:text-white hover:bg-white/5 border-2 border-transparent"
+                ]
+                prop.title (section.Title |> Option.defaultValue "")
+                prop.onClick (fun _ -> onGroupToggled section.Key)
+                prop.children [
+                    Html.div [
+                        prop.className "w-8 flex items-center justify-center flex-shrink-0 [&>svg]:w-8 [&>svg]:h-8"
+                        prop.children [ lead.Icon ]
+                    ]
+                ]
+            ]
+
     let moduleList =
         Html.div [
             prop.className "flex-1 py-2 px-4 overflow-y-auto"
             prop.children [
                 for section in sections do
-                    // Header — only visible when sidebar is expanded
-                    // and the section declares a title.
-                    match isExpanded, section.Title with
-                    | true, Some title -> renderSectionHeader onGroupToggled section title
-                    | _ -> ()
+                    if isExpanded then
+                        // Expanded: section header (when titled) + the
+                        // module rows when the section isn't collapsed.
+                        match section.Title with
+                        | Some title -> renderSectionHeader onGroupToggled section title
+                        | None -> ()
 
-                    // Modules render when the section is expanded OR the
-                    // sidebar is in narrow (icons-only) mode. Group collapse
-                    // is an expanded-mode affordance — the collapse chevron
-                    // lives in the section header, which only shows when
-                    // expanded. In narrow mode there is no header to toggle,
-                    // so honouring `IsCollapsed` there would leave a fresh
-                    // user (whose groups all default collapsed — `prefs`
-                    // starts with an empty `ExpandedGroups`) staring at a
-                    // completely empty sidebar with no way to reach any
-                    // module. Narrow mode therefore always shows the icons.
-                    if (not isExpanded) || (not section.IsCollapsed) then
-                        React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
+                        if not section.IsCollapsed then
+                            React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
+                    else
+                        // Narrow (at-rest) rail. Home + the pinned overlay
+                        // stay fully visible; every other group collapses to
+                        // its single default icon, expanding to its module
+                        // icons when the user opens it.
+                        let alwaysVisible = section.IsPinnedSection || section.Key = HomeKey
+
+                        if alwaysVisible || not section.IsCollapsed then
+                            React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
+                        else
+                            React.KeyedFragment(section.Key + "__collapsed", [ renderCollapsedGroupIcon section ])
             ]
         ]
 
