@@ -2002,6 +2002,38 @@ type TenantOffboardConfirmationRefusedPayload = {
     Reason: string
 }
 
+// ─── Phase 54f — scheduled / grace-period offboard audit payloads ──────
+//
+// Emitted by `PlatformTenantApiHandler` when an offboard is scheduled
+// behind a grace window or that pending schedule is cancelled. Reserved
+// `SourceModule = "_platform.tenant"`. Metadata-only. The eventual fire
+// is recorded by the offboard's own `TenantDeprovisioned` marker, so
+// there is no separate "fired" event.
+
+/// A grace-period offboard was scheduled (`ScheduleDeprovision`): the
+/// tenant will be deprovisioned at `DueAt` unless cancelled first.
+type TenantDeprovisionScheduledPayload = {
+    ScopeId: string
+    /// Platform-Admin who scheduled the offboard.
+    RequestedBy: string
+    /// Operator-supplied reason.
+    Reason: string
+    /// When the offboard fires unless cancelled (UTC).
+    DueAt: System.DateTimeOffset
+    /// Backing scheduler job id (string-rendered).
+    JobId: string
+}
+
+/// A pending grace-period offboard was cancelled
+/// (`CancelScheduledDeprovision`) before it fired — the tenant survives.
+type TenantDeprovisionCancelledPayload = {
+    ScopeId: string
+    /// Platform-Admin who cancelled the pending offboard.
+    CancelledBy: string
+    /// The reason the cancelled schedule carried (for the trail).
+    Reason: string
+}
+
 /// Phase 69h.tail — uniform-shape audit row emitted by the ToolUp.Remoting
 /// dispatcher for `[<Audit>]`-annotated API record methods. One payload
 /// shape for every annotated method: the dispatcher knows the method
@@ -2422,6 +2454,12 @@ type AuditEvent =
     /// same-admin redemption under `TwoPersonRule`). Reserved
     /// `SourceModule = "_platform.tenant"`.
     | TenantOffboardConfirmationRefused of TenantOffboardConfirmationRefusedPayload
+    /// Phase 54f — a grace-period offboard was scheduled to fire after a
+    /// cancellable window. Reserved `SourceModule = "_platform.tenant"`.
+    | TenantDeprovisionScheduled of TenantDeprovisionScheduledPayload
+    /// Phase 54f — a pending grace-period offboard was cancelled before it
+    /// fired. Reserved `SourceModule = "_platform.tenant"`.
+    | TenantDeprovisionCancelled of TenantDeprovisionCancelledPayload
     /// Phase 107 — an original ingested document was fetched from the
     /// Knowledge Base via `GetOriginalDocument`. Sensitive-read audit,
     /// distinct from the upload event (GP 6).
@@ -2555,6 +2593,8 @@ module AuditEvent =
         | TenantOffboardConfirmationRequested _ -> "TenantOffboardConfirmationRequested"
         | TenantOffboardConfirmationApproved _ -> "TenantOffboardConfirmationApproved"
         | TenantOffboardConfirmationRefused _ -> "TenantOffboardConfirmationRefused"
+        | TenantDeprovisionScheduled _ -> "TenantDeprovisionScheduled"
+        | TenantDeprovisionCancelled _ -> "TenantDeprovisionCancelled"
         | KnowledgeOriginalRetrieved _ -> "KnowledgeOriginalRetrieved"
         | KnowledgeOriginalRetrievalDenied _ -> "KnowledgeOriginalRetrievalDenied"
         | RemotingMethodAudited _ -> "RemotingMethodAudited"

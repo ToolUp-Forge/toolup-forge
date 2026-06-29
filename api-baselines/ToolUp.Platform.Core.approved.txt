@@ -752,6 +752,8 @@ ToolUp.Platform.AuditEvent.IsTeamInviteRedeemed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamInviteRevoked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTeamRestored : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantDataExported : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsTenantDeprovisionCancelled : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsTenantDeprovisionScheduled : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantDeprovisioned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantLifecycleHookFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsTenantOffboardConfirmationApproved : System.Boolean { get }
@@ -1027,6 +1029,8 @@ ToolUp.Platform.AuditEvent+Tags.TeamInviteRedeemed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamInviteRevoked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TeamRestored : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantDataExported : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.TenantDeprovisionCancelled : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.TenantDeprovisionScheduled : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantDeprovisioned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantLifecycleHookFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.TenantOffboardConfirmationApproved : System.Int32 (literal)
@@ -1060,6 +1064,10 @@ ToolUp.Platform.AuditEvent+TeamRestored (class)
 ToolUp.Platform.AuditEvent+TeamRestored.Item : ToolUp.Platform.TeamRestoredPayload { get }
 ToolUp.Platform.AuditEvent+TenantDataExported (class)
 ToolUp.Platform.AuditEvent+TenantDataExported.Item : ToolUp.Platform.TenantDataExportedPayload { get }
+ToolUp.Platform.AuditEvent+TenantDeprovisionCancelled (class)
+ToolUp.Platform.AuditEvent+TenantDeprovisionCancelled.Item : ToolUp.Platform.TenantDeprovisionCancelledPayload { get }
+ToolUp.Platform.AuditEvent+TenantDeprovisionScheduled (class)
+ToolUp.Platform.AuditEvent+TenantDeprovisionScheduled.Item : ToolUp.Platform.TenantDeprovisionScheduledPayload { get }
 ToolUp.Platform.AuditEvent+TenantDeprovisioned (class)
 ToolUp.Platform.AuditEvent+TenantDeprovisioned.Item : ToolUp.Platform.TenantDeprovisionedPayload { get }
 ToolUp.Platform.AuditEvent+TenantLifecycleHookFailed (class)
@@ -3040,16 +3048,19 @@ ToolUp.Platform.IPendingInviteStore.SweepExpired() : Microsoft.FSharp.Control.FS
 ToolUp.Platform.IPendingInviteStore.TryConsumeForEmail(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PendingInviteByEmail], ToolUp.Platform.PendingInviteStoreError]]
 ToolUp.Platform.IPendingInviteStore.Upsert(System.String, ToolUp.Platform.PendingInviteByEmail) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PendingInviteStoreError]]
 ToolUp.Platform.IPlatformTenantApi (class)
-ToolUp.Platform.IPlatformTenantApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ProvisioningRequest], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleJobHandle, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecyclePreview, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportThenDeprovisionResult, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]])
+ToolUp.Platform.IPlatformTenantApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ProvisioningRequest], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleJobHandle, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecyclePreview, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportThenDeprovisionResult, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.Int32, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduledDeprovision, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScheduledDeprovision], System.String]]])
+ToolUp.Platform.IPlatformTenantApi.CancelScheduledDeprovision : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.DeprovisionTenant : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.DeprovisionTenantAsync : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleJobHandle, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.DeprovisionTenantConfirmed : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.DeprovisionTenantSync : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.ExportThenDeprovision : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportThenDeprovisionResult, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.GetLifecycleSummary : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary], System.String]]] { get }
+ToolUp.Platform.IPlatformTenantApi.GetScheduledDeprovision : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScheduledDeprovision], System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.PreviewDeprovision : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecyclePreview, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.ProvisionTenant : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ProvisioningRequest], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String]]] { get }
 ToolUp.Platform.IPlatformTenantApi.RequestDeprovisionToken : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, System.String]]] { get }
+ToolUp.Platform.IPlatformTenantApi.ScheduleDeprovision : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.Int32, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduledDeprovision, System.String]]] { get }
 ToolUp.Platform.IPresenceChannel (interface)
 ToolUp.Platform.IPresenceChannel.Heartbeat(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceChannel.Join(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -5134,6 +5145,13 @@ ToolUp.Platform.ScheduleError+Tags.HandlerNotRegistered : System.Int32 (literal)
 ToolUp.Platform.ScheduleError+Tags.InvalidCron : System.Int32 (literal)
 ToolUp.Platform.ScheduleError+Tags.PrecisionUnsupported : System.Int32 (literal)
 ToolUp.Platform.ScheduleError+Tags.StorageFailure : System.Int32 (literal)
+ToolUp.Platform.ScheduledDeprovision (class)
+ToolUp.Platform.ScheduledDeprovision..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String)
+ToolUp.Platform.ScheduledDeprovision.DueAt : System.DateTimeOffset { get }
+ToolUp.Platform.ScheduledDeprovision.JobId : System.String { get }
+ToolUp.Platform.ScheduledDeprovision.Reason : System.String { get }
+ToolUp.Platform.ScheduledDeprovision.RequestedBy : System.String { get }
+ToolUp.Platform.ScheduledDeprovision.ScopeId : System.String { get }
 ToolUp.Platform.SchemaOnlyAccessAttemptedPayload (class)
 ToolUp.Platform.SchemaOnlyAccessAttemptedPayload..ctor(System.String, System.String, System.String, System.String)
 ToolUp.Platform.SchemaOnlyAccessAttemptedPayload.AttemptedPath : System.String { get }
@@ -5895,6 +5913,18 @@ ToolUp.Platform.TenantDataExportedPayload.ArchivePath : System.String { get }
 ToolUp.Platform.TenantDataExportedPayload.ContentHash : System.String { get }
 ToolUp.Platform.TenantDataExportedPayload.ScopeId : System.String { get }
 ToolUp.Platform.TenantDataExportedPayload.SegmentCount : System.Int32 { get }
+ToolUp.Platform.TenantDeprovisionCancelledPayload (class)
+ToolUp.Platform.TenantDeprovisionCancelledPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.TenantDeprovisionCancelledPayload.CancelledBy : System.String { get }
+ToolUp.Platform.TenantDeprovisionCancelledPayload.Reason : System.String { get }
+ToolUp.Platform.TenantDeprovisionCancelledPayload.ScopeId : System.String { get }
+ToolUp.Platform.TenantDeprovisionScheduledPayload (class)
+ToolUp.Platform.TenantDeprovisionScheduledPayload..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String)
+ToolUp.Platform.TenantDeprovisionScheduledPayload.DueAt : System.DateTimeOffset { get }
+ToolUp.Platform.TenantDeprovisionScheduledPayload.JobId : System.String { get }
+ToolUp.Platform.TenantDeprovisionScheduledPayload.Reason : System.String { get }
+ToolUp.Platform.TenantDeprovisionScheduledPayload.RequestedBy : System.String { get }
+ToolUp.Platform.TenantDeprovisionScheduledPayload.ScopeId : System.String { get }
 ToolUp.Platform.TenantDeprovisionedPayload (class)
 ToolUp.Platform.TenantDeprovisionedPayload..ctor(System.String, System.String, System.Int32, System.Int32, System.Int32, System.Int32, System.Int64)
 ToolUp.Platform.TenantDeprovisionedPayload.Actor : System.String { get }

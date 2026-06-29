@@ -469,4 +469,73 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
 
                                     return Ok summary
             }
+
+        // Phase 54f — schedule a grace-period offboard. Registers an
+        // IJobScheduler poll job; the offboard fires after the window
+        // unless cancelled. Requires a composed IJobScheduler.
+        ScheduleDeprovision =
+            fun (scopeId, _wireActor, afterDays, reason) -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    match scheduler with
+                    | None ->
+                        return
+                            Error
+                                "scheduled offboard requires an IJobScheduler (compose JobScheduler = InProcessJobScheduler); use DeprovisionTenant for the immediate path"
+                    | Some sch ->
+                        match! TenantLifecycleAggregator.scheduleDeprovision sch scopeId actor afterDays reason with
+                        | Error e -> return Error e
+                        | Ok sd ->
+                            do!
+                                emitAudit
+                                    scopeId
+                                    (AuditEvent.TenantDeprovisionScheduled {
+                                        ScopeId = scopeId
+                                        RequestedBy = actor
+                                        Reason = reason
+                                        DueAt = sd.DueAt
+                                        JobId = sd.JobId
+                                    })
+
+                            return Ok sd
+            }
+
+        // Phase 54f — cancel a pending grace-period offboard. Idempotent:
+        // no pending offboard (or no scheduler) is a successful no-op.
+        CancelScheduledDeprovision =
+            fun scopeId -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    match scheduler with
+                    | None -> return Ok()
+                    | Some sch ->
+                        match! TenantLifecycleAggregator.cancelScheduledDeprovision sch scopeId with
+                        | None -> return Ok() // nothing pending — idempotent
+                        | Some sd ->
+                            do!
+                                emitAudit
+                                    scopeId
+                                    (AuditEvent.TenantDeprovisionCancelled {
+                                        ScopeId = scopeId
+                                        CancelledBy = actor
+                                        Reason = sd.Reason
+                                    })
+
+                            return Ok()
+            }
+
+        // Phase 54f — read the pending grace-period offboard (read-only).
+        GetScheduledDeprovision =
+            fun scopeId -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    match scheduler with
+                    | None -> return Ok None
+                    | Some sch ->
+                        let! sd = TenantLifecycleAggregator.getScheduledDeprovision sch scopeId
+                        return Ok sd
+            }
     }

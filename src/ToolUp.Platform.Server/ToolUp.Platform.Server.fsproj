@@ -569,6 +569,10 @@
              the aggregator (drives runResumable); registered with the
              scheduler in ComposeTenantLifecycle. -->
         <Compile Include="Server\LifecycleJobHandler.fs" />
+        <!-- Phase 54f — scheduled / grace-period offboard poll IJobHandler.
+             After the aggregator (drives enqueue + the scheduled helpers);
+             registered with the scheduler in ComposeTenantLifecycle. -->
+        <Compile Include="Server\ScheduledDeprovisionJobHandler.fs" />
         <Compile Include="Server\Compose\BuildRouteHandlers.fs" />
         <!-- Phase 15e follow-up — per-concern compose-body subdivision.
              Pure structural helpers consumed by `compose`; each takes

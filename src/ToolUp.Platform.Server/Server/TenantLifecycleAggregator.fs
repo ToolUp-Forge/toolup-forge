@@ -367,6 +367,157 @@ let enqueue
                 }
     }
 
+// ─── Phase 54f — scheduled / grace-period offboard ───────────────────
+//
+// `ScheduleDeprovision` registers a cron-polled job under the tenant scope
+// whose handler (`ScheduledDeprovisionJobHandler`) checks each tick
+// whether the grace window has elapsed; when it has, it fires the offboard
+// (via `enqueue` — reusing the Phase 54a/54b resumable path) and retires
+// itself. The pending window is the job's payload, so `Get` / `Cancel`
+// read/act on the persisted job with no extra store.
+
+/// Reserved `IJobScheduler` handler name for the scheduled-offboard poll
+/// job. `ComposeTenantLifecycle` registers `ScheduledDeprovisionJobHandler`
+/// under it at startup.
+[<Literal>]
+let ScheduledDeprovisionHandlerName = "_platform.tenant.scheduled-deprovision"
+
+/// Cron expression the poll job runs on — the top of every hour. A
+/// grace window is measured in days, so hourly polling bounds the fire
+/// latency to ≤1h while keeping the scheduler tick load negligible. The
+/// handler compares `now` against the payload's `dueAt`; the cron only
+/// decides *how often to check*, not *when to fire*.
+[<Literal>]
+let ScheduledDeprovisionCron = "0 * * * *"
+
+/// Payload for the scheduled-offboard poll job: the target scope, the
+/// requesting admin, the reason, and the absolute due time. Flat JSON
+/// (mirrors `LifecycleJobPayload`) so it survives `IJobStore` round-trips.
+module ScheduledDeprovisionPayload =
+    let serialise (scopeId: string) (actorUserId: string) (reason: string) (dueAt: DateTimeOffset) : string =
+        let o = JsonObject()
+        o["scopeId"] <- JsonValue.Create scopeId
+        o["actorUserId"] <- JsonValue.Create actorUserId
+        o["reason"] <- JsonValue.Create reason
+        o["dueAt"] <- JsonValue.Create(dueAt.ToString("o"))
+        o.ToJsonString()
+
+    let parse (payload: string) : Result<string * string * string * DateTimeOffset, string> =
+        try
+            let node = JsonNode.Parse payload
+
+            let dueAt =
+                DateTimeOffset.Parse(
+                    node["dueAt"].GetValue<string>(),
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind
+                )
+
+            Ok(
+                node["scopeId"].GetValue<string>(),
+                node["actorUserId"].GetValue<string>(),
+                node["reason"].GetValue<string>(),
+                dueAt
+            )
+        with ex ->
+            Error ex.Message
+
+/// Project a persisted poll job to a `ScheduledDeprovision` (the wire
+/// surface), or `None` when its payload is unreadable.
+let private toScheduledDeprovision (job: JobDefinition) : ScheduledDeprovision option =
+    match ScheduledDeprovisionPayload.parse job.Payload with
+    | Ok(scopeId, requestedBy, reason, dueAt) ->
+        Some {
+            ScopeId = scopeId
+            RequestedBy = requestedBy
+            Reason = reason
+            DueAt = dueAt
+            JobId = string job.JobId
+        }
+    | Error _ -> None
+
+/// The single pending (`Active`) scheduled-offboard job for `scopeId`, if
+/// any. Enumerates the scope's jobs and matches the reserved handler name.
+let private pendingScheduledJob (scheduler: IJobScheduler) (scopeId: string) : Async<JobDefinition option> = async {
+    let! jobs = scheduler.ListJobs scopeId
+
+    return
+        jobs
+        |> List.tryFind (fun j -> j.Handler = ScheduledDeprovisionHandlerName && j.Status = JobStatus.Active)
+}
+
+/// Schedule a grace-period offboard of `scopeId` to fire after `afterDays`
+/// unless cancelled. Idempotent per scope (a second schedule inside the
+/// TTL returns the existing pending offboard rather than registering a
+/// duplicate). Returns the pending `ScheduledDeprovision`.
+let scheduleDeprovision
+    (scheduler: IJobScheduler)
+    (scopeId: string)
+    (actorUserId: string)
+    (afterDays: int)
+    (reason: string)
+    : Async<Result<ScheduledDeprovision, string>> =
+    async {
+        // An existing pending offboard wins (idempotent) — re-scheduling a
+        // scope that already has a grace window pending returns it
+        // unchanged rather than stacking a second poll job.
+        match! pendingScheduledJob scheduler scopeId with
+        | Some existing ->
+            match toScheduledDeprovision existing with
+            | Some sd -> return Ok sd
+            | None -> return Error "a scheduled offboard exists for this scope but its payload is unreadable"
+        | None ->
+            let dueAt = DateTimeOffset.UtcNow.AddDays(float (max 0 afterDays))
+
+            let registration: JobRegistration = {
+                ScopeId = scopeId
+                Handler = ScheduledDeprovisionHandlerName
+                Payload = ScheduledDeprovisionPayload.serialise scopeId actorUserId reason dueAt
+                Trigger = CronTrigger ScheduledDeprovisionCron
+                Idempotency =
+                    Some {
+                        Key = sprintf "tenant-scheduled-deprovision-%s" scopeId
+                        TtlSeconds = 60 * 60 * 24 * 90
+                    }
+                RetryPolicy = JobRetryPolicy.defaults
+                ShardKey = None
+                Precision = Minute
+                CreatedBy = actorUserId
+                Tags = Map [ "source", "tenant-lifecycle"; "kind", "scheduled-deprovision" ]
+            }
+
+            match! scheduler.Schedule registration with
+            | Error err -> return Error(sprintf "failed to schedule grace-period offboard: %A" err)
+            | Ok jobId ->
+                return
+                    Ok {
+                        ScopeId = scopeId
+                        RequestedBy = actorUserId
+                        Reason = reason
+                        DueAt = dueAt
+                        JobId = string jobId
+                    }
+    }
+
+/// The pending scheduled offboard for `scopeId`, or `None`.
+let getScheduledDeprovision (scheduler: IJobScheduler) (scopeId: string) : Async<ScheduledDeprovision option> = async {
+    match! pendingScheduledJob scheduler scopeId with
+    | Some job -> return toScheduledDeprovision job
+    | None -> return None
+}
+
+/// Cancel the pending scheduled offboard for `scopeId` before it fires.
+/// Idempotent — returns `false` when nothing was pending. Returns the
+/// cancelled job's `ScheduledDeprovision` so the caller can audit the
+/// reason it carried.
+let cancelScheduledDeprovision (scheduler: IJobScheduler) (scopeId: string) : Async<ScheduledDeprovision option> = async {
+    match! pendingScheduledJob scheduler scopeId with
+    | None -> return None
+    | Some job ->
+        do! scheduler.Cancel(scopeId, job.JobId)
+        return toScheduledDeprovision job
+}
+
 /// Resumable, progress-persisting sweep for the background path. Unlike
 /// `run` (parallel, fire-and-forget audit), this runs hooks
 /// **sequentially** and records each terminal-success hook

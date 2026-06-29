@@ -937,6 +937,23 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> TenantOffboardConfirmationRefused(fromAuditJson<TenantOffboardConfirmationRefusedPayload> j)
     }
+    // Phase 54f — scheduled / grace-period offboard audit events (append-only).
+    {
+        EventType = "TenantDeprovisionScheduled"
+        TryEncode =
+            (function
+            | TenantDeprovisionScheduled p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantDeprovisionScheduled(fromAuditJson<TenantDeprovisionScheduledPayload> j)
+    }
+    {
+        EventType = "TenantDeprovisionCancelled"
+        TryEncode =
+            (function
+            | TenantDeprovisionCancelled p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TenantDeprovisionCancelled(fromAuditJson<TenantDeprovisionCancelledPayload> j)
+    }
     {
         EventType = "KnowledgeOriginalRetrieved"
         TryEncode =

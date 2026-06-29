@@ -163,6 +163,38 @@ type IPlatformTenantApi = {
     [<RequiresRole "PlatformAdmin">]
     [<Audit "TenantDeleted">]
     DeprovisionTenantConfirmed: string * string * string * string -> Async<Result<LifecycleSummary, string>>
+
+    // ─── Phase 54f — scheduled / grace-period offboard (append-only) ─
+
+    /// Phase 54f — schedule a tenant offboard to fire after a cancellable
+    /// grace window ("deprovision team-X in 30 days unless cancelled")
+    /// rather than the immediate `DeprovisionTenant`. Registers an
+    /// `IJobScheduler` poll job under the tenant scope; the offboard fires
+    /// after `afterDays`, attributed to `actorUserId`. Idempotent per
+    /// scope — a second schedule inside the window returns the existing
+    /// pending offboard. Returns the pending `ScheduledDeprovision` (incl.
+    /// the backing job id + due time). Returns
+    /// `Error "scheduled offboard requires an IJobScheduler…"` when no
+    /// scheduler is composed (immediate `DeprovisionTenant` still works).
+    /// Tuple: `(scopeId, actorUserId, afterDays, reason)`. Owner /
+    /// Platform-Admin only; audits `TenantDeprovisionScheduled`.
+    [<RequiresRole "PlatformAdmin">]
+    ScheduleDeprovision: string * string * int * string -> Async<Result<ScheduledDeprovision, string>>
+
+    /// Phase 54f — cancel the pending grace-period offboard for `scopeId`
+    /// before it fires (no hooks run). Idempotent — cancelling when
+    /// nothing is pending returns `Ok ()`. Owner / Platform-Admin only;
+    /// audits `TenantDeprovisionCancelled` when a pending offboard was
+    /// actually cancelled.
+    [<RequiresRole "PlatformAdmin">]
+    CancelScheduledDeprovision: string -> Async<Result<unit, string>>
+
+    /// Phase 54f — read the pending grace-period offboard for `scopeId`
+    /// (the due window + reason + requester) for the admin UI / countdown
+    /// banner. `None` when nothing is scheduled. Owner / Platform-Admin
+    /// only; read-only, no audit.
+    [<RequiresRole "PlatformAdmin">]
+    GetScheduledDeprovision: string -> Async<Result<ScheduledDeprovision option, string>>
 }
 
 module PlatformTenantApi =

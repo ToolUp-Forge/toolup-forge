@@ -366,3 +366,24 @@ type OffboardConfirmation = {
     /// restarts).
     ExpiresAt: System.DateTimeOffset
 }
+
+/// Phase 54f — a pending scheduled (grace-period) offboard, returned by
+/// `IPlatformTenantApi.ScheduleDeprovision` and
+/// `GetScheduledDeprovision`. Surfaces the cancellable window so the admin
+/// UI can render a "deprovisions in N days unless cancelled" countdown
+/// banner. The offboard fires under a system actor once `DueAt` passes;
+/// `CancelScheduledDeprovision` aborts it before then.
+type ScheduledDeprovision = {
+    /// Tenant scope the scheduled offboard targets.
+    ScopeId: string
+    /// Platform-Admin who scheduled the offboard (preserved through the
+    /// grace window; the eventual run is attributed to them).
+    RequestedBy: string
+    /// Operator-supplied reason for the offboard.
+    Reason: string
+    /// When the grace window elapses and the offboard fires (UTC).
+    DueAt: System.DateTimeOffset
+    /// The backing scheduler job id (`JobId` rendered as a string for the
+    /// Fable wire surface). Stable for the life of the pending offboard.
+    JobId: string
+}

@@ -129,6 +129,15 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
                             TenantLifecycleAggregator.LifecycleJobHandlerName,
                             LifecycleJobHandler.create sp
                         )
+
+                        // Phase 54f — the scheduled / grace-period offboard
+                        // poll handler. Same idempotent registration; a no-op
+                        // when no scheduler is composed, so `ScheduleDeprovision`
+                        // returns its clear "requires an IJobScheduler" error.
+                        scheduler.RegisterHandler(
+                            TenantLifecycleAggregator.ScheduledDeprovisionHandlerName,
+                            ScheduledDeprovisionJobHandler.create sp
+                        )
                     | _ -> ()
 
                     System.Threading.Tasks.Task.CompletedTask

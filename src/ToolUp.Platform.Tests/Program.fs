@@ -135,6 +135,7 @@ let allTests =
         TenantLifecycleAggregatorTests.tests
         LifecycleSummaryStoreTests.tests
         OffboardConfirmationTests.tests
+        ScheduledDeprovisionTests.tests
         ITenantLifecycleContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests

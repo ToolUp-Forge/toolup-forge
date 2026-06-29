@@ -276,6 +276,9 @@
         <!-- Phase 54i — confirmation-gated offboard (token gate, one-time
              token, scope binding, two-person rule). -->
         <Compile Include="InProcess\OffboardConfirmationTests.fs" />
+        <!-- Phase 54f — scheduled / grace-period offboard (handler Schedule/
+             Get/Cancel + the poll IJobHandler's due/not-due behaviour). -->
+        <Compile Include="InProcess\ScheduledDeprovisionTests.fs" />
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />
