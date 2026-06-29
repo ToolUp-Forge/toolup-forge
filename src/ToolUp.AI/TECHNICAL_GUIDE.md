@@ -323,6 +323,35 @@ The SDK has **no mechanism for users to send invisible prompts.** Everything in 
 
 This intentional limit protects the audit trail (`AnalysisCompleted` events in Phase 8, audit logs in Phase 9). Hidden user prompts would create conversations that can't be reconstructed from persisted history.
 
+## Built-in AI tools
+
+The SDK registers two families of platform-owned tools automatically inside `composeAI` (`AICompose.fs`) — apps do **not** declare them. Both reserve platform-prefixed names so a module tool can never collide; `composeAI` fails loudly at compose time on any duplicate `Name` across built-ins + module tools.
+
+### Narrative tools — [`../ToolUp.AI.Server/Server/NarrativeTools.fs`](../ToolUp.AI.Server/Server/NarrativeTools.fs)
+
+`list_narratives` / `get_narrative` / `get_narrative_section` / `publish_narrative` / `list_layouts` — surface and publish narrative output produced on other pages, scoped to the caller's `StorageScope`.
+
+### `_platform.ai.*` — cross-module read family (Phase 36.B) — [`../ToolUp.AI.Server/Server/PlatformAITools.fs`](../ToolUp.AI.Server/Server/PlatformAITools.fs)
+
+Six adapters over already-audited substrate (`IDataCatalog`, `IModuleQueryBus`, `IEntityStore`, `IResultStore`) that let the model roam across a user's module data without each module re-exposing read primitives:
+
+| Tool | Wraps | RBAC gate |
+|---|---|---|
+| `_platform.ai.list_accessible_modules` | `IDataCatalog` producers ∪ `AccessContext.ModulePermissions` | filtered by `canAccessModule`; `rbacConfigured=false` ⇒ all modules, `["unrestricted"]` |
+| `_platform.ai.list_data_types` | `IDataCatalog.ListTypes` ∩ `GetProducers` | only types with ≥1 accessible producer |
+| `_platform.ai.query_module` | `IModuleQueryBus.Ask` | the bus's own `hasPermission` Read gate → `PermissionDenied` |
+| `_platform.ai.query_entity` | `IEntityStore.Query<JsonElement>` | scope-isolated by `scopeId` (GP 4); predicate references declared indexes only |
+| `_platform.ai.list_results` | `IResultStore.ListResults` | explicit per-module `hasPermission` Read pre-check |
+| `_platform.ai.get_latest_result` | `IResultStore.GetLatest` | explicit per-module `hasPermission` Read pre-check |
+
+All six register `Location = ServerResident`, `Surface = Both`, `SourceModule = "_platform.ai"` (the shared `SourceModule` keeps Phase 36.A's per-module dispatch RBAC filter from hiding them — per-*target* RBAC is enforced inside each tool). Errors are returned as typed JSON objects (`PermissionDenied`, `ModuleNotFound`, `NoHandler`, `NotFound`, `EntityStoreUnavailable`, `ResultStoreUnavailable`, …) so the model can re-plan rather than treating a refusal as a transient fault.
+
+**Access-context resolution (load-bearing seam).** Executors run inside the agent loop's *background* `HttpContext` (`createBackgroundContext`), whose DI `AccessContext` factory reads the now-disposed live request via `IHttpContextAccessor` and would yield an *unrestricted anonymous* context — bypassing RBAC. The tools instead reconstruct the `AccessContext` from the `ToolUp.StorageScope` / `ToolUp.UserId` / `ToolUp.ModulePermissions` items the background context copies forward, which is the RBAC-correct path and also works on a real request context.
+
+**Predicate shape for `query_entity`.** A small JSON AST the model authors directly (not the `FableConverters` DU wire form): `{"op":"eq","field":"Mood","value":"happy"}`; ops `eq`/`ne`/`gt`/`gte`/`lt`/`lte` (string-ordered), `in` (`{"op":"in","field":"x","values":[…]}`), `and`/`or` (`{"op":"and","left":{…},"right":{…}}`), `not` (`{"op":"not","inner":{…}}`).
+
+**Out of scope (deferred):** `_platform.ai.write_*` (cross-module mutation needs a different consent model); streaming / paging (initial impl soft-caps at 100 entities / ~1MB result content).
+
 ## Module tools
 
 Modules declare tools via `AIToolDefinition` (in core, `src/ToolUp.Platform.Core/Shared/Types/ModuleAITypes.fs`). The declaration has no execution logic:

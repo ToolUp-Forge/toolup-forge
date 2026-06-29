@@ -155,14 +155,17 @@ let composeAI (app: AIServerApp) : ServerApp =
     let moduleAIContexts = app.ModuleAIContexts
 
     // Validate tool name uniqueness across modules AND against the
-    // platform-reserved `NarrativeTools.builtInTools` names. Duplicates
-    // fail loudly at compose time with a clear message, before any
-    // agent turn runs. Before this check included built-ins, a module
-    // tool named e.g. `list_narratives` passed compose validation and
-    // silently lost lookup to the prepended built-in at
-    // `registry.RegisterAll` (the agent then saw two tools with the
-    // same name and hit a provider-side 400 at runtime).
-    let builtInToolNames = NarrativeTools.builtInTools |> List.map _.Definition.Name
+    // platform-reserved built-in tool names (`NarrativeTools.builtInTools`
+    // + Phase 36.B's `PlatformAITools.builtIn`). Duplicates fail loudly
+    // at compose time with a clear message, before any agent turn runs.
+    // Before this check included built-ins, a module tool named e.g.
+    // `list_narratives` passed compose validation and silently lost
+    // lookup to the prepended built-in at `registry.RegisterAll` (the
+    // agent then saw two tools with the same name and hit a provider-side
+    // 400 at runtime).
+    let builtInToolNames =
+        (NarrativeTools.builtInTools @ PlatformAITools.builtIn)
+        |> List.map _.Definition.Name
 
     let moduleToolNames = moduleTools |> List.map (fun (def, _) -> def.Name)
 
@@ -173,7 +176,7 @@ let composeAI (app: AIServerApp) : ServerApp =
 
     if not duplicateNames.IsEmpty then
         failwithf
-            "AI tool name collision: %s. Each tool must have a unique Name across the deployment. The SDK reserves the built-in NarrativeTools names [%s] — rename any module-declared tools that collide."
+            "AI tool name collision: %s. Each tool must have a unique Name across the deployment. The SDK reserves the platform built-in tool names [%s] — rename any module-declared tools that collide."
             (System.String.Join(", ", duplicateNames))
             (System.String.Join(", ", builtInToolNames))
 
@@ -206,7 +209,8 @@ let composeAI (app: AIServerApp) : ServerApp =
 
     // Convert per-module `(definition, executor)` tuples into the
     // companion's `RegisteredTool` shape and prepend the SDK's built-in
-    // narrative tools. Modules contribute their tools via
+    // tools (narrative + Phase 36.B's `_platform.ai.*` cross-module read
+    // family). Modules contribute their tools via
     // `ServerModule.withAITools`; `composeAI` aggregates them via
     // `ServerApp.AITools` and registers them here. Built-ins reserve
     // platform-prefixed names so they cannot collide with module tools.
@@ -214,7 +218,7 @@ let composeAI (app: AIServerApp) : ServerApp =
         moduleTools |> List.map (fun (def, exec) -> createTool def exec)
 
     let registry = AIToolRegistry()
-    registry.RegisterAll(NarrativeTools.builtInTools @ registeredModuleTools)
+    registry.RegisterAll(NarrativeTools.builtInTools @ PlatformAITools.builtIn @ registeredModuleTools)
 
     let moduleAIContextMap =
         moduleAIContexts |> List.map (fun c -> c.ModuleName, c) |> Map.ofList

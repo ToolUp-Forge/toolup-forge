@@ -33,6 +33,10 @@
         <Compile Include="Server\ToolHelpers.fs" />
         <Compile Include="Server\AIToolRegistry.fs" />
         <Compile Include="Server\NarrativeTools.fs" />
+        <!-- Phase 36.B — built-in cross-module AI read tools (`_platform.ai.*`).
+             Depends only on AIToolRegistry + the platform substrate; registered
+             by AICompose alongside NarrativeTools.builtInTools. -->
+        <Compile Include="Server\PlatformAITools.fs" />
         <Compile Include="Server\SSEHandler.fs" />
         <Compile Include="Server\ClientToolDispatch.fs" />
         <Compile Include="Server\AICancellationRegistry.fs" />
