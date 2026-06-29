@@ -44,6 +44,25 @@ type JobSchedulerLifecycle(services: IServiceProvider) =
             | _ -> return LifecycleHookResult.Skipped "no IJobScheduler registered (background scheduling not enabled)"
         }
 
+    // Phase 54c — mutation-free preview: count the scope's scheduled jobs
+    // (the jobs that WOULD be cancelled) via the read-only ListJobs,
+    // without calling Cancel.
+    interface ITenantLifecyclePreview with
+        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
+            match services.GetService(typeof<IJobScheduler>) with
+            | :? IJobScheduler as scheduler ->
+                let! jobs = scheduler.ListJobs scopeId
+
+                return
+                    LifecyclePreviewItem.affecting
+                        "job-scheduler"
+                        jobs.Length
+                        (sprintf "%d scheduled job(s) would be cancelled" jobs.Length)
+            | _ ->
+                return
+                    LifecyclePreviewItem.affecting "job-scheduler" 0 "no IJobScheduler registered — no jobs to cancel"
+        }
+
 /// Construct the first-party job-scheduler lifecycle hook. Resolves the
 /// active `IJobScheduler` from `services` on every call.
 let create (services: IServiceProvider) : ITenantLifecycle =

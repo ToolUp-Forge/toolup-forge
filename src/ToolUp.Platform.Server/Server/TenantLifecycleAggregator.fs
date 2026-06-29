@@ -446,3 +446,56 @@ let runResumable
         do! emitRunAudit emitAudit phase scopeId actorUserId summary
         return summary
     }
+
+// ─── Phase 54c — offboard preview / dry-run ──────────────────────────
+//
+// Mutation-free projection of what a `Deprovisioning` run WOULD do. Each
+// hook that implements `ITenantLifecyclePreview` contributes a count-only
+// would-affect item; a hook that doesn't surfaces a "no preview
+// available" item, so the operator sees the gap. Previews run in parallel
+// (read-only); a preview that throws degrades to a no-preview item rather
+// than aborting the whole preview. No audit, no mutation — the canonical
+// handler emits at most a lightweight "previewed" row.
+
+/// Aggregate every registered hook's offboard preview for `scopeId`.
+/// Hooks without `ITenantLifecyclePreview` surface
+/// `LifecyclePreviewItem.noPreview`. Pure read — calls no
+/// `OnDeprovisioned`, mutates nothing.
+let previewDeprovision
+    (hooks: ITenantLifecycle list)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<LifecyclePreview> =
+    async {
+        let! items =
+            hooks
+            |> List.map (fun hook -> async {
+                match hook with
+                | :? ITenantLifecyclePreview as p ->
+                    try
+                        return! p.OnDeprovisionPreview(scopeId, actorUserId)
+                    with ex ->
+                        // A preview should never mutate, so a throw is a
+                        // bug in the hook — degrade to no-preview rather
+                        // than failing the operator's dry-run.
+                        return {
+                            HookName = hook.Name
+                            HasPreview = false
+                            WouldAffect = 0
+                            Detail = "preview failed: " + ex.Message
+                        }
+                | _ -> return LifecyclePreviewItem.noPreview hook.Name
+            })
+            |> Async.Parallel
+
+        let itemList = List.ofArray items
+
+        let total =
+            itemList |> List.sumBy (fun i -> if i.HasPreview then i.WouldAffect else 0)
+
+        return {
+            ScopeId = scopeId
+            Items = itemList
+            TotalWouldAffect = total
+        }
+    }

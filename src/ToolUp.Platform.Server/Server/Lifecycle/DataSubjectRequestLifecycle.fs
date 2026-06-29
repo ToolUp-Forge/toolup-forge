@@ -102,6 +102,45 @@ type DataSubjectRequestLifecycle(services: IServiceProvider) =
                         return LifecycleHookResult.Completed
         }
 
+    // Phase 54c — mutation-free preview: sum the affected-record counts
+    // every registered IErasureHandler.Preview (NOT Erase) reports across
+    // the offboard's subject set. Reuses the same subject resolution the
+    // erasure path uses, so the preview counts exactly what the offboard
+    // would erase.
+    interface ITenantLifecyclePreview with
+        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
+            let handlers =
+                match services.GetService(typeof<seq<IErasureHandler>>) with
+                | :? seq<IErasureHandler> as hs -> List.ofSeq hs
+                | _ -> []
+
+            if List.isEmpty handlers then
+                return
+                    LifecyclePreviewItem.affecting "data-erasure" 0 "no IErasureHandler registered — nothing to erase"
+            else
+                match! subjectsFor services scopeId with
+                | Error reason ->
+                    return
+                        LifecyclePreviewItem.affecting "data-erasure" 0 (sprintf "subject set unavailable: %s" reason)
+                | Ok subjects ->
+                    let mutable total = 0
+
+                    for subject in subjects do
+                        for handler in handlers do
+                            let! summary = handler.Preview(scopeId, subject, ErasurePolicy.HardDelete)
+                            total <- total + summary.RecordsAffected
+
+                    return
+                        LifecyclePreviewItem.affecting
+                            "data-erasure"
+                            total
+                            (sprintf
+                                "%d record(s) across %d store(s) would be erased for %d subject(s)"
+                                total
+                                handlers.Length
+                                subjects.Length)
+        }
+
 /// Construct the first-party data-erasure lifecycle hook. Resolves the
 /// registered erasure handlers (+ optional team store) from `services`
 /// on every call.

@@ -64,6 +64,32 @@ type MembershipCacheLifecycle(services: IServiceProvider) =
                         "scope resolver is not TeamScopeResolver — no team membership cache to invalidate"
         }
 
+    // Phase 54c — mutation-free preview: count the team's members (the
+    // cache entries that WOULD be invalidated) via the read-only
+    // GetTeamMembers, without calling InvalidateUser.
+    interface ITenantLifecyclePreview with
+        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
+            let resolver = services.GetService(typeof<IStorageScopeResolver>)
+            let teamStore = services.GetService(typeof<ITeamStore>)
+
+            match resolver, teamStore with
+            | (:? TeamScopeResolver), (:? ITeamStore as store) ->
+                let teamId = teamIdOf scopeId
+                let! members = store.GetTeamMembers teamId
+
+                return
+                    LifecyclePreviewItem.affecting
+                        "membership-cache"
+                        members.Length
+                        (sprintf "%d member cache entr(y/ies) would be invalidated" members.Length)
+            | _ ->
+                return
+                    LifecyclePreviewItem.affecting
+                        "membership-cache"
+                        0
+                        "not a TeamScopeResolver — no membership cache to invalidate"
+        }
+
 /// Construct the first-party membership-cache lifecycle hook. Resolves
 /// the active scope resolver + team store from `services` on every call.
 let create (services: IServiceProvider) : ITenantLifecycle =

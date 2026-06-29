@@ -245,3 +245,61 @@ module LifecycleRetryPolicy =
         else
             let raw = policy.InitialBackoff.TotalMilliseconds * (2.0 ** float (attempt - 1))
             TimeSpan.FromMilliseconds(min raw policy.MaxBackoff.TotalMilliseconds)
+
+// ─── Phase 54c — offboard preview / dry-run ──────────────────────────
+//
+// A mutation-free projection of what a `DeprovisionTenant` *would* do —
+// "destroy key X, cancel 12 jobs, erase 340 records" — so an operator can
+// inspect the blast radius before committing to the irreversible call.
+// Each hook MAY contribute a count-only would-affect item (via the
+// server-tier `ITenantLifecyclePreview` optional capability); a hook that
+// opts out surfaces a clear "no preview available" item rather than a
+// silent gap. Lives on the shared tier (GP 10) so the admin client
+// renders the same shape `PreviewDeprovision` returns.
+
+/// One hook's would-affect projection for an offboard preview.
+/// Count-only, mutation-free. `HasPreview = false` marks a hook that
+/// opted out of preview (no `ITenantLifecyclePreview`), so the operator
+/// sees the gap explicitly.
+type LifecyclePreviewItem = {
+    /// `ITenantLifecycle.Name` of the hook this item projects.
+    HookName: string
+    /// `true` when the hook produced a real preview; `false` when it
+    /// opted out (then `WouldAffect = 0` and `Detail` says so).
+    HasPreview: bool
+    /// Count of records / keys / jobs the offboard would affect for this
+    /// hook. `0` when the hook would affect nothing, or when it opted out.
+    WouldAffect: int
+    /// Human-readable detail — `"the scope's encryption key would be
+    /// destroyed"`, `"12 scheduled jobs would be cancelled"`,
+    /// `"no preview available"`, …
+    Detail: string
+}
+
+module LifecyclePreviewItem =
+    /// The hook opted out of preview (no `ITenantLifecyclePreview`).
+    let noPreview (hookName: string) : LifecyclePreviewItem = {
+        HookName = hookName
+        HasPreview = false
+        WouldAffect = 0
+        Detail = "no preview available"
+    }
+
+    /// A real would-affect projection.
+    let affecting (hookName: string) (count: int) (detail: string) : LifecyclePreviewItem = {
+        HookName = hookName
+        HasPreview = true
+        WouldAffect = count
+        Detail = detail
+    }
+
+/// Aggregated offboard preview — every registered hook's would-affect
+/// item plus the total across hooks that produced a real preview.
+type LifecyclePreview = {
+    /// Tenant scope the preview targets.
+    ScopeId: string
+    /// Per-hook would-affect items, in hook order.
+    Items: LifecyclePreviewItem list
+    /// Sum of `WouldAffect` across items where `HasPreview = true`.
+    TotalWouldAffect: int
+}

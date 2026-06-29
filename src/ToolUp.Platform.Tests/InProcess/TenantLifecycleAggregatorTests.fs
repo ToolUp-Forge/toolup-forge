@@ -39,6 +39,24 @@ let private failing name err =
 let private throwing name =
     StubHook(name, async { return failwith "boom" }, async { return failwith "boom" }) :> ITenantLifecycle
 
+/// Phase 54c — a hook that ALSO implements `ITenantLifecyclePreview`. Its
+/// `OnDeprovisioned` flips `mutated` so a preview-mutates-nothing canary
+/// can assert the destructive path was never taken.
+type private PreviewStub(name: string, wouldAffect: int, mutated: bool ref) =
+    interface ITenantLifecycle with
+        member _.Name = name
+        member _.OnProvisioned(_scopeId, _actorUserId) = async { return LifecycleHookResult.Completed }
+
+        member _.OnDeprovisioned(_scopeId, _actorUserId) = async {
+            mutated.Value <- true
+            return LifecycleHookResult.Completed
+        }
+
+    interface ITenantLifecyclePreview with
+        member _.OnDeprovisionPreview(_scopeId, _actorUserId) = async {
+            return LifecyclePreviewItem.affecting name wouldAffect (sprintf "%d would be affected" wouldAffect)
+        }
+
 /// Audit collector — records (scopeId, event) tuples the aggregator
 /// emits, so tests can assert on the emitted family + counts.
 type private AuditCollector() =
@@ -385,6 +403,31 @@ let tests =
                 audit.TypeNames |> List.filter (fun n -> n = "TenantDeprovisioned")
 
             Expect.equal deprovMarkers.Length 2 "each pass emits a TenantDeprovisioned marker"
+        }
+
+        // ─── Phase 54c — offboard preview / dry-run ─────────────────────
+
+        testCaseAsync "previewDeprovision aggregates per-hook items and mutates nothing (canary)"
+        <| async {
+            let mutated = ref false
+            let previewable = PreviewStub("previewable", 7, mutated) :> ITenantLifecycle
+            // `completed` is a plain StubHook — no ITenantLifecyclePreview.
+            let plain = completed "plain"
+
+            let! preview = TenantLifecycleAggregator.previewDeprovision [ previewable; plain ] "team-preview" "admin"
+
+            Expect.isFalse mutated.Value "preview never invoked OnDeprovisioned — nothing mutated"
+            Expect.equal preview.ScopeId "team-preview" "scope preserved"
+            Expect.equal preview.Items.Length 2 "one item per hook"
+            Expect.equal preview.TotalWouldAffect 7 "total sums only preview-capable hooks"
+
+            let plainItem = preview.Items |> List.find (fun i -> i.HookName = "plain")
+            Expect.isFalse plainItem.HasPreview "a hook without ITenantLifecyclePreview surfaces no-preview"
+            Expect.stringContains plainItem.Detail "no preview" "the gap is explicit"
+
+            let previewItem = preview.Items |> List.find (fun i -> i.HookName = "previewable")
+            Expect.isTrue previewItem.HasPreview "the preview-capable hook produced a real item"
+            Expect.equal previewItem.WouldAffect 7 "its would-affect count is surfaced"
         }
 
         // ─── Phase 54b — per-hook retry ─────────────────────────────────

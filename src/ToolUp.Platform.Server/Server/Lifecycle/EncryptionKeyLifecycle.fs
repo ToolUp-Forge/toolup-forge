@@ -49,6 +49,32 @@ type EncryptionKeyLifecycle(services: IServiceProvider) =
                         "encryption resolver is not PerScopeKeyResolver — crypto-shred unavailable (a platform-wide / KMS key must not be destroyed on a single-tenant offboard)"
         }
 
+    // Phase 54c — mutation-free preview: report whether the scope's key
+    // WOULD be crypto-shredded, without calling DestroyKey. Count is 1
+    // (the per-scope key) under an active PerScopeKeyResolver, else 0.
+    interface ITenantLifecyclePreview with
+        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
+            match services.GetService(typeof<IBlobEncryptionKeyResolver>) with
+            | :? PerScopeKeyResolver.PerScopeKeyResolver ->
+                return
+                    LifecyclePreviewItem.affecting
+                        "encryption-key"
+                        1
+                        (sprintf "the scope's encryption key would be crypto-shredded (scope %s)" scopeId)
+            | null ->
+                return
+                    LifecyclePreviewItem.affecting
+                        "encryption-key"
+                        0
+                        "encryption-at-rest not enabled — no key to destroy"
+            | _ ->
+                return
+                    LifecyclePreviewItem.affecting
+                        "encryption-key"
+                        0
+                        "resolver is not PerScopeKeyResolver — no per-scope key would be destroyed"
+        }
+
 /// Construct the first-party encryption-key lifecycle hook. The hook
 /// resolves the active `IBlobEncryptionKeyResolver` from `services` on
 /// every call, so it picks up whatever resolver the deployment composed.

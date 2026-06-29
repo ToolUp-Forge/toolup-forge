@@ -102,6 +102,17 @@ type IPlatformTenantApi = {
     [<RequiresRole "PlatformAdmin">]
     [<Audit "TenantDeleted">]
     DeprovisionTenantAsync: string * string * string -> Async<Result<LifecycleJobHandle, string>>
+
+    /// Phase 54c — preview the offboard's blast radius **without mutating
+    /// anything**: per-hook would-affect counts (the encryption key that
+    /// would be destroyed, the member-cache entries that would be
+    /// invalidated, the scheduled jobs that would be cancelled, the
+    /// per-store records that would be erased) before the irreversible
+    /// `DeprovisionTenant`. A hook that opts out of preview surfaces a
+    /// clear "no preview available" item. Owner / Platform-Admin only;
+    /// emits no destructive audit (read-only dry-run).
+    [<RequiresRole "PlatformAdmin">]
+    PreviewDeprovision: string -> Async<Result<LifecyclePreview, string>>
 }
 
 module PlatformTenantApi =

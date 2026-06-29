@@ -543,6 +543,10 @@
              StorageScopeResolver, TeamManagement, IJobScheduler,
              IDataExporter); before BuildRouteHandlers (mounts the API). -->
         <Compile Include="Server\ITenantLifecycle.fs" />
+        <!-- Phase 54c — optional preview capability. After ITenantLifecycle;
+             before the aggregator (previewDeprovision) + the hooks that
+             implement it. -->
+        <Compile Include="Server\ITenantLifecyclePreview.fs" />
         <Compile Include="Server\TenantLifecycleAggregator.fs" />
         <Compile Include="Server\Lifecycle\EncryptionKeyLifecycle.fs" />
         <Compile Include="Server\Lifecycle\MembershipCacheLifecycle.fs" />

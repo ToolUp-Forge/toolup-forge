@@ -232,4 +232,15 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                                 "background offboard requires an IJobScheduler (compose JobScheduler = InProcessJobScheduler); use DeprovisionTenant / DeprovisionTenantSync for the inline path"
                     | Some sch -> return! TenantLifecycleAggregator.enqueue sch Deprovisioning scopeId actor
             }
+
+        // Phase 54c — read-only offboard preview. No mutation, no
+        // destructive audit; aggregates each hook's would-affect item.
+        PreviewDeprovision =
+            fun scopeId -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    let! preview = TenantLifecycleAggregator.previewDeprovision (resolveHooks ()) scopeId actor
+                    return Ok preview
+            }
     }
