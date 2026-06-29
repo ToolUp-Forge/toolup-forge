@@ -113,6 +113,19 @@ type IPlatformTenantApi = {
     /// emits no destructive audit (read-only dry-run).
     [<RequiresRole "PlatformAdmin">]
     PreviewDeprovision: string -> Async<Result<LifecyclePreview, string>>
+
+    /// Phase 54j — export-then-erase: produce the tenant's data-export
+    /// archive (via the registered `IDataExporter`s) as a durable
+    /// pre-step, then run the offboard. **Fail-closed ordering**: the
+    /// erasure hooks run only after the export has been durably written;
+    /// a failed export aborts the offboard before any destruction, so the
+    /// tenant's data stays intact. Returns the erasure summary + the
+    /// archive reference (blob path + content hash) so the operator can
+    /// hand the archive to the departing customer. Owner / Platform-Admin
+    /// only; `TenantDataExported` is audited before the erasure sweep.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "TenantDeleted">]
+    ExportThenDeprovision: string * string * string -> Async<Result<ExportThenDeprovisionResult, string>>
 }
 
 module PlatformTenantApi =

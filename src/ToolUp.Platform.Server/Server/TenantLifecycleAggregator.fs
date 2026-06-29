@@ -499,3 +499,51 @@ let previewDeprovision
             TotalWouldAffect = total
         }
     }
+
+// ─── Phase 54j — export-then-erase bundle ────────────────────────────
+//
+// "Give me my data, then delete it" in one operation: produce the
+// tenant's export archive (via the caller-supplied `runExport`, which
+// drives the Phase 9h `IDataExporter` surface) and ONLY THEN run the
+// erasure sweep. Fail-closed ordering (the load-bearing GDPR property):
+// a failed export aborts the offboard before any destruction, so the
+// tenant's data stays intact. The `TenantDataExported` audit row is
+// emitted between the durable export and the erasure, so its presence
+// proves the export committed first. `runExport` is a callback so the
+// aggregator stays DI-free (the handler resolves `IDataExporter` /
+// `IBlobStorage`); it returns the durable archive reference or an error.
+
+/// Export-then-erase: run `runExport` (export the scope's data durably),
+/// then — only on success — audit `TenantDataExported` and run the
+/// `Deprovisioning` sweep under `runGuarded`. A failed export returns
+/// `Error` and runs NO erasure hook (fail-closed). Returns the erasure
+/// summary + the archive reference.
+let exportThenDeprovision
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (runExport: unit -> Async<Result<LifecycleExportArchive, string>>)
+    (hooks: ITenantLifecycle list)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<Result<ExportThenDeprovisionResult, string>> =
+    async {
+        match! runExport () with
+        | Error err ->
+            // Fail-closed — nothing erased, the tenant's data is intact.
+            return Error(sprintf "export failed — offboard aborted, no data erased: %s" err)
+        | Ok archive ->
+            // Audit the export BEFORE the erasure sweep (ordering proof).
+            let payload: TenantDataExportedPayload = {
+                ScopeId = scopeId
+                Actor = actorUserId
+                ArchiveContainer = archive.Container
+                ArchivePath = archive.BlobPath
+                ContentHash = archive.ContentHash
+                SegmentCount = archive.SegmentCount
+            }
+
+            do! emitAudit scopeId (AuditEvent.TenantDataExported payload)
+
+            let! summary = runGuarded emitAudit hooks Deprovisioning scopeId actorUserId
+
+            return Ok { Summary = summary; Archive = archive }
+    }

@@ -536,6 +536,76 @@ let tests =
             Expect.isFalse (store.Contains "broken") "a Failed hook is NOT recorded — it re-runs next sweep"
         }
 
+        // ─── Phase 54j — export-then-erase bundle ───────────────────────
+
+        testCaseAsync "exportThenDeprovision aborts before any erasure when the export fails (fail-closed)"
+        <| async {
+            let audit = AuditCollector()
+            let erased = ref false
+
+            let hook =
+                StubHook(
+                    "h",
+                    async { return LifecycleHookResult.Completed },
+                    async {
+                        erased.Value <- true
+                        return LifecycleHookResult.Completed
+                    }
+                )
+                :> ITenantLifecycle
+
+            let runExport () = async { return Error "blob store unreachable" }
+
+            let! result =
+                TenantLifecycleAggregator.exportThenDeprovision audit.Emit runExport [ hook ] "team-export" "admin"
+
+            match result with
+            | Error msg -> Expect.stringContains msg "no data erased" "the error explains the fail-closed abort"
+            | Ok _ -> failtest "expected Error when the export fails"
+
+            Expect.isFalse erased.Value "no erasure hook ran — the tenant's data is intact"
+            Expect.isFalse (List.contains "TenantDataExported" audit.TypeNames) "no export audit on a failed export"
+            Expect.isFalse (List.contains "TenantDeprovisioned" audit.TypeNames) "no offboard marker on abort"
+        }
+
+        testCaseAsync "exportThenDeprovision exports then erases, auditing TenantDataExported + the offboard"
+        <| async {
+            let audit = AuditCollector()
+            let erased = ref false
+
+            let hook =
+                StubHook(
+                    "h",
+                    async { return LifecycleHookResult.Completed },
+                    async {
+                        erased.Value <- true
+                        return LifecycleHookResult.Completed
+                    }
+                )
+                :> ITenantLifecycle
+
+            let archive = {
+                Container = "_platform"
+                BlobPath = "tenant-export/team-export/export-abc.json"
+                ContentHash = "abc"
+                SegmentCount = 3
+            }
+
+            let runExport () = async { return Ok archive }
+
+            let! result =
+                TenantLifecycleAggregator.exportThenDeprovision audit.Emit runExport [ hook ] "team-export" "admin"
+
+            match result with
+            | Ok r ->
+                Expect.equal r.Archive.SegmentCount 3 "the archive reference is carried on the result"
+                Expect.isTrue erased.Value "the erasure ran after the export committed"
+            | Error e -> failtestf "expected Ok; got %s" e
+
+            Expect.contains audit.TypeNames "TenantDataExported" "the export was audited"
+            Expect.contains audit.TypeNames "TenantDeprovisioned" "the offboard marker was emitted"
+        }
+
         testCaseAsync "runGuarded allows different scopes to run in parallel"
         <| async {
             let audit = AuditCollector()

@@ -1,7 +1,11 @@
 module ToolUp.Platform.DataSubjectRequestLifecycle
 
 open System
+open System.Security.Cryptography
+open System.Text
+open System.Text.Json.Nodes
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.IDataExporter
 open ToolUp.Platform.TeamManagement
 
@@ -146,3 +150,69 @@ type DataSubjectRequestLifecycle(services: IServiceProvider) =
 /// on every call.
 let create (services: IServiceProvider) : ITenantLifecycle =
     DataSubjectRequestLifecycle(services) :> ITenantLifecycle
+
+/// Phase 54j — produce the durable export archive for `scopeId` as the
+/// pre-step of an export-then-erase offboard. Resolves every registered
+/// `IDataExporter` + `IBlobStorage` from `services`, runs each exporter
+/// for the offboard's subject set (the same subjects the erasure hook
+/// clears), bundles the segments — alphabetical by `Name` for
+/// deterministic bytes — into one content-addressable JSON blob under
+/// `_platform`, and returns its reference. Fail-closed: any failure (no
+/// exporters, no blob store, subject-resolution failure, a write error)
+/// returns `Error`, so `exportThenDeprovision` aborts the offboard before
+/// erasing anything.
+let exportArchive (services: IServiceProvider) (scopeId: string) : Async<Result<LifecycleExportArchive, string>> = async {
+    let exporters =
+        match services.GetService(typeof<seq<IDataExporter>>) with
+        | :? seq<IDataExporter> as es -> List.ofSeq es
+        | _ -> []
+
+    if List.isEmpty exporters then
+        return Error "no IDataExporter registered — export-then-erase requires at least one exporter"
+    else
+        match services.GetService(typeof<IBlobStorage>) with
+        | :? IBlobStorage as blob ->
+            match! subjectsFor services scopeId with
+            | Error reason -> return Error(sprintf "subject set unavailable: %s" reason)
+            | Ok subjects ->
+                let segments = ResizeArray<ExportSegment>()
+
+                for subject in subjects do
+                    for exporter in exporters do
+                        let! segs = exporter.Export(scopeId, subject)
+                        segments.AddRange segs
+
+                // Alphabetical by Name → deterministic archive bytes
+                // (so the same data hashes the same across runs).
+                let ordered = segments |> Seq.sortBy _.Name |> List.ofSeq
+
+                let arr = JsonArray()
+
+                for seg in ordered do
+                    let o = JsonObject()
+                    o["name"] <- JsonValue.Create seg.Name
+                    o["mimeType"] <- JsonValue.Create seg.MimeType
+                    o["body"] <- JsonValue.Create(Convert.ToBase64String seg.Body)
+                    arr.Add o
+
+                let root = JsonObject()
+                root["scopeId"] <- JsonValue.Create scopeId
+                root["segmentCount"] <- JsonValue.Create ordered.Length
+                root["segments"] <- arr
+
+                let bytes = Encoding.UTF8.GetBytes(root.ToJsonString())
+                let hash = Convert.ToHexString(SHA256.HashData bytes).ToLowerInvariant()
+                let path = sprintf "tenant-export/%s/export-%s.json" scopeId hash
+
+                match! blob.Upload("_platform", path, bytes) with
+                | Ok _ ->
+                    return
+                        Ok {
+                            Container = "_platform"
+                            BlobPath = path
+                            ContentHash = hash
+                            SegmentCount = ordered.Length
+                        }
+                | Error err -> return Error(sprintf "failed to write export archive: %s" err)
+        | _ -> return Error "no IBlobStorage registered — cannot durably write the export archive"
+}

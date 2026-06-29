@@ -303,3 +303,38 @@ type LifecyclePreview = {
     /// Sum of `WouldAffect` across items where `HasPreview = true`.
     TotalWouldAffect: int
 }
+
+// ─── Phase 54j — export-then-erase bundle ────────────────────────────
+//
+// Optionally produce the tenant's data-export archive (via the Phase 9h
+// `IDataExporter` surface) as a durable pre-step of the offboard — the
+// "give me my data, then delete it" flow — and hand the operator the
+// archive reference so they can pass it to the departing customer. The
+// ordering is fail-closed: the erasure hooks run ONLY after the export
+// has been durably written; a failed export aborts the offboard before
+// any destruction.
+
+/// Reference to the durable export archive produced before erasure.
+/// Identity-by-value (GP 12 rule 1) — a blob location + content hash, no
+/// live handle. Lives on the shared tier (GP 10) so the admin client can
+/// surface the archive the operator hands the customer.
+type LifecycleExportArchive = {
+    /// Blob container the archive was written to (`_platform`).
+    Container: string
+    /// Blob path of the archive (content-addressable by `ContentHash`).
+    BlobPath: string
+    /// SHA-256 hex of the archive bytes.
+    ContentHash: string
+    /// Number of export segments bundled into the archive.
+    SegmentCount: int
+}
+
+/// Result of an `ExportThenDeprovision` offboard: the erasure
+/// `LifecycleSummary` plus the export `LifecycleExportArchive` produced
+/// (and durably written + audited) before the erasure sweep ran.
+type ExportThenDeprovisionResult = {
+    /// The erasure sweep's disposition (same shape as a plain offboard).
+    Summary: LifecycleSummary
+    /// The export archive written before erasure.
+    Archive: LifecycleExportArchive
+}

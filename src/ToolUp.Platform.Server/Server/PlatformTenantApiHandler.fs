@@ -243,4 +243,30 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                     let! preview = TenantLifecycleAggregator.previewDeprovision (resolveHooks ()) scopeId actor
                     return Ok preview
             }
+
+        // Phase 54j — export-then-erase. The export step resolves
+        // IDataExporter / IBlobStorage from DI (via exportArchive); the
+        // aggregator enforces the fail-closed ordering (export durably,
+        // audit, then erase). Persist the erasure summary on success.
+        ExportThenDeprovision =
+            fun (scopeId, _wireActor, _reason) -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    let runExport () =
+                        DataSubjectRequestLifecycle.exportArchive services scopeId
+
+                    match!
+                        TenantLifecycleAggregator.exportThenDeprovision
+                            emitAudit
+                            runExport
+                            (resolveHooks ())
+                            scopeId
+                            actor
+                    with
+                    | Error e -> return Error e
+                    | Ok result ->
+                        do! persist scopeId result.Summary
+                        return Ok result
+            }
     }

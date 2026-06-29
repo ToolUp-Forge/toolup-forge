@@ -1935,6 +1935,26 @@ type TenantLifecycleHookFailedPayload = {
     Error: string
 }
 
+/// Phase 54j — the tenant's data-export archive was durably written as
+/// the pre-step of an export-then-erase offboard, BEFORE any erasure
+/// hook ran (fail-closed ordering: a failed export aborts the offboard,
+/// so this row's presence proves the export committed first). Metadata
+/// only — the archive reference, not its contents. Reserved
+/// `SourceModule = "_platform.tenant"`.
+type TenantDataExportedPayload = {
+    ScopeId: string
+    Actor: string
+    /// Blob container the archive was written to.
+    ArchiveContainer: string
+    /// Blob path of the durable export archive (content-addressable).
+    ArchivePath: string
+    /// SHA-256 hex of the archive bytes — lets the departing customer
+    /// verify the archive they received.
+    ContentHash: string
+    /// Number of export segments the archive bundles.
+    SegmentCount: int
+}
+
 /// Phase 69h.tail — uniform-shape audit row emitted by the ToolUp.Remoting
 /// dispatcher for `[<Audit>]`-annotated API record methods. One payload
 /// shape for every annotated method: the dispatcher knows the method
@@ -2338,6 +2358,10 @@ type AuditEvent =
     /// deprovision run. Non-aborting; one row per failed hook. Reserved
     /// `SourceModule = "_platform.tenant"`.
     | TenantLifecycleHookFailed of TenantLifecycleHookFailedPayload
+    /// Phase 54j — the tenant's data-export archive was durably written
+    /// before the erasure sweep (export-then-erase, fail-closed). Reserved
+    /// `SourceModule = "_platform.tenant"`.
+    | TenantDataExported of TenantDataExportedPayload
     /// Phase 107 — an original ingested document was fetched from the
     /// Knowledge Base via `GetOriginalDocument`. Sensitive-read audit,
     /// distinct from the upload event (GP 6).
@@ -2467,6 +2491,7 @@ module AuditEvent =
         | TenantProvisioned _ -> "TenantProvisioned"
         | TenantDeprovisioned _ -> "TenantDeprovisioned"
         | TenantLifecycleHookFailed _ -> "TenantLifecycleHookFailed"
+        | TenantDataExported _ -> "TenantDataExported"
         | KnowledgeOriginalRetrieved _ -> "KnowledgeOriginalRetrieved"
         | KnowledgeOriginalRetrievalDenied _ -> "KnowledgeOriginalRetrievalDenied"
         | RemotingMethodAudited _ -> "RemotingMethodAudited"
