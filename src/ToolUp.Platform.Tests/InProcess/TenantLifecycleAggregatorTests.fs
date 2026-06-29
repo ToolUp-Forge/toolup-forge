@@ -223,6 +223,154 @@ let tests =
             Expect.equal maxConcurrent.Value 1 "same-scope guarded runs never overlapped"
         }
 
+        // ─── Phase 54a — runResumable (background offboard sweep) ────────
+
+        testCaseAsync "runResumable with no prior progress runs every hook + emits the marker"
+        <| async {
+            let audit = AuditCollector()
+            let store = System.Collections.Generic.HashSet<string>()
+            let read () = async { return Set.ofSeq store }
+            let record name = async { lock store (fun () -> store.Add name |> ignore) }
+            let onProgress _ = async { return () }
+
+            let hooks = [ completed "a"; completed "b"; completed "c" ]
+
+            let! summary =
+                TenantLifecycleAggregator.runResumable
+                    audit.Emit
+                    read
+                    record
+                    onProgress
+                    shortTimeout
+                    hooks
+                    Deprovisioning
+                    "team-fresh"
+                    "admin"
+
+            Expect.equal summary.Outcomes.Length 3 "every hook produced an outcome"
+            Expect.equal (LifecycleSummary.completedCount summary) 3 "all completed"
+            Expect.equal (Set.ofSeq store) (Set.ofList [ "a"; "b"; "c" ]) "all three recorded as done"
+            Expect.contains audit.TypeNames "TenantDeprovisioned" "end-of-offboard marker emitted"
+        }
+
+        testCaseAsync "runResumable streams partial progress after each hook"
+        <| async {
+            let audit = AuditCollector()
+            let store = System.Collections.Generic.HashSet<string>()
+            let read () = async { return Set.ofSeq store }
+            let record name = async { lock store (fun () -> store.Add name |> ignore) }
+            let progressSizes = ResizeArray<int>()
+            let onProgress (s: LifecycleSummary) = async { progressSizes.Add s.Outcomes.Length }
+
+            let hooks = [ completed "a"; completed "b"; completed "c" ]
+
+            let! _ =
+                TenantLifecycleAggregator.runResumable
+                    audit.Emit
+                    read
+                    record
+                    onProgress
+                    shortTimeout
+                    hooks
+                    Deprovisioning
+                    "team-progress"
+                    "admin"
+
+            Expect.equal (List.ofSeq progressSizes) [ 1; 2; 3 ] "progress streamed N-of-M after each hook"
+        }
+
+        testCaseAsync "runResumable resumes after a simulated crash — completed hooks are NOT re-invoked"
+        <| async {
+            // Restart-survival: pass 1 crashes partway (a hook fails, so it
+            // is not recorded as done); pass 2 (the re-dispatched job) must
+            // skip the already-completed hooks and re-run only the failed
+            // one, reaching the TenantDeprovisioned marker.
+            let audit = AuditCollector()
+
+            // Durable progress store shared across the two passes.
+            let store = System.Collections.Generic.HashSet<string>()
+            let read () = async { return Set.ofSeq store }
+            let record name = async { lock store (fun () -> store.Add name |> ignore) }
+            let onProgress _ = async { return () }
+
+            // Per-hook invocation counters.
+            let counts = System.Collections.Concurrent.ConcurrentDictionary<string, int>()
+
+            let bump name =
+                counts.AddOrUpdate(name, 1, (fun _ n -> n + 1)) |> ignore
+
+            // `b` fails on the first pass, succeeds on the second.
+            let bShouldFail = ref true
+
+            let counting name (resultFor: unit -> LifecycleHookResult) =
+                StubHook(
+                    name,
+                    async { return LifecycleHookResult.Completed },
+                    async {
+                        bump name
+                        return resultFor ()
+                    }
+                )
+                :> ITenantLifecycle
+
+            let hooks = [
+                counting "a" (fun () -> LifecycleHookResult.Completed)
+                counting "b" (fun () ->
+                    if bShouldFail.Value then
+                        LifecycleHookResult.Failed "transient"
+                    else
+                        LifecycleHookResult.Completed)
+                counting "c" (fun () -> LifecycleHookResult.Completed)
+            ]
+
+            // Pass 1 — crash simulation: b fails, so only a + c are recorded.
+            let! pass1 =
+                TenantLifecycleAggregator.runResumable
+                    audit.Emit
+                    read
+                    record
+                    onProgress
+                    shortTimeout
+                    hooks
+                    Deprovisioning
+                    "team-resume"
+                    "admin"
+
+            Expect.equal (LifecycleSummary.failedCount pass1) 1 "b failed on the first pass"
+            Expect.equal (Set.ofSeq store) (Set.ofList [ "a"; "c" ]) "only the completed hooks recorded"
+            Expect.equal counts["a"] 1 "a invoked once"
+            Expect.equal counts["b"] 1 "b invoked once"
+            Expect.equal counts["c"] 1 "c invoked once"
+
+            // Pass 2 — the re-dispatched job. b now succeeds; a + c must be
+            // skipped (their counters stay at 1).
+            bShouldFail.Value <- false
+
+            let! pass2 =
+                TenantLifecycleAggregator.runResumable
+                    audit.Emit
+                    read
+                    record
+                    onProgress
+                    shortTimeout
+                    hooks
+                    Deprovisioning
+                    "team-resume"
+                    "admin"
+
+            Expect.equal counts["a"] 1 "a NOT re-invoked on resume"
+            Expect.equal counts["c"] 1 "c NOT re-invoked on resume"
+            Expect.equal counts["b"] 2 "only b re-invoked on resume"
+            Expect.equal pass2.Outcomes.Length 3 "summary reaches all three hooks"
+            Expect.equal (LifecycleSummary.completedCount pass2) 3 "all three now completed (a/c resumed, b fresh)"
+            Expect.equal (Set.ofSeq store) (Set.ofList [ "a"; "b"; "c" ]) "b now recorded too"
+
+            let deprovMarkers =
+                audit.TypeNames |> List.filter (fun n -> n = "TenantDeprovisioned")
+
+            Expect.equal deprovMarkers.Length 2 "each pass emits a TenantDeprovisioned marker"
+        }
+
         testCaseAsync "runGuarded allows different scopes to run in parallel"
         <| async {
             let audit = AuditCollector()

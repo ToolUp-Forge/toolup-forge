@@ -72,6 +72,36 @@ type IPlatformTenantApi = {
     /// replaying audit events. Owner / Platform-Admin only.
     [<RequiresRole "PlatformAdmin">]
     GetLifecycleSummary: string -> Async<Result<LifecycleSummary option, string>>
+
+    // ─── Phase 54a — async / inline offboard (append-only) ───────────
+    //
+    // `DeprovisionTenant` (above) keeps its original inline,
+    // summary-returning semantics for backward compatibility (GP 11);
+    // the two methods below add the explicit inline + the background
+    // paths without changing it.
+
+    /// Phase 54a — explicit inline (synchronous) offboard. Identical
+    /// semantics to `DeprovisionTenant`: runs every `OnDeprovisioned`
+    /// hook inline and returns the aggregated `LifecycleSummary`. Named
+    /// so callers / tests can request the inline path unambiguously even
+    /// after the async path exists. Owner / Platform-Admin only.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "TenantDeleted">]
+    DeprovisionTenantSync: string * string * string -> Async<Result<LifecycleSummary, string>>
+
+    /// Phase 54a — background / async offboard. Enqueues an
+    /// `IJobScheduler`-backed lifecycle job and returns a
+    /// `LifecycleJobHandle` promptly instead of awaiting the (potentially
+    /// 25-minute) multi-store erasure inline; the job survives a process
+    /// restart and resumes from the last completed hook. Poll progress
+    /// via `GetLifecycleSummary scopeId`. Returns
+    /// `Error "background offboard requires an IJobScheduler…"` when no
+    /// scheduler is composed (use `DeprovisionTenant` /
+    /// `DeprovisionTenantSync` for the inline path). Owner /
+    /// Platform-Admin only.
+    [<RequiresRole "PlatformAdmin">]
+    [<Audit "TenantDeleted">]
+    DeprovisionTenantAsync: string * string * string -> Async<Result<LifecycleJobHandle, string>>
 }
 
 module PlatformTenantApi =

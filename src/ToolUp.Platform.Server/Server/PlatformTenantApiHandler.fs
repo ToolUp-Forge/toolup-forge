@@ -23,13 +23,18 @@ open ToolUp.Platform
 // (no resolved auth) is treated as non-admin — fail-closed.
 
 /// Process-local holder of the most-recent `LifecycleSummary` per scope.
-/// Registered as a DI singleton when `TenantLifecycle` is enabled; read
-/// by `GetLifecycleSummary`, written after each run. Best-effort — the
-/// durable record is the audit trail (`TenantProvisioned` /
-/// `TenantDeprovisioned`); this exists so the admin UI can show the last
-/// run's disposition without replaying audit events. A distributed
-/// deployment sees per-replica snapshots; the audit trail remains the
-/// cross-replica source of truth.
+/// Registered as a DI singleton when `TenantLifecycle` is enabled.
+///
+/// **Phase 54e — this is now a read-through cache** in front of the
+/// durable `ILifecycleSummaryStore`: written after each run alongside the
+/// durable store, and read first by `GetLifecycleSummary` (a miss reads
+/// the durable store and back-fills here). On a fresh replica or after a
+/// restart the cache is cold, so the read falls through to the durable
+/// store — that is the cross-replica/restart-survival fix. When no
+/// durable store is registered (minimal/test wiring) this remains the
+/// sole backing, preserving prior Phase 54 process-local behaviour. The
+/// audit trail (`TenantProvisioned` / `TenantDeprovisioned`) remains the
+/// durable record of the *fact* a run happened.
 type TenantLifecycleSnapshot() =
     let last = ConcurrentDictionary<string, LifecycleSummary>()
 
@@ -63,9 +68,27 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         | :? TenantLifecycleSnapshot as s -> s
         | _ -> TenantLifecycleSnapshot()
 
+    // Phase 54e — durable backing for the last summary. Registered under
+    // `EnabledTenantLifecycle`; `None` only in minimal/test wiring, where
+    // the process-local snapshot remains the sole backing (prior Phase 54
+    // behaviour). The snapshot is a read-through cache in front of it.
+    let summaryStore =
+        match services.GetService(typeof<ILifecycleSummaryStore>) with
+        | :? ILifecycleSummaryStore as s -> Some s
+        | _ -> None
+
     let accessContext =
         match services.GetService(typeof<AccessContext>) with
         | :? AccessContext as ac -> Some ac
+        | _ -> None
+
+    // Phase 54a — optional background-job substrate. `None` when no
+    // scheduler is composed; `DeprovisionTenantAsync` then returns a clear
+    // "requires an IJobScheduler" error and the inline paths are
+    // unaffected (GP 13).
+    let scheduler =
+        match services.GetService(typeof<IJobScheduler>) with
+        | :? IJobScheduler as s -> Some s
         | _ -> None
 
     // Server-authoritative actor — the authenticated caller, never the
@@ -86,6 +109,42 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         | Some a -> a.Record(scopeId, event)
         | None -> async { return () }
 
+    // Phase 54e — persist the run's summary durably (best-effort) and
+    // refresh the process-local cache. A durable-store failure must not
+    // fail an offboard: the hooks already ran and the audit trail already
+    // recorded the run, so a blob-write outage degrades to "the admin UI
+    // reads a stale/empty summary", never "the offboard errored".
+    let persist (scopeId: string) (summary: LifecycleSummary) = async {
+        match summaryStore with
+        | Some store ->
+            try
+                do! store.SetLast(scopeId, summary)
+            with _ ->
+                () // swallowed by contract — see comment above
+        | None -> ()
+
+        snapshot.Set(scopeId, summary)
+    }
+
+    // Phase 54e — read-through cache. The process-local snapshot answers a
+    // hit directly; on a miss (fresh replica, post-restart process) read
+    // the durable store and populate the cache so subsequent reads are
+    // local. With no durable store registered this is the prior Phase 54
+    // process-local-only behaviour.
+    let readSummary (scopeId: string) : Async<LifecycleSummary option> = async {
+        match snapshot.Get scopeId with
+        | Some s -> return Some s
+        | None ->
+            match summaryStore with
+            | Some store ->
+                match! store.GetLast scopeId with
+                | Some s ->
+                    snapshot.Set(scopeId, s)
+                    return Some s
+                | None -> return None
+            | None -> return None
+    }
+
     {
         ProvisionTenant =
             fun (scopeId, _wireActor, _request) -> async {
@@ -95,7 +154,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                     let! summary =
                         TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Provisioning scopeId actor
 
-                    snapshot.Set(scopeId, summary)
+                    do! persist scopeId summary
                     return Ok summary
             }
 
@@ -107,7 +166,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                     let! summary =
                         TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Deprovisioning scopeId actor
 
-                    snapshot.Set(scopeId, summary)
+                    do! persist scopeId summary
                     return Ok summary
             }
 
@@ -116,6 +175,39 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 if not isAdmin then
                     return Error adminError
                 else
-                    return Ok(snapshot.Get scopeId)
+                    let! summary = readSummary scopeId
+                    return Ok summary
+            }
+
+        // Phase 54a — explicit inline offboard. Same path as
+        // `DeprovisionTenant` above (runGuarded inline + persist); named so
+        // callers/tests can request the inline path unambiguously.
+        DeprovisionTenantSync =
+            fun (scopeId, _wireActor, _reason) -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    let! summary =
+                        TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Deprovisioning scopeId actor
+
+                    do! persist scopeId summary
+                    return Ok summary
+            }
+
+        // Phase 54a — background offboard. Enqueues + fires a lifecycle
+        // job and returns the handle promptly; the background
+        // `LifecycleJobHandler` runs the resumable sweep and persists the
+        // summary as it progresses. Requires a composed `IJobScheduler`.
+        DeprovisionTenantAsync =
+            fun (scopeId, _wireActor, _reason) -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    match scheduler with
+                    | None ->
+                        return
+                            Error
+                                "background offboard requires an IJobScheduler (compose JobScheduler = InProcessJobScheduler); use DeprovisionTenant / DeprovisionTenantSync for the inline path"
+                    | Some sch -> return! TenantLifecycleAggregator.enqueue sch Deprovisioning scopeId actor
             }
     }

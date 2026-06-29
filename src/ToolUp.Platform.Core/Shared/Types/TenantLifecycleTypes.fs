@@ -164,3 +164,30 @@ type TenantLifecycleEvent =
     /// Deprovisioning completed for `scopeId`; `summary` carries the
     /// per-hook disposition.
     | Deprovisioned of scopeId: string * summary: LifecycleSummary
+
+// ─── Phase 54a — background / async offboard handle ──────────────────
+//
+// The async offboard path (`IPlatformTenantApi.DeprovisionTenantAsync`)
+// enqueues an `IJobScheduler`-backed lifecycle job and returns this
+// handle promptly, instead of awaiting a (potentially 25-minute)
+// multi-store erasure inline under the aggregator's per-hook timeout.
+// The operator polls `GetLifecycleSummary scopeId` for streaming
+// progress (running → N-of-M hooks done); the durable record remains the
+// audit trail (`TenantDeprovisioned`).
+
+/// Handle to a background offboard job. Identity-by-value (GP 12 rule 1)
+/// — `JobId` is the scheduler's value-typed `JobId` (a `Guid`), never a
+/// live handle, so the same poll works against the in-process scheduler
+/// and any distributed companion. Lives on the shared tier (GP 10) so the
+/// admin client renders the same shape `DeprovisionTenantAsync` returns.
+type LifecycleJobHandle = {
+    /// Scheduler `JobId` of the enqueued lifecycle job. Poll its
+    /// disposition via the snapshot surface (`GetLifecycleSummary`) or the
+    /// job substrate (`IJobScheduler.Get`).
+    JobId: JobId
+    /// Tenant scope the offboard targets.
+    ScopeId: string
+    /// Which phase the job runs. The v1 async path always enqueues
+    /// `Deprovisioning`; carried for symmetry + forward use.
+    Phase: TenantLifecyclePhase
+}

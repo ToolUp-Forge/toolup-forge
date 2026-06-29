@@ -3,6 +3,7 @@ module ToolUp.Platform.TenantLifecycleAggregator
 open System
 open System.Collections.Concurrent
 open System.Diagnostics
+open System.Text.Json.Nodes
 open System.Threading
 open ToolUp.Platform
 
@@ -116,6 +117,66 @@ let private invokeHook
             sw.Stop()
     }
 
+/// Emit the post-run audit rows for an aggregated `summary`: one
+/// `TenantLifecycleHookFailed` per failed hook (non-aborting — the run
+/// already completed every hook), then the single end-of-phase marker
+/// (`TenantProvisioned` / `TenantDeprovisioned`). Shared by the parallel
+/// `run` and the resumable `runResumable` so both phases emit the
+/// identical audit shape. `emitAudit` is best-effort by contract — a
+/// sink outage cannot fail an offboard.
+let private emitRunAudit
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    (summary: LifecycleSummary)
+    : Async<unit> =
+    async {
+        for o in summary.Outcomes do
+            match o.Result with
+            | LifecycleHookResult.Failed err ->
+                let payload: TenantLifecycleHookFailedPayload = {
+                    ScopeId = scopeId
+                    Actor = actorUserId
+                    Phase = TenantLifecyclePhase.name phase
+                    HookName = o.HookName
+                    Error = err
+                }
+
+                do! emitAudit scopeId (AuditEvent.TenantLifecycleHookFailed payload)
+            | _ -> ()
+
+        let completed = LifecycleSummary.completedCount summary
+        let skipped = LifecycleSummary.skippedCount summary
+        let failed = LifecycleSummary.failedCount summary
+
+        match phase with
+        | Provisioning ->
+            let payload: TenantProvisionedPayload = {
+                ScopeId = scopeId
+                Actor = actorUserId
+                HooksRun = summary.Outcomes.Length
+                HooksCompleted = completed
+                HooksSkipped = skipped
+                HooksFailed = failed
+                ElapsedMs = summary.TotalElapsedMs
+            }
+
+            do! emitAudit scopeId (AuditEvent.TenantProvisioned payload)
+        | Deprovisioning ->
+            let payload: TenantDeprovisionedPayload = {
+                ScopeId = scopeId
+                Actor = actorUserId
+                HooksRun = summary.Outcomes.Length
+                HooksCompleted = completed
+                HooksSkipped = skipped
+                HooksFailed = failed
+                ElapsedMs = summary.TotalElapsedMs
+            }
+
+            do! emitAudit scopeId (AuditEvent.TenantDeprovisioned payload)
+    }
+
 /// Run every hook for `phase` against `scopeId` (attributed to
 /// `actorUserId`) with the supplied per-hook `timeout`, emit the audit
 /// rows via `emitAudit` (scopeId + event), and return the aggregated
@@ -149,53 +210,7 @@ let run
             TotalElapsedMs = sw.ElapsedMilliseconds
         }
 
-        // One audit row per failed hook (non-aborting — the run already
-        // completed every hook above).
-        for o in outcomes do
-            match o.Result with
-            | LifecycleHookResult.Failed err ->
-                let payload: TenantLifecycleHookFailedPayload = {
-                    ScopeId = scopeId
-                    Actor = actorUserId
-                    Phase = TenantLifecyclePhase.name phase
-                    HookName = o.HookName
-                    Error = err
-                }
-
-                do! emitAudit scopeId (AuditEvent.TenantLifecycleHookFailed payload)
-            | _ -> ()
-
-        // The single end-of-phase marker.
-        let completed = LifecycleSummary.completedCount summary
-        let skipped = LifecycleSummary.skippedCount summary
-        let failed = LifecycleSummary.failedCount summary
-
-        match phase with
-        | Provisioning ->
-            let payload: TenantProvisionedPayload = {
-                ScopeId = scopeId
-                Actor = actorUserId
-                HooksRun = outcomes.Length
-                HooksCompleted = completed
-                HooksSkipped = skipped
-                HooksFailed = failed
-                ElapsedMs = sw.ElapsedMilliseconds
-            }
-
-            do! emitAudit scopeId (AuditEvent.TenantProvisioned payload)
-        | Deprovisioning ->
-            let payload: TenantDeprovisionedPayload = {
-                ScopeId = scopeId
-                Actor = actorUserId
-                HooksRun = outcomes.Length
-                HooksCompleted = completed
-                HooksSkipped = skipped
-                HooksFailed = failed
-                ElapsedMs = sw.ElapsedMilliseconds
-            }
-
-            do! emitAudit scopeId (AuditEvent.TenantDeprovisioned payload)
-
+        do! emitRunAudit emitAudit phase scopeId actorUserId summary
         return summary
     }
 
@@ -230,4 +245,167 @@ let runGuarded
             return! runWithDefaults emitAudit hooks phase scopeId actorUserId
         finally
             gate.Release() |> ignore
+    }
+
+// ─── Phase 54a — background / async offboard ─────────────────────────
+//
+// When an `IJobScheduler` is composed, a long offboard runs as a
+// background lifecycle job instead of awaiting inline under the per-hook
+// timeout: `enqueue` schedules + fires the job (returning a
+// `LifecycleJobHandle` promptly), and `runResumable` is the
+// progress-persisting, restart-survivable sweep `LifecycleJobHandler`
+// drives on the job thread. The inline `run` / `runGuarded` path above is
+// unchanged — deployments without a scheduler keep the synchronous
+// behaviour (GP 11 / GP 13).
+
+/// Reserved `IJobScheduler` handler name for the background lifecycle
+/// job. `ComposeTenantLifecycle` registers `LifecycleJobHandler` under
+/// it at startup; `enqueue` schedules against it.
+[<Literal>]
+let LifecycleJobHandlerName = "_platform.tenant.lifecycle"
+
+/// The job payload carried in `JobContext.Payload`: the phase + scope +
+/// actor of the offboard. A flat JSON object (phase → stable case-name
+/// string) so it survives `IJobStore` round-trips without a converter
+/// dependency — mirrors `DsrJobPayload`.
+module LifecycleJobPayload =
+    /// Serialise `(phase, scopeId, actorUserId)` to the job payload string.
+    let serialise (phase: TenantLifecyclePhase) (scopeId: string) (actorUserId: string) : string =
+        let o = JsonObject()
+        o["phase"] <- JsonValue.Create(TenantLifecyclePhase.name phase)
+        o["scopeId"] <- JsonValue.Create scopeId
+        o["actorUserId"] <- JsonValue.Create actorUserId
+        o.ToJsonString()
+
+    /// Parse the job payload back to `(phase, scopeId, actorUserId)`.
+    let parse (payload: string) : Result<TenantLifecyclePhase * string * string, string> =
+        try
+            let node = JsonNode.Parse payload
+
+            let phase =
+                match node["phase"].GetValue<string>() with
+                | "Provisioning" -> Provisioning
+                | _ -> Deprovisioning
+
+            Ok(phase, node["scopeId"].GetValue<string>(), node["actorUserId"].GetValue<string>())
+        with ex ->
+            Error ex.Message
+
+/// Enqueue a background offboard against `scheduler` and fire it
+/// immediately, returning a `LifecycleJobHandle` without awaiting the
+/// sweep. `Manual` trigger + `TriggerOnce` (mirrors the Phase 9h.A async
+/// DSR path) so the work starts now rather than at the next scheduler
+/// tick. An idempotency key per `(phase, scope)` dedups a double-clicked
+/// admin button within the TTL; a re-offboard inside the window returns
+/// the existing handle rather than racing a second sweep.
+let enqueue
+    (scheduler: IJobScheduler)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<Result<LifecycleJobHandle, string>> =
+    async {
+        let registration: JobRegistration = {
+            ScopeId = scopeId
+            Handler = LifecycleJobHandlerName
+            Payload = LifecycleJobPayload.serialise phase scopeId actorUserId
+            Trigger = Manual
+            Idempotency =
+                Some {
+                    Key = sprintf "tenant-lifecycle-%s-%s" (TenantLifecyclePhase.name phase) scopeId
+                    TtlSeconds = 60 * 60 * 24
+                }
+            RetryPolicy = JobRetryPolicy.defaults
+            ShardKey = None
+            Precision = Minute
+            CreatedBy = actorUserId
+            Tags = Map [ "source", "tenant-lifecycle"; "phase", TenantLifecyclePhase.name phase ]
+        }
+
+        match! scheduler.Schedule registration with
+        | Error err -> return Error(sprintf "failed to schedule offboard job: %A" err)
+        | Ok jobId ->
+            // Fire immediately (Manual trigger) so the offboard does not
+            // wait for the next scheduler tick.
+            let! _ = scheduler.TriggerOnce(scopeId, jobId, actorUserId)
+
+            return
+                Ok {
+                    JobId = jobId
+                    ScopeId = scopeId
+                    Phase = phase
+                }
+    }
+
+/// Resumable, progress-persisting sweep for the background path. Unlike
+/// `run` (parallel, fire-and-forget audit), this runs hooks
+/// **sequentially** and records each terminal-success hook
+/// (`Completed` / `Skipped`) via `recordCompleted` as it lands, so a
+/// process killed mid-sweep re-dispatches and resumes from the last
+/// completed hook without re-running it. `readCompleted` returns the set
+/// of hook names already done on a prior (crashed) attempt — those are
+/// recorded as `Completed` outcomes without re-invocation. `onProgress`
+/// receives each intermediate `LifecycleSummary` so a snapshot surface
+/// (`GetLifecycleSummary`) can stream running → N-of-M progress. A
+/// `Failed` hook is NOT recorded as done, so the re-dispatch retries it;
+/// the end-of-run audit (`emitRunAudit`) matches the inline path exactly.
+let runResumable
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (readCompleted: unit -> Async<Set<string>>)
+    (recordCompleted: string -> Async<unit>)
+    (onProgress: LifecycleSummary -> Async<unit>)
+    (timeout: TimeSpan)
+    (hooks: ITenantLifecycle list)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<LifecycleSummary> =
+    async {
+        let sw = Stopwatch.StartNew()
+        let! alreadyDone = readCompleted ()
+
+        // Hooks completed on a prior (crashed) attempt — recorded as
+        // Completed outcomes (elapsed 0) WITHOUT re-invoking, so the
+        // summary reaches its terminal marker without re-running them.
+        let resumed =
+            hooks
+            |> List.filter (fun h -> Set.contains h.Name alreadyDone)
+            |> List.map (fun h -> {
+                HookName = h.Name
+                Result = LifecycleHookResult.Completed
+                ElapsedMs = 0L
+            })
+
+        let outcomes = ResizeArray<LifecycleHookOutcome>(resumed)
+        let pending = hooks |> List.filter (fun h -> not (Set.contains h.Name alreadyDone))
+
+        for hook in pending do
+            let! outcome = invokeHook phase scopeId actorUserId timeout hook
+            outcomes.Add outcome
+
+            match outcome.Result with
+            | LifecycleHookResult.Completed
+            | LifecycleHookResult.Skipped _ -> do! recordCompleted hook.Name
+            | LifecycleHookResult.Failed _ -> ()
+
+            // Stream partial progress after each hook resolves.
+            do!
+                onProgress {
+                    ScopeId = scopeId
+                    Phase = phase
+                    Outcomes = List.ofSeq outcomes
+                    TotalElapsedMs = sw.ElapsedMilliseconds
+                }
+
+        sw.Stop()
+
+        let summary = {
+            ScopeId = scopeId
+            Phase = phase
+            Outcomes = List.ofSeq outcomes
+            TotalElapsedMs = sw.ElapsedMilliseconds
+        }
+
+        do! emitRunAudit emitAudit phase scopeId actorUserId summary
+        return summary
     }
