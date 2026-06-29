@@ -230,7 +230,11 @@ let tests =
             let audit = AuditCollector()
             let store = System.Collections.Generic.HashSet<string>()
             let read () = async { return Set.ofSeq store }
-            let record name = async { lock store (fun () -> store.Add name |> ignore) }
+
+            let record (outcome: LifecycleHookOutcome) = async {
+                lock store (fun () -> store.Add outcome.HookName |> ignore)
+            }
+
             let onProgress _ = async { return () }
 
             let hooks = [ completed "a"; completed "b"; completed "c" ]
@@ -241,6 +245,7 @@ let tests =
                     read
                     record
                     onProgress
+                    LifecycleRetryPolicy.noRetry
                     shortTimeout
                     hooks
                     Deprovisioning
@@ -258,7 +263,11 @@ let tests =
             let audit = AuditCollector()
             let store = System.Collections.Generic.HashSet<string>()
             let read () = async { return Set.ofSeq store }
-            let record name = async { lock store (fun () -> store.Add name |> ignore) }
+
+            let record (outcome: LifecycleHookOutcome) = async {
+                lock store (fun () -> store.Add outcome.HookName |> ignore)
+            }
+
             let progressSizes = ResizeArray<int>()
             let onProgress (s: LifecycleSummary) = async { progressSizes.Add s.Outcomes.Length }
 
@@ -270,6 +279,7 @@ let tests =
                     read
                     record
                     onProgress
+                    LifecycleRetryPolicy.noRetry
                     shortTimeout
                     hooks
                     Deprovisioning
@@ -290,7 +300,11 @@ let tests =
             // Durable progress store shared across the two passes.
             let store = System.Collections.Generic.HashSet<string>()
             let read () = async { return Set.ofSeq store }
-            let record name = async { lock store (fun () -> store.Add name |> ignore) }
+
+            let record (outcome: LifecycleHookOutcome) = async {
+                lock store (fun () -> store.Add outcome.HookName |> ignore)
+            }
+
             let onProgress _ = async { return () }
 
             // Per-hook invocation counters.
@@ -330,6 +344,7 @@ let tests =
                     read
                     record
                     onProgress
+                    LifecycleRetryPolicy.noRetry
                     shortTimeout
                     hooks
                     Deprovisioning
@@ -352,6 +367,7 @@ let tests =
                     read
                     record
                     onProgress
+                    LifecycleRetryPolicy.noRetry
                     shortTimeout
                     hooks
                     Deprovisioning
@@ -369,6 +385,112 @@ let tests =
                 audit.TypeNames |> List.filter (fun n -> n = "TenantDeprovisioned")
 
             Expect.equal deprovMarkers.Length 2 "each pass emits a TenantDeprovisioned marker"
+        }
+
+        // ─── Phase 54b — per-hook retry ─────────────────────────────────
+
+        testCaseAsync "runResumable retries a transient Failed hook per policy until it succeeds"
+        <| async {
+            let audit = AuditCollector()
+            let store = System.Collections.Generic.HashSet<string>()
+            let read () = async { return Set.ofSeq store }
+
+            let record (outcome: LifecycleHookOutcome) = async {
+                lock store (fun () -> store.Add outcome.HookName |> ignore)
+            }
+
+            let onProgress _ = async { return () }
+
+            // Fast policy so the test doesn't actually sleep seconds.
+            let policy: LifecycleRetryPolicy = {
+                MaxAttempts = 3
+                InitialBackoff = TimeSpan.FromMilliseconds 1.0
+                MaxBackoff = TimeSpan.FromMilliseconds 5.0
+            }
+
+            // Fails twice, then completes (a transient store outage).
+            let attempts = ref 0
+
+            let flaky =
+                StubHook(
+                    "flaky",
+                    async { return LifecycleHookResult.Completed },
+                    async {
+                        attempts.Value <- attempts.Value + 1
+
+                        if attempts.Value < 3 then
+                            return LifecycleHookResult.Failed "transient"
+                        else
+                            return LifecycleHookResult.Completed
+                    }
+                )
+                :> ITenantLifecycle
+
+            let! summary =
+                TenantLifecycleAggregator.runResumable
+                    audit.Emit
+                    read
+                    record
+                    onProgress
+                    policy
+                    shortTimeout
+                    [ flaky ]
+                    Deprovisioning
+                    "team-retry"
+                    "admin"
+
+            Expect.equal attempts.Value 3 "invoked 3 times (2 fails + 1 success)"
+            Expect.equal (LifecycleSummary.completedCount summary) 1 "terminal outcome is Completed"
+            Expect.equal (Set.ofSeq store) (Set.ofList [ "flaky" ]) "recorded as done after eventual success"
+        }
+
+        testCaseAsync "runResumable gives up after MaxAttempts — terminal Failed, NOT recorded as done"
+        <| async {
+            let audit = AuditCollector()
+            let store = System.Collections.Generic.HashSet<string>()
+            let read () = async { return Set.ofSeq store }
+
+            let record (outcome: LifecycleHookOutcome) = async {
+                lock store (fun () -> store.Add outcome.HookName |> ignore)
+            }
+
+            let onProgress _ = async { return () }
+
+            let policy: LifecycleRetryPolicy = {
+                MaxAttempts = 2
+                InitialBackoff = TimeSpan.FromMilliseconds 1.0
+                MaxBackoff = TimeSpan.FromMilliseconds 5.0
+            }
+
+            let attempts = ref 0
+
+            let broken =
+                StubHook(
+                    "broken",
+                    async { return LifecycleHookResult.Completed },
+                    async {
+                        attempts.Value <- attempts.Value + 1
+                        return LifecycleHookResult.Failed "always"
+                    }
+                )
+                :> ITenantLifecycle
+
+            let! summary =
+                TenantLifecycleAggregator.runResumable
+                    audit.Emit
+                    read
+                    record
+                    onProgress
+                    policy
+                    shortTimeout
+                    [ broken ]
+                    Deprovisioning
+                    "team-giveup"
+                    "admin"
+
+            Expect.equal attempts.Value 2 "invoked MaxAttempts times"
+            Expect.equal (LifecycleSummary.failedCount summary) 1 "terminal Failed"
+            Expect.isFalse (store.Contains "broken") "a Failed hook is NOT recorded — it re-runs next sweep"
         }
 
         testCaseAsync "runGuarded allows different scopes to run in parallel"

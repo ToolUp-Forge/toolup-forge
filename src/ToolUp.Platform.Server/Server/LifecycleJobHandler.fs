@@ -4,13 +4,11 @@
 module ToolUp.Platform.LifecycleJobHandler
 
 open System
-open System.Text
-open System.Text.Json.Nodes
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.PlatformTenantApiHandler
 
-// ─── Phase 54a — background offboard job handler ─────────────────────
+// ─── Phase 54a/54b — background offboard job handler ─────────────────
 //
 // `IJobHandler` registered under `TenantLifecycleAggregator.
 // LifecycleJobHandlerName`. Runs the offboard sweep on an `IJobScheduler`
@@ -19,81 +17,29 @@ open ToolUp.Platform.PlatformTenantApiHandler
 // thread — `DeprovisionTenantAsync` returns a `LifecycleJobHandle`
 // promptly while this executes in the background.
 //
-// **Restart survival.** The sweep runs through
-// `TenantLifecycleAggregator.runResumable`, which records each
-// terminal-success hook (`Completed` / `Skipped`) to a blob-backed
-// progress record as it lands. A process killed mid-sweep re-dispatches
-// the same job; this handler re-reads the progress record and resumes
-// from the last completed hook without re-running it, reaching the
-// `TenantDeprovisioned` marker. The progress record is cleared on a
-// clean finish. (Phase 54b generalises this into `ILifecycleLedger`
-// with per-hook retry; 54a's blob record is the minimal precursor.)
+// **Restart survival + retry (Phase 54b).** The sweep runs through
+// `TenantLifecycleAggregator.runResumable`, consulting an
+// `ILifecycleLedger`: each terminal-success hook (`Completed` /
+// `Skipped`) is recorded as it lands, so a process killed mid-sweep
+// re-dispatches the same job, skips the already-completed hooks, and
+// resumes from the last incomplete one — reaching the
+// `TenantDeprovisioned` marker without re-running anything. A `Failed`
+// hook is retried per `LifecycleRetryPolicy` within the sweep and, if
+// still failing, left unrecorded so the re-dispatch retries it. The
+// ledger is cleared on a clean finish. (Phase 54a shipped this as an
+// inline blob record; 54b lifted it into the portable `ILifecycleLedger`
+// seam + added retry.)
 //
 // **Progress streaming.** Each intermediate summary is pushed to the
-// process-local `TenantLifecycleSnapshot`, so `GetLifecycleSummary`
-// reflects running → N-of-M progress while the job is in flight.
+// process-local `TenantLifecycleSnapshot` (and the durable Phase 54e
+// store on completion), so `GetLifecycleSummary` reflects running →
+// N-of-M progress while the job is in flight.
 //
 // **Stateless between invocations (GP 12 rule 4).** The handler resolves
 // its substrate (`seq<ITenantLifecycle>`, `IAuditLog`,
-// `TenantLifecycleSnapshot`, `IBlobStorage`) from the injected
-// `IServiceProvider` on every `Execute`; no state survives across
-// dispatches except the durable progress record.
-
-/// Reserved blob container + name for the per-scope offboard progress
-/// record. Stored under the platform-reserved `_platform` container (not
-/// the offboarded tenant's own container, so it is never swept by the
-/// tenant's data-erasure hook) and cleared on a clean finish.
-[<Literal>]
-let private ProgressContainer = "_platform"
-
-let private progressBlob (scopeId: string) (phase: TenantLifecyclePhase) : string =
-    sprintf "tenant-lifecycle/%s/%s-progress.json" scopeId (TenantLifecyclePhase.name phase)
-
-/// Read the set of hook names already completed on a prior attempt.
-/// Absent / unreadable record → empty set (fresh sweep). Never throws —
-/// a corrupt record degrades to a full re-run, which is safe because the
-/// first-party hooks are idempotent.
-let private readCompleted (blob: IBlobStorage) (scopeId: string) (phase: TenantLifecyclePhase) : Async<Set<string>> = async {
-    match! blob.Download(ProgressContainer, progressBlob scopeId phase) with
-    | Error _ -> return Set.empty
-    | Ok bytes ->
-        try
-            let arr = JsonNode.Parse(Encoding.UTF8.GetString bytes).AsArray()
-            return arr |> Seq.map (fun n -> n.GetValue<string>()) |> Set.ofSeq
-        with _ ->
-            return Set.empty
-}
-
-/// Record one hook as completed by re-reading the current record, adding
-/// the name, and writing it back. Sequential within a sweep
-/// (`runResumable` records one hook at a time), so the read-modify-write
-/// does not race itself.
-let private recordCompleted
-    (blob: IBlobStorage)
-    (scopeId: string)
-    (phase: TenantLifecyclePhase)
-    (hookName: string)
-    : Async<unit> =
-    async {
-        let! current = readCompleted blob scopeId phase
-        let updated = Set.add hookName current
-        let arr = JsonArray()
-
-        for name in updated do
-            arr.Add(JsonValue.Create name)
-
-        let bytes = Encoding.UTF8.GetBytes(arr.ToJsonString())
-        let! _ = blob.Upload(ProgressContainer, progressBlob scopeId phase, bytes)
-        return ()
-    }
-
-/// Clear the progress record after a clean finish so a later re-offboard
-/// of the same scope starts fresh. Idempotent (`IBlobStorage.Delete`
-/// returns `Ok` for a missing blob).
-let private clearProgress (blob: IBlobStorage) (scopeId: string) (phase: TenantLifecyclePhase) : Async<unit> = async {
-    let! _ = blob.Delete(ProgressContainer, progressBlob scopeId phase)
-    return ()
-}
+// `TenantLifecycleSnapshot`, `ILifecycleSummaryStore`, `ILifecycleLedger`)
+// from the injected `IServiceProvider` on every `Execute`; no state
+// survives across dispatches except the durable ledger.
 
 type LifecycleJobHandler(services: IServiceProvider) =
     interface IJobHandler with
@@ -150,15 +96,36 @@ type LifecycleJobHandler(services: IServiceProvider) =
                     snapshot.Set(scopeId, summary)
                 }
 
-                match services.GetService(typeof<IBlobStorage>) with
-                | :? IBlobStorage as blob ->
+                // Phase 54b — resumability ledger. Prefer a composed
+                // ILifecycleLedger; else build the blob-backed default from
+                // IBlobStorage. None only in minimal/test wiring with no
+                // blob store at all → the non-resumable fallback below.
+                let ledger =
+                    match services.GetService(typeof<ILifecycleLedger>) with
+                    | :? ILifecycleLedger as l -> Some l
+                    | _ ->
+                        match services.GetService(typeof<IBlobStorage>) with
+                        | :? IBlobStorage as blob -> Some(BlobBackedLifecycleLedger.create blob)
+                        | _ -> None
+
+                match ledger with
+                | Some ledger ->
                     try
+                        let recordToLedger (outcome: LifecycleHookOutcome) =
+                            let disposition =
+                                match outcome.Result with
+                                | LifecycleHookResult.Skipped _ -> LedgerDisposition.Skipped
+                                | _ -> LedgerDisposition.Completed
+
+                            ledger.Record(scopeId, phase, outcome.HookName, disposition)
+
                         let! summary =
                             TenantLifecycleAggregator.runResumable
                                 emitAudit
-                                (fun () -> readCompleted blob scopeId phase)
-                                (fun hookName -> recordCompleted blob scopeId phase hookName)
+                                (fun () -> ledger.GetCompleted(scopeId, phase))
+                                recordToLedger
                                 (fun partial -> async { snapshot.Set(scopeId, partial) })
+                                LifecycleRetryPolicy.defaults
                                 (TenantLifecycleAggregator.defaultTimeout phase)
                                 hooks
                                 phase
@@ -166,20 +133,19 @@ type LifecycleJobHandler(services: IServiceProvider) =
                                 actorUserId
 
                         do! persistFinal summary
-                        do! clearProgress blob scopeId phase
+                        do! ledger.Clear(scopeId, phase)
                         return Success
                     with ex ->
-                        // Transient — the job re-dispatches; the
-                        // persisted progress lets the retry resume from
-                        // the last completed hook.
+                        // Transient — the job re-dispatches; the ledger
+                        // lets the retry resume from the last completed hook.
                         return TransientFailure ex.Message
-                | _ ->
-                    // No durable blob store — fall back to a
-                    // non-resumable inline sweep (still off the HTTP
-                    // thread, still survives at the job level via
-                    // IJobStore re-dispatch, but re-runs every hook on
-                    // restart). The first-party hooks are idempotent,
-                    // so a full re-run is safe.
+                | None ->
+                    // No ledger backing at all — fall back to a
+                    // non-resumable inline sweep (still off the HTTP thread,
+                    // still survives at the job level via IJobStore
+                    // re-dispatch, but re-runs every hook on restart). The
+                    // first-party hooks are idempotent, so a full re-run is
+                    // safe.
                     let! summary = TenantLifecycleAggregator.runWithDefaults emitAudit hooks phase scopeId actorUserId
 
                     do! persistFinal summary

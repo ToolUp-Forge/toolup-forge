@@ -117,6 +117,36 @@ let private invokeHook
             sw.Stop()
     }
 
+/// Invoke one hook with `LifecycleRetryPolicy` retry (Phase 54b): a hook
+/// that returns `Failed` is re-invoked (after the policy's backoff) up to
+/// `MaxAttempts`, returning the first non-`Failed` outcome or the last
+/// `Failed`. `Completed` / `Skipped` short-circuits immediately. Retry as
+/// data (GP 12 rule 3) — the policy is a record, never an `OnFailure`
+/// callback. `MaxAttempts = 1` (`LifecycleRetryPolicy.noRetry`) is one
+/// attempt, identical to a bare `invokeHook`.
+let rec private invokeHookWithRetry
+    (policy: LifecycleRetryPolicy)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    (timeout: TimeSpan)
+    (attempt: int)
+    (hook: ITenantLifecycle)
+    : Async<LifecycleHookOutcome> =
+    async {
+        let! outcome = invokeHook phase scopeId actorUserId timeout hook
+
+        match outcome.Result with
+        | LifecycleHookResult.Failed _ when attempt < policy.MaxAttempts ->
+            let delay = LifecycleRetryPolicy.delayFor policy (attempt + 1)
+
+            if delay > TimeSpan.Zero then
+                do! Async.Sleep(int delay.TotalMilliseconds)
+
+            return! invokeHookWithRetry policy phase scopeId actorUserId timeout (attempt + 1) hook
+        | _ -> return outcome
+    }
+
 /// Emit the post-run audit rows for an aggregated `summary`: one
 /// `TenantLifecycleHookFailed` per failed hook (non-aborting — the run
 /// already completed every hook), then the single end-of-phase marker
@@ -349,11 +379,18 @@ let enqueue
 /// (`GetLifecycleSummary`) can stream running → N-of-M progress. A
 /// `Failed` hook is NOT recorded as done, so the re-dispatch retries it;
 /// the end-of-run audit (`emitRunAudit`) matches the inline path exactly.
+///
+/// Phase 54b — `retryPolicy` re-invokes a `Failed` hook per backoff
+/// before recording its terminal outcome (`LifecycleRetryPolicy.noRetry`
+/// preserves the prior single-attempt behaviour). `readCompleted` /
+/// `recordCompleted` are the ledger seam: a hook already recorded for
+/// this `(scopeId, phase)` is skipped (idempotent re-run).
 let runResumable
     (emitAudit: string -> AuditEvent -> Async<unit>)
     (readCompleted: unit -> Async<Set<string>>)
-    (recordCompleted: string -> Async<unit>)
+    (recordCompleted: LifecycleHookOutcome -> Async<unit>)
     (onProgress: LifecycleSummary -> Async<unit>)
+    (retryPolicy: LifecycleRetryPolicy)
     (timeout: TimeSpan)
     (hooks: ITenantLifecycle list)
     (phase: TenantLifecyclePhase)
@@ -380,12 +417,12 @@ let runResumable
         let pending = hooks |> List.filter (fun h -> not (Set.contains h.Name alreadyDone))
 
         for hook in pending do
-            let! outcome = invokeHook phase scopeId actorUserId timeout hook
+            let! outcome = invokeHookWithRetry retryPolicy phase scopeId actorUserId timeout 1 hook
             outcomes.Add outcome
 
             match outcome.Result with
             | LifecycleHookResult.Completed
-            | LifecycleHookResult.Skipped _ -> do! recordCompleted hook.Name
+            | LifecycleHookResult.Skipped _ -> do! recordCompleted outcome
             | LifecycleHookResult.Failed _ -> ()
 
             // Stream partial progress after each hook resolves.

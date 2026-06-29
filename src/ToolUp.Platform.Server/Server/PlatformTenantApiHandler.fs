@@ -91,6 +91,25 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         | :? IJobScheduler as s -> Some s
         | _ -> None
 
+    // Phase 54b — completed-step offboard ledger. A fresh provision of a
+    // scope supersedes any prior offboard ledger (re-onboarding resets
+    // it), so the inline provision path clears the Deprovisioning ledger.
+    // `None` in minimal/test wiring — then the clear is a no-op.
+    let ledger =
+        match services.GetService(typeof<ILifecycleLedger>) with
+        | :? ILifecycleLedger as l -> Some l
+        | _ -> None
+
+    let clearOffboardLedger (scopeId: string) = async {
+        match ledger with
+        | Some l ->
+            try
+                do! l.Clear(scopeId, Deprovisioning)
+            with _ ->
+                () // best-effort — a stale ledger only costs a redundant skip
+        | None -> ()
+    }
+
     // Server-authoritative actor — the authenticated caller, never the
     // wire-supplied id. Empty when no AccessContext resolved (which also
     // fails the admin gate below).
@@ -155,6 +174,9 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                         TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Provisioning scopeId actor
 
                     do! persist scopeId summary
+                    // Phase 54b — re-onboarding supersedes a prior offboard
+                    // ledger so a future offboard of this scope starts fresh.
+                    do! clearOffboardLedger scopeId
                     return Ok summary
             }
 

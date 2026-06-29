@@ -58,6 +58,29 @@ let tests =
             Expect.isTrue (isSkipped result) "skipped without erasure handlers"
         }
 
+        // ─── Phase 54d — domain / companion offboard hooks ───────────
+
+        testCaseAsync "ConversationStoreLifecycle skips when no IConversationStore is registered"
+        <| async {
+            let hook = ConversationStoreLifecycle.create emptyProvider
+            let! result = hook.OnDeprovisioned("team-x", "admin")
+            Expect.isTrue (isSkipped result) "skipped without a conversation store"
+        }
+
+        testCaseAsync "KnowledgeBaseLifecycle skips when no IBlobStorage is registered"
+        <| async {
+            let hook = ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
+            let! result = hook.OnDeprovisioned("team-x", "admin")
+            Expect.isTrue (isSkipped result) "skipped without a blob store (KB substrate uncomposed)"
+        }
+
+        testCaseAsync "RagVectorStoreLifecycle skips when no IVectorStore is registered"
+        <| async {
+            let hook = ToolUp.RAG.RagVectorStoreLifecycle.create emptyProvider
+            let! result = hook.OnDeprovisioned("team-x", "admin")
+            Expect.isTrue (isSkipped result) "skipped without a vector store"
+        }
+
         testCaseAsync "every first-party hook is a no-op Skipped on OnProvisioned"
         <| async {
             let hooks = [
@@ -65,6 +88,9 @@ let tests =
                 MembershipCacheLifecycle.create emptyProvider
                 JobSchedulerLifecycle.create emptyProvider
                 DataSubjectRequestLifecycle.create emptyProvider
+                ConversationStoreLifecycle.create emptyProvider
+                ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
+                ToolUp.RAG.RagVectorStoreLifecycle.create emptyProvider
             ]
 
             for hook in hooks do
@@ -80,9 +106,81 @@ let tests =
                     MembershipCacheLifecycle.create emptyProvider
                     JobSchedulerLifecycle.create emptyProvider
                     DataSubjectRequestLifecycle.create emptyProvider
+                    ConversationStoreLifecycle.create emptyProvider
+                    ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
+                    ToolUp.RAG.RagVectorStoreLifecycle.create emptyProvider
                 ]
                 |> List.map (fun h -> h.Name)
 
-            Expect.equal (List.distinct names |> List.length) names.Length "all four hook names are unique"
+            Expect.equal (List.distinct names |> List.length) names.Length "all hook names are unique"
+        }
+
+        // ─── Phase 54b — resumable offboard ledger contract ──────────
+        //
+        // ILifecycleLedger conformance (against the blob-backed default
+        // over the in-memory blob double). Resumability + retry *through
+        // the aggregator sweep* are exercised in
+        // TenantLifecycleAggregatorTests (`runResumable`); these cases pin
+        // the ledger seam those callbacks ride on.
+
+        testCaseAsync "ledger records a hook then GetCompleted reads it back"
+        <| async {
+            let ledger =
+                BlobBackedLifecycleLedger.create (
+                    InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+                )
+
+            let! before = ledger.GetCompleted("team-x", Deprovisioning)
+            Expect.isTrue (Set.isEmpty before) "a fresh ledger is empty"
+
+            do! ledger.Record("team-x", Deprovisioning, "encryption-key", LedgerDisposition.Completed)
+            do! ledger.Record("team-x", Deprovisioning, "data-erasure", LedgerDisposition.Skipped)
+
+            let! after = ledger.GetCompleted("team-x", Deprovisioning)
+            Expect.equal after (Set.ofList [ "encryption-key"; "data-erasure" ]) "both dispositions recorded as done"
+        }
+
+        testCaseAsync "ledger Record is idempotent — recording the same hook twice is one entry"
+        <| async {
+            let ledger =
+                BlobBackedLifecycleLedger.create (
+                    InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+                )
+
+            do! ledger.Record("team-x", Deprovisioning, "job-scheduler", LedgerDisposition.Completed)
+            do! ledger.Record("team-x", Deprovisioning, "job-scheduler", LedgerDisposition.Completed)
+
+            let! completed = ledger.GetCompleted("team-x", Deprovisioning)
+            Expect.equal completed (Set.ofList [ "job-scheduler" ]) "duplicate record collapses to one entry"
+        }
+
+        testCaseAsync "ledger keys are isolated per (scope, phase)"
+        <| async {
+            let ledger =
+                BlobBackedLifecycleLedger.create (
+                    InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+                )
+
+            do! ledger.Record("team-a", Deprovisioning, "h", LedgerDisposition.Completed)
+
+            let! otherScope = ledger.GetCompleted("team-b", Deprovisioning)
+            let! otherPhase = ledger.GetCompleted("team-a", Provisioning)
+            Expect.isTrue (Set.isEmpty otherScope) "a different scope sees nothing"
+            Expect.isTrue (Set.isEmpty otherPhase) "a different phase sees nothing"
+        }
+
+        testCaseAsync "ledger Clear resets the run so a re-offboard starts fresh"
+        <| async {
+            let ledger =
+                BlobBackedLifecycleLedger.create (
+                    InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+                )
+
+            do! ledger.Record("team-x", Deprovisioning, "h1", LedgerDisposition.Completed)
+            do! ledger.Record("team-x", Deprovisioning, "h2", LedgerDisposition.Completed)
+            do! ledger.Clear("team-x", Deprovisioning)
+
+            let! afterClear = ledger.GetCompleted("team-x", Deprovisioning)
+            Expect.isTrue (Set.isEmpty afterClear) "Clear removes every recorded hook for the run"
         }
     ]

@@ -83,6 +83,14 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
             TenantLifecycleDiagnosticsContributor(sp) :> IDevDiagnosticsContributor)
         |> ignore
 
+        // Phase 54b — completed-step offboard ledger. Factory-registered so
+        // it resolves the deployment's `IBlobStorage` lazily; the background
+        // sweep (`LifecycleJobHandler`) consults it for resumable recovery,
+        // and the inline provision path clears it on re-onboarding.
+        services.AddSingleton<ILifecycleLedger>(fun (sp: IServiceProvider) ->
+            BlobBackedLifecycleLedger.create (sp.GetRequiredService<IBlobStorage>()))
+        |> ignore
+
         services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> EncryptionKeyLifecycle.create sp)
         |> ignore
 

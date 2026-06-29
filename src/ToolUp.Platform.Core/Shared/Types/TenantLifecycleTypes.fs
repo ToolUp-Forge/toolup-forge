@@ -191,3 +191,57 @@ type LifecycleJobHandle = {
     /// `Deprovisioning`; carried for symmetry + forward use.
     Phase: TenantLifecyclePhase
 }
+
+// ─── Phase 54b — per-hook retry policy ───────────────────────────────
+//
+// Retry-as-data (GP 12 rule 3): the aggregator re-invokes a hook that
+// returns `Failed` per this policy's backoff before recording the
+// terminal outcome — never an `OnFailure` callback. An aggregator-level
+// default applies to every hook (a per-hook override is a future
+// extension that would not change this shape). Lives on the shared tier
+// so a deployment can configure it from `ServerConfig`.
+
+/// Per-hook retry policy for the offboard sweep. Exponential backoff
+/// `min(InitialBackoff * 2^(attempt-1), MaxBackoff)`; `MaxAttempts` is
+/// inclusive — `1` means no retry (one attempt, the prior Phase 54
+/// behaviour). Mirrors `JobRetryPolicy`'s shape (minus the dead-letter
+/// destination, which the lifecycle sweep records as a `Failed` outcome +
+/// audit row rather than routing onward).
+type LifecycleRetryPolicy = {
+    /// Inclusive max attempts. `1` = no retry.
+    MaxAttempts: int
+    /// Delay before the first retry (attempt 2).
+    InitialBackoff: TimeSpan
+    /// Cap on the exponential backoff.
+    MaxBackoff: TimeSpan
+}
+
+module LifecycleRetryPolicy =
+    /// No retry — one attempt, then record the terminal outcome. The
+    /// prior Phase 54 / 54a behaviour (the inline parallel `run` path
+    /// keeps this; only the ledger-aware sweep opts into retry).
+    let noRetry: LifecycleRetryPolicy = {
+        MaxAttempts = 1
+        InitialBackoff = TimeSpan.Zero
+        MaxBackoff = TimeSpan.Zero
+    }
+
+    /// SDK default for the background sweep: 3 attempts, 2s initial
+    /// backoff, 30s cap. Tuned for offboard hooks that fail on transient
+    /// resource pressure (a store briefly unreachable mid-erasure) and
+    /// recover within the window.
+    let defaults: LifecycleRetryPolicy = {
+        MaxAttempts = 3
+        InitialBackoff = TimeSpan.FromSeconds 2.0
+        MaxBackoff = TimeSpan.FromSeconds 30.0
+    }
+
+    /// Delay before `attempt` (1-indexed). Attempt 1 runs immediately
+    /// (`delayFor 1 = Zero`); attempt 2+ uses exponential backoff capped
+    /// at `MaxBackoff`. Mirrors `JobRetryPolicy.delayFor`.
+    let delayFor (policy: LifecycleRetryPolicy) (attempt: int) : TimeSpan =
+        if attempt <= 1 then
+            TimeSpan.Zero
+        else
+            let raw = policy.InitialBackoff.TotalMilliseconds * (2.0 ** float (attempt - 1))
+            TimeSpan.FromMilliseconds(min raw policy.MaxBackoff.TotalMilliseconds)

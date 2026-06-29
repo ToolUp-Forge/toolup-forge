@@ -555,6 +555,10 @@
              default). After the aggregator (consumes LifecycleSummary);
              before the handler that reads through it. -->
         <Compile Include="Server\ILifecycleSummaryStore.fs" />
+        <!-- Phase 54b — completed-step offboard ledger (blob-backed
+             default). After the aggregator; consumed by the resumable
+             sweep via LifecycleJobHandler. -->
+        <Compile Include="Server\ILifecycleLedger.fs" />
         <Compile Include="Server\PlatformTenantApiHandler.fs" />
         <!-- Phase 54a — background offboard IJobHandler. After
              PlatformTenantApiHandler (reads TenantLifecycleSnapshot) +
