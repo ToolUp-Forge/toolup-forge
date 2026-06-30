@@ -1,7 +1,6 @@
 module ToolUp.Platform.TenantLifecycleAggregator
 
 open System
-open System.Collections.Concurrent
 open System.Diagnostics
 open System.Text.Json.Nodes
 open System.Threading
@@ -30,12 +29,15 @@ open ToolUp.Platform
 // block the crypto-shred / erasure of the rest.
 //
 // **Per-scope idempotency.** `runGuarded` serialises concurrent runs
-// for the *same* scope via a per-scope `SemaphoreSlim` so two operators
-// (or a double-clicked admin button) can't interleave two offboards of
-// one tenant. Different scopes never contend. Process-local — a
-// distributed deployment that needs cross-replica offboard exclusion
-// layers its own lock (the audit trail is the cross-replica record of
-// truth regardless).
+// for the *same* scope so two operators (or a double-clicked admin
+// button) can't interleave two offboards of one tenant. Different scopes
+// never contend. Phase 54h lifts the exclusion behind `ILifecycleLock`:
+// `runGuarded` routes through the process-local `InProcessLifecycleLock`
+// (byte-identical single-instance serialisation), while `runGuardedWith`
+// accepts an explicit lock so a distributed deployment composes a
+// cross-replica lock (the Redis reference impl) and the losing replica
+// gets a prompt `AlreadyInProgress` rather than interleaving a second
+// offboard. The audit trail stays the cross-replica record of truth.
 
 /// Default per-hook timeout for `OnProvisioned`. Provisioning hooks are
 /// fast (key creation, config seeding); 30 s is generous headroom.
@@ -52,16 +54,6 @@ let defaultTimeout =
     function
     | Provisioning -> DefaultProvisionTimeout
     | Deprovisioning -> DefaultDeprovisionTimeout
-
-// Per-scope semaphores backing `runGuarded`. Keyed by scope id; a
-// scope's first guarded run lazily creates its semaphore. Never
-// removed — the count of distinct tenant scopes a process offboards in
-// its lifetime is bounded and small, so the leak is immaterial and
-// removal would race the acquire path.
-let private scopeLocks = ConcurrentDictionary<string, SemaphoreSlim>()
-
-let private lockFor (scopeId: string) : SemaphoreSlim =
-    scopeLocks.GetOrAdd(scopeId, fun _ -> new SemaphoreSlim(1, 1))
 
 /// Invoke one hook for the given phase with a per-hook timeout. Never
 /// throws — a timeout or exception becomes a `Failed` outcome so the
@@ -254,12 +246,57 @@ let runWithDefaults
     : Async<LifecycleSummary> =
     run emitAudit (defaultTimeout phase) hooks phase scopeId actorUserId
 
+/// Outcome of a lock-guarded lifecycle run (Phase 54h).
+[<RequireQualifiedAccess>]
+type GuardedRun =
+    /// The lock was acquired and the run completed with this summary.
+    | Ran of LifecycleSummary
+    /// Another holder (a concurrent replica under a distributed lock)
+    /// already holds the scope, so the run did not start. The in-process
+    /// default never yields this — it serialises same-scope runs — so this
+    /// case only materialises under a distributed `ILifecycleLock`.
+    | AlreadyInProgress
+
+/// `runWithDefaults` guarded by an explicit `ILifecycleLock` (Phase 54h):
+/// acquire the scope, run on success, release the lease on completion.
+/// Returns `GuardedRun.AlreadyInProgress` WITHOUT running when the lock
+/// reports another holder (a concurrent replica under a distributed lock),
+/// so the caller can surface a prompt "offboard already in progress"
+/// rather than blocking the request for the minutes a cross-store offboard
+/// can take. Under the in-process default the acquire blocks until the
+/// scope frees and so always returns `Some`, making this always `Ran`
+/// (Phase 54 serialisation preserved). `lease.Dispose()` releases in a
+/// `finally`, so a hook that throws still frees the scope.
+let runGuardedWith
+    (lock: ILifecycleLock)
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (hooks: ITenantLifecycle list)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<GuardedRun> =
+    async {
+        match! lock.Acquire scopeId with
+        | None -> return GuardedRun.AlreadyInProgress
+        | Some lease ->
+            try
+                let! summary = runWithDefaults emitAudit hooks phase scopeId actorUserId
+                return GuardedRun.Ran summary
+            finally
+                lease.Dispose()
+    }
+
 /// `runWithDefaults` serialised per scope: concurrent runs for the same
-/// `scopeId` execute one-at-a-time (per-scope `SemaphoreSlim`), so two
-/// operators offboarding the same tenant don't interleave. Different
-/// scopes run fully in parallel. Use this from the request handler;
-/// the contract pack exercises both `run` (parallel/timeout/isolation)
-/// and `runGuarded` (per-scope serialisation) directly.
+/// `scopeId` execute one-at-a-time, so two operators offboarding the same
+/// tenant don't interleave. Different scopes run fully in parallel. Use
+/// this from the request handler; the contract pack exercises both `run`
+/// (parallel/timeout/isolation) and the per-scope serialisation directly.
+///
+/// Phase 54h — routes through `runGuardedWith` over the process-local
+/// `InProcessLifecycleLock`, whose `Acquire` blocks until the scope frees,
+/// so single-instance behaviour is byte-identical to Phase 54. A
+/// deployment that needs cross-replica exclusion composes a distributed
+/// `ILifecycleLock` and calls `runGuardedWith` instead.
 let runGuarded
     (emitAudit: string -> AuditEvent -> Async<unit>)
     (hooks: ITenantLifecycle list)
@@ -268,13 +305,12 @@ let runGuarded
     (actorUserId: string)
     : Async<LifecycleSummary> =
     async {
-        let gate = lockFor scopeId
-        do! gate.WaitAsync() |> Async.AwaitTask
-
-        try
+        match! runGuardedWith InProcessLifecycleLock.shared emitAudit hooks phase scopeId actorUserId with
+        | GuardedRun.Ran summary -> return summary
+        | GuardedRun.AlreadyInProgress ->
+            // Unreachable with the in-process lock (it serialises, never
+            // refuses); kept total so the match is exhaustive.
             return! runWithDefaults emitAudit hooks phase scopeId actorUserId
-        finally
-            gate.Release() |> ignore
     }
 
 // ─── Phase 54a — background / async offboard ─────────────────────────

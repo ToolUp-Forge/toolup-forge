@@ -547,6 +547,9 @@
              before the aggregator (previewDeprovision) + the hooks that
              implement it. -->
         <Compile Include="Server\ITenantLifecyclePreview.fs" />
+        <!-- Phase 54h — cross-replica offboard exclusion lock + in-process
+             default. Before the aggregator (runGuarded acquires via it). -->
+        <Compile Include="Server\ILifecycleLock.fs" />
         <Compile Include="Server\TenantLifecycleAggregator.fs" />
         <Compile Include="Server\Lifecycle\EncryptionKeyLifecycle.fs" />
         <Compile Include="Server\Lifecycle\MembershipCacheLifecycle.fs" />

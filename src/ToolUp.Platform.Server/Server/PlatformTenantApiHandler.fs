@@ -64,6 +64,13 @@ let offboardConfirmationRequired = "offboard confirmation required"
 let offboardConfirmationNoStore =
     "offboard confirmation requires an IShareTokenStore (compose the share-token substrate)"
 
+/// Phase 54h — returned to the loser when a distributed `ILifecycleLock`
+/// reports another replica already mid-offboard of this scope. Under the
+/// in-process default this never surfaces (same-scope offboards serialise);
+/// it only appears in a multi-replica deployment that composed a
+/// cross-replica lock.
+let offboardAlreadyInProgress = "offboard already in progress for this scope"
+
 /// `ResourceKind` the confirmation tokens are minted under. Namespaced so
 /// a confirmation token can never be confused with a Forms / share-link
 /// token even within the same `IShareTokenStore`.
@@ -141,6 +148,16 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         match services.GetService(typeof<ILifecycleLedger>) with
         | :? ILifecycleLedger as l -> Some l
         | _ -> None
+
+    // Phase 54h — cross-replica offboard exclusion lock. Resolves the
+    // composed `ILifecycleLock` (a distributed impl in a multi-replica
+    // deployment); falls back to the process-local `InProcessLifecycleLock`
+    // default when none is registered — minimal/test wiring, which then
+    // serialises same-scope offboards exactly as Phase 54 did.
+    let lifecycleLock =
+        match services.GetService(typeof<ILifecycleLock>) with
+        | :? ILifecycleLock as l -> l
+        | _ -> InProcessLifecycleLock.shared
 
     let clearOffboardLedger (scopeId: string) = async {
         match ledger with
@@ -249,11 +266,26 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     // Phase 54i — run the (already-authorised, already-confirmed) offboard
     // inline and persist, returning the summary. Shared by the confirmed
     // path; identical aggregator call to `DeprovisionTenant`.
-    let runConfirmedOffboard (scopeId: string) = async {
-        let! summary = TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Deprovisioning scopeId actor
-
-        do! persist scopeId summary
-        return summary
+    //
+    // Phase 54h — guarded by the resolved `ILifecycleLock`. Under a
+    // distributed lock a concurrent replica mid-offboard of this scope
+    // yields `AlreadyInProgress`, surfaced as `Error
+    // offboardAlreadyInProgress`; the in-process default serialises and so
+    // always `Ran` (Phase 54 behaviour). Persists only on a run.
+    let runConfirmedOffboard (scopeId: string) : Async<Result<LifecycleSummary, string>> = async {
+        match!
+            TenantLifecycleAggregator.runGuardedWith
+                lifecycleLock
+                emitAudit
+                (resolveHooks ())
+                Deprovisioning
+                scopeId
+                actor
+        with
+        | TenantLifecycleAggregator.GuardedRun.AlreadyInProgress -> return Error offboardAlreadyInProgress
+        | TenantLifecycleAggregator.GuardedRun.Ran summary ->
+            do! persist scopeId summary
+            return Ok summary
     }
 
     {
@@ -279,9 +311,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 else
                     match! confirmationGate scopeId with
                     | Some banner -> return Error banner
-                    | None ->
-                        let! summary = runConfirmedOffboard scopeId
-                        return Ok summary
+                    | None -> return! runConfirmedOffboard scopeId
             }
 
         GetLifecycleSummary =
@@ -303,9 +333,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 else
                     match! confirmationGate scopeId with
                     | Some banner -> return Error banner
-                    | None ->
-                        let! summary = runConfirmedOffboard scopeId
-                        return Ok summary
+                    | None -> return! runConfirmedOffboard scopeId
             }
 
         // Phase 54a — background offboard. Enqueues + fires a lifecycle
@@ -456,18 +484,19 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                                     let! banner = refuseOffboard scopeId (validationReason e)
                                     return Error banner
                                 | Ok() ->
-                                    let! summary = runConfirmedOffboard scopeId
+                                    match! runConfirmedOffboard scopeId with
+                                    | Error e -> return Error e
+                                    | Ok summary ->
+                                        do!
+                                            emitAudit
+                                                scopeId
+                                                (AuditEvent.TenantOffboardConfirmationApproved {
+                                                    ScopeId = scopeId
+                                                    RequestedBy = claim.IssuedBy
+                                                    ApprovedBy = actor
+                                                })
 
-                                    do!
-                                        emitAudit
-                                            scopeId
-                                            (AuditEvent.TenantOffboardConfirmationApproved {
-                                                ScopeId = scopeId
-                                                RequestedBy = claim.IssuedBy
-                                                ApprovedBy = actor
-                                            })
-
-                                    return Ok summary
+                                        return Ok summary
             }
 
         // Phase 54f — schedule a grace-period offboard. Registers an

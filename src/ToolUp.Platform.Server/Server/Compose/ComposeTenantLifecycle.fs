@@ -2,6 +2,7 @@ module ToolUp.Platform.ComposeTenantLifecycle
 
 open System
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -90,6 +91,17 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ILifecycleLedger>(fun (sp: IServiceProvider) ->
             BlobBackedLifecycleLedger.create (sp.GetRequiredService<IBlobStorage>()))
         |> ignore
+
+        // Phase 54h — cross-replica offboard exclusion lock. Registers the
+        // process-local `InProcessLifecycleLock` default (single shared
+        // instance, so every inline offboard contends on the same per-scope
+        // semaphores) so the handler always resolves an `ILifecycleLock`.
+        // `TryAddSingleton` semantics: a distributed deployment that
+        // composes a cross-replica lock (the Redis reference impl) BEFORE
+        // this step wins, and the handler then fail-fast-refuses the losing
+        // replica's concurrent offboard. Behaviour is byte-identical to
+        // Phase 54 under the default (the in-process lock serialises).
+        services.TryAddSingleton<ILifecycleLock>(InProcessLifecycleLock.shared)
 
         services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> EncryptionKeyLifecycle.create sp)
         |> ignore
