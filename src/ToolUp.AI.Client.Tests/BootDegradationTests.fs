@@ -72,12 +72,18 @@ let private baseModel: Client.Model = {
     Degradations = []
 }
 
-// `update`'s config / queryBus / modules parameters are untouched by
-// the degradation arms under test (the gate-flip path stops before
-// module init while both prefetches are pending), so nulls suffice —
-// a test that accidentally reaches them fails loudly.
+// `update`'s queryBus / modules parameters are untouched by the
+// degradation arms under test (the gate-flip path stops before module
+// init while both prefetches are pending), so nulls suffice — a test
+// that accidentally reaches them fails loudly. The `config` parameter,
+// however, IS read on every arm: the post-update `ProcessedData`
+// recompute calls `resolveProcessedData config …`, which reads
+// `config.DataManager`. A null config therefore throws `Cannot read
+// properties of null (reading 'DataManager')` regardless of arm, so we
+// pass the real `ClientConfig.defaults` (resolves under Fable — same
+// HomeLanding precedent).
 let private update msg model =
-    Client.update Unchecked.defaultof<ClientConfig> Unchecked.defaultof<IModuleQueryBus> [] msg model
+    Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> [] msg model
 
 let tests =
     installStubs ()
