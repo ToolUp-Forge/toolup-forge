@@ -9,6 +9,9 @@
     <Compile Include="RedisNotificationChannel.fs" />
     <Compile Include="RedisNotificationChannelHealth.fs" />
     <Compile Include="RedisNotificationChannelValidator.fs" />
+    <!-- Phase 54h — distributed offboard exclusion lock (ILifecycleLock)
+         over Redis SET NX PX, sharing the channel's multiplexer. -->
+    <Compile Include="RedisLifecycleLock.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
