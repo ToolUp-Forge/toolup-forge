@@ -66,6 +66,10 @@
              (HomeWidgetRegistry in Platform.Client; needs ClientConfig.defaults,
              which only resolves under Fable — see HomeWidgetContributorTests.fs). -->
         <Compile Include="HomeWidgetContributorTests.fs" />
+        <!-- Phase 54e — tenant-lifecycle diagnostics admin MVU
+             (TenantLifecycleAdminUI lives in Platform.Client, reached
+             transitively; same Phase 110 precedent as the others). -->
+        <Compile Include="TenantLifecycleAdminUITests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

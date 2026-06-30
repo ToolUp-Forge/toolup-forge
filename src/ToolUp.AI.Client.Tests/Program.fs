@@ -22,6 +22,9 @@ let allTests =
         // HomeWidgetRegistry contract (flatten + weight-sort) in
         // Platform.Client.
         HomeWidgetContributorTests.tests
+        // Phase 54e — tenant-lifecycle diagnostics admin MVU
+        // (TenantLifecycleAdminUI in Platform.Client tier).
+        TenantLifecycleAdminUITests.tests
     ]
 
 [<EntryPoint>]

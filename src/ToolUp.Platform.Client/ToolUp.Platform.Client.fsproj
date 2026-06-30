@@ -215,6 +215,11 @@
         <Compile Include="Client\DataSourceCredentialUI.fs" />
         <Compile Include="Client\DataIngestionUI.fs" />
         <Compile Include="Client\DataSubjectRequestAdminUI.fs" />
+        <!-- Phase 54e — tenant-lifecycle diagnostics admin. Surfaces the
+             durable last LifecycleSummary (IPlatformTenantApi.GetLifecycleSummary)
+             per scope; Platform-Admin gated like the other _sdk.* admin
+             modules. Before SDK.Client.fs (prepareModules calls create). -->
+        <Compile Include="Client\TenantLifecycleAdminUI.fs" />
         <Compile Include="Components\ModuleBoundary.fs" />
         <Compile Include="Client\SDK.Client.fs" />
         <!-- Phase 57 — hydration-aware bootstrap + per-route metadata

@@ -2798,6 +2798,14 @@ module Client =
             | _, ConfiguredDataSubjectRequestAdmin cfg -> [ DataSubjectRequestAdminUI.create (Some cfg) ]
             | _, ExternalDataSubjectRequestAdmin custom -> [ custom ]
 
+        // Phase 54e — tenant-lifecycle diagnostics admin. Mode-agnostic,
+        // same reasoning as PlatformAdmin / HealthMonitor: a bootstrapped
+        // admin in any mode reaches the panel; non-admins are hidden by
+        // the sidebar role filter on the "Platform Management" group.
+        // Zero-cost on `NoTenantLifecycle` deployments (GP 13): the API
+        // surface 404s and the panel renders its empty state.
+        let tenantLifecycleAdmin = [ TenantLifecycleAdminUI.create () ]
+
         // Trailing order is load-bearing: the sidebar renders groups
         // in first-occurrence order across the full module list, so
         // whichever group is named first in `trailing` lands earlier in
@@ -2822,6 +2830,7 @@ module Client =
             @ healthMonitor
             @ serviceStatusBoard
             @ dataSubjectRequestAdmin
+            @ tenantLifecycleAdmin
 
         home @ noActiveTeamLanding @ leading @ workApp @ trailing @ debugApp
 
