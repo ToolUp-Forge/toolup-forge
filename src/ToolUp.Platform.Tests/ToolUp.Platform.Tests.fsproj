@@ -71,6 +71,7 @@
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
         <Compile Include="Contracts\ITenantLifecycleContract.fs" />
+        <Compile Include="Contracts\ILifecycleLockContract.fs" />
         <Compile Include="Contracts\IPeerBearerAuthContract.fs" />
         <Compile Include="Contracts\IAuthProviderContract.fs" />
         <Compile Include="Contracts\IAIProviderContract.fs" />

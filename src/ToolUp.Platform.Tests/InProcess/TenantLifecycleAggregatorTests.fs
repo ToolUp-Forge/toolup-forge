@@ -241,6 +241,58 @@ let tests =
             Expect.equal maxConcurrent.Value 1 "same-scope guarded runs never overlapped"
         }
 
+        // ─── Phase 54h — runGuardedWith under an explicit ILifecycleLock ─
+
+        testCaseAsync
+            "runGuardedWith returns AlreadyInProgress when the lock refuses (loser sees offboard already in progress)"
+        <| async {
+            let audit = AuditCollector()
+
+            // A lock that refuses every acquire — models a peer replica
+            // already holding the scope under a distributed lock.
+            let refusingLock =
+                { new ILifecycleLock with
+                    member _.Acquire(_scopeId) = async { return None }
+                }
+
+            let! outcome =
+                TenantLifecycleAggregator.runGuardedWith
+                    refusingLock
+                    audit.Emit
+                    [ completed "h" ]
+                    Deprovisioning
+                    "team-busy"
+                    "admin"
+
+            Expect.equal
+                outcome
+                TenantLifecycleAggregator.GuardedRun.AlreadyInProgress
+                "a refused acquire yields AlreadyInProgress — the offboard never starts"
+
+            Expect.isEmpty audit.Events "no audit emitted — the run never started, so no hooks ran and no marker fired"
+        }
+
+        testCaseAsync "runGuardedWith over the in-process default runs (Ran) — single-instance behaviour preserved"
+        <| async {
+            let audit = AuditCollector()
+            let lock = InProcessLifecycleLock.create ()
+
+            let! outcome =
+                TenantLifecycleAggregator.runGuardedWith
+                    lock
+                    audit.Emit
+                    [ completed "h" ]
+                    Deprovisioning
+                    "team-ok"
+                    "admin"
+
+            match outcome with
+            | TenantLifecycleAggregator.GuardedRun.Ran summary ->
+                Expect.equal (LifecycleSummary.completedCount summary) 1 "the hook ran under the in-process lock"
+            | TenantLifecycleAggregator.GuardedRun.AlreadyInProgress ->
+                failtest "the in-process lock blocks rather than refusing a free scope"
+        }
+
         // ─── Phase 54a — runResumable (background offboard sweep) ────────
 
         testCaseAsync "runResumable with no prior progress runs every hook + emits the marker"

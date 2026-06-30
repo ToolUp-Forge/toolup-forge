@@ -137,6 +137,7 @@ let allTests =
         OffboardConfirmationTests.tests
         ScheduledDeprovisionTests.tests
         ITenantLifecycleContract.tests
+        ILifecycleLockContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
         EntityQueryTests.tests
