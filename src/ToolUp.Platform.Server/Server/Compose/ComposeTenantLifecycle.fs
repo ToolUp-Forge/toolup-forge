@@ -111,6 +111,22 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> ConversationStoreLifecycle.create sp)
         |> ignore
 
+        // Phase 54g — provisioning hooks that do real work. Each
+        // self-`Skipped`s when its substrate is inactive (no `IConfigStore` /
+        // `ITeamStore` / `PerScopeKeyResolver`), so registering them
+        // unconditionally under the enabled mode is safe. They make
+        // `OnProvisioned` symmetric with the offboard hooks: seed default
+        // `_platform` config, bootstrap the owner team, pre-create the
+        // per-scope encryption key.
+        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> ConfigSeedLifecycle.create sp)
+        |> ignore
+
+        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> OwnerTeamBootstrapLifecycle.create sp)
+        |> ignore
+
+        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> EncryptionKeyProvisionLifecycle.create sp)
+        |> ignore
+
         // Phase 54a — register the background offboard job handler with the
         // scheduler at startup, so `DeprovisionTenantAsync` can enqueue +
         // dispatch a `LifecycleJobHandler` job. Deferred to an

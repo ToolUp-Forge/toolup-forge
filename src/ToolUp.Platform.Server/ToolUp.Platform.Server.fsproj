@@ -552,6 +552,14 @@
         <Compile Include="Server\Lifecycle\MembershipCacheLifecycle.fs" />
         <Compile Include="Server\Lifecycle\JobSchedulerLifecycle.fs" />
         <Compile Include="Server\Lifecycle\DataSubjectRequestLifecycle.fs" />
+        <!-- Phase 54g — first-party provisioning hooks that do real work
+             (config seed / owner-team bootstrap / per-scope key pre-create).
+             After the substrate they wrap (IConfigStore, ITeamStore,
+             PerScopeKeyResolver — all compiled above); before
+             ComposeTenantLifecycle registers them. -->
+        <Compile Include="Server\Lifecycle\ConfigSeedLifecycle.fs" />
+        <Compile Include="Server\Lifecycle\OwnerTeamBootstrapLifecycle.fs" />
+        <Compile Include="Server\Lifecycle\EncryptionKeyProvisionLifecycle.fs" />
         <!-- Phase 54d — conversation-store offboard purge (core-tier).
              After the aggregator; before ComposeTenantLifecycle registers it. -->
         <Compile Include="Server\Lifecycle\ConversationStoreLifecycle.fs" />
