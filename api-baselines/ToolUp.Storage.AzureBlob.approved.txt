@@ -9,8 +9,9 @@ ToolUp.Storage.AzureBlobStorage.fromEnv(Microsoft.FSharp.Core.FSharpOption`1[Sys
 ToolUp.Storage.AzureBlobStorage+AzureBlobStorage (class)
 ToolUp.Storage.AzureBlobStorage+AzureBlobStorage..ctor(ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig)
 ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig (class)
-ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig..ctor(System.String, System.String)
+ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]])
 ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig.ConnectionString : System.String { get }
+ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig.ConnectionStringProvider : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]] { get }
 ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig.RootContainer : System.String { get }
 ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfigModule (class)
 ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfigModule.defaults : ToolUp.Storage.AzureBlobStorage+AzureBlobStorageConfig { get }
