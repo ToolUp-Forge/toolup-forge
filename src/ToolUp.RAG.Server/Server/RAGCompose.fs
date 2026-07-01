@@ -602,6 +602,16 @@ type RAGServerApp = {
     /// (default) preserves no-limit behaviour. Tune via
     /// `RAGServerApp.withMaxDocumentBytes`.
     MaxDocumentBytes: int option
+    /// Phase 14y — hard cap on the character length of a retrieval query
+    /// reaching `IRetrievalPipeline.Retrieve`. Above the cap the pipeline
+    /// refuses with a `KnowledgeQueryTooLargeException` and emits a
+    /// `KnowledgeQueryRejected` audit — a query this long is almost always a
+    /// programming bug (an entire document pasted into the query slot), and
+    /// embedding it wastes provider spend / can trip the provider's own token
+    /// cap with an opaque error. Defaults to `Some 16384` (~4k tokens); tune
+    /// via `RAGServerApp.withMaxQueryChars`. `None` disables the guard (not
+    /// reachable through the public builder — the default is always on).
+    MaxQueryChars: int option
     /// Phase 14w — tombstone retention window. `IVectorStore.DeleteChunk`
     /// soft-deletes (stamps `_deletedAt`); the scheduled vacuum
     /// hard-removes tombstones older than `now - TombstoneRetention`.
@@ -970,7 +980,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 platformKnowledgeBaseSnapshot = snapshot,
                 // Phase 122 — same instance the `/health/rag` endpoint resolves,
                 // so per-stage P50/P95 surface in the snapshot.
-                telemetry = telemetry
+                telemetry = telemetry,
+                // Phase 14y — query-size cap + audit sink for the hard refusal.
+                ?maxQueryChars = app.MaxQueryChars,
+                eventStore = eventStore
             )
             :> IRetrievalPipeline
 
@@ -1235,6 +1248,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // vacuum schedule is set without a scheduler, or when a persistent
         // deployment has no vacuum schedule at all (tombstones accumulate).
         ToolUp.RAG.RagConfigValidator.VacuumScheduleValidator(finalConfig, app.VacuumSchedule.IsSome)
+        // Phase 14y — warn when an authenticated RAG deployment runs with no
+        // rate limiter: retrieval embeds every query, so an unbounded request
+        // loop burns embedding spend even behind a proxy (per-query cost, not
+        // per-connection). Mode ≠ Anonymous AND RateLimit = RateLimitConfig.none.
+        ToolUp.RAG.RagConfigValidator.RAGRateLimitConfiguredValidator finalConfig
     ]
 
     // Merge RAG handlers + service config + the "RAG" notification-consumer
@@ -1296,6 +1314,7 @@ module RAGServerApp =
             RetrievalDefaultsClampLog = []
             MaxChunkBytes = None
             MaxDocumentBytes = None
+            MaxQueryChars = Some 16384
             TombstoneRetention = System.TimeSpan.FromDays 7.0
             VacuumSchedule = None
         }
@@ -1335,6 +1354,7 @@ module RAGServerApp =
             RetrievalDefaultsClampLog = []
             MaxChunkBytes = None
             MaxDocumentBytes = None
+            MaxQueryChars = Some 16384
             TombstoneRetention = System.TimeSpan.FromDays 7.0
             VacuumSchedule = None
         }
@@ -1801,6 +1821,18 @@ module RAGServerApp =
     let withMaxDocumentBytes (maxBytes: int) (app: RAGServerApp) : RAGServerApp = {
         app with
             MaxDocumentBytes = Some(max 1 maxBytes)
+    }
+
+    /// Phase 14y — cap the character length of a retrieval query reaching
+    /// the pipeline. Above the cap, `IRetrievalPipeline.Retrieve` refuses
+    /// with a `KnowledgeQueryTooLargeException` and emits a
+    /// `KnowledgeQueryRejected` audit. Default `Some 16384` (~4k tokens) —
+    /// generous for any genuine natural-language question, tight enough that
+    /// an accidental whole-document paste is refused before it burns embedding
+    /// spend. Clamped to a floor of 1.
+    let withMaxQueryChars (maxChars: int) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            MaxQueryChars = Some(max 1 maxChars)
     }
 
     /// Phase 14w — set the tombstone retention window. Soft-deleted chunks

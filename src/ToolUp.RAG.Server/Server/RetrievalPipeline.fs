@@ -12,6 +12,45 @@ open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.Platform.IRetrievalTracer
 open ToolUp.Platform.IRagTelemetry
 
+// ─── Query-size guard (Phase 14y) ─────────────────────────────────
+
+/// Reserved event-type literal for the `KnowledgeQueryRejected` audit
+/// emitted when a retrieval query exceeds the pipeline's configured
+/// `MaxQueryChars` cap. Wire-format constant — ops dashboards / admin
+/// UIs match on this string alongside the other RAG `Document*` audit
+/// events (`DocumentRejected`, `DocumentVectorisationSkipped`, …).
+[<Literal>]
+let KnowledgeQueryRejectedEventType = "KnowledgeQueryRejected"
+
+/// Raised by `RetrievalPipeline.Retrieve` when the query length exceeds
+/// the pipeline's configured `MaxQueryChars` cap. A hard refusal: a query
+/// this long is almost always a programming bug (an entire document pasted
+/// into the query slot) — embedding it wastes provider spend and can trip
+/// the provider's own token limit with an opaque error, so the pipeline
+/// refuses at the contract boundary before any embedding call. Carries the
+/// offending length and the cap (both as inspectable properties) so the
+/// message names `MaxQueryChars` explicitly.
+type KnowledgeQueryTooLargeException(queryChars: int, maxQueryChars: int) =
+    inherit
+        exn(
+            sprintf
+                "Retrieval query of %d characters exceeds the configured MaxQueryChars cap of %d. A query this long is almost always a programming bug (an entire document pasted into the query slot) — split it, or raise the cap via RAGServerApp.withMaxQueryChars."
+                queryChars
+                maxQueryChars
+        )
+
+    /// Character length of the query that was refused.
+    member _.QueryChars = queryChars
+    /// The configured `MaxQueryChars` cap the query exceeded.
+    member _.MaxQueryChars = maxQueryChars
+
+/// STJ options carrying the full F# converter set, for the
+/// `KnowledgeQueryRejected` audit payload. Constructed once at module
+/// level (the payload is a plain anonymous record, but Option / list
+/// fields still need the converters).
+let private queryRejectedJsonOptions =
+    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+
 // ─── Access validation ────────────────────────────────────────────
 
 /// Returns the subset of requested scopes the caller is permitted to read.
@@ -303,7 +342,15 @@ type RetrievalPipeline
         // Phase 122 — when supplied, each `Retrieve` reports its per-stage
         // timing breakdown via `RecordRetrievalStages` so `/health/rag`
         // can expose per-stage P50/P95. `None` costs nothing (GP 13).
-        ?telemetry: IRagTelemetry
+        ?telemetry: IRagTelemetry,
+        // Phase 14y — hard cap on query length. A query longer than this is
+        // refused at the top of `Retrieve` (before any embedding call) with a
+        // `KnowledgeQueryTooLargeException`. `None` disables the guard.
+        ?maxQueryChars: int,
+        // Phase 14y — audit sink for the `KnowledgeQueryRejected` event a
+        // refusal emits. `None` ⇒ the refusal still raises, just without the
+        // audit row (GP 13 — zero cost when unwired, e.g. eval / benchmark).
+        ?eventStore: IEventStore
     ) =
 
     let sparse = sparseIndex
@@ -324,9 +371,57 @@ type RetrievalPipeline
 
     let needsHybridPool = sparse.IsSome || opts.Reranker.IsSome
 
+    // Phase 14y — emit the `KnowledgeQueryRejected` audit for an over-length
+    // query. Privacy contract matches `RetrievalTrace`: the plaintext query
+    // is NEVER persisted — only its SHA256 hash + character count. Best-
+    // effort (try/with): a failed audit write must never mask the primary
+    // refusal exception. `None` event store ⇒ no-op.
+    let emitQueryRejected
+        (query: string)
+        (queryChars: int)
+        (limit: int)
+        (scopes: VectorScope list)
+        (teamId: string option)
+        : Async<unit> =
+        async {
+            match eventStore with
+            | None -> ()
+            | Some es ->
+                try
+                    let payload = {|
+                        QueryHash = ToolUp.RAG.RetrievalTracers.hashQuery query
+                        QueryChars = queryChars
+                        MaxQueryChars = limit
+                        Scopes = scopes
+                    |}
+
+                    let json =
+                        System.Text.Json.JsonSerializer.Serialize(payload, queryRejectedJsonOptions)
+
+                    let scopeId = teamId |> Option.defaultValue "_platform"
+                    do! es.Write(Events.create scopeId "ToolUp.RAG" KnowledgeQueryRejectedEventType json)
+                with _ ->
+                    ()
+        }
+
     interface IRetrievalPipeline with
 
         member _.Retrieve request ctx = async {
+            // Phase 14y — query-size guard. Refuse an over-length query at the
+            // contract boundary, before any embedding call: it is almost always
+            // a programming bug (an entire document pasted into the query slot),
+            // and embedding it wastes provider spend / can trip the provider's
+            // own token cap with an opaque error. Emit a `KnowledgeQueryRejected`
+            // audit (hash + length only) then raise a structured exception
+            // naming `MaxQueryChars`.
+            let queryChars = if isNull request.Query then 0 else request.Query.Length
+
+            match maxQueryChars with
+            | Some limit when queryChars > limit ->
+                do! emitQueryRejected request.Query queryChars limit request.Scopes ctx.TeamId
+                raise (KnowledgeQueryTooLargeException(queryChars, limit))
+            | _ -> ()
+
             let stopwatch = System.Diagnostics.Stopwatch.StartNew()
             let stages = ResizeArray<string>()
             // Per-stage `(name, elapsedMs)` pairs (Phase 122). Appended

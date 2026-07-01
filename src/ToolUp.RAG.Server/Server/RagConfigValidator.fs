@@ -308,3 +308,46 @@ type VacuumScheduleValidator(serverConfig: ServerConfig, vacuumScheduleEnabled: 
             else
                 return Ok
         }
+
+/// Phase 14y — warns when a RAG deployment that requires authentication
+/// runs with no rate limiter configured (`RateLimit = RateLimitConfig.none`,
+/// the default). Retrieval embeds *every* query through the configured
+/// embedding provider, so the cost of a request is per-query, not per-
+/// connection: an unbounded request loop against the AI-assistant /
+/// knowledge-search path burns embedding-token spend and CPU with no
+/// ceiling. That makes an unlimited authenticated RAG deployment a cost-DoS
+/// surface even behind a TLS-terminating proxy (which caps connections, not
+/// per-query provider spend) — a broader concern than the general
+/// `RateLimitModeValidator`, which only fires when the deployment is also
+/// internet-facing.
+///
+/// `Warning` (not `Error`): single-tenant deployments behind their own
+/// rate-limiting proxy legitimately run `RateLimit = None`. Honours the same
+/// escape hatch as `RateLimitModeValidator`
+/// (`ServerConfig.AcceptNoRateLimitWhenAuthRequired` /
+/// `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1`) so an operator who has made
+/// the informed decision silences both at once. Anonymous-only deployments
+/// are `Ok` — there's no per-user budget to protect and public tools accept
+/// the exposure by shape.
+type RAGRateLimitConfiguredValidator(serverConfig: ServerConfig, ?timeout: TimeSpan) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "rag-rate-limit-configured"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            let requiresAuth = DeploymentConfig.requiresAnyAuth serverConfig
+            let rateLimitOff = not (RateLimitConfig.isEnabled serverConfig.RateLimit)
+            let escapeHatch = serverConfig.AcceptNoRateLimitWhenAuthRequired
+
+            if requiresAuth && rateLimitOff && not escapeHatch then
+                return
+                    Warning(
+                        sprintf
+                            "RAG is composed in an authenticated deployment (Surfaces = %s) with ServerConfig.RateLimit = RateLimitConfig.none. Retrieval embeds every query through the configured embedding provider, so an unbounded request loop against the AI-assistant / knowledge-search path burns embedding-token spend and CPU with no ceiling — a cost-DoS surface even behind a TLS-terminating proxy, because retrieval cost is per-query, not per-connection. Enable the SDK's per-subject-kind fixed-window limiter by setting ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 } (or RateLimitConfig.withOverrides for per-shape limits), or set ServerConfig.AcceptNoRateLimitWhenAuthRequired = true (TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1) if a rate-limiting proxy enforces per-client limits upstream. Verify in the HealthMonitorUI Preflight tab or /dev/inspect Validators panel."
+                            (DeploymentConfig.surfacesLabel serverConfig)
+                    )
+            else
+                return Ok
+        }
