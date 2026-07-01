@@ -376,6 +376,7 @@
         <Compile Include="InProcess\InProcessRateLimiterTests.fs" />
         <Compile Include="InProcess\PlatformTestingFrameworkTests.fs" />
         <Compile Include="InProcess\I18nInfrastructureTests.fs" />
+        <Compile Include="InProcess\I18nCoverageTests.fs" />
         <Compile Include="InProcess\MultimodalAIProviderTests.fs" />
         <Compile Include="InProcess\CitationNormaliserTests.fs" />
         <!-- BM25 snapshot persistence regression — private CLIMutable

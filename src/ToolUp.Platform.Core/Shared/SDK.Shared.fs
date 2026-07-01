@@ -2656,6 +2656,21 @@ type ServerConfig = {
     /// `ServerApp.withDeploymentReadiness`. Pure projection over existing
     /// signals — zero cost when not enabled.
     DeploymentReadiness: DeploymentReadinessMode
+    /// Phase 179 — the locales this deployment declares support for.
+    /// Default `[ LocaleCode.en ]`. Read by the translation-coverage
+    /// gate (`I18nCoverage.validator`) when `I18nCoverageMode` is on, so
+    /// the SDK's own `sdk.*` + `ApiError` keys (and every module's
+    /// registered translations) are checked against exactly these
+    /// locales. A single-locale deployment leaves the default; a
+    /// French-serving deployment declares `[ LocaleCode.en; LocaleCode.fr ]`.
+    RegisteredLocales: LocaleCode list
+    /// Phase 179 — translation-coverage-gate policy. Default
+    /// `NoCoverageCheck` (GP 11/13) — no gate, byte-for-byte unchanged.
+    /// `WarnOnMissing` logs a `Warn` per missing (key, locale) and
+    /// continues; `FailOnMissing` joins the `IConfigValidator` preflight
+    /// and aborts startup, naming the missing key + locale. Checked
+    /// against `RegisteredLocales`.
+    I18nCoverageMode: I18nCoverageMode
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -2948,6 +2963,8 @@ module ServerConfig =
         TenantLifecycle = NoTenantLifecycle
         TenantOffboardConfirmation = NoConfirmation
         DeploymentReadiness = NoReadinessReport
+        RegisteredLocales = [ LocaleCode.en ]
+        I18nCoverageMode = NoCoverageCheck
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

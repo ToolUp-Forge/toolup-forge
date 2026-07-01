@@ -201,6 +201,7 @@ let allTests =
         InProcessRateLimiterTests.tests
         PlatformTestingFrameworkTests.tests
         I18nInfrastructureTests.tests
+        I18nCoverageTests.tests
         MultimodalAIProviderTests.tests
         CitationNormaliserTests.tests
         InMemoryBM25IndexTests.tests

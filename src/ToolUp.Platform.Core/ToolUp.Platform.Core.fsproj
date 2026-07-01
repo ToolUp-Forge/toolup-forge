@@ -192,6 +192,14 @@
              AuditSamplingPolicy field. Depends only on Guid; AuditTypes.fs
              (after SDK.Shared.fs, needs ModuleEvent) references it back. -->
         <Compile Include="Shared\Types\AuditSampling.fs" />
+        <!-- Phase 179 — locale + translation primitives (LocaleCode /
+             TranslationKey / Translations) + the I18nCoverageMode policy DU,
+             split out of I18nTypes.fs so they compile before SDK.Shared.fs and
+             ServerConfig can carry `RegisteredLocales` + `I18nCoverageMode`
+             fields. Dependency-free / Fable-safe. The ErrorCode / ApiError
+             envelope stays in I18nTypes.fs (needs RateLimitedError, defined in
+             SDK.Shared.fs). -->
+        <Compile Include="Shared\Types\LocaleTypes.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
         <Compile Include="Shared\RateLimitDescriptor.fs" />
@@ -261,6 +269,13 @@
         <Compile Include="Shared\Types\I18nTypes.fs" />
         <Compile Include="Shared\I18nDefaults.fs" />
         <Compile Include="Shared\Interfaces\ILocaleResolver.fs" />
+        <!-- Phase 179 — translation-coverage gate + pseudo-localisation.
+             Pure / BCL-only / Fable-safe so both tiers compile them.
+             I18nCoverage.fs after I18nDefaults.fs (audits sdkTranslations +
+             messageKeyFor) and IConfigValidator.fs (validator factory);
+             PseudoLocale.fs needs only LocaleCode. -->
+        <Compile Include="Shared\PseudoLocale.fs" />
+        <Compile Include="Shared\I18nCoverage.fs" />
         <Compile Include="Shared\Api.fs" />
         <!-- 0.4.4 — MsgPack binary format folded in from
              ToolUp.Remoting.MsgPack. Used by Platform.Server's remoting

@@ -75,16 +75,31 @@ let private warnMissing (locale: LocaleCode) (key: TranslationKey) =
 /// Resolve `key` for the active locale. Returns the translated string
 /// if registered, or the key verbatim (with a one-shot `console.warn`)
 /// otherwise. Hook — call from a React component body.
+///
+/// Phase 179 — when the active locale is the reserved pseudo-locale
+/// (`qps-ploc`), the resolved-or-key string is run through
+/// `PseudoLocale.transform` (vowels accented, +30% padding, `⟦…⟧`
+/// markers). The resolution itself is unchanged — the pseudo-locale
+/// carries no entries, so lookup falls through the fallback locale to
+/// the English string, which is then accented. An un-externalised
+/// hardcoded literal never reaches `tr`, so it renders un-accented and
+/// stands out. Byte-for-byte the pre-179 path for any real locale.
 let tr (key: TranslationKey) : string =
     let locale = useLocale ()
     let translations = useTranslations ()
     let fallback = useFallback ()
 
-    match Translations.tryLookup translations locale (Some fallback) key with
-    | Some v -> v
-    | None ->
-        warnMissing locale key
-        key
+    let resolved =
+        match Translations.tryLookup translations locale (Some fallback) key with
+        | Some v -> v
+        | None ->
+            warnMissing locale key
+            key
+
+    if PseudoLocale.isActive locale then
+        PseudoLocale.transform resolved
+    else
+        resolved
 
 /// Variant of `tr` that applies placeholder substitutions (same
 /// `{name}` syntax as the server-side `ApiError.applyPlaceholders`).
