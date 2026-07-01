@@ -2,7 +2,15 @@
 
 Azure Blob Storage `IBlobStorage` companion for `ToolUp.Platform`. Wraps `Azure.Storage.Blobs` to back the platform's storage interface with Azure containers; supports versioning, server-side encryption, and immutability policies.
 
-Configuration via standard Azure resolution (`DefaultAzureCredential` — env vars, managed identity, etc.). Production deployments typically pair with `AzureBlobEncryptionAtRestValidator` to confirm encryption-at-rest is enabled.
+Configuration via an Azure Storage connection string. Production deployments typically pair with `AzureBlobEncryptionAtRestValidator` to confirm encryption-at-rest is enabled.
+
+## Credential rotation
+
+**Static credential — provider seam or restart.** The connection string embeds an `AccountKey` (or SAS). Built once, the `BlobServiceClient` pins that key for the process lifetime: an out-of-band `AccountKey` regeneration or SAS expiry leaves the cached client failing every call with `403` until the process restarts.
+
+To survive rotation without a restart, construct via `create` with `ConnectionStringProvider = Some f` (Phase 2c). `f ()` is read on each operation and the client is rebuilt **only when the resolved connection string changes** (a change-detection cache, not a per-call reconstruction). The closure typically closes over an `ISecretStore.GetSecret` read, so the rotated key is picked up on the next call. `fromEnv` wires the static `None` path (today's behaviour). See [`docs/operations/credential-rotation.md`](../../../docs/operations/credential-rotation.md).
+
+The `blob_storage:azure` health probe performs a **live authenticated list** (Phase 2c) against the `_platform` health prefix, so a rotated-out key surfaces as `Unhealthy` with the Azure `403` message within one probe cycle — the earlier `Exists`-based probe swallowed the `403` and read Healthy.
 
 Licensed under Apache-2.0.
 

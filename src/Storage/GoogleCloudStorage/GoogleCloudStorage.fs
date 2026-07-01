@@ -38,20 +38,35 @@ type GoogleCloudStorageConfig = {
     /// resolution chain (`GOOGLE_APPLICATION_CREDENTIALS` path, gcloud
     /// auth, metadata server, workload identity).
     CredentialsJson: string option
+    /// Phase 2c — optional per-call service-account-JSON provider for
+    /// out-of-band credential rotation. `None` (default) preserves
+    /// today's behaviour: the `StorageClient` is built once from
+    /// `CredentialsJson` (or the ADC chain when that is `None`) for the
+    /// process lifetime. `Some f` calls `f ()` on each operation and
+    /// rebuilds the client *only when the resolved JSON changes*
+    /// (change-detection cache — not a per-call reconstruction), so a
+    /// rolled service-account key is picked up without a restart. The
+    /// closure typically closes over an `ISecretStore.GetSecret` read.
+    /// Note: ADC-based deployments (`CredentialsJson = None`,
+    /// `CredentialsJsonProvider = None`) are already rotation-transparent
+    /// — the metadata server / workload-identity chain refreshes tokens
+    /// itself — so the provider is only needed for the inline-JSON path.
+    CredentialsJsonProvider: (unit -> string) option
 }
 
 module GoogleCloudStorageConfig =
     let defaults = {
         BucketName = ""
         CredentialsJson = None
+        CredentialsJsonProvider = None
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
-let private buildClient (config: GoogleCloudStorageConfig) : StorageClient =
-    match config.CredentialsJson with
+let private buildClientFromJson (credentialsJson: string option) : StorageClient =
+    match credentialsJson with
     | Some json ->
         let credential = GoogleCredential.FromJson json
         StorageClient.Create credential
@@ -67,7 +82,39 @@ let private buildClient (config: GoogleCloudStorageConfig) : StorageClient =
 /// Thread-safe — `StorageClient` is documented reusable across
 /// concurrent calls.
 type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
-    let client = buildClient config
+    // Change-detection cache (Phase 2c). The `StorageClient` is (re)built
+    // when the resolved service-account JSON differs from the cached one —
+    // for the static (`CredentialsJsonProvider = None`) path that is
+    // exactly once, reproducing the original build-once behaviour; for the
+    // provider path it rebuilds only on key rotation, not per call.
+    // Instance-level `mutable` guarded by `gate` — justified by the
+    // caching intent.
+    let gate = obj ()
+    let mutable cachedJson: string = null
+    let mutable cachedClient: StorageClient = null
+
+    let client () =
+        match config.CredentialsJsonProvider with
+        | None ->
+            // Static / ADC path: build once, never rebuild.
+            lock gate (fun () ->
+                if isNull cachedClient then
+                    cachedClient <- buildClientFromJson config.CredentialsJson
+
+                cachedClient)
+        | Some provider ->
+            let resolved = provider ()
+
+            lock gate (fun () ->
+                if isNull cachedClient || resolved <> cachedJson then
+                    cachedJson <- resolved
+                    cachedClient <- buildClientFromJson (Some resolved)
+
+                cachedClient)
+
+    // Eager build at construction — preserves the original fail-fast on a
+    // malformed service-account JSON / credential-chain failure at startup.
+    do client () |> ignore
 
     interface IBlobStorage with
         member this.Erase(container, prefix, policy, dryRun) =
@@ -85,7 +132,10 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 // ContentType `null` lets GCS sniff from the object
                 // name; we don't force octet-stream because the
                 // platform doesn't track MIME per blob.
-                let! obj = client.UploadObjectAsync(config.BucketName, key, null, ms) |> Async.AwaitTask
+                let! obj =
+                    (client ()).UploadObjectAsync(config.BucketName, key, null, ms)
+                    |> Async.AwaitTask
+
                 return Ok $"gs://{obj.Bucket}/{obj.Name}"
             with ex ->
                 return Error ex.Message
@@ -95,7 +145,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             try
                 use ms = new MemoryStream()
                 let key = blobKey toolupContainer blobName
-                let! _ = client.DownloadObjectAsync(config.BucketName, key, ms) |> Async.AwaitTask
+                let! _ = (client ()).DownloadObjectAsync(config.BucketName, key, ms) |> Async.AwaitTask
                 return Ok(ms.ToArray())
             with
             | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound ->
@@ -109,7 +159,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             // other error surfaces as `Error`.
             try
                 let key = blobKey toolupContainer blobName
-                do! client.DeleteObjectAsync(config.BucketName, key) |> Async.AwaitTask
+                do! (client ()).DeleteObjectAsync(config.BucketName, key) |> Async.AwaitTask
                 return Ok()
             with
             | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok()
@@ -123,7 +173,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
 
             // `fullPrefix` is the 2nd positional arg; no options
             // needed for a simple prefix list.
-            let enumerable = client.ListObjectsAsync(config.BucketName, fullPrefix)
+            let enumerable = (client ()).ListObjectsAsync(config.BucketName, fullPrefix)
             let enumerator = enumerable.GetAsyncEnumerator()
 
             try
@@ -145,7 +195,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
         member _.Exists(toolupContainer, blobName) = async {
             try
                 let key = blobKey toolupContainer blobName
-                let! _ = client.GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
+                let! _ = (client ()).GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
                 return true
             with
             | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound -> return false
@@ -155,7 +205,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
         member _.GetMetadata(toolupContainer, blobName) = async {
             try
                 let key = blobKey toolupContainer blobName
-                let! obj = client.GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
+                let! obj = (client ()).GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
 
                 let size = if obj.Size.HasValue then int64 obj.Size.Value else 0L
 
@@ -214,5 +264,10 @@ let fromEnv () : IBlobStorage option =
             create {
                 BucketName = bucket
                 CredentialsJson = credsJson
+                // `fromEnv` reads the service-account JSON once. Deployments
+                // that roll the key out of band construct via `create` with
+                // `CredentialsJsonProvider = Some f` (Phase 2c) to survive
+                // rotation without a restart; ADC deployments need neither.
+                CredentialsJsonProvider = None
             }
         )

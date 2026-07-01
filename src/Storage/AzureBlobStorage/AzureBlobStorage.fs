@@ -30,12 +30,25 @@ type AzureBlobStorageConfig = {
     /// to `"toolup"`. Must satisfy Azure naming rules; the class
     /// creates it on construction if absent.
     RootContainer: string
+    /// Phase 2c — optional per-call connection-string provider for
+    /// out-of-band credential rotation. `None` (default) preserves
+    /// today's behaviour: the static `ConnectionString` above is used
+    /// and the `BlobServiceClient` is built once for the process
+    /// lifetime. `Some f` calls `f ()` on each operation and rebuilds
+    /// the client *only when the resolved connection string changes*
+    /// (change-detection cache — not a per-call reconstruction), so a
+    /// rotated AccountKey / regenerated SAS is picked up without a
+    /// restart. The closure typically closes over an
+    /// `ISecretStore.GetSecret` read, keeping this companion free of a
+    /// direct dependency on the secret backend (GP 12).
+    ConnectionStringProvider: (unit -> string) option
 }
 
 module AzureBlobStorageConfig =
     let defaults = {
         ConnectionString = ""
         RootContainer = "toolup"
+        ConnectionStringProvider = None
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -49,13 +62,43 @@ let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupCont
 /// Azure container. Thread-safe via the underlying Azure SDK clients
 /// (designed for reuse).
 type AzureBlobStorage(config: AzureBlobStorageConfig) =
-    let serviceClient = BlobServiceClient(config.ConnectionString)
-    let containerClient = serviceClient.GetBlobContainerClient(config.RootContainer)
+    // Change-detection cache (Phase 2c). The container client is
+    // (re)built whenever the resolved connection string differs from the
+    // cached one — for the static (`ConnectionStringProvider = None`)
+    // path that is exactly once, reproducing the original build-once
+    // behaviour; for the provider path it rebuilds only on rotation, not
+    // per call, since `BlobServiceClient` construction parses the
+    // connection string and builds an HTTP pipeline. Instance-level
+    // `mutable` guarded by `gate` — justified by the caching intent.
+    let gate = obj ()
+    let mutable cachedConnStr = ""
+    let mutable containerClient: BlobContainerClient = null
 
-    // One-time eager creation. Azure accounts are billed per-container
-    // only for content, not existence, so creating on startup costs
-    // nothing even if the deployment hasn't persisted yet.
-    do containerClient.CreateIfNotExists() |> ignore
+    let resolveConnStr () =
+        match config.ConnectionStringProvider with
+        | Some provider -> provider ()
+        | None -> config.ConnectionString
+
+    // Return the current container client, rebuilding on a connection-
+    // string change. One-time eager creation of the container itself is
+    // preserved: Azure bills per-container only for content, not
+    // existence, so `CreateIfNotExists` on (re)build costs nothing.
+    let container () =
+        let resolved = resolveConnStr ()
+
+        lock gate (fun () ->
+            if isNull containerClient || resolved <> cachedConnStr then
+                let serviceClient = BlobServiceClient(resolved)
+                let cc = serviceClient.GetBlobContainerClient(config.RootContainer)
+                cc.CreateIfNotExists() |> ignore
+                cachedConnStr <- resolved
+                containerClient <- cc
+
+            containerClient)
+
+    // Eager build at construction — preserves the original fail-fast on a
+    // malformed connection string / unreachable account at startup.
+    do container () |> ignore
 
     interface IBlobStorage with
         member this.Erase(container, prefix, policy, dryRun) =
@@ -68,7 +111,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
 
         member _.Upload(toolupContainer, blobName, content) = async {
             try
-                let blob = containerClient.GetBlobClient(blobKey toolupContainer blobName)
+                let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
                 use ms = new MemoryStream(content)
                 let! _ = blob.UploadAsync(ms, overwrite = true) |> Async.AwaitTask
                 return Ok(blob.Uri.ToString())
@@ -78,7 +121,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
 
         member _.Download(toolupContainer, blobName) = async {
             try
-                let blob = containerClient.GetBlobClient(blobKey toolupContainer blobName)
+                let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
                 let! response = blob.DownloadContentAsync() |> Async.AwaitTask
                 return Ok(response.Value.Content.ToArray())
             with
@@ -89,7 +132,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
 
         member _.Delete(toolupContainer, blobName) = async {
             try
-                let blob = containerClient.GetBlobClient(blobKey toolupContainer blobName)
+                let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
                 // `DeleteIfExists` is idempotent by design — matches
                 // the contract's promise that deleting a missing
                 // blob succeeds.
@@ -108,12 +151,8 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             // style optional-params overload from a subset, so we
             // pass the default CancellationToken explicitly.
             let enumerable: AsyncPageable<BlobItem> =
-                containerClient.GetBlobsAsync(
-                    BlobTraits.None,
-                    BlobStates.None,
-                    fullPrefix,
-                    System.Threading.CancellationToken()
-                )
+                (container ())
+                    .GetBlobsAsync(BlobTraits.None, BlobStates.None, fullPrefix, System.Threading.CancellationToken())
 
             let enumerator = enumerable.GetAsyncEnumerator()
 
@@ -135,7 +174,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
 
         member _.Exists(toolupContainer, blobName) = async {
             try
-                let blob = containerClient.GetBlobClient(blobKey toolupContainer blobName)
+                let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
                 let! response = blob.ExistsAsync() |> Async.AwaitTask
                 return response.Value
             with _ ->
@@ -144,7 +183,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
 
         member _.GetMetadata(toolupContainer, blobName) = async {
             try
-                let blob = containerClient.GetBlobClient(blobKey toolupContainer blobName)
+                let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
                 let! response = blob.GetPropertiesAsync() |> Async.AwaitTask
                 let props = response.Value
 
@@ -188,5 +227,10 @@ let fromEnv (rootContainer: string option) : IBlobStorage option =
             create {
                 ConnectionString = connectionString
                 RootContainer = rootContainer |> Option.defaultValue "toolup"
+                // `fromEnv` reads the connection string once. Deployments
+                // that rotate the AccountKey out of band construct via
+                // `create` with `ConnectionStringProvider = Some f`
+                // (Phase 2c) to survive rotation without a restart.
+                ConnectionStringProvider = None
             }
         )

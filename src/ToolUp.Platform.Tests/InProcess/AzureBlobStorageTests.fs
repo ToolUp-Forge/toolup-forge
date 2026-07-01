@@ -33,6 +33,7 @@ let tests =
             ToolUp.Storage.AzureBlobStorage.create {
                 ConnectionString = connectionString
                 RootContainer = "test-" + suffix
+                ConnectionStringProvider = None
             }
 
         IBlobStorageContract.tests "AzureBlobStorage" factory

@@ -47,6 +47,7 @@ let tests =
                 Token = token
                 Namespace = ns
                 MountPath = "secret"
+                TokenProvider = None
             }
 
         ISecretStoreContract.tests "HashiCorpVaultSecretStore" factory
