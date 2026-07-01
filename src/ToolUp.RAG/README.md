@@ -262,7 +262,19 @@ The reembedding service drains a `ReembeddingQueue` (unbounded `Channel<VectorSc
 
 **Soft delete (`_deletedAt` tombstones).** `IVectorStore.DeleteChunk` no longer hard-deletes — it stamps `_deletedAt = <ISO 8601 UTC>` on the chunk's metadata and leaves the entry in place. `Search` filters tombstoned chunks out (so deleted content is invisible to AI prompts and module retrieval); `ListChunks scope false` agrees. `RestoreChunk` removes the tombstone within the retention window, making the chunk visible again; past retention, `Vacuum scope (UtcNow - retention)` hard-removes the entry and `RestoreChunk` becomes a no-op. `DeleteByScope` continues to hard-delete unconditionally — it's a config-grade reset, not a recoverable action.
 
-The `Vacuum` API ships and is callable; an auto-vacuum scheduler (a `BackgroundService` driving `Vacuum` on a timer with a configurable retention window) is a Phase 14h follow-up. Until then, deployments call `Vacuum` from their own admin path with whatever retention they choose.
+**Steady-state memory — the auto-vacuum contract (Phase 14w).** Soft-delete alone does not bound memory: without a vacuum, `_deletedAt` tombstones accumulate for the process lifetime and a long-running replica grows toward OOM. `RAGServerApp.withVacuumSchedule` closes that gap — it registers a `RAGVacuumJobHandler` on the `IJobScheduler` that, on a cron (default **daily 03:00 UTC**), enumerates every scope via `IVectorStore.ListScopes()` and calls `Vacuum(scope, now - retention)` per scope. The retention window defaults to **7 days** (tune with `withTombstoneRetention`; floored at one minute). Each scope that purges anything emits a `KnowledgeVacuumCompleted` audit event carrying `(ScopeKey, ChunksRemoved, BytesReclaimed, DurationMs)`.
+
+> **Production deployments must enable `JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) *and* `RAGServerApp.withVacuumSchedule` for memory to stabilise.** With the schedule set but no scheduler, the sweep can never fire; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call. The `VacuumScheduleValidator` warns at startup in both cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel).
+
+```fsharp
+RAGServerApp.create factory providerProfile embedder
+|> RAGServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
+|> RAGServerApp.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
+|> RAGServerApp.withVacuumSchedule                                // daily 03:00 UTC; or withVacuumScheduleCron "0 */6 * * *"
+|> RAGServerApp.run
+```
+
+Deployments that want a bespoke cadence use `withVacuumScheduleCron "<5-field cron>"`; those that prefer to drive `Vacuum` from their own admin path can omit the schedule entirely (accepting the manual-reclaim contract above).
 
 ## Writing a `VectorisationHandler` (for module authors)
 
@@ -401,6 +413,6 @@ Each helper delegates through `AIServerApp` to `ServerApp` — see [`src/ToolUp.
 
 - **Configurable `withRetrieval` parameters.** `TopK = 5` and `Merge = Interleaved` are hard-coded. A builder-factory variant `withRetrievalOptions { TopK; Merge; MinScore }` would let deployments tune this without rewriting the builder.
 - **Distributed vector store companion.** The HNSW companion ([`src/VectorStores/Hnsw/`](../VectorStores/Hnsw/)) is the first concrete in-process alternative to `InMemoryVectorStore`. The next rung is an external implementation (Pgvector / Qdrant) — the `IVectorStore` contract supports it; deferred follow-ups beyond Phase 14k.
-- **Auto-vacuum scheduler.** `IVectorStore.Vacuum` ships, but the retention sweep is deployment-driven today. A built-in scheduled sweeper (configurable retention window via `ServerConfig`) is a Phase 14h follow-up.
+- **Auto-vacuum scheduler.** ✅ Shipped (Phase 14w) — `RAGServerApp.withVacuumSchedule` + `withTombstoneRetention` register a `RAGVacuumJobHandler` on the `IJobScheduler` that sweeps every scope on a cron (default daily 03:00 UTC). See the "Steady-state memory" contract above.
 - **CI integration for the eval harness.** The repo has no CI pipeline yet; once one exists, a step running `dotnet run --project src/ToolUp.RAG.Evaluation -- --baseline baseline.json --out latest.json` against a tracked baseline would fail PRs that regress recall by more than 5%.
 - **Trace export sinks.** `IRetrievalTracer` only emits to `IEventStore` today. A Splunk / Datadog companion mirroring `KnowledgeRetrieved` payloads is a natural follow-up alongside `IAuditSink`.

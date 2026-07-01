@@ -269,3 +269,42 @@ type RagIngestionInstanceValidator(serverConfig: ServerConfig, ?timeout: TimeSpa
             else
                 return Ok
         }
+
+/// Phase 14w — surfaces the steady-state-memory contract for tombstone
+/// vacuuming. `IVectorStore.DeleteChunk` is a soft-delete (stamps
+/// `_deletedAt`); those tombstones are only reclaimed when
+/// `IVectorStore.Vacuum` runs. `RAGServerApp.withVacuumSchedule` drives
+/// `Vacuum` on a cron via the `IJobScheduler`, so a long-running replica's
+/// memory stabilises — but only when a scheduler is actually composed.
+///
+/// Two misconfigurations warrant a `Warning` (not `Error` — the
+/// deployment still runs, it just leaks tombstoned chunks over time):
+///   1. `withVacuumSchedule` set but `JobScheduler = NoJobScheduler` — the
+///      scheduled sweep can never fire (dead configuration).
+///   2. A persistent deployment with NO vacuum schedule at all — tombstones
+///      accumulate indefinitely until an operator vacuums by hand.
+/// Ephemeral / no-schedule-and-no-scheduler dev deployments are `Ok`.
+type VacuumScheduleValidator(serverConfig: ServerConfig, vacuumScheduleEnabled: bool, ?timeout: TimeSpan) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "rag-tombstone-vacuum-schedule"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            let schedulerOff = serverConfig.JobScheduler = NoJobScheduler
+            let persistent = DeploymentConfig.hasPersistentAuthenticatedStorage serverConfig
+
+            if vacuumScheduleEnabled && schedulerOff then
+                return
+                    Warning(
+                        "RAGServerApp.withVacuumSchedule is configured but JobScheduler = NoJobScheduler — the tombstone auto-vacuum can never run. Soft-deleted chunks (_deletedAt tombstones from IVectorStore.DeleteChunk) accumulate until the process restarts, so a long-running replica grows toward OOM. Set ServerConfig.JobScheduler = InProcessJobScheduler (or a distributed scheduler companion) so the scheduled sweep can fire."
+                    )
+            elif not vacuumScheduleEnabled && persistent then
+                return
+                    Warning(
+                        "RAG is composed without a tombstone auto-vacuum schedule. Soft-deleted chunks (_deletedAt tombstones from IVectorStore.DeleteChunk) are reclaimed only when an operator calls IVectorStore.Vacuum manually — otherwise they accumulate indefinitely and a long-running replica's memory grows without bound. Enable RAGServerApp.withVacuumSchedule together with ServerConfig.JobScheduler = InProcessJobScheduler for steady-state memory. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
+                    )
+            else
+                return Ok
+        }

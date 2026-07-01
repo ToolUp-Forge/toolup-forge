@@ -275,6 +275,7 @@ let allTests =
         // projection + neutral SourceLocator mapping + wire backward-compat.
         KnowledgeOriginalRetrievalTests.tests
         KnowledgeScopeResetAuditTests.tests
+        RAGVacuumJobHandlerTests.tests
         KnowledgeUploadPolicyTests.tests
         BrandingTests.tests
         BrandKitTests.tests

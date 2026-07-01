@@ -602,6 +602,23 @@ type RAGServerApp = {
     /// (default) preserves no-limit behaviour. Tune via
     /// `RAGServerApp.withMaxDocumentBytes`.
     MaxDocumentBytes: int option
+    /// Phase 14w — tombstone retention window. `IVectorStore.DeleteChunk`
+    /// soft-deletes (stamps `_deletedAt`); the scheduled vacuum
+    /// hard-removes tombstones older than `now - TombstoneRetention`.
+    /// Default 7 days — long enough for an accidental delete to be
+    /// restored, short enough that soft-deleted content doesn't pin
+    /// memory indefinitely. Tune via `RAGServerApp.withTombstoneRetention`.
+    TombstoneRetention: System.TimeSpan
+    /// Phase 14w — cron expression for the tombstone auto-vacuum sweep.
+    /// `None` (default) = no scheduled vacuum: soft-deleted chunks are only
+    /// reclaimed when an operator calls `IVectorStore.Vacuum` manually, so
+    /// a long-running replica's memory grows without bound. `Some cron`
+    /// (typically via `withVacuumSchedule` = daily 03:00 UTC) registers a
+    /// `RAGVacuumJobHandler` on the `IJobScheduler` that sweeps every scope
+    /// on the schedule. REQUIRES `ServerConfig.JobScheduler =
+    /// InProcessJobScheduler` (or a distributed scheduler companion) — the
+    /// `VacuumScheduleValidator` warns when the pair is misconfigured.
+    VacuumSchedule: string option
 }
 
 // ─── composeRAG ───────────────────────────────────────────────────
@@ -1091,6 +1108,86 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             | Some r -> s.AddSingleton<IReranker>(r)
             | None -> s
 
+        // Phase 14w — tombstone auto-vacuum. When a vacuum schedule is
+        // configured, register the vacuum handler + schedule a cron job on
+        // the resolved `IJobScheduler`. Deferred to an `IHostedService`
+        // `StartAsync` (mirrors the DSR handler-registration pattern in
+        // `ComposeJobs.registerDataSubjectRequestJobs`) because the
+        // scheduler singleton is built downstream in `ComposeJobs` — it is
+        // only resolvable from the built provider, not from this callback.
+        // The handler captures the local `vectorStore` / `eventStore`
+        // singletons directly (same instances registered above). Scheduling
+        // is idempotent (stable key + one-year TTL) so a restart re-attaches
+        // to the existing job definition rather than duplicating it.
+        let s =
+            match app.VacuumSchedule with
+            | None -> s
+            | Some cron ->
+                let vacuumDeps: ToolUp.RAG.RAGVacuumJobHandler.RAGVacuumDeps = {
+                    VectorStore = vectorStore
+                    EventStore = eventStore
+                    Retention = app.TombstoneRetention
+                    Logger = ragLogger
+                }
+
+                let vacuumHandler = ToolUp.RAG.RAGVacuumJobHandler.create vacuumDeps
+
+                s.AddSingleton<IHostedService>(fun (sp: System.IServiceProvider) ->
+                    { new IHostedService with
+                        member _.StartAsync(_ct) =
+                            match sp.GetService(typeof<IJobScheduler>) with
+                            | :? IJobScheduler as scheduler ->
+                                scheduler.RegisterHandler(
+                                    ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName,
+                                    vacuumHandler
+                                )
+
+                                let registration: JobRegistration = {
+                                    ScopeId = "_platform"
+                                    Handler = ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName
+                                    Payload = ""
+                                    Trigger = CronTrigger cron
+                                    Idempotency =
+                                        Some {
+                                            Key = "rag-tombstone-vacuum-_platform"
+                                            TtlSeconds = 60 * 60 * 24 * 365
+                                        }
+                                    RetryPolicy = JobRetryPolicy.defaults
+                                    ShardKey = None
+                                    Precision = JobPrecision.Minute
+                                    CreatedBy = "_platform"
+                                    Tags = Map.ofList [ "source", "rag-compose"; "purpose", "tombstone-vacuum" ]
+                                }
+
+                                async {
+                                    let! result = scheduler.Schedule registration
+
+                                    match result with
+                                    | Ok _ ->
+                                        ragLogger.Info(
+                                            sprintf
+                                                "[RAGCompose] Tombstone auto-vacuum scheduled (cron '%s', retention %A)."
+                                                cron
+                                                app.TombstoneRetention
+                                        )
+                                    | Error err ->
+                                        ragLogger.Warn(
+                                            sprintf "[RAGCompose] Failed to schedule tombstone auto-vacuum: %A" err
+                                        )
+                                }
+                                |> Async.StartAsTask
+                                :> System.Threading.Tasks.Task
+                            | _ ->
+                                ragLogger.Warn(
+                                    "[RAGCompose] withVacuumSchedule is set but JobScheduler = NoJobScheduler — the tombstone auto-vacuum will not run and soft-deleted chunks will accumulate. Set ServerConfig.JobScheduler = InProcessJobScheduler for steady-state memory."
+                                )
+
+                                System.Threading.Tasks.Task.CompletedTask
+
+                        member _.StopAsync(_ct) =
+                            System.Threading.Tasks.Task.CompletedTask
+                    })
+
         // Phase 54d — RAG vector-store offboard purge hook, gated on the
         // same `TenantLifecycle = EnabledTenantLifecycle` switch the core
         // `ComposeTenantLifecycle` gates on. Additive `AddSingleton` —
@@ -1134,6 +1231,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // Investigate gaps 2026-06-12 (RAG Gap 8) — warn when the citation-dev-
         // endpoint override is configured as the retired force-on shape.
         ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator finalConfig
+        // Phase 14w — surface the steady-state-memory contract: warn when a
+        // vacuum schedule is set without a scheduler, or when a persistent
+        // deployment has no vacuum schedule at all (tombstones accumulate).
+        ToolUp.RAG.RagConfigValidator.VacuumScheduleValidator(finalConfig, app.VacuumSchedule.IsSome)
     ]
 
     // Merge RAG handlers + service config + the "RAG" notification-consumer
@@ -1195,6 +1296,8 @@ module RAGServerApp =
             RetrievalDefaultsClampLog = []
             MaxChunkBytes = None
             MaxDocumentBytes = None
+            TombstoneRetention = System.TimeSpan.FromDays 7.0
+            VacuumSchedule = None
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -1232,6 +1335,8 @@ module RAGServerApp =
             RetrievalDefaultsClampLog = []
             MaxChunkBytes = None
             MaxDocumentBytes = None
+            TombstoneRetention = System.TimeSpan.FromDays 7.0
+            VacuumSchedule = None
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -1696,6 +1801,48 @@ module RAGServerApp =
     let withMaxDocumentBytes (maxBytes: int) (app: RAGServerApp) : RAGServerApp = {
         app with
             MaxDocumentBytes = Some(max 1 maxBytes)
+    }
+
+    /// Phase 14w — set the tombstone retention window. Soft-deleted chunks
+    /// (`_deletedAt` stamped by `IVectorStore.DeleteChunk`) become
+    /// vacuum-eligible once older than `retention`. Default 7 days.
+    /// Clamped to a floor of one minute so a fat-fingered `TimeSpan.Zero`
+    /// can't turn every soft-delete into an immediate hard-delete on the
+    /// next sweep (which would defeat `RestoreChunk`).
+    let withTombstoneRetention (retention: System.TimeSpan) (app: RAGServerApp) : RAGServerApp =
+        let clamped =
+            if retention < System.TimeSpan.FromMinutes 1.0 then
+                System.TimeSpan.FromMinutes 1.0
+            else
+                retention
+
+        {
+            app with
+                TombstoneRetention = clamped
+        }
+
+    /// Phase 14w — enable the tombstone auto-vacuum on the default daily
+    /// 03:00 UTC schedule. Registers a `RAGVacuumJobHandler` on the
+    /// `IJobScheduler` that sweeps every scope, hard-removing tombstones
+    /// older than `TombstoneRetention`. REQUIRES `ServerConfig.JobScheduler
+    /// = InProcessJobScheduler` (or a distributed scheduler companion) —
+    /// without a scheduler the sweep never fires and the
+    /// `VacuumScheduleValidator` warns at startup. Use
+    /// `withVacuumScheduleCron` for a non-default cadence.
+    let withVacuumSchedule (app: RAGServerApp) : RAGServerApp = {
+        app with
+            VacuumSchedule = Some RAGVacuumJobHandler.DefaultVacuumCron
+    }
+
+    /// Phase 14w — enable the tombstone auto-vacuum on a custom cron
+    /// (`Minute Hour DayOfMonth Month DayOfWeek`; the in-process scheduler
+    /// supports `*`, integers, comma lists, and `*/N`). An invalid
+    /// expression is rejected at schedule time with
+    /// `ScheduleError.InvalidCron` and logged at `Warn` — the deployment
+    /// still boots.
+    let withVacuumScheduleCron (cron: string) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            VacuumSchedule = Some cron
     }
 
     /// Drive the final composition. Returns the process exit code. All

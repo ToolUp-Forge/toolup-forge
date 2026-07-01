@@ -458,6 +458,8 @@
         <Compile Include="InProcess\KnowledgeOriginalRetrievalTests.fs" />
         <!-- Phase 115 — KnowledgeScopeErased structured reset-audit emission. -->
         <Compile Include="InProcess\KnowledgeScopeResetAuditTests.fs" />
+        <!-- Phase 14w — tombstone auto-vacuum sweep + KnowledgeVacuumCompleted. -->
+        <Compile Include="InProcess\RAGVacuumJobHandlerTests.fs" />
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />

@@ -39,6 +39,9 @@
         <!-- Phase 14t — scheduled per-chunk ingestion-retry job handler.
              After IngestionService (reuses its Outcome helpers). -->
         <Compile Include="Server\IngestionRetryJobHandler.fs" />
+        <!-- Phase 14w — scheduled tombstone auto-vacuum job handler.
+             After IngestionService (reuses its Outcome.emitAudit helper). -->
+        <Compile Include="Server\RAGVacuumJobHandler.fs" />
         <Compile Include="Server\ReembeddingService.fs" />
         <Compile Include="Server\RAGPromptBuilder.fs" />
         <Compile Include="Server\CitationNormaliser.fs" />

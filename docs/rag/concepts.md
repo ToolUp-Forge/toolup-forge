@@ -228,7 +228,7 @@ The cache helps a lot when the same query / chunk text recurs (e.g., re-embeddin
 
 ## Background services
 
-Two background services run when RAG is enabled:
+Two background services run when RAG is enabled, plus an opt-in scheduled tombstone vacuum:
 
 ### `IngestionBackgroundService`
 
@@ -250,6 +250,26 @@ Drains the `ReembeddingQueue` (a `Channel<VectorScope>`). For each enqueued scop
 Emits `KnowledgeChunkReembedded` / `KnowledgeChunkReembedFailed`.
 
 Trigger on operator action (model swap, scope reset, periodic refresh). The default isn't to re-embed on every chunk access — too expensive. The pattern is: operator decides "I'm changing embedding model"; calls `reembeddingQueue.Enqueue(Team teamId)` for each affected scope; background service drains over the next minutes/hours.
+
+### Tombstone auto-vacuum (Phase 14w) — the steady-state-memory contract
+
+`IVectorStore.DeleteChunk` is a **soft-delete**: it stamps `_deletedAt` and keeps the entry so `RestoreChunk` can un-delete within the retention window. `Vacuum(scope, olderThan)` hard-removes tombstones past that window. Left un-driven, tombstones accumulate for the whole process lifetime and a long-running replica's memory grows without bound — soft-delete on its own does **not** bound memory.
+
+`RAGServerApp.withVacuumSchedule` closes that gap. It registers a `RAGVacuumJobHandler` on the `IJobScheduler` under `_platform.rag.tombstone-vacuum`, triggered by a cron (default **daily 03:00 UTC**; override with `withVacuumScheduleCron "<5-field cron>"`). On each tick the handler enumerates `IVectorStore.ListScopes()` and calls `Vacuum(scope, now - retention)` per scope. Retention defaults to **7 days** (`withTombstoneRetention`, floored at one minute). Every scope that purges anything emits a `KnowledgeVacuumCompleted` audit event with `(ScopeKey, ChunksRemoved, BytesReclaimed, DurationMs)`.
+
+**Deployment contract — required for production:**
+
+- Set `ServerConfig.JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) **and** call `RAGServerApp.withVacuumSchedule`. Without both, memory does not stabilise: with the schedule but no scheduler the sweep never fires; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call from your own admin path.
+- The `VacuumScheduleValidator` warns at startup in both misconfigured cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel), so the gap is loud rather than silent.
+- `ListScopes()` on the in-memory default returns only scopes loaded so far this process lifetime — a cold scope is vacuumed on the first tick after it loads, not before. This is a latency, not a correctness, caveat: nothing is ever purged before its retention window elapses.
+
+```fsharp
+RAGServerApp.create factory providerProfile embedder
+|> RAGServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
+|> RAGServerApp.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
+|> RAGServerApp.withVacuumSchedule                                // daily 03:00 UTC
+|> RAGServerApp.run
+```
 
 ## RAG prompt builder
 
