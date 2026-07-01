@@ -31,9 +31,17 @@ open ToolUp.Platform.TeamManagement
 // pre-305 behaviour (the provisioning actor IS the owner for the
 // self-provision case).
 //
-// `OnDeprovisioned` is a no-op `Skipped`: the offboard substrate evicts
-// membership caches + erases subject data; deleting the team row on
-// offboard is not this provision-only hook's job.
+// **Phase 306 — offboard teardown (provision/offboard symmetry).**
+// `OnDeprovisioned` is now the symmetric counterpart of the bootstrap: it
+// deletes the owner-team row this hook created, so what provisioning
+// creates, offboarding removes. It deletes only the team metadata row (via
+// `ITeamStore.DeleteTeam`); membership blobs live under a separate prefix
+// and stay the offboard erasure path's job — so this teardown running in
+// the same parallel offboard sweep as `DataSubjectRequestLifecycle` (which
+// enumerates members to erase their data) cannot race it away.
+// `DeleteTeam` is read-guarded on `GetTeam`, so a re-run over an
+// already-deleted team — the Phase 54b resumable re-dispatch, or a double
+// offboard — is a clean no-op.
 
 /// Strip the `team-` container prefix if present so the hook accepts
 /// either the bare team id or the `team-{id}` container form (mirrors
@@ -84,6 +92,24 @@ let private bootstrap (store: ITeamStore) (scopeId: string) (ownerUserId: string
                 | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
 }
 
+/// Phase 306 — tear down the bootstrapped owner team for `scopeId` on
+/// offboard: delete the team row (the symmetric counterpart of
+/// `bootstrap`). Read-guarded on `GetTeam` so a re-run over an
+/// already-deleted team — the Phase 54b resumable re-dispatch, or a double
+/// offboard — is a no-op that still reports Completed. A non-team scope has
+/// no owner team to tear down (`Skipped`), mirroring `bootstrap`.
+let private teardown (store: ITeamStore) (scopeId: string) : Async<LifecycleHookResult> = async {
+    match teamIdOf scopeId with
+    | None -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to tear down"
+    | Some teamId ->
+        match! store.GetTeam teamId with
+        | None -> return LifecycleHookResult.Completed
+        | Some _ ->
+            match! store.DeleteTeam teamId with
+            | Ok() -> return LifecycleHookResult.Completed
+            | Error e -> return LifecycleHookResult.Failed(sprintf "delete owner team %s: %s" teamId e)
+}
+
 /// The effective owner for a provisioning run: the request's explicit
 /// `OwnerUserId` when it carries a non-blank one, else the acting admin.
 /// This is the one behavioural lever Phase 305 adds — an operator
@@ -104,10 +130,12 @@ type OwnerTeamBootstrapLifecycle(services: IServiceProvider) =
             | _ -> return LifecycleHookResult.Skipped "no ITeamStore registered (teams substrate not composed)"
         }
 
-        member _.OnDeprovisioned(_scopeId, _actorUserId) = async {
-            return
-                LifecycleHookResult.Skipped
-                    "no offboard action — owner-team teardown is the offboard substrate's job, not this provision hook"
+        // Phase 306 — offboard teardown: delete the owner-team row this
+        // hook created at provisioning (symmetry with the bootstrap).
+        member _.OnDeprovisioned(scopeId, _actorUserId) = async {
+            match services.GetService(typeof<ITeamStore>) with
+            | :? ITeamStore as store -> return! teardown store scopeId
+            | _ -> return LifecycleHookResult.Skipped "no ITeamStore registered (teams substrate not composed)"
         }
 
     // Phase 305 — request-aware provisioning: attach the request's explicit

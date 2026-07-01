@@ -44,9 +44,19 @@ open ToolUp.Platform
 // Phase 9h `ConfigStoreErasureHandler` clears on offboard, so a scope's
 // seeded config sits under the same prefix the offboard erasure sweeps.
 //
-// `OnDeprovisioned` is a no-op `Skipped`: tearing config down on offboard
-// is the existing erasure path's job (`DataSubjectRequestLifecycle` →
-// `ConfigStoreErasureHandler`), not this provision-only hook's.
+// **Phase 306 — offboard teardown (provision/offboard symmetry).**
+// `OnDeprovisioned` is now the symmetric counterpart of the seed: it clears
+// exactly the module keys `runSeed` seeds (the `seededModuleKeys`
+// manifest), so what provisioning creates, offboarding removes. It clears
+// ONLY the seeded keys — a config document another subsystem or the admin
+// UI authored under a different module key is never touched (the manifest
+// is the "config-owner tag"). This teardown lives in the offboard hook, NOT
+// in the subject-keyed `ConfigStoreErasureHandler`, deliberately: a
+// per-subject DSR must NOT delete the scope's shared default-valued
+// `_platform` docs (the scope lives on, and those docs name no subject),
+// whereas a full offboard must remove them. `IConfigStore.Clear` is
+// idempotent, so a re-run — the Phase 54b resumable re-dispatch, or a
+// double offboard — is a clean no-op.
 
 /// A fully-resolved seed target: the module key, the schema to validate
 /// the write against (with any override-only field schemas spliced in),
@@ -65,6 +75,13 @@ let private baseSeedTargets: (string * ModuleConfigSchema) list = [
     ConfigKeys.PlatformModuleKey, PlatformSchema.sdkDefaultPlatformSchema.Schema
     ConfigKeys.NotificationPrefsModuleKey, PlatformSchema.sdkNotificationPrefsSchema.Schema
 ]
+
+/// The reserved `_platform` module keys this hook seeds — the provisioning
+/// manifest the Phase 306 offboard teardown clears. Deriving it from
+/// `baseSeedTargets` keeps seed + teardown from drifting: a key added to
+/// the seed is automatically torn down. Only these keys are cleared on
+/// offboard, so a document under any other module key is never removed.
+let private seededModuleKeys: string list = baseSeedTargets |> List.map fst
 
 /// The SDK branding `appName` field — used both to clamp the seeded
 /// display name to the field's declared max length and to splice the field
@@ -183,6 +200,28 @@ let private runSeed (services: IServiceProvider) (context: TenantProvisioningCon
     | _ -> return LifecycleHookResult.Skipped "no IConfigStore registered (config substrate not composed)"
 }
 
+/// Phase 306 — tear down the provisioning-seeded `_platform` config
+/// documents for `scopeId` on offboard: `Clear` each seeded module key.
+/// The symmetric counterpart of `runSeed`, clearing exactly the keys it
+/// seeds (never a document another subsystem owns). `IConfigStore.Clear` is
+/// idempotent (a no-op when the document is already gone), so a re-run over
+/// an already-torn-down scope clears nothing and still reports Completed.
+let private runTeardown (services: IServiceProvider) (scopeId: string) : Async<LifecycleHookResult> = async {
+    match services.GetService(typeof<IConfigStore>) with
+    | :? IConfigStore as configStore ->
+        let scope: StorageScope = {
+            ScopeId = scopeId
+            Container = scopeId
+            Persist = true
+        }
+
+        for moduleKey in seededModuleKeys do
+            do! configStore.Clear(scope, moduleKey)
+
+        return LifecycleHookResult.Completed
+    | _ -> return LifecycleHookResult.Skipped "no IConfigStore registered (config substrate not composed)"
+}
+
 type ConfigSeedLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with
         member _.Name = "config-seed"
@@ -194,11 +233,9 @@ type ConfigSeedLifecycle(services: IServiceProvider) =
                 Request = None
             }
 
-        member _.OnDeprovisioned(_scopeId, _actorUserId) = async {
-            return
-                LifecycleHookResult.Skipped
-                    "no offboard action — seeded config is torn down by the erasure path, not this provision hook"
-        }
+        // Phase 306 — offboard teardown: remove the seeded `_platform` docs
+        // this hook created at provisioning (symmetry with the seed).
+        member _.OnDeprovisioned(scopeId, _actorUserId) = runTeardown services scopeId
 
     // Phase 305 — request-aware provisioning: overlay per-deployment values
     // (the team app-name from the request's DisplayName) onto the schema

@@ -310,8 +310,13 @@ let tests =
                 Expect.isTrue (isSkipped result) (sprintf "%s skips without its substrate" hook.Name)
         }
 
-        testCaseAsync "Phase 54g hooks are a no-op Skipped on OnDeprovisioned (provision-only)"
+        testCaseAsync "Phase 54g hooks skip on OnDeprovisioned when their substrate is absent"
         <| async {
+            // EncryptionKeyProvisionLifecycle is genuinely provision-only
+            // (offboard shred is EncryptionKeyLifecycle's job). ConfigSeed +
+            // OwnerTeamBootstrap gained Phase 306 offboard teardown, but with
+            // no substrate composed they still degrade to Skipped — the
+            // graceful-degrade bar every offboard hook must clear.
             let hooks = [
                 ConfigSeedLifecycle.create emptyProvider
                 OwnerTeamBootstrapLifecycle.create emptyProvider
@@ -320,7 +325,7 @@ let tests =
 
             for hook in hooks do
                 let! result = hook.OnDeprovisioned("team-x", "admin")
-                Expect.isTrue (isSkipped result) (sprintf "%s offboard is a no-op skip" hook.Name)
+                Expect.isTrue (isSkipped result) (sprintf "%s offboard skips without its substrate" hook.Name)
         }
 
         testCaseAsync "ConfigSeedLifecycle seeds _platform + notification_prefs defaults on provision"
@@ -592,5 +597,234 @@ let tests =
             Expect.isFalse
                 (Map.containsKey ConfigKeys.BrandingKeys.AppName raw)
                 "app-name branding is team-scoped — a user scope gets no appName seed"
+        }
+
+        // ─── Phase 306 — offboard teardown of seeded config + owner team ─
+        //
+        // Provision/offboard symmetry: what the Phase 54g provision hooks
+        // create (seeded `_platform` config docs + the bootstrapped owner
+        // team), the Phase 306 offboard counterparts remove. Idempotent (a
+        // second offboard is a clean no-op) and scope-precise (only the
+        // provisioning-seeded keys are cleared).
+
+        testCaseAsync "ConfigSeed offboard clears the seeded _platform config docs"
+        <| async {
+            let store = newConfigStore ()
+            let provider = providerOf [ typeof<IConfigStore>, box store ]
+            let hook = ConfigSeedLifecycle.create provider
+            let scope = lifecycleScope "team-teardown"
+
+            let! seeded = hook.OnProvisioned("team-teardown", "admin")
+            Expect.isTrue (isCompleted seeded) "provision seeds the config docs"
+
+            let! platformBefore = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+            let! prefsBefore = store.GetRaw(scope, ConfigKeys.NotificationPrefsModuleKey)
+            Expect.isFalse (Map.isEmpty platformBefore) "the _platform doc exists after provision"
+            Expect.isFalse (Map.isEmpty prefsBefore) "the notification_prefs doc exists after provision"
+
+            let! torndown = hook.OnDeprovisioned("team-teardown", "admin")
+            Expect.isTrue (isCompleted torndown) "offboard teardown completes"
+
+            let! platformAfter = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+            let! prefsAfter = store.GetRaw(scope, ConfigKeys.NotificationPrefsModuleKey)
+            Expect.isTrue (Map.isEmpty platformAfter) "the seeded _platform doc is gone after offboard"
+            Expect.isTrue (Map.isEmpty prefsAfter) "the seeded notification_prefs doc is gone after offboard"
+        }
+
+        testCaseAsync "ConfigSeed offboard is idempotent — a second teardown is a clean no-op"
+        <| async {
+            let store = newConfigStore ()
+            let provider = providerOf [ typeof<IConfigStore>, box store ]
+            let hook = ConfigSeedLifecycle.create provider
+
+            let! _ = hook.OnProvisioned("team-idem-off", "admin")
+            let! first = hook.OnDeprovisioned("team-idem-off", "admin")
+            Expect.isTrue (isCompleted first) "first offboard completes"
+
+            // Re-run over an already-torn-down scope (the resumable
+            // re-dispatch) — Clear is idempotent, so this is a no-op.
+            let! second = hook.OnDeprovisioned("team-idem-off", "admin")
+            Expect.isTrue (isCompleted second) "a second offboard over a torn-down scope still completes"
+
+            let scope = lifecycleScope "team-idem-off"
+            let! platformAfter = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+            Expect.isTrue (Map.isEmpty platformAfter) "the doc stays gone after the second teardown"
+        }
+
+        testCaseAsync "ConfigSeed offboard clears ONLY the seeded keys — a foreign config doc survives"
+        <| async {
+            let store = newConfigStore ()
+            let provider = providerOf [ typeof<IConfigStore>, box store ]
+            let hook = ConfigSeedLifecycle.create provider
+            let scope = lifecycleScope "team-foreign"
+
+            let! _ = hook.OnProvisioned("team-foreign", "admin")
+
+            // A document under a module key this hook never seeds — a domain
+            // module's own settings, or an admin-authored doc. It must
+            // survive offboard teardown (only the seed manifest is cleared).
+            let! wrote =
+                store.SetRaw(scope, "domain.custom", Map.ofList [ "currencySymbol", "\"$\"" ], platformProbeSchema)
+
+            Expect.isOk wrote "the foreign doc write succeeds"
+
+            let! torndown = hook.OnDeprovisioned("team-foreign", "admin")
+            Expect.isTrue (isCompleted torndown) "offboard teardown completes"
+
+            let! seededAfter = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+            Expect.isTrue (Map.isEmpty seededAfter) "the seeded _platform doc is cleared"
+
+            let! foreignAfter = store.GetRaw(scope, "domain.custom")
+
+            Expect.equal
+                (Map.tryFind "currencySymbol" foreignAfter)
+                (Some "\"$\"")
+                "a non-seeded module doc is left intact — teardown is manifest-scoped"
+        }
+
+        testCaseAsync "OwnerTeamBootstrap offboard deletes the bootstrapped owner-team row"
+        <| async {
+            let store = newTeamStore ()
+            let provider = providerOf [ typeof<ITeamStore>, box store ]
+            let hook = OwnerTeamBootstrapLifecycle.create provider
+
+            let! created = hook.OnProvisioned("team-del", "owner-1")
+            Expect.isTrue (isCompleted created) "provision creates the owner team"
+
+            let! before = store.GetTeam "del"
+            Expect.isSome before "the owner team exists after provision"
+
+            let! torndown = hook.OnDeprovisioned("team-del", "owner-1")
+            Expect.isTrue (isCompleted torndown) "offboard teardown completes"
+
+            let! after = store.GetTeam "del"
+            Expect.isNone after "the owner-team row is gone after offboard"
+        }
+
+        testCaseAsync "OwnerTeamBootstrap offboard is idempotent — a second teardown is a clean no-op"
+        <| async {
+            let store = newTeamStore ()
+            let provider = providerOf [ typeof<ITeamStore>, box store ]
+            let hook = OwnerTeamBootstrapLifecycle.create provider
+
+            let! _ = hook.OnProvisioned("team-del2", "owner-1")
+
+            let! first = hook.OnDeprovisioned("team-del2", "owner-1")
+            Expect.isTrue (isCompleted first) "first offboard deletes the team"
+
+            // The team row is already gone — the GetTeam guard makes this a
+            // no-op Completed rather than a DeleteTeam error.
+            let! second = hook.OnDeprovisioned("team-del2", "owner-1")
+            Expect.isTrue (isCompleted second) "a second offboard over a deleted team still completes"
+        }
+
+        testCaseAsync "OwnerTeamBootstrap offboard skips a non-team scope"
+        <| async {
+            let store = newTeamStore ()
+            let provider = providerOf [ typeof<ITeamStore>, box store ]
+            let hook = OwnerTeamBootstrapLifecycle.create provider
+
+            let! result = hook.OnDeprovisioned("user-solo", "owner-1")
+            Expect.isTrue (isSkipped result) "a user scope has no owner team to tear down"
+        }
+
+        // Full provision→offboard symmetry across both hooks at once: what
+        // provisioning creates (seeded config + owner team), offboarding
+        // removes — the same shape as the Phase 54g encryption-key symmetry.
+        testCaseAsync "provision seeds config + owner team; offboard removes both (symmetry)"
+        <| async {
+            let configStore = newConfigStore ()
+            let teamStore = newTeamStore ()
+
+            let provider =
+                providerOf [ typeof<IConfigStore>, box configStore; typeof<ITeamStore>, box teamStore ]
+
+            let configHook = ConfigSeedLifecycle.create provider
+            let teamHook = OwnerTeamBootstrapLifecycle.create provider
+            let scope = lifecycleScope "team-sym306"
+
+            let! seeded = configHook.OnProvisioned("team-sym306", "owner-1")
+            let! bootstrapped = teamHook.OnProvisioned("team-sym306", "owner-1")
+            Expect.isTrue (isCompleted seeded) "config seeded"
+            Expect.isTrue (isCompleted bootstrapped) "owner team bootstrapped"
+
+            let! platformBefore = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+            let! teamBefore = teamStore.GetTeam "sym306"
+            Expect.isFalse (Map.isEmpty platformBefore) "seeded config present after provision"
+            Expect.isSome teamBefore "owner team present after provision"
+
+            let! configOff = configHook.OnDeprovisioned("team-sym306", "owner-1")
+            let! teamOff = teamHook.OnDeprovisioned("team-sym306", "owner-1")
+            Expect.isTrue (isCompleted configOff) "config teardown completes"
+            Expect.isTrue (isCompleted teamOff) "team teardown completes"
+
+            let! platformAfter = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+            let! teamAfter = teamStore.GetTeam "sym306"
+            Expect.isTrue (Map.isEmpty platformAfter) "seeded config removed on offboard"
+            Expect.isNone teamAfter "owner team removed on offboard"
+        }
+
+        // Phase 306 task 3 — wired into the exportThenDeprovision path: the
+        // teardown runs strictly AFTER the export bundle is captured, so the
+        // export still sees the seeded config + owner team before they are
+        // removed. The runExport callback snapshots the stores at capture
+        // time; the assertion is that snapshot saw the data present, and the
+        // post-bundle stores show it gone.
+        testCaseAsync "exportThenDeprovision captures seeded config + owner team BEFORE the teardown removes them"
+        <| async {
+            let configStore = newConfigStore ()
+            let teamStore = newTeamStore ()
+
+            let provider =
+                providerOf [ typeof<IConfigStore>, box configStore; typeof<ITeamStore>, box teamStore ]
+
+            let configHook = ConfigSeedLifecycle.create provider
+            let teamHook = OwnerTeamBootstrapLifecycle.create provider
+            let scope = lifecycleScope "team-export306"
+
+            let! _ = configHook.OnProvisioned("team-export306", "owner-1")
+            let! _ = teamHook.OnProvisioned("team-export306", "owner-1")
+
+            let noAudit (_scopeId: string) (_event: AuditEvent) = async { return () }
+
+            // Snapshot the stores at export-capture time — this proves the
+            // export ran before teardown (fail-closed ordering: export first).
+            let configAtCapture = ref false
+            let teamAtCapture = ref false
+
+            let runExport () = async {
+                let! platformRaw = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+                let! team = teamStore.GetTeam "export306"
+                configAtCapture.Value <- not (Map.isEmpty platformRaw)
+                teamAtCapture.Value <- Option.isSome team
+
+                return
+                    Ok {
+                        Container = "_platform"
+                        BlobPath = "tenant-export/team-export306/export.json"
+                        ContentHash = "abc"
+                        SegmentCount = 1
+                    }
+            }
+
+            let! result =
+                TenantLifecycleAggregator.exportThenDeprovision
+                    noAudit
+                    runExport
+                    [ configHook; teamHook ]
+                    "team-export306"
+                    "owner-1"
+
+            match result with
+            | Ok _ -> ()
+            | Error e -> failtestf "expected Ok; got %s" e
+
+            Expect.isTrue configAtCapture.Value "the export saw the seeded config present (captured before teardown)"
+            Expect.isTrue teamAtCapture.Value "the export saw the owner team present (captured before teardown)"
+
+            let! platformAfter = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+            let! teamAfter = teamStore.GetTeam "export306"
+            Expect.isTrue (Map.isEmpty platformAfter) "the seeded config was torn down after the export"
+            Expect.isNone teamAfter "the owner team was torn down after the export"
         }
     ]
