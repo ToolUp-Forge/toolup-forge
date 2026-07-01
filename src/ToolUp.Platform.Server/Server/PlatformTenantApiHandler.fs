@@ -382,16 +382,27 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                         let runExport () =
                             DataSubjectRequestLifecycle.exportArchive services scopeId
 
+                        // Phase 54h — guard the whole export-then-erase
+                        // bundle by the resolved `ILifecycleLock`. Under a
+                        // distributed lock a peer replica mid-bundle yields
+                        // `AlreadyInProgress` (surfaced as the same
+                        // `offboardAlreadyInProgress` error the inline
+                        // offboard path returns); the in-process default
+                        // serialises and so never refuses. Persists only on a
+                        // completed run.
                         match!
-                            TenantLifecycleAggregator.exportThenDeprovision
+                            TenantLifecycleAggregator.exportThenDeprovisionWith
+                                lifecycleLock
                                 emitAudit
                                 runExport
                                 (resolveHooks ())
                                 scopeId
                                 actor
                         with
-                        | Error e -> return Error e
-                        | Ok result ->
+                        | TenantLifecycleAggregator.GuardedExportThenDeprovision.AlreadyInProgress ->
+                            return Error offboardAlreadyInProgress
+                        | TenantLifecycleAggregator.GuardedExportThenDeprovision.ExportFailed e -> return Error e
+                        | TenantLifecycleAggregator.GuardedExportThenDeprovision.Ran result ->
                             do! persist scopeId result.Summary
                             return Ok result
             }

@@ -700,11 +700,94 @@ let previewDeprovision
 // aggregator stays DI-free (the handler resolves `IDataExporter` /
 // `IBlobStorage`); it returns the durable archive reference or an error.
 
+/// Outcome of a lock-guarded export-then-erase bundle (Phase 54h). Mirrors
+/// `GuardedRun` for the Phase 54j bundle: because the WHOLE bundle
+/// (export + audit + erasure sweep) runs under one lease, a distributed
+/// lock's refusal aborts BEFORE the export — so two replicas can never run
+/// concurrent export-then-erase bundles of one tenant.
+[<RequireQualifiedAccess>]
+type GuardedExportThenDeprovision =
+    /// The lease was acquired and the bundle completed — export committed
+    /// then the erasure ran; carries the summary + archive reference.
+    | Ran of ExportThenDeprovisionResult
+    /// The lease was acquired but the export failed, so NO erasure ran
+    /// (fail-closed — the tenant's data is intact). Carries the reason.
+    | ExportFailed of string
+    /// Another holder (a concurrent replica under a distributed lock)
+    /// already holds the scope, so neither export nor erasure ran. The
+    /// in-process default never yields this — it blocks until the scope
+    /// frees — so this only materialises under a distributed `ILifecycleLock`.
+    | AlreadyInProgress
+
+/// `exportThenDeprovision` guarded by an explicit `ILifecycleLock` (Phase
+/// 54h). Acquires the scope BEFORE the export so the whole bundle (export +
+/// audit + erasure sweep) is one cross-replica-exclusive unit: under a
+/// distributed lock a peer replica already mid-bundle yields
+/// `AlreadyInProgress` and neither the export nor the erasure runs, closing
+/// the window where two replicas produce concurrent export-then-erase
+/// bundles of the same tenant (which the Phase 54j inline `runGuarded` —
+/// process-local, and guarding only the erasure — left open). Fail-closed
+/// ordering is preserved inside the lease (a failed export is `ExportFailed`,
+/// no erasure). The erasure runs via `runWithDefaults` — NOT `runGuarded` —
+/// because the lease is already held; re-entering the same-scope in-process
+/// semaphore would deadlock. Under the in-process default the acquire blocks
+/// until the scope frees, so this is always `Ran` / `ExportFailed` (Phase 54j
+/// behaviour preserved, now also serialising the export in-process).
+let exportThenDeprovisionWith
+    (lock: ILifecycleLock)
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (runExport: unit -> Async<Result<LifecycleExportArchive, string>>)
+    (hooks: ITenantLifecycle list)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<GuardedExportThenDeprovision> =
+    async {
+        match! lock.Acquire scopeId with
+        | None -> return GuardedExportThenDeprovision.AlreadyInProgress
+        | Some lease ->
+            try
+                match! runExport () with
+                | Error err ->
+                    // Fail-closed — nothing erased, the tenant's data is intact.
+                    return
+                        GuardedExportThenDeprovision.ExportFailed(
+                            sprintf "export failed — offboard aborted, no data erased: %s" err
+                        )
+                | Ok archive ->
+                    // Audit the export BEFORE the erasure sweep (ordering proof).
+                    let payload: TenantDataExportedPayload = {
+                        ScopeId = scopeId
+                        Actor = actorUserId
+                        ArchiveContainer = archive.Container
+                        ArchivePath = archive.BlobPath
+                        ContentHash = archive.ContentHash
+                        SegmentCount = archive.SegmentCount
+                    }
+
+                    do! emitAudit scopeId (AuditEvent.TenantDataExported payload)
+
+                    // The lease is already held, so run the sweep directly
+                    // (`runWithDefaults`, not `runGuarded`) — re-entering the
+                    // same-scope in-process lock would deadlock.
+                    let! summary = runWithDefaults emitAudit hooks Deprovisioning scopeId actorUserId
+
+                    return GuardedExportThenDeprovision.Ran { Summary = summary; Archive = archive }
+            finally
+                lease.Dispose()
+    }
+
 /// Export-then-erase: run `runExport` (export the scope's data durably),
 /// then — only on success — audit `TenantDataExported` and run the
-/// `Deprovisioning` sweep under `runGuarded`. A failed export returns
-/// `Error` and runs NO erasure hook (fail-closed). Returns the erasure
-/// summary + the archive reference.
+/// `Deprovisioning` sweep. A failed export returns `Error` and runs NO
+/// erasure hook (fail-closed). Returns the erasure summary + the archive
+/// reference.
+///
+/// Phase 54h — delegates to `exportThenDeprovisionWith` over the
+/// process-local `InProcessLifecycleLock`, whose `Acquire` blocks until the
+/// scope frees, so single-instance behaviour is preserved (the export now
+/// also serialises in-process against a concurrent same-scope bundle). A
+/// deployment that needs cross-replica exclusion composes a distributed
+/// `ILifecycleLock` and calls `exportThenDeprovisionWith` instead.
 let exportThenDeprovision
     (emitAudit: string -> AuditEvent -> Async<unit>)
     (runExport: unit -> Async<Result<LifecycleExportArchive, string>>)
@@ -713,24 +796,13 @@ let exportThenDeprovision
     (actorUserId: string)
     : Async<Result<ExportThenDeprovisionResult, string>> =
     async {
-        match! runExport () with
-        | Error err ->
-            // Fail-closed — nothing erased, the tenant's data is intact.
-            return Error(sprintf "export failed — offboard aborted, no data erased: %s" err)
-        | Ok archive ->
-            // Audit the export BEFORE the erasure sweep (ordering proof).
-            let payload: TenantDataExportedPayload = {
-                ScopeId = scopeId
-                Actor = actorUserId
-                ArchiveContainer = archive.Container
-                ArchivePath = archive.BlobPath
-                ContentHash = archive.ContentHash
-                SegmentCount = archive.SegmentCount
-            }
-
-            do! emitAudit scopeId (AuditEvent.TenantDataExported payload)
-
-            let! summary = runGuarded emitAudit hooks Deprovisioning scopeId actorUserId
-
-            return Ok { Summary = summary; Archive = archive }
+        match!
+            exportThenDeprovisionWith InProcessLifecycleLock.shared emitAudit runExport hooks scopeId actorUserId
+        with
+        | GuardedExportThenDeprovision.Ran result -> return Ok result
+        | GuardedExportThenDeprovision.ExportFailed err -> return Error err
+        | GuardedExportThenDeprovision.AlreadyInProgress ->
+            // Unreachable with the in-process lock (it blocks, never
+            // refuses); kept total so the match is exhaustive.
+            return Error "offboard already in progress for this scope"
     }

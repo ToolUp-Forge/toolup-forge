@@ -658,6 +658,104 @@ let tests =
             Expect.contains audit.TypeNames "TenantDeprovisioned" "the offboard marker was emitted"
         }
 
+        // ─── Phase 54h — exportThenDeprovisionWith cross-replica exclusion ─
+
+        testCaseAsync
+            "exportThenDeprovisionWith returns AlreadyInProgress under a refusing lock — no export, no erasure (cross-replica exclusion)"
+        <| async {
+            let audit = AuditCollector()
+            let exported = ref false
+            let erased = ref false
+
+            // A lock that refuses every acquire — models a peer replica
+            // already mid-bundle for this scope under a distributed lock.
+            let refusingLock =
+                { new ILifecycleLock with
+                    member _.Acquire(_scopeId) = async { return None }
+                }
+
+            let hook =
+                StubHook(
+                    "h",
+                    async { return LifecycleHookResult.Completed },
+                    async {
+                        erased.Value <- true
+                        return LifecycleHookResult.Completed
+                    }
+                )
+                :> ITenantLifecycle
+
+            // Would succeed if ever called — the assertion is that it isn't.
+            let runExport () = async {
+                exported.Value <- true
+
+                return
+                    Ok {
+                        Container = "_platform"
+                        BlobPath = "tenant-export/team-busy/export.json"
+                        ContentHash = "abc"
+                        SegmentCount = 1
+                    }
+            }
+
+            let! outcome =
+                TenantLifecycleAggregator.exportThenDeprovisionWith
+                    refusingLock
+                    audit.Emit
+                    runExport
+                    [ hook ]
+                    "team-busy"
+                    "admin"
+
+            Expect.equal
+                outcome
+                TenantLifecycleAggregator.GuardedExportThenDeprovision.AlreadyInProgress
+                "a refused acquire yields AlreadyInProgress — the whole bundle is skipped"
+
+            Expect.isFalse exported.Value "the export never ran — the loser aborts before exporting (data untouched)"
+            Expect.isFalse erased.Value "no erasure hook ran"
+            Expect.isEmpty audit.Events "no audit — neither the export row nor the offboard marker fired"
+        }
+
+        testCaseAsync
+            "exportThenDeprovisionWith over the in-process default runs the whole bundle (Ran) — single-instance behaviour preserved"
+        <| async {
+            let audit = AuditCollector()
+            let erased = ref false
+            let lock = InProcessLifecycleLock.create ()
+
+            let hook =
+                StubHook(
+                    "h",
+                    async { return LifecycleHookResult.Completed },
+                    async {
+                        erased.Value <- true
+                        return LifecycleHookResult.Completed
+                    }
+                )
+                :> ITenantLifecycle
+
+            let archive = {
+                Container = "_platform"
+                BlobPath = "tenant-export/team-ok/export.json"
+                ContentHash = "abc"
+                SegmentCount = 2
+            }
+
+            let runExport () = async { return Ok archive }
+
+            let! outcome =
+                TenantLifecycleAggregator.exportThenDeprovisionWith lock audit.Emit runExport [ hook ] "team-ok" "admin"
+
+            match outcome with
+            | TenantLifecycleAggregator.GuardedExportThenDeprovision.Ran result ->
+                Expect.equal result.Archive.SegmentCount 2 "the archive reference is carried on the result"
+                Expect.isTrue erased.Value "the erasure ran after the export committed"
+                Expect.contains audit.TypeNames "TenantDataExported" "the export was audited under the lease"
+                Expect.contains audit.TypeNames "TenantDeprovisioned" "the offboard marker was emitted"
+            | other -> failtestf "the in-process lock blocks a free scope rather than refusing; got %A" other
+        }
+
         testCaseAsync "runGuarded allows different scopes to run in parallel"
         <| async {
             let audit = AuditCollector()
