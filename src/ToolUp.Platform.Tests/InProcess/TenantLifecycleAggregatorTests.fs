@@ -57,6 +57,46 @@ type private PreviewStub(name: string, wouldAffect: int, mutated: bool ref) =
             return LifecyclePreviewItem.affecting name wouldAffect (sprintf "%d would be affected" wouldAffect)
         }
 
+/// Phase 305 — a hook that ALSO implements
+/// `ITenantLifecycleProvisionContext`. It records the context of every
+/// provisioning invocation, so a threading test can assert the aggregator
+/// forwarded the `ProvisioningRequest` to `OnProvisionedWith` (and passed
+/// `None` on the request-free path).
+type private RecordingProvisionHook(name: string) =
+    let received = ResizeArray<TenantProvisioningContext>()
+    member _.Received = List.ofSeq received
+
+    interface ITenantLifecycle with
+        member _.Name = name
+
+        member _.OnProvisioned(scopeId, actorUserId) = async {
+            received.Add {
+                ScopeId = scopeId
+                ActorUserId = actorUserId
+                Request = None
+            }
+
+            return LifecycleHookResult.Completed
+        }
+
+        member _.OnDeprovisioned(_scopeId, _actorUserId) = async {
+            return LifecycleHookResult.Skipped "provision-only recording hook"
+        }
+
+    interface ITenantLifecycleProvisionContext with
+        member _.OnProvisionedWith(context) = async {
+            received.Add context
+            return LifecycleHookResult.Completed
+        }
+
+let private sampleRequest: ProvisioningRequest = {
+    Slug = "acme"
+    OwnerUserId = "owner-42"
+    Region = "eu-west"
+    Tier = "pro"
+    DisplayName = "Acme Corp"
+}
+
 /// Audit collector — records (scopeId, event) tuples the aggregator
 /// emits, so tests can assert on the emitted family + counts.
 type private AuditCollector() =
@@ -788,5 +828,70 @@ let tests =
                 |> Async.Parallel
 
             Expect.equal maxConcurrent.Value 2 "distinct scopes ran concurrently"
+        }
+
+        // ─── Phase 305 — ProvisioningRequest threading ───────────────
+
+        testCaseAsync "runWithRequest forwards the request to a request-aware hook's OnProvisionedWith"
+        <| async {
+            let audit = AuditCollector()
+            let hook = RecordingProvisionHook("rec")
+
+            let! summary =
+                TenantLifecycleAggregator.runWithRequest
+                    audit.Emit
+                    (Some sampleRequest)
+                    shortTimeout
+                    [ hook :> ITenantLifecycle ]
+                    Provisioning
+                    "team-req"
+                    "admin"
+
+            Expect.equal (LifecycleSummary.completedCount summary) 1 "the request-aware hook completed"
+            Expect.equal hook.Received.Length 1 "the hook was invoked once"
+            Expect.equal hook.Received.Head.Request (Some sampleRequest) "the ProvisioningRequest was threaded through"
+            Expect.equal hook.Received.Head.ScopeId "team-req" "scope threaded through"
+            Expect.equal hook.Received.Head.ActorUserId "admin" "actor threaded through"
+        }
+
+        testCaseAsync "the request-free run path dispatches OnProvisionedWith with Request = None"
+        <| async {
+            let audit = AuditCollector()
+            let hook = RecordingProvisionHook("rec")
+
+            // `run` (no request) still routes a request-aware hook through
+            // OnProvisionedWith, but with `None` — byte-identical semantics
+            // to the base OnProvisioned.
+            let! _ =
+                TenantLifecycleAggregator.run
+                    audit.Emit
+                    shortTimeout
+                    [ hook :> ITenantLifecycle ]
+                    Provisioning
+                    "team-noreq"
+                    "admin"
+
+            Expect.equal hook.Received.Length 1 "the hook was invoked once"
+            Expect.equal hook.Received.Head.Request None "no request rides the request-free path"
+        }
+
+        testCaseAsync "Deprovisioning never carries a provisioning request"
+        <| async {
+            let audit = AuditCollector()
+            let hook = RecordingProvisionHook("rec")
+
+            let! summary =
+                TenantLifecycleAggregator.run
+                    audit.Emit
+                    shortTimeout
+                    [ hook :> ITenantLifecycle ]
+                    Deprovisioning
+                    "team-off"
+                    "admin"
+
+            // OnDeprovisioned Skips (provision-only recording hook), so no
+            // provisioning context is recorded at all.
+            Expect.equal hook.Received.Length 0 "offboard did not touch the provisioning surface"
+            Expect.equal (LifecycleSummary.skippedCount summary) 1 "the offboard skipped"
         }
     ]

@@ -1,6 +1,7 @@
 module ToolUp.Platform.ConfigSeedLifecycle
 
 open System
+open System.Text.Json
 open ToolUp.Platform
 
 // ─── Phase 54g — first-party config-seed lifecycle hook ──────────────
@@ -23,12 +24,18 @@ open ToolUp.Platform
 //     re-provisioning produces no duplicate or overwritten config).
 //   * no store registered — `Skipped` (config substrate not composed).
 //
-// **Default-source note.** The `OnProvisioned` hook surface carries only
-// `scopeId` + `actorUserId` (not the deploy-plane `ProvisioningRequest`),
-// so "deployment defaults" here are the SDK-shipped schema `DefaultJson`
-// values, not per-request overrides. Threading a `ProvisioningRequest`
-// through the hook surface is a follow-on (it would change the
-// `ITenantLifecycle` contract, out of this phase's scope).
+// **Default-source note.** The base `OnProvisioned` surface carries only
+// `scopeId` + `actorUserId`, so "deployment defaults" on that path are the
+// SDK-shipped schema `DefaultJson` values. Phase 305 threads the
+// deploy-plane `ProvisioningRequest` through the optional
+// `ITenantLifecycleProvisionContext` surface: `OnProvisionedWith` overlays
+// per-request values onto those defaults before the write. The one mapping
+// today is the app-name — on a *team* scope a fresh `_platform` doc's
+// `appName` branding field defaults to the request's `DisplayName`, so the
+// team is labelled by its display name from the first request rather than
+// falling back to the deployment-wide default. Absent a request (the base
+// path), a blank `DisplayName`, or a non-team scope, the seed is
+// byte-identical to the schema-defaults write (GP 11).
 //
 // **Scope/symmetry note.** The seeded documents live at
 // `config/{scopeId}/{moduleKey}.json` (the config store keys its blob
@@ -41,69 +48,164 @@ open ToolUp.Platform
 // is the existing erasure path's job (`DataSubjectRequestLifecycle` →
 // `ConfigStoreErasureHandler`), not this provision-only hook's.
 
+/// A fully-resolved seed target: the module key, the schema to validate
+/// the write against (with any override-only field schemas spliced in),
+/// and the concrete values to write (schema defaults overlaid with the
+/// per-request overrides). Building the values up-front keeps `seedModule`
+/// a pure "write if absent" step.
+type private SeedTarget = {
+    ModuleKey: string
+    Schema: ModuleConfigSchema
+    Values: Map<string, string>
+}
+
 /// The reserved `_platform` module keys this hook seeds, paired with the
 /// SDK-shipped schema each is validated + defaulted against.
-let private seedTargets: (string * ModuleConfigSchema) list = [
+let private baseSeedTargets: (string * ModuleConfigSchema) list = [
     ConfigKeys.PlatformModuleKey, PlatformSchema.sdkDefaultPlatformSchema.Schema
     ConfigKeys.NotificationPrefsModuleKey, PlatformSchema.sdkNotificationPrefsSchema.Schema
 ]
 
-/// Seed one module key's document with its schema defaults, but only if
-/// no document exists yet. Returns `Ok true` when a fresh document was
+/// The SDK branding `appName` field — used both to clamp the seeded
+/// display name to the field's declared max length and to splice the field
+/// into the `_platform` seed schema when it is being overridden (it lives
+/// in `sdkBrandingFields`, not the default `_platform` schema, so a naked
+/// `SetRaw` of an `appName` value would be rejected as an unknown field).
+let private appNameField =
+    PlatformSchema.sdkBrandingFields
+    |> List.find (fun f -> f.Key = ConfigKeys.BrandingKeys.AppName)
+
+/// Clamp a candidate string value to a field's declared max length so a
+/// long `DisplayName` can't trip the config store's per-field length
+/// validation and fail the whole seed. Non-string kinds pass through.
+let private clampToKind (kind: ConfigFieldKind) (value: string) : string =
+    match kind with
+    | ConfigFieldKind.String(Some maxLen) when value.Length > maxLen -> value.Substring(0, maxLen)
+    | _ -> value
+
+/// Per-deployment `_platform` seed overrides derived from the provisioning
+/// request. Currently the app-name only: on a *team* scope, `appName`
+/// defaults to the request's `DisplayName` (clamped to the field's length).
+/// Empty on the base path (no request / blank display name / non-team
+/// scope), so the seed stays byte-identical to the schema-defaults write.
+let private platformOverrides (context: TenantProvisioningContext) : Map<string, string> =
+    let isTeamScope = context.ScopeId.StartsWith("team-", StringComparison.Ordinal)
+
+    match context.Request with
+    | Some req when isTeamScope && not (String.IsNullOrWhiteSpace req.DisplayName) ->
+        let appName = clampToKind appNameField.Kind req.DisplayName
+        Map.ofList [ ConfigKeys.BrandingKeys.AppName, JsonSerializer.Serialize appName ]
+    | _ -> Map.empty
+
+/// Resolve the concrete seed targets for a provisioning run. Each base
+/// target's schema defaults are overlaid with its per-request overrides;
+/// an override key that isn't already a schema field has its field schema
+/// spliced in (from `sdkBrandingFields`) so `SetRaw`'s unknown-key
+/// validation accepts the write.
+let private resolveTargets (context: TenantProvisioningContext) : SeedTarget list =
+    baseSeedTargets
+    |> List.map (fun (moduleKey, schema) ->
+        let overrides =
+            if moduleKey = ConfigKeys.PlatformModuleKey then
+                platformOverrides context
+            else
+                Map.empty
+
+        let knownKeys = schema.Fields |> List.map _.Key |> Set.ofList
+
+        let overrideOnlyFields =
+            overrides
+            |> Map.toList
+            |> List.map fst
+            |> List.filter (fun k -> not (Set.contains k knownKeys))
+            |> List.choose (fun k -> PlatformSchema.sdkBrandingFields |> List.tryFind (fun f -> f.Key = k))
+
+        let schema = {
+            schema with
+                Fields = schema.Fields @ overrideOnlyFields
+        }
+
+        let values =
+            schema.Fields
+            |> List.map (fun f -> f.Key, f.DefaultJson)
+            |> Map.ofList
+            |> fun defaults -> Map.fold (fun acc k v -> Map.add k v acc) defaults overrides
+
+        {
+            ModuleKey = moduleKey
+            Schema = schema
+            Values = values
+        })
+
+/// Seed one module key's document with its resolved values, but only if no
+/// document exists yet. Returns `Ok true` when a fresh document was
 /// written, `Ok false` when one already existed (idempotent skip), and
 /// `Error` when the write failed.
 let private seedModule
     (configStore: IConfigStore)
     (scope: StorageScope)
-    (moduleKey: string)
-    (schema: ModuleConfigSchema)
+    (target: SeedTarget)
     : Async<Result<bool, string>> =
     async {
-        let! existing = configStore.GetRaw(scope, moduleKey)
+        let! existing = configStore.GetRaw(scope, target.ModuleKey)
 
         if not (Map.isEmpty existing) then
             return Ok false
         else
-            let defaults =
-                schema.Fields |> List.map (fun f -> f.Key, f.DefaultJson) |> Map.ofList
-
-            match! configStore.SetRaw(scope, moduleKey, defaults, schema) with
+            match! configStore.SetRaw(scope, target.ModuleKey, target.Values, target.Schema) with
             | Ok() -> return Ok true
             | Error e -> return Error e
     }
+
+/// Run the seed for a provisioning context — shared by the base
+/// `OnProvisioned` (`Request = None`, schema defaults only) and the
+/// Phase 305 `OnProvisionedWith` (per-request overrides applied).
+let private runSeed (services: IServiceProvider) (context: TenantProvisioningContext) : Async<LifecycleHookResult> = async {
+    match services.GetService(typeof<IConfigStore>) with
+    | :? IConfigStore as configStore ->
+        let scope: StorageScope = {
+            ScopeId = context.ScopeId
+            Container = context.ScopeId
+            Persist = true
+        }
+
+        let errors = ResizeArray<string>()
+
+        for target in resolveTargets context do
+            match! seedModule configStore scope target with
+            | Ok _ -> ()
+            | Error e -> errors.Add(sprintf "%s: %s" target.ModuleKey e)
+
+        if errors.Count > 0 then
+            return LifecycleHookResult.Failed(String.Join("; ", errors))
+        else
+            return LifecycleHookResult.Completed
+    | _ -> return LifecycleHookResult.Skipped "no IConfigStore registered (config substrate not composed)"
+}
 
 type ConfigSeedLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with
         member _.Name = "config-seed"
 
-        member _.OnProvisioned(scopeId, _actorUserId) = async {
-            match services.GetService(typeof<IConfigStore>) with
-            | :? IConfigStore as configStore ->
-                let scope: StorageScope = {
-                    ScopeId = scopeId
-                    Container = scopeId
-                    Persist = true
-                }
-
-                let errors = ResizeArray<string>()
-
-                for moduleKey, schema in seedTargets do
-                    match! seedModule configStore scope moduleKey schema with
-                    | Ok _ -> ()
-                    | Error e -> errors.Add(sprintf "%s: %s" moduleKey e)
-
-                if errors.Count > 0 then
-                    return LifecycleHookResult.Failed(String.Join("; ", errors))
-                else
-                    return LifecycleHookResult.Completed
-            | _ -> return LifecycleHookResult.Skipped "no IConfigStore registered (config substrate not composed)"
-        }
+        member _.OnProvisioned(scopeId, actorUserId) =
+            runSeed services {
+                ScopeId = scopeId
+                ActorUserId = actorUserId
+                Request = None
+            }
 
         member _.OnDeprovisioned(_scopeId, _actorUserId) = async {
             return
                 LifecycleHookResult.Skipped
                     "no offboard action — seeded config is torn down by the erasure path, not this provision hook"
         }
+
+    // Phase 305 — request-aware provisioning: overlay per-deployment values
+    // (the team app-name from the request's DisplayName) onto the schema
+    // defaults. Falls back byte-identically to OnProvisioned when no request
+    // rides or it carries no per-deployment override.
+    interface ITenantLifecycleProvisionContext with
+        member _.OnProvisionedWith(context) = runSeed services context
 
 /// Construct the first-party config-seed lifecycle hook. Resolves the
 /// active `IConfigStore` from `services` on every call.

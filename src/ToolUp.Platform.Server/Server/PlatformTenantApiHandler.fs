@@ -290,12 +290,24 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
 
     {
         ProvisionTenant =
-            fun (scopeId, _wireActor, _request) -> async {
+            fun (scopeId, _wireActor, request) -> async {
                 if not isAdmin then
                     return Error adminError
                 else
+                    // Phase 305 — thread the deploy-plane ProvisioningRequest
+                    // through to the hooks so request-aware hooks
+                    // (ConfigSeed / OwnerTeamBootstrap) seed per-deployment
+                    // values + the explicit owner rather than schema defaults
+                    // / the acting admin. Hooks that don't opt into
+                    // ITenantLifecycleProvisionContext are unaffected.
                     let! summary =
-                        TenantLifecycleAggregator.runGuarded emitAudit (resolveHooks ()) Provisioning scopeId actor
+                        TenantLifecycleAggregator.runGuardedRequest
+                            emitAudit
+                            (Some request)
+                            (resolveHooks ())
+                            Provisioning
+                            scopeId
+                            actor
 
                     do! persist scopeId summary
                     // Phase 54b — re-onboarding supersedes a prior offboard

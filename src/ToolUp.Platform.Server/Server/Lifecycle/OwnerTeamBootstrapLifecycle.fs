@@ -19,14 +19,17 @@ open ToolUp.Platform.TeamManagement
 //     ephemeral scope has no owner team to bootstrap.
 //   * no store registered — `Skipped` (teams substrate not composed).
 //
-// **Owner-identity note.** The task envisaged seeding the owner from
-// `ProvisioningRequest.OwnerUserId`, but the `OnProvisioned` hook surface
-// carries only `scopeId` + `actorUserId` (the deploy-plane request is not
-// threaded through `ITenantLifecycle`). The provisioning actor IS the
-// owner for the self-provision case, so the hook attaches `actorUserId`
-// as the team `Owner`. Threading the explicit `OwnerUserId` through the
-// hook surface is a follow-on (an `ITenantLifecycle` contract change, out
-// of this phase's scope).
+// **Owner-identity note.** Phase 305 threads the deploy-plane
+// `ProvisioningRequest` through the optional
+// `ITenantLifecycleProvisionContext` surface, so `OnProvisionedWith`
+// attaches `ProvisioningRequest.OwnerUserId` as the team `Owner` when the
+// request carries one. The request's owner is often a *different* user
+// from the acting admin (an operator provisions a tenant on a customer's
+// behalf), which the actor-only base surface could not express. When no
+// request rides (the base `OnProvisioned` path) or its `OwnerUserId` is
+// blank, the hook falls back to `actorUserId` — byte-identical to the
+// pre-305 behaviour (the provisioning actor IS the owner for the
+// self-provision case).
 //
 // `OnDeprovisioned` is a no-op `Skipped`: the offboard substrate evicts
 // membership caches + erases subject data; deleting the team row on
@@ -54,32 +57,50 @@ let private ensureOwner (store: ITeamStore) (teamId: string) (actorUserId: strin
         | None -> return! store.AddMember(teamId, actorUserId, Owner)
 }
 
+/// Bootstrap the owner team for `scopeId`, attaching `ownerUserId` as the
+/// team `Owner`. Shared by the base `OnProvisioned` (owner == acting
+/// admin) and the Phase 305 `OnProvisionedWith` (owner ==
+/// `ProvisioningRequest.OwnerUserId`, falling back to the actor). Both
+/// steps are read-guarded so re-provision is idempotent.
+let private bootstrap (store: ITeamStore) (scopeId: string) (ownerUserId: string) : Async<LifecycleHookResult> = async {
+    match teamIdOf scopeId with
+    | None -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to bootstrap"
+    | Some teamId ->
+        let! existing = store.GetTeam teamId
+
+        match existing with
+        | Some _ ->
+            // Team already exists — re-provision. Ensure the owner
+            // membership is present, then done.
+            match! ensureOwner store teamId ownerUserId with
+            | Ok() -> return LifecycleHookResult.Completed
+            | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
+        | None ->
+            match! store.CreateTeam(teamId, teamId) with
+            | Error e -> return LifecycleHookResult.Failed(sprintf "create team %s: %s" teamId e)
+            | Ok _ ->
+                match! ensureOwner store teamId ownerUserId with
+                | Ok() -> return LifecycleHookResult.Completed
+                | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
+}
+
+/// The effective owner for a provisioning run: the request's explicit
+/// `OwnerUserId` when it carries a non-blank one, else the acting admin.
+/// This is the one behavioural lever Phase 305 adds — an operator
+/// provisioning on a customer's behalf names the customer as owner rather
+/// than themselves.
+let private effectiveOwner (context: TenantProvisioningContext) : string =
+    match context.Request with
+    | Some req when not (String.IsNullOrWhiteSpace req.OwnerUserId) -> req.OwnerUserId
+    | _ -> context.ActorUserId
+
 type OwnerTeamBootstrapLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with
         member _.Name = "owner-team-bootstrap"
 
         member _.OnProvisioned(scopeId, actorUserId) = async {
             match services.GetService(typeof<ITeamStore>) with
-            | :? ITeamStore as store ->
-                match teamIdOf scopeId with
-                | None -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to bootstrap"
-                | Some teamId ->
-                    let! existing = store.GetTeam teamId
-
-                    match existing with
-                    | Some _ ->
-                        // Team already exists — re-provision. Ensure the
-                        // owner membership is present, then done.
-                        match! ensureOwner store teamId actorUserId with
-                        | Ok() -> return LifecycleHookResult.Completed
-                        | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
-                    | None ->
-                        match! store.CreateTeam(teamId, teamId) with
-                        | Error e -> return LifecycleHookResult.Failed(sprintf "create team %s: %s" teamId e)
-                        | Ok _ ->
-                            match! ensureOwner store teamId actorUserId with
-                            | Ok() -> return LifecycleHookResult.Completed
-                            | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
+            | :? ITeamStore as store -> return! bootstrap store scopeId actorUserId
             | _ -> return LifecycleHookResult.Skipped "no ITeamStore registered (teams substrate not composed)"
         }
 
@@ -87,6 +108,17 @@ type OwnerTeamBootstrapLifecycle(services: IServiceProvider) =
             return
                 LifecycleHookResult.Skipped
                     "no offboard action — owner-team teardown is the offboard substrate's job, not this provision hook"
+        }
+
+    // Phase 305 — request-aware provisioning: attach the request's explicit
+    // OwnerUserId (falling back to the acting admin) rather than always the
+    // actor. Falls back byte-identically to OnProvisioned when no request
+    // rides or its owner is blank.
+    interface ITenantLifecycleProvisionContext with
+        member _.OnProvisionedWith(context) = async {
+            match services.GetService(typeof<ITeamStore>) with
+            | :? ITeamStore as store -> return! bootstrap store context.ScopeId (effectiveOwner context)
+            | _ -> return LifecycleHookResult.Skipped "no ITeamStore registered (teams substrate not composed)"
         }
 
 /// Construct the first-party owner-team bootstrap lifecycle hook.

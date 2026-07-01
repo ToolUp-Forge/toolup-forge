@@ -73,3 +73,50 @@ type ITenantLifecycle =
     /// misbehaving hook must not block the crypto-shred / erasure of the
     /// rest.
     abstract OnDeprovisioned: scopeId: string * actorUserId: string -> Async<LifecycleHookResult>
+
+// ─── Phase 305 — request-aware provisioning surface ──────────────────
+//
+// The base `ITenantLifecycle.OnProvisioned` carries only
+// `(scopeId, actorUserId)`, so the first-party provision hooks (Phase
+// 54g) seed from SDK schema *defaults* and attribute the owner to the
+// provisioning *actor* rather than reading the deploy-plane
+// `ProvisioningRequest` (region, tier, slug, display name, explicit
+// owner) that the `PlatformTenantApiHandler` already holds. This optional
+// companion interface threads that request through **without** touching
+// the base contract — the same additive, opt-in shape
+// `ITenantLifecyclePreview` uses (a separate interface, not a new
+// abstract member, so every existing implementor compiles unchanged;
+// GP 11 / GP 13).
+
+/// The full provisioning context threaded to hooks that opt into the
+/// request-aware surface (Phase 305): the same `scopeId` + `actorUserId`
+/// the base `OnProvisioned` receives, plus the deploy-plane
+/// `ProvisioningRequest` that triggered the run when one is available.
+/// `Request` is `None` for internal provisioning paths that carry no
+/// request (the base-surface behaviour), so a hook MUST fall back to its
+/// `OnProvisioned` semantics when it is absent.
+type TenantProvisioningContext = {
+    ScopeId: string
+    ActorUserId: string
+    Request: ProvisioningRequest option
+}
+
+/// Optional companion to `ITenantLifecycle` (Phase 305) that a
+/// provisioning hook MAY implement *in addition to* `ITenantLifecycle` to
+/// receive the triggering `ProvisioningRequest`. `TenantLifecycleAggregator`
+/// dispatches `OnProvisionedWith` when a hook implements this interface and
+/// falls back to `OnProvisioned(scopeId, actorUserId)` otherwise — so
+/// existing hooks (first-party + every companion) need no change (GP 11 /
+/// GP 13). Mirrors the `ITenantLifecyclePreview` opt-in exactly.
+///
+/// **Behavioural contract.** An implementor MUST behave identically to its
+/// own `OnProvisioned(scopeId, actorUserId)` when `context.Request` is
+/// `None` (or carries only blank per-deployment values) — the request only
+/// ever *overrides* a default, never removes the schema-default / actor
+/// fallback. This is what keeps the legacy `OnProvisioned` path
+/// byte-identical.
+type ITenantLifecycleProvisionContext =
+    /// Run this hook's provisioning work with the full provisioning
+    /// context. Falls back to `OnProvisioned` semantics when
+    /// `context.Request` is `None`.
+    abstract OnProvisionedWith: context: TenantProvisioningContext -> Async<LifecycleHookResult>

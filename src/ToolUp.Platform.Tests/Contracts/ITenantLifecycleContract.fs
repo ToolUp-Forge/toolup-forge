@@ -111,6 +111,33 @@ let private platformProbeSchema: ModuleConfigSchema = {
     ]
 }
 
+/// Phase 305 — build a `ProvisioningRequest` for the request-aware
+/// provisioning tests.
+let private requestWith (owner: string) (displayName: string) : ProvisioningRequest = {
+    Slug = "acme"
+    OwnerUserId = owner
+    Region = "eu-west"
+    Tier = "standard"
+    DisplayName = displayName
+}
+
+/// Phase 305 — cast a first-party hook (constructed via `create`, typed as
+/// `ITenantLifecycle`) to its optional request-aware surface. The runtime
+/// object implements the interface, so the downcast succeeds.
+let private asProvisionContext (hook: ITenantLifecycle) : ITenantLifecycleProvisionContext =
+    hook :?> ITenantLifecycleProvisionContext
+
+let private ctxOf
+    (scopeId: string)
+    (actorUserId: string)
+    (request: ProvisioningRequest option)
+    : TenantProvisioningContext =
+    {
+        ScopeId = scopeId
+        ActorUserId = actorUserId
+        Request = request
+    }
+
 let tests =
     testList "ITenantLifecycle — first-party hook contract" [
 
@@ -457,5 +484,113 @@ let tests =
             match afterShred with
             | Error(KeyDestroyed _) -> ()
             | other -> failwithf "expected KeyDestroyed after offboard, got %A" other
+        }
+
+        // ─── Phase 305 — request-aware provisioning (OnProvisionedWith) ──
+
+        testCaseAsync "OwnerTeamBootstrap OnProvisionedWith attaches the request's OwnerUserId (≠ acting admin)"
+        <| async {
+            let store = newTeamStore ()
+            let provider = providerOf [ typeof<ITeamStore>, box store ]
+            let hook = asProvisionContext (OwnerTeamBootstrapLifecycle.create provider)
+
+            // The operator ("op-admin") provisions on the customer's behalf;
+            // the request names "customer-9" as the owner.
+            let ctx =
+                ctxOf "team-behalf" "op-admin" (Some(requestWith "customer-9" "Behalf Co"))
+
+            let! result = hook.OnProvisionedWith ctx
+            Expect.isTrue (isCompleted result) "request-aware bootstrap completes"
+
+            let! ownerRole = store.GetMemberRole("behalf", "customer-9")
+            Expect.equal ownerRole (Some Owner) "the request's OwnerUserId is the team Owner"
+
+            let! actorRole = store.GetMemberRole("behalf", "op-admin")
+            Expect.equal actorRole None "the acting admin is NOT attached as owner"
+        }
+
+        testCaseAsync "OwnerTeamBootstrap OnProvisionedWith falls back to the actor when the request owner is blank"
+        <| async {
+            let store = newTeamStore ()
+            let provider = providerOf [ typeof<ITeamStore>, box store ]
+            let hook = asProvisionContext (OwnerTeamBootstrapLifecycle.create provider)
+
+            // Blank request OwnerUserId → the acting admin owns (byte-
+            // identical to the base OnProvisioned self-provision case).
+            let ctx = ctxOf "team-fallback" "self-admin" (Some(requestWith "   " "Fallback Co"))
+            let! result = hook.OnProvisionedWith ctx
+            Expect.isTrue (isCompleted result) "bootstrap completes on the fallback path"
+
+            let! role = store.GetMemberRole("fallback", "self-admin")
+            Expect.equal role (Some Owner) "the acting admin is the owner when the request carries no owner"
+        }
+
+        testCaseAsync "OwnerTeamBootstrap OnProvisionedWith with Request = None matches the base OnProvisioned"
+        <| async {
+            let store = newTeamStore ()
+            let provider = providerOf [ typeof<ITeamStore>, box store ]
+            let hook = asProvisionContext (OwnerTeamBootstrapLifecycle.create provider)
+
+            let! result = hook.OnProvisionedWith(ctxOf "team-none" "actor-1" None)
+            Expect.isTrue (isCompleted result) "no-request path completes"
+
+            let! role = store.GetMemberRole("none", "actor-1")
+            Expect.equal role (Some Owner) "with no request the actor is the owner (legacy behaviour)"
+        }
+
+        testCaseAsync "ConfigSeed OnProvisionedWith seeds _platform appName from the request DisplayName (team scope)"
+        <| async {
+            let store = newConfigStore ()
+            let provider = providerOf [ typeof<IConfigStore>, box store ]
+            let hook = asProvisionContext (ConfigSeedLifecycle.create provider)
+
+            let ctx = ctxOf "team-brand" "admin" (Some(requestWith "owner-1" "Acme Corp"))
+            let! result = hook.OnProvisionedWith ctx
+            Expect.isTrue (isCompleted result) "request-aware seed completes"
+
+            let scope = lifecycleScope "team-brand"
+            let! raw = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+
+            Expect.equal
+                (Map.tryFind ConfigKeys.BrandingKeys.AppName raw)
+                (Some "\"Acme Corp\"")
+                "the team app-name defaults to the request's DisplayName"
+
+            Expect.isTrue (Map.containsKey "currencySymbol" raw) "the schema-default fields are still seeded"
+        }
+
+        testCaseAsync "ConfigSeed base OnProvisioned seeds NO appName — legacy path is byte-identical"
+        <| async {
+            let store = newConfigStore ()
+            let provider = providerOf [ typeof<IConfigStore>, box store ]
+            let hook = ConfigSeedLifecycle.create provider
+
+            let! result = hook.OnProvisioned("team-plain", "admin")
+            Expect.isTrue (isCompleted result) "base seed completes"
+
+            let scope = lifecycleScope "team-plain"
+            let! raw = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+
+            Expect.isFalse
+                (Map.containsKey ConfigKeys.BrandingKeys.AppName raw)
+                "the base path seeds only schema defaults — no appName override"
+        }
+
+        testCaseAsync "ConfigSeed OnProvisionedWith does not seed appName for a non-team (user) scope"
+        <| async {
+            let store = newConfigStore ()
+            let provider = providerOf [ typeof<IConfigStore>, box store ]
+            let hook = asProvisionContext (ConfigSeedLifecycle.create provider)
+
+            let ctx = ctxOf "user-solo" "admin" (Some(requestWith "owner-1" "Solo User"))
+            let! result = hook.OnProvisionedWith ctx
+            Expect.isTrue (isCompleted result) "user-scope seed completes"
+
+            let scope = lifecycleScope "user-solo"
+            let! raw = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
+
+            Expect.isFalse
+                (Map.containsKey ConfigKeys.BrandingKeys.AppName raw)
+                "app-name branding is team-scoped — a user scope gets no appName seed"
         }
     ]

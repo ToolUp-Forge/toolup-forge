@@ -59,10 +59,19 @@ let defaultTimeout =
 /// throws — a timeout or exception becomes a `Failed` outcome so the
 /// caller's `Async.Parallel` always resolves every hook. Retry /
 /// supervision as data (GP 12 rule 3).
+///
+/// Phase 305 — on the `Provisioning` phase a hook that opts into
+/// `ITenantLifecycleProvisionContext` is dispatched via `OnProvisionedWith`
+/// (carrying `request`), so it can seed per-deployment values from the
+/// triggering `ProvisioningRequest`; a hook that doesn't falls back to the
+/// base `OnProvisioned(scopeId, actorUserId)`. `request` is `None` for
+/// every offboard path and for provisioning paths that carry no request,
+/// making those byte-identical to before.
 let private invokeHook
     (phase: TenantLifecyclePhase)
     (scopeId: string)
     (actorUserId: string)
+    (request: ProvisioningRequest option)
     (timeout: TimeSpan)
     (hook: ITenantLifecycle)
     : Async<LifecycleHookOutcome> =
@@ -75,7 +84,15 @@ let private invokeHook
 
                 let work =
                     match phase with
-                    | Provisioning -> hook.OnProvisioned(scopeId, actorUserId)
+                    | Provisioning ->
+                        match hook with
+                        | :? ITenantLifecycleProvisionContext as rc ->
+                            rc.OnProvisionedWith {
+                                ScopeId = scopeId
+                                ActorUserId = actorUserId
+                                Request = request
+                            }
+                        | _ -> hook.OnProvisioned(scopeId, actorUserId)
                     | Deprovisioning -> hook.OnDeprovisioned(scopeId, actorUserId)
 
                 let probeTask = Async.StartImmediateAsTask(work, cts.Token)
@@ -121,12 +138,13 @@ let rec private invokeHookWithRetry
     (phase: TenantLifecyclePhase)
     (scopeId: string)
     (actorUserId: string)
+    (request: ProvisioningRequest option)
     (timeout: TimeSpan)
     (attempt: int)
     (hook: ITenantLifecycle)
     : Async<LifecycleHookOutcome> =
     async {
-        let! outcome = invokeHook phase scopeId actorUserId timeout hook
+        let! outcome = invokeHook phase scopeId actorUserId request timeout hook
 
         match outcome.Result with
         | LifecycleHookResult.Failed _ when attempt < policy.MaxAttempts ->
@@ -135,7 +153,7 @@ let rec private invokeHookWithRetry
             if delay > TimeSpan.Zero then
                 do! Async.Sleep(int delay.TotalMilliseconds)
 
-            return! invokeHookWithRetry policy phase scopeId actorUserId timeout (attempt + 1) hook
+            return! invokeHookWithRetry policy phase scopeId actorUserId request timeout (attempt + 1) hook
         | _ -> return outcome
     }
 
@@ -200,14 +218,21 @@ let private emitRunAudit
     }
 
 /// Run every hook for `phase` against `scopeId` (attributed to
-/// `actorUserId`) with the supplied per-hook `timeout`, emit the audit
-/// rows via `emitAudit` (scopeId + event), and return the aggregated
-/// `LifecycleSummary`. Hooks run in parallel; per-hook failure does not
-/// abort the run. `emitAudit` is best-effort from the run's
-/// perspective — the canonical wiring (`IAuditLog.Record`) swallows its
-/// own failures, so an audit-sink outage cannot fail an offboard.
-let run
+/// `actorUserId`, with the triggering `request` on provision) with the
+/// supplied per-hook `timeout`, emit the audit rows via `emitAudit`
+/// (scopeId + event), and return the aggregated `LifecycleSummary`. Hooks
+/// run in parallel; per-hook failure does not abort the run. `emitAudit`
+/// is best-effort from the run's perspective — the canonical wiring
+/// (`IAuditLog.Record`) swallows its own failures, so an audit-sink outage
+/// cannot fail an offboard.
+///
+/// Phase 305 — `request` is forwarded to each provisioning hook's
+/// `OnProvisionedWith` (when it opts into `ITenantLifecycleProvisionContext`);
+/// `None` reproduces the base `OnProvisioned` behaviour exactly. The
+/// request-free `run` below delegates here with `None`.
+let runWithRequest
     (emitAudit: string -> AuditEvent -> Async<unit>)
+    (request: ProvisioningRequest option)
     (timeout: TimeSpan)
     (hooks: ITenantLifecycle list)
     (phase: TenantLifecyclePhase)
@@ -219,7 +244,7 @@ let run
 
         let! outcomesArr =
             hooks
-            |> List.map (invokeHook phase scopeId actorUserId timeout)
+            |> List.map (invokeHook phase scopeId actorUserId request timeout)
             |> Async.Parallel
 
         sw.Stop()
@@ -236,6 +261,29 @@ let run
         return summary
     }
 
+/// `runWithRequest` with no provisioning request — the request-free
+/// entry point every offboard path (and legacy provisioning caller) uses.
+let run
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (timeout: TimeSpan)
+    (hooks: ITenantLifecycle list)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<LifecycleSummary> =
+    runWithRequest emitAudit None timeout hooks phase scopeId actorUserId
+
+/// `runWithRequest` with the phase's default per-hook timeout (Phase 305).
+let runWithDefaultsRequest
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (request: ProvisioningRequest option)
+    (hooks: ITenantLifecycle list)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<LifecycleSummary> =
+    runWithRequest emitAudit request (defaultTimeout phase) hooks phase scopeId actorUserId
+
 /// `run` with the phase's default per-hook timeout.
 let runWithDefaults
     (emitAudit: string -> AuditEvent -> Async<unit>)
@@ -244,7 +292,7 @@ let runWithDefaults
     (scopeId: string)
     (actorUserId: string)
     : Async<LifecycleSummary> =
-    run emitAudit (defaultTimeout phase) hooks phase scopeId actorUserId
+    runWithDefaultsRequest emitAudit None hooks phase scopeId actorUserId
 
 /// Outcome of a lock-guarded lifecycle run (Phase 54h).
 [<RequireQualifiedAccess>]
@@ -267,9 +315,15 @@ type GuardedRun =
 /// scope frees and so always returns `Some`, making this always `Ran`
 /// (Phase 54 serialisation preserved). `lease.Dispose()` releases in a
 /// `finally`, so a hook that throws still frees the scope.
-let runGuardedWith
+///
+/// Phase 305 — `runGuardedWithRequest` carries the provisioning `request`
+/// through to the hooks; `runGuardedWith` delegates with `None` (its
+/// signature stays byte-identical for the offboard callers + the contract
+/// pack).
+let runGuardedWithRequest
     (lock: ILifecycleLock)
     (emitAudit: string -> AuditEvent -> Async<unit>)
+    (request: ProvisioningRequest option)
     (hooks: ITenantLifecycle list)
     (phase: TenantLifecyclePhase)
     (scopeId: string)
@@ -280,11 +334,21 @@ let runGuardedWith
         | None -> return GuardedRun.AlreadyInProgress
         | Some lease ->
             try
-                let! summary = runWithDefaults emitAudit hooks phase scopeId actorUserId
+                let! summary = runWithDefaultsRequest emitAudit request hooks phase scopeId actorUserId
                 return GuardedRun.Ran summary
             finally
                 lease.Dispose()
     }
+
+let runGuardedWith
+    (lock: ILifecycleLock)
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (hooks: ITenantLifecycle list)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<GuardedRun> =
+    runGuardedWithRequest lock emitAudit None hooks phase scopeId actorUserId
 
 /// `runWithDefaults` serialised per scope: concurrent runs for the same
 /// `scopeId` execute one-at-a-time, so two operators offboarding the same
@@ -297,6 +361,30 @@ let runGuardedWith
 /// so single-instance behaviour is byte-identical to Phase 54. A
 /// deployment that needs cross-replica exclusion composes a distributed
 /// `ILifecycleLock` and calls `runGuardedWith` instead.
+///
+/// Phase 305 — `runGuardedRequest` carries the provisioning `request`
+/// through the same per-scope-serialised path (this is the provisioning
+/// entry point `PlatformTenantApiHandler.ProvisionTenant` calls);
+/// `runGuarded` delegates with `None`.
+let runGuardedRequest
+    (emitAudit: string -> AuditEvent -> Async<unit>)
+    (request: ProvisioningRequest option)
+    (hooks: ITenantLifecycle list)
+    (phase: TenantLifecyclePhase)
+    (scopeId: string)
+    (actorUserId: string)
+    : Async<LifecycleSummary> =
+    async {
+        match!
+            runGuardedWithRequest InProcessLifecycleLock.shared emitAudit request hooks phase scopeId actorUserId
+        with
+        | GuardedRun.Ran summary -> return summary
+        | GuardedRun.AlreadyInProgress ->
+            // Unreachable with the in-process lock (it serialises, never
+            // refuses); kept total so the match is exhaustive.
+            return! runWithDefaultsRequest emitAudit request hooks phase scopeId actorUserId
+    }
+
 let runGuarded
     (emitAudit: string -> AuditEvent -> Async<unit>)
     (hooks: ITenantLifecycle list)
@@ -304,14 +392,7 @@ let runGuarded
     (scopeId: string)
     (actorUserId: string)
     : Async<LifecycleSummary> =
-    async {
-        match! runGuardedWith InProcessLifecycleLock.shared emitAudit hooks phase scopeId actorUserId with
-        | GuardedRun.Ran summary -> return summary
-        | GuardedRun.AlreadyInProgress ->
-            // Unreachable with the in-process lock (it serialises, never
-            // refuses); kept total so the match is exhaustive.
-            return! runWithDefaults emitAudit hooks phase scopeId actorUserId
-    }
+    runGuardedRequest emitAudit None hooks phase scopeId actorUserId
 
 // ─── Phase 54a — background / async offboard ─────────────────────────
 //
@@ -604,7 +685,10 @@ let runResumable
         let pending = hooks |> List.filter (fun h -> not (Set.contains h.Name alreadyDone))
 
         for hook in pending do
-            let! outcome = invokeHookWithRetry retryPolicy phase scopeId actorUserId timeout 1 hook
+            // Phase 305 — the resumable sweep is the background *offboard*
+            // path (Deprovisioning); no provisioning request rides it, so
+            // `None` keeps every hook on the base `OnProvisioned` surface.
+            let! outcome = invokeHookWithRetry retryPolicy phase scopeId actorUserId None timeout 1 hook
             outcomes.Add outcome
 
             match outcome.Result with
