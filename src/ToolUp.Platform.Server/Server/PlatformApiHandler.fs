@@ -15,7 +15,7 @@ open ToolUp.Platform.RemotingHelpers
 // own route prefix and per-concern test surface:
 //
 //   * `platformInfoApiHandler`   → `PlatformInfoApi`   (1 method)
-//   * `teamApiHandler`           → `TeamApi`            (13 methods)
+//   * `teamApiHandler`           → `TeamApi`            (14 methods)
 //   * `permissionApiHandler`     → `PermissionApi`      (3 methods)
 //   * `accessibilityApiHandler`  → `AccessibilityApi`   (1 method)
 //   * `dataCatalogApiHandler`    → `DataCatalogApi`     (1 method)
@@ -114,7 +114,7 @@ let platformInfoApiHandler (config: ServerConfig) =
             }
     })
 
-// ─── TeamApi — team CRUD + membership + admin lifecycle (13 methods) ─
+// ─── TeamApi — team CRUD + membership + admin lifecycle (14 methods) ─
 
 /// Build the `TeamApi` record for one request. Resolves `ITeamStore`
 /// per request; returns `Error "Team management not available in this
@@ -455,6 +455,69 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     | Error e, _
                     | _, Error e -> return Error e
                 | None -> return Error "Team management not available in this mode"
+            }
+        TransferOwnership =
+            fun (teamId, newOwnerUserId) -> async {
+                match teamStore with
+                | None -> return Error "Team management not available in this mode"
+                | Some ts ->
+                    let target = newOwnerUserId.Trim()
+
+                    // Gate on the caller's OWN team role being Owner —
+                    // NOT the Platform-Admin bypass. The transfer demotes
+                    // the caller (the outgoing Owner) to Admin, so "caller
+                    // is Owner" is load-bearing to the operation's meaning,
+                    // not just an authorisation check. Admins / Members /
+                    // non-members (incl. Platform Admins with no membership
+                    // row) are refused: ownership hand-over is the Owner's
+                    // own act.
+                    let! callerRole = ts.GetMemberRole(teamId, userId)
+
+                    match callerRole with
+                    | role when role <> Some Owner -> return Error "Only the team Owner can transfer ownership"
+                    | _ when System.String.IsNullOrWhiteSpace target -> return Error "New owner user id can't be empty"
+                    | _ when target = userId -> return Error "You are already the Owner of this team"
+                    | _ ->
+                        // Target must already be a member — ownership can
+                        // only move to someone on the team, never mint a new
+                        // membership row.
+                        let! targetRole = ts.GetMemberRole(teamId, target)
+
+                        match targetRole with
+                        | None -> return Error "The new owner must be an existing member of the team"
+                        | Some _ ->
+                            // Promote-then-demote ordering. The membership
+                            // store keeps each user's rows under their own
+                            // per-user blob (two separate writes, two
+                            // separate locks — a literal single write across
+                            // both users isn't available at this seam), so
+                            // the ordering is what guarantees the invariant:
+                            // promoting the target to Owner FIRST means the
+                            // team always has ≥1 Owner, and the subsequent
+                            // caller demotion clears `IsLastOwner` (two Owners
+                            // momentarily) so it isn't rejected as "last
+                            // Owner". An interruption between the two writes
+                            // leaves two Owners — recoverable — never zero.
+                            let! promote = ts.ChangeMemberRole(teamId, target, Owner)
+
+                            match promote with
+                            | Error e -> return Error e
+                            | Ok() ->
+                                let! demote = ts.ChangeMemberRole(teamId, userId, Admin)
+
+                                match demote with
+                                | Error e -> return Error e
+                                | Ok() ->
+                                    audit
+                                        teamId
+                                        (TeamOwnershipTransferred {
+                                            TeamId = teamId
+                                            FromUserId = userId
+                                            ToUserId = target
+                                            ActorUserId = userId
+                                        })
+
+                                    return Ok()
             }
         RemoveTeamMember =
             fun (teamId, memberId) -> async {

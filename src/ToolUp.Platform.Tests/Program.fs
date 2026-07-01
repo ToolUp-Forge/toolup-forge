@@ -296,6 +296,10 @@ let allTests =
         TeamCreationPolicyTests.tests
         TeamCreationPolicyTests.integrityTests
         TeamCreationPolicyTests.quotaTests
+        // Phase 304 — TeamApi.TransferOwnership: Owner-gated ownership
+        // hand-over (promote-then-demote single-Owner invariant, member /
+        // self / non-Owner rejections, TeamOwnershipTransferred audit).
+        TeamOwnershipTransferTests.tests
         // Platform-Admin team lifecycle — ListAllTeams / Archive / Restore
         // / DeleteTeamHard gating + archived-team access enforcement.
         TeamAdminLifecycleTests.tests

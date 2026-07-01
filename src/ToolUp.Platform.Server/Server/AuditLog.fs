@@ -600,6 +600,14 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> TeamDeleted(fromAuditJson<TeamDeletedPayload> j)
     }
     {
+        EventType = "TeamOwnershipTransferred"
+        TryEncode =
+            (function
+            | TeamOwnershipTransferred p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamOwnershipTransferred(fromAuditJson<TeamOwnershipTransferredPayload> j)
+    }
+    {
         EventType = "TeamInviteIssued"
         TryEncode =
             (function

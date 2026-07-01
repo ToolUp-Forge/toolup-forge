@@ -44,6 +44,30 @@ type IssueByEmailModalState = {
     Submitting: bool
 }
 
+/// Phase 304 — the two-step ownership-transfer flow. Step one picks the
+/// incoming Owner from the team's current members via a typeahead filter;
+/// step two is an explicit "are you sure?" confirmation naming both the
+/// outgoing (the caller) and incoming Owner before the API fires.
+type TransferStep =
+    | PickNewOwner
+    | ConfirmTransfer
+
+/// Phase 304 — open-modal state for "Transfer ownership". `None` = closed.
+type TransferOwnershipModalState = {
+    TeamId: string
+    /// Typeahead filter over the team's current members (step one).
+    Query: string
+    /// The chosen incoming Owner's user id — `Some` once a candidate is
+    /// picked (which advances the modal to `ConfirmTransfer`).
+    SelectedUserId: string option
+    Step: TransferStep
+    /// Disable the confirm button while the transfer call is in flight.
+    Submitting: bool
+    /// Inline error from the most recent submit — keeps the confirm step
+    /// open so the operator sees why (e.g. a concurrent role change).
+    SubmitError: string option
+}
+
 type Model = {
     /// Teams the signed-in user belongs to. Loaded on init.
     Teams: TeamInfo list
@@ -96,6 +120,8 @@ type Model = {
     /// `Some (teamId, email)` = a confirmation dialog is open for
     /// that team's pending entry.
     RevokeByEmailConfirm: (string * string) option
+    /// Phase 304 — ownership-transfer modal state. `None` = closed.
+    TransferOwnershipModal: TransferOwnershipModalState option
     /// Resolved directory entries keyed by user id (id → display name +
     /// email), populated lazily via `IUserDirectoryApi.ResolveUsers`
     /// after a team's members load. Ids absent from the map (directory
@@ -125,6 +151,14 @@ type Msg =
     | ChangeMemberRole of teamId: string * userId: string * newRole: TeamRole
     | MemberRoleChanged of Result<unit, string>
     | IsPlatformAdminLoaded of bool
+    // ─── Phase 304 — ownership transfer ───────────────────────────
+    | OpenTransferOwnership of teamId: string
+    | CloseTransferOwnership
+    | SetTransferQuery of string
+    | SelectTransferCandidate of userId: string
+    | BackToTransferPick
+    | SubmitTransferOwnership
+    | TransferOwnershipDone of teamId: string * Result<unit, string>
     // ─── Phase 3d.A — pending-invite admin surface ────────────────
     | NavigatePendingInvites of teamId: string
     | LoadPendingByEmail of teamId: string
@@ -201,6 +235,7 @@ let init (ctx: ClientModuleContext) =
         PendingByEmail = Map.empty
         IssueByEmailModal = None
         RevokeByEmailConfirm = None
+        TransferOwnershipModal = None
         Directory = Map.empty
     }
 
@@ -430,6 +465,111 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 IsPlatformAdmin = Some isAdmin
+        },
+        Cmd.none
+
+    // ─── Phase 304 — ownership transfer ───────────────────────────
+
+    | OpenTransferOwnership teamId ->
+        {
+            model with
+                TransferOwnershipModal =
+                    Some {
+                        TeamId = teamId
+                        Query = ""
+                        SelectedUserId = None
+                        Step = PickNewOwner
+                        Submitting = false
+                        SubmitError = None
+                    }
+        },
+        Cmd.none
+
+    | CloseTransferOwnership ->
+        {
+            model with
+                TransferOwnershipModal = None
+        },
+        Cmd.none
+
+    | SetTransferQuery query ->
+        {
+            model with
+                TransferOwnershipModal = model.TransferOwnershipModal |> Option.map (fun m -> { m with Query = query })
+        },
+        Cmd.none
+
+    // Picking a candidate advances to the confirmation step — the
+    // two-step "typeahead then are-you-sure" contract.
+    | SelectTransferCandidate userId ->
+        {
+            model with
+                TransferOwnershipModal =
+                    model.TransferOwnershipModal
+                    |> Option.map (fun m -> {
+                        m with
+                            SelectedUserId = Some userId
+                            Step = ConfirmTransfer
+                            SubmitError = None
+                    })
+        },
+        Cmd.none
+
+    | BackToTransferPick ->
+        {
+            model with
+                TransferOwnershipModal =
+                    model.TransferOwnershipModal
+                    |> Option.map (fun m -> {
+                        m with
+                            Step = PickNewOwner
+                            SubmitError = None
+                    })
+        },
+        Cmd.none
+
+    | SubmitTransferOwnership ->
+        match model.TransferOwnershipModal with
+        | Some m when m.SelectedUserId.IsSome && not m.Submitting ->
+            let target = m.SelectedUserId.Value
+
+            {
+                model with
+                    TransferOwnershipModal =
+                        Some {
+                            m with
+                                Submitting = true
+                                SubmitError = None
+                        }
+            },
+            Cmd.OfRemoting.call
+                teamApi.TransferOwnership
+                (m.TeamId, target)
+                (fun r -> TransferOwnershipDone(m.TeamId, r))
+                (fun e -> TransferOwnershipDone(m.TeamId, Error e.Message))
+        | _ -> model, Cmd.none
+
+    | TransferOwnershipDone(teamId, Ok()) ->
+        // Ownership moved — the caller is now an Admin. Close the modal
+        // and reload members so every role badge (incl. the caller's own)
+        // reflects the new state.
+        {
+            model with
+                TransferOwnershipModal = None
+                Error = None
+        },
+        Cmd.ofMsg (LoadMembers teamId)
+
+    | TransferOwnershipDone(_, Error e) ->
+        {
+            model with
+                TransferOwnershipModal =
+                    model.TransferOwnershipModal
+                    |> Option.map (fun m -> {
+                        m with
+                            Submitting = false
+                            SubmitError = Some e
+                    })
         },
         Cmd.none
 
@@ -889,6 +1029,188 @@ let private addMemberForm (teamId: string) (callerRole: TeamRole option) (model:
         ]
     ]
 
+/// Best-effort human label for a user id, mirroring `memberRow`'s
+/// name resolution: the JWT display name for the caller themselves, else
+/// the directory-resolved name / email, else the raw id. Used by the
+/// Phase 304 transfer modal for both the candidate list and the
+/// confirmation copy.
+let private displayNameForId (directory: Map<string, UserSummary>) (selfId: string) (userId: string) : string =
+    if userId = selfId then
+        UserSession.getDisplayName () |> Option.defaultValue userId
+    else
+        match Map.tryFind userId directory with
+        | Some s ->
+            let name = s.DisplayName |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
+            let email = s.Email |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
+
+            match name, email with
+            | Some n, _ -> n
+            | None, Some e -> e
+            | None, None -> userId
+        | None -> userId
+
+/// Phase 304 — the two-step "Transfer ownership" modal. Step one filters
+/// the team's current members (never mints a new membership); picking one
+/// advances to step two, an explicit confirmation naming both parties
+/// before the API fires. Rendered only for the real team Owner (the
+/// caller opening it), so the candidate list always excludes the caller.
+let private transferOwnershipModalView
+    (teamId: string)
+    (state: TransferOwnershipModalState)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    =
+    let selfId = selfUserId ()
+    let members = model.Members |> Map.tryFind teamId |> Option.defaultValue []
+
+    let teamName =
+        model.Teams
+        |> List.tryFind (fun t -> t.TeamId = teamId)
+        |> Option.map _.Name
+        |> Option.defaultValue teamId
+
+    // Candidates: every current member except the caller (the outgoing
+    // Owner). Ownership can only move to someone already on the team.
+    let candidates = members |> List.filter (fun m -> m.UserId <> selfId)
+
+    let query = state.Query.Trim().ToLower()
+
+    let filtered =
+        if query = "" then
+            candidates
+        else
+            candidates
+            |> List.filter (fun m ->
+                let label = (displayNameForId model.Directory selfId m.UserId).ToLower()
+                label.Contains query || m.UserId.ToLower().Contains query)
+
+    let modalShell (children: ReactElement list) =
+        Html.div [
+            prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+            prop.children [
+                Html.div [
+                    prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
+                    prop.children children
+                ]
+            ]
+        ]
+
+    match state.Step with
+    | PickNewOwner ->
+        modalShell [
+            Html.h3 [ prop.className "text-lg font-semibold"; prop.text "Transfer ownership" ]
+            Html.p [
+                prop.className "text-sm text-muted"
+                prop.text (
+                    sprintf
+                        "Choose a current member of %s to become the new Owner. You'll be demoted to Admin once the transfer completes."
+                        teamName
+                )
+            ]
+            Html.input [
+                prop.type' "text"
+                prop.placeholder "Filter members by name or email"
+                prop.value state.Query
+                prop.onChange (fun (v: string) -> dispatch (SetTransferQuery v))
+                prop.className [
+                    "border border-border"
+                    "rounded-lg"
+                    "px-4 py-2"
+                    "focus:outline-none focus:border-brand"
+                    "transition-colors"
+                    "w-full"
+                ]
+            ]
+            if List.isEmpty candidates then
+                Html.p [
+                    prop.className "text-sm text-muted py-2"
+                    prop.text
+                        "This team has no other members to transfer ownership to. Add a member first, then transfer."
+                ]
+            elif List.isEmpty filtered then
+                Html.p [
+                    prop.className "text-sm text-muted py-2"
+                    prop.text "No members match your filter."
+                ]
+            else
+                Html.div [
+                    prop.className "max-h-64 overflow-y-auto flex flex-col gap-1"
+                    prop.children [
+                        for m in filtered do
+                            let label = displayNameForId model.Directory selfId m.UserId
+
+                            Html.button [
+                                prop.className
+                                    "flex items-center justify-between w-full text-left px-3 py-2 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                                prop.onClick (fun _ -> dispatch (SelectTransferCandidate m.UserId))
+                                prop.children [
+                                    Html.span [ prop.className "font-medium text-sm"; prop.text label ]
+                                    Html.span [
+                                        prop.className "text-xs text-muted"
+                                        prop.text (TeamRoles.displayName m.Role)
+                                    ]
+                                ]
+                            ]
+                    ]
+                ]
+            Html.div [
+                prop.className "flex justify-end gap-3 pt-2"
+                prop.children [ Forms.Button.secondary "Cancel" (fun () -> dispatch CloseTransferOwnership) ]
+            ]
+        ]
+    | ConfirmTransfer ->
+        let newOwnerLabel =
+            state.SelectedUserId
+            |> Option.map (displayNameForId model.Directory selfId)
+            |> Option.defaultValue "the selected member"
+
+        let outgoingLabel = displayNameForId model.Directory selfId selfId
+
+        modalShell [
+            Html.h3 [
+                prop.className "text-lg font-semibold"
+                prop.text "Confirm ownership transfer"
+            ]
+            Html.p [
+                prop.className "text-sm text-muted"
+                prop.text (sprintf "Transfer ownership of %s from %s (you) to %s?" teamName outgoingLabel newOwnerLabel)
+            ]
+            Html.p [
+                prop.className "text-sm text-muted"
+                prop.text (
+                    sprintf
+                        "%s becomes the Owner and you become an Admin. Only the new Owner can transfer it back."
+                        newOwnerLabel
+                )
+            ]
+            match state.SubmitError with
+            | Some msg -> Html.p [ prop.className "text-sm text-red-600"; prop.text msg ]
+            | None -> Html.none
+            Html.div [
+                prop.className "flex justify-end gap-3 pt-2"
+                prop.children [
+                    Forms.Button.secondary "Back" (fun () -> dispatch BackToTransferPick)
+                    Html.button [
+                        prop.disabled state.Submitting
+                        prop.className [
+                            "px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                            if state.Submitting then
+                                "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            else
+                                "bg-brand text-brand-text hover:bg-brand-dark"
+                        ]
+                        prop.text (
+                            if state.Submitting then
+                                "Transferring…"
+                            else
+                                "Confirm transfer"
+                        )
+                        prop.onClick (fun _ -> dispatch SubmitTransferOwnership)
+                    ]
+                ]
+            ]
+        ]
+
 let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> unit) =
     let teamOpt = model.Teams |> List.tryFind (fun t -> t.TeamId = teamId)
     let members = model.Members |> Map.tryFind teamId |> Option.defaultValue []
@@ -896,6 +1218,14 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
 
     let canManage =
         callerRole |> Option.map TeamRoles.canManageMembers |> Option.defaultValue false
+
+    // Transfer ownership is Owner-only and, unlike the other management
+    // controls, does NOT honour the Platform-Admin bypass — the server
+    // gates on the caller's OWN membership role being Owner (the caller
+    // is the outgoing Owner). Gate the affordance on the real membership
+    // role so it stays hidden for Admins, Members, and Platform Admins
+    // who aren't the team's Owner.
+    let isRealOwner = (model.RoleInTeam |> Map.tryFind teamId) = Some Owner
 
     let selfId = selfUserId ()
 
@@ -917,8 +1247,11 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
                     ]
                     if canManage then
                         Html.div [
-                            prop.className "ml-auto"
+                            prop.className "ml-auto flex gap-2"
                             prop.children [
+                                if isRealOwner then
+                                    Forms.Button.secondary "Transfer ownership" (fun () ->
+                                        dispatch (OpenTransferOwnership teamId))
                                 Forms.Button.secondary "Pending invites" (fun () ->
                                     dispatch (NavigatePendingInvites teamId))
                             ]
@@ -941,6 +1274,10 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
 
             if canManage then
                 addMemberForm teamId callerRole model dispatch
+
+            match model.TransferOwnershipModal with
+            | Some state when state.TeamId = teamId -> transferOwnershipModalView teamId state model dispatch
+            | _ -> Html.none
         ]
     ]
 

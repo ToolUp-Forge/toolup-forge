@@ -204,6 +204,23 @@ type TeamDeletedPayload = {
     TeamName: string
 }
 
+/// Phase 304 — team ownership transferred via `TeamApi.TransferOwnership`.
+/// The outgoing Owner (`FromUserId`) was demoted to `Admin` and the
+/// incoming Owner (`ToUserId`) promoted to `Owner`. `ActorUserId` is the
+/// caller who performed the transfer — always equal to `FromUserId` under
+/// the current gate (the outgoing Owner transfers their own team), carried
+/// as a distinct field so a future admin-driven reassignment path stays
+/// wire-compatible. Recorded under the `team-{TeamId}` audit scope (GP 6).
+type TeamOwnershipTransferredPayload = {
+    TeamId: string
+    /// Outgoing Owner, demoted to `Admin` by the transfer.
+    FromUserId: string
+    /// Incoming Owner, promoted from their prior role.
+    ToUserId: string
+    /// Caller who invoked the transfer. Equal to `FromUserId` today.
+    ActorUserId: string
+}
+
 type MemberAddedPayload = {
     UserId: string
     TeamId: string
@@ -2330,6 +2347,10 @@ type AuditEvent =
     /// A Platform Admin irreversibly deleted a team
     /// (`TeamApi.DeleteTeamHard`) — record + membership rows purged.
     | TeamDeleted of TeamDeletedPayload
+    /// Phase 304 — team ownership transferred (`TeamApi.TransferOwnership`).
+    /// Outgoing Owner demoted to `Admin`, incoming member promoted to
+    /// `Owner`. Recorded under the `team-{TeamId}` scope.
+    | TeamOwnershipTransferred of TeamOwnershipTransferredPayload
     /// Phase 3d — `ITeamInviteApi.IssueInvite` succeeded. Reserved
     /// `SourceModule = "_platform.team_invites"`. Recorded under
     /// `team-{TeamId}` scope.
@@ -2597,6 +2618,7 @@ module AuditEvent =
         | TeamArchived _ -> "TeamArchived"
         | TeamRestored _ -> "TeamRestored"
         | TeamDeleted _ -> "TeamDeleted"
+        | TeamOwnershipTransferred _ -> "TeamOwnershipTransferred"
         | TeamInviteIssued _ -> "TeamInviteIssued"
         | TeamInviteAccepted _ -> "TeamInviteAccepted"
         | TeamInviteAcceptedFromPending _ -> "TeamInviteAcceptedFromPending"

@@ -211,6 +211,25 @@ type TeamApi = {
     [<RequiresClaim "scope">]
     [<Audit "PolicyChanged">]
     ChangeMemberRole: string * string * TeamRole -> Async<Result<unit, string>>
+    /// Phase 304 — transfer team ownership `(teamId, newOwnerUserId)`.
+    /// The single affordance for handing a team over when the founding
+    /// Owner leaves. Since the 2026-06-04 Platform-Management refactor,
+    /// `TeamRole.Owner` is set once at creation and is not assignable via
+    /// `ChangeMemberRole` / `AddTeamMember` (the `assignableRoles` pickers
+    /// expose only `[Member; Admin]`), so ownership had no exit path.
+    ///
+    /// Gated server-side on the **caller's own** team role being `Owner`
+    /// (`TeamRoles.isOwner`) — Admins and Members are refused; the caller
+    /// is the outgoing Owner. The target must already be a member of the
+    /// team, and must not be the caller. The handler atomically-in-effect
+    /// swaps the roles (promote target → `Owner`, then demote caller →
+    /// `Admin`) so the team is never left with zero Owners; a
+    /// `TeamOwnershipTransferred` audit event records the handover.
+    /// `CreateTeamWithOwner` and the `assignableRoles` role pickers are
+    /// unchanged.
+    [<RequiresClaim "scope">]
+    [<Audit "Custom:TeamOwnershipTransferred">]
+    TransferOwnership: string * string -> Async<Result<unit, string>>
     /// List all members of a team. Ungated at the dispatcher — the
     /// handler's leak guard returns `[]` for non-members (same shape
     /// as "no such team", so team existence doesn't leak).
