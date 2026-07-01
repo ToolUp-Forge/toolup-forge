@@ -68,7 +68,7 @@ Two pipelines touch `IRetrievalPipeline`: **ingestion** (write path, background)
 
 | Layer | Mechanism | Cap |
 |---|---|---|
-| Enqueue | Unbounded `Channel<IngestionJob>` | None (bounded only by memory; audit events are the backpressure signal — growing `KnowledgeChunkFailed` indicates the embedding provider is being rate-limited) |
+| Enqueue | Bounded `Channel<DocumentIngestionJob>` (default 5,000, `withIngestionQueueCapacity`) | Capacity cap; a full queue is handled per `IngestionOverflowPolicy` (see [Backpressure + overflow surfaces](#backpressure--overflow-surfaces-phase-303)) — `DropWrite` drops with audit + notification + `/health/rag` counters, `Block` awaits space, `Refuse` fails loud |
 | Dequeue | `while` loop awaiting `ReadAsync` | One reader at a time (channel is `SingleReader = true`) |
 | Per-job embedding | `SemaphoreSlim` acquired inside `processJob` | `maxConcurrency`, default 4 — sized to respect embedding-provider rate limits |
 | Audit emission | `IEventStore.Write` inline | No additional cap — event store is expected to be cheap |
@@ -81,6 +81,28 @@ The dequeue-and-fire-without-awaiting pattern is deliberate: if `processJob` wai
 - **Audit write throws.** Uncaught inside `processJob` (the `try/with` only wraps the index call). The outer `Async.Start` default handler logs via `ILogger.Error` if the operation faults — but the dequeue loop continues.
 - **Dequeue loop throws unexpectedly.** The `while` loop's `try/with` catches `OperationCanceledException` (graceful shutdown) silently and everything else via `logger.Error` — the loop then iterates. The service does not self-terminate on transient errors.
 - **Process shutdown.** ASP.NET Core cancels the `stoppingToken`, the `ReadAsync` call throws `OperationCanceledException`, the `while` exits, and `Dispose` runs — releasing the `SemaphoreSlim`. Any in-flight `processJob` tasks not yet started are silently abandoned; started jobs either complete or fault based on the token they captured.
+
+### Backpressure + overflow surfaces (Phase 303)
+
+The ingestion queue is a **bounded** `Channel<DocumentIngestionJob>` (default capacity 5,000, `RAGServerApp.withIngestionQueueCapacity`), not unbounded — a bulk-upload spike is rejected at the door rather than buffering unboundedly and tripping the embedding provider's rate limiter. When the post-save hook offers a document to a full queue, the behaviour is set by `RAGServerApp.withIngestionQueueOverflowPolicy : IngestionOverflowPolicy`:
+
+| Policy | Full-queue behaviour |
+|---|---|
+| `DropWrite` (default) | Bounded retry (`[100; 250; 500; 1000]` ms — 5 tries over ~1.85 s on the fire-and-forget path), then **drop** with the observability triple below. Favours upload responsiveness. |
+| `Block` | Never drop — the hook awaits queue space via `IngestionQueue.EnqueueBlocking`. The upload HTTP response has already returned, so this delays *indexing* under sustained load but never loses a document. Suited to bulk backfills. |
+| `Refuse` | Drops like `DropWrite`, and **additionally raises `ConfigPreflightFailedException`** once ≥ `refuseSaturationThreshold` (5) documents have been dropped inside the queue's rolling 60 s window — compliance-grade fail-loud. |
+
+**The drop observability triple** (`DropWrite` / `Refuse`, when the bounded retry is exhausted) — emitted by `RAGCompose.emitIngestionDrop`:
+
+1. **`KnowledgeIngestionDropped` audit** under the deployment-wide `_platform.knowledge` scope (`KnowledgeSourceModule.value`), via `IAuditLog.Record`. Payload: `{ ScopeKey; DocId; ChunkCount; QueueCapacity; Reason }` — identifiers + cardinality only, no chunk content. Queryable per-document in isolation, distinct from per-tenant activity (mirrors the corrupt-index `KnowledgeIndexLoadFailed` trail).
+2. **Warning `SystemMessage`** published to the uploading user's scope via `INotificationChannel` (when the enqueue carried a `OriginatingUserId`), so the client can surface "this document could not be indexed — try again in a moment". No user attribution (e.g. the system hydration path) ⇒ no notification; the file-list badge still refreshes on the next `ListFiles`.
+3. **Queue `Dropped` counters** — `IngestionQueue.Dropped` (cumulative, process-lifetime) and `IngestionQueue.DroppedLast60s` (rolling 60 s), bumped by `RecordDrop`.
+
+Alongside the triple, the existing per-scope `DocumentVectorisationDropped` event (RAG event trail) and `FileIngestionStatus.Failed` badge are still written.
+
+**`/health/rag` exposure.** The `RagHealthHandler` merges the queue counters onto the telemetry snapshot under an `IngestionQueueDrops` object: `{ Cumulative; RollingLast60s; Depth; Capacity }`. The snapshot's existing top-level fields are unchanged (additive), so an operator dashboard sees a non-zero `RollingLast60s` the moment saturation starts dropping documents, without trawling the audit trail.
+
+**`Refuse` propagation nuance.** The post-save hook is fire-and-forget — `SessionFileStore.AddFile` runs it on `Async.Start` *after* the HTTP response is sent, wrapping any thrown exception in a `PostSaveHooksLogger.Error` (falling back to stderr). So `Refuse`'s `ConfigPreflightFailedException` surfaces as a **loud, named error in the operator log** alongside the audit trail — it does not crash the already-returned upload request. The screaming-error signal is the point; the process stays up.
 
 ## Pipeline lifecycle — retrieval path
 

@@ -15,6 +15,8 @@ let allTests =
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).
         IngestionEmbedderRetryTests.tests
+        // Phase 303 — ingestion-queue backpressure observability.
+        IngestionBackpressureTests.tests
         ColumnMatcherTests.tests
         // Phase 218 — CSV-mapping dry-run validation preview.
         MappingDryRunValidationTests.tests

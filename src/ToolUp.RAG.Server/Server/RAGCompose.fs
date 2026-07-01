@@ -144,6 +144,77 @@ let resolveFraming (mode: GroundingMode) (framing: string) : string =
 /// add latency to the upload response.
 let private enqueueRetryDelaysMs: int list = [ 100; 250; 500; 1000 ]
 
+/// Phase 303 — sustained-saturation threshold for
+/// `IngestionOverflowPolicy.Refuse`. Once this many documents have been
+/// dropped inside the queue's rolling 60s window, `Refuse` raises
+/// `ConfigPreflightFailedException` from the drop path. A handful of drops
+/// in a minute already means the queue stayed full through the ~1.85s
+/// bounded retry repeatedly — genuine sustained pressure, not a one-off
+/// spike.
+[<Literal>]
+let private refuseSaturationThreshold = 5
+
+/// Phase 303 — emit the drop-observability triple for one document the
+/// ingestion queue could not accept: record it on the queue's `Dropped`
+/// counters, write a `KnowledgeIngestionDropped` audit under
+/// `_platform.knowledge` (deployment-wide, like the corrupt-index trail),
+/// and publish a Warning `SystemMessage` to the uploading user (when the
+/// enqueue carried a user attribution) so the client can surface "this
+/// document could not be indexed — try again in a moment". Both the audit
+/// log and the notification channel are optional / best-effort — a
+/// channel-less / audit-less deployment still bumps the queue counter and
+/// leaves the caller's `Error` log line (GP 13). Mirrors the
+/// `InMemoryVectorStore` corrupt-index emission shape. `scopeKey` is the
+/// vector-store scope key (`platform` / `deployment` / `team:{id}`),
+/// matching `KnowledgeIndexLoadFailedPayload.ScopeKey`.
+let emitIngestionDrop
+    (auditLog: IAuditLog option)
+    (notifications: INotificationChannel option)
+    (queue: IngestionQueue)
+    (logger: ILogger)
+    (scopeKey: string)
+    (docId: string)
+    (chunkCount: int)
+    (reason: string)
+    (originatingUserId: string option)
+    : Async<unit> =
+    async {
+        queue.RecordDrop()
+
+        match auditLog with
+        | Some a ->
+            try
+                do!
+                    a.Record(
+                        KnowledgeSourceModule.value,
+                        KnowledgeIngestionDropped {
+                            ScopeKey = scopeKey
+                            DocId = docId
+                            ChunkCount = chunkCount
+                            QueueCapacity = queue.Capacity
+                            Reason = reason
+                        }
+                    )
+            with ex ->
+                logger.Warn(
+                    sprintf "[RAGCompose] KnowledgeIngestionDropped audit write failed for %s: %s" docId ex.Message
+                )
+        | None -> ()
+
+        match notifications, originatingUserId with
+        | Some ch, Some uid ->
+            try
+                let text =
+                    sprintf
+                        "\"%s\" could not be indexed for search right now — the ingestion queue is saturated. The file is saved; re-upload it in a moment to index it for retrieval."
+                        docId
+
+                do! ch.Publish(uid, Notification.SystemMessage(SystemMessageLevel.Warning, text))
+            with ex ->
+                logger.Warn(sprintf "[RAGCompose] ingestion-drop notification failed for %s: %s" docId ex.Message)
+        | _ -> ()
+    }
+
 let private makeVectorisationHook
     (handlers: VectorisationHandler list)
     (queue: IngestionQueue)
@@ -153,6 +224,9 @@ let private makeVectorisationHook
     (maxDocumentBytes: int option)
     (eventStoreRef: IEventStore option ref)
     (ingestionStatusStoreRef: IIngestionStatusStore option ref)
+    (overflowPolicy: IngestionOverflowPolicy)
+    (auditLogRef: IAuditLog option ref)
+    (notificationChannelRef: INotificationChannel option ref)
     (logger: ILogger)
     : ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit> =
 
@@ -380,46 +454,97 @@ let private makeVectorisationHook
                                 return! tryEnqueue rest
                     }
 
-                    let! accepted = tryEnqueue enqueueRetryDelaysMs
-                    telemetry.RecordEnqueue(queue.Count, queue.Capacity, accepted)
+                    let scopeKey =
+                        match vectorScope with
+                        | Platform -> "platform"
+                        | Deployment -> "deployment"
+                        | Team teamId -> $"team:{teamId}"
 
-                    if accepted then
-                        // Mark the file `Pending` with its chunk total so the
-                        // ingestion observer can flip it to `Indexed` once the
-                        // last chunk lands (Phase 173).
-                        do! setPending scope.Container entry.FileName (List.length chunkPairs)
+                    let chunkCount = List.length chunkPairs
 
-                    if not accepted then
-                        // Retries exhausted — permanent data loss for this
-                        // document's searchability. Log at Error so it trips
-                        // error-rate alerting, AND write an event so the drop
-                        // is queryable per-document in the RAG event trail
-                        // (symmetric with DocumentVectorisationSkipped /
-                        // DocumentRejected), not just in the telemetry snapshot.
-                        let attempts = List.length enqueueRetryDelaysMs + 1
+                    match overflowPolicy with
+                    | Block ->
+                        // Phase 303 — never drop. Await queue space instead of
+                        // retrying-then-dropping; the upload response has already
+                        // returned, so the wait delays indexing under sustained
+                        // load but never loses a document.
+                        do! queue.EnqueueBlocking job
+                        telemetry.RecordEnqueue(queue.Count, queue.Capacity, true)
+                        do! setPending scope.Container entry.FileName chunkCount
+                    | DropWrite
+                    | Refuse ->
+                        let! accepted = tryEnqueue enqueueRetryDelaysMs
+                        telemetry.RecordEnqueue(queue.Count, queue.Capacity, accepted)
 
-                        logger.Error(
-                            $"[RAGCompose] Ingestion queue full ({queue.Count}/{queue.Capacity}) after {attempts} attempts — DROPPED vectorisation for {entry.FileName}. The file is saved but is permanently unsearchable until re-uploaded. Raise IngestionQueueCapacity (RAGServerApp.withIngestionQueueCapacity) or IngestionConcurrency if drops recur.",
-                            None
-                        )
+                        if accepted then
+                            // Mark the file `Pending` with its chunk total so the
+                            // ingestion observer can flip it to `Indexed` once the
+                            // last chunk lands (Phase 173).
+                            do! setPending scope.Container entry.FileName chunkCount
+                        else
+                            // Retries exhausted — permanent data loss for this
+                            // document's searchability. Log at Error so it trips
+                            // error-rate alerting, AND write an event so the drop
+                            // is queryable per-document in the RAG event trail
+                            // (symmetric with DocumentVectorisationSkipped /
+                            // DocumentRejected), not just in the telemetry snapshot.
+                            let attempts = List.length enqueueRetryDelaysMs + 1
+                            let reason = "ingestion queue full after bounded retry"
 
-                        do!
-                            writeEvent scope.ScopeId "DocumentVectorisationDropped" {|
-                                DocumentId = entry.FileName
-                                FileName = entry.FileName
-                                Container = scope.Container
-                                ChunkCount = List.length chunkPairs
-                                QueueDepth = queue.Count
-                                QueueCapacity = queue.Capacity
-                                Attempts = attempts
-                                Reason = "ingestion queue full after bounded retry"
-                            |}
+                            logger.Error(
+                                $"[RAGCompose] Ingestion queue full ({queue.Count}/{queue.Capacity}) after {attempts} attempts — DROPPED vectorisation for {entry.FileName}. The file is saved but is permanently unsearchable until re-uploaded. Raise IngestionQueueCapacity (RAGServerApp.withIngestionQueueCapacity) or IngestionConcurrency if drops recur.",
+                                None
+                            )
 
-                        do!
-                            setStatus
-                                scope.Container
-                                entry.FileName
-                                (FileIngestionStatus.Failed "ingestion queue full after bounded retry")
+                            do!
+                                writeEvent scope.ScopeId "DocumentVectorisationDropped" {|
+                                    DocumentId = entry.FileName
+                                    FileName = entry.FileName
+                                    Container = scope.Container
+                                    ChunkCount = chunkCount
+                                    QueueDepth = queue.Count
+                                    QueueCapacity = queue.Capacity
+                                    Attempts = attempts
+                                    Reason = reason
+                                |}
+
+                            // Phase 303 — deployment-wide `KnowledgeIngestionDropped`
+                            // audit + Warning `SystemMessage` to the uploader +
+                            // queue `Dropped` counters (rolling 60s + cumulative,
+                            // surfaced on /health/rag).
+                            do!
+                                emitIngestionDrop
+                                    auditLogRef.Value
+                                    notificationChannelRef.Value
+                                    queue
+                                    logger
+                                    scopeKey
+                                    entry.FileName
+                                    chunkCount
+                                    reason
+                                    job.OriginatingUserId
+
+                            do! setStatus scope.Container entry.FileName (FileIngestionStatus.Failed reason)
+
+                            // Phase 303 — compliance-grade fail-loud. Under
+                            // `Refuse`, sustained saturation (≥ threshold drops in
+                            // the rolling 60s window) raises
+                            // `ConfigPreflightFailedException`. The post-save hook
+                            // is fire-and-forget and wraps hook exceptions in an
+                            // `Error` log (never crashing the already-sent upload
+                            // response), so this surfaces as a loud, named error in
+                            // the operator log alongside the audit trail rather
+                            // than a silent drop.
+                            if overflowPolicy = Refuse && queue.DroppedLast60s >= refuseSaturationThreshold then
+                                raise (
+                                    ConfigValidatorAggregator.ConfigPreflightFailedException(
+                                        sprintf
+                                            "RAG ingestion queue is sustainedly saturated: %d documents dropped in the last 60s (capacity %d). IngestionOverflowPolicy = Refuse treats this as fail-loud — raise IngestionQueueCapacity / IngestionConcurrency, add a distributed ingestion path, or switch to DropWrite / Block. Most recent drop: '%s'."
+                                            queue.DroppedLast60s
+                                            queue.Capacity
+                                            entry.FileName
+                                    )
+                                )
     }
 
 // ─── Null blob storage for when no storage is configured ─────────
@@ -629,6 +754,16 @@ type RAGServerApp = {
     /// InProcessJobScheduler` (or a distributed scheduler companion) — the
     /// `VacuumScheduleValidator` warns when the pair is misconfigured.
     VacuumSchedule: string option
+    /// Phase 303 — behaviour when the ingestion queue is full. `DropWrite`
+    /// (default) retries with a short bounded backoff then drops the
+    /// document, emitting a `KnowledgeIngestionDropped` audit + a Warning
+    /// `SystemMessage` to the uploader + the queue `Dropped` counters.
+    /// `Block` never drops — the post-save hook awaits queue space (delays
+    /// indexing under load, never loses a document). `Refuse` drops like
+    /// `DropWrite` but additionally raises `ConfigPreflightFailedException`
+    /// on sustained saturation for compliance-grade fail-loud. Tune via
+    /// `RAGServerApp.withIngestionQueueOverflowPolicy`.
+    OverflowPolicy: IngestionOverflowPolicy
 }
 
 // ─── composeRAG ───────────────────────────────────────────────────
@@ -675,7 +810,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let b = ai.Base
     let config = b.Config
 
-    let queue = IngestionQueue(app.IngestionQueueCapacity)
+    let queue = IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy)
 
     // Default to a 60-second rolling-window telemetry sink so `/health/rag`
     // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel
@@ -707,6 +842,16 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // the hook's status writes are no-ops if a file somehow ingests first.
     let ingestionStatusStoreRef: IIngestionStatusStore option ref = ref None
 
+    // Phase 303 — audit log + notification channel references for the
+    // ingestion-drop observability triple. Both are resolved from the
+    // probe in the service-config callback below (same instances the
+    // vector store's corrupt-index path uses), so — like `eventStoreRef` —
+    // they're captured here by deferred ref because the post-save hook is
+    // built before that callback runs. `None` until then ⇒ a drop before
+    // the callback degrades to the queue counter + `Error` log only.
+    let auditLogRef: IAuditLog option ref = ref None
+    let notificationChannelRef: INotificationChannel option ref = ref None
+
     // Register the post-save vectorisation hook so `SessionFileStore.AddFile`
     // enqueues chunks after every successful file upload.
     if not b.VectorisationHandlers.IsEmpty then
@@ -720,6 +865,9 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 app.MaxDocumentBytes
                 eventStoreRef
                 ingestionStatusStoreRef
+                app.OverflowPolicy
+                auditLogRef
+                notificationChannelRef
                 ragLogger
         ]
 
@@ -923,6 +1071,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             | :? INotificationChannel as ch -> Some ch
             | _ -> None
 
+        // Phase 303 — hand the resolved notification channel to the
+        // post-save hook so a queue-drop can warn the uploading user.
+        notificationChannelRef.Value <- ingestionNotificationChannel
+
         let dataManagerIngestionObserver =
             ToolUp.RAG.DataManagerIngestionObserver.create ingestionStatusStore ingestionNotificationChannel ragLogger
 
@@ -936,6 +1088,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             match probe.GetService(typeof<IAuditLog>) with
             | :? IAuditLog as a -> Some a
             | _ -> None
+
+        // Phase 303 — hand the resolved audit log to the post-save hook so
+        // a queue-drop writes a `KnowledgeIngestionDropped` row under
+        // `_platform.knowledge` (same instance the corrupt-index path uses).
+        auditLogRef.Value <- ragAuditLog
 
         let vectorStore: IVectorStore =
             app.VectorStore
@@ -1317,6 +1474,7 @@ module RAGServerApp =
             MaxQueryChars = Some 16384
             TombstoneRetention = System.TimeSpan.FromDays 7.0
             VacuumSchedule = None
+            OverflowPolicy = DropWrite
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -1357,6 +1515,7 @@ module RAGServerApp =
             MaxQueryChars = Some 16384
             TombstoneRetention = System.TimeSpan.FromDays 7.0
             VacuumSchedule = None
+            OverflowPolicy = DropWrite
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -1622,6 +1781,23 @@ module RAGServerApp =
     let withIngestionQueueCapacity (capacity: int) (app: RAGServerApp) : RAGServerApp = {
         app with
             IngestionQueueCapacity = max 1 capacity
+    }
+
+    /// Phase 303 — choose what happens when the ingestion queue is full.
+    /// `DropWrite` (default) retries with a short bounded backoff then drops
+    /// the document, emitting a `KnowledgeIngestionDropped` audit under
+    /// `_platform.knowledge`, a Warning `SystemMessage` to the uploader, and
+    /// the queue `Dropped` counters surfaced on `/health/rag`. `Block` never
+    /// drops — the post-save hook awaits queue space (the upload response has
+    /// already returned, so this delays indexing under sustained load but
+    /// never loses a document; suited to bulk backfills). `Refuse` drops like
+    /// `DropWrite` but additionally raises `ConfigPreflightFailedException`
+    /// once sustained saturation is observed in the rolling 60s window — a
+    /// loud, operator-visible signal for compliance-grade deploys that prefer
+    /// a screaming error over a quiet drop.
+    let withIngestionQueueOverflowPolicy (policy: IngestionOverflowPolicy) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            OverflowPolicy = policy
     }
 
     /// Phase 14t — set the retry / dead-letter policy for transient

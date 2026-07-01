@@ -999,6 +999,36 @@ type KnowledgeIndexLoadFailedPayload = {
     BlobLocation: string
 }
 
+/// Phase 303 — a `DocumentIngestionJob` was dropped because the
+/// in-process ingestion queue was at capacity and the bounded enqueue
+/// retry was exhausted. The source file persists to KB / Data-Manager
+/// blob storage and appears in the document list, but its chunks never
+/// reach retrieval — so without this row the loss is silent (the user
+/// thinks the upload "worked"; retrieval returns nothing relevant).
+/// Recorded under `KnowledgeSourceModule.value` scope (deployment-wide,
+/// like the corrupt-index trail) so an operator can query queue-drop
+/// pressure in isolation. Identifiers + cardinality only; no chunk
+/// content travels through the audit trail.
+type KnowledgeIngestionDroppedPayload = {
+    /// Vector-store scope key the dropped document was bound for —
+    /// `platform` / `deployment` / `team:{teamId}`.
+    ScopeKey: string
+    /// Document id (the file name) that was dropped. Recorded verbatim
+    /// so the operator can correlate against the KB / Data-Manager
+    /// document list and re-upload.
+    DocId: string
+    /// Number of chunks (including any summary chunk) that would have
+    /// been indexed. Cardinality only — the chunk bodies never travel
+    /// through the audit trail.
+    ChunkCount: int
+    /// Configured `IngestionQueue.Capacity` at drop time, so the
+    /// operator can size the gap between offered load and capacity.
+    QueueCapacity: int
+    /// Why the document was dropped (e.g. "ingestion queue full after
+    /// bounded retry").
+    Reason: string
+}
+
 // ─── Share-token audit payloads ───────────────────────────────────────
 
 /// `IShareTokenStore.Issue` succeeded. `UserId` is the issuer (the
@@ -2550,6 +2580,12 @@ type AuditEvent =
     /// a pod kill). Recorded under `KnowledgeSourceModule.value` scope;
     /// makes the formerly `Warn`-only silent-empty load loud (GP 6 + GP 9).
     | KnowledgeIndexLoadFailed of KnowledgeIndexLoadFailedPayload
+    /// Phase 303 — a document was dropped from ingestion because the
+    /// in-process queue was full and the bounded enqueue retry was
+    /// exhausted. Recorded under `KnowledgeSourceModule.value`; makes the
+    /// formerly telemetry-only queue-overflow loss queryable per-document
+    /// (GP 6 + GP 9).
+    | KnowledgeIngestionDropped of KnowledgeIngestionDroppedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2663,6 +2699,7 @@ module AuditEvent =
         | AuthorizationDenied _ -> "AuthorizationDenied"
         | EgressBlocked _ -> "EgressBlocked"
         | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
+        | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

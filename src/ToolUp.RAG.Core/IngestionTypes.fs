@@ -1,6 +1,7 @@
 module ToolUp.RAG.IngestionTypes
 
 open System
+open System.Collections.Concurrent
 open System.Threading.Channels
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -57,6 +58,32 @@ type DocumentIngestionJob = {
 
 // ─── Ingestion queue ──────────────────────────────────────────────
 
+/// Phase 303 — behaviour when a `DocumentIngestionJob` is offered to a
+/// full ingestion queue. Expressed as data (portability rule 3 — no
+/// callbacks) so a future distributed ingestion companion can map the
+/// same choice onto its native backpressure mechanism.
+type IngestionOverflowPolicy =
+    /// Default, back-compat behaviour. `Enqueue` returns `false` when the
+    /// queue is full; the post-save hook retries with a short bounded
+    /// backoff and, if still full, drops the document — emitting a
+    /// `KnowledgeIngestionDropped` audit, a Warning `SystemMessage` to the
+    /// uploader, and the queue `Dropped` counters. Favours upload
+    /// responsiveness over never-drop.
+    | DropWrite
+    /// Never drop: the post-save hook awaits queue space
+    /// (`EnqueueBlocking`) instead of retrying-then-dropping. The upload
+    /// HTTP response has already returned (the hook is fire-and-forget), so
+    /// blocking delays *indexing* under sustained load but never loses a
+    /// document. Suited to bulk backfills where completeness beats latency.
+    | Block
+    /// Compliance-grade fail-loud. Behaves like `DropWrite` (drop + audit +
+    /// notify) but additionally raises `ConfigPreflightFailedException` once
+    /// sustained saturation is observed in the rolling 60s window — a loud,
+    /// operator-visible signal (logged by the post-save-hook error path)
+    /// that the deployment is losing documents, for deployments that prefer
+    /// a screaming error over a quiet drop.
+    | Refuse
+
 /// Thread-safe queue used to hand off whole documents from upload handlers
 /// to the background ingestion service. Backed by a `System.Threading.Channels`
 /// bounded channel so a 10k-document spike is rejected at the door rather
@@ -74,8 +101,27 @@ type DocumentIngestionJob = {
 /// rather than enqueue silently. A live-depth counter (`Count`) drives
 /// telemetry under `/health/rag` so admins can see when backpressure
 /// is active before users notice.
-type IngestionQueue(?capacity: int) =
+type IngestionQueue(?capacity: int, ?overflowPolicy: IngestionOverflowPolicy) =
     let cap = defaultArg capacity 5000
+    let policy = defaultArg overflowPolicy DropWrite
+
+    // Phase 303 — drop observability. `RecordDrop` is called by the
+    // enqueue-site (the post-save hook) each time a document is permanently
+    // dropped after the bounded retry, so the counters reflect *final*
+    // drops, not transient full-then-cleared enqueues. `droppedCumulative`
+    // is the process-lifetime total; `dropWindow` is the rolling 60s window
+    // surfaced on `/health/rag` so an operator sees active saturation
+    // without trawling the audit trail.
+    let mutable droppedCumulative = 0L
+    let dropWindow = ConcurrentQueue<DateTimeOffset>()
+    let dropWindowSpan = TimeSpan.FromSeconds 60.0
+
+    let evictDropWindow () =
+        let cutoff = DateTimeOffset.UtcNow - dropWindowSpan
+        let mutable head = DateTimeOffset.MinValue
+
+        while dropWindow.TryPeek(&head) && head < cutoff do
+            dropWindow.TryDequeue(&head) |> ignore
 
     // `Wait` (not `DropWrite`): under `DropWrite`, `TryWrite` ALWAYS
     // returns `true` while silently discarding the incoming job when
@@ -116,6 +162,38 @@ type IngestionQueue(?capacity: int) =
             false
 
     member _.Reader = channel.Reader
+
+    /// Configured overflow policy (Phase 303). Read by the post-save hook
+    /// to decide between drop-with-observability (`DropWrite` / `Refuse`)
+    /// and never-drop blocking (`Block`).
+    member _.Policy = policy
+
+    /// Await queue space and enqueue (Phase 303 — `Block` policy). Uses the
+    /// channel's blocking `WriteAsync`, so a full queue suspends the caller
+    /// until the drainer frees a slot rather than returning `false`. Only
+    /// called on the fire-and-forget post-save path, so the wait never
+    /// delays an upload's HTTP response.
+    member _.EnqueueBlocking(job: DocumentIngestionJob) : Async<unit> = async {
+        do! channel.Writer.WriteAsync(job).AsTask() |> Async.AwaitTask
+        System.Threading.Interlocked.Increment(&depth) |> ignore
+    }
+
+    /// Record one permanently-dropped document (Phase 303). Increments the
+    /// cumulative total and stamps the rolling 60s window.
+    member _.RecordDrop() =
+        System.Threading.Interlocked.Increment(&droppedCumulative) |> ignore
+        dropWindow.Enqueue(DateTimeOffset.UtcNow)
+
+    /// Process-lifetime count of documents dropped on a full queue
+    /// (Phase 303).
+    member _.Dropped = System.Threading.Interlocked.Read(&droppedCumulative)
+
+    /// Documents dropped within the trailing 60 seconds (Phase 303).
+    /// Evicts stale window entries on read, so it is a live saturation
+    /// gauge for `/health/rag`.
+    member _.DroppedLast60s =
+        evictDropWindow ()
+        dropWindow.Count
 
     /// Called by `IngestionBackgroundService` after a successful `ReadAsync`
     /// to keep the depth counter consistent with the underlying channel.
