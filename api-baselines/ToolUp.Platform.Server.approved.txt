@@ -1302,12 +1302,13 @@ ToolUp.Platform.IRagTelemetry+IRagTelemetry (interface)
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordEmbedding(System.Int32, System.Int64) : System.Void
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordEnqueue(System.Int32, System.Int32, System.Boolean) : System.Void
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordFlush(System.Int32, System.Int64) : System.Void
+ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordIndexLoadError(System.String) : System.Void
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordObserverFailure(System.String) : System.Void
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordRetrieval(System.Double, System.Int32, System.Double) : System.Void
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.RecordRetrievalStages(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]]) : System.Void
 ToolUp.Platform.IRagTelemetry+IRagTelemetry.Snapshot() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot]
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot (class)
-ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot..ctor(System.Int32, System.Int32, System.Double, System.Int64, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Double, System.Int32, System.Int32, System.Int32, System.Int32, System.Double, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]], System.Int32)
+ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot..ctor(System.Int32, System.Int32, System.Double, System.Int64, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Double, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Double, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Double]], System.Int32)
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.EmbeddingAvgLatencyMs : System.Double { get }
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.EmbeddingCallCount : System.Int32 { get }
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.EmbeddingP95LatencyMs : System.Int64 { get }
@@ -1315,6 +1316,7 @@ ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.EmbeddingTextCount : System.I
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.FlushAvgLatencyMs : System.Double { get }
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.FlushCount : System.Int32 { get }
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.FlushDirtyChunks : System.Int32 { get }
+ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.IndexLoadErrors : System.Int32 { get }
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.ObserverFailureCount : System.Int32 { get }
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.QueueCapacity : System.Int32 { get }
 ToolUp.Platform.IRagTelemetry+RagTelemetrySnapshot.QueueDepth : System.Int32 { get }
