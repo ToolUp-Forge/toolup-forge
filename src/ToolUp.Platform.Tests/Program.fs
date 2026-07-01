@@ -13,6 +13,8 @@ let allTests =
         DataObjectStoreTests.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
+        // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).
+        IngestionEmbedderRetryTests.tests
         ColumnMatcherTests.tests
         // Phase 218 — CSV-mapping dry-run validation preview.
         MappingDryRunValidationTests.tests
@@ -327,6 +329,10 @@ let allTests =
         // note in HomeOverviewTests.fs for why it can't run in-process.
         HomeOverviewTests.countAffordanceTests
         HomeOverviewTests.overviewScopeAiTests
+        // Probe-present converse: a registered IActiveAiProbe surfaces the
+        // wired platform provider on the Home overview (pins the v0.9.4
+        // RAG-path "No AI provider configured" fork-drift regression).
+        HomeOverviewTests.overviewActiveAiPresentTests
         // Phase 217 — IHomeWidgetDataProvider merge + scope-correctness.
         HomeOverviewTests.widgetDataTests
         // Phase 217 — recents/pinning per-user round-trip + scope isolation.

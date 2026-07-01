@@ -527,6 +527,17 @@ type RAGServerApp = {
     /// raise for deployments with bursty bulk uploads, lower for tight
     /// memory budgets.
     IngestionQueueCapacity: int
+    /// Phase 14t — retry / dead-letter policy for transient embedder
+    /// failures during ingestion (429 rate limits, 5xx, timeouts,
+    /// network faults). A transient per-chunk `Index` failure is retried
+    /// with exponential backoff + jitter (via `IJobScheduler` when one is
+    /// composed, so the pending retry survives process restart; an
+    /// in-process loop otherwise) and dead-lettered after `MaxAttempts`;
+    /// a permanent failure (401/403 bad credentials, other 4xx) is
+    /// dead-lettered immediately with an Owner/Admin alert. Defaults to
+    /// `IngestionRetryPolicy.defaults` (5 attempts, 30s→30min backoff,
+    /// +20% jitter). Tune via `RAGServerApp.withIngestionRetryPolicy`.
+    IngestionRetryPolicy: IngestionRetryPolicy
     /// Optional substitute `IRagTelemetry`. When `None`, RAG installs a
     /// 60-second rolling-window in-memory implementation backing the
     /// `/health/rag` endpoint. Pass `Some` to wire up Prometheus / OTel /
@@ -972,18 +983,31 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // itself by the documents it tracks.
         let ingestionObservers = app.IngestionObservers @ [ dataManagerIngestionObserver ]
 
-        let ingestionSvc =
-            create
-                queue
-                pipeline
-                cachedEmbedder
-                eventStore
-                ingestionObservers
-                app.IngestionConcurrency
-                ragLogger
-                telemetry
-                ingestionUsageLog
-                ingestionQuota
+        // Phase 14t — retry / dead-letter substrate. One shared
+        // `IngestionAlertState` spans the first-attempt path (the
+        // background service) and the scheduled retry handler, so
+        // provider-unavailable dedup + the dead-letter-rate threshold
+        // count both. `ingestionNotificationChannel` (resolved above)
+        // carries the Owner/Admin alerts; `None` ⇒ audit-only.
+        let ingestionAlertState = IngestionAlertState()
+
+        let retryHandlerDeps: IngestionRetryDeps = {
+            Pipeline = pipeline
+            EventStore = eventStore
+            Observers = ingestionObservers
+            NotificationChannel = ingestionNotificationChannel
+            Telemetry = telemetry
+            Logger = ragLogger
+            Policy = app.IngestionRetryPolicy
+            AlertState = ingestionAlertState
+        }
+
+        // The background service registers this handler on the resolved
+        // scheduler at startup (the handler is compiled after
+        // IngestionService, so the registration is injected here rather
+        // than referenced from inside the service).
+        let registerRetryHandler (scheduler: IJobScheduler) =
+            scheduler.RegisterHandler(RetryHandlerName, ToolUp.RAG.IngestionRetryJobHandler.create retryHandlerDeps)
 
         // Background re-embedding: when a deployment swaps the embedding model,
         // chunks indexed under the old `EmbeddingVersion` are detected and
@@ -1027,7 +1051,32 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 .AddSingleton<IRetrievalPipeline>(pipeline)
                 .AddSingleton<IngestionQueue>(queue)
                 .AddSingleton<ToolUp.RAG.ReembeddingService.ReembeddingQueue>(reembedQueue)
-                .AddSingleton<IHostedService>(ingestionSvc)
+                // Phase 14t — factory registration so the ingestion service
+                // captures the REAL host provider and can lazily resolve the
+                // (downstream-built) `IJobScheduler` for durable retries.
+                .AddSingleton<IHostedService>(fun (sp: System.IServiceProvider) ->
+                    let getJobScheduler () =
+                        match sp.GetService(typeof<IJobScheduler>) with
+                        | :? IJobScheduler as js -> Some js
+                        | _ -> None
+
+                    create
+                        queue
+                        pipeline
+                        cachedEmbedder
+                        eventStore
+                        ingestionObservers
+                        app.IngestionConcurrency
+                        ragLogger
+                        telemetry
+                        ingestionUsageLog
+                        ingestionQuota
+                        app.IngestionRetryPolicy
+                        ingestionNotificationChannel
+                        ingestionAlertState
+                        getJobScheduler
+                        registerRetryHandler
+                    :> IHostedService)
                 .AddSingleton<IHostedService>(reembedSvc)
                 .AddSingleton<IOcrProvider>(ocrProvider)
                 .AddSingleton<ITableExtractor>(tableExtractor)
@@ -1136,6 +1185,7 @@ module RAGServerApp =
             RetrievalFraming = defaultRetrievalFraming
             IngestionConcurrency = 8
             IngestionQueueCapacity = 5000
+            IngestionRetryPolicy = IngestionRetryPolicy.defaults
             Telemetry = None
             RetrievalDefaults = RetrievalDefaults.defaults
             IndexConversations = false
@@ -1172,6 +1222,7 @@ module RAGServerApp =
             RetrievalFraming = defaultRetrievalFraming
             IngestionConcurrency = 8
             IngestionQueueCapacity = 5000
+            IngestionRetryPolicy = IngestionRetryPolicy.defaults
             Telemetry = None
             RetrievalDefaults = RetrievalDefaults.defaults
             IndexConversations = false
@@ -1446,6 +1497,21 @@ module RAGServerApp =
     let withIngestionQueueCapacity (capacity: int) (app: RAGServerApp) : RAGServerApp = {
         app with
             IngestionQueueCapacity = max 1 capacity
+    }
+
+    /// Phase 14t — set the retry / dead-letter policy for transient
+    /// embedder failures during ingestion. Transient per-chunk failures
+    /// (429 / 5xx / timeout / network) retry with exponential backoff +
+    /// jitter and dead-letter after `MaxAttempts`; permanent failures
+    /// (401/403 / other 4xx) dead-letter immediately with an Owner/Admin
+    /// alert. Default `IngestionRetryPolicy.defaults` (5 attempts,
+    /// 30s→30min backoff, +20% jitter). `MaxAttempts` is clamped to ≥ 1.
+    let withIngestionRetryPolicy (policy: IngestionRetryPolicy) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            IngestionRetryPolicy = {
+                policy with
+                    MaxAttempts = max 1 policy.MaxAttempts
+            }
     }
 
     /// Substitute the rolling-window in-memory telemetry default with a

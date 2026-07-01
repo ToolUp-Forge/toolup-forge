@@ -162,6 +162,9 @@
         <!-- Phase 220 — ingestion retry-eligibility + status-filter predicates
              + store re-cycle. -->
         <Compile Include="InProcess\IngestionRetryTests.fs" />
+        <!-- Phase 14t — embedder retry + dead-letter classification / backoff /
+             alert-throttling unit coverage. -->
+        <Compile Include="InProcess\IngestionEmbedderRetryTests.fs" />
         <Compile Include="InProcess\ColumnMatcherTests.fs" />
         <Compile Include="InProcess\MappingDryRunValidationTests.fs" />
         <Compile Include="InProcess\DerivedColumnEvalTests.fs" />

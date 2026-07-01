@@ -36,6 +36,9 @@
         <Compile Include="Server\RagTelemetry.fs" />
         <Compile Include="Server\RetrievalPipeline.fs" />
         <Compile Include="Server\IngestionService.fs" />
+        <!-- Phase 14t — scheduled per-chunk ingestion-retry job handler.
+             After IngestionService (reuses its Outcome helpers). -->
+        <Compile Include="Server\IngestionRetryJobHandler.fs" />
         <Compile Include="Server\ReembeddingService.fs" />
         <Compile Include="Server\RAGPromptBuilder.fs" />
         <Compile Include="Server\CitationNormaliser.fs" />

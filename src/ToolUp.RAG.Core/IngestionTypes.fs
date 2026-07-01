@@ -1,5 +1,6 @@
 module ToolUp.RAG.IngestionTypes
 
+open System
 open System.Threading.Channels
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -139,3 +140,123 @@ type IIngestionStatusObserver =
     abstract OnChunkIndexed: IngestionJob -> Async<unit>
     /// Fired when a chunk's pipeline call threw. `error` is the exception message.
     abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
+
+// ─── Retry / dead-letter policy (Phase 14t) ───────────────────────
+
+/// Retry / dead-letter policy applied to transient embedder failures
+/// during ingestion. Expressed as data (portability rule 3 — no
+/// callbacks, no supervision objects) so it reads identically to
+/// `WebhookRetryPolicy` / `JobRetryPolicy`; a future distributed
+/// ingestion companion can map the same record onto its native retry
+/// mechanism. One field is added over the webhook/job shape:
+/// `JitterFactor`, which spreads the backoff so a provider-wide
+/// rate-limit window doesn't cause every retrying chunk to re-hit the
+/// provider in lockstep (thundering herd).
+///
+/// Backoff is exponential — `min(InitialBackoff * 2^(attempt-1), MaxBackoff)`
+/// — with up to `+JitterFactor` proportional jitter layered on top.
+/// `MaxAttempts` is inclusive: `5` means up to 5 index attempts (the
+/// initial inline attempt plus 4 scheduled retries) before the chunk
+/// is dead-lettered.
+type IngestionRetryPolicy = {
+    MaxAttempts: int
+    InitialBackoff: TimeSpan
+    MaxBackoff: TimeSpan
+    /// Proportional jitter ∈ [0, 1]. `0.2` spreads each backoff by up
+    /// to +20%. `0.0` disables jitter (deterministic backoff).
+    JitterFactor: float
+}
+
+module IngestionRetryPolicy =
+    /// SDK defaults: 5 attempts, 30s initial backoff, 30min cap, +20%
+    /// jitter. Tuned for OpenAI-style embedding rate limits, which
+    /// generally clear well inside the 30-minute window — matching the
+    /// `WebhookRetryPolicy` defaults so the two backoff shapes feel
+    /// identical to operators.
+    let defaults = {
+        MaxAttempts = 5
+        InitialBackoff = TimeSpan.FromSeconds 30.0
+        MaxBackoff = TimeSpan.FromMinutes 30.0
+        JitterFactor = 0.2
+    }
+
+    /// Base exponential backoff for `attempt` (1-indexed), before
+    /// jitter. Attempt 1 is the initial index and runs immediately
+    /// (`TimeSpan.Zero`); attempt 2+ uses `min(InitialBackoff *
+    /// 2^(attempt-1), MaxBackoff)`. Mirrors `WebhookRetryPolicy.delayFor`
+    /// / `JobRetryPolicy.delayFor` so all three feel the same.
+    let baseDelayFor (policy: IngestionRetryPolicy) (attempt: int) : TimeSpan =
+        if attempt <= 1 then
+            TimeSpan.Zero
+        else
+            let exponent = float (attempt - 1)
+            let raw = policy.InitialBackoff.TotalMilliseconds * (2.0 ** exponent)
+            let capped = min raw policy.MaxBackoff.TotalMilliseconds
+            TimeSpan.FromMilliseconds capped
+
+    /// The jitter component (never negative) to add on top of a base
+    /// backoff already applied elsewhere (the scheduler applies the
+    /// exponential base; the retry handler adds this). `sample` is a
+    /// caller-supplied uniform draw ∈ [0, 1) — kept a parameter rather
+    /// than calling `Random` internally so the function stays pure /
+    /// Fable-safe / testable. Returns `base * JitterFactor * sample`,
+    /// i.e. 0..(JitterFactor·base) of additive spread.
+    let jitterComponentFor (policy: IngestionRetryPolicy) (attempt: int) (sample: float) : TimeSpan =
+        let baseMs = (baseDelayFor policy attempt).TotalMilliseconds
+
+        if baseMs <= 0.0 || policy.JitterFactor <= 0.0 then
+            TimeSpan.Zero
+        else
+            let clampedSample = max 0.0 (min 1.0 sample)
+            TimeSpan.FromMilliseconds(baseMs * policy.JitterFactor * clampedSample)
+
+/// Classification of a per-chunk index failure, deciding whether the
+/// chunk is retried or dead-lettered immediately (Phase 14t). Derived
+/// from the embedder exception by `IngestionService.classifyIndexFailure`.
+type EmbedFailureClass =
+    /// Non-retryable — bad credentials (401 / 403) or a malformed
+    /// request (other 4xx). Retrying cannot succeed, so the chunk is
+    /// dead-lettered immediately and the Owner/Admin are alerted that
+    /// the embedding provider is unusable.
+    | Permanent of reason: string
+    /// Retryable — rate limit (429), a 5xx, a timeout, or a network
+    /// error. Retried with exponential backoff + jitter. `retryAfter`
+    /// carries a provider `Retry-After` hint when one is recoverable
+    /// (`None` ⇒ use the policy's computed backoff).
+    | Transient of retryAfter: TimeSpan option
+
+/// Event-type names for the ingestion retry / dead-letter audit family
+/// (Phase 14t). Emitted under `SourceModule = "ToolUp.RAG"` alongside
+/// the existing `KnowledgeChunkIndexed` / `KnowledgeChunkFailed` events.
+module IngestionEventTypes =
+    /// The embedding provider rejected the call in a non-retryable way
+    /// (bad credentials / malformed request). Payload: `{ ScopeId;
+    /// Reason }`. Paired with an Owner/Admin `SystemMessage(Error)`.
+    [<Literal>]
+    let EmbeddingProviderUnavailable = "KnowledgeEmbeddingProviderUnavailable"
+
+    /// A chunk exhausted its retry budget (or failed permanently) and
+    /// was dropped from indexing. Payload: `{ DocId; ChunkIndex;
+    /// Reason; AttemptCount }`.
+    [<Literal>]
+    let IngestionDeadLettered = "KnowledgeIngestionDeadLettered"
+
+/// Serialisable payload for a scheduled ingestion-retry job (Phase
+/// 14t). Carries everything the `IngestionRetryJobHandler` needs to
+/// re-attempt `IRetrievalPipeline.Index` for one chunk on any node,
+/// with no in-memory state (portability rule 4). Persisted as the
+/// `JobDefinition.Payload` JSON string, so its shape stays
+/// `FableConverters`-serialisable (DUs / records / `Map` / option).
+type IngestionRetryPayload = {
+    DocumentId: string
+    DocumentName: string
+    ChunkId: string
+    /// Zero-based position of the chunk within its document. Surfaced
+    /// in the `KnowledgeIngestionDeadLettered` payload.
+    ChunkIndex: int
+    Chunk: TextChunk
+    Scope: VectorScope
+    ScopeId: string
+    Container: string
+    OriginatingUserId: string option
+}

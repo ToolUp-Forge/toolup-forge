@@ -1,7 +1,10 @@
 module ToolUp.RAG.IngestionService
 
 open System
+open System.Collections.Concurrent
+open System.Net.Http
 open System.Threading
+open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
@@ -12,6 +15,315 @@ open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.Platform.IRagTelemetry
 open ToolUp.Platform.Usage
 open ToolUp.RAG.IngestionTypes
+
+// ─── Retry / dead-letter substrate (Phase 14t) ────────────────────
+
+/// Logical handler name the scheduled per-chunk retry job registers
+/// under. Referenced by the composition wiring + the background
+/// service (which registers the handler) + `IngestionRetryJobHandler`.
+[<Literal>]
+let RetryHandlerName = "_platform.rag.ingestion-retry"
+
+/// Rolling window over which a burst of dead-letters is counted for
+/// the "your embedding provider is degraded" Owner/Admin alert.
+let private DeadLetterRateWindow = TimeSpan.FromMinutes 5.0
+
+/// Number of dead-letters within `DeadLetterRateWindow` that trips the
+/// aggregate Owner/Admin `SystemMessage(Error)`.
+[<Literal>]
+let private DeadLetterRateThreshold = 10
+
+/// Minimum spacing between repeat provider-unavailable alerts for one
+/// scope — dedups a provider outage that fails N chunks down to a
+/// single notification.
+let private ProviderAlertDedupWindow = TimeSpan.FromMinutes 5.0
+
+/// Classify a per-chunk index failure so the caller can decide between
+/// immediate dead-letter (permanent) and backed-off retry (transient).
+/// The OpenAI embedder surfaces HTTP failures as `HttpRequestException`
+/// (via `EnsureSuccessStatusCode`), whose `StatusCode` is populated on
+/// .NET 5+ — 401/403 (bad credentials) and other 4xx (malformed
+/// request) are permanent; 429 (rate limit) and 5xx are transient.
+/// Timeouts / cancellations / network faults are transient. Anything
+/// unrecognised defaults to `Transient` — the whole point of Phase 14t
+/// is to stop silently DROPPING chunks, so the safe default is "retry,
+/// then dead-letter loudly" rather than "drop".
+let classifyIndexFailure (ex: exn) : EmbedFailureClass =
+    let inner =
+        match ex with
+        | :? AggregateException as agg when not (isNull agg.InnerException) -> agg.InnerException
+        | _ -> ex
+
+    match inner with
+    | :? HttpRequestException as httpEx ->
+        match Option.ofNullable httpEx.StatusCode with
+        | Some code ->
+            let status = int code
+
+            if status = 401 || status = 403 then
+                Permanent(sprintf "embedding provider rejected credentials (HTTP %d)" status)
+            elif status = 429 then
+                // Rate limit — retryable. The provider's `Retry-After`
+                // header is not recoverable here (`EnsureSuccessStatusCode`
+                // discards the response before the ingestion path sees
+                // it), so the policy's exponential backoff governs.
+                Transient None
+            elif status >= 500 then
+                Transient None
+            else
+                Permanent(sprintf "embedding provider returned a non-retryable HTTP %d" status)
+        | None ->
+            // No status ⇒ transport / DNS / connection failure — transient.
+            Transient None
+    | :? TaskCanceledException
+    | :? TimeoutException
+    | :? OperationCanceledException -> Transient None
+    | _ -> Transient None
+
+/// Per-scope alert throttling state shared by the background service
+/// (first-attempt failures) and `IngestionRetryJobHandler` (retry
+/// exhaustion) so provider-unavailable dedup + the dead-letter-rate
+/// threshold count both paths coherently. Thread-safe.
+type IngestionAlertState() =
+    let providerAlerts = ConcurrentDictionary<string, DateTime>()
+    let rateAlerts = ConcurrentDictionary<string, DateTime>()
+    let deadLetters = ConcurrentDictionary<string, ResizeArray<DateTime>>()
+
+    /// True at most once per `window` for a scope — gates the
+    /// provider-unavailable notification so an outage failing N chunks
+    /// yields ONE Owner/Admin message, not N.
+    member _.ShouldAlertProvider(scopeId: string, now: DateTime, window: TimeSpan) : bool =
+        let mutable send = false
+
+        providerAlerts.AddOrUpdate(
+            scopeId,
+            (fun _ ->
+                send <- true
+                now),
+            (fun _ last ->
+                if now - last >= window then
+                    send <- true
+                    now
+                else
+                    last)
+        )
+        |> ignore
+
+        send
+
+    /// Record a dead-letter for `scopeId`; return true when the count
+    /// within `window` has reached `threshold` AND the rate alert
+    /// hasn't already fired inside the same window (once-per-window).
+    member _.RecordDeadLetterAndShouldAlert(scopeId: string, now: DateTime, window: TimeSpan, threshold: int) : bool =
+        let times = deadLetters.GetOrAdd(scopeId, (fun _ -> ResizeArray<DateTime>()))
+
+        let crossed =
+            lock times (fun () ->
+                times.Add now
+                times.RemoveAll(fun t -> now - t > window) |> ignore
+                times.Count >= threshold)
+
+        if not crossed then
+            false
+        else
+            let mutable send = false
+
+            rateAlerts.AddOrUpdate(
+                scopeId,
+                (fun _ ->
+                    send <- true
+                    now),
+                (fun _ last ->
+                    if now - last >= window then
+                        send <- true
+                        now
+                    else
+                        last)
+            )
+            |> ignore
+
+            send
+
+/// Everything the failure / dead-letter / retry-success paths need,
+/// bundled so the background service and `IngestionRetryJobHandler`
+/// (which re-attempts one chunk on a scheduled dispatch) run the exact
+/// same outcome logic. `AlertState` is shared between the two so alert
+/// dedup + the dead-letter-rate threshold count both paths.
+type IngestionRetryDeps = {
+    Pipeline: IRetrievalPipeline
+    EventStore: IEventStore
+    Observers: IIngestionStatusObserver list
+    NotificationChannel: INotificationChannel option
+    Telemetry: IRagTelemetry
+    Logger: ILogger
+    Policy: IngestionRetryPolicy
+    AlertState: IngestionAlertState
+}
+
+/// Shared audit / notification / observer emission helpers, reused by
+/// the background service and the retry job handler so the two paths
+/// can never drift in how they record a chunk outcome.
+module Outcome =
+    let private jsonOptions = FableConverters.create ()
+
+    let toJson (o: 'T) =
+        JsonSerializer.Serialize(o, jsonOptions)
+
+    /// Best-effort audit write (swallow + log). An event-store outage
+    /// degrades to a lost audit event, never an escaping exception that
+    /// aborts ingestion.
+    let emitAudit (eventStore: IEventStore) (logger: ILogger) (scopeId: string) (eventType: string) (payload: 'T) = async {
+        try
+            let evt = Events.create scopeId "ToolUp.RAG" eventType (toJson payload)
+            do! eventStore.Write evt
+        with ex ->
+            logger.Error(
+                $"[Ingestion] event=audit_emit_failed kind={eventType} scope={scopeId}: event-store write failed; the audit event is lost",
+                Some ex
+            )
+    }
+
+    let emitChunkIndexed (eventStore: IEventStore) (logger: ILogger) (job: IngestionJob) =
+        emitAudit eventStore logger job.ScopeId "KnowledgeChunkIndexed" {|
+            DocumentId = job.DocumentId
+            ChunkId = job.ChunkId
+            Scope = job.Scope
+        |}
+
+    let emitChunkFailed (eventStore: IEventStore) (logger: ILogger) (job: IngestionJob) (error: string) =
+        emitAudit eventStore logger job.ScopeId "KnowledgeChunkFailed" {|
+            DocumentId = job.DocumentId
+            ChunkId = job.ChunkId
+            Error = error
+        |}
+
+    let notifyObservers
+        (observers: IIngestionStatusObserver list)
+        (telemetry: IRagTelemetry)
+        (logger: ILogger)
+        (providerLabel: string)
+        (callback: string)
+        (job: IngestionJob)
+        (notify: IIngestionStatusObserver -> Async<unit>)
+        =
+        async {
+            for obs in observers do
+                try
+                    do! notify obs
+                with ex ->
+                    telemetry.RecordObserverFailure(obs.GetType().Name)
+
+                    logger.Error(
+                        $"[Ingestion] event=observer_threw callback={callback} doc={job.DocumentId} chunk={job.ChunkId} provider={providerLabel}: continuing with remaining observers",
+                        Some ex
+                    )
+        }
+
+    let private publishSystemMessage
+        (channelOpt: INotificationChannel option)
+        (logger: ILogger)
+        (scopeId: string)
+        (level: SystemMessageLevel)
+        (text: string)
+        =
+        async {
+            match channelOpt with
+            | None -> ()
+            | Some channel ->
+                try
+                    do! channel.Publish(scopeId, SystemMessage(level, text))
+                with ex ->
+                    logger.Warn(
+                        sprintf "[Ingestion] event=system_message_publish_failed scope=%s: %s" scopeId ex.Message
+                    )
+        }
+
+    /// Dead-letter one chunk: emit `KnowledgeIngestionDeadLettered`,
+    /// the per-chunk `KnowledgeChunkFailed`, notify observers
+    /// `OnChunkFailed`, and — when dead-letters cross the rolling-window
+    /// threshold — publish the aggregate Owner/Admin `SystemMessage(Error)`.
+    let deadLetterChunk
+        (deps: IngestionRetryDeps)
+        (job: IngestionJob)
+        (chunkIndex: int)
+        (reason: string)
+        (attemptCount: int)
+        =
+        async {
+            do!
+                emitAudit deps.EventStore deps.Logger job.ScopeId IngestionEventTypes.IngestionDeadLettered {|
+                    DocId = job.DocumentId
+                    ChunkIndex = chunkIndex
+                    Reason = reason
+                    AttemptCount = attemptCount
+                |}
+
+            do! emitChunkFailed deps.EventStore deps.Logger job reason
+
+            do!
+                notifyObservers
+                    deps.Observers
+                    deps.Telemetry
+                    deps.Logger
+                    "ingestion-retry"
+                    "OnChunkFailed"
+                    job
+                    (fun o -> o.OnChunkFailed(job, reason))
+
+            let now = DateTime.UtcNow
+
+            if
+                deps.AlertState.RecordDeadLetterAndShouldAlert(
+                    job.ScopeId,
+                    now,
+                    DeadLetterRateWindow,
+                    DeadLetterRateThreshold
+                )
+            then
+                do!
+                    publishSystemMessage
+                        deps.NotificationChannel
+                        deps.Logger
+                        job.ScopeId
+                        SystemMessageLevel.Error
+                        (sprintf
+                            "Knowledge-base ingestion is dead-lettering chunks at a high rate (≥%d in %d minutes) for this workspace. The embedding provider is likely degraded or misconfigured — recent uploads may be missing from search until it recovers and the affected documents are re-ingested."
+                            DeadLetterRateThreshold
+                            (int DeadLetterRateWindow.TotalMinutes))
+        }
+
+    /// Permanent (non-retryable) failure: emit
+    /// `KnowledgeEmbeddingProviderUnavailable`, alert Owner/Admin once
+    /// per dedup window, then dead-letter the chunk.
+    let deadLetterPermanent
+        (deps: IngestionRetryDeps)
+        (job: IngestionJob)
+        (chunkIndex: int)
+        (reason: string)
+        (attemptCount: int)
+        =
+        async {
+            do!
+                emitAudit deps.EventStore deps.Logger job.ScopeId IngestionEventTypes.EmbeddingProviderUnavailable {|
+                    ScopeId = job.ScopeId
+                    Reason = reason
+                |}
+
+            let now = DateTime.UtcNow
+
+            if deps.AlertState.ShouldAlertProvider(job.ScopeId, now, ProviderAlertDedupWindow) then
+                do!
+                    publishSystemMessage
+                        deps.NotificationChannel
+                        deps.Logger
+                        job.ScopeId
+                        SystemMessageLevel.Error
+                        (sprintf
+                            "The embedding provider rejected knowledge-base ingestion and cannot recover by retrying: %s. New uploads will not be searchable until this is fixed (check the provider API key / configuration)."
+                            reason)
+
+            do! deadLetterChunk deps job chunkIndex reason attemptCount
+        }
 
 // ─── Background service ───────────────────────────────────────────
 
@@ -49,7 +361,26 @@ type IngestionBackgroundService
         logger: ILogger,
         telemetry: IRagTelemetry,
         usageLog: IUsageLog,
-        quota: ITeamQuotaPolicy
+        quota: ITeamQuotaPolicy,
+        // Phase 14t — transient-embedder retry + dead-letter.
+        retryPolicy: IngestionRetryPolicy,
+        // Owner/Admin alerting for permanent failures + high dead-letter
+        // rate. `None` ⇒ no channel composed; the audit events still fire.
+        notificationChannel: INotificationChannel option,
+        // Shared alert-throttle state (also handed to the retry job
+        // handler so dedup / rate counting spans both paths).
+        alertState: IngestionAlertState,
+        // Lazy lookup of the durable job scheduler — resolved from the
+        // real (host) service provider, so it's populated even though the
+        // scheduler is built downstream of this service's construction.
+        // `None` ⇒ no scheduler configured; retries fall back to an
+        // in-process loop (which does not survive restart).
+        getJobScheduler: unit -> IJobScheduler option,
+        // Registers the retry job handler with a resolved scheduler. The
+        // handler lives in a file compiled AFTER this one (it reuses this
+        // module's `Outcome` helpers), so the composition wiring injects
+        // its construction here rather than this service referencing it.
+        registerRetryHandler: IJobScheduler -> unit
     ) =
     inherit BackgroundService()
 
@@ -60,69 +391,41 @@ type IngestionBackgroundService
     let toJson o =
         JsonSerializer.Serialize(o, jsonOptions)
 
+    let providerLabel = $"{embedder.ProviderId}/{embedder.ModelId}"
+
+    // Bundle the shared failure/dead-letter deps once.
+    let retryDeps: IngestionRetryDeps = {
+        Pipeline = pipeline
+        EventStore = eventStore
+        Observers = observers
+        NotificationChannel = notificationChannel
+        Telemetry = telemetry
+        Logger = logger
+        Policy = retryPolicy
+        AlertState = alertState
+    }
+
+    // Register the retry handler at most once, on the first scheduler
+    // resolution. 0 = not yet, 1 = done (Interlocked so concurrent
+    // document processing races safely).
+    let mutable retryHandlerRegistered = 0
+
     // Both emit helpers are best-effort swallow-and-log (mirroring
     // `usageLog.Record` below): `processJob` runs fire-and-forget via
     // `Async.Start`, and the emits are called from *catch paths* — an
     // event-store outage must degrade to a lost audit event, never to
     // an escaping exception that aborts the document's remaining chunks
     // and strands its ingestion status as "in progress" forever.
-    let emitIndexed (job: IngestionJob) = async {
-        let payload =
-            toJson {|
-                DocumentId = job.DocumentId
-                ChunkId = job.ChunkId
-                Scope = job.Scope
-            |}
+    // Delegated to the shared `Outcome` helpers so the retry job handler
+    // records outcomes identically.
+    let emitIndexed (job: IngestionJob) =
+        Outcome.emitChunkIndexed eventStore logger job
 
-        let evt = Events.create job.ScopeId "ToolUp.RAG" "KnowledgeChunkIndexed" payload
+    let emitFailed (job: IngestionJob) (error: string) =
+        Outcome.emitChunkFailed eventStore logger job error
 
-        try
-            do! eventStore.Write(evt)
-        with ex ->
-            logger.Error(
-                $"[IngestionBackgroundService] event=audit_emit_failed kind=KnowledgeChunkIndexed doc={job.DocumentId} chunk={job.ChunkId}: event-store write failed; the chunk IS indexed but the audit event is lost",
-                Some ex
-            )
-    }
-
-    let emitFailed (job: IngestionJob) (error: string) = async {
-        let payload =
-            toJson {|
-                DocumentId = job.DocumentId
-                ChunkId = job.ChunkId
-                Error = error
-            |}
-
-        let evt = Events.create job.ScopeId "ToolUp.RAG" "KnowledgeChunkFailed" payload
-
-        try
-            do! eventStore.Write(evt)
-        with ex ->
-            logger.Error(
-                $"[IngestionBackgroundService] event=audit_emit_failed kind=KnowledgeChunkFailed doc={job.DocumentId} chunk={job.ChunkId}: event-store write failed; the per-chunk failure report is lost (original chunk error: {error})",
-                Some ex
-            )
-    }
-
-    let notifyObservers (callback: string) (job: IngestionJob) (notify: IIngestionStatusObserver -> Async<unit>) = async {
-        for obs in observers do
-            try
-                do! notify obs
-            with ex ->
-                // Telemetry counter so the aggregate failure rate is
-                // visible at `/health/rag` (`ObserverFailureCount`) —
-                // the per-incident detail lives in the Error log line.
-                // Observer label is the .NET type name; for an
-                // object-expression observer it'll be the synthesised
-                // closure name, which is good enough for bucketing in
-                // a future per-label breakdown.
-                telemetry.RecordObserverFailure(obs.GetType().Name)
-
-                logger.Error(
-                    $"[IngestionBackgroundService] event=observer_threw callback={callback} doc={job.DocumentId} chunk={job.ChunkId} provider={embedder.ProviderId}/{embedder.ModelId}: continuing with remaining observers",
-                    Some ex
-                )
-    }
+    let notifyObservers (callback: string) (job: IngestionJob) (notify: IIngestionStatusObserver -> Async<unit>) =
+        Outcome.notifyObservers observers telemetry logger providerLabel callback job notify
 
     /// Build the per-chunk `IngestionJob` projection used by observer
     /// callbacks and audit events. The DocumentIngestionJob carries all the
@@ -137,6 +440,187 @@ type IngestionBackgroundService
         Container = doc.Container
         OriginatingUserId = doc.OriginatingUserId
     }
+
+    // ─── Phase 14t — per-chunk retry / dead-letter ───────────────
+
+    /// Resolve the durable scheduler (if configured) and register the
+    /// retry job handler exactly once. Returns `None` when no scheduler
+    /// is composed — callers then fall back to the in-process loop.
+    let resolveScheduler () =
+        match getJobScheduler () with
+        | Some scheduler ->
+            if Interlocked.CompareExchange(&retryHandlerRegistered, 1, 0) = 0 then
+                try
+                    registerRetryHandler scheduler
+                with ex ->
+                    logger.Error("[IngestionBackgroundService] event=retry_handler_register_failed", Some ex)
+
+            Some scheduler
+        | None -> None
+
+    /// Schedule a durable retry job for one transient-failed chunk. The
+    /// scheduler persists the job (so the pending retry survives process
+    /// restart — today's in-memory channel loses it) and drives the
+    /// attempt count + final dead-letter; the handler owns the backoff
+    /// (keyed to the true ingestion attempt) + jitter, and emits the
+    /// RAG-specific dead-letter audit on exhaustion. On a scheduling
+    /// failure the chunk is dead-lettered immediately (better a loud
+    /// drop than a silent one).
+    let scheduleRetry
+        (scheduler: IJobScheduler)
+        (doc: DocumentIngestionJob)
+        (chunkIndex: int)
+        (chunkId: string)
+        (chunk: TextChunk)
+        (firstError: string)
+        =
+        async {
+            let payload: IngestionRetryPayload = {
+                DocumentId = doc.DocumentId
+                DocumentName = doc.DocumentName
+                ChunkId = chunkId
+                ChunkIndex = chunkIndex
+                Chunk = chunk
+                Scope = doc.Scope
+                ScopeId = doc.ScopeId
+                Container = doc.Container
+                OriginatingUserId = doc.OriginatingUserId
+            }
+
+            // The scheduled job's own backoff is disabled (`Zero`) — the
+            // handler owns ALL the delay, keyed to the true ingestion
+            // attempt (`ctx.Attempt + 1`, since attempt 1 was the inline
+            // index). `MaxAttempts - 1` remaining scheduler attempts map
+            // to ingestion attempts 2..MaxAttempts.
+            let jobRetry: JobRetryPolicy = {
+                MaxAttempts = max 1 (retryPolicy.MaxAttempts - 1)
+                InitialBackoff = TimeSpan.Zero
+                MaxBackoff = TimeSpan.Zero
+                DeadLetterDestination = None
+            }
+
+            let registration: JobRegistration = {
+                ScopeId = doc.ScopeId
+                Handler = RetryHandlerName
+                Payload = Outcome.toJson payload
+                Trigger = Manual
+                Idempotency = None
+                RetryPolicy = jobRetry
+                ShardKey = Some doc.DocumentId
+                Precision = Minute
+                CreatedBy = "system"
+                Tags = Map.ofList [ "rag.retry.documentId", doc.DocumentId; "rag.retry.chunkId", chunkId ]
+            }
+
+            let deadLetterNow () =
+                Outcome.deadLetterChunk retryDeps (chunkJob doc chunkId chunk) chunkIndex firstError 1
+
+            try
+                match! scheduler.Schedule registration with
+                | Ok jobId ->
+                    // Manual trigger sits until fired; dispatch it now so
+                    // the retry runs (the handler applies the backoff).
+                    match! scheduler.TriggerOnce(doc.ScopeId, jobId, "system") with
+                    | Ok() -> ()
+                    | Error err ->
+                        logger.Warn(
+                            sprintf
+                                "[IngestionBackgroundService] event=retry_trigger_failed doc=%s chunk=%s: %s; dead-lettering"
+                                doc.DocumentId
+                                chunkId
+                                err
+                        )
+
+                        do! deadLetterNow ()
+                | Error err ->
+                    logger.Warn(
+                        sprintf
+                            "[IngestionBackgroundService] event=retry_schedule_failed doc=%s chunk=%s: %A; dead-lettering"
+                            doc.DocumentId
+                            chunkId
+                            err
+                    )
+
+                    do! deadLetterNow ()
+            with ex ->
+                logger.Error(
+                    sprintf
+                        "[IngestionBackgroundService] event=retry_schedule_crashed doc=%s chunk=%s: dead-lettering"
+                        doc.DocumentId
+                        chunkId,
+                    Some ex
+                )
+
+                do! deadLetterNow ()
+        }
+
+    /// In-process fallback retry loop for deployments with no
+    /// `IJobScheduler` composed. Mirrors the `WebhookDispatcher` shape —
+    /// exponential backoff + jitter, dead-letter after `MaxAttempts`.
+    /// Does NOT survive restart (the scheduled path does); it is the
+    /// graceful-degradation path, not the default.
+    let inProcessRetry
+        (doc: DocumentIngestionJob)
+        (chunkIndex: int)
+        (chunkId: string)
+        (chunk: TextChunk)
+        (job: IngestionJob)
+        (firstError: string)
+        =
+        async {
+            let mutable attempt = 2
+            let mutable handled = false
+            let mutable lastError = firstError
+
+            while attempt <= retryPolicy.MaxAttempts && not handled do
+                let delay =
+                    IngestionRetryPolicy.baseDelayFor retryPolicy attempt
+                    + IngestionRetryPolicy.jitterComponentFor retryPolicy attempt (Random.Shared.NextDouble())
+
+                if delay > TimeSpan.Zero then
+                    do! Async.Sleep delay
+
+                try
+                    do! pipeline.Index chunkId chunk doc.Scope
+                    do! emitIndexed job
+                    do! notifyObservers "OnChunkIndexed" job (fun o -> o.OnChunkIndexed job)
+                    handled <- true
+                with ex ->
+                    match classifyIndexFailure ex with
+                    | Permanent reason ->
+                        do! Outcome.deadLetterPermanent retryDeps job chunkIndex reason attempt
+                        handled <- true
+                    | Transient _ ->
+                        lastError <- ex.Message
+                        attempt <- attempt + 1
+
+            if not handled then
+                do! Outcome.deadLetterChunk retryDeps job chunkIndex lastError retryPolicy.MaxAttempts
+        }
+
+    /// Route a first-attempt (inline) index failure: dead-letter
+    /// permanently on a non-retryable failure, otherwise hand off to the
+    /// durable scheduler (or the in-process fallback) for retry.
+    let handleChunkFailure
+        (doc: DocumentIngestionJob)
+        (chunkIndex: int)
+        (chunkId: string)
+        (chunk: TextChunk)
+        (job: IngestionJob)
+        (ex: exn)
+        =
+        async {
+            match classifyIndexFailure ex with
+            | Permanent reason -> do! Outcome.deadLetterPermanent retryDeps job chunkIndex reason 1
+            | Transient _ ->
+                if retryPolicy.MaxAttempts <= 1 then
+                    // No retries configured — dead-letter now (still loud).
+                    do! Outcome.deadLetterChunk retryDeps job chunkIndex ex.Message 1
+                else
+                    match resolveScheduler () with
+                    | Some scheduler -> do! scheduleRetry scheduler doc chunkIndex chunkId chunk ex.Message
+                    | None -> do! inProcessRetry doc chunkIndex chunkId chunk job ex.Message
+        }
 
     let processJobCore (doc: DocumentIngestionJob) = async {
         let chunkTexts = doc.Chunks |> List.map (fun (_, c) -> c.Content) |> List.toArray
@@ -214,7 +698,7 @@ type IngestionBackgroundService
                     Some ex
                 )
 
-            for (chunkId, chunk) in doc.Chunks do
+            for (chunkIndex, (chunkId, chunk)) in List.indexed doc.Chunks do
                 let job = chunkJob doc chunkId chunk
 
                 try
@@ -222,8 +706,10 @@ type IngestionBackgroundService
                     do! emitIndexed job
                     do! notifyObservers "OnChunkIndexed" job (fun o -> o.OnChunkIndexed job)
                 with ex ->
-                    do! emitFailed job ex.Message
-                    do! notifyObservers "OnChunkFailed" job (_.OnChunkFailed(job, ex.Message))
+                    // Phase 14t — classify + retry (transient) / dead-letter
+                    // (permanent) instead of the former silent single
+                    // `KnowledgeChunkFailed` that dropped the chunk for good.
+                    do! handleChunkFailure doc chunkIndex chunkId chunk job ex
     }
 
     let processJob (doc: DocumentIngestionJob) = async {
@@ -260,6 +746,11 @@ type IngestionBackgroundService
     }
 
     override _.ExecuteAsync(stoppingToken: CancellationToken) = task {
+        // Register the retry job handler up front (idempotent) so the
+        // first scheduled retry has no registration race. No-op when no
+        // scheduler is composed.
+        resolveScheduler () |> ignore
+
         while not stoppingToken.IsCancellationRequested do
             try
                 let! job = queue.Reader.ReadAsync(stoppingToken).AsTask()
@@ -295,6 +786,11 @@ let create
     (telemetry: IRagTelemetry)
     (usageLog: IUsageLog)
     (quota: ITeamQuotaPolicy)
+    (retryPolicy: IngestionRetryPolicy)
+    (notificationChannel: INotificationChannel option)
+    (alertState: IngestionAlertState)
+    (getJobScheduler: unit -> IJobScheduler option)
+    (registerRetryHandler: IJobScheduler -> unit)
     =
     new IngestionBackgroundService(
         queue,
@@ -306,5 +802,10 @@ let create
         logger = logger,
         telemetry = telemetry,
         usageLog = usageLog,
-        quota = quota
+        quota = quota,
+        retryPolicy = retryPolicy,
+        notificationChannel = notificationChannel,
+        alertState = alertState,
+        getJobScheduler = getJobScheduler,
+        registerRetryHandler = registerRetryHandler
     )
