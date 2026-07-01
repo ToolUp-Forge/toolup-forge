@@ -902,6 +902,34 @@ module ServerApp =
             TransactionalSinks = app.TransactionalSinks @ [ sink ]
     }
 
+    /// Phase 178 — register a declarative alert rule. Each rule watches a
+    /// metric (`IMetricsSink` accumulator) or a health probe
+    /// (`IHealthCheck`) and delivers a notification when its
+    /// `ThresholdCondition` holds for `ForDuration`. Registering any rule
+    /// causes `compose` to host the `AlertRuleEngine` `BackgroundService`
+    /// (subject to the `ProcessProfile` gate — `AllInOne` / `WorkerOnly`
+    /// run it, `WebOnly` / `DispatcherOnly` / `ServerlessHost` skip). Apps
+    /// without alerting omit the call entirely — zero runtime cost (GP 13).
+    /// Rule `Name`s must be unique within a deployment (the engine keys its
+    /// per-rule breach window on the name).
+    let withAlertRule (rule: AlertRule) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    AlertRules = app.Config.AlertRules @ [ rule ]
+            }
+    }
+
+    /// Phase 178 — register several alert rules at once. Appends to any
+    /// already registered; see `withAlertRule` for the hosting contract.
+    let withAlertRules (rules: AlertRule list) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    AlertRules = app.Config.AlertRules @ rules
+            }
+    }
+
     /// Phase 9g — register an audit-log external-export sink (Splunk
     /// HEC, Datadog Logs, S3 Object Lock archive, custom SIEM
     /// endpoint). Each sink advertises a deployment-unique `Name`;

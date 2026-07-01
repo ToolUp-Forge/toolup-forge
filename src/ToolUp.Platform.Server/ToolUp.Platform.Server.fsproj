@@ -494,6 +494,12 @@
         <!-- Phase 177 — deployment-readiness scorecard gatherer + handler. -->
         <Compile Include="Server\DeploymentReadinessReport.fs" />
         <Compile Include="Server\HealthStateTracker.fs" />
+        <!-- Phase 178 — alert-rule / threshold engine (pure evaluator +
+             BackgroundService). After HealthStateTracker (shares the tick
+             shape) + PrometheusMetricsSink (the metric-read tap) +
+             INotificationSink; before Compose/ (ComposeRuntimeServices
+             hosts it). -->
+        <Compile Include="Server\AlertRuleEngine.fs" />
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <!-- Phase 120 — /dev/auth-denials rollup (reads AuthorizationDenied

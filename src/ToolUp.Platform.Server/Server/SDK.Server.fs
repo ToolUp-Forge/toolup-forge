@@ -677,6 +677,13 @@ let compose
     // on `config.HealthStateTracking` AND ProcessProfile matrix.
     registerHealthStateTracker services config auditLog resolvedLogger
 
+    // Phase 178 — opt-in alert-rule / threshold engine BackgroundService
+    // (extracted to `ComposeRuntimeServices.registerAlertRuleEngine`).
+    // Gated on a non-empty `config.AlertRules` AND the ProcessProfile
+    // matrix. Passes the decorated `resolvedNotificationChannel` so
+    // `ViaSink` deliveries route through the transactional dispatcher.
+    registerAlertRuleEngine services config resolvedNotificationChannel resolvedLogger
+
     // Phase 9b — opt-in job scheduler (extracted to
     // `ComposeJobs.registerJobScheduler`). Populates `jobSchedulerCell`
     // so subsequent writes through the notify-wrapper forward to the

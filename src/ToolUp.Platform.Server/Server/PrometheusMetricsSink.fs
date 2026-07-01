@@ -373,6 +373,35 @@ type PrometheusMetricsSink(config: MetricsSinkConfig, registrations: MetricRegis
         sb.Append("# EOF\n") |> ignore
         sb.ToString()
 
+    /// Phase 178 — read the current accumulated value of a counter /
+    /// gauge series for the `AlertRuleEngine`. This is the metric-read
+    /// tap the alert engine consumes so `IMetricsSink` stays write-only
+    /// (its rule-2 hot-path exemption is preserved — no read method is
+    /// added to the emission interface; the read lives on the concrete
+    /// default sink, resolved from DI by the engine's BackgroundService).
+    ///
+    /// Read-only: unlike the emission path's `getNumericCell`, this
+    /// never creates a series. Returns `None` for an unregistered
+    /// metric, a `Histogram` / `Summary` metric (threshold rules target
+    /// scalar counter / gauge series), or a `(name, tags)` series that
+    /// has had no observation yet. Tags are filtered through the
+    /// metric's allowlist first, matching the emission path so a rule's
+    /// tag set selects the same series a caller's emission wrote.
+    member _.TryRead(name: string, tags: Map<string, string>) : float option =
+        match registry.TryGetValue name with
+        | true, metric ->
+            match metric.Definition.Kind with
+            | Counter
+            | Gauge ->
+                let filtered = filterTags metric tags
+                let fingerprint = TagFingerprint.create filtered
+
+                match metric.NumericSeries.TryGetValue fingerprint with
+                | true, cell -> Some(lock cell (fun () -> cell.Value))
+                | false, _ -> None
+            | _ -> None
+        | false, _ -> None
+
     interface IMetricsSink with
         member _.Record(name, value, tags) =
             match registry.TryGetValue name with

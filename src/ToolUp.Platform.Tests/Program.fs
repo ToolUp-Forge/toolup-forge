@@ -118,6 +118,7 @@ let allTests =
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests
+        AlertRuleEngineTests.tests
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests
         RedisNotificationChannelHealthTests.tests

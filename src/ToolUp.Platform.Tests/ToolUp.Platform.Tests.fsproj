@@ -258,6 +258,8 @@
              so no real network is hit. -->
         <Compile Include="InProcess\AIProviderProbeValidatorTests.fs" />
         <Compile Include="InProcess\HealthStateTrackerTests.fs" />
+        <!-- Phase 178 — alert-rule / threshold engine. -->
+        <Compile Include="InProcess\AlertRuleEngineTests.fs" />
         <Compile Include="InProcess\ServiceStatusBoardApiHandlerTests.fs" />
         <Compile Include="InProcess\DeploymentReadinessReportTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelHealthTests.fs" />

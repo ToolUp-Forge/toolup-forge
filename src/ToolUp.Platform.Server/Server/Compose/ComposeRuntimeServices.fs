@@ -402,6 +402,33 @@ let registerHealthStateTracker
         )
         |> ignore
 
+/// Phase 178 — opt-in alert-rule / threshold engine BackgroundService.
+/// Hosted only when `config.AlertRules` is non-empty (GP 13 — an empty
+/// set registers no service and pays no tick cost) AND the ProcessProfile
+/// matrix admits it (`AllInOne` / `WorkerOnly` run it; `WebOnly` /
+/// `DispatcherOnly` / `ServerlessHost` skip). The `notificationChannel`
+/// passed here is the compose-resolved (decorated) channel, so `ViaSink`
+/// deliveries route through `DispatchingNotificationChannel` to the
+/// registered `INotificationSink`. Registered as a factory so the
+/// captured `IServiceProvider` resolves the metric-read tap
+/// (`PrometheusMetricsSink`) + `IHealthCheck` set lazily per tick.
+let registerAlertRuleEngine
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (notificationChannel: INotificationChannel)
+    (resolvedLogger: ILogger)
+    : unit =
+    if
+        not (List.isEmpty config.AlertRules)
+        && ProcessProfileGate.shouldRegisterBackgroundService config AlertRuleEngineSubsystem
+    then
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                new AlertRuleEngine.AlertRuleEngineService(sp, notificationChannel, config.AlertRules, resolvedLogger)
+                :> Microsoft.Extensions.Hosting.IHostedService)
+        )
+        |> ignore
+
 /// Phase 9 + Phase 56 — rate-limit middleware substrates. Phase 9 is a
 /// single fixed-window team-keyed policy (opt-in via
 /// `ServerConfig.RateLimit`); Phase 56 is a portable per-route-policy

@@ -2094,6 +2094,18 @@ type ServerConfig = {
     /// fan-out per minute) is non-zero.
     HealthStateTracking: bool
 
+    /// Phase 178 — opt-in alert-rule / threshold engine. Default
+    /// `AlertRule.none` (empty). Each rule watches a metric or health
+    /// probe and delivers a notification when its `ThresholdCondition`
+    /// holds for `ForDuration`. A non-empty set causes `compose` to host
+    /// the `AlertRuleEngine` `BackgroundService` (subject to the
+    /// `ProcessProfile` gate); an empty set registers no service and
+    /// pays zero runtime cost (GP 13). Rules are code-authored — there
+    /// is no env-var path (unlike scalar knobs), so `fromEnv` inherits
+    /// the `defaults` empty set. Wire rules via `ServerApp.withAlertRule`
+    /// / `withAlertRules`.
+    AlertRules: AlertRule list
+
     /// Floor on `ILogger`
     /// `Debug`/`Info`/`Warn`/`Error` emission. The default
     /// `ConsoleLogger` honours this; alternative implementations are
@@ -2889,6 +2901,7 @@ module ServerConfig =
         EnableCitationDevEndpoint = None
         SkipPreflight = false
         HealthStateTracking = false
+        AlertRules = AlertRule.none
         LogLevel = LogLevel.Info
         TraceCategories = Set.empty
         SseAuthMode = QueryParamFallback

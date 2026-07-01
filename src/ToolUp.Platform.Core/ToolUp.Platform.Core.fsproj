@@ -156,6 +156,12 @@
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="Shared\IPresenceChannel.fs" />
         <Compile Include="Shared\IHealthCheck.fs" />
+        <!-- Phase 178 — declarative alert-rule / threshold data (AlertSource
+             / ThresholdCondition / AlertDelivery / AlertRule). After
+             NotificationTypes (uses SystemMessageLevel + NotificationKind.SinkKind)
+             and before SDK.Shared.fs so ServerConfig can carry an
+             `AlertRules: AlertRule list` field. Pure / Fable-safe. -->
+        <Compile Include="Shared\AlertRule.fs" />
         <Compile Include="Shared\ISmokeTest.fs" />
         <Compile Include="Shared\IConfigValidator.fs" />
         <!-- Phase 165 — opt-in module-binding gate contract (pure types +

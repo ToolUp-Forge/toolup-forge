@@ -50,6 +50,11 @@ type BackgroundSubsystem =
     | UsageBatchFlusherSubsystem
     /// Periodic IHealthCheck poll + state-change audit emission.
     | HealthStateTrackerSubsystem
+    /// Phase 178 — periodic alert-rule / threshold evaluation +
+    /// notification delivery. Runs on `AllInOne` / `WorkerOnly`; skipped
+    /// on `WebOnly` / `DispatcherOnly` (not an outbound dispatcher) /
+    /// `ServerlessHost` — all handled by the existing wildcard arms.
+    | AlertRuleEngineSubsystem
     /// OAuth state-store TTL sweeper.
     | OAuthStateCleanupSubsystem
     /// OAuth refresher startup-time `Recover` (one-shot IHostedService).

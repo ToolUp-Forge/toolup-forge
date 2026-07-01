@@ -1159,7 +1159,7 @@ TeamManagerUI+IssueByEmailModalState.SubmitError : Microsoft.FSharp.Core.FSharpO
 TeamManagerUI+IssueByEmailModalState.Submitting : System.Boolean { get }
 TeamManagerUI+IssueByEmailModalState.TeamId : System.String { get }
 TeamManagerUI+Model (class)
-TeamManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamManagerUI+View, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.TeamRole, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]]], Microsoft.FSharp.Core.FSharpOption`1[TeamManagerUI+IssueByEmailModalState], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary])
+TeamManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamManagerUI+View, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.TeamRole], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.TeamRole, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]]], Microsoft.FSharp.Core.FSharpOption`1[TeamManagerUI+IssueByEmailModalState], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[TeamManagerUI+TransferOwnershipModalState], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary])
 TeamManagerUI+Model.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 TeamManagerUI+Model.AddMemberRole : ToolUp.Platform.TeamRole { get }
 TeamManagerUI+Model.AddMemberSubmitting : System.Boolean { get }
@@ -1175,10 +1175,13 @@ TeamManagerUI+Model.PendingByEmail : Microsoft.FSharp.Collections.FSharpMap`2[Sy
 TeamManagerUI+Model.RevokeByEmailConfirm : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]] { get }
 TeamManagerUI+Model.RoleInTeam : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.TeamRole] { get }
 TeamManagerUI+Model.Teams : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo] { get }
+TeamManagerUI+Model.TransferOwnershipModal : Microsoft.FSharp.Core.FSharpOption`1[TeamManagerUI+TransferOwnershipModalState] { get }
 TeamManagerUI+Msg (class)
 TeamManagerUI+Msg.BackToMyTeams : TeamManagerUI+Msg { get }
+TeamManagerUI+Msg.BackToTransferPick : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.CancelRevokeByEmail : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.CloseIssueByEmailModal : TeamManagerUI+Msg { get }
+TeamManagerUI+Msg.CloseTransferOwnership : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.ConfirmRevokeByEmail : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.DismissError : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.IsActiveTeamLoaded : System.Boolean { get }
@@ -1186,9 +1189,11 @@ TeamManagerUI+Msg.IsActiveTeamSwitched : System.Boolean { get }
 TeamManagerUI+Msg.IsAddMember : System.Boolean { get }
 TeamManagerUI+Msg.IsApiError : System.Boolean { get }
 TeamManagerUI+Msg.IsBackToMyTeams : System.Boolean { get }
+TeamManagerUI+Msg.IsBackToTransferPick : System.Boolean { get }
 TeamManagerUI+Msg.IsCancelRevokeByEmail : System.Boolean { get }
 TeamManagerUI+Msg.IsChangeMemberRole : System.Boolean { get }
 TeamManagerUI+Msg.IsCloseIssueByEmailModal : System.Boolean { get }
+TeamManagerUI+Msg.IsCloseTransferOwnership : System.Boolean { get }
 TeamManagerUI+Msg.IsConfirmRevokeByEmail : System.Boolean { get }
 TeamManagerUI+Msg.IsDirectoryResolved : System.Boolean { get }
 TeamManagerUI+Msg.IsDismissError : System.Boolean { get }
@@ -1205,21 +1210,27 @@ TeamManagerUI+Msg.IsMembersLoaded : System.Boolean { get }
 TeamManagerUI+Msg.IsNavigatePendingInvites : System.Boolean { get }
 TeamManagerUI+Msg.IsOpenIssueByEmailModal : System.Boolean { get }
 TeamManagerUI+Msg.IsOpenRevokeByEmailConfirm : System.Boolean { get }
+TeamManagerUI+Msg.IsOpenTransferOwnership : System.Boolean { get }
 TeamManagerUI+Msg.IsPendingByEmailLoaded : System.Boolean { get }
 TeamManagerUI+Msg.IsRemoveMember : System.Boolean { get }
 TeamManagerUI+Msg.IsRevokeByEmailDone : System.Boolean { get }
 TeamManagerUI+Msg.IsSelectTeam : System.Boolean { get }
+TeamManagerUI+Msg.IsSelectTransferCandidate : System.Boolean { get }
 TeamManagerUI+Msg.IsSetAddMemberRole : System.Boolean { get }
 TeamManagerUI+Msg.IsSetAddMemberUserId : System.Boolean { get }
 TeamManagerUI+Msg.IsSetIssueByEmailEmail : System.Boolean { get }
 TeamManagerUI+Msg.IsSetIssueByEmailExpiresInDays : System.Boolean { get }
 TeamManagerUI+Msg.IsSetIssueByEmailRole : System.Boolean { get }
+TeamManagerUI+Msg.IsSetTransferQuery : System.Boolean { get }
 TeamManagerUI+Msg.IsSubmitIssueByEmail : System.Boolean { get }
+TeamManagerUI+Msg.IsSubmitTransferOwnership : System.Boolean { get }
 TeamManagerUI+Msg.IsSwitchActiveTeam : System.Boolean { get }
 TeamManagerUI+Msg.IsTeamsLoaded : System.Boolean { get }
+TeamManagerUI+Msg.IsTransferOwnershipDone : System.Boolean { get }
 TeamManagerUI+Msg.LoadActiveTeam : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.LoadTeams : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.SubmitIssueByEmail : TeamManagerUI+Msg { get }
+TeamManagerUI+Msg.SubmitTransferOwnership : TeamManagerUI+Msg { get }
 TeamManagerUI+Msg.Tag : System.Int32 { get }
 TeamManagerUI+Msg+ActiveTeamLoaded (class)
 TeamManagerUI+Msg+ActiveTeamLoaded.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -1261,6 +1272,8 @@ TeamManagerUI+Msg+OpenIssueByEmailModal.teamId : System.String { get }
 TeamManagerUI+Msg+OpenRevokeByEmailConfirm (class)
 TeamManagerUI+Msg+OpenRevokeByEmailConfirm.email : System.String { get }
 TeamManagerUI+Msg+OpenRevokeByEmailConfirm.teamId : System.String { get }
+TeamManagerUI+Msg+OpenTransferOwnership (class)
+TeamManagerUI+Msg+OpenTransferOwnership.teamId : System.String { get }
 TeamManagerUI+Msg+PendingByEmailLoaded (class)
 TeamManagerUI+Msg+PendingByEmailLoaded.Item2 : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]] { get }
 TeamManagerUI+Msg+PendingByEmailLoaded.teamId : System.String { get }
@@ -1273,6 +1286,8 @@ TeamManagerUI+Msg+RevokeByEmailDone.email : System.String { get }
 TeamManagerUI+Msg+RevokeByEmailDone.teamId : System.String { get }
 TeamManagerUI+Msg+SelectTeam (class)
 TeamManagerUI+Msg+SelectTeam.teamId : System.String { get }
+TeamManagerUI+Msg+SelectTransferCandidate (class)
+TeamManagerUI+Msg+SelectTransferCandidate.userId : System.String { get }
 TeamManagerUI+Msg+SetAddMemberRole (class)
 TeamManagerUI+Msg+SetAddMemberRole.Item : ToolUp.Platform.TeamRole { get }
 TeamManagerUI+Msg+SetAddMemberUserId (class)
@@ -1283,6 +1298,8 @@ TeamManagerUI+Msg+SetIssueByEmailExpiresInDays (class)
 TeamManagerUI+Msg+SetIssueByEmailExpiresInDays.Item : System.Int32 { get }
 TeamManagerUI+Msg+SetIssueByEmailRole (class)
 TeamManagerUI+Msg+SetIssueByEmailRole.Item : ToolUp.Platform.TeamRole { get }
+TeamManagerUI+Msg+SetTransferQuery (class)
+TeamManagerUI+Msg+SetTransferQuery.Item : System.String { get }
 TeamManagerUI+Msg+SwitchActiveTeam (class)
 TeamManagerUI+Msg+SwitchActiveTeam.teamId : System.String { get }
 TeamManagerUI+Msg+Tags (class)
@@ -1291,9 +1308,11 @@ TeamManagerUI+Msg+Tags.ActiveTeamSwitched : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.AddMember : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.ApiError : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.BackToMyTeams : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.BackToTransferPick : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.CancelRevokeByEmail : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.ChangeMemberRole : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.CloseIssueByEmailModal : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.CloseTransferOwnership : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.ConfirmRevokeByEmail : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.DirectoryResolved : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.DismissError : System.Int32 (literal)
@@ -1310,20 +1329,45 @@ TeamManagerUI+Msg+Tags.MembersLoaded : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.NavigatePendingInvites : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.OpenIssueByEmailModal : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.OpenRevokeByEmailConfirm : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.OpenTransferOwnership : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.PendingByEmailLoaded : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.RemoveMember : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.RevokeByEmailDone : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SelectTeam : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.SelectTransferCandidate : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SetAddMemberRole : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SetAddMemberUserId : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SetIssueByEmailEmail : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SetIssueByEmailExpiresInDays : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SetIssueByEmailRole : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.SetTransferQuery : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SubmitIssueByEmail : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.SubmitTransferOwnership : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.SwitchActiveTeam : System.Int32 (literal)
 TeamManagerUI+Msg+Tags.TeamsLoaded : System.Int32 (literal)
+TeamManagerUI+Msg+Tags.TransferOwnershipDone : System.Int32 (literal)
 TeamManagerUI+Msg+TeamsLoaded (class)
 TeamManagerUI+Msg+TeamsLoaded.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo] { get }
+TeamManagerUI+Msg+TransferOwnershipDone (class)
+TeamManagerUI+Msg+TransferOwnershipDone.Item2 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+TeamManagerUI+Msg+TransferOwnershipDone.teamId : System.String { get }
+TeamManagerUI+TransferOwnershipModalState (class)
+TeamManagerUI+TransferOwnershipModalState..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamManagerUI+TransferStep, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+TeamManagerUI+TransferOwnershipModalState.Query : System.String { get }
+TeamManagerUI+TransferOwnershipModalState.SelectedUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+TeamManagerUI+TransferOwnershipModalState.Step : TeamManagerUI+TransferStep { get }
+TeamManagerUI+TransferOwnershipModalState.SubmitError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+TeamManagerUI+TransferOwnershipModalState.Submitting : System.Boolean { get }
+TeamManagerUI+TransferOwnershipModalState.TeamId : System.String { get }
+TeamManagerUI+TransferStep (class)
+TeamManagerUI+TransferStep.ConfirmTransfer : TeamManagerUI+TransferStep { get }
+TeamManagerUI+TransferStep.IsConfirmTransfer : System.Boolean { get }
+TeamManagerUI+TransferStep.IsPickNewOwner : System.Boolean { get }
+TeamManagerUI+TransferStep.PickNewOwner : TeamManagerUI+TransferStep { get }
+TeamManagerUI+TransferStep.Tag : System.Int32 { get }
+TeamManagerUI+TransferStep+Tags (class)
+TeamManagerUI+TransferStep+Tags.ConfirmTransfer : System.Int32 (literal)
+TeamManagerUI+TransferStep+Tags.PickNewOwner : System.Int32 (literal)
 TeamManagerUI+View (class)
 TeamManagerUI+View.IsMyTeams : System.Boolean { get }
 TeamManagerUI+View.IsPendingInvites : System.Boolean { get }
@@ -1338,6 +1382,31 @@ TeamManagerUI+View+Tags.PendingInvites : System.Int32 (literal)
 TeamManagerUI+View+Tags.TeamDetails : System.Int32 (literal)
 TeamManagerUI+View+TeamDetails (class)
 TeamManagerUI+View+TeamDetails.teamId : System.String { get }
+TenantLifecycleAdminUI (class)
+TenantLifecycleAdminUI.create() : ToolUp.Platform.ErasedModule
+TenantLifecycleAdminUI.init() : System.Tuple`2[TenantLifecycleAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TenantLifecycleAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TenantLifecycleAdminUI.update(TenantLifecycleAdminUI+Msg, TenantLifecycleAdminUI+Model) : System.Tuple`2[TenantLifecycleAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TenantLifecycleAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TenantLifecycleAdminUI+Model (class)
+TenantLifecycleAdminUI+Model..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+TenantLifecycleAdminUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+TenantLifecycleAdminUI+Model.Loaded : System.Boolean { get }
+TenantLifecycleAdminUI+Model.Loading : System.Boolean { get }
+TenantLifecycleAdminUI+Model.QueriedScope : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+TenantLifecycleAdminUI+Model.Summary : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary] { get }
+TenantLifecycleAdminUI+Msg (class)
+TenantLifecycleAdminUI+Msg.DismissError : TenantLifecycleAdminUI+Msg { get }
+TenantLifecycleAdminUI+Msg.IsDismissError : System.Boolean { get }
+TenantLifecycleAdminUI+Msg.IsSubmitScope : System.Boolean { get }
+TenantLifecycleAdminUI+Msg.IsSummaryLoaded : System.Boolean { get }
+TenantLifecycleAdminUI+Msg.Tag : System.Int32 { get }
+TenantLifecycleAdminUI+Msg+SubmitScope (class)
+TenantLifecycleAdminUI+Msg+SubmitScope.Item : System.String { get }
+TenantLifecycleAdminUI+Msg+SummaryLoaded (class)
+TenantLifecycleAdminUI+Msg+SummaryLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary], System.String] { get }
+TenantLifecycleAdminUI+Msg+Tags (class)
+TenantLifecycleAdminUI+Msg+Tags.DismissError : System.Int32 (literal)
+TenantLifecycleAdminUI+Msg+Tags.SubmitScope : System.Int32 (literal)
+TenantLifecycleAdminUI+Msg+Tags.SummaryLoaded : System.Int32 (literal)
 ToolUp.Elmish.Cmd (class)
 ToolUp.Elmish.Cmd.batch`2(a) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
 ToolUp.Elmish.Cmd.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, msg], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
@@ -2433,6 +2502,8 @@ ToolUp.Platform.Client+Msg+Tags.TeamSwitched : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ToggleShowAllModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+TeamSwitched (class)
 ToolUp.Platform.Client+Msg+TeamSwitched.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ClientBoundHostView (class)
+ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
 ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -2861,6 +2932,10 @@ ToolUp.Platform.IAuthBridge.GetUserId() : Microsoft.FSharp.Core.FSharpOption`1[S
 ToolUp.Platform.IAuthBridge.ProviderName : System.String { get }
 ToolUp.Platform.IHomeWidgetContributor (interface)
 ToolUp.Platform.IHomeWidgetContributor.Widgets() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HomeWidget]
+ToolUp.Platform.IHostStateProjection (class)
+ToolUp.Platform.IHostStateProjection.ofFunc`1(Microsoft.FSharp.Core.FSharpFunc`2[Model, ToolUp.Platform.HostBindingSources]) : ToolUp.Platform.IHostStateProjection`1[Model]
+ToolUp.Platform.IHostStateProjection`1 (interface)
+ToolUp.Platform.IHostStateProjection`1.Project(Model) : ToolUp.Platform.HostBindingSources
 ToolUp.Platform.Icon (class)
 ToolUp.Platform.Icon.ofImport(System.Object) : Fable.React.ReactElement
 ToolUp.Platform.Icon.ofUrl(System.String) : Fable.React.ReactElement
@@ -3401,6 +3476,8 @@ Toolup.NarrativeCommit.setHandler(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Pl
 Toolup.NarrativeRenderer (class)
 Toolup.NarrativeRenderer.render(ToolUp.Platform.Narrative.NarrativeDocument) : Fable.React.ReactElement
 Toolup.Sidebar (class)
+Toolup.Sidebar.HomeId : System.String (literal)
+Toolup.Sidebar.HomeKey : System.String (literal)
 Toolup.Sidebar.OtherKey : System.String (literal)
 Toolup.Sidebar.PinnedKey : System.String (literal)
 Toolup.Sidebar.Sidebar(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
