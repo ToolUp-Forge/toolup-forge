@@ -46,6 +46,16 @@ type RagTelemetrySnapshot = {
     FlushDirtyChunks: int
     /// Average wall-clock latency of a flush in ms. `0.0` when no flushes.
     FlushAvgLatencyMs: float
+    /// Phase 14v — number of scope-load attempts in the window that
+    /// failed because the persisted index blob would not deserialise
+    /// (disk corruption / partial flush during a pod kill). Non-zero
+    /// here means at least one scope is running retrieval empty until
+    /// its blob is repaired — cross-reference the `KnowledgeIndexLoadFailed`
+    /// audit trail for the affected `ScopeKey` + blob location. Aggregate
+    /// count (per-scope detail lives in the audit trail, not this
+    /// snapshot — the privacy contract keeps the snapshot scope-free).
+    /// Additive (GP 11): old `/health/rag` readers ignore the extra field.
+    IndexLoadErrors: int
 
     // ─── Retrieval ──────────────────────────────────────────────────
     /// Number of retrieval calls observed via `RecordRetrieval`. Aligns
@@ -128,6 +138,15 @@ type IRagTelemetry =
     /// chunks persisted and `latencyMs` is the wall-clock time spent in
     /// the flush.
     abstract RecordFlush: dirtyChunks: int * latencyMs: int64 -> unit
+
+    /// Phase 14v — record one failed scope-load caused by a corrupt /
+    /// undeserialisable index blob. `scopeKey` identifies the affected
+    /// scope (`platform` / `deployment` / `team:{id}`); the default
+    /// rolling implementation aggregates a single window counter
+    /// regardless of the key (per-scope detail lives in the
+    /// `KnowledgeIndexLoadFailed` audit trail, not this snapshot).
+    /// Hot-path sync recorder like the other `Record*` members.
+    abstract RecordIndexLoadError: scopeKey: string -> unit
 
     /// Record the per-stage timing breakdown of one retrieval call
     /// (Phase 122). `stageTimings` carries `RetrievalTrace.StageTimings`

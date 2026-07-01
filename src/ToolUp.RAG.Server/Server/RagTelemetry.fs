@@ -23,6 +23,7 @@ type NoOpRagTelemetry() =
         FlushCount = 0
         FlushDirtyChunks = 0
         FlushAvgLatencyMs = 0.0
+        IndexLoadErrors = 0
         RetrievalCount = 0
         RetrievalHits = 0
         RetrievalLowScoreMisses = 0
@@ -37,6 +38,7 @@ type NoOpRagTelemetry() =
         member _.RecordEmbedding(_, _) = ()
         member _.RecordEnqueue(_, _, _) = ()
         member _.RecordFlush(_, _) = ()
+        member _.RecordIndexLoadError(_) = ()
         member _.RecordRetrievalStages(_) = ()
         member _.RecordRetrieval(_, _, _) = ()
         member _.RecordObserverFailure(_) = ()
@@ -105,6 +107,11 @@ type RollingRagTelemetry(?windowSeconds: int) =
     // (the snapshot exposes one aggregate count); the per-observer
     // breakdown lives in the existing `event=observer_threw` log line.
     let observerFailures = ConcurrentQueue<DateTimeOffset>()
+    // Phase 14v — corrupt-index scope-load-failure timestamps. The
+    // `scopeKey` label is dropped here (the snapshot exposes one
+    // aggregate count, keeping the privacy contract scope-free); the
+    // per-scope detail lives in the `KnowledgeIndexLoadFailed` audit trail.
+    let indexLoadErrors = ConcurrentQueue<DateTimeOffset>()
 
     let now () = DateTimeOffset.UtcNow
 
@@ -187,6 +194,8 @@ type RollingRagTelemetry(?windowSeconds: int) =
 
         member _.RecordObserverFailure(_) = observerFailures.Enqueue(now ())
 
+        member _.RecordIndexLoadError(_) = indexLoadErrors.Enqueue(now ())
+
         member _.Snapshot() = async {
             let cutoff = now () - window
 
@@ -196,6 +205,7 @@ type RollingRagTelemetry(?windowSeconds: int) =
             evict stageSamples cutoff fst
             evict queueRejections cutoff id
             evict observerFailures cutoff id
+            evict indexLoadErrors cutoff id
 
             // Snapshot the queues into arrays once so we don't double-iterate.
             let embeddings = embeddingSamples.ToArray()
@@ -243,6 +253,7 @@ type RollingRagTelemetry(?windowSeconds: int) =
                 FlushCount = flushes.Length
                 FlushDirtyChunks = flushes |> Array.sumBy _.Magnitude
                 FlushAvgLatencyMs = avgInt64 flushLatencies
+                IndexLoadErrors = indexLoadErrors.ToArray().Length
                 RetrievalCount = retrievals.Length
                 RetrievalHits = hits.Length
                 RetrievalLowScoreMisses = lowScoreMisses.Length

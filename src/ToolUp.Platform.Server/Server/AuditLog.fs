@@ -1005,6 +1005,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> EgressBlocked(fromAuditJson<EgressBlockedPayload> j)
     }
+    // Phase 14v — RAG vector-index corrupt-load audit row (append-only registration).
+    {
+        EventType = "KnowledgeIndexLoadFailed"
+        TryEncode =
+            (function
+            | KnowledgeIndexLoadFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> KnowledgeIndexLoadFailed(fromAuditJson<KnowledgeIndexLoadFailedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

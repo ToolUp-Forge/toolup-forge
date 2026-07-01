@@ -822,11 +822,6 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
                 makeNullBlobStorage ()
 
-        let vectorStore: IVectorStore =
-            app.VectorStore
-            |> Option.defaultWith (fun () ->
-                new InMemoryVectorStore(blobStorageForRag, logger = ragLogger, telemetry = telemetry) :> IVectorStore)
-
         let sparseIndex: ISparseIndex =
             new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex
 
@@ -892,6 +887,29 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
         let dataManagerIngestionObserver =
             ToolUp.RAG.DataManagerIngestionObserver.create ingestionStatusStore ingestionNotificationChannel ragLogger
+
+        // Phase 14v — build the default vector store here (after the probe)
+        // so it can resolve the audit log + notification channel and make
+        // corrupt-index loads loud (audit event + telemetry counter +
+        // SystemMessage) instead of starting the scope silently empty. Both
+        // collaborators are optional — a `NoAuditLog` / channel-less
+        // deployment still gets the telemetry counter + Warn log line.
+        let ragAuditLog =
+            match probe.GetService(typeof<IAuditLog>) with
+            | :? IAuditLog as a -> Some a
+            | _ -> None
+
+        let vectorStore: IVectorStore =
+            app.VectorStore
+            |> Option.defaultWith (fun () ->
+                new InMemoryVectorStore(
+                    blobStorageForRag,
+                    logger = ragLogger,
+                    telemetry = telemetry,
+                    ?auditLog = ragAuditLog,
+                    ?notifications = ingestionNotificationChannel
+                )
+                :> IVectorStore)
 
         // Pick the registered tracer if any; default to the event-store tracer
         // so retrieval traces are persisted out-of-the-box.

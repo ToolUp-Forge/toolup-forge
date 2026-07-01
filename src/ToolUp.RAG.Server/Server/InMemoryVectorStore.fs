@@ -102,7 +102,15 @@ type InMemoryVectorStore
         ?logger: ILogger,
         ?flushIntervalMs: int,
         ?flushChunkThreshold: int,
-        ?telemetry: IRagTelemetry
+        ?telemetry: IRagTelemetry,
+        // Phase 14v — optional collaborators for corrupt-index observability.
+        // `auditLog` records a `KnowledgeIndexLoadFailed` event; `notifications`
+        // publishes a `SystemMessage` (Error) to platform admins on first
+        // observed corruption per scope. Both optional — a deployment with
+        // `NoAuditLog` / no channel still gets the telemetry counter + Warn
+        // log line (GP 13: no collaborator, no cost).
+        ?auditLog: IAuditLog,
+        ?notifications: INotificationChannel
     ) =
 
     let log =
@@ -220,13 +228,95 @@ type InMemoryVectorStore
             | None -> ()
     }
 
-    let loadScope (scope: VectorScope) = async {
-        match! storage.Download("_rag", blobName scope) with
-        | Ok bytes ->
-            try
-                let json = System.Text.Encoding.UTF8.GetString bytes
-                let entries = fromJson<IndexEntry list> json
+    // ─── Phase 14v — corrupt-index observability + refusal ───────────
+    //
+    // Blob container the index blobs live under. `blobName scope` is the
+    // logical index path within it (`_rag/{scopeKey}/index.json`) — what an
+    // operator greps for the corrupt artefact.
+    let ragContainer = "_rag"
 
+    // Scopes whose corrupt load has already been reported this process.
+    // Keyed by scopeKey so a lazily-loaded team scope re-probed on every
+    // `Search` (the corrupt load leaves it empty, so `ensureScopeLoaded`
+    // re-attempts each time) emits telemetry + audit + a SystemMessage
+    // exactly once, not once per query — the storm guard.
+    let reportedCorruptions = ConcurrentDictionary<string, byte>()
+
+    // Compliance-grade fail-loud toggle. When set, a corrupt-index load is
+    // aborted with an actionable error instead of starting the scope empty;
+    // for the eager Platform/Deployment loads this fails process startup.
+    let refuseOnCorruption =
+        match Environment.GetEnvironmentVariable "TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION" with
+        | "1"
+        | "true"
+        | "TRUE" -> true
+        | _ -> false
+
+    /// Handle a scope-load deserialisation failure. Refusal (when enabled)
+    /// is raised on every attempt, independent of the dedup — a corrupt
+    /// blob must never load empty under fail-loud. The observability
+    /// emissions (telemetry counter + `KnowledgeIndexLoadFailed` audit +
+    /// deduplicated `SystemMessage`) fire once per scope per process.
+    let handleCorruption (scope: VectorScope) (byteLen: int) (reason: string) = async {
+        let scopeKey = scopeToKey scope
+        let location = blobName scope
+
+        if refuseOnCorruption then
+            failwith
+                $"[InMemoryVectorStore] Refusing to start scope '{scopeKey}' from a corrupt index blob '{location}' ({byteLen} bytes): {reason}. TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION is set — replace or delete the blob, then restart (unset the variable to fall back to the default silent-empty behaviour)."
+
+        if reportedCorruptions.TryAdd(scopeKey, 0uy) then
+            match telemetry with
+            | Some t -> t.RecordIndexLoadError scopeKey
+            | None -> ()
+
+            match auditLog with
+            | Some a ->
+                do!
+                    a.Record(
+                        KnowledgeSourceModule.value,
+                        KnowledgeIndexLoadFailed {
+                            ScopeKey = scopeKey
+                            Reason = reason
+                            Bytes = byteLen
+                            BlobLocation = location
+                        }
+                    )
+            | None -> ()
+
+            match notifications with
+            | Some ch ->
+                let text =
+                    $"RAG knowledge index for scope '{scopeKey}' failed to load (corrupt blob '{location}', {byteLen} bytes): {reason}. Retrieval for this scope is running empty until the blob is repaired."
+
+                do!
+                    ch.Publish(
+                        NotificationKind.PlatformReservedScope,
+                        Notification.SystemMessage(SystemMessageLevel.Error, text)
+                    )
+            | None -> ()
+
+            log.Warn
+                $"[InMemoryVectorStore] Corrupt index for {scopeKey}: {reason} — starting empty (telemetry + audit + SystemMessage emitted)."
+        else
+            log.Warn
+                $"[InMemoryVectorStore] Corrupt index for {scopeKey}: {reason} — starting empty (already reported this process)."
+    }
+
+    let loadScope (scope: VectorScope) = async {
+        match! storage.Download(ragContainer, blobName scope) with
+        | Ok bytes ->
+            // Parse in a pure try/with so the corruption handler (which
+            // awaits audit + notification) runs outside the exception frame.
+            let entriesResult =
+                try
+                    let json = System.Text.Encoding.UTF8.GetString bytes
+                    Ok(fromJson<IndexEntry list> json)
+                with ex ->
+                    Error ex.Message
+
+            match entriesResult with
+            | Ok entries ->
                 for e in entries do
                     let chunk = {
                         Content = e.Content
@@ -239,8 +329,7 @@ type InMemoryVectorStore
 
                     store.AddOrUpdate((e.ScopeTag, e.ChunkId), (unit, chunk), fun _ _ -> (unit, chunk))
                     |> ignore
-            with ex ->
-                log.Warn $"[InMemoryVectorStore] Corrupt index for {scopeToKey scope}: {ex.Message} — starting empty."
+            | Error reason -> do! handleCorruption scope bytes.Length reason
         | Error _ -> ()
     }
 

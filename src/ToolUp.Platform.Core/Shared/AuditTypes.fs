@@ -948,6 +948,40 @@ type KnowledgeScopeErasedPayload = {
     OrphanChunkCount: int
 }
 
+/// Phase 14v — reserved audit scope for RAG/KB knowledge-index
+/// infrastructure events. `KnowledgeIndexLoadFailed` is recorded under
+/// this scope (via `IAuditLog.Record`) so an operator can query the
+/// knowledge-index health trail in isolation, distinct from per-tenant
+/// activity. Deployment-wide, like the `_platform` scope the Platform
+/// KB document events use.
+module KnowledgeSourceModule =
+    [<Literal>]
+    let value = "_platform.knowledge"
+
+/// Phase 14v — a persisted RAG vector-index blob failed to deserialise
+/// on scope load. Today the in-memory vector store catches the
+/// deserialisation failure, logs a single `Warn`, and starts the scope
+/// empty; in multi-replica deploys a blob corrupted by one node (disk
+/// failure, partial flush during a pod kill) makes the next replica read
+/// that scope and start it silently empty — retrieval returns nothing
+/// and the operator has no signal beyond a buried log line. This event
+/// makes the corrupt load loud (GP 6 + GP 9). Identifiers + cardinality
+/// only; no index content travels through the audit trail.
+type KnowledgeIndexLoadFailedPayload = {
+    /// Vector-store scope key whose index failed to load —
+    /// `platform` / `deployment` / `team:{teamId}`.
+    ScopeKey: string
+    /// Deserialisation failure detail (the exception message). Verbatim
+    /// so operators can correlate against the store's own `Warn` log line.
+    Reason: string
+    /// Size of the corrupt blob in bytes. Cardinality only — the body
+    /// itself never travels through the audit trail.
+    Bytes: int
+    /// Blob location (the index path within the RAG container) so the
+    /// operator can find and replace / delete the corrupt artefact.
+    BlobLocation: string
+}
+
 // ─── Share-token audit payloads ───────────────────────────────────────
 
 /// `IShareTokenStore.Issue` succeeded. `UserId` is the issuer (the
@@ -2490,6 +2524,11 @@ type AuditEvent =
     /// Reserved `SourceModule = "_platform.classification"`. Value-free;
     /// one row per non-`Allow` decision so a DLP deny is never silent.
     | EgressBlocked of EgressBlockedPayload
+    /// Phase 14v — a persisted RAG vector-index blob failed to
+    /// deserialise on scope load (disk corruption / partial flush during
+    /// a pod kill). Recorded under `KnowledgeSourceModule.value` scope;
+    /// makes the formerly `Warn`-only silent-empty load loud (GP 6 + GP 9).
+    | KnowledgeIndexLoadFailed of KnowledgeIndexLoadFailedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2601,6 +2640,7 @@ module AuditEvent =
         | KnowledgeScopeErased _ -> "KnowledgeScopeErased"
         | AuthorizationDenied _ -> "AuthorizationDenied"
         | EgressBlocked _ -> "EgressBlocked"
+        | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
