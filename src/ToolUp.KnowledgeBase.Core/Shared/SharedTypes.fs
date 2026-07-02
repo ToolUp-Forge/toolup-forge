@@ -117,6 +117,16 @@ type KnowledgeDocument = {
     /// is overwritten by a new ingestion of the same narrative.
     ChunkCount: int
     Source: KnowledgeSource
+    /// Phase 14x — lowercase SHA-256 hex of the raw uploaded bytes,
+    /// stamped by `UploadDocument` so a scope-local re-upload of the
+    /// same file short-circuits to this document instead of
+    /// re-ingesting (see `KnowledgeDedupPolicy`). `None` for notes,
+    /// narratives, and documents ingested before the dedup landed —
+    /// legacy entries never match, so the first re-upload of a legacy
+    /// document still re-ingests once and the new entry then carries
+    /// the hash. Deserialising a pre-14x index record leaves this
+    /// `None` (missing JSON properties absorb leniently).
+    ContentHash: string option
 }
 
 // ─── Narrative ingestion ─────────────────────────────────────────
@@ -325,6 +335,34 @@ module KnowledgeUploadPolicy =
     /// uncapped in-memory `byte[]` is then a per-tenant DoS lever.
     let warnsUncappedInTeamMode (teamScoped: bool) (policy: KnowledgeUploadPolicy) : bool =
         teamScoped && policy.MaxUploadBytes.IsNone && not policy.AcceptUnboundedUploads
+
+// ─── Document dedup policy (Phase 14x) ───────────────────────────
+
+/// Compose-time content-hash dedup policy for KB uploads. When
+/// `DedupUploads` is `true` (the default a deployment gets without
+/// calling `withDocumentDedup`), `UploadDocument` SHA-256-hashes the
+/// raw uploaded bytes and — when the caller's scope already holds a
+/// document with the same hash — returns the existing document instead
+/// of re-ingesting: uploads are idempotent and the corpus never
+/// accumulates byte-identical duplicates (Phase 14x). The dedup
+/// decision is audited (`KnowledgeDocumentDeduplicated`) and surfaced
+/// to the user as an Info `SystemMessage`.
+///
+/// `KnowledgeBase.Server.withDocumentDedup false` opts a deployment out
+/// for cases where byte-identical re-uploads should legitimately stay
+/// separate documents (e.g. contract revisions where each upload is its
+/// own record); the opt-out restores the pre-14x upload path
+/// byte-for-byte (GP 11).
+type KnowledgeDedupPolicy = { DedupUploads: bool }
+
+module KnowledgeDedupPolicy =
+    /// The default: dedup on. Resolved when a deployment never calls
+    /// `withDocumentDedup`.
+    let enabled: KnowledgeDedupPolicy = { DedupUploads = true }
+
+    /// The opt-out: pre-14x behaviour byte-for-byte — no hashing, no
+    /// lookup, every upload ingests.
+    let disabled: KnowledgeDedupPolicy = { DedupUploads = false }
 
 // ─── Note authoring ──────────────────────────────────────────────
 

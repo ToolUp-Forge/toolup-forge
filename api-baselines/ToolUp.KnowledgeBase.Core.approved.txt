@@ -111,9 +111,16 @@ SharedTypes+KnowledgeBaseError+Tags (class)
 SharedTypes+KnowledgeBaseError+Tags.NoOriginalAvailable : System.Int32 (literal)
 SharedTypes+KnowledgeBaseError+Tags.NotInScope : System.Int32 (literal)
 SharedTypes+KnowledgeBaseError+Tags.OriginalRetrievalFailed : System.Int32 (literal)
+SharedTypes+KnowledgeDedupPolicy (class)
+SharedTypes+KnowledgeDedupPolicy..ctor(System.Boolean)
+SharedTypes+KnowledgeDedupPolicy.DedupUploads : System.Boolean { get }
+SharedTypes+KnowledgeDedupPolicyModule (class)
+SharedTypes+KnowledgeDedupPolicyModule.disabled : SharedTypes+KnowledgeDedupPolicy { get }
+SharedTypes+KnowledgeDedupPolicyModule.enabled : SharedTypes+KnowledgeDedupPolicy { get }
 SharedTypes+KnowledgeDocument (class)
-SharedTypes+KnowledgeDocument..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String, SharedTypes+IngestionStatus, System.Int64, System.Int32, SharedTypes+KnowledgeSource)
+SharedTypes+KnowledgeDocument..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String, SharedTypes+IngestionStatus, System.Int64, System.Int32, SharedTypes+KnowledgeSource, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 SharedTypes+KnowledgeDocument.ChunkCount : System.Int32 { get }
+SharedTypes+KnowledgeDocument.ContentHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 SharedTypes+KnowledgeDocument.FileName : System.String { get }
 SharedTypes+KnowledgeDocument.FileType : System.String { get }
 SharedTypes+KnowledgeDocument.Id : System.String { get }

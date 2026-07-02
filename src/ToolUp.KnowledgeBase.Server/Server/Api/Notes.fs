@@ -52,6 +52,10 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                 SizeBytes = sizeBytes
                 ChunkCount = chunks.Length
                 Source = Note noteSource
+                // Phase 14x — dedup applies to uploaded files only; a
+                // note whose body happens to match an upload must not
+                // hijack it.
+                ContentHash = None
             }
 
             // Persist raw body so the note round-trips even if the

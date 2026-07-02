@@ -102,6 +102,12 @@ type KnowledgeApiDeps = {
     /// (no caps; pre-119 behaviour modulo always-on filename sanitisation
     /// and the `UnsupportedFormat` status fix). Enforced by `uploadDocument`.
     UploadPolicy: KnowledgeUploadPolicy
+    /// Phase 14x — compose-time content-hash dedup policy. Resolved from
+    /// DI when a deployment composed `withDocumentDedup`; otherwise
+    /// `KnowledgeDedupPolicy.enabled` (uploads dedup by default; the
+    /// opt-out restores pre-14x behaviour byte-for-byte, GP 11).
+    /// Consulted by `uploadDocument` before anything is persisted.
+    DedupPolicy: KnowledgeDedupPolicy
 }
 
 module KnowledgeApiDeps =
@@ -262,6 +268,13 @@ module KnowledgeApiDeps =
             | :? KnowledgeUploadPolicy as p -> p
             | _ -> KnowledgeUploadPolicy.permissive
 
+        // Phase 14x — dedup policy registered by `withDocumentDedup`;
+        // dedup enabled when absent.
+        let dedupPolicy =
+            match ctx.RequestServices.GetService(typeof<KnowledgeDedupPolicy>) with
+            | :? KnowledgeDedupPolicy as p -> p
+            | _ -> KnowledgeDedupPolicy.enabled
+
         let accessContext =
             match ctx.RequestServices.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
@@ -344,6 +357,7 @@ module KnowledgeApiDeps =
             EnsureContextWriteAllowed = ensureContextWriteAllowed
             ScopeResolvedFromRequest = scopeResolvedFromRequest
             UploadPolicy = uploadPolicy
+            DedupPolicy = dedupPolicy
         }
 
     /// Fail-closed guard for destructive KB operations. Returns `Error`

@@ -281,6 +281,8 @@ let allTests =
         KnowledgeScopeResetAuditTests.tests
         RAGVacuumJobHandlerTests.tests
         KnowledgeUploadPolicyTests.tests
+        // Phase 14x — KB upload content-hash dedup.
+        KnowledgeDedupTests.tests
         BrandingTests.tests
         BrandKitTests.tests
         // Phase 92 — BrandKit layout library (seven layouts: a11y
@@ -338,10 +340,11 @@ let allTests =
         // note in HomeOverviewTests.fs for why it can't run in-process.
         HomeOverviewTests.countAffordanceTests
         HomeOverviewTests.overviewScopeAiTests
-        // Probe-present converse: a registered IActiveAiProbe surfaces the
-        // wired platform provider on the Home overview (pins the v0.9.4
-        // RAG-path "No AI provider configured" fork-drift regression).
-        HomeOverviewTests.overviewActiveAiPresentTests
+        // NOTE: `HomeOverviewTests.overviewActiveAiPresentTests` (the
+        // IActiveAiProbe probe-present converse, registered by the Phase
+        // 14t commit) was never committed on the HomeOverviewTests.fs
+        // side, leaving this project uncompilable — the dangling
+        // registration is removed until the test body lands.
         // Phase 217 — IHomeWidgetDataProvider merge + scope-correctness.
         HomeOverviewTests.widgetDataTests
         // Phase 217 — recents/pinning per-user round-trip + scope isolation.

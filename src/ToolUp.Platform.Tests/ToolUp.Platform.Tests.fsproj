@@ -469,6 +469,9 @@
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />
+        <!-- Phase 14x — KB upload content-hash dedup (idempotent re-upload,
+             hash ref index, opt-out, Failed-retry path, legacy-index pin). -->
+        <Compile Include="InProcess\KnowledgeDedupTests.fs" />
         <!-- Phase 5e — per-tenant branding: Branding.resolve fallback +
              hex validation, and PlatformSchema.mergeBrandingSchema. -->
         <Compile Include="InProcess\BrandingTests.fs" />

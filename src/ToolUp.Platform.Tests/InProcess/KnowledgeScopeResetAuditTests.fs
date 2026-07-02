@@ -67,6 +67,7 @@ let private mkDoc (docId: string) : KnowledgeDocument = {
     SizeBytes = 0L
     ChunkCount = 1
     Source = UploadedFile
+    ContentHash = None
 }
 
 let private chunk content : TextChunk = {
@@ -107,6 +108,7 @@ let private mkDeps
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
+        DedupPolicy = KnowledgeDedupPolicy.enabled
     }
 
 let tests =

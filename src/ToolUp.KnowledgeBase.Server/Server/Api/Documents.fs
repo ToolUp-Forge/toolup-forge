@@ -2,6 +2,7 @@ module KnowledgeBase.ServerApiDocuments
 
 open System
 open System.IO
+open System.Security.Cryptography
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.RAG.IngestionTypes
@@ -11,60 +12,70 @@ open KnowledgeBase.ServerExtractionErrors
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerApiDeps
 
-let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> = async {
-    let docId = Guid.NewGuid().ToString()
+// ─── Content-hash dedup (Phase 14x) ───────────────────────────────
 
-    // Phase 119 — server-controlled storage key. `Path.GetFileName` strips
-    // any directory component the caller smuggled in (`../../index.json` →
-    // `index.json`); the docId GUID prefix + a separator-free name then
-    // means the blob key can never escape `knowledge/{docId}/` or reach the
-    // container-root `knowledge/index.json`. `FileNameSanitiser.validate`
-    // rejects whatever survives stripping (control chars, over-length).
-    let safeName = Path.GetFileName fileName
-    let ext = Path.GetExtension(safeName).ToLowerInvariant().TrimStart('.')
-    let policy = deps.UploadPolicy
+/// Lowercase SHA-256 hex of the raw uploaded bytes — the dedup
+/// identity. Raw bytes, not extracted text: extraction runs off the
+/// request path (the upload returns before OCR starts), so only a
+/// pre-persist hash can honour the "re-upload returns the existing
+/// docId" contract — and the re-upload case dedup targets is
+/// byte-identity by construction. Byte-different files whose *text*
+/// happens to match (e.g. a re-exported PDF) ingest as separate
+/// documents.
+let private contentHashOf (bytes: byte[]) : string =
+    SHA256.HashData bytes |> Convert.ToHexStringLower
 
-    // Pure pre-persist policy evaluation (GP 9 — a refusal stores nothing
-    // and is loud). Filename sanitisation runs regardless of policy; the
-    // size cap / allowlist / unsupported-Reject levers fire only when the
-    // deployment composed them via `withUploadPolicy`.
-    let rejectionReason: string option =
-        match FileNameSanitiser.validate safeName with
-        | Error reason -> Some(sprintf "unsafe filename — %s" reason)
-        | Ok() ->
-            match KnowledgeUploadPolicy.exceedsSizeCap (int64 bytes.Length) policy with
-            | Some reason -> Some reason
-            | None ->
-                if not (KnowledgeUploadPolicy.allowsExtension ext policy) then
-                    Some(sprintf "file type '.%s' is not in this deployment's upload allowlist" ext)
-                elif not (isSupportedExtension ext) && policy.OnUnsupportedType = Reject then
-                    Some(
-                        sprintf
-                            "file type '.%s' has no extractor and this deployment's upload policy rejects unsupported types"
-                            ext
-                    )
-                else
-                    None
+/// Per-scope secondary index mapping content hash → docId as
+/// `_platform/kb-content-hash/{hash}/{docId}.ref` inside the scope's
+/// own container (Phase 9f `BlobIndex`). GP 4 is structural: the
+/// container IS the tenant boundary, so a hash can never match across
+/// scopes. Refs are existence-only; the canonical
+/// `knowledge/index.json` stays authoritative — a ref whose document
+/// is gone (deleted / `ResetIndex`) is skipped at lookup and
+/// overwritten by the next upload of the same bytes (drift contract).
+let private contentHashIndex (deps: KnowledgeApiDeps) : SecondaryIndex.BlobIndex<string, string> =
+    SecondaryIndex.BlobIndex.create deps.Storage deps.Scope.Container "_platform/kb-content-hash" id id Some
 
-    match rejectionReason with
-    | Some reason ->
-        // Nothing is persisted; the returned document carries the typed
-        // rejection so the client can surface the reason. Logged at Warn.
-        deps.Logger.Warn(sprintf "[KnowledgeBase] Upload rejected (%s): %s" reason safeName)
+/// O(1) scope-local duplicate lookup: one `List` under the hash's
+/// index segment, then a canonical-index verification of the candidate
+/// ids. A `Failed` document never dedups — re-uploading the same bytes
+/// is the documented retry path for a failed ingestion. In-flight
+/// (`Queued` / `ExtractingText` / `Embedding`) and terminal
+/// (`Complete` / `UnsupportedFormat`) documents both dedup: a
+/// double-submit during ingestion is exactly the race this absorbs.
+let private findDuplicate (deps: KnowledgeApiDeps) (contentHash: string) : Async<KnowledgeDocument option> = async {
+    let! refs = (contentHashIndex deps).Lookup contentHash
 
-        return {
-            Id = docId
-            FileName = safeName
-            FileType = ext
-            UploadedAt = DateTimeOffset.UtcNow
-            UploadedBy = deps.UserId
-            Status = UploadRejected reason
-            SizeBytes = int64 bytes.Length
-            ChunkCount = 0
-            Source = UploadedFile
-        }
-    | None ->
+    match refs with
+    | [] -> return None
+    | refs ->
+        let candidateIds = refs |> List.map fst |> Set.ofList
+        let! index = loadIndex deps.Storage deps.Scope.Container
 
+        return
+            index
+            |> List.tryFind (fun d ->
+                candidateIds.Contains d.Id
+                && d.ContentHash = Some contentHash
+                && (match d.Status with
+                    | Failed _ -> false
+                    | _ -> true))
+}
+
+/// Persist + ingest path for a non-duplicate upload — the pre-14x body
+/// of `uploadDocument`, plus the `ContentHash` stamp and the hash-index
+/// registration. `contentHash` is `None` when the deployment opted out
+/// via `withDocumentDedup false`, keeping the opt-out path byte-for-byte
+/// identical to pre-14x behaviour (GP 11): no hash stored, no ref written.
+let private persistAndIngest
+    (deps: KnowledgeApiDeps)
+    (bytes: byte[])
+    (docId: string)
+    (safeName: string)
+    (ext: string)
+    (contentHash: string option)
+    : Async<KnowledgeDocument> =
+    async {
         // Persist the raw blob synchronously so a refresh during extraction
         // still finds the source file. ChunkCount stays 0 until extraction
         // completes — the observer reads it from the index, so the chunk
@@ -80,6 +91,7 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
             SizeBytes = int64 bytes.Length
             ChunkCount = 0
             Source = UploadedFile
+            ContentHash = contentHash
         }
 
         let rawBlobName = sprintf "knowledge/%s/%s" docId safeName
@@ -90,6 +102,14 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
         // the background extraction below, which re-acquires the same
         // container lock via `updateIndexStatus`.
         do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+
+        // Phase 14x — register the content hash in the O(1) dedup index.
+        // Written after the canonical index entry so a crash between the
+        // two writes leaves a missing ref (dedup miss → harmless
+        // re-ingest), never a ref with no canonical entry behind it.
+        match contentHash with
+        | Some hash -> do! (contentHashIndex deps).Add hash docId None
+        | None -> ()
 
         // Seed initial cache state. The background extractor flips this to
         // ExtractingText as soon as it starts running.
@@ -197,6 +217,124 @@ let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) :
 
         do! deps.PublishInventory()
         return doc
+    }
+
+let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> = async {
+    let docId = Guid.NewGuid().ToString()
+
+    // Phase 119 — server-controlled storage key. `Path.GetFileName` strips
+    // any directory component the caller smuggled in (`../../index.json` →
+    // `index.json`); the docId GUID prefix + a separator-free name then
+    // means the blob key can never escape `knowledge/{docId}/` or reach the
+    // container-root `knowledge/index.json`. `FileNameSanitiser.validate`
+    // rejects whatever survives stripping (control chars, over-length).
+    let safeName = Path.GetFileName fileName
+    let ext = Path.GetExtension(safeName).ToLowerInvariant().TrimStart('.')
+    let policy = deps.UploadPolicy
+
+    // Pure pre-persist policy evaluation (GP 9 — a refusal stores nothing
+    // and is loud). Filename sanitisation runs regardless of policy; the
+    // size cap / allowlist / unsupported-Reject levers fire only when the
+    // deployment composed them via `withUploadPolicy`.
+    let rejectionReason: string option =
+        match FileNameSanitiser.validate safeName with
+        | Error reason -> Some(sprintf "unsafe filename — %s" reason)
+        | Ok() ->
+            match KnowledgeUploadPolicy.exceedsSizeCap (int64 bytes.Length) policy with
+            | Some reason -> Some reason
+            | None ->
+                if not (KnowledgeUploadPolicy.allowsExtension ext policy) then
+                    Some(sprintf "file type '.%s' is not in this deployment's upload allowlist" ext)
+                elif not (isSupportedExtension ext) && policy.OnUnsupportedType = Reject then
+                    Some(
+                        sprintf
+                            "file type '.%s' has no extractor and this deployment's upload policy rejects unsupported types"
+                            ext
+                    )
+                else
+                    None
+
+    match rejectionReason with
+    | Some reason ->
+        // Nothing is persisted; the returned document carries the typed
+        // rejection so the client can surface the reason. Logged at Warn.
+        deps.Logger.Warn(sprintf "[KnowledgeBase] Upload rejected (%s): %s" reason safeName)
+
+        return {
+            Id = docId
+            FileName = safeName
+            FileType = ext
+            UploadedAt = DateTimeOffset.UtcNow
+            UploadedBy = deps.UserId
+            Status = UploadRejected reason
+            SizeBytes = int64 bytes.Length
+            ChunkCount = 0
+            Source = UploadedFile
+            ContentHash = None
+        }
+    | None ->
+
+        if not deps.DedupPolicy.DedupUploads then
+            // `withDocumentDedup false` — pre-14x path byte-for-byte
+            // (GP 11): no hash computed, no lookup, no ref written.
+            return! persistAndIngest deps bytes docId safeName ext None
+        else
+            // Phase 14x — scope-local content-hash dedup, checked before
+            // anything is persisted. A duplicate upload stores nothing:
+            // the existing document is returned verbatim (same docId),
+            // ingestion is skipped, the decision is audited, and the
+            // user sees an Info toast.
+            let contentHash = contentHashOf bytes
+            let! duplicate = findDuplicate deps contentHash
+
+            match duplicate with
+            | None -> return! persistAndIngest deps bytes docId safeName ext (Some contentHash)
+            | Some existing ->
+                deps.Logger.Info(
+                    sprintf
+                        "[KnowledgeBase] Upload of '%s' deduplicated onto existing document %s (content hash %s)"
+                        safeName
+                        existing.Id
+                        contentHash
+                )
+
+                match deps.AuditLog with
+                | Some audit ->
+                    // Best-effort by contract (`IAuditLog.Record` swallows
+                    // its own failures), awaited on the request path (GP 7)
+                    // — an audit gap never fails the upload.
+                    do!
+                        audit.Record(
+                            deps.Scope.ScopeId,
+                            KnowledgeDocumentDeduplicated {
+                                UserId = deps.UserId
+                                ScopeId = deps.Scope.ScopeId
+                                ExistingDocumentId = existing.Id
+                                FileName = safeName
+                                ContentHash = contentHash
+                            }
+                        )
+                | None -> ()
+
+                if not (isNull (box deps.Notifications)) then
+                    try
+                        do!
+                            deps.Notifications.Publish(
+                                deps.UserId,
+                                SystemMessage(
+                                    SystemMessageLevel.Info,
+                                    sprintf
+                                        "\"%s\" already exists in the knowledge base — using the existing copy."
+                                        safeName
+                                )
+                            )
+                    with ex ->
+                        deps.Logger.Error(
+                            sprintf "[KnowledgeBase] Failed to publish dedup notification for %s" safeName,
+                            Some ex
+                        )
+
+                return existing
 }
 
 let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =
@@ -254,6 +392,14 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
 
                     let updated = existing |> List.filter (fun d -> d.Id <> docId)
                     do! saveIndex deps.Storage deps.Scope.Container updated
+
+                    // Phase 14x — drop the content-hash dedup ref so a
+                    // future upload of the same bytes re-ingests fresh
+                    // instead of being pointed at the deleted docId
+                    // (`Remove` is idempotent; legacy docs carry no hash).
+                    match doc.ContentHash with
+                    | Some hash -> do! (contentHashIndex deps).Remove hash docId
+                    | None -> ()
 
                     statusCache.TryRemove(docId) |> ignore
                     // Invalidate the prompt-build inventory cache so the next AI

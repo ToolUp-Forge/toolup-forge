@@ -102,6 +102,13 @@ let withOriginalSourceResolver =
 /// fix).
 let withUploadPolicy = KnowledgeBase.ServerUploadPolicy.withUploadPolicy
 
+/// Phase 14x — compose-time lever for KB upload content-hash dedup
+/// (on by default; `withDocumentDedup false` restores the pre-14x
+/// always-ingest behaviour byte-for-byte). Defined in
+/// `Server/UploadPolicy.fs`; re-exported here alongside the other
+/// compose-time hooks.
+let withDocumentDedup = KnowledgeBase.ServerUploadPolicy.withDocumentDedup
+
 /// Wave 1 Gap #2 — explicit operator-callable recovery hook for the KB
 /// ingestion pipeline. The in-process `IngestionQueue` (in
 /// `ToolUp.RAG.IngestionTypes`) has no durable backing, so a crash

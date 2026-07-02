@@ -151,7 +151,20 @@ The whole point of "standing context" is that it's *always* seen, not retrieved 
 
 The blob deletion is container-locked (a single `ResetIndex` call serialises against concurrent uploads in the same container); this prevents partial-state errors when an upload races with a reset.
 
-Dedup is by content hash on upload — re-uploading the same bytes returns the existing document rather than creating a duplicate. Narrative-commit uses a separate identity (a stable hash of the AI-generated narrative + originating module) so that the same narrative committed twice updates the existing entry instead of creating a new one.
+### Upload content-hash dedup (Phase 14x)
+
+Dedup is by content hash on upload — re-uploading the same bytes into the same scope returns the existing document rather than creating a duplicate. The contract:
+
+- **Identity** is the lowercase SHA-256 hex of the *raw uploaded bytes*, computed in `UploadDocument` before anything is persisted. Raw bytes rather than extracted text: extraction runs off the request path (the upload returns before OCR starts), so only a pre-persist hash can return the existing `docId` synchronously — and the re-upload case dedup targets is byte-identity by construction. Byte-different files whose extracted text happens to match (e.g. a re-exported PDF) ingest as separate documents.
+- **On a scope-local match** the existing `KnowledgeDocument` is returned verbatim (same `docId`), nothing is persisted, ingestion is skipped (no re-chunk, no re-embed, no duplicate retrieval hits), a `KnowledgeDocumentDeduplicated` audit event is emitted (identifiers + hash only), and the uploader sees an Info `SystemMessage` ("this document already exists in the knowledge base").
+- **Lookup is O(1)** via a per-scope secondary index (`BlobIndex`, Phase 9f) at `_platform/kb-content-hash/{hash}/{docId}.ref` inside the scope's own container — the container is the tenant boundary, so a hash can never match across scopes (GP 4). The canonical `knowledge/index.json` stays authoritative: a ref whose document is gone (deleted, `ResetIndex`) is skipped at lookup and overwritten by the next upload of the same bytes.
+- **A `Failed` document never dedups** — re-uploading the same bytes is the documented retry path for a failed ingestion. In-flight (`Queued` / `ExtractingText` / `Embedding`) and terminal (`Complete` / `UnsupportedFormat`) documents both dedup, so a double-submit during ingestion is absorbed.
+- **Scope**: uploaded files only. Notes and narratives carry `ContentHash = None` and never participate. Documents ingested before 14x have no hash either — the first re-upload of a legacy document still re-ingests once; the new entry then carries the hash.
+- **Opt-out**: `KnowledgeBase.Server.withDocumentDedup false` restores the pre-14x always-ingest path byte-for-byte (no hash computed, no ref written) for deployments where byte-identical re-uploads must stay separate documents — e.g. contract revisions uploaded as distinct records (GP 11).
+- **Known race**: two concurrent first-uploads of the same bytes can both miss the lookup and both ingest — dedup is best-effort idempotency, not a uniqueness constraint. The next upload of those bytes dedups against whichever entry the lookup verifies first.
+- **`ResetIndex`** does not sweep `_platform/kb-content-hash/`; stale refs are harmless (canonical-index verification drops them) but accumulate until a vacuum — same drift contract as every Phase 9f index.
+
+Narrative-commit uses a separate identity (a stable hash of the AI-generated narrative + originating module) so that the same narrative committed twice updates the existing entry instead of creating a new one.
 
 ## File extraction notes
 

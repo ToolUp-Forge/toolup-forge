@@ -1022,6 +1022,24 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> KnowledgeIndexLoadFailed(fromAuditJson<KnowledgeIndexLoadFailedPayload> j)
     }
+    // Phase 303 — ingestion-queue drop audit row (append-only registration).
+    {
+        EventType = "KnowledgeIngestionDropped"
+        TryEncode =
+            (function
+            | KnowledgeIngestionDropped p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> KnowledgeIngestionDropped(fromAuditJson<KnowledgeIngestionDroppedPayload> j)
+    }
+    // Phase 14x — KB upload content-hash dedup audit row (append-only registration).
+    {
+        EventType = "KnowledgeDocumentDeduplicated"
+        TryEncode =
+            (function
+            | KnowledgeDocumentDeduplicated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> KnowledgeDocumentDeduplicated(fromAuditJson<KnowledgeDocumentDeduplicatedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

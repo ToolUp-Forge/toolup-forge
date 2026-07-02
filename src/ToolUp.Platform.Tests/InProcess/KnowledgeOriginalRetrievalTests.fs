@@ -64,6 +64,7 @@ let private mkDoc (docId: string) (fileName: string) (fileType: string) (source:
     SizeBytes = 0L
     ChunkCount = 1
     Source = source
+    ContentHash = None
 }
 
 let private mkDeps
@@ -100,6 +101,7 @@ let private mkDeps
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
+        DedupPolicy = KnowledgeDedupPolicy.enabled
     }
 
 let private narrativeSource: NarrativeDocSource = {

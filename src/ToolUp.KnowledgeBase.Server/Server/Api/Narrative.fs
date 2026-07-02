@@ -99,6 +99,9 @@ let ingestNarrative
                             SettingsDisplay = prov.SettingsDisplay
                             GeneratedAt = prov.GeneratedAt
                         }
+                    // Phase 14x — narratives dedup by provenance
+                    // (`DuplicateExists` + `Overwrite`), not content hash.
+                    ContentHash = None
                 }
 
                 // Vector-chunk cleanup on overwrite. When the regenerated

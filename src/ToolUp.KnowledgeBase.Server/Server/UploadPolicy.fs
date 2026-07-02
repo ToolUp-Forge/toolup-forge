@@ -66,3 +66,32 @@ let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerAp
     }
 
     ServerApp.withConfigValidator (UploadPolicyValidator(app.Config, policy) :> IConfigValidator) withSingleton
+
+/// Phase 14x — compose-time lever for KB upload content-hash dedup.
+/// Dedup is ON by default (no call needed): `UploadDocument` SHA-256-
+/// hashes the raw uploaded bytes and a scope-local match returns the
+/// existing document — no re-chunk, no re-embed, no duplicate retrieval
+/// hits — emitting a `KnowledgeDocumentDeduplicated` audit row and an
+/// Info `SystemMessage` to the uploader. Call `withDocumentDedup false`
+/// when byte-identical re-uploads must legitimately stay separate
+/// documents (e.g. contract revisions where each upload is its own
+/// record); the opt-out restores the pre-14x upload path byte-for-byte
+/// (GP 11 — no hash computed, no ref written). Threads through the same
+/// `ComposeExtensions.ServiceConfig` seam as `withUploadPolicy`, so
+/// `AIServerApp` / `RAGServerApp` inherit it via their `Base`.
+let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
+    let policy: KnowledgeDedupPolicy = { DedupUploads = enabled }
+
+    let register (s: IServiceCollection) =
+        s.AddSingleton<KnowledgeDedupPolicy>(policy)
+
+    {
+        app with
+            Extensions = {
+                app.Extensions with
+                    ServiceConfig =
+                        match app.Extensions.ServiceConfig with
+                        | None -> Some register
+                        | Some baseFn -> Some(fun s -> register (baseFn s))
+            }
+    }

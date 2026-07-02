@@ -69,6 +69,10 @@ let private mkDeps (storage: IBlobStorage) (policy: KnowledgeUploadPolicy) (cont
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
     UploadPolicy = policy
+    // Phase 119 assertions pin the pre-dedup upload path; dedup has its
+    // own pack (`KnowledgeDedupTests`), and each 119 case uploads
+    // distinct bytes anyway.
+    DedupPolicy = KnowledgeDedupPolicy.enabled
 }
 
 let private isRejected =

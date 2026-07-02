@@ -1029,6 +1029,31 @@ type KnowledgeIngestionDroppedPayload = {
     Reason: string
 }
 
+/// Phase 14x — a KB upload was deduplicated onto an existing document:
+/// the caller's scope already held a `KnowledgeDocument` with the same
+/// content hash, so `UploadDocument` returned the existing document and
+/// skipped ingestion entirely (no re-chunk, no re-embed, no duplicate
+/// retrieval hits). Audited so the idempotent-upload decision is
+/// queryable in the trail (GP 5 — the dedup outcome is recorded, not
+/// silent). Identifiers + hash only; no document content travels
+/// through the audit trail (same PII envelope as the other KB events).
+type KnowledgeDocumentDeduplicatedPayload = {
+    /// User whose upload was deduplicated.
+    UserId: string
+    /// Scope the existing document lives in — the caller's resolved
+    /// scope (the hash index is container-local, GP 4).
+    ScopeId: string
+    /// Id of the pre-existing `KnowledgeDocument` the upload matched
+    /// and that was returned to the caller.
+    ExistingDocumentId: string
+    /// File name of the *attempted* upload. May differ from the stored
+    /// document's name — dedup keys on content, not name.
+    FileName: string
+    /// Lowercase SHA-256 hex of the uploaded bytes. A correlation
+    /// identifier, not content.
+    ContentHash: string
+}
+
 // ─── Share-token audit payloads ───────────────────────────────────────
 
 /// `IShareTokenStore.Issue` succeeded. `UserId` is the issuer (the
@@ -2586,6 +2611,11 @@ type AuditEvent =
     /// formerly telemetry-only queue-overflow loss queryable per-document
     /// (GP 6 + GP 9).
     | KnowledgeIngestionDropped of KnowledgeIngestionDroppedPayload
+    /// Phase 14x — a KB upload matched an existing document's content
+    /// hash in the caller's scope and was deduplicated onto it
+    /// (idempotent upload; ingestion skipped). Recorded under the
+    /// caller's scope.
+    | KnowledgeDocumentDeduplicated of KnowledgeDocumentDeduplicatedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2700,6 +2730,7 @@ module AuditEvent =
         | EgressBlocked _ -> "EgressBlocked"
         | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
         | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
+        | KnowledgeDocumentDeduplicated _ -> "KnowledgeDocumentDeduplicated"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
