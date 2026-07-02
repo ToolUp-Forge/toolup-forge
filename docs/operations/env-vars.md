@@ -87,6 +87,7 @@ Client (Vite defines) — **off-direction only**; enabling carries a structured 
 |---|---|---|
 | `TOOLUP_REQUIRE_HTTPS` | `RequireHttps` | `false` |
 | `TOOLUP_TRUST_FORWARDED_HEADERS` | `TrustForwardedHeaders` | `true` (fail-loud on unrecognised value) |
+| `TOOLUP_TRUSTED_PROXY_CIDRS` | `TrustedProxyCidrs` | empty (comma-separated CIDRs, e.g. `10.0.0.0/8`; fail-loud on malformed entry — Phase 325) |
 | `TOOLUP_STATIC_PATH_BEHAVIOUR` | `StaticPathBehaviour` | `warn` (`warn`/`require`/`skip`) |
 | `TOOLUP_SSE_AUTH` | `SseAuthMode` | `fallback` (`cookie`/`fallback`) |
 | `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | `MaxSseConnectionsPerScope` | `10` (positive int or `none`) |
@@ -112,6 +113,7 @@ Each is `false` by default; setting it to `1`/`true`/`yes`/`on` opts the deploym
 | `TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE` | `AcceptUnboundAudienceWhenAuthRequired` |
 | `TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE` | `AcceptInMemoryOAuthStateInMultiInstance` |
 | `TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE` | `AcceptInMemoryShareTokenRateLimiterInMultiInstance` |
+| `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY` | `AcceptForwardedHeadersFromAnyProxy` |
 | `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | `AcceptPendingInviteStoreInMultiInstance` |
 
 _Other already-honoured scalars (`TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES`, `TOOLUP_STORE_EVICTION_MINUTES`, `TOOLUP_RATE_LIMIT_*`) are documented at their field definitions in `SDK.Shared.fs`; they move into this table as the later Phase 71.A increments consolidate the parsers._

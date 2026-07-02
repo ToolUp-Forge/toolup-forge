@@ -27,6 +27,41 @@ open ToolUp.Platform.SurfaceEnforcement
 // default. Serverless host adapters never call `RunBlocking()`; they
 // invoke the configured pipeline per cloud invocation via
 // `IServerHost.Invoke`.
+
+/// Phase 325 — build the `ForwardedHeadersOptions` registered when
+/// `TrustForwardedHeaders = true`, extracted so tests exercise the
+/// trust scope directly. An empty `TrustedProxyCidrs` preserves the
+/// pre-325 posture — `KnownIPNetworks` / `KnownProxies` cleared, the
+/// listed headers honoured from any peer (a posture
+/// `ForwardedHeadersTrustValidator` now gates in auth-requiring
+/// modes). A populated allowlist scopes the trust instead:
+/// `KnownIPNetworks` is populated from the parsed CIDRs, so
+/// `X-Forwarded-*` from an out-of-range peer is ignored by the
+/// middleware. A malformed entry fails loud here as the backstop for
+/// `SkipPreflight` deployments (the preflight validator surfaces the
+/// same message as an `Error` first otherwise).
+let buildForwardedHeadersOptions (config: ServerConfig) : Microsoft.AspNetCore.Builder.ForwardedHeadersOptions =
+    let opts = Microsoft.AspNetCore.Builder.ForwardedHeadersOptions()
+
+    opts.ForwardedHeaders <-
+        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+        ||| Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+
+    // Default known-network limits (127.0.0.1, ::1) are too narrow for
+    // typical cloud load balancers — clear them, then re-populate from
+    // the operator-declared allowlist when one is present.
+    opts.KnownIPNetworks.Clear()
+    opts.KnownProxies.Clear()
+
+    match ForwardedHeadersTrustValidator.Cidr.parseAll config.TrustedProxyCidrs with
+    | Ok [] -> () // trust-any-peer posture (validator-gated in auth-requiring modes)
+    | Ok networks ->
+        for network in networks do
+            opts.KnownIPNetworks.Add network
+    | Error bad -> failwith (ForwardedHeadersTrustValidator.Cidr.malformedMessage bad)
+
+    opts
+
 let configurePipeline
     (app: WebApplication)
     (config: ServerConfig)
@@ -43,32 +78,21 @@ let configurePipeline
     // `Request.Scheme` to reflect the originating proxy hop, not the
     // proxy-to-origin scheme.
     if config.TrustForwardedHeaders then
-        let opts = Microsoft.AspNetCore.Builder.ForwardedHeadersOptions()
+        app.UseForwardedHeaders(buildForwardedHeadersOptions config) |> ignore
 
-        opts.ForwardedHeaders <-
-            Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
-            ||| Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
-
-        // Default known-network limits (127.0.0.1, ::1) are too narrow
-        // for typical cloud load balancers — clear them so the listed
-        // headers are honoured from any peer. Deployments with strict
-        // network controls can override by registering a custom
-        // `ForwardedHeadersOptions` post-`compose`.
-        opts.KnownIPNetworks.Clear()
-        opts.KnownProxies.Clear()
-        app.UseForwardedHeaders(opts) |> ignore
-
-        // Phase 16d follow-up — surface the "trust any peer" posture
-        // explicitly. `KnownIPNetworks` / `KnownProxies` are cleared
-        // above by design, so an attacker sending `X-Forwarded-Proto`
-        // or `X-Forwarded-For` from any peer is honoured. Behind a
-        // single TLS-terminating ingress that's the right shape; in
-        // any other topology operators should pin the proxy CIDR via
-        // a post-`compose` `ForwardedHeadersOptions` registration.
-        // Logged at startup (not per request) so the noise budget is
-        // bounded.
-        resolvedLogger.Warn
-            "ServerConfig.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured from any peer (KnownIPNetworks + KnownProxies cleared by design). Behind a single TLS-terminating ingress this is correct. To pin a known proxy CIDR range, register a custom `ForwardedHeadersOptions` post-`compose`. To opt out entirely, set `TOOLUP_TRUST_FORWARDED_HEADERS=0`."
+        // Phase 16d follow-up / Phase 325 — surface the trust posture
+        // explicitly at startup (not per request, so the noise budget
+        // is bounded). Trust-any-peer (empty allowlist) warns; a
+        // scoped allowlist logs the declared networks at Info.
+        if List.isEmpty config.TrustedProxyCidrs then
+            resolvedLogger.Warn
+                "ServerConfig.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured from any peer (KnownIPNetworks + KnownProxies cleared; TrustedProxyCidrs is empty). Behind a single TLS-terminating ingress that strips client-supplied X-Forwarded-* headers this is correct. To scope the trust to your proxy's network(s), set `TOOLUP_TRUSTED_PROXY_CIDRS` (comma-separated CIDRs). To opt out entirely, set `TOOLUP_TRUST_FORWARDED_HEADERS=0`."
+        else
+            resolvedLogger.Info(
+                "ServerConfig.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured only from TrustedProxyCidrs: "
+                + String.concat ", " config.TrustedProxyCidrs
+                + "."
+            )
 
     // Exception-handler middleware. Without this, ASP.NET Core's
     // behaviour depends on the host's `EnvironmentName`: in

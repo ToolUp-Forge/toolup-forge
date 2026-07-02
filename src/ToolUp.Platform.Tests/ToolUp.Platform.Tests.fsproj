@@ -364,6 +364,7 @@
         <Compile Include="InProcess\SecurityHeadersValidatorTests.fs" />
         <Compile Include="InProcess\SecurityHardeningTests.fs" />
         <Compile Include="InProcess\ForwardedHeadersTrustValidatorTests.fs" />
+        <Compile Include="InProcess\ForwardedHeadersTrustTests.fs" />
         <Compile Include="InProcess\LocalSecretFilePermissionsValidatorTests.fs" />
         <Compile Include="InProcess\IdentitySanitiserTests.fs" />
         <Compile Include="InProcess\FileManagementTests.fs" />

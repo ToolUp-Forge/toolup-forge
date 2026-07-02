@@ -85,7 +85,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (PeerBearerConfigValidator.PeerBearerConfigValidator(config, secretStore)) // warn PeerRoutePrefixes set but no peer bearer secrets seeded
     addConfigValidator (MaxRequestBodyBytesValidator.MaxRequestBodyBytesValidator(config)) // warn high request-body cap + no rate-limit (memory-DoS surface)
     addConfigValidator (CorsConfigValidator.CorsConfigValidator(config)) // refuse AllowCredentials + wildcard-origin CORS
-    addConfigValidator (ForwardedHeadersTrustValidator.ForwardedHeadersTrustValidator(config)) // warn TrustForwardedHeaders without RequireHttps in auth mode
+    addConfigValidator (ForwardedHeadersTrustValidator.ForwardedHeadersTrustValidator(config)) // Phase 325 — refuse unscoped TrustForwardedHeaders (empty TrustedProxyCidrs, no escape hatch) in auth modes; warn anonymous-only; refuse malformed CIDRs
     addConfigValidator (CsrfHardeningValidator.CsrfHardeningValidator(config)) // warn hardening + PublicBaseUrl: split-origin SPA must call CsrfClient.setApiOrigin
     addConfigValidator (LocalSecretFilePermissionsValidator.LocalSecretFilePermissionsValidator()) // probe working-dir secret files for permissive Unix modes
     addConfigValidator (LocalStorageEncryptionValidator.LocalFileStorageEncryptionAtRestValidator(resolvedBlobStorage)) // warn local blob storage that is not encrypted-at-rest

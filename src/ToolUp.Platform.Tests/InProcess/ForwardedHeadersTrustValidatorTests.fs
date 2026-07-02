@@ -24,7 +24,8 @@ let tests =
         test "Anonymous mode + TrustForwardedHeaders → Warning (rate-limit-bypass signal, no longer exempt)" {
             // The X-Forwarded-For spoof bypasses IP rate limiting + poisons
             // logs in anonymous mode too — anonymous deployments must get the
-            // signal, not silence.
+            // signal, not silence (and no refusal — Phase 325 escalates only
+            // auth-requiring modes).
             let result = validate (cfg Surfaces.anonymous true false)
 
             match result with
@@ -38,13 +39,15 @@ let tests =
             Expect.equal result Ok "validator only fires when forwarded headers are trusted"
         }
 
-        test "Individual mode + TrustForwardedHeaders + RequireHttps → Warning (rate-limit bypass persists)" {
+        test
+            "Individual mode + TrustForwardedHeaders + RequireHttps → Error (rate-limit bypass persists; Phase 325 escalation)" {
             // RequireHttps closes the IsHttps spoof but NOT the X-Forwarded-For
-            // rate-limit-bypass / log-poisoning (KnownProxies still cleared).
+            // rate-limit-bypass / log-poisoning (KnownProxies still cleared) —
+            // with an empty TrustedProxyCidrs the auth-mode posture refuses.
             let result = validate (cfg Surfaces.individual true true)
 
             match result with
-            | Warning msg ->
+            | Error msg ->
                 Expect.stringContains
                     msg
                     "X-Forwarded-For"
@@ -53,38 +56,40 @@ let tests =
                 Expect.isFalse
                     (msg.Contains "TOOLUP_REQUIRE_HTTPS=1")
                     "no IsHttps clause when HTTPS is already required"
-            | other -> failtestf "expected Warning, got %A" other
+            | other -> failtestf "expected Error, got %A" other
         }
 
-        test "Individual mode + TrustForwardedHeaders + no HTTPS → Warning" {
+        test "Individual mode + TrustForwardedHeaders + no HTTPS → Error (Phase 325 escalation)" {
             let result = validate (cfg Surfaces.individual true false)
 
             match result with
-            | Warning msg ->
+            | Error msg ->
                 Expect.stringContains msg "Individual" "names the offending mode"
 
                 Expect.stringContains msg "TrustForwardedHeaders = true" "names the offending config"
 
                 Expect.stringContains msg "RequireHttps = false" "names the missing config"
                 Expect.stringContains msg "X-Forwarded-Proto" "explains the consequence"
-                Expect.stringContains msg "TOOLUP_REQUIRE_HTTPS=1" "points at the canonical fix"
-            | other -> failtestf "expected Warning, got %A" other
+                Expect.stringContains msg "TOOLUP_REQUIRE_HTTPS=1" "points at the canonical HTTPS fix"
+
+                Expect.stringContains msg "TOOLUP_TRUSTED_PROXY_CIDRS" "points at the CIDR allowlist fix"
+            | other -> failtestf "expected Error, got %A" other
         }
 
-        test "Team mode + TrustForwardedHeaders + no HTTPS → Warning" {
+        test "Team mode + TrustForwardedHeaders + no HTTPS → Error (Phase 325 escalation)" {
             let result = validate (cfg Surfaces.team true false)
 
             match result with
-            | Warning msg -> Expect.stringContains msg "Team" "names the offending mode"
-            | other -> failtestf "expected Warning, got %A" other
+            | Error msg -> Expect.stringContains msg "Team" "names the offending mode"
+            | other -> failtestf "expected Error, got %A" other
         }
 
-        test "MultiTeam mode + TrustForwardedHeaders + no HTTPS → Warning" {
+        test "MultiTeam mode + TrustForwardedHeaders + no HTTPS → Error (Phase 325 escalation)" {
             let result = validate (cfg Surfaces.multiTeam true false)
 
             match result with
-            | Warning msg -> Expect.stringContains msg "MultiTeam" "names the offending mode"
-            | other -> failtestf "expected Warning, got %A" other
+            | Error msg -> Expect.stringContains msg "MultiTeam" "names the offending mode"
+            | other -> failtestf "expected Error, got %A" other
         }
 
         test "Validator metadata is well-formed" {

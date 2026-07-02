@@ -189,6 +189,8 @@ let allTests =
         SecurityHeadersValidatorTests.tests
         SecurityHardeningTests.tests
         ForwardedHeadersTrustValidatorTests.tests
+        // Phase 325 — trusted-proxy CIDR allowlist + auth-mode escalation.
+        ForwardedHeadersTrustTests.tests
         LocalSecretFilePermissionsValidatorTests.tests
         IdentitySanitiserTests.tests
         FileManagementTests.tests
@@ -417,6 +419,10 @@ let allTests =
         PlatformPeerTests.inProcessTests
         PlatformPeerTests.workedExampleTests
         PlatformPeerTests.audienceBindingTests
+        // Phase 308 — job-poll caller-ownership scoping: a parked
+        // long-running result is readable only by the peer that
+        // scheduled it.
+        PlatformPeerTests.jobPollOwnershipTests
         // Phase 18c — federation primitives: IPeerFanout (scatter to N
         // peers, total result map under timeout / quorum / first-success)
         // + IPeerCascade (next-hop Route / HopsRemaining bookkeeping with

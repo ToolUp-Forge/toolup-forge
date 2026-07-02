@@ -1757,6 +1757,29 @@ type ServerConfig = {
     /// Set `false` (or `TOOLUP_TRUST_FORWARDED_HEADERS=0`) on a direct-
     /// bind dev shell with no proxy hop.
     TrustForwardedHeaders: bool
+    /// Phase 325 — CIDR allowlist scoping `TrustForwardedHeaders`.
+    /// When non-empty, `UseForwardedHeaders` honours `X-Forwarded-For`
+    /// / `X-Forwarded-Proto` only from peers inside these networks
+    /// (`ForwardedHeadersOptions.KnownIPNetworks` is populated from
+    /// the parsed entries instead of being cleared). Entries are
+    /// IPv4/IPv6 networks in CIDR form with host bits zero
+    /// (`"10.0.0.0/8"`, `"2001:db8::/32"`); a malformed entry fails
+    /// loud at startup. Default `[]` preserves the pre-325
+    /// trust-any-peer posture (GP 11) — but
+    /// `ForwardedHeadersTrustValidator` escalates that posture to a
+    /// preflight `Error` in auth-requiring modes unless
+    /// `AcceptForwardedHeadersFromAnyProxy` is set. Override via
+    /// `TOOLUP_TRUSTED_PROXY_CIDRS` (comma-separated CIDR list).
+    TrustedProxyCidrs: string list
+    /// Phase 325 — explicit opt-in to keeping the trust-any-peer
+    /// forwarded-headers posture (`TrustForwardedHeaders = true` with
+    /// an empty `TrustedProxyCidrs`) in an auth-requiring mode. Set
+    /// `true` only when a single trusted proxy that strips
+    /// client-supplied `X-Forwarded-*` headers fronts every request
+    /// path. Default `false` — `ForwardedHeadersTrustValidator`
+    /// refuses startup in auth-requiring modes otherwise. Override
+    /// via `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY=1`.
+    AcceptForwardedHeadersFromAnyProxy: bool
     /// What to do when `PublicPath` doesn't exist on disk at startup.
     /// Default `Warn` (backward-compatible — local dev appropriate).
     /// Production sets `RequireExist` so a missing artefact crashes
@@ -2881,6 +2904,8 @@ module ServerConfig =
         ModuleBindingTrust = ModuleBindingTrustConfig.defaults
         RequireHttps = false
         TrustForwardedHeaders = true
+        TrustedProxyCidrs = []
+        AcceptForwardedHeadersFromAnyProxy = false
         StaticPathBehaviour = Warn
         SlowRequestThreshold = TimeSpan.FromSeconds 1.0
         SlowRequestThresholdOverrides = Map.empty
@@ -3525,6 +3550,13 @@ module ServerConfig =
                 ModuleBindingTrust = moduleBindingTrust
                 RequireHttps = envFlag "TOOLUP_REQUIRE_HTTPS"
                 TrustForwardedHeaders = envFlagOrFail "TOOLUP_TRUST_FORWARDED_HEADERS" defaults.TrustForwardedHeaders
+                // Phase 325 — trusted-proxy CIDR allowlist + its escape hatch.
+                // Entries are validated (fail-loud on malformed CIDR) by the
+                // preflight validator + the pipeline's options builder, not here:
+                // `fromEnv` stays a pure string read so the error surfaces with
+                // the same message whichever construction path built the config.
+                TrustedProxyCidrs = parseStringList "TOOLUP_TRUSTED_PROXY_CIDRS"
+                AcceptForwardedHeadersFromAnyProxy = envFlag "TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY"
                 StaticPathBehaviour = parseStaticPathBehaviour logger
                 SlowRequestThresholdOverrides =
                     overrides.SlowRequestThresholdOverrides
