@@ -191,3 +191,147 @@ module ClientHostInvokeView =
             (fun model dispatch ->
                 view model dispatch (ClientHostCapabilities.create dispatch) (ClientHostInvoke.create registry))
             m
+
+// ─── Phase 270 — hosted-tree capability/version negotiation gate ──────
+//
+// The host runtime (Phase 110) and an external tree language version
+// independently; nothing checked compatibility, so a tree that needs a newer
+// capability (Phase 266's `Invoke`, or a binding shape the host predates)
+// rendered BROKEN — a cryptic partial render with a console warning. This is
+// a lightweight handshake: the host advertises a `HostCapabilitySet`
+// version + supported ids, the tree declares its minimum required set, and a
+// mismatch raises a STRUCTURED error at mount naming the missing capability —
+// not a console warning after a half-render. It complements Phase 203's
+// STRUCTURAL (SSR↔CSR) parity check with a CAPABILITY compatibility check.
+
+/// A version + the set of capability ids in scope. For the HOST: the version
+/// it advertises + the capability ids it implements (the four built-ins plus
+/// any Phase 266 registered ids). For a TREE's required set: the minimum
+/// version + the ids it needs. Neutral — capability ids are opaque strings.
+type HostCapabilitySet = {
+    /// Host-capability protocol version. A tree that requires a higher version
+    /// than the host advertises fails negotiation.
+    Version: int
+    /// The capability ids in the set (host: implemented; tree: required).
+    Capabilities: Set<string>
+}
+
+/// Why a capability negotiation failed. Structured — a mount-time error names
+/// the gap, never a post-render console warning.
+[<RequireQualifiedAccess>]
+type HostCapabilityMismatch =
+    /// The tree requires `required` but the host advertises `hostVersion`
+    /// (below the minimum the tree needs).
+    | VersionTooLow of required: int * hostVersion: int
+    /// The tree requires capability ids the host does not implement. Sorted
+    /// for a stable, greppable message.
+    | MissingCapabilities of missing: string list
+
+[<RequireQualifiedAccess>]
+module HostCapabilityMismatch =
+    /// Human-readable description of the gap — what a mount-time error state
+    /// renders and what the Phase 268 telemetry sink records.
+    let describe (mismatch: HostCapabilityMismatch) : string =
+        match mismatch with
+        | HostCapabilityMismatch.VersionTooLow(required, hostVersion) ->
+            sprintf "hosted tree requires host-capability version %d but the host advertises %d" required hostVersion
+        | HostCapabilityMismatch.MissingCapabilities missing ->
+            sprintf "host does not implement required capabilities: %s" (String.concat ", " missing)
+
+[<RequireQualifiedAccess>]
+module HostCapabilitySet =
+
+    /// The four Phase 110 built-in capability ids (the `ActionDescriptor.Kind`
+    /// vocabulary). The default required set a hosted view declares when it
+    /// names none — always satisfied by any host, so an existing
+    /// `withElementView` caller is byte-for-byte unchanged (GP 11).
+    let builtInCapabilities: Set<string> =
+        Set.ofList [ "navigate"; "call"; "notify"; "dispatch" ]
+
+    /// The version the current host protocol advertises. Bump when the
+    /// host-capability surface gains a breaking shape.
+    [<Literal>]
+    let CurrentVersion = 1
+
+    /// The default required set — the four built-ins at the current version. A
+    /// hosted view that declares nothing negotiates this and always mounts.
+    let defaultRequired: HostCapabilitySet = {
+        Version = CurrentVersion
+        Capabilities = builtInCapabilities
+    }
+
+    /// A host set advertising `CurrentVersion` + the four built-ins + the given
+    /// Phase 266 registered capability ids.
+    let host (registered: CapabilityId seq) : HostCapabilitySet = {
+        Version = CurrentVersion
+        Capabilities =
+            registered
+            |> Seq.map CapabilityId.value
+            |> Set.ofSeq
+            |> Set.union builtInCapabilities
+    }
+
+    /// A tree's required set: the minimum version + the capability ids it
+    /// needs (the four built-ins are always implicitly required).
+    let requires (version: int) (capabilities: CapabilityId seq) : HostCapabilitySet = {
+        Version = version
+        Capabilities =
+            capabilities
+            |> Seq.map CapabilityId.value
+            |> Set.ofSeq
+            |> Set.union builtInCapabilities
+    }
+
+[<RequireQualifiedAccess>]
+module HostCapabilityNegotiation =
+
+    /// Check a tree's `required` set against the `host`'s advertised set.
+    /// Returns `Ok ()` when the host meets or exceeds the required version AND
+    /// implements every required capability; otherwise a structured
+    /// `HostCapabilityMismatch` naming the gap (never a thrown console
+    /// warning). Called at mount.
+    let negotiate (required: HostCapabilitySet) (host: HostCapabilitySet) : Result<unit, HostCapabilityMismatch> =
+        if host.Version < required.Version then
+            Error(HostCapabilityMismatch.VersionTooLow(required.Version, host.Version))
+        else
+            let missing = Set.difference required.Capabilities host.Capabilities
+
+            if Set.isEmpty missing then
+                Ok()
+            else
+                Error(HostCapabilityMismatch.MissingCapabilities(missing |> Set.toList |> List.sort))
+
+[<RequireQualifiedAccess>]
+module ClientHostNegotiatedView =
+
+    /// The structured mount-time error element (not a console warning) a
+    /// hosted view renders when negotiation fails.
+    let private mismatchElement (mismatch: HostCapabilityMismatch) : ReactElement =
+        Html.div [
+            prop.className "toolup-host-capability-mismatch"
+            prop.children [
+                Html.strong [ prop.text "Hosted view unavailable" ]
+                Html.p [ prop.text (HostCapabilityMismatch.describe mismatch) ]
+            ]
+        ]
+
+    /// `ClientHostView.withElementView` with a mount-time capability handshake.
+    /// Negotiates the tree's `required` set against the `host`'s advertised set
+    /// once at mount: on success the tree renders as usual; on a mismatch it
+    /// renders a STRUCTURED error state (never a silent partial render) and
+    /// reports the gap through `onMismatch` (wire the Phase 268 render-failure
+    /// telemetry sink here; pass `ignore` when none is composed). Existing
+    /// `withElementView` callers that declare no required set stay on the
+    /// four-built-in default and always mount (GP 11).
+    let withNegotiatedElementView
+        (required: HostCapabilitySet)
+        (host: HostCapabilitySet)
+        (onMismatch: HostCapabilityMismatch -> unit)
+        (view: 'Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> ReactElement)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        match HostCapabilityNegotiation.negotiate required host with
+        | Ok() -> ClientHostView.withElementView view m
+        | Error mismatch ->
+            onMismatch mismatch
+            ClientModule.withFullWidthView (fun _ _ -> mismatchElement mismatch) m

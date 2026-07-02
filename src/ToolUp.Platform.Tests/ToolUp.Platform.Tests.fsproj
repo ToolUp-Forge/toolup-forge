@@ -410,6 +410,12 @@
              clipboard-write / file-read built-ins reaching their injected
              effect through the gate. -->
         <Compile Include="InProcess\HostCapabilityRegistryTests.fs" />
+        <!-- Phase 270 — hosted-tree capability/version negotiation gate:
+             matched sets mount clean; a missing capability / below-minimum
+             version fails with a structured HostCapabilityMismatch naming the
+             gap (not a console warning); the four-built-in default always
+             satisfies (GP 11). -->
+        <Compile Include="InProcess\HostCapabilityNegotiationTests.fs" />
         <Compile Include="InProcess\ModuleExposureMigrationTests.fs" />
         <Compile Include="InProcess\NoActiveTeamLandingTests.fs" />
         <!-- Phase 227 (task #4) — typed client-side scope-denial

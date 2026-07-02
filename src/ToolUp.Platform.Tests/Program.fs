@@ -224,6 +224,10 @@ let allTests =
         // Invoke (registered-only-when-granted / unregistered-denies /
         // cross-scope-denies / empty-registry-deny-all) + built-ins.
         HostCapabilityRegistryTests.tests
+        // Phase 270 — hosted-tree capability/version negotiation gate:
+        // matched sets mount clean; missing capability / below-min version
+        // fail with a structured mismatch naming the gap.
+        HostCapabilityNegotiationTests.tests
         // Phase 245 — tri-state ModuleExposure persistence migration
         // (legacy `hidden[]` → Hidden, dual-write back-compat).
         ModuleExposureMigrationTests.tests
