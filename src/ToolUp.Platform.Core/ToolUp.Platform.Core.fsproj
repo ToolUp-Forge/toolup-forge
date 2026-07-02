@@ -139,6 +139,15 @@
              (the Authorize parameter) + PermissionTypes (ModulePermission
              in ActionRequirement). -->
         <Compile Include="Shared\Types\ActionAuthorization.fs" />
+        <!-- Phase 266 — extensible host-capability registry: CapabilityId /
+             HostCapabilityArgs / HostCapabilityOutcome / IHostCapabilityRegistry
+             + the authorizer-gated default `create` + forge-public built-in
+             capabilities (clipboard-write / file-read). After
+             ActionAuthorization.fs (every Invoke maps to an ActionDescriptor
+             and routes through IActionAuthorizer) + AccessContext (the Invoke
+             parameter). Fable-safe (plain Dictionary, injected side-effects)
+             so it ships under fable/ for the client host bridge. -->
+        <Compile Include="Shared\Types\HostCapabilityRegistry.fs" />
         <!-- Phase 41 — data-classification shared types (ClassificationLevel
              / FieldClassification / FieldHit). Standalone; no deps. -->
         <Compile Include="Shared\Types\ClassificationTypes.fs" />

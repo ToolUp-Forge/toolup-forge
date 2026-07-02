@@ -399,6 +399,12 @@
              grant→Allow, tier gate, cross-scope, fail-closed), contract
              binding. -->
         <Compile Include="InProcess\ActionAuthorizerTests.fs" />
+        <!-- Phase 266 — extensible host-capability registry: authorizer-gated
+             Invoke (registered-only-when-granted, unregistered-denies,
+             cross-scope-denies, empty-registry-deny-all), + the forge-public
+             clipboard-write / file-read built-ins reaching their injected
+             effect through the gate. -->
+        <Compile Include="InProcess\HostCapabilityRegistryTests.fs" />
         <Compile Include="InProcess\ModuleExposureMigrationTests.fs" />
         <Compile Include="InProcess\NoActiveTeamLandingTests.fs" />
         <!-- Phase 227 (task #4) — typed client-side scope-denial

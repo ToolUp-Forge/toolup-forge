@@ -218,6 +218,10 @@ let allTests =
         // policy matching + PermissionStoreActionAuthorizer semantics +
         // contract binding.
         ActionAuthorizerTests.tests
+        // Phase 266 — extensible host-capability registry: authorizer-gated
+        // Invoke (registered-only-when-granted / unregistered-denies /
+        // cross-scope-denies / empty-registry-deny-all) + built-ins.
+        HostCapabilityRegistryTests.tests
         // Phase 245 — tri-state ModuleExposure persistence migration
         // (legacy `hidden[]` → Hidden, dual-write back-compat).
         ModuleExposureMigrationTests.tests

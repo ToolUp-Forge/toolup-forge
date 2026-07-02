@@ -133,3 +133,61 @@ module ClientHostView =
         ClientModule.withFullWidthView
             (fun model dispatch -> view model dispatch (ClientHostCapabilities.create dispatch))
             m
+
+// ─── Phase 266 — additive Invoke hook for capabilities beyond the four ──
+//
+// The four `ClientHostCapabilities` are fixed. A tree language that needs a
+// capability BEYOND them — clipboard-write, file-read, a consumer-registered
+// capability — routes it through `ClientHostInvoke`, whose every call is
+// gated by the Phase 266 `IHostCapabilityRegistry` (an `IActionAuthorizer`
+// default-deny gate). This is a SEPARATE surface from `ClientHostCapabilities`
+// (whose four-member shape every existing binding implements as an object
+// expression) so the existing bag + every `withElementView` caller compile
+// byte-for-byte unchanged (GP 11). A pipeline that never constructs a
+// registry pays nothing (GP 13).
+
+/// The additive Invoke hook a hosted tree uses for named host capabilities
+/// beyond the fixed four. A thin, renderer-neutral view over the composed
+/// `IHostCapabilityRegistry` — every `Invoke` routes through the registry's
+/// authorizer (default-deny); an unregistered id or an unauthorized call
+/// yields `HostCapabilityOutcome.Denied`.
+type ClientHostInvoke =
+    abstract Invoke:
+        capability: CapabilityId -> args: HostCapabilityArgs -> ctx: AccessContext -> Async<HostCapabilityOutcome>
+
+[<RequireQualifiedAccess>]
+module ClientHostInvoke =
+
+    /// Build the Invoke hook from a composed registry. The bridge is a pure
+    /// passthrough — the registry owns the authorizer gate — so a hosted tree
+    /// gets the same default-deny semantics the rest of the platform enforces.
+    let create (registry: IHostCapabilityRegistry) : ClientHostInvoke =
+        { new ClientHostInvoke with
+            member _.Invoke capability args ctx = registry.Invoke capability args ctx
+        }
+
+[<RequireQualifiedAccess>]
+module ClientHostInvokeView =
+
+    /// `ClientHostView.withElementView`-shaped builder whose view ALSO
+    /// receives a `ClientHostInvoke` constructed from the composed registry,
+    /// so a hosted tree gets the four built-in hooks PLUS the authorizer-gated
+    /// `Invoke` for capabilities beyond them. Existing `withView` /
+    /// `withFullWidthView` / `withPages` / `withElementView` callers are
+    /// untouched (GP 11):
+    ///
+    /// ```
+    /// ClientModule.create spec
+    /// |> ClientHostInvokeView.withInvokableElementView registry (fun model dispatch host invoke ->
+    ///     MyTreeRuntime.render (view model) host invoke)
+    /// |> ClientModule.register
+    /// ```
+    let withInvokableElementView
+        (registry: IHostCapabilityRegistry)
+        (view: 'Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> ClientHostInvoke -> ReactElement)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        ClientModule.withFullWidthView
+            (fun model dispatch ->
+                view model dispatch (ClientHostCapabilities.create dispatch) (ClientHostInvoke.create registry))
+            m
