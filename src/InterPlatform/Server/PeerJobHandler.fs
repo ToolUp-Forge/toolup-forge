@@ -23,7 +23,8 @@ open PeerReflection
 //   • `IPeerJobResultStore` / `BlobPeerJobResultStore` — the job
 //     substrate's `JobResult` is `Success | …Failure`, with no payload,
 //     so a finished peer call parks its *typed* (serialised) result
-//     here, keyed by `JobId`, for the polling caller to retrieve.
+//     here, keyed by `JobId` and stamped with the scheduling caller's
+//     `PeerId`, for the polling *owner* to retrieve (Phase 308).
 //   • `PeerJobHandler` — the `IJobHandler` the scheduler dispatches: it
 //     unmarshals the call arguments from the job payload, applies the
 //     contract implementation, resolves the returned `PeerJobHandle<'T>`
@@ -33,6 +34,27 @@ open PeerReflection
 //
 // No new runtime — the existing job substrate is the engine.
 
+/// The job payload the dispatch side schedules for a long-running
+/// contract method: the validated scheduling caller's `PeerId` plus the
+/// method's positional-args JSON exactly as it arrived on the invoke
+/// leg. `JobContext` carries no scheduling-caller identity, so the owner
+/// rides the payload from `scheduleDispatch` to `PeerJobHandler.Execute`,
+/// which stamps it onto the parked result (Phase 308 — caller-ownership
+/// scoping). Identity by value (GP 12 rule 1).
+type PeerJobPayload = {
+    OwnerPeerId: string
+    ArgsJson: string
+}
+
+/// A parked long-running result together with the `PeerId` of the peer
+/// that scheduled it. The poll route compares the recorded owner against
+/// the polling principal and refuses a mismatch — isolation enforced
+/// structurally at the poll seam, not by `jobId` Guid entropy (GP 4).
+type PeerJobRecord = {
+    OwnerPeerId: string
+    Status: PeerJobStatus<string>
+}
+
 /// Persists a long-running peer call's terminal status, keyed by the
 /// backing `JobId`. `IJobScheduler`'s `JobResult` carries no result
 /// payload, so the typed (serialised) result rides here instead. Async
@@ -40,13 +62,16 @@ open PeerReflection
 /// `scopeId` for isolation (GP 4), mirroring `IJobStore`.
 type IPeerJobResultStore =
     /// Record the terminal status (`Completed` json / `Failed` error) of
-    /// a finished peer job. Never called with `Pending` — the absence of
-    /// a stored status *is* the pending signal.
-    abstract SaveResult: scopeId: string * jobId: PeerJobId * status: PeerJobStatus<string> -> Async<unit>
+    /// a finished peer job, stamped with the scheduling caller's
+    /// `PeerId`. Never called with `Pending` — the absence of a stored
+    /// record *is* the pending signal.
+    abstract SaveResult:
+        scopeId: string * jobId: PeerJobId * ownerPeerId: string * status: PeerJobStatus<string> -> Async<unit>
 
-    /// Read a peer job's terminal status. `None` means the job has not
-    /// yet finished (the caller keeps polling); `Some` is terminal.
-    abstract TryGetResult: scopeId: string * jobId: PeerJobId -> Async<PeerJobStatus<string> option>
+    /// Read a peer job's owner-stamped terminal record. `None` means the
+    /// job has not yet finished (the caller keeps polling); `Some` is
+    /// terminal.
+    abstract TryGetResult: scopeId: string * jobId: PeerJobId -> Async<PeerJobRecord option>
 
 /// `IBlobStorage`-backed default. One JSON document per job under the
 /// reserved `_platform` container at `peers/jobs/{scopeId}/{jobId}.json`,
@@ -58,8 +83,13 @@ type BlobPeerJobResultStore(blobs: IBlobStorage) =
     let blobNameFor (scopeId: string) (jobId: PeerJobId) = $"peers/jobs/{scopeId}/{jobId}.json"
 
     interface IPeerJobResultStore with
-        member _.SaveResult(scopeId: string, jobId: PeerJobId, status: PeerJobStatus<string>) = async {
-            let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize status)
+        member _.SaveResult(scopeId: string, jobId: PeerJobId, ownerPeerId: string, status: PeerJobStatus<string>) = async {
+            let record = {
+                OwnerPeerId = ownerPeerId
+                Status = status
+            }
+
+            let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize record)
             let! _ = blobs.Upload(container, blobNameFor scopeId jobId, payload)
             return ()
         }
@@ -71,7 +101,7 @@ type BlobPeerJobResultStore(blobs: IBlobStorage) =
                 match result with
                 | Ok bytes ->
                     try
-                        Some(JsonRpc.deserialize<PeerJobStatus<string>> (Encoding.UTF8.GetString bytes))
+                        Some(JsonRpc.deserialize<PeerJobRecord> (Encoding.UTF8.GetString bytes))
                     with _ ->
                         None
                 | Error _ -> None
@@ -149,9 +179,23 @@ type PeerJobHandler(funcValue: obj, argTypes: Type list, innerType: Type, result
 
     interface IJobHandler with
         member _.Execute(ctx: JobContext) = async {
+            // The dispatch side schedules the owner-stamped `PeerJobPayload`
+            // envelope. A payload that fails to parse as the envelope (a
+            // job scheduled before ownership scoping landed) degrades to
+            // owner-unknown: the whole payload is treated as the args and
+            // the parked record is owned by no peer, so the poll route
+            // fails closed rather than guessing an owner.
+            let envelope =
+                try
+                    JsonRpc.deserialize<PeerJobPayload> ctx.Payload
+                with _ -> {
+                    OwnerPeerId = ""
+                    ArgsJson = ctx.Payload
+                }
+
             let! status = async {
                 try
-                    let args = unmarshalArgs ctx.Payload argTypes
+                    let args = unmarshalArgs envelope.ArgsJson argTypes
                     let boxedAsyncHandle = applyFunction funcValue args
 
                     let statusAsync =
@@ -164,7 +208,7 @@ type PeerJobHandler(funcValue: obj, argTypes: Type list, innerType: Type, result
                 | ex -> return PeerJobStatus.Failed(PeerHandler ex.Message)
             }
 
-            do! resultStore.SaveResult(ctx.ScopeId, ctx.JobId, status)
+            do! resultStore.SaveResult(ctx.ScopeId, ctx.JobId, envelope.OwnerPeerId, status)
             return Success
         }
 

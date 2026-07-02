@@ -98,16 +98,25 @@ module JsonRpcPeerHost =
     /// once, and return the assigned `JobId` (serialised) for the caller
     /// to poll. The job's *typed* result is captured by the registered
     /// `PeerJobHandler` and parked in the `IPeerJobResultStore`; this
-    /// closure only kicks the job off and hands back the id.
+    /// closure only kicks the job off and hands back the id. The
+    /// scheduling caller's `PeerId` — read from the *validated* call
+    /// context, never the wire body — rides the job payload so the parked
+    /// result is owned by that caller and the poll route can refuse any
+    /// other peer (Phase 308, GP 4).
     let private scheduleDispatch
         (fusion: PeerJobFusion)
         (handlerName: string)
-        : string -> Async<Result<string, PeerError>> =
-        fun argsJson -> async {
+        : PeerCallContext -> string -> Async<Result<string, PeerError>> =
+        fun context argsJson -> async {
+            let payload: PeerJobPayload = {
+                OwnerPeerId = context.Peer.PeerId
+                ArgsJson = argsJson
+            }
+
             let registration: JobRegistration = {
                 ScopeId = PeerJob.Scope
                 Handler = handlerName
-                Payload = argsJson
+                Payload = JsonRpc.serialize payload
                 Trigger = Manual
                 Idempotency = None
                 RetryPolicy = JobRetryPolicy.defaults
@@ -177,7 +186,7 @@ module JsonRpcPeerHost =
                         (field.Name, dispatch), Some(hName, jobHandler)
                     | None ->
                         let dispatch =
-                            fun (_: string) -> async {
+                            fun (_: PeerCallContext) (_: string) -> async {
                                 return
                                     Error(
                                         PeerHandler
@@ -187,15 +196,18 @@ module JsonRpcPeerHost =
 
                         (field.Name, dispatch), None
                 else
-                    (field.Name, immediateDispatch implObj field argTypes retType), None)
+                    // Immediate methods take no identity decision, so the
+                    // call context is dropped at this seam.
+                    let immediate = immediateDispatch implObj field argTypes retType
+                    (field.Name, (fun (_: PeerCallContext) argsJson -> immediate argsJson)), None)
 
         let methodMap = perField |> Array.map fst |> Map.ofArray
         let jobHandlers = perField |> Array.choose snd |> Array.toList
 
         let dispatch: PeerDispatch =
-            fun _context methodName argsJson ->
+            fun context methodName argsJson ->
                 match Map.tryFind methodName methodMap with
-                | Some handler -> handler argsJson
+                | Some handler -> handler context argsJson
                 | None -> async { return Error(PeerMethodNotFound methodName) }
 
         {
@@ -394,9 +406,16 @@ module JsonRpcPeerHost =
 
     /// `GET /peer/v1/{contractId}/jobs/{jobId}` — authenticate, then
     /// return the long-running call's current status from the result
-    /// store. `None` (the job has not finished) is reported as `Pending`;
-    /// a finished job reports its stored terminal status. The status rides
-    /// in `Result` as a serialised `PeerJobStatus<string>`, matching what
+    /// store, scoped to the peer that scheduled it (Phase 308). The
+    /// parked record carries the scheduling caller's `PeerId`; a
+    /// different validated peer polling the same `jobId` is refused
+    /// `PeerUnauthorized` (401, no result body) — possession of the
+    /// `jobId` is not authorization (GP 4). An absent record (the job has
+    /// not finished, or never existed) is reported as `Pending` to every
+    /// validated caller — deliberately the same answer for both, so an
+    /// unknown `jobId` discloses nothing. A finished job reports its
+    /// stored terminal status to its owner only. The status rides in
+    /// `Result` as a serialised `PeerJobStatus<string>`, matching what
     /// the client transport's `PollJob` expects. `contractId` is part of
     /// the route for symmetry with the invoke leg; the store is keyed by
     /// scope + job id, so it is not needed for the lookup.
@@ -412,7 +431,7 @@ module JsonRpcPeerHost =
 
                 match validation with
                 | Error e -> return! writeJson 401 (JsonRpc.failure "" e) next ctx
-                | Ok _ ->
+                | Ok principal ->
                     match fusion with
                     | None ->
                         return!
@@ -422,17 +441,31 @@ module JsonRpcPeerHost =
                                 next
                                 ctx
                     | Some f ->
-                        let! status = f.ResultStore.TryGetResult(PeerJob.Scope, jobId) |> Async.StartAsTask
-                        let resolved = status |> Option.defaultValue PeerJobStatus.Pending
+                        let! record = f.ResultStore.TryGetResult(PeerJob.Scope, jobId) |> Async.StartAsTask
 
-                        let response = {
+                        let statusResponse (status: PeerJobStatus<string>) = {
                             JsonRpc = JsonRpc.version
-                            Result = Some(JsonRpc.serialize resolved)
+                            Result = Some(JsonRpc.serialize status)
                             Error = None
                             Id = ""
                         }
 
-                        return! writeJson 200 response next ctx
+                        match record with
+                        | None -> return! writeJson 200 (statusResponse PeerJobStatus.Pending) next ctx
+                        | Some r when r.OwnerPeerId <> "" && r.OwnerPeerId = principal.Caller.PeerId ->
+                            return! writeJson 200 (statusResponse r.Status) next ctx
+                        | Some _ ->
+                            // Not the scheduling caller (or an owner-less
+                            // pre-ownership record, which matches nobody):
+                            // refuse without disclosing the stored status.
+                            return!
+                                writeJson
+                                    401
+                                    (JsonRpc.failure
+                                        ""
+                                        (PeerUnauthorized "peer job result is not owned by the calling peer"))
+                                    next
+                                    ctx
         }
 
     /// The peer host's Giraffe routes. Mount under the deployment's root

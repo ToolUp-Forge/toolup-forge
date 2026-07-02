@@ -134,8 +134,15 @@ let private seedSigningKey (store: ISecretStore) (peerId: string) (key: string) 
 
 /// Build a `TestServer`-hosted seller deployment that mounts the real
 /// `JsonRpcPeerHost.routes` with the given providers registered as DI
-/// singletons (resolved per-request by the host handlers).
-let private buildSellerHost (auth: IPeerAuthProvider) (peer: IPlatformPeer) (audit: IAuditLog) : IHost =
+/// singletons (resolved per-request by the host handlers). `fusion` is
+/// registered only when supplied — the poll-route fixtures need it; the
+/// immediate-dispatch worked example does not.
+let private buildSellerHostWith
+    (fusion: PeerJobFusion option)
+    (auth: IPeerAuthProvider)
+    (peer: IPlatformPeer)
+    (audit: IAuditLog)
+    : IHost =
     Host
         .CreateDefaultBuilder()
         .ConfigureWebHostDefaults(fun webHost ->
@@ -148,10 +155,16 @@ let private buildSellerHost (auth: IPeerAuthProvider) (peer: IPlatformPeer) (aud
                     // the Giraffe serializer / negotiation services.
                     services.AddSingleton<IPeerAuthProvider>(auth) |> ignore
                     services.AddSingleton<IPlatformPeer>(peer) |> ignore
-                    services.AddSingleton<IAuditLog>(audit) |> ignore)
+                    services.AddSingleton<IAuditLog>(audit) |> ignore
+
+                    match fusion with
+                    | Some f -> services.AddSingleton<PeerJobFusion>(f) |> ignore
+                    | None -> ())
                 .Configure(fun (app: IApplicationBuilder) -> app.UseGiraffe JsonRpcPeerHost.routes)
             |> ignore)
         .Build()
+
+let private buildSellerHost = buildSellerHostWith None
 
 /// A proxy config that routes through `client` to the seller over the
 /// absolute base URL the `TestServer` client expects.
@@ -280,6 +293,154 @@ let workedExampleTests =
             Expect.isEmpty
                 (peerCallRootRequestIds audit)
                 "an unauthorized call never reaches dispatch, so no PeerCallCompleted row is emitted"
+        }
+    ]
+
+// ─── Job-poll caller-ownership scoping (Phase 308) ───────────────────
+//
+// The poll route (`GET /peer/v1/{contractId}/jobs/{jobId}`) returns a
+// parked long-running result only to the peer that scheduled it —
+// possession of the `jobId` is not authorization (GP 4). The fixtures
+// seed the result store directly via `SaveResult` (the exact write
+// `PeerJobHandler.Execute` performs; the dispatch→handler owner
+// threading is covered by the contract pack) so these tests isolate the
+// poll seam without standing up a scheduler.
+
+let private intruderId: PeerIdentity = {
+    PeerId = "intruder"
+    DisplayName = "Intruder Deployment"
+}
+
+let private pollTarget: TargetPeer = {
+    Peer = sellerId
+    BaseUrl = "http://localhost"
+}
+
+/// Fusion pair over a fresh in-memory store. The scheduler stub throws
+/// on any use — the poll route must never schedule.
+let private pollFixtureFusion () =
+    let store = IPlatformPeerContract.InMemoryResultStore() :> IPeerJobResultStore
+
+    let fusion: PeerJobFusion = {
+        Scheduler = IPlatformPeerContract.StubScheduler()
+        ResultStore = store
+    }
+
+    store, fusion
+
+let jobPollOwnershipTests =
+    testList "JsonRpcPeerHost — job-poll caller-ownership scoping (Phase 308)" [
+
+        // ─── (a) + (b): owner reads, any other validated peer refused ─
+
+        testCaseAsync
+            "a parked result is readable by its scheduling peer only; another validated peer is refused with no payload"
+        <| async {
+            let buyerKey = "buyer-signing-key-0123456789abcdefghijkl"
+            let intruderKey = "intruder-signing-key-0123456789abcdefghi"
+
+            // The seller trusts both peers' signing keys — the intruder
+            // is a *validated* peer, just not the scheduling caller.
+            let sellerSecrets = InMemorySecretStore() :> ISecretStore
+            seedSigningKey sellerSecrets buyerId.PeerId buyerKey
+            seedSigningKey sellerSecrets intruderId.PeerId intruderKey
+
+            let buyerSecrets = InMemorySecretStore() :> ISecretStore
+            seedSigningKey buyerSecrets buyerId.PeerId buyerKey
+
+            let intruderSecrets = InMemorySecretStore() :> ISecretStore
+            seedSigningKey intruderSecrets intruderId.PeerId intruderKey
+
+            let sellerAuth = JwtPeerAuthProvider(sellerSecrets) :> IPeerAuthProvider
+            let buyerAuth = JwtPeerAuthProvider(buyerSecrets) :> IPeerAuthProvider
+            let intruderAuth = JwtPeerAuthProvider(intruderSecrets) :> IPeerAuthProvider
+
+            let store, fusion = pollFixtureFusion ()
+
+            // Park a completed result owned by the buyer — the exact
+            // write the job handler performs when the job finishes.
+            let jobId = Guid.NewGuid()
+
+            do! store.SaveResult("_platform", jobId, buyerId.PeerId, PeerJobStatus.Completed(JsonRpc.serialize 42))
+
+            let seller = DefaultPlatformPeer() :> IPlatformPeer
+            let host = buildSellerHostWith (Some fusion) sellerAuth seller (RecordingAuditLog())
+            host.Start()
+            use testClient = host.GetTestClient()
+
+            // (a) the scheduling peer reads its own terminal status …
+            let buyerClient = HttpPeerClient(testClient, buyerAuth, buyerId) :> IPeerClient
+            let! owned = buyerClient.PollJob(pollTarget, "directory", jobId)
+
+            match owned with
+            | Ok(PeerJobStatus.Completed json) ->
+                Expect.equal (JsonRpc.deserialize<int> json) 42 "the owner reads the parked typed result"
+            | other -> failtestf "Expected Completed for the owner, got %A" other
+
+            // … and an unknown jobId stays Pending for the owner — not a
+            // disclosure of existence, the same answer as "not finished".
+            let! unknown = buyerClient.PollJob(pollTarget, "directory", Guid.NewGuid())
+
+            match unknown with
+            | Ok PeerJobStatus.Pending -> ()
+            | other -> failtestf "Expected Pending for an unknown jobId, got %A" other
+
+            // (b) a different validated peer polling the same jobId is
+            // rejected and never sees the payload …
+            let intruderClient =
+                HttpPeerClient(testClient, intruderAuth, intruderId) :> IPeerClient
+
+            let! stolen = intruderClient.PollJob(pollTarget, "directory", jobId)
+
+            match stolen with
+            | Error(PeerUnauthorized _) -> ()
+            | other -> failtestf "Expected PeerUnauthorized for a non-owner, got %A" other
+
+            // … verified at the raw HTTP layer too: 401, no result body.
+            let! tokenResult = intruderAuth.IssuePeerToken(intruderId, sellerId, Anonymous)
+
+            let intruderToken =
+                match tokenResult with
+                | Ok t -> t
+                | Error e -> failtestf "intruder token mint failed: %A" e
+
+            use raw =
+                new HttpRequestMessage(HttpMethod.Get, $"http://localhost/peer/v1/directory/jobs/{jobId}")
+
+            raw.Headers.Authorization <- Headers.AuthenticationHeaderValue("Bearer", intruderToken)
+            let! response = testClient.SendAsync raw |> Async.AwaitTask
+            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+            Expect.equal (int response.StatusCode) 401 "a non-owner poll is refused at the HTTP layer"
+            Expect.isFalse (body.Contains "42") "the refused response carries no trace of the parked result"
+        }
+
+        // ─── (c): unauthenticated poll stays 401 (unchanged) ──────────
+
+        testCaseAsync "an unauthenticated poll is refused before any store read"
+        <| async {
+            let sellerSecrets = InMemorySecretStore() :> ISecretStore
+            seedSigningKey sellerSecrets buyerId.PeerId "buyer-signing-key-0123456789abcdefghijkl"
+            let sellerAuth = JwtPeerAuthProvider(sellerSecrets) :> IPeerAuthProvider
+
+            let store, fusion = pollFixtureFusion ()
+            let jobId = Guid.NewGuid()
+
+            do! store.SaveResult("_platform", jobId, buyerId.PeerId, PeerJobStatus.Completed(JsonRpc.serialize 42))
+
+            let seller = DefaultPlatformPeer() :> IPlatformPeer
+            let host = buildSellerHostWith (Some fusion) sellerAuth seller (RecordingAuditLog())
+            host.Start()
+            use testClient = host.GetTestClient()
+
+            use raw =
+                new HttpRequestMessage(HttpMethod.Get, $"http://localhost/peer/v1/directory/jobs/{jobId}")
+
+            let! response = testClient.SendAsync raw |> Async.AwaitTask
+            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+            Expect.equal (int response.StatusCode) 401 "an unauthenticated poll stays 401"
+            Expect.isFalse (body.Contains "42") "the refused response carries no trace of the parked result"
         }
     ]
 

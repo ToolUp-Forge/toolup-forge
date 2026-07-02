@@ -222,7 +222,7 @@ Four routes, all auth-gated (fail-closed — a missing / invalid / expired beare
 | `POST /peer/v1/{contractId}` | Dispatch an immediate call, or schedule a long-running one (returns a `JobId`). |
 | `GET  /peer/v1/capabilities` | Version handshake — answers with a bare `CapabilityList`. |
 | `GET  /peer/v1/capabilities/profile` | Phase 18d — per-method capability profile (lifecycle / deprecation windows). |
-| `GET  /peer/v1/{contractId}/jobs/{jobId}` | Poll a long-running call to a terminal `PeerJobStatus`. |
+| `GET  /peer/v1/{contractId}/jobs/{jobId}` | Poll a long-running call to a terminal `PeerJobStatus`. Owner-scoped: only the peer that scheduled the call can read its result — any other validated peer is refused `PeerUnauthorized` with no result body. |
 
 ## See also
 

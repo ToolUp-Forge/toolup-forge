@@ -100,8 +100,8 @@ ToolUp.InterPlatform.IPeerHandshake.LocalProfile() : Microsoft.FSharp.Control.FS
 ToolUp.InterPlatform.IPeerHandshake.Negotiate(ToolUp.InterPlatform.TargetPeer, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.ContractVersion, ToolUp.InterPlatform.PeerHandshakeError]]
 ToolUp.InterPlatform.IPeerHandshake.NegotiateMethod(ToolUp.InterPlatform.TargetPeer, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.MethodResolution, ToolUp.InterPlatform.MethodNegotiationError]]
 ToolUp.InterPlatform.IPeerJobResultStore (interface)
-ToolUp.InterPlatform.IPeerJobResultStore.SaveResult(System.String, System.Guid, ToolUp.InterPlatform.PeerJobStatus`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.InterPlatform.IPeerJobResultStore.TryGetResult(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobStatus`1[System.String]]]
+ToolUp.InterPlatform.IPeerJobResultStore.SaveResult(System.String, System.Guid, System.String, ToolUp.InterPlatform.PeerJobStatus`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.IPeerJobResultStore.TryGetResult(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobRecord]]
 ToolUp.InterPlatform.IPeerProfileProvider (interface)
 ToolUp.InterPlatform.IPeerProfileProvider.LocalProfile() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile]]
 ToolUp.InterPlatform.IPeerRegistry (interface)
@@ -400,6 +400,14 @@ ToolUp.InterPlatform.PeerJobHandle`1.JobId : System.Guid { get }
 ToolUp.InterPlatform.PeerJobHandle`1.Poll : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.PeerJobStatus`1[T]]] { get }
 ToolUp.InterPlatform.PeerJobHandler (class)
 ToolUp.InterPlatform.PeerJobHandler..ctor(System.Object, Microsoft.FSharp.Collections.FSharpList`1[System.Type], System.Type, ToolUp.InterPlatform.IPeerJobResultStore)
+ToolUp.InterPlatform.PeerJobPayload (class)
+ToolUp.InterPlatform.PeerJobPayload..ctor(System.String, System.String)
+ToolUp.InterPlatform.PeerJobPayload.ArgsJson : System.String { get }
+ToolUp.InterPlatform.PeerJobPayload.OwnerPeerId : System.String { get }
+ToolUp.InterPlatform.PeerJobRecord (class)
+ToolUp.InterPlatform.PeerJobRecord..ctor(System.String, ToolUp.InterPlatform.PeerJobStatus`1[System.String])
+ToolUp.InterPlatform.PeerJobRecord.OwnerPeerId : System.String { get }
+ToolUp.InterPlatform.PeerJobRecord.Status : ToolUp.InterPlatform.PeerJobStatus`1[System.String] { get }
 ToolUp.InterPlatform.PeerJobStatus`1 (class)
 ToolUp.InterPlatform.PeerJobStatus`1.IsCompleted : System.Boolean { get }
 ToolUp.InterPlatform.PeerJobStatus`1.IsFailed : System.Boolean { get }
