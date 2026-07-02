@@ -74,6 +74,12 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
       - name: Restore .NET local tools
         run: dotnet tool restore
 
