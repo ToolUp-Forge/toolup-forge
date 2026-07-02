@@ -1529,9 +1529,21 @@ module ServerApp =
                 let queryRegistrations = m.QueryHandlers |> List.map (fun h -> m.Name, h)
                 let dataTypeRegistrations = m.DataTypes |> List.map (fun dt -> m.Name, dt)
 
+                // Phase 283 — permit the `component_id` correlation
+                // dimension on every module metric's tag allowlist so
+                // per-component telemetry can be keyed by the stable
+                // ComponentId across a display-name rename. Additive: the
+                // allowlist merely *accepts* the id when an emission carries
+                // it (via `Metrics.ComponentCorrelation.withComponentId`);
+                // rendered output stays byte-identical until then (GP 11),
+                // and no id dimension is allocated on the hot path when
+                // unused (GP 13).
                 let metricRegistrations: Metrics.MetricRegistration list =
                     m.MetricDefinitions
-                    |> List.map (fun d -> { Module = Some m.Name; Definition = d })
+                    |> List.map (fun d -> {
+                        Module = Some m.Name
+                        Definition = Metrics.ComponentCorrelation.permitComponentIdDimension d
+                    })
 
                 let mergedSlowRequestOverrides =
                     m.SlowRequestThresholdOverrides
@@ -1669,6 +1681,21 @@ module ServerApp =
         ]
 
         CompositionManifest.build modules companionSlots dataTypes tools configKnobs
+
+    /// Phase 283 — resolve a composed module's stable Phase 279 `ComponentId`
+    /// from its display name (the label its audit events carry as
+    /// `SourceModule`, and the dimension its metrics namespace under). This
+    /// is the correlation join for the audit + telemetry paths: declare an
+    /// explicit id via `ServerModule.withComponentId`, rename the display
+    /// `Name` freely, and this still resolves the same id, so a component's
+    /// audit trail and metric series correlate across the rename. A module
+    /// that declares no explicit id resolves to `ComponentId.ofModule Name`
+    /// (byte-for-byte the pre-283 identity, GP 11) — to survive a rename it
+    /// must declare an explicit id. `None` when no module of that name is
+    /// composed (a reserved `_platform.*` source, or an unregistered name).
+    let componentIdForModule (moduleName: string) (app: ServerApp) : ComponentId option =
+        app.ModuleComponentIds
+        |> List.tryPick (fun (n, id) -> if n = moduleName then Some id else None)
 
     /// Assemble the final `ServerConfig` (merging accumulated module names and
     /// configs) and invoke the underlying `compose`. Returns the process exit

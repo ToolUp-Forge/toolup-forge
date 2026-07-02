@@ -117,6 +117,8 @@ let allTests =
         ComponentIdentityTests.tests
         // Phase 280 — introspectable composition manifest.
         CompositionManifestTests.tests
+        // Phase 283 — component-id telemetry / audit correlation.
+        ComponentIdCorrelationTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests

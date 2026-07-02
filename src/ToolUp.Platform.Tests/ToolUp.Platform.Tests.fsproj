@@ -246,6 +246,11 @@
              ComponentId from the live registry; empty pipeline → empty
              manifest (GP 13). -->
         <Compile Include="InProcess\CompositionManifestTests.fs" />
+        <!-- Phase 283 — component-id telemetry / audit correlation: a
+             module metric + audit source label carry the stable ComponentId;
+             renaming the display name preserves id-keyed correlation; the id
+             dimension is zero-cost when unused (GP 11 / GP 13). -->
+        <Compile Include="InProcess\ComponentIdCorrelationTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->

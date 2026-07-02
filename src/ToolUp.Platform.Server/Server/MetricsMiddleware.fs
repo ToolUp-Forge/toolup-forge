@@ -241,3 +241,61 @@ type MetricsMiddleware(next: RequestDelegate, sink: IMetricsSink) =
             with _ ->
                 ()
     }
+
+// ─── Component-id telemetry correlation — Phase 283 ─────────────────
+//
+// Threads the stable Phase 279 `ComponentId` into metric emission as an
+// additional *tag* dimension (`component_id`) alongside the name-based
+// auto-namespacing that module metrics already carry. A module keeps its
+// name-derived namespace (`toolup.{name}.{metric}`) — byte-for-byte
+// unchanged for a deployment that never emits the id tag (GP 11) — and a
+// deployment that opts in gains a rename-stable grouping key: rename the
+// display `Name` and the metric namespace moves, but the `component_id`
+// tag (when an explicit id was declared via `ServerModule.withComponentId`)
+// stays put, so telemetry correlates across the rename.
+//
+// Zero cost when unused (GP 13): the helpers are pure `string` / `Map`
+// projections a caller pays for only when it merges the tag or permits the
+// dimension. The hot-path emission in `MetricsMiddleware.InvokeAsync` above
+// is untouched — it allocates no id dimension.
+module ComponentCorrelation =
+    open ToolUp.Platform
+
+    /// The standard correlation tag key. One stable wire string that every
+    /// emission site and every dashboard references, so an id-keyed
+    /// grouping survives a display-name rename.
+    [<Literal>]
+    let ComponentIdTag = "component_id"
+
+    /// The `(key, value)` correlation tag carrying a component's stable id.
+    let componentIdTag (componentId: ComponentId) : string * string = ComponentIdTag, componentId.Value
+
+    /// Merge the `component_id` correlation dimension into a tag map.
+    /// Additive — every existing tag is preserved; a caller that never
+    /// merges pays nothing (GP 13).
+    let withComponentId (componentId: ComponentId) (tags: Map<string, string>) : Map<string, string> =
+        let k, v = componentIdTag componentId
+        Map.add k v tags
+
+    /// Permit the `component_id` dimension on a metric's tag allowlist so
+    /// the sink accepts — rather than silently drops — the id when it is
+    /// emitted. Idempotent + order-preserving: the key is appended once, at
+    /// the end, only when absent, so a definition already permitting it (or
+    /// one re-augmented) is returned unchanged. Rendered output stays
+    /// byte-identical until an emission actually carries the tag (GP 11).
+    let permitComponentIdDimension (def: MetricDefinition) : MetricDefinition =
+        if List.contains ComponentIdTag def.Tags then
+            def
+        else
+            {
+                def with
+                    Tags = def.Tags @ [ ComponentIdTag ]
+            }
+
+    /// The stable audit `SourceModule` label for a component. A module that
+    /// wants its audit trail to survive a display-name rename records audit
+    /// under this label (the stable id string) rather than its mutable
+    /// display `Name`, so historical and post-rename events share one
+    /// correlatable source. Opt-in — a module that keeps recording under its
+    /// `Name` is byte-for-byte unchanged (GP 11).
+    let auditSourceLabel (componentId: ComponentId) : string = componentId.Value
