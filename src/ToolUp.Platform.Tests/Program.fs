@@ -176,6 +176,10 @@ let allTests =
         AuditLogHealthCheckTests.tests
         DegradedCapabilityRegistryTests.tests
         AuthAuditHookTests.tests
+        // Phase 272 — hosted-tree action audit emission (GP 6): authorized/
+        // denied actions emit HostActionDispatched; authorize-then-audit is one
+        // path; disabled hook is zero-cost; codec round-trip.
+        HostActionAuditTests.tests
         NotificationSilentlySkippedTests.tests
         EncryptedSecretStoreModeValidatorTests.tests
         JobSchedulerInstanceValidatorTests.tests

@@ -1004,6 +1004,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> AuthorizationDenied(fromAuditJson<AuthorizationDeniedPayload> j)
     }
+    // Phase 272 — hosted-tree action audit row (append-only registration).
+    {
+        EventType = "HostActionDispatched"
+        TryEncode =
+            (function
+            | HostActionDispatched p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> HostActionDispatched(fromAuditJson<HostActionDispatchedPayload> j)
+    }
     // Phase 188 — field-classification egress/DLP gate deny row (append-only registration).
     {
         EventType = "EgressBlocked"

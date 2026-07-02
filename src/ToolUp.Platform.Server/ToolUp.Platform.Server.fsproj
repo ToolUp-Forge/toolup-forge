@@ -443,6 +443,12 @@
              data). After PermissionStore (the backing) + IUserClaims
              (the tier provider). -->
         <Compile Include="Server\Scope\PermissionStoreActionAuthorizer.fs" />
+        <!-- Phase 272 — hosted-tree action audit emission (GP 6): the
+             IHostActionAuditHook + default IAuditLog-backed impl +
+             authorize-then-audit helper. After PermissionStoreActionAuthorizer
+             (composes beside it) + AuditLog.fs (the HostActionDispatched
+             codec + IAuditLog it writes through). -->
+        <Compile Include="Server\Scope\HostActionAuditHook.fs" />
         <Compile Include="Server\Config\IConfigStore.fs" />
         <Compile Include="Server\Config\ConfigStore.fs" />
         <Compile Include="Server\ConfigStoreErasureHandler.fs" />

@@ -1695,6 +1695,38 @@ type AuthorizationDeniedPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 272 — a hosted-tree action was authorized (or denied) through the
+/// host-neutral action seam (Phase 113 `IActionAuthorizer`). GP 6 mandates
+/// "audit everything that changes state" — an action a user drove through a
+/// hosted UI must be traceable for the regulated / Sovereign buyers in the
+/// Vision (provenance is the moat). Keyed on the neutral `ActionDescriptor`
+/// (kind / target / scope) + the decision; NO tree-language type appears
+/// (open-core boundary). PII-free beyond `SubjectId` — same envelope as the
+/// Phase 120 `AuthorizationDenied` row. A DENIED action is audited too (the
+/// security-relevant case).
+type HostActionDispatchedPayload = {
+    /// Subject kind at dispatch (`anonymous` / `user` / `team` / `claim`).
+    SubjectKind: string
+    /// Stable subject id; `None` for anonymous (no PII).
+    SubjectId: string option
+    /// `ActionDescriptor.Kind` — the action space (`dispatch` / `call` /
+    /// `navigate` / `notify` / `invoke` / host-defined).
+    ActionKind: string
+    /// `ActionDescriptor.Target` — the specific action within the kind (a
+    /// message case name, a Remoting method, a route, a capability id).
+    ActionTarget: string
+    /// Scope the action targeted (`ActionDescriptor.Scope`); `None` when the
+    /// action carried no explicit scope.
+    ScopeId: string option
+    /// `true` when the authorizer granted the action; `false` for a denial.
+    Allowed: bool
+    /// Human-readable decision reason — the authorizer's `Deny` reason, or a
+    /// fixed `"allowed"` marker on the grant path. Bounded + PII-free beyond
+    /// `SubjectId`.
+    Reason: string
+    OccurredAt: DateTimeOffset
+}
+
 // ─── Phase 30a — signed module artefact audit payloads ───────────────
 //
 // Emitted by `IArtifactSigner.Sign` (hub-side) and
@@ -2595,6 +2627,11 @@ type AuditEvent =
     /// KB-destructive). One queryable trail keyed by route/requirement/scope
     /// (GP 6); coalesced under a per-`(route, subject)` flood guard.
     | AuthorizationDenied of AuthorizationDeniedPayload
+    /// Phase 272 — a hosted-tree action was authorized (or denied) through the
+    /// Phase 113 action authorizer and dispatched. GP 6 — every state-changing
+    /// hosted action leaves a trail keyed on the neutral `ActionDescriptor` +
+    /// the decision; a denied action audits the denial.
+    | HostActionDispatched of HostActionDispatchedPayload
     /// Phase 188 — a classified field was redacted / blocked at an egress
     /// boundary (export / RPC response / sink) by the `EgressGate`.
     /// Reserved `SourceModule = "_platform.classification"`. Value-free;
@@ -2727,6 +2764,7 @@ module AuditEvent =
         | RemotingMethodAudited _ -> "RemotingMethodAudited"
         | KnowledgeScopeErased _ -> "KnowledgeScopeErased"
         | AuthorizationDenied _ -> "AuthorizationDenied"
+        | HostActionDispatched _ -> "HostActionDispatched"
         | EgressBlocked _ -> "EgressBlocked"
         | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
         | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
