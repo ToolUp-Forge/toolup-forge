@@ -113,7 +113,7 @@ The built-in `TeamManagerUI` invokes `ctx.OnTeamSwitched` from `ActiveTeamSwitch
 
 **Module re-init handles the per-module state.** `ModuleStates = Map.empty` evicts the prior team's state across every module. After re-init, each module's `init` runs against the new `ClientModuleContext` and re-fetches its own data: `FileManagerUI.ListFiles`, AI assistant's `ListConversations`, KnowledgeBase's `GetDocuments`, every analytical module's pristine state. `ProcessedDataContext` is re-derived by `computeProcessedData` on the next render against empty module state. No module-level handling required.
 
-**Multi-team header switcher.** The shell's `view` builds a dropdown component when `config.Mode = MultiTeam && model.MyTeams.Length >= 2` and merges it with `chrome.HeaderAction` (apps' own header content). The dropdown renders each team in `MyTeams`; clicking a non-active team calls `teamApi.SetActiveTeam` then dispatches `TeamSwitched`. `MyTeams` is loaded at boot (`MyTeamsLoaded`) and refreshed on `TeamSwitched` so newly-created teams appear in the dropdown without a page reload.
+**Multi-team header switcher.** The shell's `view` builds a dropdown component when `ClientConfig.hasMultiTeamSwitcher config && model.MyTeams.Length >= 2` and merges it with `chrome.HeaderAction` (apps' own header content). The dropdown renders each team in `MyTeams`; clicking a non-active team calls `teamApi.SetActiveTeam` then dispatches `TeamSwitched`. `MyTeams` is loaded at boot (`MyTeamsLoaded`) and refreshed on `TeamSwitched` so newly-created teams appear in the dropdown without a page reload.
 
 ## Access Control
 
@@ -129,11 +129,14 @@ type ModulePermission =
 type AccessContext = {
     UserId: string
     TeamId: string option
-    Mode: PlatformMode
+    Subject: Subject
     ModulePermissions: Map<string, ModulePermission list>
+    ModuleExposure: Map<string, ModuleExposure>
     PlatformRole: PlatformRole option
 }
 ```
+
+`Subject` is the per-request resolved caller shape (`AnonymousSession` / `AuthenticatedUser` / `TeamMember` / `ClaimBearer`) — it replaced the retired deployment-wide `Mode: PlatformMode` field; storage scope, persistence, permissions, and audit attribution all derive from it. Handlers branch via pattern-match or the `AccessContext.kindLabel` / `inTeamScope` / `isAnonymous` / `claim` helpers.
 
 `ModulePermission` has hierarchy `Admin ⊇ Write ⊇ Read` encoded in `ModulePermission.implies`. `[<RequireQualifiedAccess>]` is mandatory because `Admin` collides with `TeamRole.Admin` (different concept — module perm vs team role).
 

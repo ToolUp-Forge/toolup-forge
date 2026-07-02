@@ -33,8 +33,6 @@ direct dependencies and their licences for at-a-glance attribution.
   Copyright (c) .NET Foundation and Contributors. https://github.com/dotnet/aspnetcore
 - **F# Core (FSharp.Core)** — F# runtime and standard library. MIT License.
   Copyright (c) Microsoft Corporation. https://github.com/dotnet/fsharp
-- **Newtonsoft.Json** — JSON serialisation. MIT License.
-  Copyright (c) 2007 James Newton-King. https://github.com/JamesNK/Newtonsoft.Json
 
 ### Client-side runtime and framework
 

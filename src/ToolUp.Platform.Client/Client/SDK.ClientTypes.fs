@@ -1589,7 +1589,8 @@ module ClientConfig =
 
 module ClientModule =
     /// Erase the types for composition into a heterogeneous list.
-    /// This is the only place box/unbox appears.
+    /// One of the sanctioned type-erasure boundaries — see
+    /// CLAUDE.md "Type erasure boundaries" for the full list.
     let register (m: ClientModule<'Model, 'Msg>) : ErasedModule =
         if m.View.IsNone && m.PageViews.IsNone then
             failwithf

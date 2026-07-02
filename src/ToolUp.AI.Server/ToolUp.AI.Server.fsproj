@@ -66,7 +66,6 @@
         <Compile Include="Server\AICompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server
-         (Giraffe / ToolUp.Remoting.Giraffe / ToolUp.Remoting.Json /
-         Newtonsoft.Json all originate there). FSharp.Core is implicit
-         via the .NET SDK. -->
+         (Giraffe / ToolUp.Remoting.Giraffe / ToolUp.Remoting.Json all
+         originate there). FSharp.Core is implicit via the .NET SDK. -->
 </Project>

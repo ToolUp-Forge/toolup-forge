@@ -24,24 +24,36 @@ toolup-forge/
 ├── src/
 │   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK (4 packages)
 │   ├── ToolUp.AI.{Core,Server,Client}/               # AI agent loop + SSE + tools
+│   ├── ToolUp.AI.Wire{,.Conformance}/                # AI wire format + conformance fixtures
 │   ├── ToolUp.RAG.{Core,Server}/                     # retrieval-augmented generation
 │   ├── ToolUp.KnowledgeBase.{Core,Server,Client}/    # document ingestion + extraction
 │   ├── ToolUp.Forms.{Core,Server,Client}/            # schema-driven forms + workflows
 │   ├── ToolUp.Scheduling.{Core,Server}/              # booking + recurrence
-│   ├── ToolUp.Stripe.{Webhook,TierToken,Server}/       # Stripe billing: webhook verify + tier cookies + Giraffe wiring
+│   ├── ToolUp.Workflow.{Core,Server}/                # standalone workflow engine
+│   ├── ToolUp.Experiments.{Core,Server}/             # A/B experiment substrate
+│   ├── ToolUp.Reporting{,.Core,.Server}/             # report generation
+│   ├── ToolUp.Stripe.{Webhook,TierToken,Server}/     # Stripe billing: webhook verify + tier cookies + Giraffe wiring
+│   ├── ToolUp.Tabular/, ToolUp.OpenXml/              # tabular-data + OpenXml substrates
+│   ├── ToolUp.ArtefactSigning/                       # artefact signing + module-binding manifest + SBOM stamp
+│   ├── ToolUp.AssetStore/, ToolUp.BrandKit/          # asset store + brand kit
+│   ├── ToolUp.PublicRendering/                       # SSR public pages + sitemap / SEO surface
+│   ├── ToolUp.Cli/                                   # `toolup` admin / deploy CLI
 │   ├── InterPlatform/                                # opt-in cross-deployment typed peer RPC (server-only)
-│   ├── AIProviders/{Claude,OpenAI}/                  # LLM providers
+│   ├── AIProviders/{Claude,OpenAI,Gemini}/           # LLM providers
 │   ├── EmbeddingProviders/{Local,OpenAI}/            # embedding providers
-│   ├── AuthProviders/{Oidc,OidcClient,ClerkUI}/      # auth providers
+│   ├── AuthProviders/{Oidc,OidcClient,ClerkUI,Entra*}/ # auth providers
 │   ├── Storage/{AwsS3,Azure,GoogleCloud}/            # IBlobStorage companions
-│   ├── AuditSinks/{S3Archive,SplunkHec,DatadogLogs}/ # audit replication
+│   ├── AuditSinks/{S3Archive,GcsArchive,AzureBlobArchive,SplunkHec,DatadogLogs}/ # audit replication
 │   ├── NotificationChannels/{Redis,Email/...,Sms/Twilio,Push/WebPush}/
 │   ├── VectorStores/Hnsw/                            # scalable IVectorStore
+│   ├── TimeSeriesStores/, Rerankers/, ContainerSchedulers/, TelemetrySinks/,
+│   │   FeatureFlagProviders/, RateLimiters/, DataSources/, Webhooks/,
+│   │   ContentAuthoring/, Media/, Encryption/, Cloud/, Hosts/  # further companion families
 │   ├── Metrics/OpenTelemetry/                        # IMetricsSink companion
 │   ├── Secrets/AzureKeyVault/                        # ISecretStore companion
 │   ├── AgGridEnterprise/                             # AG Grid Enterprise init shim
 │   ├── ToolUp.Platform.Tests/                        # SDK contract test packs
-│   ├── ToolUp.Forms.Tests/, ToolUp.Scheduling.Tests/, ToolUp.Stripe.Tests/ # per-companion test packs
+│   ├── ToolUp.{Forms,Scheduling,Stripe,Tabular,OpenXml,ArtefactSigning,AssetStore,Cli,AIProviders}.Tests/ # per-companion test packs
 │   ├── ToolUp.RAG.Evaluation/, ToolUp.RAG.Benchmarks/
 │   └── ToolUp.Sdk/                                   # coordinated-bump meta-manifest
 ├── samples/HelloWorld/                               # runnable end-to-end sample
@@ -103,9 +115,9 @@ Public-form surface adds `IPublicFormApi` (token-gated submit at `/api/public/fo
 
 Three independently-versioned packages (`0.1.0-alpha`) for deployments that bill via Stripe, each isolating the Stripe wire format behind a small F# surface (GP 1) — **no `Stripe.net` dependency**; a consumer wanting the richer Stripe client API consumes `Stripe.net` directly alongside these.
 
-- **`ToolUp.Stripe.Webhook`** — pure-F# webhook signature verification (`WebhookSigner.verify` / `verifyWith`: HMAC-SHA256 over `"{timestamp}.{body}"`, constant-time compare, 5-minute freshness window) returning `Result<VerifiedEvent, WebhookError>`. Zero ASP.NET Core / Giraffe deps. The typed `StripeEvent` DU is a planned addition (raw body passed through opaquely today).
+- **`ToolUp.Stripe.Webhook`** — pure-F# webhook signature verification (`WebhookSigner.verify` / `verifyWith`: HMAC-SHA256 over `"{timestamp}.{body}"`, constant-time compare, 5-minute freshness window) returning `Result<VerifiedEvent, WebhookError>`, plus the typed `StripeEvent` model (`StripeEvent.fs`). Zero ASP.NET Core / Giraffe deps.
 - **`ToolUp.Stripe.TierToken`** — HMAC-signed tier-claim cookie machinery: `Tier` DU (`Anonymous | Free | Personal | Teacher`), `Token.mint` / `Token.validate`, `Cookie.issue` / `clear` / `resolveFromRequest`. Depends only on `Microsoft.AspNetCore.Http`. Single-issuer/-audience by design — swap the signer for a JWT validator without changing the cookie/claim shape when federation lands.
-- **`ToolUp.Stripe.Server`** — Giraffe / ASP.NET Core wiring (`StripeConfig`, `Routes`). Skeleton at `0.1.0-alpha`; the `stripeWebhook` `HttpHandler` + Customer-Portal / Checkout wrappers are planned additions.
+- **`ToolUp.Stripe.Server`** — Giraffe / ASP.NET Core wiring: `StripeConfig` + `Routes`, the production webhook handler, Customer-Portal (`CustomerPortal.fs`) + Checkout (`Checkout.fs`) wrappers, pluggable webhook idempotency (`Idempotency.fs` / `DurableIdempotencyStore.fs`), `StripeBillingProvider`, and the tier-token sink (`TierTokenSink.fs`). Still versioned `0.1.0-alpha` pending surface stabilisation; subscription lifecycle (dunning, invoicing, tax) remains out of scope.
 
 Test pack: `src/ToolUp.Stripe.Tests` (Expecto; wired into `dotnet run -- VerifyAll`).
 
@@ -251,12 +263,15 @@ This rule retires when the upstream packages ship nullness annotations.
 
 ## Type erasure boundaries
 
-Type erasure (`box`/`unbox`) is contained in three sanctioned boundaries inside forge:
+Type erasure (`box`/`unbox`) is contained in six sanctioned boundaries inside forge:
 1. **`ClientModule.register`** — erases per-module `'Model`/`'Msg` for the heterogeneous module list.
 2. **`DataTypeDisplay.RenderSummary`** — every data-producing module boxes its summary record in its server-side `DataType.Process` and unboxes in the client-side `RenderSummary` callback. Symmetric same-module-known-type cast on both ends.
 3. **Narrative `Component` block renderers** (Phase 87) — the `NarrativeElement.Component of name * props` case carries a stringly-typed `Map<string,string>` rather than a typed payload, so a deployment can register custom block renderers (`props -> XmlNode` in `NarrativeLayout`, bridged to the SDK's `string -> Map -> string option` resolver in `NarrativeHtml.RenderOptions`) without forking the `NarrativeElement` DU. The "erasure" is the stringly-typed prop bag at the registry seam; renderers are pure and resolve by name, with an unregistered name degrading to a safe placeholder.
+4. **`GridApiRegistry`** (`AgGrid.fs`) — boxed `IGridApi` handles in a keyed registry; symmetric unbox at the same-module read site.
+5. **`EntityStore` registrations** (`Server/EntityStore.fs`) — symmetric box/unbox of `EntityRegistration<'T>` in the name-keyed registration dictionary.
+6. **`AuthUIProvider` handler dispatch** (`AuthUIProvider.fs`) — the auth-UI delegate registry boxes the provider config for the registered handler.
 
-Module code outside these boundaries never sees type erasure.
+Fable/JS interop boxing (React dependency arrays, `isNull (box x)` probes, erased-type coercions in the AG Grid bindings) and `HttpContext.Items` stamps are idiomatic interop, not domain erasure, and don't count against this list. Module code outside these boundaries never sees type erasure.
 
 ## Build pipeline
 

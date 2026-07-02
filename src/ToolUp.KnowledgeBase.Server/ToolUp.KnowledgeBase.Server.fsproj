@@ -60,9 +60,9 @@
         <Compile Include="Server\AICompose.fs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Giraffe / ToolUp.Remoting.Giraffe / ToolUp.Remoting.Json /
-             Newtonsoft.Json flow transitively from ToolUp.Platform.Server
-             + ToolUp.AI.Server. FSharp.Core is implicit via the .NET SDK.
+        <!-- Giraffe / ToolUp.Remoting.Giraffe / ToolUp.Remoting.Json flow
+             transitively from ToolUp.Platform.Server + ToolUp.AI.Server.
+             FSharp.Core is implicit via the .NET SDK.
              PdfPig + DocumentFormat.OpenXml are unique to KB. -->
         <PackageReference Include="PdfPig" />
         <PackageReference Include="DocumentFormat.OpenXml" />

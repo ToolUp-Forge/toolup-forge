@@ -155,26 +155,30 @@ Each module that handles file data declares a `DataType` record (detection + pro
 
 Modules communicate exclusively through the platform's event infrastructure. A module emits a `ModuleEvent` — a JSON-serialised envelope with source module, event type, and payload. Other modules query the event store by type or source. The platform persists events and makes them available to any module that asks. No module needs to know which other modules exist.
 
-### Platform modes
+### Platform surfaces
 
-`PlatformMode` controls authentication, data scoping, and persistence across the entire stack. Set it in both `ServerConfig.Mode` and `ClientConfig.Mode`.
+A deployment declares which subject shapes it serves via `ServerConfig.Surfaces: SurfaceProfile list` (non-empty — `SurfaceCoherenceValidator` refuses startup on an empty list). Authentication, data scoping, and persistence are then resolved **per request** from the caller's `Subject` (`AnonymousSession` / `AuthenticatedUser` / `TeamMember` / `ClaimBearer`) — there is no deployment-wide mode switch. (The historical `PlatformMode` field on `ServerConfig` / `ClientConfig` / `AccessContext` was retired in favour of `AccessContext.Subject`; regression tests assert the retired shape stays gone.)
 
-| Mode | Auth required | Data scoped to | Persistent | Use case |
+The canonical single-shape profiles, via the `Surfaces` helpers:
+
+| Surface profile | Auth required | Data scoped to | Persistent | Use case |
 |------|---------------|----------------|------------|----------|
-| `Anonymous` | No | Session (per-tab) | No | Dev, demos, public tools |
-| `AuthenticatedEphemeral` | Yes | User | No | Trial accounts, compliance-sensitive analysis |
-| `Individual` | Yes | User | Yes | Single-user paid accounts |
-| `Team` | Yes | Active team | Yes | Multi-user organisations, one team per user (no switcher UI) |
-| `MultiTeam` | Yes | Active team | Yes | Users belong to many teams and switch between them in-session |
+| `Surfaces.anonymous` | No | Session (per-tab) | No (`SurfaceProfile.anonymousPersistent` opts in) | Dev, demos, public tools |
+| `Surfaces.trial` | Yes | User | No | Trial accounts, compliance-sensitive analysis |
+| `Surfaces.individual` | Yes | User | Yes | Single-user paid accounts |
+| `Surfaces.team` | Yes | Active team | Yes | Multi-user organisations, one team per user (no switcher UI) |
+| `Surfaces.multiTeam` | Yes | Active team | Yes | Users belong to many teams and switch between them in-session |
 
-`Team` and `MultiTeam` share the server-side data model and storage layout; they differ only in client UX and deployment intent. `MultiTeam` activates a header team-switcher (visible when the user has 2+ memberships) and a shell-level `TeamSwitched` reset path that swaps every module's state to the new team's data without re-auth — see the [Technical Guide](technical-guide/02-multi-tenancy-and-access.md#team-switching-reset-flow).
+Mixed-mode deployments list two or more profiles (`Surfaces.anonymousAndIndividual`, `Surfaces.anonymousAndTeam`, `Surfaces.teamWithShareTokens`, …); the `ClaimBearer` profile carries share-token subjects (publishable Forms embeds and similar).
+
+`team` and `multiTeam` share the server-side data model and storage layout; they differ only in client UX and deployment intent. `multiTeam` activates a header team-switcher (rendered when `ClientConfig.hasMultiTeamSwitcher` and the user has 2+ memberships) and a shell-level `TeamSwitched` reset path that swaps every module's state to the new team's data without re-auth — see the [Technical Guide](technical-guide/02-multi-tenancy-and-access.md#team-switching-reset-flow).
 
 **Server side** (`ServerApp.run` → `SDK.Server.compose`):
-1. Registers the appropriate `IStorageScopeResolver` based on mode
-2. For `Team` mode, also registers `TeamStore` (persists team metadata to `_platform` blob container)
+1. Registers the `IStorageScopeResolver`(s) appropriate to the declared surfaces
+2. For team surfaces, also registers `TeamStore` (persists team metadata to `_platform` blob container)
 3. Each request resolves a `StorageScope` (`{ ScopeId; Container; Persist }`) via the scope resolver
 4. `SessionFileStore` uses `scope.Persist` to decide whether to persist files to `IBlobStorage` or keep them in-memory only
-5. `AccessContext` (userId, teamId, mode, permissions) is resolved per-request via DI
+5. `AccessContext` (userId, teamId, subject, permissions) is resolved per-request via DI
 
 #### Production deployment knobs
 

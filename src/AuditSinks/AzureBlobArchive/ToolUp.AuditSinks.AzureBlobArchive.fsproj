@@ -18,6 +18,6 @@
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
   </ItemGroup>
-  <!-- Newtonsoft.Json + ToolUp.Remoting.Json flow transitively from
+  <!-- ToolUp.Remoting.Json (System.Text.Json-based) flows transitively from
        ToolUp.Platform.Server. FSharp.Core is implicit via the .NET SDK. -->
 </Project>

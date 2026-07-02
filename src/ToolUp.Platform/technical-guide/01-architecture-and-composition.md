@@ -544,8 +544,8 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
 | `IEventStore` (inner) | OptIn | `config.EventStore` | `SDK.Server.fs:973–979` |
 | `IAuthProvider` | Always | constructor arg | `SDK.Server.fs:1153` |
 | `ISecretStore` | Always | constructor arg | `SDK.Server.fs:1154` |
-| `IStorageScopeResolver` | OptIn (mode-driven) | `config.Mode` | `SDK.Server.fs:1373` |
-| `ITeamStore` | OptIn | `PlatformMode.isTeamScoped` | `SDK.Server.fs:1295–1307` |
+| `IStorageScopeResolver` | OptIn (surface-driven) | `config.Surfaces` | `SDK.Server.fs:1373` |
+| `ITeamStore` | OptIn | team surface declared in `config.Surfaces` | `SDK.Server.fs:1295–1307` |
 | `INotificationChannel` + `SSEConnectionManager` + `/api/notifications` | OptIn | `config.Notifications` (auto-detected) | `SDK.Server.fs:820–831, 1155–1156` |
 | `IAuditLog` | OptIn | `config.AuditLog` | `SDK.Server.fs:1152` |
 | `IWebhookRegistry` + `IWebhookDeliveryLog` + `IWebhookDispatcher` | OptIn | `config.Webhooks` | `SDK.Server.fs:996–1009, 1158–1163` |
@@ -557,10 +557,10 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
 | `IDataSourceConfigStore` + `IDataIngestor` | OptIn | `config.DataIngestion` | `SDK.Server.fs:1218–1251` |
 | `RateLimiter` middleware | OptIn | `config.RateLimit` | `SDK.Server.fs:1273–1277` |
 | `ScopeResolutionMiddleware` | Always | — | pipeline |
-| `AuthEnforcementMiddleware` | Always (mode-aware) | `config.Mode` | pipeline |
+| `AuthEnforcementMiddleware` | Always (surface-aware) | `config.Surfaces` | pipeline |
 | `RequestTimingMiddleware` | OptIn | `config.SlowRequestThreshold` | pipeline |
 | `RemotingBodyNormalizationMiddleware` | Always | — | pipeline |
-| `platformInfoApiHandler` / `teamApiHandler` / `permissionApiHandler` / `accessibilityApiHandler` / `dataCatalogApiHandler` | Always (surface trims in Anonymous) | `config.Mode` | router |
+| `platformInfoApiHandler` / `teamApiHandler` / `permissionApiHandler` / `accessibilityApiHandler` / `dataCatalogApiHandler` | Always (surface trims for anonymous subjects) | `config.Surfaces` | router |
 | `configHandler` / `featureFlagHandler` / `moduleQueryBusHandler` | Always | — | router |
 | `webhookHandler` | OptIn | `config.Webhooks` | router |
 | `fileManagementHandler` | OptIn | non-empty `dataTypes` | router |
