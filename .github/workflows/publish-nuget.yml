@@ -5,12 +5,16 @@
 # ─── Trigger ─────────────────────────────────────────────────────────
 #
 # - `v*.*.*` tag push — coordinated SDK-wide release. Every IsPackable
-#   fsproj packs at its current <Version> (currently driven by the
-#   centralised <Version> in Directory.Build.props, lifted to
-#   <ToolUpSdkVersion> via the ToolUp.Sdk meta-manifest). Per-package
-#   independent bumps remain possible via a per-fsproj <Version>
-#   override; the tag scheme `v{Package}/{Version}` is reserved for that
-#   future shape but not yet wired here.
+#   fsproj packs at its current <Version> — the centralised <Version> in
+#   Directory.Build.props, unless a per-fsproj <Version> override applies.
+#   NOTE: <Version> (what packs + publishes here) is a SEPARATE knob from
+#   the meta-manifest's <ToolUpSdkVersion> in Directory.Packages.props
+#   (the version at which a *consumer* pins every ToolUp.* package via the
+#   ToolUp.Sdk meta-manifest). The two are maintained independently and
+#   are NOT auto-derived from each other — keep them in sync at release
+#   time. Per-package independent bumps remain possible via a per-fsproj
+#   <Version> override; the tag scheme `v{Package}/{Version}` is reserved
+#   for that future shape but not yet wired here.
 # - `workflow_dispatch` — manual trigger for the first publish + any
 #   re-run after a transient CI failure. Idempotent thanks to
 #   `--skip-duplicate` in the FAKE Publish target — re-runs cleanly skip
