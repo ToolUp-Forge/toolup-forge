@@ -19,6 +19,12 @@
              Icon are independent of each other. PageChrome composes
              Wordmark + Icon. -->
         <Compile Include="Server\Tokens.fs" />
+        <!-- Phase 269 — brandkit to hosted-tree theme-token bridge. A neutral
+             CSS-variable projection (brandkit primitives + Phase 223 per-tenant
+             palette overrides) a hosted renderer emits as :root variables.
+             After Tokens.fs (reads the canonical bk custom-property names);
+             self-contained, no ToolUp.Platform.Core pull. -->
+        <Compile Include="HostThemeTokens.fs" />
         <Compile Include="Server\Text.fs" />
         <Compile Include="Server\Wordmark.fs" />
         <Compile Include="Server\Card.fs" />

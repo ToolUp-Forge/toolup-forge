@@ -291,6 +291,9 @@ let allTests =
         KnowledgeDedupTests.tests
         BrandingTests.tests
         BrandKitTests.tests
+        // Phase 269 — brandkit → hosted-tree theme-token bridge: projection,
+        // palette-override precedence + scope isolation, GP 13, snapshot determinism.
+        HostThemeTokensTests.tests
         // Phase 92 — BrandKit layout library (seven layouts: a11y
         // baseline, class hooks, optional-slot rule) + Feliz.ViewEngine
         // layout adapter (single doctype, registry round-trip).
