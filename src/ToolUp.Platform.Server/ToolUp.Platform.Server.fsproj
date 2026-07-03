@@ -661,6 +661,13 @@
              the ServerApp.compositionManifest projector lives in ServerApp
              (next), so this must compile before it. -->
         <Compile Include="Server\CompositionManifest.fs" />
+        <!-- Phase 286 — composition structural diff: CompositionDelta +
+             CompositionDiff.diff, an id-keyed / order-independent diff of two
+             CompositionManifests (added / removed / changed modules, companion
+             slots, datatypes, tools + config-knob value moves). Pure companion
+             to the Phase 280 manifest — depends only on CompositionManifest +
+             ComponentId. Feeds the Phase 287 golden-file CI gate. -->
+        <Compile Include="Server\CompositionDiff.fs" />
         <!-- Phase 297 — ComponentId-keyed hosted-tree usage telemetry export:
              IHostedTreeUsageExport (Record usage / Snapshot scope-isolated) +
              NoOp default + in-memory reference. Widens the Phase 268 fault

@@ -117,6 +117,8 @@ let allTests =
         ComponentIdentityTests.tests
         // Phase 280 — introspectable composition manifest.
         CompositionManifestTests.tests
+        // Phase 286 — composition structural diff (id-keyed, order-independent).
+        CompositionDiffTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).

@@ -253,6 +253,12 @@
              ComponentId from the live registry; empty pipeline → empty
              manifest (GP 13). -->
         <Compile Include="InProcess\CompositionManifestTests.fs" />
+        <!-- Phase 286 — composition structural diff: add / remove / swap /
+             config-change each surface as the right id-keyed delta; a renamed
+             module (stable id) is a changed entry with a label delta, not
+             remove+add; an identical pair diffs to empty; the diff is
+             order-independent (keyed by id, not position). -->
+        <Compile Include="InProcess\CompositionDiffTests.fs" />
         <!-- Phase 281 — composition well-formedness preflight: duplicate
              ComponentId / companion-slot legality / orphaned tool reference
              each fail with a readable message; a well-formed app passes. -->
