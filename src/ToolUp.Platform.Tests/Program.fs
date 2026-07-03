@@ -119,6 +119,8 @@ let allTests =
         CompositionManifestTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
+        // Phase 294 — composition invariant rule-manifest (well-formedness as data).
+        InvariantRuleManifestTests.tests
         // Phase 283 — component-id telemetry / audit correlation.
         ComponentIdCorrelationTests.tests
         ConfigReferenceTests.tests

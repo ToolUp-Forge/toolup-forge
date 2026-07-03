@@ -55,6 +55,19 @@ type CompositionDefect = {
     Message: string
 }
 
+/// The introspectable projection of one well-formedness rule (Phase 294):
+/// its stable code, severity, and description — everything an external
+/// pre-build checker needs to validate a composition against forge's *own*
+/// rules, without the executable predicate. Exposed as `ruleManifest`,
+/// projected from the same `rules` list the runtime check runs, so the two
+/// cannot diverge — one source of truth for "well-formed app," checkable at
+/// authoring time (by the external tool) and at compose time (by forge).
+type CompositionRuleDescriptor = {
+    Code: string
+    Severity: CompositionDefectSeverity
+    Description: string
+}
+
 /// Cross-reference edges the bare `CompositionManifest` does not itself
 /// carry: which module each tool declares as its owning `SourceModule`.
 /// Supplied alongside the manifest so the orphaned-reference rule can
@@ -220,6 +233,21 @@ module CompositionValidator =
             Evaluate = evalOrphanedToolReference
         }
     ]
+
+    /// Phase 294 — the introspectable rule manifest: every shipped
+    /// well-formedness invariant as data (code + severity + description),
+    /// projected from the same `rules` list `checkWith` runs. One source of
+    /// truth — a rule cannot appear in the runtime check without appearing
+    /// here, or vice versa (both read `rules`), so an external pre-build
+    /// checker validates against forge's own invariants with no re-encoding
+    /// and no drift. Order matches `rules`.
+    let ruleManifest: CompositionRuleDescriptor list =
+        rules
+        |> List.map (fun rule -> {
+            Code = rule.Code
+            Severity = rule.Severity
+            Description = rule.Description
+        })
 
     /// Run every rule against a composed surface + its reference edges,
     /// returning the flat, rule-tagged defect list. Pure.

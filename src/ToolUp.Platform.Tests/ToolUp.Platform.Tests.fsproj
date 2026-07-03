@@ -250,6 +250,10 @@
              ComponentId / companion-slot legality / orphaned tool reference
              each fail with a readable message; a well-formed app passes. -->
         <Compile Include="InProcess\CompositionValidatorTests.fs" />
+        <!-- Phase 294 — composition invariant rule-manifest: every shipped
+             rule appears in ruleManifest with a stable code; the runtime
+             check + the manifest cannot diverge (bijection). -->
+        <Compile Include="InProcess\InvariantRuleManifestTests.fs" />
         <!-- Phase 283 — component-id telemetry / audit correlation: a
              module metric + audit source label carry the stable ComponentId;
              renaming the display name preserves id-keyed correlation; the id
