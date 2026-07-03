@@ -54,6 +54,13 @@
              placed early so module / companion / datatype / tool
              registration surfaces in every later tier can reference it. -->
         <Compile Include="Shared\ComponentId.fs" />
+        <!-- Phase 289 — component-scoped configuration section addressable
+             by ComponentId + the pure, deterministic env-var-name
+             derivation (TOOLUP_COMPONENT__<id>__<key>). Fable-safe (string
+             only); after ComponentId.fs (keys the section) so the Server-tier
+             resolver + the both-tier scaffolding tooling agree on the
+             override name. -->
+        <Compile Include="Shared\ComponentConfig.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
              Phase 69d markers in ToolUp.Remoting.Server). Placed early so
              every later API record file can annotate its fields. The SDK's

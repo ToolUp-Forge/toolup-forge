@@ -88,6 +88,13 @@
              first non-substrate conformance witness. References the toy
              sample project (ProjectReference below) for the witness. -->
         <Compile Include="Contracts\ClientHostCapabilitiesContract.fs" />
+        <!-- Phase 285 — IComponentRegistryContract conformance pack: the
+             reusable GP-12 identity-law suite (rename / re-order stability,
+             deterministic default derivation, duplicate rejection, id-keyed
+             manifest completeness) bound to the in-tree default ServerApp
+             registry, plus a self-test proving the pack fails a non-conforming
+             registry. Test/build infra only. -->
+        <Compile Include="Contracts\ComponentRegistryContract.fs" />
         <Compile Include="Contracts\IClientToolDispatchContract.fs" />
         <!-- Phase 112 — scope-isolated live-session host conformance bar
              (structural cross-scope denial, single-session ordering,
@@ -259,6 +266,31 @@
              renaming the display name preserves id-keyed correlation; the id
              dimension is zero-cost when unused (GP 11 / GP 13). -->
         <Compile Include="InProcess\ComponentIdCorrelationTests.fs" />
+        <!-- Phase 289 — component-scoped configuration binding: an id-scoped
+             override reaches exactly its component; a stray override fails
+             preflight with an id-named message; no overrides → byte-identical. -->
+        <Compile Include="InProcess\ComponentConfigTests.fs" />
+        <!-- Phase 293 — composable-surface descriptor: companion slots + config
+             knob schemas + module contract derived from the live ServerApp /
+             ServerConfig registry (reflection); the slot set = the reflected
+             companion-interface set (derived, not hand-listed). -->
+        <Compile Include="InProcess\ComposableSurfaceTests.fs" />
+        <!-- Phase 288 — component provenance: a first-party companion reports
+             the platform assembly + version; the provenance key id-joins the
+             manifest companion slot; resolution is total (null → unknown). -->
+        <Compile Include="InProcess\ComponentProvenanceTests.fs" />
+        <!-- Phase 290 — component health rollup: a degraded probe surfaces
+             under its ComponentId; an unkeyed probe is retained; empty app →
+             empty rollup (GP 13). -->
+        <Compile Include="InProcess\ComponentHealthRollupTests.fs" />
+        <!-- Phase 291 — component lifecycle ordering: a declared init-before
+             order initialises in order + disposes in reverse; undeclared →
+             registration order (GP 11); a cycle fails at compose. -->
+        <Compile Include="InProcess\ComponentLifecycleTests.fs" />
+        <!-- Phase 301 — live composition hot-swap: an enabled swap re-points new
+             traffic while in-flight finishes on the old; a failed init rolls
+             back; only declared components swap; gate-off is unchanged. -->
+        <Compile Include="InProcess\CompositionHotSwapTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->

@@ -123,6 +123,24 @@ let allTests =
         InvariantRuleManifestTests.tests
         // Phase 283 — component-id telemetry / audit correlation.
         ComponentIdCorrelationTests.tests
+        // Phase 289 — component-scoped configuration binding: id-scoped
+        // override reaches its component; stray override fails preflight.
+        ComponentConfigTests.tests
+        // Phase 293 — composable-surface descriptor: companion slots / config
+        // knob schemas / module contract derived from the live registry.
+        ComposableSurfaceTests.tests
+        // Phase 288 — component provenance: package/version/assembly per
+        // composed companion, id-joined to the manifest; total resolution.
+        ComponentProvenanceTests.tests
+        // Phase 290 — component health rollup: IHealthCheck results keyed by
+        // ComponentId; unkeyed probes retained.
+        ComponentHealthRollupTests.tests
+        // Phase 291 — component lifecycle ordering: init-before partial order,
+        // stable topo init/dispose, cycle rejected at compose.
+        ComponentLifecycleTests.tests
+        // Phase 301 — live composition hot-swap: atomic re-point + rollback,
+        // in-flight finishes on old, only declared components swap.
+        CompositionHotSwapTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests
@@ -582,6 +600,15 @@ let allTests =
         // contract not by a one-off sample. A routing regression fails
         // this pack (and `Build.fsproj -- VerifyAll`).
         ClientHostCapabilitiesContract.tests
+        // Phase 285 — IComponentRegistryContract conformance pack: the
+        // reusable Phase 279 identity-law suite bound to the in-tree default
+        // ServerApp registry (rename / re-order stability, deterministic
+        // default derivation, duplicate rejection, id-keyed manifest
+        // completeness), plus a self-test proving the pack fails a
+        // non-conforming (unstable / positional / duplicate-tolerating)
+        // registry. A regression fails `Build.fsproj -- VerifyAll`.
+        ComponentRegistryContract.tests
+        ComponentRegistryContract.selfTests
     ]
 
 [<EntryPoint>]
