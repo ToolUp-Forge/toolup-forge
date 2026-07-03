@@ -295,6 +295,10 @@
              builds an equivalent ServerApp; the manifest round-trip law
              holds; an unknown component id fails with a readable error. -->
         <Compile Include="InProcess\CompositionDescriptorTests.fs" />
+        <!-- Phase 292 — descriptor schema-version + migration: an older
+             descriptor migrates + composes equivalently; a too-new version
+             fails readably; a current-version descriptor is a no-op migrate. -->
+        <Compile Include="InProcess\CompositionDescriptorVersionTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->

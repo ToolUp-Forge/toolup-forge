@@ -62,6 +62,13 @@ type ComponentSelection = {
 /// a `RegistrationCatalogue`. Carries no application logic — handler /
 /// view / executor bodies are referenced by id, never embedded (GP 1).
 type CompositionDescriptor = {
+    /// Phase 292 — the descriptor's schema version. A persisted descriptor
+    /// authored against an older forge carries an older version; the
+    /// versioned build path (`CompositionDescriptorVersion.migrate`,
+    /// invoked by `ServerApp.ofManifest`) upgrades it to
+    /// `CompositionDescriptor.CurrentSchemaVersion` before composing.
+    /// `CompositionDescriptor.create` stamps the current version.
+    Version: int
     /// The modules / companions selected, each by stable id. Datatypes and
     /// tools are contributed *by* their owning module's registration, so
     /// they are not listed separately — they appear in the projected
@@ -151,6 +158,14 @@ module RegistrationCatalogue =
 /// Author + build a `CompositionDescriptor`.
 module CompositionDescriptor =
 
+    /// Phase 292 — the current descriptor schema version. `create` stamps
+    /// it; `CompositionDescriptorVersion.migrate` upgrades any older
+    /// descriptor up to it before `ofManifest` composes. Bump this (and
+    /// add a migration step) whenever the descriptor's serialized shape
+    /// changes in a way an older stored descriptor would not satisfy.
+    [<Literal>]
+    let CurrentSchemaVersion = 1
+
     /// A component selection by id, with no registration inputs — the
     /// common case (the catalogue entry closes over everything it needs).
     let select (id: ComponentId) : ComponentSelection = { Id = id; Inputs = Map.empty }
@@ -163,14 +178,32 @@ module CompositionDescriptor =
         Inputs = Map.ofList inputs
     }
 
-    /// A descriptor over the given component selections and `ServerConfig`.
-    /// The construction path — author descriptors through this, never a
-    /// bare record literal, so later additive fields (schema version, …)
-    /// default here without churning call sites.
+    /// A descriptor over the given component selections and `ServerConfig`,
+    /// stamped at the current schema version. The construction path —
+    /// author descriptors through this, never a bare record literal, so
+    /// additive fields (schema version, …) default here without churning
+    /// call sites.
     let create (components: ComponentSelection list) (config: ServerConfig) : CompositionDescriptor = {
+        Version = CurrentSchemaVersion
         Components = components
         Config = config
     }
+
+    /// A descriptor stamped at an explicit schema `version` — for
+    /// round-tripping a persisted descriptor authored against an older (or
+    /// newer) forge, or a test fixture that exercises the Phase 292
+    /// migration path. Prefer `create` (stamps the current version) for
+    /// freshly-authored descriptors.
+    let createVersioned
+        (version: int)
+        (components: ComponentSelection list)
+        (config: ServerConfig)
+        : CompositionDescriptor =
+        {
+            Version = version
+            Components = components
+            Config = config
+        }
 
     /// The stable ids the descriptor selects, in declaration order.
     let componentIds (descriptor: CompositionDescriptor) : ComponentId list = descriptor.Components |> List.map _.Id
@@ -221,24 +254,7 @@ module CompositionDescriptor =
 
             Ok built
 
-/// `ServerApp.ofManifest` — the ergonomic composition-root entry point for
-/// building an app from a descriptor. The raising counterpart to the total
-/// `CompositionDescriptor.ofManifest`: it surfaces a `DescriptorError` as a
-/// readable exception (the message `CompositionDescriptor.renderError`
-/// produces), so a composition root reads `ServerApp.ofManifest(cat, d) |>
-/// ServerApp.run` without threading a `Result`. Prefer the total
-/// `CompositionDescriptor.ofManifest` where a caller wants to handle the
-/// error as data.
-[<AutoOpen>]
-module ServerAppDescriptorExtensions =
-
-    type ServerApp with
-
-        /// Build a `ServerApp` from a `CompositionDescriptor` against a
-        /// `RegistrationCatalogue`, raising a readable error if any selected
-        /// id does not resolve. See `CompositionDescriptor.ofManifest` for
-        /// the total, `Result`-returning form.
-        static member ofManifest(catalogue: RegistrationCatalogue, descriptor: CompositionDescriptor) : ServerApp =
-            match CompositionDescriptor.ofManifest catalogue descriptor with
-            | Ok app -> app
-            | Error e -> failwith (CompositionDescriptor.renderError e)
+// `ServerApp.ofManifest` — the ergonomic raising entry point — lives in
+// `CompositionDescriptorVersion.fs` (Phase 292), where it runs the schema
+// migration before composing. The total, version-agnostic builder is
+// `CompositionDescriptor.ofManifest` above.

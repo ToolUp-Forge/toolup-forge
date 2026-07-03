@@ -145,6 +145,9 @@ let allTests =
         // descriptor builds an equivalent app; manifest round-trip law; unknown
         // component id fails readably.
         CompositionDescriptorTests.tests
+        // Phase 292 — descriptor schema-version + migration: older→current
+        // migrate + equivalent compose; too-new fails readably; no-op current.
+        CompositionDescriptorVersionTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests

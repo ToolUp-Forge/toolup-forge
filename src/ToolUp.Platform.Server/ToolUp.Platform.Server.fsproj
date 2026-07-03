@@ -727,6 +727,12 @@
              CompositionDescriptor.ofManifest / ServerApp.ofManifest. After
              ServerApp (folds addModule / with* builders). -->
         <Compile Include="Server\CompositionDescriptor.fs" />
+        <!-- Phase 292 — descriptor schema-version + forward migration: an
+             older CompositionDescriptor migrates to the current shape before
+             ServerApp.ofManifest composes it; a too-new version fails
+             readably. Hosts the versioned ServerApp.ofManifest (runs migrate
+             first). After CompositionDescriptor.fs. -->
+        <Compile Include="Server\CompositionDescriptorVersion.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />
