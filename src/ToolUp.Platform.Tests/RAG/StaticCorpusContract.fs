@@ -2,6 +2,10 @@ module ToolUp.Platform.Tests.RAG.StaticCorpusContract
 
 open System
 open Expecto
+open ToolUp.Platform
+open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.RAG.StaticCorpus
 
 // ─── Phase 63 — StaticCorpus contract + determinism ──────────────────
@@ -175,6 +179,159 @@ let tests =
                 let a = Chunker.chunk "p.md" Chunker.DefaultMaxChunkChars md
                 let b = Chunker.chunk "p.md" Chunker.DefaultMaxChunkChars md
                 Expect.equal a b "deterministic: identical chunk lists"
+            }
+        ]
+
+        // ── 63.D / 63.H — StaticCorpusRetrievalPipeline (IRetrievalPipeline) ──
+        testList "RetrievalPipeline" [
+
+            // A deterministic bag-of-words embedder: each word bumps the
+            // dimension it hashes to. Lexical overlap ⇒ cosine similarity, so
+            // a query retrieves the chunk sharing the most words — enough to
+            // exercise the pipeline without a real model.
+            let dim = 32
+
+            let bow (text: string) : float32[] =
+                let v = Array.zeroCreate<float32> dim
+
+                let words =
+                    text
+                        .ToLowerInvariant()
+                        .Split([| ' '; '\n'; '\t'; '.'; ','; '#' |], StringSplitOptions.RemoveEmptyEntries)
+
+                for w in words do
+                    let h = (abs (w.GetHashCode())) % dim
+                    v[h] <- v[h] + 1.0f
+
+                v
+
+            let embedder =
+                { new IEmbeddingProvider with
+                    member _.GenerateEmbedding text = async { return bow text }
+                    member _.GenerateEmbeddings texts = async { return texts |> Seq.map bow |> Seq.toArray }
+                    member _.Dimensions = dim
+                    member _.ProviderId = "test"
+                    member _.ModelId = "bow-v1"
+                }
+
+            let mkCorpusChunk (id: string) (body: string) : DocChunk = {
+                Id = id
+                Source = sprintf "%s.md" id
+                HeadingPath = [ "# Docs"; sprintf "## %s" id ]
+                Body = body
+                Embedding = bow body
+                Metadata = Map.ofList [ "anchor", id ]
+            }
+
+            let corpus: StaticCorpus = {
+                Chunks = [|
+                    mkCorpusChunk "install" "install the setup wizard and configure the database connection"
+                    mkCorpusChunk "usage" "run the usage report to see monthly active totals"
+                    mkCorpusChunk "billing" "invoices and billing cycles are managed under the account page"
+                |]
+                EmbeddingModel = "bow-v1"
+                EmbeddingDimensions = dim
+                BuiltUtc = DateTime(2026, 7, 3, 0, 0, 0, DateTimeKind.Utc)
+                PackerVersion = "63.0.0"
+            }
+
+            let pipeline = StaticCorpusRetrievalPipeline.create embedder corpus
+            let access = AccessContext.unrestricted (AnonymousSession "t")
+
+            let request query topK = {
+                RetrievalRequest.create query [ Deployment ] topK MergeStrategy.Interleaved with
+                    OriginFilter = None
+            }
+
+            testAsync "retrieves the lexically-closest chunk first" {
+                let! matches = pipeline.Retrieve (request "monthly usage report" 3) access
+                Expect.isGreaterThan matches.Length 0 "at least one match"
+                Expect.equal (List.head matches).ChunkId "usage" "the 'usage' chunk ranks first for a usage query"
+            }
+
+            testAsync "honours TopK" {
+                let! matches = pipeline.Retrieve (request "the" 2) access
+                Expect.isLessThanOrEqual matches.Length 2 "no more than TopK matches returned"
+            }
+
+            testAsync "empty query returns no matches" {
+                let! matches = pipeline.Retrieve (request "   " 5) access
+                Expect.isEmpty matches "a blank query short-circuits to no retrieval"
+            }
+
+            testAsync "matches carry deployment scope + a citation source" {
+                let! matches = pipeline.Retrieve (request "install setup" 1) access
+                let top = List.head matches
+                Expect.equal top.Scope Deployment "static corpus is deployment-scoped"
+                Expect.isTrue (top.Metadata.ContainsKey "_source") "a _source citation header is stamped"
+
+                Expect.equal
+                    (top.Metadata.TryFind ChunkMetadata.OriginKey)
+                    (Some "Document")
+                    "chunks report origin Document"
+            }
+
+            testAsync "metadata Filters are honoured" {
+                let filtered = {
+                    request "the" 5 with
+                        Filters = Some(Map.ofList [ "anchor", "billing" ])
+                }
+
+                let! matches = pipeline.Retrieve filtered access
+                Expect.all matches (fun m -> m.ChunkId = "billing") "only chunks matching the metadata filter survive"
+            }
+
+            test "Index throws NotSupportedException (read-only corpus)" {
+                Expect.throwsT<NotSupportedException>
+                    (fun () ->
+                        pipeline.Index "id" (Unchecked.defaultof<TextChunk>) Deployment
+                        |> Async.RunSynchronously
+                        |> ignore)
+                    "Index is unsupported on a static corpus"
+            }
+
+            test "DeleteByScope throws NotSupportedException (read-only corpus)" {
+                Expect.throwsT<NotSupportedException>
+                    (fun () -> pipeline.DeleteByScope Deployment |> Async.RunSynchronously |> ignore)
+                    "DeleteByScope is unsupported on a static corpus"
+            }
+
+            testAsync "an embedding-dimension mismatch fails loudly" {
+                let wrongDimEmbedder =
+                    { new IEmbeddingProvider with
+                        member _.GenerateEmbedding _ = async { return Array.zeroCreate<float32> (dim + 1) }
+
+                        member _.GenerateEmbeddings texts = async {
+                            return texts |> Seq.map (fun _ -> Array.zeroCreate<float32> (dim + 1)) |> Seq.toArray
+                        }
+
+                        member _.Dimensions = dim + 1
+                        member _.ProviderId = "test"
+                        member _.ModelId = "wrong"
+                    }
+
+                let mismatched = StaticCorpusRetrievalPipeline.create wrongDimEmbedder corpus
+
+                let! ex = Async.Catch(mismatched.Retrieve (request "x" 1) access)
+
+                match ex with
+                | Choice2Of2(:? InvalidOperationException) -> ()
+                | Choice2Of2 other -> failtestf "expected InvalidOperationException, got %A" other
+                | Choice1Of2 _ -> failtest "expected a dimension-mismatch failure"
+            }
+
+            testAsync "round-trip through the .scidx bytes preserves retrieval" {
+                let bytes = Serialization.serialize corpus
+
+                let loaded =
+                    StaticCorpusRetrievalPipeline.loadFromStream embedder (new IO.MemoryStream(bytes))
+
+                let! matches = loaded.Retrieve (request "monthly usage report" 1) access
+
+                Expect.equal
+                    (List.head matches).ChunkId
+                    "usage"
+                    "a loaded corpus retrieves identically to an in-memory one"
             }
         ]
     ]

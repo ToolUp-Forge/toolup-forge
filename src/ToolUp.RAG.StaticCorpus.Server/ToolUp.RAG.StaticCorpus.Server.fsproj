@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.RAG.StaticCorpus Server — an IRetrievalPipeline over a build-time-precomputed static-corpus embedding index. Only the query is embedded at runtime; chunk embeddings are precomputed, so no live-ingestion machinery is carried. Slots into RAGServerApp via withRetrievalPipeline.</Description>
+        <PackageTags>fsharp;sdk;rag;retrieval;static-corpus;pipeline</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="StaticCorpusRetrievalPipeline.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Core\ToolUp.RAG.StaticCorpus.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>
