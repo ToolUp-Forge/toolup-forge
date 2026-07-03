@@ -393,6 +393,8 @@ let allTests =
         KnowledgeOriginalRetrievalTests.tests
         KnowledgeScopeResetAuditTests.tests
         RAGVacuumJobHandlerTests.tests
+        // Phase 14r — tool-aware RAG framing (live-interface detection + companion).
+        ToolAwareRagFramingTests.tests
         KnowledgeUploadPolicyTests.tests
         // Phase 14x — KB upload content-hash dedup.
         KnowledgeDedupTests.tests

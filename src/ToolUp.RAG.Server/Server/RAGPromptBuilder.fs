@@ -17,6 +17,50 @@ open ToolUp.Remoting.Json.SystemTextJson
 /// thin / noisy / off-topic for the queries it's getting.
 let private MissThreshold = 2
 
+// ─── Tool-aware framing (Phase 14r) ──────────────────────────────
+
+/// Phase 14r — a compact, request-independent summary of the tools
+/// available to the assistant, derived once at compose time from the
+/// deployment's registered tool list. Drives tool-aware retrieval
+/// framing: when the deployment has live-interface tools loaded, the
+/// framing (and the empty-retrieval message) teach the model that a
+/// knowledge-base miss is not the only fallback — "what is on the user's
+/// screen right now" is answered by calling the inspection tool, not by
+/// the knowledge base. A deployment with no such tools sees the historical
+/// knowledge-base-first behaviour unchanged.
+type ToolFraming = {
+    /// True when the deployment has at least one live-interface tool — a
+    /// tool that reads or drives the browser-resident module state the
+    /// user is currently looking at, so a question about live on-screen
+    /// state is answerable without the knowledge base.
+    HasLiveUiTools: bool
+}
+
+module ToolFraming =
+    /// The zero value: no tools known / no live-interface awareness. The
+    /// back-compat `withRetrieval` and any caller that doesn't thread a
+    /// tool list use this, so their behaviour is byte-identical to the
+    /// pre-Phase-14r knowledge-base-first framing.
+    let none = { HasLiveUiTools = false }
+
+    /// A tool counts as a "live-interface" tool when it reads or drives
+    /// the user's on-screen module state: the platform `_platform.ui.*`
+    /// inspection / mutation family, or any client-resident tool (whose
+    /// body runs in the browser against live UI state). Server-resident
+    /// analytical tools — including the `_platform.ai.*` cross-module read
+    /// family — are *not* live-interface tools: they read persisted data,
+    /// so the knowledge-base-first framing still applies to them.
+    let private isLiveUiTool (def: AIToolDefinition) : bool =
+        def.Location = ClientResident
+        || def.Name.StartsWith("_platform.ui.", System.StringComparison.Ordinal)
+
+    /// Derive the framing summary from the deployment's full tool list
+    /// (the `AIToolDefinition`s aggregated on the base `ServerApp`, which
+    /// `RAGCompose` reads at compose time).
+    let fromTools (tools: AIToolDefinition list) : ToolFraming = {
+        HasLiveUiTools = tools |> List.exists isLiveUiTool
+    }
+
 // ─── Source reference deserialisation ────────────────────────────
 
 let private jsonOptions = FableConverters.create ()
@@ -143,6 +187,21 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
 
 // ─── Retrieval builder ────────────────────────────────────────────
 
+/// Phase 14r — the message injected when knowledge-base retrieval found
+/// nothing for the turn. With no live-interface tools the wording is the
+/// historical neutral one (byte-identical — a no-UI-tools deployment sees
+/// no change). When the deployment *does* have live-interface tools, the
+/// empty result is no longer framed as a dead end: the model is told to
+/// call the interface inspection tool before concluding it cannot answer,
+/// so a "what filters do I have applied?" question resolves via inspection
+/// rather than an "I don't have that in the knowledge base" refusal.
+let private emptyRetrievalMessage (toolFraming: ToolFraming) : string =
+    if toolFraming.HasLiveUiTools then
+        "Knowledge-base search ran for this turn and returned no relevant matches. \
+         If the user's question is about the live state of the interface they are viewing — the filters currently applied, the current selection, or the values on screen — call the interface inspection tool before concluding you cannot answer, rather than treating this empty result as the final word."
+    else
+        "Knowledge-base search ran for this turn and returned no relevant matches."
+
 /// Build a `SystemPromptBuilder` that injects retrieved context from the
 /// team's knowledge base into the system prompt.
 ///
@@ -168,10 +227,18 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
 ///   when fewer than `MissThreshold` matches survive the score filter, so
 ///   admins can spot teams whose KB is too thin for their queries without
 ///   sampling individual conversations.
-let withRetrieval
+///
+/// Phase 14r — `toolFraming` makes the empty-retrieval message tool-aware:
+/// when the deployment has live-interface tools loaded, a knowledge-base
+/// miss redirects the model to the interface inspection tool instead of
+/// framing the miss as a dead end (see `emptyRetrievalMessage`). Pass
+/// `ToolFraming.none` (as the back-compat `withRetrieval` wrapper does) for
+/// the historical knowledge-base-first empty message.
+let withRetrievalToolAware
     (defaults: RetrievalDefaults)
     (telemetry: IRagTelemetry option)
     (tracer: IRetrievalTracer option)
+    (toolFraming: ToolFraming)
     (pipeline: IRetrievalPipeline)
     : SystemPromptBuilder =
     fun ctx -> async {
@@ -238,7 +305,7 @@ let withRetrieval
             ctx.RetrievedSources.Value <- matches |> List.map (toRetrievedSource defaults.SnippetCharLimit)
 
             if matches.IsEmpty then
-                return "Knowledge-base search ran for this turn and returned no relevant matches."
+                return emptyRetrievalMessage toolFraming
             else
                 let formattedChunks = matches |> List.mapi formatMatch |> String.concat "\n\n"
 
@@ -264,3 +331,16 @@ let withRetrieval
 
                 return $"{preamble}:\n\n{formattedChunks}"
     }
+
+/// Back-compat retrieval builder (pre-Phase-14r shape). Delegates to
+/// `withRetrievalToolAware` with `ToolFraming.none`, so the empty-retrieval
+/// message and every other behaviour are byte-identical to the historical
+/// knowledge-base-first path. Callers that can supply the deployment's tool
+/// list (e.g. `RAGCompose`) call `withRetrievalToolAware` directly.
+let withRetrieval
+    (defaults: RetrievalDefaults)
+    (telemetry: IRagTelemetry option)
+    (tracer: IRetrievalTracer option)
+    (pipeline: IRetrievalPipeline)
+    : SystemPromptBuilder =
+    withRetrievalToolAware defaults telemetry tracer ToolFraming.none pipeline

@@ -116,6 +116,43 @@ let resolveFraming (mode: GroundingMode) (framing: string) : string =
         else
             framing + "\n\n" + strictlyGroundedDirective
 
+/// Phase 14r — companion sentence appended to the retrieval framing when
+/// the deployment has live-interface tools loaded. Teaches the model that
+/// a knowledge-base miss is not a dead end: "what is on the user's screen
+/// right now" is answered by the interface inspection tool, not the KB. It
+/// names the capability by *purpose* (interface inspection), never by tool
+/// ID, so it stays correct regardless of which module registered the tool.
+/// The knowledge base stays authoritative for saved documents / analyses;
+/// only live on-screen state is relinquished to the inspection path.
+let uiToolFramingCompanion =
+    "This deployment also exposes live interface tools that can read the state of the module the user is currently viewing. \
+     For a question about what is on the user's screen right now — the filters currently applied, the current selection, the values in a form, or any other live page state — the interface inspection tool is the canonical source, not the knowledge base. \
+     Call it before answering rather than replying that you don't know or guessing from earlier in the conversation. \
+     The knowledge base stays authoritative for saved documents, notes, and prior analyses; only live on-screen state defers to the inspection tool. \
+     So an empty knowledge-base result is not a dead end when the user is asking about their current screen — inspect the live interface instead of saying the search found nothing."
+
+/// Phase 14r — resolve the framing text, then append the live-interface
+/// companion (`uiToolFramingCompanion`) when the deployment has such tools.
+/// The companion is added only under `Preferred` — the default grounding
+/// stance. `Permissive` emits no framing at all (the model is already free
+/// to call any tool), and `StrictlyGrounded` deliberately refuses on a
+/// retrieval miss, so redirecting to a tool would contradict its contract;
+/// both ignore `toolFraming` and fall through to plain `resolveFraming`.
+let resolveFramingWithTools
+    (mode: GroundingMode)
+    (framing: string)
+    (toolFraming: RAGPromptBuilder.ToolFraming)
+    : string =
+    let baseFraming = resolveFraming mode framing
+
+    match mode with
+    | Preferred when toolFraming.HasLiveUiTools ->
+        if System.String.IsNullOrWhiteSpace baseFraming then
+            uiToolFramingCompanion
+        else
+            baseFraming + "\n\n" + uiToolFramingCompanion
+    | _ -> baseFraming
+
 // ─── Post-save vectorisation hook ────────────────────────────────
 
 /// Build the file-save hook that enqueues processed data for vectorisation.
@@ -810,6 +847,14 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let b = ai.Base
     let config = b.Config
 
+    // Phase 14r — derive the tool-aware framing summary once, from the
+    // deployment's aggregated module tool list (the `_platform.ui.*`
+    // family / client-resident tools land here via `withAITools`). Drives
+    // both the framing companion below and the retrieval builder's
+    // empty-result message. A deployment with no live-interface tools
+    // yields `HasLiveUiTools = false` ⇒ historical framing, no regression.
+    let toolFraming = RAGPromptBuilder.ToolFraming.fromTools (b.AITools |> List.map fst)
+
     let queue = IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy)
 
     // Default to a 60-second rolling-window telemetry sink so `/health/rag`
@@ -882,7 +927,9 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         fun ctx -> async {
             match pipelineRef.Value with
             | Some pipeline ->
-                let! block = (withRetrieval app.RetrievalDefaults (Some telemetry) tracerRef.Value pipeline) ctx
+                let! block =
+                    (withRetrievalToolAware app.RetrievalDefaults (Some telemetry) tracerRef.Value toolFraming pipeline)
+                        ctx
 
                 // Server-side strict-grounding guard. Under `StrictlyGrounded`,
                 // an empty retrieved set means "knowledge base had nothing
@@ -899,8 +946,12 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
     // Framing preamble: explains to the model what the KB is, that retrieval
     // has already run for the current turn, and how to behave when nothing was
-    // found. The `GroundingMode` further shapes the directive.
-    let resolvedFraming = resolveFraming app.GroundingMode app.RetrievalFraming
+    // found. The `GroundingMode` further shapes the directive. Phase 14r — the
+    // tool-aware resolver appends the live-interface companion under
+    // `Preferred` when the deployment has such tools, so live-screen questions
+    // defer to the inspection tool rather than a KB-miss refusal.
+    let resolvedFraming =
+        resolveFramingWithTools app.GroundingMode app.RetrievalFraming toolFraming
 
     let framingBuilder: SystemPromptBuilder option =
         if System.String.IsNullOrWhiteSpace resolvedFraming then
