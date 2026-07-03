@@ -33,12 +33,22 @@ type SidebarId = string
 
 let private listeners = List<SidebarId -> unit>()
 
+// `gate` guards every read/write of `listeners`. In the browser the
+// bus is single-threaded (Fable compiles `lock` to a plain call of the
+// body), so this costs nothing at runtime; on .NET it makes the
+// registry safe under concurrent (un)subscription + `request` — the
+// case Expecto's parallel test runner exercises, where one test
+// enumerated the list while another mutated it ("Collection was
+// modified…"). Symmetry with `ModuleEvents.fire`, which snapshots for
+// the same reason.
+let private gate = obj ()
+
 /// Shell-side subscription. Returns a dispose thunk that removes
 /// the callback (the shell never disposes — subscription lives
 /// for the lifetime of the React tree).
 let subscribe (callback: SidebarId -> unit) : unit -> unit =
-    listeners.Add(callback)
-    fun () -> listeners.Remove(callback) |> ignore
+    lock gate (fun () -> listeners.Add(callback))
+    fun () -> lock gate (fun () -> listeners.Remove(callback) |> ignore)
 
 /// Public — call from companion code to ask the shell to navigate.
 /// Fires every subscribed callback in registration order. The
@@ -47,8 +57,14 @@ let subscribe (callback: SidebarId -> unit) : unit -> unit =
 ///
 /// No-op when no subscribers are registered — this is the case in
 /// test harnesses that don't mount the full shell.
+///
+/// Fires against a snapshot so a callback that (un)subscribes during
+/// delivery — or a concurrent test mutating the shared registry —
+/// can't disturb the in-flight iteration.
 let request (sidebarId: SidebarId) : unit =
-    for cb in listeners do
+    let snapshot = lock gate (fun () -> listeners.ToArray())
+
+    for cb in snapshot do
         try
             cb sidebarId
         with ex ->
