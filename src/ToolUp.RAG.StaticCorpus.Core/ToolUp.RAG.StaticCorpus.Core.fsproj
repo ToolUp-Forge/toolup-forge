@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.RAG.StaticCorpus Core — Fable-compatible types (DocChunk, StaticCorpus) plus the MessagePack binary index (de)serialisation for a build-time-precomputed documentation-retrieval corpus.</Description>
+        <PackageTags>fsharp;sdk;rag;retrieval;static-corpus;messagepack</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Types.fs" />
+        <Compile Include="Serialization.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="MessagePack" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" />
+        <!-- Source-in-nupkg (fable/) so a Fable-side consumer can model a
+             loaded corpus. The MessagePack (de)serialisation is `#if
+             !FABLE_COMPILER`-gated, so Fable compiles only the pure types. -->
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

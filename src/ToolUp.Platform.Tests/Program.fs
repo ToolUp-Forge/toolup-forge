@@ -4,6 +4,7 @@ open Expecto
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
 open ToolUp.Platform.Tests.AI
+open ToolUp.Platform.Tests.RAG
 
 let allTests =
     testList "ToolUp.Platform.Tests" [
@@ -395,6 +396,8 @@ let allTests =
         RAGVacuumJobHandlerTests.tests
         // Phase 14r — tool-aware RAG framing (live-interface detection + companion).
         ToolAwareRagFramingTests.tests
+        // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
+        StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests
         // Phase 14x — KB upload content-hash dedup.
         KnowledgeDedupTests.tests

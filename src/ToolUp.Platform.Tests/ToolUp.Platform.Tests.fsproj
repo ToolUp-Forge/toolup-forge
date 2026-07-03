@@ -643,6 +643,9 @@
              the Preferred-only framing companion, and the tool-aware
              empty-retrieval redirect (no regression without UI tools). -->
         <Compile Include="InProcess\ToolAwareRagFramingTests.fs" />
+        <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
+             (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
+        <Compile Include="RAG\StaticCorpusContract.fs" />
         <!-- Phase 119 — KnowledgeUploadPolicy enforcement (size cap / allowlist /
              filename sanitisation / unsupported-type status). -->
         <Compile Include="InProcess\KnowledgeUploadPolicyTests.fs" />
@@ -957,6 +960,8 @@
         <!-- Phase 6q — CitationNormaliser unit-tests need the RAG.Server
              reference for the normaliser module + RagCitationPolicy DU. -->
         <ProjectReference Include="..\ToolUp.RAG.Server\ToolUp.RAG.Server.fsproj" />
+        <!-- Phase 63 — StaticCorpus contract + determinism tests. -->
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Core\ToolUp.RAG.StaticCorpus.Core.fsproj" />
         <!-- Wave 15 (Phases 102/104/107) — KB original-document retrieval
              tests drive the KnowledgeBase server handler + resolver
              directly (transitively pulls KnowledgeBase.Core for the
