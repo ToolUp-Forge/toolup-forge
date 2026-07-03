@@ -20,6 +20,12 @@
         <Compile Include="Testing\ModuleHotReload.fs" />
         <!-- Phase 203 — hydration-parity conformance harness (BCL-only). -->
         <Compile Include="Testing\HydrationParity.fs" />
+        <!-- Phase 277 — hosted-tree a11y conformance harness (BCL-only): checks
+             a rendered hosted fragment for unlabelled controls, missing roles
+             on interaction sites, heading-order skips, and focus-order breaks.
+             Modelled on HydrationParity; consumes the fragment string so any
+             tree language (the ToyNode witness included) is checkable. -->
+        <Compile Include="Testing\HostedTreeA11y.fs" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

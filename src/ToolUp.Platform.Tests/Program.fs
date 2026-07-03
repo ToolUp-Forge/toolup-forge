@@ -232,6 +232,29 @@ let allTests =
         // matched sets mount clean; missing capability / below-min version
         // fail with a structured mismatch naming the gap.
         HostCapabilityNegotiationTests.tests
+        // Phase 268 — hosted-tree render-failure telemetry sink: faults
+        // reach the sink with the right kind + node id; NoOp swallows;
+        // counting decorator + onMismatch bridge + forwarding default.
+        HostRenderTelemetryTests.tests
+        // Phase 274 — hosted-tree content sanitization seam: injection
+        // classes stripped (script / iframe / javascript: / on* / style /
+        // unknown tag+attr), safe HTML + markdown preserved, client↔SSR
+        // determinism, OSS grep-guard.
+        HostContentSanitizerTests.tests
+        // Phase 275 — hosted-tree i18n resolution seam: key + placeholder
+        // resolves per locale (fallback), missing key flagged not blanked,
+        // pseudolocalisation passthrough (qps-ploc audit).
+        HostI18nResolverTests.tests
+        // Phase 277 — hosted-tree a11y conformance harness: clean fixture
+        // passes; each seeded violation class (unlabelled control / missing
+        // role / focus-order break / heading skip) fails with a diagnostic;
+        // the ToyNode witness is checkable. Runs under VerifyAll.
+        HostedTreeA11yTests.tests
+        // Phase 278 — hosted-tree render-cost budget gate: evaluate trips
+        // node/depth/render-time breaches with a readable report; measureTree
+        // over the ToyNode witness; over-budget reports through the Phase 268
+        // sink (non-fatal) + enforce hard-fail; not-configured = no measurement.
+        HostRenderBudgetTests.tests
         // Phase 245 — tri-state ModuleExposure persistence migration
         // (legacy `hidden[]` → Hidden, dual-write back-compat).
         ModuleExposureMigrationTests.tests
@@ -245,10 +268,18 @@ let allTests =
         // Phase 112 — scope-isolated live-session host: contract pack,
         // cap refusal, endpoint integration (404 / 429 / SSE frames).
         LiveSessionHostTests.tests
+        // Phase 271 — neutral tree-patch transport envelope: wire round-trip,
+        // pure gap-detector, ordered incremental delivery, gap → resync →
+        // resume end-to-end, GP 4 scope isolation over the Phase 112 channel.
+        TreePatchChannelTests.tests
         // Phase 264 — host-state binding-source projection seam: CSR
         // projection round-trip, SSR scope-isolation, GP 13 zero-cost,
         // toy read-side resolves on both projection paths, OSS grep-guard.
         HostStateProjectionTests.tests
+        // Phase 299 — owning ComponentId on the hosting seam (identity
+        // bridge): a tagged host carries its owner; an interaction event +
+        // a binding resolution attribute to it; an untagged host is pre-299.
+        HostingSeamComponentIdTests.tests
         // Phase 267 — multi-region hosted-tree composition: withElementPanes
         // / withElementPages populate the SplitPanel / PageViews slots, a
         // hosted tree renders into every region, capabilities reach concretes

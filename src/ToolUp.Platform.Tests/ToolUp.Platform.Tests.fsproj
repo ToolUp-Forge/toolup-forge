@@ -422,6 +422,31 @@
              gap (not a console warning); the four-built-in default always
              satisfies (GP 11). -->
         <Compile Include="InProcess\HostCapabilityNegotiationTests.fs" />
+        <!-- Phase 268 — hosted-tree render-failure telemetry: a forced
+             render / binding-resolution fault reaches the sink with the
+             right kind + node id; NoOp swallows; counting decorator +
+             onMismatch bridge + forwarding default. -->
+        <Compile Include="InProcess\HostRenderTelemetryTests.fs" />
+        <!-- Phase 274 — hosted-tree content sanitization seam: script/iframe/
+             javascript: URL / on* handler / inline style / unknown tag+attr
+             stripped; safe HTML + markdown preserved; escape-first markdown;
+             determinism (client↔SSR parity) + OSS grep-guard. -->
+        <Compile Include="InProcess\HostContentSanitizerTests.fs" />
+        <!-- Phase 275 — hosted-tree i18n resolution seam: key + placeholder
+             resolves per locale (with fallback), missing key flagged not
+             blanked (coverage signal), pseudolocalisation passthrough, OSS
+             grep-guard. -->
+        <Compile Include="InProcess\HostI18nResolverTests.fs" />
+        <!-- Phase 277 — hosted-tree a11y conformance harness: clean fixture
+             passes; each seeded violation (unlabelled control / missing role /
+             focus-order break / heading skip) fails with a diagnostic; the
+             ToyNode witness (Phase 202) is checkable; OSS grep-guard. -->
+        <Compile Include="InProcess\HostedTreeA11yTests.fs" />
+        <!-- Phase 278 — hosted-tree render-cost budget gate: evaluate trips
+             node/depth/render-time breaches; measureTree over the ToyNode
+             witness; over-budget reports through the Phase 268 sink (non-fatal)
+             + enforce hard-fail; not-configured = no measurement; OSS grep-guard. -->
+        <Compile Include="InProcess\HostRenderBudgetTests.fs" />
         <Compile Include="InProcess\ModuleExposureMigrationTests.fs" />
         <Compile Include="InProcess\NoActiveTeamLandingTests.fs" />
         <!-- Phase 227 (task #4) — typed client-side scope-denial
@@ -432,10 +457,19 @@
              cap refusal, endpoint integration (path gate, cross-scope
              404, rate-limit 429, SSE frame delivery). -->
         <Compile Include="InProcess\LiveSessionHostTests.fs" />
+        <!-- Phase 271 — neutral tree-patch transport envelope: wire round-trip,
+             pure gap-detector (accept / duplicate / gap / snapshot re-base),
+             ordered incremental delivery, gap → resync → resume end-to-end,
+             GP 4 scope isolation + GP 13 + OSS grep-guard. -->
+        <Compile Include="InProcess\TreePatchChannelTests.fs" />
         <!-- Phase 264 — host-state binding-source projection seam: client
              projection round-trip, SSR scope-isolation, GP 13 zero-cost,
              toy read-side binding on both projection paths, OSS grep-guard. -->
         <Compile Include="InProcess\HostStateProjectionTests.fs" />
+        <!-- Phase 299 — owning ComponentId on the hosting seam: a tagged host
+             carries its owner; an interaction event + a binding resolution
+             attribute to it; an untagged host is pre-299 (None); OSS grep-guard. -->
+        <Compile Include="InProcess\HostingSeamComponentIdTests.fs" />
         <!-- Phase 267 — multi-region / PageContent hosted-tree composition:
              withElementPanes (SplitPanel) + withElementPages (every
              PageContent case), capability routing from each region,

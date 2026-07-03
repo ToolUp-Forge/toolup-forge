@@ -155,6 +155,22 @@
              parameter). Fable-safe (plain Dictionary, injected side-effects)
              so it ships under fable/ for the client host bridge. -->
         <Compile Include="Shared\Types\HostCapabilityRegistry.fs" />
+        <!-- Phase 268 — neutral hosted-tree render-fault contract:
+             HostRenderFault(Kind) + IHostRenderTelemetrySink +
+             NoOpHostRenderTelemetrySink. In Core (not Client) so the SSR
+             boundary (Phase 273, in ToolUp.PublicRendering which references
+             Core not Client) reports through the SAME sink — the shape
+             ITelemetrySink / NoOpTelemetrySink already use. No deps beyond
+             primitives; Fable-safe so it ships under fable/ for the client
+             render path. -->
+        <Compile Include="Shared\Types\HostRenderFault.fs" />
+        <!-- Phase 274 — hosted-tree content sanitization seam (CSP-aligned):
+             HostContentKind / SanitizedContent / HostSanitizePolicy /
+             IHostContentSanitizer + the default-deny default sanitizer. In
+             Core (shared floor) + BCL-only (hand-rolled scanner, no regex/
+             Feliz) so the client (Phase 110) + SSR (Phase 111) legs sanitize
+             byte-identically. Ships under fable/ for the client render path. -->
+        <Compile Include="Shared\Types\HostContentSanitizer.fs" />
         <!-- Phase 41 — data-classification shared types (ClassificationLevel
              / FieldClassification / FieldHit). Standalone; no deps. -->
         <Compile Include="Shared\Types\ClassificationTypes.fs" />

@@ -124,6 +124,12 @@
              substrate it rides; the compose hook + endpoint live in
              Server\Compose\LiveSessionsCompose.fs (after ServerApp). -->
         <Compile Include="Server\Notifications\LiveSessionHost.fs" />
+        <!-- Phase 271 — neutral tree-patch transport envelope: TreePatchEnvelope
+             (monotonic seq / diff-base) + ITreePatchChannel (push / ack /
+             resync-on-gap) layered over the Phase 112 ILiveChannel. Opaque
+             payload (GP 1), scope isolation inherited from the wrapped channel
+             (GP 4), six-rule (GP 12). After LiveSessionHost.fs it wraps. -->
+        <Compile Include="Server\Notifications\TreePatchChannel.fs" />
         <!-- Phase 11.C.5 Tier 3 — server-tier `RequestContext.ofHttpContext`
              constructor for the Core-tier `RequestContext` newtype. Must
              precede every `IAuthProvider` impl so they can compile against
@@ -655,6 +661,13 @@
              the ServerApp.compositionManifest projector lives in ServerApp
              (next), so this must compile before it. -->
         <Compile Include="Server\CompositionManifest.fs" />
+        <!-- Phase 281 / 294 — composition well-formedness preflight: pure
+             rules-as-data over the CompositionManifest (duplicate ComponentId,
+             companion-slot legality, orphaned tool references) + the first-
+             party IConfigValidator that runs them. After CompositionManifest
+             (reads it); before ServerApp (run folds the validator into the
+             extension ServiceConfig hook). -->
+        <Compile Include="Server\CompositionValidator.fs" />
         <Compile Include="Server\ServerApp.fs" />
         <!-- Phase 166 — detachable module-binding manifest reader. After
              ServerApp (it applies stamps onto ServerModule). -->
