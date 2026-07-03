@@ -2,20 +2,35 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.RAG.StaticCorpus Build — the Markdig-based Markdown chunker and (in a later slice) the `toolup-rag pack-docs` CLI that precomputes a static-corpus embedding index at build time.</Description>
-        <PackageTags>fsharp;sdk;rag;retrieval;static-corpus;chunker;markdig;build</PackageTags>
+        <OutputType>Exe</OutputType>
+        <!-- Packaged as a .NET tool: `dotnet tool install ToolUp.RAG.StaticCorpus.Build`
+             then `dotnet toolup-rag pack-docs`. Also referenced as a library
+             (Chunker / Packer) by the test pack + the MSBuild target. -->
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>toolup-rag</ToolCommandName>
+        <Description>ToolUp.RAG.StaticCorpus Build — the Markdig Markdown chunker + the `toolup-rag pack-docs` CLI that precomputes a static-corpus embedding index (.scidx) at build time.</Description>
+        <PackageTags>fsharp;sdk;rag;retrieval;static-corpus;chunker;markdig;build;dotnet-tool</PackageTags>
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Chunker.fs" />
+        <Compile Include="Packer.fs" />
+        <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Core\ToolUp.RAG.StaticCorpus.Core.fsproj" />
+        <!-- Server carries the shared offline HashingEmbeddingProvider (used
+             by both this packer and a runtime deployment, so pack-time and
+             query-time embeddings share a space) + IEmbeddingProvider. -->
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Server\ToolUp.RAG.StaticCorpus.Server.fsproj" />
+        <!-- Optional `openai` provider for real semantic embeddings. -->
+        <ProjectReference Include="..\EmbeddingProviders\OpenAI\OpenAIEmbeddingProvider.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Markdig" />
     </ItemGroup>
     <ItemGroup>
         <None Include="README.md" Pack="true" PackagePath="\" />
+        <None Include="ToolUp.RAG.StaticCorpus.Build.targets" Pack="true" PackagePath="build\" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.RAG.StaticCorpusContract
 
 open System
+open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -332,6 +333,220 @@ let tests =
                     (List.head matches).ChunkId
                     "usage"
                     "a loaded corpus retrieves identically to an in-memory one"
+            }
+        ]
+
+        // ── 63.E / 63.G — packer + determinism over the filesystem ──
+        testList "Packer" [
+
+            let tempRoot () =
+                let d =
+                    Path.Combine(Path.GetTempPath(), "scidx-test-" + Guid.NewGuid().ToString("N"))
+
+                Directory.CreateDirectory d |> ignore
+                d
+
+            let writeDocs (dir: string) (files: (string * string) list) =
+                for (name, content) in files do
+                    let p = Path.Combine(dir, name)
+                    Directory.CreateDirectory(Path.GetDirectoryName p) |> ignore
+                    File.WriteAllText(p, content)
+
+            let mkConfig (dir: string) : Packer.PackConfig = {
+                Include = [ "**/*.md" ]
+                Exclude = []
+                EmbeddingProvider = "hashing"
+                Model = ""
+                Dimensions = Some 64
+                MaxChunkChars = Chunker.DefaultMaxChunkChars
+                Output = "out/docs.scidx"
+                BaseDir = dir
+            }
+
+            let fixedUtc = DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            let packEmbedder = HashingEmbeddingProvider.create 64
+
+            let outputBytes (config: Packer.PackConfig) =
+                File.ReadAllBytes(Path.Combine(config.BaseDir, config.Output))
+
+            /// A counting decorator so cache-hit behaviour is observable.
+            let counting (inner: IEmbeddingProvider) =
+                let mutable calls = 0
+
+                let e =
+                    { new IEmbeddingProvider with
+                        member _.GenerateEmbedding t =
+                            calls <- calls + 1
+                            inner.GenerateEmbedding t
+
+                        member _.GenerateEmbeddings ts =
+                            calls <- calls + Seq.length ts
+                            inner.GenerateEmbeddings ts
+
+                        member _.Dimensions = inner.Dimensions
+                        member _.ProviderId = inner.ProviderId
+                        member _.ModelId = inner.ModelId
+                    }
+
+                e, (fun () -> calls)
+
+            test "pack twice over an unchanged corpus → byte-identical .scidx" {
+                let dir = tempRoot ()
+
+                try
+                    writeDocs dir [
+                        "a.md", "# A\n\n## S1\n\ntext one here\n"
+                        "b.md", "# B\n\n## S2\n\ntext two here\n"
+                    ]
+
+                    let config = mkConfig dir
+
+                    Packer.pack packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
+                    |> ignore
+
+                    let bytes1 = outputBytes config
+
+                    Packer.pack packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
+                    |> ignore
+
+                    let bytes2 = outputBytes config
+                    Expect.equal bytes2 bytes1 "same MDs + model + packer version + builtUtc ⇒ byte-identical .scidx"
+                finally
+                    Directory.Delete(dir, true)
+            }
+
+            test "editing one file changes only that file's chunks" {
+                let dir = tempRoot ()
+
+                try
+                    writeDocs dir [
+                        "a.md", "# A\n\n## S1\n\napple banana\n"
+                        "b.md", "# B\n\n## S2\n\ncherry date\n"
+                    ]
+
+                    let config = mkConfig dir
+
+                    Packer.pack packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
+                    |> ignore
+
+                    let before = Serialization.deserialize (outputBytes config)
+
+                    // Touch only a.md.
+                    writeDocs dir [ "a.md", "# A\n\n## S1\n\napple banana elderberry\n" ]
+
+                    Packer.pack packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
+                    |> ignore
+
+                    let after = Serialization.deserialize (outputBytes config)
+
+                    let chunkFor (src: string) (c: StaticCorpus) =
+                        c.Chunks |> Array.filter (fun ch -> ch.Source = src)
+
+                    Expect.equal
+                        (chunkFor "b.md" after)
+                        (chunkFor "b.md" before)
+                        "b.md's chunks (body + embedding) are untouched"
+
+                    Expect.notEqual (chunkFor "a.md" after) (chunkFor "a.md" before) "a.md's chunks changed"
+                finally
+                    Directory.Delete(dir, true)
+            }
+
+            test "the on-disk embedding cache makes a re-pack embed nothing" {
+                let dir = tempRoot ()
+
+                try
+                    writeDocs dir [
+                        "a.md", "# A\n\n## S1\n\nalpha beta\n"
+                        "b.md", "# B\n\n## S2\n\ngamma delta\n"
+                    ]
+
+                    let config = mkConfig dir
+                    let cacheDir = Some(Path.Combine(dir, ".cache"))
+
+                    let e1, calls1 = counting packEmbedder
+                    Packer.pack e1 config fixedUtc cacheDir |> Async.RunSynchronously |> ignore
+                    Expect.isGreaterThan (calls1 ()) 0 "first pack embeds every chunk"
+
+                    let e2, calls2 = counting packEmbedder
+                    Packer.pack e2 config fixedUtc cacheDir |> Async.RunSynchronously |> ignore
+                    Expect.equal (calls2 ()) 0 "second pack hits the disk cache for every chunk — no embedder calls"
+                finally
+                    Directory.Delete(dir, true)
+            }
+
+            test "excludes remove matching files; the corpus records model + packer version" {
+                let dir = tempRoot ()
+
+                try
+                    writeDocs dir [
+                        "keep.md", "# K\n\n## S\n\nkeep me\n"
+                        "drafts/skip.md", "# D\n\n## S\n\nskip me\n"
+                    ]
+
+                    let config = {
+                        mkConfig dir with
+                            Exclude = [ "drafts/**" ]
+                    }
+
+                    Packer.pack packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
+                    |> ignore
+
+                    let corpus = Serialization.deserialize (outputBytes config)
+
+                    Expect.isFalse
+                        (corpus.Chunks |> Array.exists (fun c -> c.Source.Contains "skip"))
+                        "excluded files contribute no chunks"
+
+                    Expect.isTrue
+                        (corpus.Chunks |> Array.exists (fun c -> c.Source = "keep.md"))
+                        "included files are packed"
+
+                    Expect.equal corpus.EmbeddingModel packEmbedder.ModelId "corpus records the embedding model id"
+                    Expect.equal corpus.PackerVersion Packer.PackerVersion "corpus records the packer version"
+                finally
+                    Directory.Delete(dir, true)
+            }
+
+            test "incremental pack skips when inputs are unchanged and re-packs when they change (63.F)" {
+                let dir = tempRoot ()
+
+                try
+                    writeDocs dir [ "a.md", "# A\n\n## S1\n\nfirst\n" ]
+                    let config = mkConfig dir
+
+                    let first =
+                        Packer.packIncremental packEmbedder config fixedUtc None
+                        |> Async.RunSynchronously
+
+                    match first with
+                    | Packer.Packed _ -> ()
+                    | Packer.Skipped -> failtest "the first pack must not be skipped"
+
+                    // Unchanged inputs ⇒ skipped.
+                    let second =
+                        Packer.packIncremental packEmbedder config fixedUtc None
+                        |> Async.RunSynchronously
+
+                    Expect.equal second Packer.Skipped "unchanged inputs ⇒ the second pack is a no-op"
+
+                    // Change a file ⇒ re-packs.
+                    writeDocs dir [ "a.md", "# A\n\n## S1\n\nsecond\n" ]
+
+                    let third =
+                        Packer.packIncremental packEmbedder config fixedUtc None
+                        |> Async.RunSynchronously
+
+                    match third with
+                    | Packer.Packed _ -> ()
+                    | Packer.Skipped -> failtest "a changed input must force a re-pack"
+                finally
+                    Directory.Delete(dir, true)
             }
         ]
     ]

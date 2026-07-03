@@ -12,10 +12,42 @@ corpus.
   paragraphs are never split mid-way. Chunk identity is by value:
   `{source}:{heading-anchor}:{ordinal}`. Pure function, no I/O.
 
-- **`pack-docs` CLI** (a later slice) — walks a configured include set, chunks
-  each document, embeds each chunk once via the configured `IEmbeddingProvider`
-  (caching embedding responses on disk against input hashes), and writes the
+- **`toolup-rag pack-docs` CLI** (`Packer` + `Program`) — walks a configured
+  include set (`staticcorpus.json`), chunks each document, embeds each chunk once
+  via the configured provider (`hashing` offline default, or `openai`), caches
+  embedding responses on disk against `(model, text)` hashes, and writes the
   deterministic `.scidx` index consumed at runtime by
-  `ToolUp.RAG.StaticCorpus.Server`.
+  `ToolUp.RAG.StaticCorpus.Server`. Exit codes: `0` clean, `1` config invalid,
+  `2` embedding-provider error, `3` output write failure.
+
+## `staticcorpus.json`
+
+```json
+{
+  "include": ["docs/**/*.md"],
+  "exclude": ["**/drafts/**"],
+  "embeddingProvider": "hashing",
+  "dimensions": 512,
+  "maxChunkChars": 1500,
+  "output": "out/docs.scidx"
+}
+```
+
+Run `dotnet toolup-rag pack-docs --config staticcorpus.json`, or wire the packer
+into a project build with the shipped `ToolUp.RAG.StaticCorpus.Build.targets`:
+
+```xml
+<ItemGroup>
+  <ToolUpRagStaticCorpus Include="docs/**/*.md"
+                         Config="staticcorpus.json"
+                         Output="$(IntermediateOutputPath)docs.scidx" />
+</ItemGroup>
+```
+
+The pack is incremental: it content-hashes the inputs (config + docs + packer
+version) and writes a `<output>.inputs` sidecar, so an unchanged re-pack is a
+no-op even on a fresh checkout where timestamps are unreliable. Setting
+`SOURCE_DATE_EPOCH` fixes the corpus `BuiltUtc` for reproducible builds (it
+defaults to the Unix epoch, so the `.scidx` is byte-reproducible by default).
 
 Licensed under Apache-2.0.

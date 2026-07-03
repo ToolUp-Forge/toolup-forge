@@ -6,6 +6,7 @@
         <PackageTags>fsharp;sdk;rag;retrieval;static-corpus;pipeline</PackageTags>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="HashingEmbeddingProvider.fs" />
         <Compile Include="StaticCorpusRetrievalPipeline.fs" />
     </ItemGroup>
     <ItemGroup>

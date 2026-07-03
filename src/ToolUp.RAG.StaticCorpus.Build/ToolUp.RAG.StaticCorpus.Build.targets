@@ -1,0 +1,57 @@
+<Project>
+    <!--
+    ToolUp.RAG.StaticCorpus build integration.
+
+    Packs a documentation folder into a build-time-precomputed `.scidx`
+    retrieval index before the project compiles, and copies the index to the
+    output directory. Declare one item per index in the consuming project:
+
+      <ItemGroup>
+        <ToolUpRagStaticCorpus Include="docs/**/*.md"
+                               Config="staticcorpus.json"
+                               Output="$(IntermediateOutputPath)docs.scidx" />
+      </ItemGroup>
+
+    - `Config`  — path to the `staticcorpus.json` config (relative to the
+                  project). Its own `output` field MUST equal this item's
+                  `Output` so MSBuild incrementality and the copy agree.
+    - `Output`  — the `.scidx` path the packer writes and this target ships as
+                  Content.
+
+    Incrementality is two-fold: MSBuild's Inputs/Outputs skips the target when
+    the `.scidx` is newer than the docs / config / packer; and the packer
+    itself content-hashes the inputs, so even a forced run is a no-op when
+    nothing changed (a fresh checkout, where timestamps are unreliable, still
+    detects "unchanged" correctly).
+    -->
+
+    <PropertyGroup>
+        <!-- The packer tool DLL shipped in this package's tools/ folder. This
+             .targets lives in the package's build/ folder. -->
+        <ToolUpRagPackerDll Condition="'$(ToolUpRagPackerDll)' == ''">$(MSBuildThisFileDirectory)../tools/net10.0/any/ToolUp.RAG.StaticCorpus.Build.dll</ToolUpRagPackerDll>
+    </PropertyGroup>
+
+    <Target Name="PackToolUpRagStaticCorpus"
+            BeforeTargets="CoreCompile"
+            Condition="'@(ToolUpRagStaticCorpus)' != ''"
+            Inputs="@(ToolUpRagStaticCorpus);%(ToolUpRagStaticCorpus.Config);$(ToolUpRagPackerDll)"
+            Outputs="%(ToolUpRagStaticCorpus.Output)">
+
+        <Message Importance="high"
+                 Text="ToolUp.RAG.StaticCorpus: packing %(ToolUpRagStaticCorpus.Config) -&gt; %(ToolUpRagStaticCorpus.Output)" />
+
+        <Exec Command="dotnet exec &quot;$(ToolUpRagPackerDll)&quot; pack-docs --config &quot;%(ToolUpRagStaticCorpus.Config)&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+    </Target>
+
+    <!-- Ship every declared index as Content so it lands next to the app. -->
+    <Target Name="IncludeToolUpRagStaticCorpusContent"
+            AfterTargets="PackToolUpRagStaticCorpus"
+            Condition="'@(ToolUpRagStaticCorpus)' != ''">
+        <ItemGroup>
+            <Content Include="%(ToolUpRagStaticCorpus.Output)"
+                     CopyToOutputDirectory="PreserveNewest"
+                     Condition="Exists('%(ToolUpRagStaticCorpus.Output)')" />
+        </ItemGroup>
+    </Target>
+</Project>
