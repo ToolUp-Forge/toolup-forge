@@ -343,4 +343,9 @@ let withRetrieval
     (tracer: IRetrievalTracer option)
     (pipeline: IRetrievalPipeline)
     : SystemPromptBuilder =
-    withRetrievalToolAware defaults telemetry tracer ToolFraming.none pipeline
+    // Eta-expanded over `ctx` (rather than a point-free delegation) so the
+    // compiled arity matches the pre-Phase-14r `withRetrieval` exactly — a
+    // point-free `= withRetrievalToolAware …` would reflect as a 4-arg method
+    // returning a function, tripping the public-API baseline gate on an
+    // otherwise source-compatible change. Keeps IL-level back-compat.
+    fun ctx -> withRetrievalToolAware defaults telemetry tracer ToolFraming.none pipeline ctx
