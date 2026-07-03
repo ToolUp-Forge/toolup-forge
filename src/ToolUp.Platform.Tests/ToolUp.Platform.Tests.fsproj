@@ -266,6 +266,12 @@
              reference-companion posture constants + DeterminismSource
              normalisation. -->
         <Compile Include="InProcess\CompanionCapabilityTests.fs" />
+        <!-- Phase 296 — CompanionCapability effect-join surface: the join is
+             associative / commutative / idempotent with identity the
+             two-sided identity; an effecting companion flips a pure
+             composition to effecting; determinism factors union; dev-only
+             wins; composedEffect joins a ComponentId-keyed signature. -->
+        <Compile Include="InProcess\EffectJoinTests.fs" />
         <!-- Phase 281 — composition well-formedness preflight: duplicate
              ComponentId / companion-slot legality / orphaned tool reference
              each fail with a readable message; a well-formed app passes. -->

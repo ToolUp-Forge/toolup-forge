@@ -121,6 +121,8 @@ let allTests =
         CompositionDiffTests.tests
         // Phase 282 — typed companion capability descriptors.
         CompanionCapabilityTests.tests
+        // Phase 296 — CompanionCapability effect-join surface.
+        EffectJoinTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).

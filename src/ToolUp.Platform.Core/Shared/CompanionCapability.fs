@@ -139,6 +139,49 @@ module DeterminismSource =
     /// Draws on mutable external state (network / disk / db / env).
     let externalState: DeterminismSource = ofFactor ExternalStateFactor
 
+    /// Componentwise join (Phase 296): the set union of the two sources'
+    /// factors. `Deterministic ⊔ x = x` (the empty set is the identity);
+    /// `clock ⊔ random = {clock; random}`. Associative + commutative +
+    /// idempotent by the semilattice laws of set union.
+    let join (a: DeterminismSource) (b: DeterminismSource) : DeterminismSource =
+        ofFactors (Set.union (factors a) (factors b))
+
+// ─── Phase 296 — the effect-join axis operators ───────────────────────
+//
+// Each axis is a two- (or set-) element join-semilattice; the composition's
+// posture is the componentwise join of its parts. The three axis joins
+// below feed `CompanionCapability.join`.
+
+[<RequireQualifiedAccess>]
+module EffectClass =
+
+    /// Componentwise join: `Pure ⊔ Effecting = Effecting`. One effecting
+    /// part makes the whole effecting. `Pure` is the identity.
+    let join (a: EffectClass) (b: EffectClass) : EffectClass =
+        match a, b with
+        | Pure, Pure -> Pure
+        | _ -> Effecting
+
+[<RequireQualifiedAccess>]
+module Readiness =
+
+    /// Componentwise join: `DistributedReady ⊔ DevOnly = DevOnly`. One
+    /// dev-only part makes the whole composition dev-only.
+    /// `DistributedReady` is the identity.
+    let join (a: Readiness) (b: Readiness) : Readiness =
+        match a, b with
+        | DistributedReady, DistributedReady -> DistributedReady
+        | _ -> DevOnly
+
+/// An external **effect signature** an authoring / supply-chain tool joins
+/// componentwise: every composed unit's declared `CompanionCapability` keyed
+/// by its stable `ComponentId` (the same key space the Phase 280 manifest
+/// enumerates). `CompanionCapability.composedEffect` folds it to the whole
+/// composition's effect class — the static "what can this composition touch?"
+/// property. An absent id contributes the conservative default (the
+/// identity), so an undeclared companion never changes the join (GP 11).
+type CapabilitySignature = Map<ComponentId, CompanionCapability>
+
 [<RequireQualifiedAccess>]
 module CompanionCapability =
 
@@ -207,3 +250,45 @@ module CompanionCapability =
     /// Whether this capability is safe for a distributed deployment — false
     /// only when it declares `DevOnly`.
     let isDistributedReady (cap: CompanionCapability) : bool = cap.Readiness = DistributedReady
+
+    // ─── Phase 296 — the componentwise effect-join ────────────────────
+    //
+    // The composition's posture is the componentwise join of its
+    // companions' capabilities: effecting wins over pure, determinism
+    // factors union, dev-only wins over distributed-ready. `identity` is
+    // the join identity (joining with it returns the other value), so an
+    // undeclared companion never changes the join (GP 11). The join is
+    // associative + commutative + idempotent — the three axes are each a
+    // join-semilattice, so the product is too — which is exactly what an
+    // authoring tool needs to reason about a composition's effect class
+    // regardless of the order it composed the parts.
+
+    /// Componentwise join of two capabilities: effect ⊔ effect, determinism
+    /// ⊔ determinism (factor-set union), readiness ⊔ readiness. Associative,
+    /// commutative, idempotent; `identity` is the two-sided identity.
+    let join (a: CompanionCapability) (b: CompanionCapability) : CompanionCapability = {
+        Effect = EffectClass.join a.Effect b.Effect
+        Determinism = DeterminismSource.join a.Determinism b.Determinism
+        Readiness = Readiness.join a.Readiness b.Readiness
+    }
+
+    /// The join of a sequence of capabilities, folded from `identity`. An
+    /// empty sequence joins to `identity` ("pure"); the fold order does not
+    /// matter (associative + commutative). This is the composed app's effect
+    /// class — the static "what can this composition touch?" property.
+    let joinAll (caps: CompanionCapability seq) : CompanionCapability = Seq.fold join identity caps
+
+    /// Look a component's declared capability up in a `CapabilitySignature`,
+    /// falling back to the conservative default (`identity`) for an
+    /// undeclared component — so an absent id never changes a join (GP 11).
+    let resolve (signature: CapabilitySignature) (componentId: ComponentId) : CompanionCapability =
+        signature |> Map.tryFind componentId |> Option.defaultValue defaultCapability
+
+    /// The composed app's joined effect class over a whole
+    /// `CapabilitySignature` — the join of every declared component
+    /// capability. Undeclared components contribute the identity (they are
+    /// simply absent from the map), so the result equals the join of the
+    /// declared capabilities. This is the value the Phase 280 manifest
+    /// surfaces (opt-in) as the composition's effect class.
+    let composedEffect (signature: CapabilitySignature) : CompanionCapability =
+        signature |> Map.toSeq |> Seq.map snd |> joinAll
