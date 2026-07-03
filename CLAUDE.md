@@ -228,6 +228,8 @@ For HTTP-shaped companions (audit sinks, notification sinks): use BCL `HttpClien
 
 For stateful companions (job scheduler, vector store, etc.): document explicitly in the file header whether the impl is dev-only or distributed-ready. Distributed-ready impls must be stateless between handler calls (rule 4). Dev-only impls are clearly marked.
 
+A companion's effect / determinism / distributed-readiness posture can additionally be declared as a **typed, queryable value** — `CompanionCapability` (`ToolUp.Platform.Core`, `Shared/CompanionCapability.fs`): `EffectClass` (`Pure` | `Effecting`), `DeterminismSource` (`Deterministic` | a set of `DeterminismFactor`s), and `Readiness` (`DistributedReady` | `DevOnly`). Each axis is a join-semilattice whose bottom (pure / deterministic / distributed-ready) is `CompanionCapability.identity`, the value an *undeclared* companion contributes — so a deployment that declares nothing is byte-for-byte unchanged (GP 11). Declare a posture with the reference constants (`distributedEffecting` / `devOnlyEffecting` / `pure'`) or the fluent `withEffect` / `withDeterminism` / `withReadiness` helpers, keyed by the companion's stable `ComponentId`. The descriptor is *read* by the introspection manifest + preflight (it makes the file-header prose machine-checkable), and joined componentwise into a composed-app effect signature; it is never a hard runtime gate on its own — the opt-in `CompositionCapabilityGate` is.
+
 ### Native-dependency companions (P/Invoke)
 
 Every shipped companion to date wraps a managed SDK. A companion that wraps a *native* library (via P/Invoke) follows these additional conventions:
