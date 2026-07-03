@@ -119,6 +119,8 @@ let allTests =
         CompositionManifestTests.tests
         // Phase 286 — composition structural diff (id-keyed, order-independent).
         CompositionDiffTests.tests
+        // Phase 282 — typed companion capability descriptors.
+        CompanionCapabilityTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).

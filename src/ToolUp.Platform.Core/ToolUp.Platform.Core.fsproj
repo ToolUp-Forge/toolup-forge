@@ -61,6 +61,16 @@
              resolver + the both-tier scaffolding tooling agree on the
              override name. -->
         <Compile Include="Shared\ComponentConfig.fs" />
+        <!-- Phase 282 — typed companion capability descriptors: a
+             machine-queryable EffectClass / DeterminismSource / Readiness
+             posture a companion declares, keyed against the same
+             ComponentId the manifest + preflight correlate against. Three
+             join-semilattices (Phase 296 joins them componentwise); the
+             bottom of each axis is the identity an undeclared companion
+             contributes, so a pre-282 deployment is byte-for-byte
+             unchanged (GP 11). Fable-safe (DUs + Set only); after
+             ComponentId.fs so it can key on the stable identity. -->
+        <Compile Include="Shared\CompanionCapability.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
              Phase 69d markers in ToolUp.Remoting.Server). Placed early so
              every later API record file can annotate its fields. The SDK's
