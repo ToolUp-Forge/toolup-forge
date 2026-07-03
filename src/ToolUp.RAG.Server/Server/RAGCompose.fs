@@ -801,6 +801,19 @@ type RAGServerApp = {
     /// on sustained saturation for compliance-grade fail-loud. Tune via
     /// `RAGServerApp.withIngestionQueueOverflowPolicy`.
     OverflowPolicy: IngestionOverflowPolicy
+    /// Phase 63.A — substitute the entire `IRetrievalPipeline`. `None`
+    /// (default) builds the standard dense/hybrid `RetrievalPipeline` over
+    /// the composed `IVectorStore` / `ISparseIndex` / `IEmbeddingProvider`.
+    /// `Some p` registers `p` as the `IRetrievalPipeline` verbatim and skips
+    /// the default pipeline construction — the seam a build-time-precomputed
+    /// static-corpus pipeline (or any custom retrieval implementation) slots
+    /// into. When set AND no `VectorisationHandler` is registered, the
+    /// ingestion + reembedding background services are also suppressed (no
+    /// producers ⇒ no consumers needed) so a static-doc deployment carries
+    /// no live-ingestion overhead (GP 13). Query embedding still resolves the
+    /// registered `IEmbeddingProvider`; only chunk embeddings move to build
+    /// time. Set via `RAGServerApp.withRetrievalPipeline`.
+    RetrievalPipelineOverride: IRetrievalPipeline option
 }
 
 // ─── composeRAG ───────────────────────────────────────────────────
@@ -854,6 +867,18 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // empty-result message. A deployment with no live-interface tools
     // yields `HasLiveUiTools = false` ⇒ historical framing, no regression.
     let toolFraming = RAGPromptBuilder.ToolFraming.fromTools (b.AITools |> List.map fst)
+
+    // Phase 63.A — retrieval-pipeline override seam. When a consumer supplies
+    // a pipeline via `withRetrievalPipeline` (e.g. a build-time-precomputed
+    // static-corpus pipeline), it is registered verbatim and the default
+    // `RetrievalPipeline` construction is skipped. `suppressIngestion`
+    // additionally drops the ingestion + reembedding background services when
+    // the override is set AND no module contributes a `VectorisationHandler`
+    // (no producers ⇒ no consumers): a static-doc deployment then carries no
+    // live-ingestion overhead (GP 13). Query embedding still resolves the
+    // registered `IEmbeddingProvider`; only chunk embeddings move to build time.
+    let suppressIngestion =
+        app.RetrievalPipelineOverride.IsSome && b.VectorisationHandlers.IsEmpty
 
     let queue = IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy)
 
@@ -1165,35 +1190,44 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
 
         let pipeline: IRetrievalPipeline =
-            // Phase 4b commit 5 + runtime-toggle follow-up — wire a snapshot
-            // thunk that reads the live `IPlatformRuntimeConfigStore` value
-            // when registered, otherwise falls back to the static
-            // `ServerConfig.PlatformKnowledgeBase` value.
-            let runtimeStoreOpt =
-                match probe.GetService(typeof<IPlatformRuntimeConfigStore>) with
-                | :? IPlatformRuntimeConfigStore as rc -> Some rc
-                | _ -> None
+            // Phase 63.A — an override (e.g. the static-corpus pipeline) is
+            // registered verbatim; the default dense/hybrid `RetrievalPipeline`
+            // is not constructed. The override still receives the query through
+            // `IRetrievalPipeline.Retrieve` and embeds it via the registered
+            // `IEmbeddingProvider`; it just doesn't consume the vector store /
+            // sparse index / reranker this branch would build.
+            match app.RetrievalPipelineOverride with
+            | Some overridePipeline -> overridePipeline
+            | None ->
+                // Phase 4b commit 5 + runtime-toggle follow-up — wire a snapshot
+                // thunk that reads the live `IPlatformRuntimeConfigStore` value
+                // when registered, otherwise falls back to the static
+                // `ServerConfig.PlatformKnowledgeBase` value.
+                let runtimeStoreOpt =
+                    match probe.GetService(typeof<IPlatformRuntimeConfigStore>) with
+                    | :? IPlatformRuntimeConfigStore as rc -> Some rc
+                    | _ -> None
 
-            let snapshot () =
-                match runtimeStoreOpt with
-                | Some rc -> rc.Snapshot()
-                | None -> config.PlatformKnowledgeBase
+                let snapshot () =
+                    match runtimeStoreOpt with
+                    | Some rc -> rc.Snapshot()
+                    | None -> config.PlatformKnowledgeBase
 
-            RetrievalPipeline(
-                vectorStore,
-                cachedEmbedder,
-                sparseIndex,
-                pipelineOptions,
-                retrievalTracer,
-                platformKnowledgeBaseSnapshot = snapshot,
-                // Phase 122 — same instance the `/health/rag` endpoint resolves,
-                // so per-stage P50/P95 surface in the snapshot.
-                telemetry = telemetry,
-                // Phase 14y — query-size cap + audit sink for the hard refusal.
-                ?maxQueryChars = app.MaxQueryChars,
-                eventStore = eventStore
-            )
-            :> IRetrievalPipeline
+                RetrievalPipeline(
+                    vectorStore,
+                    cachedEmbedder,
+                    sparseIndex,
+                    pipelineOptions,
+                    retrievalTracer,
+                    platformKnowledgeBaseSnapshot = snapshot,
+                    // Phase 122 — same instance the `/health/rag` endpoint resolves,
+                    // so per-stage P50/P95 surface in the snapshot.
+                    telemetry = telemetry,
+                    // Phase 14y — query-size cap + audit sink for the hard refusal.
+                    ?maxQueryChars = app.MaxQueryChars,
+                    eventStore = eventStore
+                )
+                :> IRetrievalPipeline
 
         // Fill the deferred pipeline + tracer references so the prompt builder
         // works at request time. Both share the same tracer instance so traces
@@ -1289,33 +1323,6 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 .AddSingleton<IRetrievalPipeline>(pipeline)
                 .AddSingleton<IngestionQueue>(queue)
                 .AddSingleton<ToolUp.RAG.ReembeddingService.ReembeddingQueue>(reembedQueue)
-                // Phase 14t — factory registration so the ingestion service
-                // captures the REAL host provider and can lazily resolve the
-                // (downstream-built) `IJobScheduler` for durable retries.
-                .AddSingleton<IHostedService>(fun (sp: System.IServiceProvider) ->
-                    let getJobScheduler () =
-                        match sp.GetService(typeof<IJobScheduler>) with
-                        | :? IJobScheduler as js -> Some js
-                        | _ -> None
-
-                    create
-                        queue
-                        pipeline
-                        cachedEmbedder
-                        eventStore
-                        ingestionObservers
-                        app.IngestionConcurrency
-                        ragLogger
-                        telemetry
-                        ingestionUsageLog
-                        ingestionQuota
-                        app.IngestionRetryPolicy
-                        ingestionNotificationChannel
-                        ingestionAlertState
-                        getJobScheduler
-                        registerRetryHandler
-                    :> IHostedService)
-                .AddSingleton<IHostedService>(reembedSvc)
                 .AddSingleton<IOcrProvider>(ocrProvider)
                 .AddSingleton<ITableExtractor>(tableExtractor)
                 .AddSingleton<IRagTelemetry>(telemetry)
@@ -1323,6 +1330,51 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // observer write through, so `FileManagement.ListFiles`
                 // resolves it and joins status onto the file-list read.
                 .AddSingleton<IIngestionStatusStore>(ingestionStatusStore)
+
+        // Phase 63.A — the ingestion + reembedding hosted services are the
+        // load-bearing live-ingestion overhead. Register them only when NOT
+        // suppressed. `suppressIngestion` is set when a retrieval-pipeline
+        // override is composed AND no module contributes a
+        // `VectorisationHandler` — i.e. a static-corpus / read-only-retrieval
+        // deployment with no producers, so these consumers have nothing to do
+        // (GP 13). A deployment that keeps the default pipeline, or overrides
+        // the pipeline but still registers handlers, keeps both services.
+        let s =
+            if suppressIngestion then
+                ragLogger.Info(
+                    "[RAGCompose] Retrieval pipeline overridden with no VectorisationHandler registered — ingestion + reembedding background services suppressed (static-corpus / read-only retrieval mode)."
+                )
+
+                s
+            else
+                s
+                    // Phase 14t — factory registration so the ingestion service
+                    // captures the REAL host provider and can lazily resolve the
+                    // (downstream-built) `IJobScheduler` for durable retries.
+                    .AddSingleton<IHostedService>(fun (sp: System.IServiceProvider) ->
+                        let getJobScheduler () =
+                            match sp.GetService(typeof<IJobScheduler>) with
+                            | :? IJobScheduler as js -> Some js
+                            | _ -> None
+
+                        create
+                            queue
+                            pipeline
+                            cachedEmbedder
+                            eventStore
+                            ingestionObservers
+                            app.IngestionConcurrency
+                            ragLogger
+                            telemetry
+                            ingestionUsageLog
+                            ingestionQuota
+                            app.IngestionRetryPolicy
+                            ingestionNotificationChannel
+                            ingestionAlertState
+                            getJobScheduler
+                            registerRetryHandler
+                        :> IHostedService)
+                    .AddSingleton<IHostedService>(reembedSvc)
 
         let s =
             match app.Reranker with
@@ -1526,6 +1578,7 @@ module RAGServerApp =
             TombstoneRetention = System.TimeSpan.FromDays 7.0
             VacuumSchedule = None
             OverflowPolicy = DropWrite
+            RetrievalPipelineOverride = None
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -1567,6 +1620,7 @@ module RAGServerApp =
             TombstoneRetention = System.TimeSpan.FromDays 7.0
             VacuumSchedule = None
             OverflowPolicy = DropWrite
+            RetrievalPipelineOverride = None
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -1814,6 +1868,21 @@ module RAGServerApp =
     /// implementations. Without one, RAG uses the in-memory flat-scan
     /// `InMemoryVectorStore` — fine up to ~50k chunks per scope.
     let withVectorStore (store: IVectorStore) (app: RAGServerApp) : RAGServerApp = { app with VectorStore = Some store }
+
+    /// Phase 63.A — substitute the entire retrieval pipeline. `p` is
+    /// registered as the `IRetrievalPipeline` verbatim; the default
+    /// `RetrievalPipeline` (and, when no `VectorisationHandler` is present,
+    /// the ingestion + reembedding background services) are skipped. Slots a
+    /// build-time-precomputed static-corpus pipeline — or any custom
+    /// `IRetrievalPipeline` — into the standard `RAGServerApp` fluent shape so
+    /// static-doc-Q&A consumers and live-KB consumers share one composition
+    /// root. Query embedding still uses the registered `IEmbeddingProvider`;
+    /// only chunk embeddings are precomputed. `IEmbeddingProvider` remains a
+    /// required `create` argument for now (relaxing it is a deferred follow-up).
+    let withRetrievalPipeline (pipeline: IRetrievalPipeline) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalPipelineOverride = Some pipeline
+    }
 
     /// Cap the number of documents the `IngestionBackgroundService` processes
     /// in parallel. Each slot does one batched embedding call covering a whole
