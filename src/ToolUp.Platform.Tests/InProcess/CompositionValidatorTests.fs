@@ -4,6 +4,11 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+// DataType + its DataTypeInfo record live here; the explicit open pins the
+// record-field labels (Info / Detect / Process) so the well-formed-app
+// fixture resolves unambiguously against DataType rather than a same-named
+// field on another record in scope.
+open ToolUp.Platform.FileProcessor
 
 // ─── Phase 281 — composition well-formedness preflight ────────────────
 //
