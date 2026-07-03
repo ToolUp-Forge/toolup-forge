@@ -661,6 +661,13 @@
              the ServerApp.compositionManifest projector lives in ServerApp
              (next), so this must compile before it. -->
         <Compile Include="Server\CompositionManifest.fs" />
+        <!-- Phase 297 — ComponentId-keyed hosted-tree usage telemetry export:
+             IHostedTreeUsageExport (Record usage / Snapshot scope-isolated) +
+             NoOp default + in-memory reference. Widens the Phase 268 fault
+             signal to interaction/usage keyed by ComponentId (Phase 279/283);
+             scope-isolated by construction (GP 4), zero-cost when unused
+             (GP 13). Depends only on Core ComponentId; standalone. -->
+        <Compile Include="Server\HostedTreeUsageExport.fs" />
         <!-- Phase 281 / 294 — composition well-formedness preflight: pure
              rules-as-data over the CompositionManifest (duplicate ComponentId,
              companion-slot legality, orphaned tool references) + the first-
