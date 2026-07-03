@@ -458,11 +458,13 @@ let allTests =
         // note in HomeOverviewTests.fs for why it can't run in-process.
         HomeOverviewTests.countAffordanceTests
         HomeOverviewTests.overviewScopeAiTests
-        // NOTE: `HomeOverviewTests.overviewActiveAiPresentTests` (the
-        // IActiveAiProbe probe-present converse, registered by the Phase
-        // 14t commit) was never committed on the HomeOverviewTests.fs
-        // side, leaving this project uncompilable — the dangling
-        // registration is removed until the test body lands.
+        // NOTE: `HomeOverviewTests.overviewActiveAiPresentTests` was referenced
+        // here but never defined in `HomeOverviewTests.fs` (landed dangling in
+        // Phase 14t `70d75ec`), so the whole ToolUp.Platform.Tests pack failed
+        // to compile on HEAD. Reference removed to restore the build; the
+        // intended "probe-present converse" test (pins the v0.9.4 RAG-path
+        // "No AI provider configured" fork-drift regression) still needs
+        // authoring — tracked in the roadmap TIDY-UP.
         // Phase 217 — IHomeWidgetDataProvider merge + scope-correctness.
         HomeOverviewTests.widgetDataTests
         // Phase 217 — recents/pinning per-user round-trip + scope isolation.
