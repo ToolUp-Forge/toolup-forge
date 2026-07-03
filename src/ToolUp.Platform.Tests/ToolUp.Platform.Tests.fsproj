@@ -259,6 +259,13 @@
              remove+add; an identical pair diffs to empty; the diff is
              order-independent (keyed by id, not position). -->
         <Compile Include="InProcess\CompositionDiffTests.fs" />
+        <!-- Phase 287 — composition golden-file CI gate: build a reference
+             composition's Phase 280 manifest, compare to a checked-in
+             composition-baseline.json via the Phase 286 diff, fail with the
+             readable delta on an unacknowledged drop / swap / datatype change;
+             env-gated regenerate (TOOLUP_APPROVE_COMPOSITION=1). Mirrors the
+             Phase 175 api-baseline guard. Test/build infra only. -->
+        <Compile Include="Composition\CompositionBaselineTests.fs" />
         <!-- Phase 282 — typed companion capability descriptors: the
              conservative default is the join identity (undeclared → pure,
              byte-for-byte pre-282, GP 11); a declared capability correlates

@@ -119,6 +119,8 @@ let allTests =
         CompositionManifestTests.tests
         // Phase 286 — composition structural diff (id-keyed, order-independent).
         CompositionDiffTests.tests
+        // Phase 287 — composition golden-file CI gate (mirrors Phase 175 api-baseline).
+        ToolUp.Platform.Tests.Composition.CompositionBaselineTests.tests
         // Phase 282 — typed companion capability descriptors.
         CompanionCapabilityTests.tests
         // Phase 296 — CompanionCapability effect-join surface.

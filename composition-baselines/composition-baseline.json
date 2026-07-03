@@ -1,0 +1,100 @@
+{
+  "Modules": [
+    {
+      "Id": {
+        "ComponentId": "module:orders-service"
+      },
+      "Kind": "ModuleComponent",
+      "Label": "Orders",
+      "Impl": null
+    },
+    {
+      "Id": {
+        "ComponentId": "module:inventory-service"
+      },
+      "Kind": "ModuleComponent",
+      "Label": "Inventory",
+      "Impl": null
+    }
+  ],
+  "CompanionSlots": [
+    {
+      "Id": {
+        "ComponentId": "companion:IAuditSink/primary-archive"
+      },
+      "Kind": "CompanionComponent",
+      "Label": "IAuditSink",
+      "Impl": "primary-archive"
+    }
+  ],
+  "DataTypes": [
+    {
+      "Id": {
+        "ComponentId": "datatype:SalesData"
+      },
+      "Kind": "DataTypeComponent",
+      "Label": "SalesData",
+      "Impl": null
+    },
+    {
+      "Id": {
+        "ComponentId": "datatype:StockData"
+      },
+      "Kind": "DataTypeComponent",
+      "Label": "StockData",
+      "Impl": null
+    }
+  ],
+  "Tools": [
+    {
+      "Id": {
+        "ComponentId": "tool:orders.run"
+      },
+      "Kind": "ToolComponent",
+      "Label": "orders.run",
+      "Impl": null
+    }
+  ],
+  "ConfigKnobs": [
+    {
+      "Name": "ProcessProfile",
+      "Value": "AllInOne"
+    },
+    {
+      "Name": "ConfigDriftDetection",
+      "Value": "NoConfigDriftDetection"
+    },
+    {
+      "Name": "JobScheduler",
+      "Value": "NoJobScheduler"
+    },
+    {
+      "Name": "EntityStore",
+      "Value": "NoEntityStore"
+    },
+    {
+      "Name": "UsageMetering",
+      "Value": "NoUsageMetering"
+    },
+    {
+      "Name": "MetricsEndpoint",
+      "Value": "NoMetricsEndpoint"
+    },
+    {
+      "Name": "RateLimiter",
+      "Value": "NoRateLimiter"
+    },
+    {
+      "Name": "SmokeTest",
+      "Value": "NoSmokeTest"
+    },
+    {
+      "Name": "DataSubjectRequests",
+      "Value": "Disabled"
+    },
+    {
+      "Name": "PeerSubstrate",
+      "Value": "NoPeerSubstrate"
+    }
+  ]
+}
