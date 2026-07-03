@@ -299,6 +299,11 @@
              descriptor migrates + composes equivalently; a too-new version
              fails readably; a current-version descriptor is a no-op migrate. -->
         <Compile Include="InProcess\CompositionDescriptorVersionTests.fs" />
+        <!-- Phase 295 — descriptor completeness round-trip + partial/preset:
+             an arbitrary composed app round-trips losslessly; a preset + a
+             hole-binding composes the equivalent full app; an unfilled hole
+             fails readably. -->
+        <Compile Include="InProcess\DescriptorCompletenessTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->

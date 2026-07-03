@@ -148,6 +148,9 @@ let allTests =
         // Phase 292 — descriptor schema-version + migration: older→current
         // migrate + equivalent compose; too-new fails readably; no-op current.
         CompositionDescriptorVersionTests.tests
+        // Phase 295 — descriptor completeness round-trip + partial/preset holes:
+        // lossless lowering; preset + hole-binding equivalence; unfilled hole fails.
+        DescriptorCompletenessTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests

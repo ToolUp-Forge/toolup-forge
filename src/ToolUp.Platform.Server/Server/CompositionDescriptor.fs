@@ -54,6 +54,21 @@ type ComponentSelection = {
     Inputs: Map<string, string>
 }
 
+/// Phase 295 — a declared *hole* in a partial descriptor (a preset /
+/// archetype): a named slot that a later `apply` binds to a set of
+/// component selections. An unbound hole (`Filling = None`) makes the
+/// descriptor a reusable template; `ofManifest` rejects a descriptor that
+/// still carries one, naming it. A bound hole (`Filling = Some sels`)
+/// contributes its selections to the composition exactly as if they were
+/// listed in `Components`.
+type DescriptorHole = {
+    /// The hole's stable name — the key `apply` fills against and the
+    /// token a readable "unfilled hole" error reports.
+    Name: string
+    /// The selections bound into this hole, or `None` while unbound.
+    Filling: ComponentSelection list option
+}
+
 /// A declarative, serializable description of an application's whole
 /// composition: which components to include (each by stable
 /// `ComponentId`), plus the `ServerConfig` that shaped composition
@@ -74,6 +89,12 @@ type CompositionDescriptor = {
     /// they are not listed separately — they appear in the projected
     /// manifest transitively.
     Components: ComponentSelection list
+    /// Phase 295 — declared holes (a partial / preset descriptor). Empty
+    /// for a fully-bound descriptor. Each hole is bound by `apply`; an
+    /// unbound hole makes `ofManifest` fail readably, naming it. A bound
+    /// hole's selections are folded into the composition alongside
+    /// `Components`.
+    Holes: DescriptorHole list
     /// The `ServerConfig` whose switches change *what* gets composed
     /// (drift detection, usage metering, rate limiting, …).
     Config: ServerConfig
@@ -89,6 +110,10 @@ type DescriptorError =
     /// registered). Carries every unresolved id, so one failure reports
     /// them all.
     | UnknownComponents of ComponentId list
+    /// Phase 295 — the descriptor still declares one or more unbound holes
+    /// (a partial / preset descriptor that was never fully `apply`-ed).
+    /// Carries every unfilled hole name, so one failure reports them all.
+    | UnfilledHoles of string list
 
 /// The code side of config-as-data composition: a lookup from a stable
 /// `ComponentId` to the registration that folds that component onto a
@@ -186,6 +211,7 @@ module CompositionDescriptor =
     let create (components: ComponentSelection list) (config: ServerConfig) : CompositionDescriptor = {
         Version = CurrentSchemaVersion
         Components = components
+        Holes = []
         Config = config
     }
 
@@ -202,11 +228,85 @@ module CompositionDescriptor =
         {
             Version = version
             Components = components
+            Holes = []
             Config = config
         }
 
-    /// The stable ids the descriptor selects, in declaration order.
+    /// The stable ids the descriptor directly selects (its `Components`),
+    /// in declaration order. Excludes hole fillings — see `effectiveComponentIds`.
     let componentIds (descriptor: CompositionDescriptor) : ComponentId list = descriptor.Components |> List.map _.Id
+
+    // ── Phase 295 — partial / preset descriptors (declared holes) ─────
+
+    /// Declare additional unbound holes on a descriptor, making it a
+    /// partial / preset (archetype) that a later `apply` fills. Each name
+    /// becomes an unbound `DescriptorHole`; `ofManifest` rejects a
+    /// descriptor that still carries an unbound hole, naming it.
+    let withHoles (names: string list) (descriptor: CompositionDescriptor) : CompositionDescriptor = {
+        descriptor with
+            Holes = descriptor.Holes @ (names |> List.map (fun n -> { Name = n; Filling = None }))
+    }
+
+    /// Fill the declared hole named `name` with `fillings`. Fills the
+    /// matching declared hole in place; a `name` that matches no declared
+    /// hole is a no-op — the intended hole stays unbound and `ofManifest`
+    /// fails naming it, surfacing the typo rather than silently binding
+    /// stray components.
+    let apply
+        (name: string)
+        (fillings: ComponentSelection list)
+        (descriptor: CompositionDescriptor)
+        : CompositionDescriptor =
+        {
+            descriptor with
+                Holes =
+                    descriptor.Holes
+                    |> List.map (fun h ->
+                        if h.Name = name then
+                            { h with Filling = Some fillings }
+                        else
+                            h)
+        }
+
+    /// The names of holes still unbound, in declaration order. Empty when
+    /// the descriptor is fully bound (a completable composition).
+    let unfilledHoles (descriptor: CompositionDescriptor) : string list =
+        descriptor.Holes
+        |> List.filter (fun h -> Option.isNone h.Filling)
+        |> List.map _.Name
+
+    /// The selections contributed by bound holes, in hole-declaration
+    /// order. The composition folds these in alongside `Components`.
+    let private boundFillings (descriptor: CompositionDescriptor) : ComponentSelection list =
+        descriptor.Holes |> List.collect (fun h -> h.Filling |> Option.defaultValue [])
+
+    /// Every selection the descriptor actually composes: its direct
+    /// `Components` followed by every bound hole's fillings.
+    let effectiveComponents (descriptor: CompositionDescriptor) : ComponentSelection list =
+        descriptor.Components @ boundFillings descriptor
+
+    /// The stable ids the descriptor actually composes (direct selections +
+    /// bound hole fillings). This is the id set the projected manifest
+    /// reproduces (the round-trip / completeness law).
+    let effectiveComponentIds (descriptor: CompositionDescriptor) : ComponentId list =
+        effectiveComponents descriptor |> List.map _.Id
+
+    /// Phase 295 — lower an arbitrary composed `ServerApp` to a
+    /// `CompositionDescriptor` (the completeness direction): emit a
+    /// selection for every module and companion slot the app's manifest
+    /// enumerates, carrying the app's `ServerConfig`. Datatypes / tools are
+    /// module-derived, so they are not lowered as separate selections —
+    /// they reappear transitively when the descriptor is rebuilt against a
+    /// catalogue that registers the same modules. The lossless round-trip
+    /// law: `ofManifest cat (toDescriptor app)` reproduces `app`'s full
+    /// component-id set (proven in `DescriptorCompletenessTests`).
+    let toDescriptor (app: ServerApp) : CompositionDescriptor =
+        let manifest = ServerApp.compositionManifest app
+
+        let selections =
+            (manifest.Modules @ manifest.CompanionSlots) |> List.map (fun e -> select e.Id)
+
+        create selections app.Config
 
     /// Render a `DescriptorError` to a readable, actionable single-line
     /// message — the text `ofManifest`'s raising variant surfaces.
@@ -218,41 +318,55 @@ module CompositionDescriptor =
             sprintf
                 "CompositionDescriptor references component id(s) that the registration catalogue does not register: %s. Every selected ComponentId must resolve to a catalogue entry (register it via RegistrationCatalogue.addModule / add) — the descriptor names ids as data, the catalogue supplies the code."
                 listing
+        | UnfilledHoles names ->
+            let listing = names |> String.concat ", "
+
+            sprintf
+                "CompositionDescriptor has unbound hole(s): %s. A partial / preset descriptor must have every declared hole filled (CompositionDescriptor.apply <name> <selections>) before it composes — an unbound hole is an incomplete composition, not a default."
+                listing
 
     /// Build a `CompositionDescriptor` into a `ServerApp` by resolving
-    /// every selected `ComponentId` against `catalogue` and folding its
-    /// registration onto a fresh app seeded with the descriptor's
-    /// `ServerConfig`. Total: returns `Error (UnknownComponents …)`
-    /// naming *every* id the catalogue cannot resolve, rather than
-    /// composing a partial app. On success the projected manifest
-    /// reproduces the descriptor's module + companion selections (the
-    /// round-trip law).
+    /// every effective selection (direct `Components` + bound hole
+    /// fillings) against `catalogue` and folding its registration onto a
+    /// fresh app seeded with the descriptor's `ServerConfig`. Total:
+    /// - an unbound declared hole → `Error (UnfilledHoles …)` naming every
+    ///   unfilled hole (checked first — a partial descriptor is never
+    ///   silently composed);
+    /// - an unresolved id → `Error (UnknownComponents …)` naming every id
+    ///   the catalogue cannot resolve, rather than composing a partial app.
+    /// On success the projected manifest reproduces the descriptor's
+    /// effective module + companion selections (the round-trip law).
     let ofManifest
         (catalogue: RegistrationCatalogue)
         (descriptor: CompositionDescriptor)
         : Result<ServerApp, DescriptorError> =
-        let unresolved =
-            descriptor.Components
-            |> List.filter (fun sel -> (RegistrationCatalogue.tryResolve sel.Id catalogue) |> Option.isNone)
-            |> List.map _.Id
-
-        match unresolved with
-        | _ :: _ -> Error(UnknownComponents unresolved)
+        match unfilledHoles descriptor with
+        | _ :: _ as holes -> Error(UnfilledHoles holes)
         | [] ->
-            let seed = ServerApp.empty |> ServerApp.withConfig descriptor.Config
+            let effective = effectiveComponents descriptor
 
-            let built =
-                descriptor.Components
-                |> List.fold
-                    (fun app sel ->
-                        // Resolution is total here — the unresolved sweep
-                        // above already rejected any missing id, so this
-                        // `Option.get` cannot fire on the non-error path.
-                        let registration = (RegistrationCatalogue.tryResolve sel.Id catalogue).Value
-                        registration sel.Inputs app)
-                    seed
+            let unresolved =
+                effective
+                |> List.filter (fun sel -> (RegistrationCatalogue.tryResolve sel.Id catalogue) |> Option.isNone)
+                |> List.map _.Id
 
-            Ok built
+            match unresolved with
+            | _ :: _ -> Error(UnknownComponents unresolved)
+            | [] ->
+                let seed = ServerApp.empty |> ServerApp.withConfig descriptor.Config
+
+                let built =
+                    effective
+                    |> List.fold
+                        (fun app sel ->
+                            // Resolution is total here — the unresolved sweep
+                            // above already rejected any missing id, so this
+                            // `Option.get` cannot fire on the non-error path.
+                            let registration = (RegistrationCatalogue.tryResolve sel.Id catalogue).Value
+                            registration sel.Inputs app)
+                        seed
+
+                Ok built
 
 // `ServerApp.ofManifest` — the ergonomic raising entry point — lives in
 // `CompositionDescriptorVersion.fs` (Phase 292), where it runs the schema
