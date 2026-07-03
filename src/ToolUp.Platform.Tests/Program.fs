@@ -236,6 +236,10 @@ let allTests =
         // reach the sink with the right kind + node id; NoOp swallows;
         // counting decorator + onMismatch bridge + forwarding default.
         HostRenderTelemetryTests.tests
+        // Phase 273 — SSR hosted-tree error-boundary: a throwing node yields
+        // a structured fallback + a Phase 268 sink fault + a completed page;
+        // healthy tree unchanged; fallback hydrates parity-clean.
+        HostRenderBoundaryTests.tests
         // Phase 274 — hosted-tree content sanitization seam: injection
         // classes stripped (script / iframe / javascript: / on* / style /
         // unknown tag+attr), safe HTML + markdown preserved, client↔SSR

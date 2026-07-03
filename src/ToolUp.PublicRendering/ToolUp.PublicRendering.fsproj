@@ -132,6 +132,14 @@
              construction (GP 4). Standalone (depends only on Core +
              Server types); placed before the compose root by convention. -->
         <Compile Include="Server\HostStateProjection.fs" />
+        <!-- Phase 273 — SSR hosted-tree error-boundary + degraded fallback:
+             HostRenderBoundary.guard wraps an opaque subtree render so a
+             thrown node yields a structured fallback fragment + a Phase 268
+             IHostRenderTelemetrySink fault instead of 500-ing the page.
+             Neutral utility (depends only on Core HostRenderFault); applied
+             at call sites, not compose-registered (GP 11/13). Standalone;
+             placed before the compose root by convention. -->
+        <Compile Include="Server\HostRenderBoundary.fs" />
         <Compile Include="Server\PublicRenderingCompose.fs" />
         <!-- Phase 276 — hosted-tree route registration (SSR half): registers
              a hosted multi-page module's neutral Core HostRoute declarations
