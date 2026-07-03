@@ -141,6 +141,10 @@ let allTests =
         // Phase 301 — live composition hot-swap: atomic re-point + rollback,
         // in-flight finishes on old, only declared components swap.
         CompositionHotSwapTests.tests
+        // Phase 284 — declarative composition descriptor + ServerApp.ofManifest:
+        // descriptor builds an equivalent app; manifest round-trip law; unknown
+        // component id fails readably.
+        CompositionDescriptorTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests

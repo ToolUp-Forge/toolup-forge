@@ -291,6 +291,10 @@
              traffic while in-flight finishes on the old; a failed init rolls
              back; only declared components swap; gate-off is unchanged. -->
         <Compile Include="InProcess\CompositionHotSwapTests.fs" />
+        <!-- Phase 284 — declarative composition descriptor: a descriptor
+             builds an equivalent ServerApp; the manifest round-trip law
+             holds; an unknown component id fails with a readable error. -->
+        <Compile Include="InProcess\CompositionDescriptorTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->

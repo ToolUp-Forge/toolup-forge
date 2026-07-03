@@ -721,6 +721,12 @@
              with rollback. Opt-in (HotSwapMode, default off). After
              ComponentLifecycle. -->
         <Compile Include="Server\CompositionHotSwap.fs" />
+        <!-- Phase 284 — declarative composition descriptor: the serializable
+             inverse of the Phase 280 manifest (component selection by
+             ComponentId + ServerConfig) + RegistrationCatalogue +
+             CompositionDescriptor.ofManifest / ServerApp.ofManifest. After
+             ServerApp (folds addModule / with* builders). -->
+        <Compile Include="Server\CompositionDescriptor.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />
