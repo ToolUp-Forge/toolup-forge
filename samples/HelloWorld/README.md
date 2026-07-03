@@ -24,6 +24,20 @@ samples/HelloWorld/
 
 The HelloWorld sample is the OSS repo's sole reference deployment. A new contributor / OSS adopter clones the repo, runs `dotnet run --project samples/HelloWorld/HelloWorld.Server` + `cd samples/HelloWorld/HelloWorld.Client && dotnet fable -o output --watch` (alongside `npm run dev`), opens `http://localhost:8080`, sees the module live. Without it, the repo has no "see it work in one terminal" path.
 
+## Static-corpus retrieval (Phase 63)
+
+The [`docs/`](docs/) folder doubles as a build-time-precomputed retrieval corpus:
+the sample's own documentation is the knowledge base a docs-aware assistant
+answers from. [`staticcorpus.json`](staticcorpus.json) configures the pack, and
+[`docs/wiring.md`](docs/wiring.md) walks through packing the index
+(`toolup-rag pack-docs`) and composing it via
+`RAGServerApp.withRetrievalPipeline (StaticCorpusRetrievalPipeline.loadFromFile …)`.
+Because the pipeline is overridden and no module contributes a
+`VectorisationHandler`, the deployment carries no live-ingestion machinery — only
+the per-query embedding runs at runtime. See
+[`../../docs/rag/static-corpus.md`](../../docs/rag/static-corpus.md) for the full
+reference. The generated `out/docs.scidx` is git-ignored.
+
 ## See also
 
 - [`../../docs/platform/modules.md`](../../docs/platform/modules.md) — module convention.

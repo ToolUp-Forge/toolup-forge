@@ -1,0 +1,7 @@
+{
+  "include": ["docs/**/*.md"],
+  "embeddingProvider": "hashing",
+  "dimensions": 512,
+  "maxChunkChars": 1500,
+  "output": "out/docs.scidx"
+}
