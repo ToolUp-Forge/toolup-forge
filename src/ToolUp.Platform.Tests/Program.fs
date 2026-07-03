@@ -125,6 +125,8 @@ let allTests =
         CompanionCapabilityTests.tests
         // Phase 296 — CompanionCapability effect-join surface.
         EffectJoinTests.tests
+        // Phase 300 — composition capability sandbox (runtime default-deny).
+        CompositionCapabilityGateTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).

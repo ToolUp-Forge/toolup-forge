@@ -279,6 +279,13 @@
              composition to effecting; determinism factors union; dev-only
              wins; composedEffect joins a ComponentId-keyed signature. -->
         <Compile Include="InProcess\EffectJoinTests.fs" />
+        <!-- Phase 300 — composition capability sandbox (runtime default-deny):
+             within-envelope access granted; a beyond-envelope / undeclared
+             invocation denied with a component-named error + observable deny;
+             an undeclared component defaults to identity (default-deny); the
+             disabled gate grants all (byte-identical off); guardInvoke
+             enforces the envelope in front of the Phase 266 registry. -->
+        <Compile Include="InProcess\CompositionCapabilityGateTests.fs" />
         <!-- Phase 281 — composition well-formedness preflight: duplicate
              ComponentId / companion-slot legality / orphaned tool reference
              each fail with a readable message; a well-formed app passes. -->

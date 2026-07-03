@@ -668,6 +668,17 @@
              to the Phase 280 manifest — depends only on CompositionManifest +
              ComponentId. Feeds the Phase 287 golden-file CI gate. -->
         <Compile Include="Server\CompositionDiff.fs" />
+        <!-- Phase 300 — composition capability sandbox (runtime default-deny):
+             ICompositionCapabilityGate enforces the Phase 296 effect-join at
+             runtime — a component may only exercise capabilities at or below
+             its declared CompanionCapability envelope (resolved from a
+             CapabilitySignature keyed by ComponentId), default-deny anything
+             beyond, every deny observable. Generalises the Phase 266
+             authorizer-gated Invoke to the whole composition (guardInvoke
+             bridge). Opt-in — `disabled` passthrough is the byte-identical
+             default (GP 11/13); depends only on Core CompanionCapability +
+             the Phase 266 registry types. -->
+        <Compile Include="Server\CompositionCapabilityGate.fs" />
         <!-- Phase 297 — ComponentId-keyed hosted-tree usage telemetry export:
              IHostedTreeUsageExport (Record usage / Snapshot scope-isolated) +
              NoOp default + in-memory reference. Widens the Phase 268 fault
