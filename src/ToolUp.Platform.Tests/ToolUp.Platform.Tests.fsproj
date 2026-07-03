@@ -962,6 +962,7 @@
         <ProjectReference Include="..\ToolUp.RAG.Server\ToolUp.RAG.Server.fsproj" />
         <!-- Phase 63 — StaticCorpus contract + determinism tests. -->
         <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Core\ToolUp.RAG.StaticCorpus.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Build\ToolUp.RAG.StaticCorpus.Build.fsproj" />
         <!-- Wave 15 (Phases 102/104/107) — KB original-document retrieval
              tests drive the KnowledgeBase server handler + resolver
              directly (transitively pulls KnowledgeBase.Core for the

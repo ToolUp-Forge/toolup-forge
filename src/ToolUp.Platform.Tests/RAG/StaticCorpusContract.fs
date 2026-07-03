@@ -87,4 +87,94 @@ let tests =
             Expect.equal round.Chunks.Length 0 "no chunks survive round-trip as an empty array"
             Expect.equal round.EmbeddingModel empty.EmbeddingModel "scalars still preserved on an empty corpus"
         }
+
+        // ── 63.C — Markdig chunker boundaries ───────────────────────
+        testList "Chunker" [
+
+            test "chunks on H2 boundaries with the full heading path" {
+                let md =
+                    "# Guide\n\nIntro paragraph.\n\n## Setup\n\nInstall the thing.\n\n## Usage\n\nRun the thing.\n"
+
+                let chunks = Chunker.chunk "guide.md" Chunker.DefaultMaxChunkChars md
+
+                // Intro (under H1) + Setup + Usage = 3 sections.
+                Expect.equal chunks.Length 3 "one chunk per H1-intro / H2 section"
+
+                let setup = chunks |> List.find (fun c -> c.Body.Contains "Install")
+                Expect.equal setup.HeadingPath [ "# Guide"; "## Setup" ] "heading path is the H1→H2 ancestor chain"
+                Expect.stringContains setup.Id "guide.md:setup:" "id is {source}:{anchor}:{ordinal}"
+                Expect.equal (setup.Metadata.TryFind "anchor") (Some "setup") "anchor slug stamped for jump-links"
+            }
+
+            test "nested H3 carries the full H1→H2→H3 path" {
+                let md = "# T\n\n## Section\n\ntext\n\n### Detail\n\ndeep text\n"
+                let chunks = Chunker.chunk "d.md" Chunker.DefaultMaxChunkChars md
+
+                let detail = chunks |> List.find (fun c -> c.Body.Contains "deep text")
+
+                Expect.equal
+                    detail.HeadingPath
+                    [ "# T"; "## Section"; "### Detail" ]
+                    "H3 chunk carries all three ancestor headings"
+            }
+
+            test "a fenced code block is never split and stays intact" {
+                let fence = "```fsharp\nlet x = 1\n\n// ## not a heading\nlet y = 2\n```"
+
+                let md = sprintf "# T\n\n## Code\n\nBefore.\n\n%s\n\nAfter.\n" fence
+
+                let chunks = Chunker.chunk "c.md" Chunker.DefaultMaxChunkChars md
+                let codeChunk = chunks |> List.find (fun c -> c.Body.Contains "let x = 1")
+
+                Expect.stringContains codeChunk.Body "```fsharp" "opening fence preserved"
+                Expect.stringContains codeChunk.Body "```" "closing fence preserved"
+
+                Expect.stringContains
+                    codeChunk.Body
+                    "// ## not a heading"
+                    "the '##' inside the fence did not start a new chunk"
+            }
+
+            test "an oversize section splits on block boundaries, replaying the heading path" {
+                let para n =
+                    sprintf "Paragraph %d %s" n (String.replicate 40 "word ")
+
+                let body = [ for i in 1..10 -> para i ] |> String.concat "\n\n"
+                let md = sprintf "# T\n\n## Big\n\n%s\n" body
+
+                let chunks = Chunker.chunk "big.md" 300 md
+
+                Expect.isGreaterThan chunks.Length 1 "the >300-char section is split into multiple chunks"
+
+                for c in chunks do
+                    Expect.equal c.HeadingPath [ "# T"; "## Big" ] "every split replays the same heading path"
+
+                    Expect.isLessThanOrEqual
+                        c.Body.Length
+                        900
+                        "no split wildly exceeds the budget (whole-block grouping)"
+
+                let ordinals = chunks |> List.map (fun c -> c.Metadata.TryFind "ordinal")
+                Expect.equal (List.distinct ordinals |> List.length) chunks.Length "ordinals are unique across splits"
+            }
+
+            test "a code fence larger than the budget is still emitted whole" {
+                let bigFence = "```\n" + String.replicate 200 "codeline\n" + "```"
+
+                let md = sprintf "# T\n\n## Big\n\n%s\n" bigFence
+
+                let chunks = Chunker.chunk "bf.md" 300 md
+                let fenceChunk = chunks |> List.find (fun c -> c.Body.Contains "codeline")
+
+                Expect.stringContains fenceChunk.Body "```" "the fence survives whole even though it exceeds the budget"
+                Expect.isGreaterThan fenceChunk.Body.Length 300 "an atomic block is never split to fit the budget"
+            }
+
+            test "chunking is a pure function (same input ⇒ same output)" {
+                let md = "# T\n\n## A\n\naaa\n\n## B\n\nbbb\n"
+                let a = Chunker.chunk "p.md" Chunker.DefaultMaxChunkChars md
+                let b = Chunker.chunk "p.md" Chunker.DefaultMaxChunkChars md
+                Expect.equal a b "deterministic: identical chunk lists"
+            }
+        ]
     ]

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.RAG.StaticCorpus Build — the Markdig-based Markdown chunker and (in a later slice) the `toolup-rag pack-docs` CLI that precomputes a static-corpus embedding index at build time.</Description>
+        <PackageTags>fsharp;sdk;rag;retrieval;static-corpus;chunker;markdig;build</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Chunker.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Core\ToolUp.RAG.StaticCorpus.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Markdig" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>
