@@ -246,6 +246,10 @@
              ComponentId from the live registry; empty pipeline → empty
              manifest (GP 13). -->
         <Compile Include="InProcess\CompositionManifestTests.fs" />
+        <!-- Phase 281 — composition well-formedness preflight: duplicate
+             ComponentId / companion-slot legality / orphaned tool reference
+             each fail with a readable message; a well-formed app passes. -->
+        <Compile Include="InProcess\CompositionValidatorTests.fs" />
         <!-- Phase 283 — component-id telemetry / audit correlation: a
              module metric + audit source label carry the stable ComponentId;
              renaming the display name preserves id-keyed correlation; the id
@@ -432,6 +436,11 @@
              completed page; healthy tree unchanged; fallback hydrates
              parity-clean (Phase 203). -->
         <Compile Include="InProcess\HostRenderBoundaryTests.fs" />
+        <!-- Phase 297 — ComponentId-keyed hosted-tree usage export: a usage
+             event attributes to its ComponentId; mixed-kind tallies; the
+             export is scope-isolated (a scope excludes another's usage); the
+             NoOp default records nothing. -->
+        <Compile Include="InProcess\HostedTreeUsageExportTests.fs" />
         <!-- Phase 274 — hosted-tree content sanitization seam: script/iframe/
              javascript: URL / on* handler / inline style / unknown tag+attr
              stripped; safe HTML + markdown preserved; escape-first markdown;

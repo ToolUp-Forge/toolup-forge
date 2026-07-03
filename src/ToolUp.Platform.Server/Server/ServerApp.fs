@@ -1796,10 +1796,31 @@ module ServerApp =
             // from DI and short-circuits every `SearchUsers` call to
             // `Ok []`. When `Some`, the companion is registered as a
             // singleton; the handler resolves it lazily per request.
-            match app.UserDirectory with
-            | None -> withErasureHandlers
-            | Some directory ->
-                appendRegistration withErasureHandlers (fun s -> s.AddSingleton<IUserDirectory>(directory))
+            let withUserDirectory =
+                match app.UserDirectory with
+                | None -> withErasureHandlers
+                | Some directory ->
+                    appendRegistration withErasureHandlers (fun s -> s.AddSingleton<IUserDirectory>(directory))
+
+            // Phase 281 — fold the composition well-formedness validator into
+            // the Phase 9m preflight set. Built here (not in `compose`) because
+            // the manifest projector + the AITools accumulator live on this
+            // record, one compile-unit after `compose`; the `serviceRegistration`
+            // closure lands the validator into `services` via the same
+            // `extensions.ServiceConfig` hook `compose` invokes before the
+            // aggregator runs, so it is checked under both NormalBoot and the
+            // ValidateConfig dry-run. The manifest + tool→module reference edges
+            // are derived from the live registry, so it validates exactly what
+            // was composed (duplicate ComponentId, companion-slot legality,
+            // orphaned tool references). Non-security-class — `SkipPreflight`
+            // bypasses it, and a well-formed app passes silently (GP 11).
+            let compositionReferences: CompositionReferences = {
+                ToolSources = app.AITools |> List.map (fun (def, _) -> def.Name, def.SourceModule)
+            }
+
+            appendRegistration
+                withUserDirectory
+                (CompositionValidator.serviceRegistration (compositionManifest app) compositionReferences)
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default
         // chains `RunBlocking()` to preserve `int` exit code semantics.

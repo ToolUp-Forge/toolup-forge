@@ -117,6 +117,8 @@ let allTests =
         ComponentIdentityTests.tests
         // Phase 280 — introspectable composition manifest.
         CompositionManifestTests.tests
+        // Phase 281 — composition well-formedness preflight.
+        CompositionValidatorTests.tests
         // Phase 283 — component-id telemetry / audit correlation.
         ComponentIdCorrelationTests.tests
         ConfigReferenceTests.tests
@@ -240,6 +242,10 @@ let allTests =
         // a structured fallback + a Phase 268 sink fault + a completed page;
         // healthy tree unchanged; fallback hydrates parity-clean.
         HostRenderBoundaryTests.tests
+        // Phase 297 — ComponentId-keyed hosted-tree usage export: usage
+        // events attribute to their ComponentId, scope-isolated snapshot,
+        // NoOp default records nothing.
+        HostedTreeUsageExportTests.tests
         // Phase 274 — hosted-tree content sanitization seam: injection
         // classes stripped (script / iframe / javascript: / on* / style /
         // unknown tag+attr), safe HTML + markdown preserved, client↔SSR
