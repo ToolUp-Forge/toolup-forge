@@ -403,8 +403,15 @@ let private boundaryTests =
 
 // ─── Aggregate ────────────────────────────────────────────────────────
 
+// `makeBag` leaks a permanent `NavigationRequest.subscribe` and the
+// witnesses fire `NavigationRequest.request` into that process-global; a
+// concurrent Phase 276 / Phase 267 nav-fire would append to this pack's
+// `Navs` list while a case here enumerates it. Same shared `SequencedGroup`
+// name as HostRouteContractTests / HostedTreeLayoutTests so the three never
+// run concurrently. See HostRouteContractTests.fs for the full rationale.
 let tests =
-    testList "ClientHostCapabilitiesContract (Phase 265)" [
+    testSequencedGroup "ToolUp.Platform.NavigationRequest"
+    <| testList "ClientHostCapabilitiesContract (Phase 265)" [
         contract (defaultFixture ())
         contract (toyFixture ())
         toyVocabularyTests

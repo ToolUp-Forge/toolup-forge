@@ -252,8 +252,22 @@ let private boundaryTests =
                 Expect.isFalse (contents.Contains "fuaran") $"{path} must carry no Fuaran token (GP 1)"
     ]
 
+// These cases subscribe to `NavigationRequest.subscribe` and fire
+// `NavigationRequest.request` — a *process-global* listener registry
+// (see NavigationRequest.fs "sanctioned mutable global"). Under Expecto's
+// default parallel runner, one case's `deepLink` fires every currently-
+// subscribed callback, including a sibling case's `navigated.Add`, from a
+// foreign thread while that sibling enumerates its own list — a
+// `List<_>` concurrent-mutation crash ("Collection was modified…") whose
+// victim changes run-to-run. The `SequencedGroup` name is SHARED with
+// every other pack that touches the same global (ClientHostCapabilitiesContract,
+// HostedTreeLayoutTests): tests in the group never run concurrently with
+// each other, so no foreign thread ever fires into a live subscription.
+// They still parallelise against the rest of the suite (nothing outside
+// the group publishes navigation).
 let tests =
-    testList "Phase 276 — hosted-tree navigation/route contract" [
+    testSequencedGroup "ToolUp.Platform.NavigationRequest"
+    <| testList "Phase 276 — hosted-tree navigation/route contract" [
         deepLinkTests
         ssrTests
         backForwardTests

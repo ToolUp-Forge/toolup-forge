@@ -278,8 +278,14 @@ let private boundaryTests =
     ]
 
 [<Tests>]
+// Shares the `NavigationRequest` process-global with HostRouteContractTests
+// (Phase 276) and ClientHostCapabilitiesContract — the capability tests
+// here subscribe + fire into it. Same `SequencedGroup` name so the three
+// packs never run concurrently and no foreign thread fires into a live
+// subscription. See HostRouteContractTests.fs for the full rationale.
 let tests =
-    testList "Phase 267 — multi-region hosted-tree composition" [
+    testSequencedGroup "ToolUp.Platform.NavigationRequest"
+    <| testList "Phase 267 — multi-region hosted-tree composition" [
         structuralTests
         renderTests
         capabilityTests
