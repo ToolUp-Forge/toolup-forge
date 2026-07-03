@@ -142,6 +142,20 @@
              ClientHostBridge (it extends withElementView's shape) and the
              Core HostBindingSources type. -->
         <Compile Include="Client\HostStateProjection.fs" />
+        <!-- Phase 276 — hosted-tree navigation/route contract (client half):
+             IHostRouteContract maps a hosted module's neutral HostRoute
+             declarations to a NavigationRequest deep-link + restores param
+             state via the Phase 264 projection. After NavigationRequest.fs
+             (the deep-link hook) and the Core HostRoute type. The SSR half
+             lives in ToolUp.PublicRendering (HostRouteRegistration.fs). -->
+        <Compile Include="Client\HostRouteContract.fs" />
+        <!-- Phase 298 — live preview of an unreduced composition's view
+             subtrees: renders a partial (not-yet-compiled) composition's
+             typed-tree view subtrees live (CSR) against a Phase 264
+             HostBindingSources projection, degrading an unresolved subtree
+             to a labelled placeholder (never throws). After HostStateProjection
+             (the binding-source seam it resolves against). -->
+        <Compile Include="Client\UnreducedViewPreview.fs" />
         <!-- Cross-module client event bus. Publish/subscribe seam letting
              one module broadcast a named event that sibling modules react
              to without importing each other. Same sanctioned-mutable-global

@@ -249,6 +249,19 @@ let allTests =
         // projection round-trip, SSR scope-isolation, GP 13 zero-cost,
         // toy read-side resolves on both projection paths, OSS grep-guard.
         HostStateProjectionTests.tests
+        // Phase 267 — multi-region hosted-tree composition: withElementPanes
+        // / withElementPages populate the SplitPanel / PageViews slots, a
+        // hosted tree renders into every region, capabilities reach concretes
+        // from each region, every PageContent case drives, GP 11 + grep-guard.
+        HostedTreeLayoutTests.tests
+        // Phase 276 — hosted-tree navigation/route contract: client deep-link
+        // + Phase 264 param round-trip, SSR route-table registration +
+        // crawlability, back/forward consistency, append-only registration.
+        HostRouteContractTests.tests
+        // Phase 298 — live preview of an unreduced composition's view subtrees:
+        // pure Rendered/Placeholder decision, safe degradation, edit-re-preview
+        // without rebuild, Phase 264 read-side parity.
+        UnreducedViewPreviewTests.tests
         PublicRenderingTests.tests
         // Phase 149/150/157 — sitemap conditional-GET + sharding + search index.
         SitemapSearchIndexTests.tests

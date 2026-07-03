@@ -134,6 +134,54 @@ module ClientHostView =
             (fun model dispatch -> view model dispatch (ClientHostCapabilities.create dispatch))
             m
 
+    // ─── Phase 267 — multi-region hosting (panes + pages) ──────────────
+    //
+    // `withElementView` hosts a hosted tree in exactly one full-width
+    // region — the single biggest LAYOUT limitation of the Phase 110 seam.
+    // A hand-authored Feliz module can be a split-pane (control + output)
+    // or a multi-page module (`PageContent` per page); a hosted tree could
+    // be neither. These two additive overloads map a hosted tree onto the
+    // SAME `View` / `PageViews` shapes the shell already renders, so a
+    // hosted module is a first-class layout peer of a hand-authored one.
+    //
+    // Both reuse the existing `PageContent` DU and split-pane tuple
+    // verbatim — no new layout shape, no tree-language type (GP 1). Every
+    // region shares ONE dispatch and therefore ONE capability bag: a
+    // per-region tree's typed actions route through the same shipped
+    // concretes as any other region's (the acceptance "capabilities reach
+    // the right concretes from every region"). Existing `withView` /
+    // `withElementView` / `withFullWidthView` callers are untouched
+    // (GP 11); a pipeline that never calls these pays nothing (GP 13).
+
+    /// Split-pane host: the view returns a `(control, output)` pair of
+    /// rendered trees, which the shell lays out as `PageContent.SplitPanel`
+    /// (the same shape a hand-authored `withView` module produces). Both
+    /// panes receive the SAME `ClientHostCapabilities`, built once from the
+    /// module's dispatch — so a `Navigate` / `Call` / `Notify` / `Dispatch`
+    /// from either pane routes through one shared set of concretes. This is
+    /// the hosted peer of `ClientModule.withView`.
+    let withElementPanes
+        (view: 'Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> ReactElement * ReactElement)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        ClientModule.withView (fun model dispatch -> view model dispatch (ClientHostCapabilities.create dispatch)) m
+
+    /// Multi-page host: each entry pairs a `PageConfig` with a view that
+    /// returns any `PageContent` case (`SplitPanel` / `Stacked` /
+    /// `FullWidth` / `Dashboard` / `Custom`) — so a hosted tree drives a
+    /// multi-page module across every existing layout shape. All pages
+    /// share the module's single `Model` / dispatch (per `withPages`), so
+    /// every page's tree resolves its typed actions through ONE capability
+    /// bag. This is the hosted peer of `ClientModule.withPages`.
+    let withElementPages
+        (pageViews: (PageConfig * ('Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> PageContent)) list)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        pageViews
+        |> List.map (fun (page, view) ->
+            page, (fun model dispatch -> view model dispatch (ClientHostCapabilities.create dispatch)))
+        |> fun mapped -> ClientModule.withPages mapped m
+
 // ─── Phase 266 — additive Invoke hook for capabilities beyond the four ──
 //
 // The four `ClientHostCapabilities` are fixed. A tree language that needs a

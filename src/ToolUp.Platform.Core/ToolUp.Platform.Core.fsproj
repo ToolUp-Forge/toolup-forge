@@ -117,6 +117,13 @@
              because the CSR projection (Platform.Client) and the SSR
              projection (PublicRendering) produce the same type; GP 10. -->
         <Compile Include="Shared\HostBindingSources.fs" />
+        <!-- Phase 276 — neutral hosted-route declaration (HostRoute /
+             HostRouteParams). Shared floor (not client-side-only) because
+             the client deep-link mapping (Platform.Client) and the SSR route
+             registration (PublicRendering) consume the same route type; GP 10.
+             After HostBindingSources.fs (paramsToBindingSources projects into
+             the State namespace for the Phase 264 param round-trip). -->
+        <Compile Include="Shared\HostRoutes.fs" />
         <Compile Include="Shared\EncryptionTypes.fs" />
         <Compile Include="Shared\EntityTypes.fs" />
         <Compile Include="Shared\EntityQueryTypes.fs" />

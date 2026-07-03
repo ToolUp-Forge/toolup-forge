@@ -133,5 +133,12 @@
              Server types); placed before the compose root by convention. -->
         <Compile Include="Server\HostStateProjection.fs" />
         <Compile Include="Server\PublicRenderingCompose.fs" />
+        <!-- Phase 276 — hosted-tree route registration (SSR half): registers
+             a hosted multi-page module's neutral Core HostRoute declarations
+             into the Phase 111 route table as enumerable IContentSource
+             entries (crawlable). After PublicRenderingCompose.fs — HostRouteRegistration.register
+             folds the Phase 83 withContentSource. The client half lives in
+             ToolUp.Platform.Client (HostRouteContract.fs). -->
+        <Compile Include="Server\HostRouteRegistration.fs" />
     </ItemGroup>
 </Project>

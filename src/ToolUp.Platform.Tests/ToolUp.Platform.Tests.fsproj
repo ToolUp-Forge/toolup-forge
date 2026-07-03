@@ -436,6 +436,21 @@
              projection round-trip, SSR scope-isolation, GP 13 zero-cost,
              toy read-side binding on both projection paths, OSS grep-guard. -->
         <Compile Include="InProcess\HostStateProjectionTests.fs" />
+        <!-- Phase 267 — multi-region / PageContent hosted-tree composition:
+             withElementPanes (SplitPanel) + withElementPages (every
+             PageContent case), capability routing from each region,
+             GP 11 additive + OSS grep-guard. -->
+        <Compile Include="InProcess\HostedTreeLayoutTests.fs" />
+        <!-- Phase 276 — hosted-tree navigation/route contract: client
+             deep-link + Phase 264 param round-trip, SSR route-table
+             registration + crawlability, back/forward consistency,
+             append-only registration, OSS grep-guard. -->
+        <Compile Include="InProcess\HostRouteContractTests.fs" />
+        <!-- Phase 298 — live preview of an unreduced composition's view
+             subtrees: pure Rendered/Placeholder decision, safe degradation
+             (never throws), edit-re-preview-without-rebuild, Phase 264
+             read-side parity, OSS grep-guard. -->
+        <Compile Include="InProcess\UnreducedViewPreviewTests.fs" />
         <Compile Include="InProcess\PublicRenderingTests.fs" />
         <!-- Phase 149/150/157 — sitemap conditional-GET + index sharding +
              universal lastmod + static client-search index emitter. -->
