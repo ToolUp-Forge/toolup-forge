@@ -3,10 +3,15 @@ module ToolUp.Platform.Tests.RAG.StaticCorpusContract
 open System
 open System.IO
 open Expecto
+open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Hosting
 open ToolUp.Platform
+open ToolUp.Platform.Providers
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.AI
+open ToolUp.RAG.RAGCompose
 open ToolUp.RAG.StaticCorpus
 
 // ─── Phase 63 — StaticCorpus contract + determinism ──────────────────
@@ -547,6 +552,82 @@ let tests =
                     | Packer.Skipped -> failtest "a changed input must force a re-pack"
                 finally
                     Directory.Delete(dir, true)
+            }
+        ]
+
+        // ── 63.A / 63.H — composeRAG DI: ingestion suppression ──────
+        testList "Compose" [
+
+            let stubFactory =
+                { new IAIProviderFactory with
+                    member _.Available = []
+                    member _.PlatformDescriptors = []
+                    member _.PlatformDescriptor = None
+                    member _.Resolve _ = async { return Error NoProviderConfigured }
+                    member _.TryResolveByLabel(_, _) = async { return Error NoProviderConfigured }
+                    member _.BuildPlatform(_, _, _) = None
+                }
+
+            let stubProfile =
+                { new IProviderProfile with
+                    member _.Get _ = async { return None }
+                    member _.Set(_, _) = async { return Ok() }
+                    member _.Clear _ = async { return () }
+                    member _.ResolveEntry(_, _, _) = async { return None }
+                    member _.SetEntryHealth(_, _, _) = async { return Ok() }
+                }
+
+            let embedder = HashingEmbeddingProvider.create 32
+
+            let emptyStaticPipeline =
+                StaticCorpusRetrievalPipeline.create embedder {
+                    Chunks = [||]
+                    EmbeddingModel = "hashing-bow-d32"
+                    EmbeddingDimensions = 32
+                    BuiltUtc = DateTime.UnixEpoch
+                    PackerVersion = "test"
+                }
+
+            /// Compose the app, apply the RAG service-config to a fresh
+            /// container, and list the resolved hosted-service type names.
+            let hostedServiceNames (app: RAGServerApp) : string list =
+                let composed = composeRAG app
+                let sc = ServiceCollection() :> IServiceCollection
+
+                let sc =
+                    match composed.Extensions.ServiceConfig with
+                    | Some f -> f sc
+                    | None -> sc
+
+                let sp = sc.BuildServiceProvider()
+
+                sp.GetServices<IHostedService>()
+                |> Seq.map (fun h -> h.GetType().Name)
+                |> Seq.toList
+
+            test "withRetrievalPipeline + no VectorisationHandler suppresses the ingestion services (63.A)" {
+                let app =
+                    RAGServerApp.create stubFactory stubProfile embedder
+                    |> RAGServerApp.withRetrievalPipeline emptyStaticPipeline
+
+                let names = hostedServiceNames app
+
+                Expect.isFalse
+                    (names |> List.exists (fun n -> n.Contains "Ingestion"))
+                    (sprintf "no IngestionBackgroundService should be registered; got %A" names)
+
+                Expect.isFalse
+                    (names |> List.exists (fun n -> n.Contains "Reembed"))
+                    "no reembedding background service either"
+            }
+
+            test "the default pipeline (no override) registers the ingestion service" {
+                let app = RAGServerApp.create stubFactory stubProfile embedder
+                let names = hostedServiceNames app
+
+                Expect.isTrue
+                    (names |> List.exists (fun n -> n.Contains "Ingestion"))
+                    (sprintf "the default composition must register the IngestionBackgroundService; got %A" names)
             }
         ]
     ]
