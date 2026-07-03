@@ -151,6 +151,9 @@ let allTests =
         // Phase 295 — descriptor completeness round-trip + partial/preset holes:
         // lossless lowering; preset + hole-binding equivalence; unfilled hole fails.
         DescriptorCompletenessTests.tests
+        // Phase 302 — per-tenant composition presets: distinct variants from one
+        // base preset; scope-isolated bindings; unbound-hole preflight failure.
+        TenantCompositionPresetTests.tests
         ConfigReferenceTests.tests
         ConfigStartupModeTests.tests
         HealthStateTrackerTests.tests

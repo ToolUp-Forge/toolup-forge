@@ -733,6 +733,12 @@
              readably. Hosts the versioned ServerApp.ofManifest (runs migrate
              first). After CompositionDescriptor.fs. -->
         <Compile Include="Server\CompositionDescriptorVersion.fs" />
+        <!-- Phase 302 — per-tenant composition presets: resolve a tenant to a
+             base preset descriptor + per-tenant hole bindings + per-tenant
+             component config (Phase 289), composed via ofManifest;
+             scope-isolated by construction. After CompositionDescriptor.fs
+             (holes/apply) + ComponentConfigResolver.fs (Phase 289). -->
+        <Compile Include="Server\TenantCompositionPreset.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />

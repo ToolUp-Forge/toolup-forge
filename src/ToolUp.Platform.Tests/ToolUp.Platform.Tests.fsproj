@@ -304,6 +304,10 @@
              hole-binding composes the equivalent full app; an unfilled hole
              fails readably. -->
         <Compile Include="InProcess\DescriptorCompletenessTests.fs" />
+        <!-- Phase 302 — per-tenant composition presets: two tenants resolve to
+             distinct variants from one base preset; bindings are
+             scope-isolated; an unbound required hole fails preflight readably. -->
+        <Compile Include="InProcess\TenantCompositionPresetTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->
