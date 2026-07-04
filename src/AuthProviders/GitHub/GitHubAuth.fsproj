@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.GitHub</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.GitHub</AssemblyName>
+    <Description>GitHub OAuth server-side IAuthProvider for ToolUp.Platform: validates opaque GitHub access tokens against the GitHub REST API (GET /user), optional organisation allow-listing, and a server-side authorize-URL + code-exchange sign-in leg. BCL HttpClient only, no vendor SDK.</Description>
+    <PackageTags>fsharp;sdk;auth;github;oauth;server;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GitHubAuthConfig.fs" />
+    <Compile Include="GitHubApi.fs" />
+    <Compile Include="GitHubAuthProvider.fs" />
+    <Compile Include="GitHubOAuth.fs" />
+    <Compile Include="GitHubAuthValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- AspNetCore framework reference for HttpContext visibility. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

@@ -183,6 +183,7 @@ let allTests =
         OidcPresetsTests.tests
         OidcCoherenceValidatorTests.tests
         OidcSignInContractTests.tests
+        GitHubAuthProviderTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
         TenantLifecycleAggregatorTests.tests
