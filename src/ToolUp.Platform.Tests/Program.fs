@@ -463,13 +463,12 @@ let allTests =
         // note in HomeOverviewTests.fs for why it can't run in-process.
         HomeOverviewTests.countAffordanceTests
         HomeOverviewTests.overviewScopeAiTests
-        // NOTE: `HomeOverviewTests.overviewActiveAiPresentTests` was referenced
-        // here but never defined in `HomeOverviewTests.fs` (landed dangling in
-        // Phase 14t `70d75ec`), so the whole ToolUp.Platform.Tests pack failed
-        // to compile on HEAD. Reference removed to restore the build; the
-        // intended "probe-present converse" test (pins the v0.9.4 RAG-path
-        // "No AI provider configured" fork-drift regression) still needs
-        // authoring — tracked in the roadmap TIDY-UP.
+        // The "probe-present converse" of overviewScopeAiTests: with a real
+        // IActiveAiProbe registered over a PlatformOnly factory, GetOverview
+        // surfaces the wired platform provider rather than "No AI provider
+        // configured." Pins the v0.9.4 RAG-path fork-drift regression. The body
+        // (Phase 14t) was authored after 26af8d9 removed the dangling reference.
+        HomeOverviewTests.overviewActiveAiPresentTests
         // Phase 217 — IHomeWidgetDataProvider merge + scope-correctness.
         HomeOverviewTests.widgetDataTests
         // Phase 217 — recents/pinning per-user round-trip + scope isolation.
