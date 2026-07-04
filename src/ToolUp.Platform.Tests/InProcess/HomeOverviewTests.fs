@@ -5,6 +5,8 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.AI
+open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts
 open DataManagementTypes
 open ToolUp.Platform.FileProcessor
@@ -252,6 +254,102 @@ let overviewScopeAiTests =
             // widget-data bag is empty, so the overview is the
             // byte-for-byte Phase 171 shape (GP 13).
             Expect.isTrue (Map.isEmpty overview.WidgetData) "WidgetData is empty without a provider"
+        }
+    ]
+
+// ─── Phase 171 — overview surfaces the platform provider (probe present) ─
+//
+// The converse of Test 3's absence assertion. A RAG-composed deployment
+// (toolup-app, and every `RAGServerApp.run` consumer) registers
+// `IActiveAiProbe` via `composeAI` — which `composeRAG` composes over
+// (forge `3bf611b`). When the probe is in DI, the Home overview's
+// `ActiveAi` must surface the deployment's wired platform provider, NOT
+// the "No AI provider configured." fallback the client renders on `None`.
+//
+// Regression pinned: at v0.9.4 the positional `composeWithRAG` never
+// propagated the Phase 171 registration to the RAG path (the same
+// AICompose→RAGCompose fork-drift class as the PlatformAIKeysApi 404), so
+// the probe was absent from DI on a RAG deployment and `ActiveAi`
+// resolved `None` despite a wired platform provider — surfacing as the
+// cd.toolup.pro "No AI provider configured" home-screen symptom.
+
+let private claudeDescriptor: AIProviderDescriptor = {
+    Id = "anthropic"
+    DisplayName = "Anthropic Claude"
+    SupportedModels = [ "claude-opus-4-8" ]
+    DefaultModel = "claude-opus-4-8"
+    Capabilities = {
+        Streaming = true
+        ToolUse = true
+        Vision = true
+        SupportsPromptCaching = true
+        ProviderName = "anthropic"
+        Model = "claude-opus-4-8"
+    }
+}
+
+/// Minimal `IAIProviderFactory` shaped like a `PlatformOnly` deployment
+/// with one wired platform provider. `PlatformDescriptor = Some` is the
+/// only member the Phase 171 probe reads — mirrors what
+/// `DefaultAIProviderFactory.create […] PlatformOnly [bundle] None`
+/// exposes when toolup-app's `Wiring.aiProviderFactory` builds it.
+let private platformOnlyFactory (descriptor: AIProviderDescriptor) : IAIProviderFactory =
+    { new IAIProviderFactory with
+        member _.Available = []
+        member _.PlatformDescriptors = [ descriptor ]
+        member _.PlatformDescriptor = Some descriptor
+        member _.Resolve _ = async { return Error NoProviderConfigured }
+        member _.TryResolveByLabel(_, _) = async { return Error NoProviderConfigured }
+        member _.BuildPlatform(_, _, _) = None
+    }
+
+let private buildHttpContextWithProbe
+    (accessContext: AccessContext)
+    (catalog: IDataCatalog)
+    (probe: IActiveAiProbe)
+    : HttpContext =
+    let services = ServiceCollection()
+    services.AddSingleton<AccessContext>(accessContext) |> ignore
+    services.AddSingleton<IDataCatalog>(catalog) |> ignore
+    services.AddSingleton<IActiveAiProbe>(probe) |> ignore
+    let sp = services.BuildServiceProvider() :> IServiceProvider
+    let ctx = DefaultHttpContext() :> HttpContext
+    ctx.RequestServices <- sp
+    ctx
+
+[<Tests>]
+let overviewActiveAiPresentTests =
+    testList "Phase 171 — GetOverview surfaces the platform provider when IActiveAiProbe is registered" [
+
+        testCaseAsync "ActiveAi is Some(label/model) via the real ActiveAiProbe over a PlatformOnly factory"
+        <| async {
+            let store = IDataCatalogContract.inMemoryObjectStore ()
+            let catalog = catalogOver [ "SalesAnalysis", mkType "Sales" "Sales Data" ] store
+
+            // The REAL Phase 171 probe (ToolUp.AI.Server) over a factory
+            // wired exactly like toolup-app's PlatformOnly bundle. This is
+            // the production probe + production handler — only the
+            // consumer-supplied factory is a stub, the same seam
+            // `Wiring.aiProviderFactory` fills.
+            let probe = ToolUp.AI.ActiveAiProbe.create (platformOnlyFactory claudeDescriptor)
+
+            let accessContext = AccessContext.unrestricted (AuthenticatedUser "scope-a")
+            let ctx = buildHttpContextWithProbe accessContext catalog probe
+
+            let api = HomeOverviewApiHandler.homeOverviewApi ctx
+            let! overview = api.GetOverview()
+
+            match overview.ActiveAi with
+            | Some summary ->
+                Expect.equal
+                    summary.ProviderLabel
+                    "Anthropic Claude"
+                    "home surfaces the wired platform provider's label, not 'No AI provider configured'"
+
+                Expect.equal summary.Model (Some "claude-opus-4-8") "home surfaces the provider's default model"
+            | None ->
+                failtest
+                    "ActiveAi resolved None despite a registered IActiveAiProbe — the 'No AI provider configured' regression"
         }
     ]
 
