@@ -595,6 +595,18 @@ type ServerApp = {
     /// returns an empty per-handler map and confirm reports zero
     /// records affected.
     ErasureHandlers: IErasureHandler list
+    /// OAuth Authorization-Code credential flows (`IOAuthCredentialFlow`).
+    /// Same shape as `DataExporters` / `ErasureHandlers`:
+    /// `ServerApp.withOAuthFlow` accumulates one flow per upstream
+    /// provider; `compose` folds each into `Extensions.ServiceConfig`
+    /// as `AddSingleton<IOAuthCredentialFlow>`; the substrate's
+    /// `/api/oauth/{flowName}/*` handlers resolve the matching flow
+    /// per-request by `Name` (via `OAuthFlowHandler.findFlow`). Empty
+    /// list = no flow registered, so every `/api/oauth/*` path 404s even
+    /// under `DataIngestion = EnabledDataIngestion` — a deployment that
+    /// enables data-ingestion without registering a flow has wiring
+    /// drift, not a substrate bug (mirrors the DataExporters gating note).
+    OAuthCredentialFlows: IOAuthCredentialFlow list
     /// Phase 5h — optional override for the email-keyed pending-invitation
     /// store (`IPendingInviteStore`). When `None` (default), `compose`
     /// registers `InMemoryPendingInviteStore` over the resolved
@@ -755,6 +767,7 @@ module ServerApp =
         SmokeTests = []
         DataExporters = []
         ErasureHandlers = []
+        OAuthCredentialFlows = []
         PendingInviteStore = None
         SubjectMigrator = None
         ShareTokenStoreDecorators = []
@@ -1116,6 +1129,20 @@ module ServerApp =
     let withErasureHandler (handler: IErasureHandler) (app: ServerApp) : ServerApp = {
         app with
             ErasureHandlers = app.ErasureHandlers @ [ handler ]
+    }
+
+    /// Register an OAuth Authorization-Code credential flow
+    /// (`IOAuthCredentialFlow`) — e.g. the GitHub App flow from
+    /// `ToolUp.DataSources.GitHub`. Each provider contributes one flow,
+    /// dispatched by its `Name` in the `/api/oauth/{flowName}/*` routes;
+    /// multi-registration is the design (one flow per upstream provider).
+    /// `compose` folds each into DI so `OAuthFlowHandler.findFlow`
+    /// resolves it per-request. Routes only mount under
+    /// `DataIngestion = EnabledDataIngestion`. Mirrors `withDataExporter`
+    /// / `withErasureHandler` in shape and gating behaviour.
+    let withOAuthFlow (flow: IOAuthCredentialFlow) (app: ServerApp) : ServerApp = {
+        app with
+            OAuthCredentialFlows = app.OAuthCredentialFlows @ [ flow ]
     }
 
     /// Phase 9m — register a companion-contributed startup config
@@ -1790,6 +1817,15 @@ module ServerApp =
                     (fun acc h -> appendRegistration acc (fun s -> s.AddSingleton<IErasureHandler>(h)))
                     withExporters
 
+            // Fold each registered OAuth credential flow into DI so the
+            // substrate's `/api/oauth/{flowName}/*` handlers can resolve
+            // it per-request by `Name`. Empty list appends nothing (GP 13).
+            let withOAuthFlows =
+                app.OAuthCredentialFlows
+                |> List.fold
+                    (fun acc flow -> appendRegistration acc (fun s -> s.AddSingleton<IOAuthCredentialFlow>(flow)))
+                    withErasureHandlers
+
             // 0.5.7 — fold the optional `IUserDirectory` companion into
             // the DI graph. When `None`, no registration is appended —
             // `UserDirectoryApiHandler.resolveDirectory` reads `None`
@@ -1798,9 +1834,9 @@ module ServerApp =
             // singleton; the handler resolves it lazily per request.
             let withUserDirectory =
                 match app.UserDirectory with
-                | None -> withErasureHandlers
+                | None -> withOAuthFlows
                 | Some directory ->
-                    appendRegistration withErasureHandlers (fun s -> s.AddSingleton<IUserDirectory>(directory))
+                    appendRegistration withOAuthFlows (fun s -> s.AddSingleton<IUserDirectory>(directory))
 
             // Phase 281 — fold the composition well-formedness validator into
             // the Phase 9m preflight set. Built here (not in `compose`) because

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.GitHub</PackageId>
+    <AssemblyName>ToolUp.DataSources.GitHub</AssemblyName>
+    <Description>GitHub App OAuth credential flow (IOAuthCredentialFlow) for ToolUp.Platform: user-to-server Authorization Code flow with refresh-token rotation and grant revocation, for connecting a GitHub account so a deployment can call the GitHub API on the user's behalf. BCL HttpClient only, no vendor SDK.</Description>
+    <PackageTags>fsharp;sdk;oauth;github;datasource;credential-flow;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GitHubAppFlow.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

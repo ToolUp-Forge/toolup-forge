@@ -372,6 +372,7 @@
         <Compile Include="InProcess\OidcCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\OidcSignInContractTests.fs" />
         <Compile Include="InProcess\GitHubAuthProviderTests.fs" />
+        <Compile Include="InProcess\GitHubAppFlowTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
         <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
@@ -937,6 +938,9 @@
              code-exchange contract tests via stub HttpMessageHandler (no
              env-gate; the handler removes the need for real GitHub creds). -->
         <ProjectReference Include="..\AuthProviders\GitHub\GitHubAuth.fsproj" />
+        <!-- GitHub App OAuth credential-flow companion — IOAuthCredentialFlow
+             contract binding + rotation/revoke tests via stub GitHub. -->
+        <ProjectReference Include="..\DataSources\GitHub\GitHubApp.fsproj" />
         <!-- Phase 23 — Reporting Core (Markdown/Html renderers + IReportRenderer). -->
         <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
         <!-- Phase 11.B follow-up — companion DLLs replacing prior

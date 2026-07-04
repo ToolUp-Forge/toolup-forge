@@ -184,6 +184,7 @@ let allTests =
         OidcCoherenceValidatorTests.tests
         OidcSignInContractTests.tests
         GitHubAuthProviderTests.tests
+        GitHubAppFlowTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
         TenantLifecycleAggregatorTests.tests
