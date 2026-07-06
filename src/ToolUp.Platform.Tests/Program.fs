@@ -42,6 +42,7 @@ let allTests =
         OAuthSecretEncryptionModeValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
         FileSecretStoreTests.tests
+        FileSecretStoreAtomicityTests.tests
         // Phase 176 — transient-fault decorator substrate.
         TransientFaultPolicyTests.tests
         // Phase 238 — generic inbound-webhook receiver substrate.

@@ -213,8 +213,33 @@ type FileSecretStore(?baseDir: string, ?path: string) =
         let obj = secrets |> Map.toSeq |> Seq.map (fun (k, v) -> k, box v) |> dict
 
         let json = JsonSerializer.Serialize(obj, opts)
-        File.WriteAllText(filePath, json)
-        restrictPermissions filePath
+
+        // Write to a temp file in the same directory, harden its
+        // permissions, then atomically rename it over the target. A crash
+        // mid-write can then never truncate the live secrets file, and a
+        // concurrent reader sees either the old or the new complete file —
+        // never a torn one. The temp lives in the same directory so the
+        // rename stays on one volume (a cross-volume File.Move degrades to
+        // copy+delete and loses atomicity); the GUID suffix avoids a
+        // collision if two writers ever reach this point for sibling scope
+        // files. Permissions are set on the temp so the secret content is
+        // never momentarily world-readable at the final path.
+        let tempPath = filePath + ".tmp-" + Guid.NewGuid().ToString("N")
+
+        try
+            File.WriteAllText(tempPath, json)
+            restrictPermissions tempPath
+            // Same-volume overwrite rename: MoveFileEx/MOVEFILE_REPLACE_EXISTING
+            // on Windows, rename(2) on Unix — atomic on both.
+            File.Move(tempPath, filePath, overwrite = true)
+        with _ ->
+            // Don't leave a stray temp file behind on failure.
+            (try
+                File.Delete tempPath
+             with _ ->
+                 ())
+
+            reraise ()
 
     interface ISecretStore with
         member _.GetSecret(scopeId, key) = async {
@@ -234,15 +259,26 @@ type FileSecretStore(?baseDir: string, ?path: string) =
             | None -> return Error "No writable file location for this scope"
             | Some filePath ->
                 try
-                    // Load current file contents (not env vars — we only
-                    // persist to the file), merge new key, write back.
-                    let current = loadFile filePath
-                    let updated = current |> Map.add key value
-                    writeFile filePath updated
-
-                    // Invalidate the in-memory cache so subsequent
-                    // GetSecret calls see the new value.
-                    lock cacheLock (fun () -> cache <- cache |> Map.remove scopeId)
+                    // Serialise the whole read-modify-write against any
+                    // concurrent writer to the same scope file, then evict
+                    // the cache in the same critical section. Without the
+                    // lock, two concurrent SetSecret calls each loadFile the
+                    // old contents and each writeFile their own superset —
+                    // last-writer-wins silently drops the other key (e.g. a
+                    // just-rotated refresh token persisted alongside a racing
+                    // access-token write). cacheLock is the same monitor
+                    // loadForScope takes, so an in-flight load either reads
+                    // the pre-write file or blocks until the atomic rename
+                    // completes.
+                    lock cacheLock (fun () ->
+                        // Load current file contents (not env vars — we only
+                        // persist to the file), merge new key, write back.
+                        let current = loadFile filePath
+                        let updated = current |> Map.add key value
+                        writeFile filePath updated
+                        // Invalidate the in-memory cache so subsequent
+                        // GetSecret calls see the new value.
+                        cache <- cache |> Map.remove scopeId)
 
                     return Ok()
                 with ex ->
@@ -254,18 +290,23 @@ type FileSecretStore(?baseDir: string, ?path: string) =
             | None -> return Error "No writable file location for this scope"
             | Some filePath ->
                 try
-                    if not (File.Exists filePath) then
-                        // Idempotent — nothing to delete.
-                        return Ok()
-                    else
-                        let current = loadFile filePath
-                        let updated = current |> Map.remove key
-                        writeFile filePath updated
-
-                        // Invalidate cache.
-                        lock cacheLock (fun () -> cache <- cache |> Map.remove scopeId)
-
-                        return Ok()
+                    // Serialise the read-modify-write + cache eviction against
+                    // concurrent writers to the same scope file, exactly as
+                    // SetSecret does — a delete racing a set on a different key
+                    // must not resurrect or drop the other's write. The
+                    // File.Exists probe sits inside the lock so it can't race a
+                    // concurrent writer creating the file between the check and
+                    // the read.
+                    lock cacheLock (fun () ->
+                        if File.Exists filePath then
+                            let current = loadFile filePath
+                            let updated = current |> Map.remove key
+                            writeFile filePath updated
+                            // Invalidate cache.
+                            cache <- cache |> Map.remove scopeId)
+                    // Idempotent — if the file didn't exist there was nothing
+                    // to delete and no cache entry to evict.
+                    return Ok()
                 with ex ->
                     return Error ex.Message
         }
