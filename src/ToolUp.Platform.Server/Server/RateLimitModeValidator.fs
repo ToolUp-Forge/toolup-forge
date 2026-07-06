@@ -101,7 +101,7 @@ type RateLimitModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
             | warnings -> return Warning(String.concat " " warnings)
         }
 
-/// Investigate gaps 2026-06-12 (Platform Gap 7) — warns when the
+/// 2026-06-12 audit (Platform Gap 7) — warns when the
 /// anonymous ad-analytics ingest endpoints are enabled without a
 /// Phase 56 `IRateLimitStore`. `AdAnalyticsApiHandler`'s per-IP
 /// budget resolves the store from DI and silently skips the gate

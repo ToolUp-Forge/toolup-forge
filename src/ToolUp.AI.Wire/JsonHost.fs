@@ -23,7 +23,7 @@ open System.Text.Json
 /// **byte-stable output is the load-bearing property the parity gate
 /// depends on**. A canonical hand-rolled writer — the same F# compiled to
 /// both hosts — makes byte-parity true by construction rather than by luck
-/// of two engines agreeing. (This is the Fuaran "hand-rolled pretty-printer"
+/// of two engines agreeing. (This is the "hand-rolled pretty-printer"
 /// idiom the phase cites.) Object members emit in `JObject` list order;
 /// output is compact (no insignificant whitespace).
 [<RequireQualifiedAccess>]

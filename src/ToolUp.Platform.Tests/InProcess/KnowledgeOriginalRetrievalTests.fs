@@ -400,7 +400,7 @@ let private lineageTests =
             Expect.equal source.OriginalRef (Some originalRef) "ref round-trips through the projection"
             Expect.equal (source.OriginalRef |> Option.bind _.Location) (Some(SourceLocator.Page 4)) "page anchor"
 
-            // Lineage widening (Investigate gaps 2026-06-12): the live
+            // Lineage widening (2026-06-12 audit): the live
             // projection always carries the match's scope (authority
             // badge) and chunk id (citation join key).
             Expect.equal source.Scope (Some Deployment) "scope projects from the VectorMatch"
@@ -483,7 +483,7 @@ let private lineageTests =
             let back = JsonSerializer.Deserialize<RetrievedSource>(json, opts)
             Expect.isNone back.OriginalRef "missing field absorbs to None"
             Expect.equal back.DocumentId "doc-1" "legacy fields intact"
-            // Lineage widening (Investigate gaps 2026-06-12): same GP 11
+            // Lineage widening (2026-06-12 audit): same GP 11
             // guarantee for the Scope / ChunkId fields — RetrievedSources
             // ride persisted conversation history, so replayed
             // pre-widening payloads must absorb to None, never a null

@@ -15,7 +15,7 @@ namespace ToolUp.AI.Wire
 /// both hosts. That byte-stable key order is the load-bearing property the
 /// later parity gate depends on.
 ///
-/// Mirrors the hand-rolled `J` JSON DU idiom the Fuaran tier already proves.
+/// Mirrors the hand-rolled `J` JSON DU idiom proven elsewhere in the codebase.
 type JsonValue =
     | JNull
     | JBool of bool

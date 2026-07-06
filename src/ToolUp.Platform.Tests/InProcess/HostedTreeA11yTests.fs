@@ -12,7 +12,7 @@ open Toolup.Samples.ToyTreeBinding.ToyNode
 //   1. The a11y-clean fixture passes.
 //   2. Each seeded violation class fails with a readable diagnostic
 //      (unlabelled control, missing role, focus-order break, heading skip).
-//   3. The Phase 202 `ToyNode` witness — a non-Fuaran stranger tree
+//   3. The Phase 202 `ToyNode` witness — a stranger tree
 //      language — lowers to a fragment the harness checks (clean tree
 //      passes; an event-wrapped tree trips MissingRole).
 //   4. OSS grep-guard.
@@ -73,7 +73,7 @@ let private fixtureTests =
             Expect.equal result HostedTreeA11y.Conformant "ascending tabindex is not a break"
     ]
 
-// ─── 3. ToyNode witness (Phase 202 — a non-Fuaran stranger tree) ──────
+// ─── 3. ToyNode witness (Phase 202 — a stranger tree) ──────
 
 let private witnessTests =
     testList "Phase 277 — ToyNode witness" [

@@ -1501,7 +1501,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // Wave 2A Gap #9 — surface the clamp log so silent clamping of
         // operator-supplied values is visible at startup.
         ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator app.RetrievalDefaultsClampLog
-        // Investigate gaps 2026-06-12 (RAG Gap 8) — warn when the citation-dev-
+        // 2026-06-12 audit (RAG Gap 8) — warn when the citation-dev-
         // endpoint override is configured as the retired force-on shape.
         ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator finalConfig
         // Phase 14w — surface the steady-state-memory contract: warn when a

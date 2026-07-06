@@ -98,7 +98,7 @@ let private citationHandler: HttpHandler =
 /// suppress-only per-endpoint override — `Some false` suppresses this
 /// endpoint specifically while leaving other dev endpoints enabled.
 /// The override cannot force the endpoint on while the master switch
-/// is off (Investigate gaps 2026-06-12, RAG Gap 8 — the former
+/// is off (2026-06-12 audit, RAG Gap 8 — the former
 /// force-on arm broke the "master off ⇒ no dev surface" audit
 /// invariant for an unauthenticated endpoint carrying
 /// conversation-derived rewrite samples).

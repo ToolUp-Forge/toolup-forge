@@ -119,7 +119,7 @@ let private ensureRegistered (registry: EntityRegistry) : unit =
     registry.Register registration
 
 /// Read-side seam for other platform endpoints — today the Phase 60
-/// ad-analytics slot sanity check (Investigate gaps 2026-06-12,
+/// ad-analytics slot sanity check (2026-06-12 audit,
 /// Platform Gap 7). Returns the set of configured slot ids, or `None`
 /// when the deployment has no `IEntityStore` / `EntityRegistry` wired
 /// (e.g. `NoEntityStore` deployments whose slot configs live in static

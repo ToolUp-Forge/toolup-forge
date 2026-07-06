@@ -21,7 +21,7 @@ open ToolUp.Platform
 // Recorded under `_platform` scope (deployment-wide; no tenant
 // scope — ads run on anonymous traffic).
 //
-// **Hardening (Investigate gaps 2026-06-12, Platform Gap 7).** The two
+// **Hardening (2026-06-12 audit, Platform Gap 7).** The two
 // endpoints are anonymous by design (ads run on logged-out traffic)
 // and previously accepted unbounded bodies verbatim into the
 // `_platform` scope of the same event store that holds compliance

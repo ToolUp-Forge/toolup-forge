@@ -160,7 +160,7 @@ let tests =
             Expect.isGreaterThan v.Timeout.TotalMilliseconds 0.0 "non-zero timeout"
         }
 
-        // ─── AdAnalyticsRateLimitValidator (Investigate gaps 2026-06-12,
+        // ─── AdAnalyticsRateLimitValidator (2026-06-12 audit,
         //     Platform Gap 7) ─────────────────────────────────────────
 
         testList "ad-analytics rate-limit validator" [

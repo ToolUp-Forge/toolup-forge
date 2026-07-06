@@ -260,7 +260,7 @@ let overviewScopeAiTests =
 // ─── Phase 171 — overview surfaces the platform provider (probe present) ─
 //
 // The converse of Test 3's absence assertion. A RAG-composed deployment
-// (toolup-app, and every `RAGServerApp.run` consumer) registers
+// (every `RAGServerApp.run` consumer) registers
 // `IActiveAiProbe` via `composeAI` — which `composeRAG` composes over
 // (forge `3bf611b`). When the probe is in DI, the Home overview's
 // `ActiveAi` must surface the deployment's wired platform provider, NOT
@@ -292,7 +292,7 @@ let private claudeDescriptor: AIProviderDescriptor = {
 /// with one wired platform provider. `PlatformDescriptor = Some` is the
 /// only member the Phase 171 probe reads — mirrors what
 /// `DefaultAIProviderFactory.create […] PlatformOnly [bundle] None`
-/// exposes when toolup-app's `Wiring.aiProviderFactory` builds it.
+/// exposes when a consumer's `Wiring.aiProviderFactory` builds it.
 let private platformOnlyFactory (descriptor: AIProviderDescriptor) : IAIProviderFactory =
     { new IAIProviderFactory with
         member _.Available = []
@@ -327,7 +327,7 @@ let overviewActiveAiPresentTests =
             let catalog = catalogOver [ "SalesAnalysis", mkType "Sales" "Sales Data" ] store
 
             // The REAL Phase 171 probe (ToolUp.AI.Server) over a factory
-            // wired exactly like toolup-app's PlatformOnly bundle. This is
+            // wired exactly like a consumer's PlatformOnly bundle. This is
             // the production probe + production handler — only the
             // consumer-supplied factory is a stub, the same seam
             // `Wiring.aiProviderFactory` fills.

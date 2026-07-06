@@ -203,7 +203,7 @@ type ChunkingConfigValidator(configName: string, config: ToolUp.RAG.Chunking.Chu
                     )
         }
 
-/// Investigate gaps 2026-06-12 (RAG Gap 8) — flags the now-inert
+/// 2026-06-12 audit (RAG Gap 8) — flags the now-inert
 /// `EnableCitationDevEndpoint = Some true` paired with
 /// `EnableDevEndpoints = false`. Phase 14s shipped that combination as
 /// a force-on arm ("register /dev/rag-citation even when the master is
