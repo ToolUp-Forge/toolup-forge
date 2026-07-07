@@ -63,6 +63,7 @@ let private scopeToKey (scope: VectorScope) =
     | Platform -> "platform"
     | Deployment -> "deployment"
     | Team teamId -> $"team:{teamId}"
+    | User userId -> $"user:{userId}"
 
 let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/index.json"
 
@@ -334,8 +335,8 @@ type InMemoryVectorStore
     }
 
     // Load Platform and Deployment scopes eagerly at construction.
-    // Team scopes are loaded lazily on first access (team IDs are not
-    // known at construction time).
+    // Team and User scopes are loaded lazily on first access (team/user
+    // IDs are not known at construction time).
     do
         loadScope Platform |> Async.RunSynchronously
         loadScope Deployment |> Async.RunSynchronously
@@ -364,13 +365,22 @@ type InMemoryVectorStore
         chunk.Metadata.ContainsKey ChunkMetadata.DeletedAtKey
 
     let scopeFromKey (sk: string) =
-        if sk = "platform" then Platform
-        elif sk = "deployment" then Deployment
-        else Team(sk.Substring("team:".Length))
+        if sk = "platform" then
+            Platform
+        elif sk = "deployment" then
+            Deployment
+        elif sk.StartsWith "user:" then
+            User(sk.Substring("user:".Length))
+        else
+            Team(sk.Substring("team:".Length))
 
     let ensureScopeLoaded (scope: VectorScope) = async {
+        // Team AND User scopes are lazy-loaded on first access — neither id
+        // is known at construction time, so only Platform/Deployment are
+        // loaded eagerly (see the eager `do` block above).
         match scope with
-        | Team _ ->
+        | Team _
+        | User _ ->
             let scopeKey = scopeToKey scope
             let hasAny = store.Keys |> Seq.exists (fun (sk, _) -> sk = scopeKey)
 

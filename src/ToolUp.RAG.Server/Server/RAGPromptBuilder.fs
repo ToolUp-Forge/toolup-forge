@@ -112,6 +112,7 @@ let private scopeOriginLabel (scope: VectorScope) =
     | Platform -> "from Platform KB"
     | Deployment -> "from deployment knowledge"
     | Team _ -> "from your team's KB"
+    | User _ -> "from your knowledge base"
 
 /// Format a single `VectorMatch` as a cited context block. The `index`
 /// (0-based) drives the citation marker — `[¹]` for the first match,
@@ -170,7 +171,8 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
                 match m.Scope with
                 | Platform -> "Platform knowledge"
                 | Deployment -> "Deployment knowledge"
-                | Team _ -> "Team knowledge")
+                | Team _ -> "Team knowledge"
+                | User _ -> "Your knowledge")
         Snippet = snippet charLimit m.Content
         Score = m.Score
         Origin = origin
@@ -245,10 +247,16 @@ let withRetrievalToolAware
         match ctx.CurrentMessage with
         | None -> return ""
         | Some query ->
+            // A team caller reads Platform + Deployment + its own team scope;
+            // a non-team caller reads Platform + Deployment + its own *user*
+            // scope. The `User` leg is the GAP-1 fix: a non-team caller's own
+            // uploads live in `User ctx.Access.UserId`, not the shared
+            // `Deployment` scope, so `authorisedScopes` admits only the
+            // caller's own chunks and never another user's.
             let scopes =
                 match ctx.Access.TeamId with
                 | Some teamId -> [ Platform; Deployment; Team teamId ]
-                | None -> [ Platform; Deployment ]
+                | None -> [ Platform; Deployment; User ctx.Access.UserId ]
 
             let request = {
                 RetrievalRequest.create query scopes defaults.TopK defaults.Merge with
@@ -323,11 +331,15 @@ let withRetrievalToolAware
                         | Team _ -> true
                         | _ -> false)
 
+                // "your knowledge base" covers both the team leg and the
+                // per-user leg — the non-team caller now retrieves from its
+                // own `User` scope, so "your team's" would misdescribe the
+                // Individual-mode case.
                 let preamble =
                     match hasPlatform, hasTeam with
-                    | true, true -> "Relevant context from the Platform KB and your team's knowledge base"
+                    | true, true -> "Relevant context from the Platform KB and your knowledge base"
                     | true, false -> "Relevant context from the Platform KB"
-                    | false, _ -> "Relevant context from your team's knowledge base"
+                    | false, _ -> "Relevant context from your knowledge base"
 
                 return $"{preamble}:\n\n{formattedChunks}"
     }

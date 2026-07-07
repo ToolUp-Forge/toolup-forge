@@ -157,8 +157,10 @@ let private parseScope (raw: string) : VectorScope =
         Deployment
     elif trimmed.StartsWith "team:" then
         Team(trimmed.Substring(5))
+    elif trimmed.StartsWith "user:" then
+        User(trimmed.Substring(5))
     else
-        failwithf "Unknown scope: '%s' (expected 'platform' / 'deployment' / 'team:<id>')" raw
+        failwithf "Unknown scope: '%s' (expected 'platform' / 'deployment' / 'team:<id>' / 'user:<id>')" raw
 
 /// Drive the HNSW store with the fixture's pre-computed mixed-dim
 /// vectors and emit a `RunRow`. Replicate iterates the full query set

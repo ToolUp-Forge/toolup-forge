@@ -32,10 +32,25 @@ type VectorScope =
     /// Per-deployment shared knowledge. Set up for a specific app instance and shared
     /// across all teams on that deployment (e.g. agency house style, approved vendor
     /// lists). Readable by all users; writable by deployment owners.
+    ///
+    /// HARD RULE: this scope is for genuinely deployment-wide *shared* content
+    /// only. Per-user uploads on a non-team surface (Individual mode,
+    /// AuthenticatedEphemeral, anonymous sessions) MUST NOT land here — they
+    /// belong in `User` so one caller cannot retrieve another's chunks. Routing
+    /// per-user content to `Deployment` reintroduces GAP-1 (cross-user KB leak).
     | Deployment
     /// Team-private knowledge. Readable and writable only by members of the named team.
-    /// All `KnowledgeBase` module uploads land here by default.
+    /// All team-surface `KnowledgeBase` module uploads land here by default.
     | Team of teamId: string
+    /// Per-user private knowledge. The vector-layer twin of the `user-{id}`
+    /// blob/index container: readable and writable only by the owning caller
+    /// (matched by `AccessContext.UserId`). Every non-team KB upload
+    /// (Individual mode, AuthenticatedEphemeral, anonymous session) lands here
+    /// so per-user isolation carried by the blob container is preserved at the
+    /// vector layer too (GP 4). Never a caller-supplied scope — derived
+    /// server-side from the resolved `StorageScope` at ingestion and from the
+    /// authenticated `AccessContext.UserId` at retrieval.
+    | User of userId: string
 
 /// A unit of text content ready to be embedded and indexed. `Metadata` is
 /// a free-form string map that travels with the vector through storage and

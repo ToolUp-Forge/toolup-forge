@@ -496,6 +496,9 @@ let private makeVectorisationHook
                         | Platform -> "platform"
                         | Deployment -> "deployment"
                         | Team teamId -> $"team:{teamId}"
+                        // Qualified: `ParticipantType.User` is also in scope
+                        // here, so an unqualified `User` binds to the wrong DU.
+                        | VectorScope.User userId -> $"user:{userId}"
 
                     let chunkCount = List.length chunkPairs
 

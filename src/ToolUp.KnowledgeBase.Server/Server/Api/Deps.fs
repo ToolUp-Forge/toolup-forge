@@ -204,11 +204,20 @@ module KnowledgeApiDeps =
                     Persist = true
                 }
 
+        // Vector scope mirrors the blob/index container's tenant boundary
+        // (GP 4). A `team-{id}` container maps to the team-shared vector
+        // scope; a `user-{id}` container (Individual mode,
+        // AuthenticatedEphemeral, anonymous session) maps to that user's
+        // *own* vector scope. Routing per-user uploads to the shared
+        // `Deployment` scope was GAP-1 — every non-team caller's chunks
+        // collapsed into one namespace that retrieval served to all
+        // authenticated users. `Deployment` is now reserved for genuinely
+        // deployment-wide shared content only.
         let vectorScope =
             if scope.Container.StartsWith "team-" then
                 Team scope.ScopeId
             else
-                Deployment
+                User scope.ScopeId
 
         // Vector store and event store are resolved lazily — only the Notes
         // and AI-context paths need them, and tests bypassing `composeWithRAG`

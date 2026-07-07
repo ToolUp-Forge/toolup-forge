@@ -64,8 +64,13 @@ let private queryRejectedJsonOptions =
 ///   restricted to `IPlatformKnowledgeApi`.
 /// - `Deployment` is readable by all authenticated users.
 /// - `Team teamId` is readable only when `ctx.TeamId = Some teamId`.
+/// - `User userId` is readable only by that user — `ctx.UserId = userId`.
+///   This is the structural enforcement of per-user KB isolation (GAP-1
+///   fix): one non-team caller can never read another's uploaded chunks,
+///   mirroring the `user-{id}` blob-container boundary at the vector layer.
 /// - Anonymous users (userId = "anonymous") may read Platform / Deployment
-///   only; team scopes are filtered out.
+///   only; team scopes are filtered out. A session with a stable id reads
+///   its own `User` scope (its `ctx.UserId`).
 let private authorisedScopes
     (platformKnowledgeBase: PlatformKnowledgeBaseMode)
     (ctx: AccessContext)
@@ -82,7 +87,8 @@ let private authorisedScopes
         | Team teamId ->
             match ctx.TeamId with
             | Some id -> id = teamId
-            | None -> false)
+            | None -> false
+        | User userId -> ctx.UserId = userId)
 
 // ─── Reciprocal Rank Fusion ───────────────────────────────────────
 

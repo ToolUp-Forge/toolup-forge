@@ -108,6 +108,7 @@ let allTests =
         TwilioNotificationSinkTests.tests
         WebPushNotificationSinkTests.tests
         HnswVectorStoreTests.tests
+        KnowledgeUserScopeIsolationTests.tests
         HealthyHealthCheckTests.tests
         DegradedHealthCheckTests.tests
         UnhealthyHealthCheckTests.tests

@@ -47,8 +47,10 @@ let private parseScope (raw: string) : VectorScope =
         Deployment
     elif trimmed.StartsWith "team:" then
         Team(trimmed.Substring(5))
+    elif trimmed.StartsWith "user:" then
+        User(trimmed.Substring(5))
     else
-        failwithf "Unknown scope: '%s'. Expected 'platform', 'deployment', or 'team:<id>'." raw
+        failwithf "Unknown scope: '%s'. Expected 'platform', 'deployment', 'team:<id>', or 'user:<id>'." raw
 
 let private toCorpusEntry (j: JsonCorpusEntry) : CorpusEntry = {
     ChunkId = j.chunkId

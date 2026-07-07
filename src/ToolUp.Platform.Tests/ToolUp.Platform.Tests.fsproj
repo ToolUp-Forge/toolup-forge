@@ -242,6 +242,7 @@
         <Compile Include="InProcess\TwilioNotificationSinkTests.fs" />
         <Compile Include="InProcess\WebPushNotificationSinkTests.fs" />
         <Compile Include="InProcess\HnswVectorStoreTests.fs" />
+        <Compile Include="InProcess\KnowledgeUserScopeIsolationTests.fs" />
         <Compile Include="InProcess\HealthyHealthCheckTests.fs" />
         <Compile Include="InProcess\DegradedHealthCheckTests.fs" />
         <Compile Include="InProcess\UnhealthyHealthCheckTests.fs" />

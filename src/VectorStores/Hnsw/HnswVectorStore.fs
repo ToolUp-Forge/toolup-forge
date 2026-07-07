@@ -120,14 +120,20 @@ let private scopeToKey (scope: VectorScope) =
     | Platform -> "platform"
     | Deployment -> "deployment"
     | Team teamId -> $"team:{teamId}"
+    | User userId -> $"user:{userId}"
 
 let private blobName (scope: VectorScope) =
     $"_rag/{scopeToKey scope}/hnsw-index.json"
 
 let private scopeFromKey (sk: string) =
-    if sk = "platform" then Platform
-    elif sk = "deployment" then Deployment
-    else Team(sk.Substring("team:".Length))
+    if sk = "platform" then
+        Platform
+    elif sk = "deployment" then
+        Deployment
+    elif sk.StartsWith "user:" then
+        User(sk.Substring("user:".Length))
+    else
+        Team(sk.Substring("team:".Length))
 
 // ─── Vector math ──────────────────────────────────────────────────
 
@@ -458,8 +464,9 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
             do! loadScope scope
     }
 
-    // Eagerly load Platform / Deployment at construction; team scopes
-    // hydrate lazily on first access (team ids unknown at construction).
+    // Eagerly load Platform / Deployment at construction; team and user
+    // scopes hydrate lazily on first access (team/user ids unknown at
+    // construction).
     do
         loadScope Platform |> Async.RunSynchronously
         loadScope Deployment |> Async.RunSynchronously

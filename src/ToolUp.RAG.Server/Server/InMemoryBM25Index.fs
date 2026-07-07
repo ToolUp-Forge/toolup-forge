@@ -57,6 +57,7 @@ let private scopeToKey (scope: VectorScope) =
     | Platform -> "platform"
     | Deployment -> "deployment"
     | Team teamId -> $"team:{teamId}"
+    | User userId -> $"user:{userId}"
 
 let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/bm25.json"
 
@@ -364,11 +365,12 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
         }
 
         member _.Search scopes' query topK = async {
-            // Lazy-load Team scopes on first access. Platform/Deployment are
-            // already loaded at construction.
+            // Lazy-load Team and User scopes on first access. Platform/
+            // Deployment are already loaded at construction.
             for scope in scopes' do
                 match scope with
-                | Team _ ->
+                | Team _
+                | User _ ->
                     let scopeKey = scopeToKey scope
 
                     if not (scopes.ContainsKey scopeKey) then
@@ -435,11 +437,12 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                         Note = Some "blank subject — no-op"
                     }
             else
-                // Team scopes are lazy-loaded on first access (same as
-                // `Search`) — erasure must see the persisted corpus even
+                // Team and User scopes are lazy-loaded on first access (same
+                // as `Search`) — erasure must see the persisted corpus even
                 // when this process has never searched the scope.
                 match scope with
-                | Team _ ->
+                | Team _
+                | User _ ->
                     if not (scopes.ContainsKey(scopeToKey scope)) then
                         do! loadScope scope
                 | _ -> ()

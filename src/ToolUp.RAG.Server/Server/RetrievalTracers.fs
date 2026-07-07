@@ -87,6 +87,7 @@ let private scopeToString (scope: VectorKnowledgeTypes.VectorScope) =
     | VectorKnowledgeTypes.Platform -> "platform"
     | VectorKnowledgeTypes.Deployment -> "deployment"
     | VectorKnowledgeTypes.Team teamId -> sprintf "team:%s" teamId
+    | VectorKnowledgeTypes.User userId -> sprintf "user:%s" userId
 
 let private traceJsonOptions = FableConverters.create ()
 

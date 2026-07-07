@@ -25,7 +25,14 @@ let private HandlerName = "vector-store"
 
 /// Map the orchestrator's scope-id string to a `VectorScope`. Mirrors
 /// the convention used by `RAGCompose` (team containers carry the
-/// `team-` prefix; everything else is deployment/platform shared).
+/// `team-` prefix, per-user containers the `user-` prefix; the
+/// reserved literals map to the deployment/platform shared scopes).
+///
+/// The `user-` branch is load-bearing for DSR completeness: a non-team
+/// caller's KB chunks live in `User {id}` (the GAP-1 fix), so an erasure
+/// pass over that caller's `user-{id}` container must target the `User`
+/// vector scope — mapping it to `Team` would scan the wrong namespace and
+/// silently leave the subject's chunks at rest.
 let scopeOf (scopeId: string) : VectorScope =
     if scopeId = "platform" || scopeId = "_platform" then
         Platform
@@ -33,6 +40,8 @@ let scopeOf (scopeId: string) : VectorScope =
         Deployment
     elif scopeId.StartsWith "team-" then
         Team(scopeId.Substring "team-".Length)
+    elif scopeId.StartsWith "user-" then
+        User(scopeId.Substring "user-".Length)
     else
         Team scopeId
 

@@ -94,6 +94,7 @@ type ReembeddingBackgroundService
         | Platform -> "_platform"
         | Deployment -> "_deployment"
         | Team teamId -> teamId
+        | User userId -> $"user:{userId}"
 
     let needsReembed (chunk: TextChunk) =
         let provider = chunk.Metadata |> Map.tryFind EmbeddingVersion.MetadataProviderKey

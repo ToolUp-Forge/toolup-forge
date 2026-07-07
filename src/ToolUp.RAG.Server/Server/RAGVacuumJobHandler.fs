@@ -72,6 +72,7 @@ let private scopeKey (scope: VectorScope) =
     | Platform -> "platform"
     | Deployment -> "deployment"
     | Team teamId -> $"team:{teamId}"
+    | User userId -> $"user:{userId}"
 
 /// Audit routing scope id — where the `KnowledgeVacuumCompleted` event
 /// lands so it is queryable in the right stream. Team sweeps land in the
@@ -82,6 +83,7 @@ let private auditScopeId (scope: VectorScope) =
     | Platform
     | Deployment -> "_platform"
     | Team teamId -> teamId
+    | User userId -> $"user:{userId}"
 
 let private utf8Len (s: string) =
     if isNull s then 0 else Encoding.UTF8.GetByteCount s
