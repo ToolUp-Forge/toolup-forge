@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Graph Core — the graph-data substrate contract: the openCypher-keyed IGraphStore interface plus its Fable-compatible value model (GraphNode / GraphEdge / PropertyValue / CypherQuery / GraphResultSet / Direction). Traversal queries the relational IEntityStore cannot express in one round-trip. Zero server/client deps; the shared floor every graph companion (in-memory default, Kùzu / Neo4j / AGE engines) is built against.</Description>
+        <PackageTags>fsharp;fable;sdk;graph;opencypher;traversal;portable</PackageTags>
+        <!-- Fable-touching project (source ships under fable/): nullable
+             reference types stay disabled per the forge CLAUDE.md
+             "Nullable reference types — keep disabled on Fable-touching
+             projects". -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <!-- Source ships in the nupkg under fable/ so a browser-tier consumer
+         compiles the same value types the .NET host runs (mirrors
+         ToolUp.Platform.Core / ToolUp.AI.Wire). -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Types.fs" />
+        <Compile Include="IGraphStore.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>
