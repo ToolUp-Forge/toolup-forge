@@ -472,6 +472,9 @@
         <Compile Include="InProcess\LocalSecretFilePermissionsValidatorTests.fs" />
         <Compile Include="InProcess\IdentitySanitiserTests.fs" />
         <Compile Include="InProcess\FileManagementTests.fs" />
+        <!-- Phase 495 — module API-factory helper contract tests +
+             the 495.C before/after reference migration. -->
+        <Compile Include="InProcess\ModuleApiFactoryTests.fs" />
         <Compile Include="InProcess\PeerBearerAuthTests.fs" />
         <Compile Include="InProcess\ConversationExportAuditTests.fs" />
         <Compile Include="InProcess\ConversationExporterTests.fs" />

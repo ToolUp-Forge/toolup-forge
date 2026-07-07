@@ -249,6 +249,8 @@ let allTests =
         LocalSecretFilePermissionsValidatorTests.tests
         IdentitySanitiserTests.tests
         FileManagementTests.tests
+        // Phase 495 — module API-factory helper + reference migration.
+        ModuleApiFactoryTests.tests
         PeerBearerAuthTests.tests
         ConversationExportAuditTests.tests
         ConversationExporterTests.tests

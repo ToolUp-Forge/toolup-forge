@@ -490,6 +490,11 @@
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
         <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />
         <Compile Include="Server\NotifyingNarrativeStore.fs" />
+        <!-- Phase 495 — module API-factory helper: the per-module consumer
+             factory shape (scope-aware getFileContents + settings-key
+             convention + narrative-provenance publish) captured once.
+             After FileManagement + INarrativeStore (it delegates to both). -->
+        <Compile Include="Server\ModuleApiFactory.fs" />
         <Compile Include="Server\ModuleQueryBus.fs" />
         <!-- Phase 16 + 16a — centralised process-profile gating helper.
              Lives first in the Compose chain so every Compose helper

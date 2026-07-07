@@ -2351,6 +2351,18 @@ ToolUp.Platform.Middleware+SubjectRequestExtractor (class)
 ToolUp.Platform.Middleware+SubjectRequestExtractor.fromHttpContext(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.Auth+IAuthProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.SubjectResolutionRequest]
 ToolUp.Platform.Middleware+SubjectResolutionErrorBridge (class)
 ToolUp.Platform.Middleware+SubjectResolutionErrorBridge.toScopeError(ToolUp.Platform.SubjectResolutionError) : ToolUp.Platform.ScopeResolutionError
+ToolUp.Platform.ModuleApiContext (class)
+ToolUp.Platform.ModuleApiContext..ctor(Microsoft.AspNetCore.Http.HttpContext, System.String)
+ToolUp.Platform.ModuleApiContext.FromFile`2(Microsoft.FSharp.Core.FSharpFunc`2[Req, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Req, Res]]) : Microsoft.FSharp.Core.FSharpFunc`2[Req, Microsoft.FSharp.Control.FSharpAsync`1[Res]]
+ToolUp.Platform.ModuleApiContext.GetFileContents(System.String) : System.String
+ToolUp.Platform.ModuleApiContext.HttpContext : Microsoft.AspNetCore.Http.HttpContext { get }
+ToolUp.Platform.ModuleApiContext.ModuleId : System.String { get }
+ToolUp.Platform.ModuleApiContext.PublishNarrative(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NarrativeSettings, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeDocument]
+ToolUp.Platform.ModuleApiContext.PublishNarrative(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NarrativeSettings, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeDocument]
+ToolUp.Platform.ModuleApiContext.TryPublishNarrative(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NarrativeSettings, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeDocument]
+ToolUp.Platform.ModuleApiContext.TryPublishNarrative(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NarrativeSettings, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeDocument]
+ToolUp.Platform.ModuleApiFactory (class)
+ToolUp.Platform.ModuleApiFactory.create(System.String, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ModuleApiContext
 ToolUp.Platform.ModuleBindingManifest (class)
 ToolUp.Platform.ModuleBindingManifest.CurrentVersion : System.Int32 (literal)
 ToolUp.Platform.ModuleBindingManifest.DefaultFileName : System.String (literal)
@@ -2464,6 +2476,14 @@ ToolUp.Platform.NarrativePublisher.publishTagged(Microsoft.AspNetCore.Http.HttpC
 ToolUp.Platform.NarrativePublisher.publishWithProvenance(Microsoft.AspNetCore.Http.HttpContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.Platform.NarrativePublisher.replaceLatest(Microsoft.AspNetCore.Http.HttpContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
 ToolUp.Platform.NarrativePublisher.replaceLatestTagged(Microsoft.AspNetCore.Http.HttpContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
+ToolUp.Platform.NarrativeSettings (class)
+ToolUp.Platform.NarrativeSettings..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Platform.NarrativeSettings.Display : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.NarrativeSettings.Key : System.String { get }
+ToolUp.Platform.NarrativeSettingsModule (class)
+ToolUp.Platform.NarrativeSettingsModule.create(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : ToolUp.Platform.NarrativeSettings
+ToolUp.Platform.NarrativeSettingsModule.key(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : System.String
+ToolUp.Platform.NarrativeSettingsModule.ofPairs(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : ToolUp.Platform.NarrativeSettings
 ToolUp.Platform.NoOpAnonymousSessionMigrator (class)
 ToolUp.Platform.NoOpAnonymousSessionMigrator..ctor()
 ToolUp.Platform.NoOpHostedTreeUsageExport (class)
