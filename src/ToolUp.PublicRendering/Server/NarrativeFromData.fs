@@ -350,9 +350,9 @@ module NarrativeFromData =
     let severityFor (thresholds: Threshold list) (value: float) : Severity =
         thresholds
         |> List.filter (fun t -> value >= t.AtLeast)
-        |> List.sortByDescending (fun t -> t.AtLeast)
+        |> List.sortByDescending _.AtLeast
         |> List.tryHead
-        |> Option.map (fun t -> t.Severity)
+        |> Option.map _.Severity
         |> Option.defaultValue Info
 
     /// Build a `Callout` whose severity is chosen by mapping `value`

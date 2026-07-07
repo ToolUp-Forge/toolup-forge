@@ -100,7 +100,7 @@ module ContentAdminApiImpl =
                         Status = PublishStatus.token p.Status
                         Collection = p.Collection
                     })
-                    |> List.sortBy (fun s -> s.Slug)
+                    |> List.sortBy _.Slug
             }
         GetPage =
             fun slug -> async {

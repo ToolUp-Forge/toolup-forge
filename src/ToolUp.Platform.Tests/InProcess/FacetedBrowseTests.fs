@@ -37,12 +37,12 @@ let tests =
 
         test "facetedBrowse with matchAll requires every tag (AND)" {
             let results, _ = TaxonomyHandler.facetedBrowse true [ "news"; "product" ] pages
-            Expect.equal (results |> List.map (fun p -> p.Title)) [ "a" ] "only the page with both tags"
+            Expect.equal (results |> List.map _.Title) [ "a" ] "only the page with both tags"
         }
 
         test "facetedBrowse with matchAll=false requires any tag (OR)" {
             let results, _ = TaxonomyHandler.facetedBrowse false [ "news"; "events" ] pages
-            Expect.equal (results |> List.map (fun p -> p.Title) |> List.sort) [ "a"; "b"; "d" ] "any matching tag"
+            Expect.equal (results |> List.map _.Title |> List.sort) [ "a"; "b"; "d" ] "any matching tag"
         }
 
         test "facet counts narrow over the filtered set" {

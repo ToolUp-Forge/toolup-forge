@@ -31,6 +31,7 @@ let private hasWindow () : bool = jsNative
 [<Emit("window.location.pathname")>]
 let private currentPath () : string = jsNative
 
+// Sanctioned module-level mutable: per-tab one-shot install guard.
 // Singleton — installed at most once per page-load. The original
 // `history.pushState` / `replaceState` are captured before the
 // wrap so re-entry is safe (a second `install` call is a no-op).

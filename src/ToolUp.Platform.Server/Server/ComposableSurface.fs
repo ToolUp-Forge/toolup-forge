@@ -122,7 +122,7 @@ module ComposableSurface =
     let private slotOf (fieldType: Type) : (Type * SlotCardinality) option =
         if fieldType.IsGenericType then
             let def = fieldType.GetGenericTypeDefinition()
-            let arg = fieldType.GetGenericArguments().[0]
+            let arg = fieldType.GetGenericArguments()[0]
 
             let isCompanionInterface =
                 arg.IsInterface && arg.Name.StartsWith("I", StringComparison.Ordinal)

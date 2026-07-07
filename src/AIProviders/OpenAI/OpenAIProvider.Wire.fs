@@ -189,17 +189,16 @@ let private toOpenAIMessages (messages: AIProviderMessage list) : JsonValue list
         // result, referencing the tool_call_id.
         if not m.ToolResults.IsEmpty then
             for tr in m.ToolResults do
-                yield
-                    jobj [
-                        "role", jstr "tool"
-                        "tool_call_id", jstr tr.ToolCallId
-                        "content", jstr tr.Content
-                    ]
+                jobj [
+                    "role", jstr "tool"
+                    "tool_call_id", jstr tr.ToolCallId
+                    "content", jstr tr.Content
+                ]
         elif not m.Parts.IsEmpty then
             // Phase 6o — multipart user message. Emit OpenAI's content
             // array shape. Tool-call envelopes don't apply here
             // (multimodal turns are user→assistant, never assistant→tool).
-            yield jobj [ "role", jstr m.Role; "content", buildMultipartContent m.Parts ]
+            jobj [ "role", jstr m.Role; "content", buildMultipartContent m.Parts ]
         elif not m.ToolCalls.IsEmpty then
             // Assistant turn that invoked tools. Content may be empty when
             // the model chose to call a tool without commentary — omit the
@@ -215,15 +214,14 @@ let private toOpenAIMessages (messages: AIProviderMessage list) : JsonValue list
                     ])
                 |> jarr
 
-            yield
-                jobj (
-                    [ "role", jstr m.Role ]
-                    @ (if m.Content = "" then [] else [ "content", jstr m.Content ])
-                    @ [ "tool_calls", toolCalls ]
-                )
+            jobj (
+                [ "role", jstr m.Role ]
+                @ (if m.Content = "" then [] else [ "content", jstr m.Content ])
+                @ [ "tool_calls", toolCalls ]
+            )
         else
             // Plain user / assistant / system turn.
-            yield jobj [ "role", jstr m.Role; "content", jstr m.Content ]
+            jobj [ "role", jstr m.Role; "content", jstr m.Content ]
 ]
 
 let private buildTools (tools: AIProviderToolDef list) : JsonValue =

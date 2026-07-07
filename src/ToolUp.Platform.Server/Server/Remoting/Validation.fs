@@ -377,7 +377,7 @@ module internal Validation =
             let gtd = t.GetGenericTypeDefinition()
 
             if gtd = typedefof<_ list> || gtd = typedefof<_ option> || gtd = typedefof<seq<_>> then
-                let e = t.GetGenericArguments().[0]
+                let e = t.GetGenericArguments()[0]
 
                 if FSharpType.IsRecord(e, reflectionFlags) then
                     Some e
@@ -443,7 +443,7 @@ module internal Validation =
             None
         else
             let case, fields = FSharpValue.GetUnionFields(value, optionType)
-            if case.Name = "Some" then Some fields.[0] else None
+            if case.Name = "Some" then Some fields[0] else None
 
     /// Phase 69e.C — structured args for a built-in attribute violation,
     /// so an `IValidationMessages` resolver can rebuild a localised message
@@ -572,7 +572,7 @@ module internal Validation =
                     |> Seq.iteri (fun i item -> walk (sprintf "%s[%d]" path i) e item)
             elif fieldType.IsGenericType then
                 let gtd = fieldType.GetGenericTypeDefinition()
-                let e = fieldType.GetGenericArguments().[0]
+                let e = fieldType.GetGenericArguments()[0]
 
                 if gtd = typedefof<_ option> && FSharpType.IsRecord(e, reflectionFlags) then
                     match optionInner fieldType value with

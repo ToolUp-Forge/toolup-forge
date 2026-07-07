@@ -65,7 +65,7 @@ type SseTraceContributor(manager: SSEConnectionManager) =
                     // without reading every entry.
                     Summary = {|
                         TotalBroadcasts = snapshot.Broadcasts.Length
-                        DroppedBroadcasts = snapshot.Broadcasts |> List.filter (fun e -> e.Dropped) |> List.length
+                        DroppedBroadcasts = snapshot.Broadcasts |> List.filter _.Dropped |> List.length
                         RegisteredScopeCount = snapshot.RegisteredScopes.Count
                         TotalConnections = snapshot.RegisteredScopes |> Map.toSeq |> Seq.sumBy snd
                         TotalRefusals = snapshot.RefusalCounts |> Map.toSeq |> Seq.sumBy snd

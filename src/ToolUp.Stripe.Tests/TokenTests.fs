@@ -46,7 +46,7 @@ let tests =
 
             let tampered =
                 let parts = token.Split('.')
-                sprintf "teacher.%s.%s" parts.[1] parts.[2]
+                sprintf "teacher.%s.%s" parts[1] parts[2]
 
             match Token.validate now tampered secret with
             | Error SignatureMismatch -> ()
@@ -61,7 +61,7 @@ let tests =
                 | Error e -> failwithf "mint failed: %A" e
 
             let parts = token.Split('.')
-            let tampered = sprintf "%s.%s.AAAA-deadbeef-AAAA" parts.[0] parts.[1]
+            let tampered = sprintf "%s.%s.AAAA-deadbeef-AAAA" parts[0] parts[1]
 
             match Token.validate now tampered secret with
             | Error SignatureMismatch -> ()

@@ -67,7 +67,7 @@ type ComponentRegistry<'Impl>(initial: (ComponentId * 'Impl) seq) =
 
     do
         for id, impl in initial do
-            map.[id] <- impl
+            map[id] <- impl
 
     /// The current implementation for `id`, if the component is declared.
     member _.Resolve(id: ComponentId) : 'Impl option =
@@ -84,7 +84,7 @@ type ComponentRegistry<'Impl>(initial: (ComponentId * 'Impl) seq) =
 
     /// Atomically re-point `id` to `impl`. Internal — a re-point only
     /// happens through a governed `CompositionHotSwap.swap`.
-    member internal _.Set(id: ComponentId, impl: 'Impl) : unit = map.[id] <- impl
+    member internal _.Set(id: ComponentId, impl: 'Impl) : unit = map[id] <- impl
 
 module CompositionHotSwap =
 

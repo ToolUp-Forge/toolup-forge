@@ -126,7 +126,7 @@ module internal Streaming =
             let argT, returnT = FSharpType.GetFunctionElements fieldType
 
             if isAsyncEnumerable returnT then
-                let elementT = returnT.GetGenericArguments().[0]
+                let elementT = returnT.GetGenericArguments()[0]
                 Some(argT, elementT)
             else
                 None

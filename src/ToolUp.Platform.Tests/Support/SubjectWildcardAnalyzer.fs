@@ -163,19 +163,19 @@ let private stripCommentsAndStrings (text: string) =
     let mutable inString = false
 
     while i < text.Length do
-        let c = text.[i]
+        let c = text[i]
 
         if inString then
-            if c = '"' && (i = 0 || text.[i - 1] <> '\\') then
+            if c = '"' && (i = 0 || text[i - 1] <> '\\') then
                 inString <- false
                 sb.Append(' ') |> ignore
             else
                 sb.Append(' ') |> ignore
 
             i <- i + 1
-        elif c = '/' && i + 1 < text.Length && text.[i + 1] = '/' then
+        elif c = '/' && i + 1 < text.Length && text[i + 1] = '/' then
             // Line comment — skip to end of line.
-            while i < text.Length && text.[i] <> '\n' do
+            while i < text.Length && text[i] <> '\n' do
                 sb.Append(' ') |> ignore
                 i <- i + 1
         elif c = '"' then
@@ -193,14 +193,14 @@ let private extractIdents (text: string) : Set<string> =
 
     identRegex.Matches(cleaned)
     |> Seq.cast<Match>
-    |> Seq.map (fun m -> m.Groups.[1].Value)
+    |> Seq.map (fun m -> m.Groups[1].Value)
     |> Seq.filter (fun id -> not (ignoredIdents.Contains id))
     |> Set.ofSeq
 
 let private leadingWhitespaceLen (line: string) =
     let mutable i = 0
 
-    while i < line.Length && (line.[i] = ' ' || line.[i] = '\t') do
+    while i < line.Length && (line[i] = ' ' || line[i] = '\t') do
         i <- i + 1
 
     i
@@ -212,8 +212,8 @@ let private startsWithBar (line: string) =
     let idx = leadingWhitespaceLen line
 
     idx < line.Length
-    && line.[idx] = '|'
-    && (idx + 1 >= line.Length || line.[idx + 1] <> '|')
+    && line[idx] = '|'
+    && (idx + 1 >= line.Length || line[idx + 1] <> '|')
 
 type private ArmBlock = {
     PatternText: string
@@ -251,7 +251,7 @@ let private parseArms (lines: string[]) (firstArmIdx: int) (armCol: int) : ArmBl
         curBody.Clear() |> ignore
 
     while not stop && idx < lines.Length do
-        let line = lines.[idx]
+        let line = lines[idx]
 
         if isBlank line then
             curBody.Append('\n') |> ignore
@@ -301,17 +301,17 @@ let lintSource (filename: string) (source: string) : Diagnostic list =
     let mutable diagnostics: Diagnostic list = []
 
     for i in 0 .. lines.Length - 1 do
-        let line = lines.[i]
+        let line = lines[i]
 
         if subjectMatchRegex.IsMatch(line) then
             // Skip blank lines to find the first arm.
             let mutable j = i + 1
 
-            while j < lines.Length && isBlank lines.[j] do
+            while j < lines.Length && isBlank lines[j] do
                 j <- j + 1
 
-            if j < lines.Length && startsWithBar lines.[j] then
-                let armCol = leadingWhitespaceLen lines.[j]
+            if j < lines.Length && startsWithBar lines[j] then
+                let armCol = leadingWhitespaceLen lines[j]
                 let arms = parseArms lines j armCol
 
                 let subjectArms =

@@ -194,6 +194,6 @@ let tests =
                 CompositionHotSwap.swap EnabledHotSwap events.Add order registry init dispose targetId (mk "new")
 
             Expect.equal events.Count 1 "exactly one event emitted"
-            Expect.equal events.[0].Component targetId "the event is keyed by the target ComponentId"
-            Expect.equal events.[0].Outcome outcome "the event carries the outcome"
+            Expect.equal events[0].Component targetId "the event is keyed by the target ComponentId"
+            Expect.equal events[0].Outcome outcome "the event carries the outcome"
     ]

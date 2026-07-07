@@ -103,7 +103,7 @@ let private onlyDataAttributesTest = test "every helper wraps a data-* attribute
 
     let offenders = [
         for m in matches do
-            let name = m.Groups.[1].Value
+            let name = m.Groups[1].Value
 
             if not (name.StartsWith "data-") then
                 yield name

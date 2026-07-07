@@ -53,7 +53,7 @@ module Token =
             let mutable diff = 0
 
             for i in 0 .. a.Length - 1 do
-                diff <- diff ||| (int a.[i] ^^^ int b.[i])
+                diff <- diff ||| (int a[i] ^^^ int b[i])
 
             diff = 0
 
@@ -82,9 +82,9 @@ module Token =
             if parts.Length <> 3 then
                 Error MalformedToken
             else
-                let tierStr = parts.[0]
-                let expStr = parts.[1]
-                let providedSig = parts.[2]
+                let tierStr = parts[0]
+                let expStr = parts[1]
+                let providedSig = parts[2]
                 let payload = sprintf "%s.%s" tierStr expStr
                 let expected = hmac secret payload |> base64UrlEncode
 

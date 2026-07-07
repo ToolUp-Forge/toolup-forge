@@ -141,7 +141,7 @@ type DefaultPeerFanout() =
                 for target in targets do
                     let work = async {
                         let! r = callGuarded call target
-                        results.[target.Peer.PeerId] <- r
+                        results[target.Peer.PeerId] <- r
                         checkDone ()
                     }
 

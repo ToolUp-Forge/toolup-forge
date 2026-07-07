@@ -103,7 +103,7 @@ let tests =
             ]
 
             let trail = NavTree.findTrail (Slug "services/consulting") tree
-            let labels = trail |> List.map (fun n -> n.Label)
+            let labels = trail |> List.map _.Label
             Expect.equal labels [ "Services"; "Consulting" ] "trail is Services → Consulting"
         }
 
@@ -191,7 +191,7 @@ let tests =
 
             let self = List.head pages
             let related = TaxonomyHandler.relatedByTag pages self
-            let titles = related |> List.map (fun p -> p.Title)
+            let titles = related |> List.map _.Title
             Expect.equal titles [ "Two"; "One" ] "ranked by shared count desc; self + unrelated excluded"
         }
 

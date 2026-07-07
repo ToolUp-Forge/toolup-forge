@@ -56,7 +56,7 @@ let tests =
         test "ofCollectionPaged slices the collection into nav nodes" {
             let pages = [ mkPage "a"; mkPage "b"; mkPage "c" ]
             let s = NavTree.ofCollectionPaged 2 2 pages
-            Expect.equal (s.Items |> List.map (fun n -> n.Label)) [ "c" ] "page 2 has the remaining node"
+            Expect.equal (s.Items |> List.map _.Label) [ "c" ] "page 2 has the remaining node"
             Expect.equal s.PageCount 2 "two pages"
         }
 

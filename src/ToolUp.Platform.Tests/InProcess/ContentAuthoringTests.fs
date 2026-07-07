@@ -164,8 +164,8 @@ let tests =
                     Expect.equal doc.Title "Acme Rebrand" "doc title"
                     Expect.equal doc.Subtitle (Some "How we doubled conversions.") "doc subtitle = description"
                     Expect.equal (List.length doc.Sections) 2 "two body sections (challenge + outcome)"
-                    Expect.equal doc.Sections.[0].Heading "The Challenge" "first section heading = field DisplayName"
-                    Expect.equal doc.Sections.[1].Heading "The Outcome" "second section heading"
+                    Expect.equal doc.Sections[0].Heading "The Challenge" "first section heading = field DisplayName"
+                    Expect.equal doc.Sections[1].Heading "The Outcome" "second section heading"
                 | other -> failtestf "expected Narrative body, got %A" other
         }
 
@@ -242,7 +242,7 @@ let tests =
             | Ok page ->
                 match page.Body with
                 | Narrative doc ->
-                    match doc.Sections.[0].Elements with
+                    match doc.Sections[0].Elements with
                     | [ BulletList items ] -> Expect.equal (List.length items) 2 "two bullets"
                     | other -> failtestf "expected a single BulletList, got %A" other
                 | other -> failtestf "expected Narrative body, got %A" other
@@ -344,7 +344,7 @@ let tests =
 
             let! revisions = PublicPageRevisions.list store "about"
             Expect.equal (List.length revisions) 2 "two revisions listed"
-            Expect.equal revisions.[0].Version 2 "newest version first"
+            Expect.equal revisions[0].Version 2 "newest version first"
 
             // Read the prior revision.
             let! rev1 = PublicPageRevisions.get store "about" 1

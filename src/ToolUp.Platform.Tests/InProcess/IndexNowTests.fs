@@ -67,7 +67,7 @@ let private makePostFn (statuses: int list) : (string -> Async<int>) * (unit -> 
         if remaining.Count = 0 then
             return 200
         else
-            let head = remaining.[0]
+            let head = remaining[0]
             remaining.RemoveAt 0
             return head
     }

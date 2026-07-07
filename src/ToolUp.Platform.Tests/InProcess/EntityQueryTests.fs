@@ -31,9 +31,9 @@ let private ItemType = "QueryItem"
 
 let private itemRegistration =
     EntityRegistration.create<Item> ItemType
-    |> EntityRegistration.withIndex "Owner" (fun e -> e.Owner)
-    |> EntityRegistration.withIndex "Status" (fun e -> e.Status)
-    |> EntityRegistration.withIndex "Priority" (fun e -> e.Priority)
+    |> EntityRegistration.withIndex "Owner" _.Owner
+    |> EntityRegistration.withIndex "Status" _.Status
+    |> EntityRegistration.withIndex "Priority" _.Priority
 
 let private mkStore () =
     let dir =
@@ -87,7 +87,7 @@ let tests =
             match result with
             | Result.Ok items ->
                 Expect.hasLength items 2 "alice has 2 items"
-                let ids = items |> List.map (fun i -> i.Id) |> List.sort
+                let ids = items |> List.map _.Id |> List.sort
                 Expect.equal ids [ "i-1"; "i-2" ] "alice's items"
             | Result.Error e -> failwithf "expected Ok, got %A" e
         }
@@ -124,7 +124,7 @@ let tests =
             match result with
             | Result.Ok items ->
                 Expect.hasLength items 3 "alice (2) + carol (1) = 3 items"
-                let owners = items |> List.map (fun i -> i.Owner) |> List.distinct |> List.sort
+                let owners = items |> List.map _.Owner |> List.distinct |> List.sort
                 Expect.equal owners [ "alice"; "carol" ] "owners present"
             | Result.Error e -> failwithf "expected Ok, got %A" e
         }
@@ -161,7 +161,7 @@ let tests =
             | Result.Ok items ->
                 // 5 total - 2 alice = 3 non-alice
                 Expect.hasLength items 3 "non-alice has 3"
-                let owners = items |> List.map (fun i -> i.Owner) |> List.distinct |> List.sort
+                let owners = items |> List.map _.Owner |> List.distinct |> List.sort
                 Expect.equal owners [ "bob"; "carol" ] "no alice in results"
             | Result.Error e -> failwithf "expected Ok, got %A" e
         }

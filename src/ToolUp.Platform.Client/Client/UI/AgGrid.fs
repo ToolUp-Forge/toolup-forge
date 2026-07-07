@@ -65,6 +65,9 @@ let provider (config: AgGridModuleConfig) (children: ReactElement list) : ReactE
 
 let private gridModuleRegistry: obj = import "ModuleRegistry" "ag-grid-community"
 
+// Sanctioned module-level mutable: per-tab one-shot registration guard
+// (AG Grid modules register once; Enterprise pre-registration flips it
+// via `setGridModulesRegistered` before the Community fallback).
 let mutable private gridModulesRegistered = false
 
 /// Mark that grid modules have been registered externally (e.g. by AgGridEnterprise).

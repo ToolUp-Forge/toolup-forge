@@ -271,7 +271,7 @@ module RemotingInterceptors =
                         telemetryLog.Warn $"correlationGetter raised: {ex.Message}; falling back to fresh GUID"
                         fallbackCorrelationGetter ()
 
-                info.Bag.["x-correlation-id"] <- corrId
+                info.Bag["x-correlation-id"] <- corrId
                 telemetryLog.Debug $"start {info.MethodName} corr={corrId}"
 
             member _.OnSuccess(info, _) =

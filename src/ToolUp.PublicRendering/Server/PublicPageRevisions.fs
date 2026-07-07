@@ -28,7 +28,7 @@ let list (store: IEntityStore) (slug: string) : Async<PageRevision list> = async
     return
         refs
         |> List.map (fun r -> { Slug = slug; Version = r.Version })
-        |> List.sortByDescending (fun r -> r.Version)
+        |> List.sortByDescending _.Version
 }
 
 /// Read a specific revision's `PublicPage`. `NotFound` when the slug or
@@ -37,13 +37,13 @@ let get (store: IEntityStore) (slug: string) (version: int) : Async<Result<Publi
     let! result =
         store.GetVersion<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, slug, version)
 
-    return result |> Result.map (fun e -> e.Page)
+    return result |> Result.map _.Page
 }
 
 /// Read the current (latest) revision's `PublicPage`.
 let current (store: IEntityStore) (slug: string) : Async<Result<PublicPage, EntityError>> = async {
     let! result = store.Get<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, slug)
-    return result |> Result.map (fun e -> e.Page)
+    return result |> Result.map _.Page
 }
 
 /// Restore a prior revision: write its content back as a new current

@@ -19,6 +19,9 @@ open Feliz
 let private agChartsCommunityModule: obj =
     import "AgChartsCommunityModule" "ag-charts-community"
 
+// Sanctioned module-level mutable: per-tab one-shot registration guard
+// (AG Charts modules register once; Enterprise pre-registration flips
+// it via `setChartsModulesRegistered` before the Community fallback).
 let mutable private chartsModulesRegistered = false
 
 /// Mark that chart modules have been registered externally (e.g. by AgGridEnterprise).

@@ -27,7 +27,7 @@ type StripeBillingProvider(config: StripeConfig, ?httpClient: HttpClient) =
         | true, items ->
             match items.TryGetProperty "data" with
             | true, data when data.ValueKind = JsonValueKind.Array && data.GetArrayLength() > 0 ->
-                match data.[0].TryGetProperty "price" with
+                match data[0].TryGetProperty "price" with
                 | true, price ->
                     match price.TryGetProperty "id" with
                     | true, id when id.ValueKind = JsonValueKind.String -> id.GetString()
@@ -41,7 +41,7 @@ type StripeBillingProvider(config: StripeConfig, ?httpClient: HttpClient) =
     let parseStatus (root: JsonElement) : SubscriptionStatus =
         match root.TryGetProperty "data" with
         | true, data when data.ValueKind = JsonValueKind.Array && data.GetArrayLength() > 0 ->
-            let sub = data.[0]
+            let sub = data[0]
 
             let status =
                 match sub.TryGetProperty "status" with

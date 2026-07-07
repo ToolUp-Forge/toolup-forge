@@ -33,7 +33,7 @@ type InMemoryNarrativeStore(policy: NarrativeRetentionPolicy) =
             // entries older than the cutoff.
             let mutable i = bucket.Count - 1
 
-            while i >= 0 && bucket.[i].PublishedAt < cutoff do
+            while i >= 0 && bucket[i].PublishedAt < cutoff do
                 bucket.RemoveAt(i)
                 i <- i - 1
         | _ -> ()

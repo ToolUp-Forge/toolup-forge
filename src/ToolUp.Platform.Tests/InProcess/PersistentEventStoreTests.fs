@@ -134,7 +134,7 @@ let retentionTests =
             Expect.equal pruned 1 "one over-cap event pruned"
 
             let! remaining = (store :> IEventStore).ReadAll scope
-            let types = remaining |> List.map (fun e -> e.EventType) |> List.sort
+            let types = remaining |> List.map _.EventType |> List.sort
 
             Expect.equal types [ "B"; "C" ] "only the newest two events remain"
         }

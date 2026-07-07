@@ -466,19 +466,17 @@ module TabularReader =
             while not stopped && rows.MoveNext() do
                 match rows.Current with
                 | SourceRow.Fatal message ->
-                    yield
-                        RowOutcome.Structural {
-                            RowIndex = 0
-                            Kind = RowErrorKind.UnparseableRow message
-                        }
+                    RowOutcome.Structural {
+                        RowIndex = 0
+                        Kind = RowErrorKind.UnparseableRow message
+                    }
 
                     stopped <- true
                 | SourceRow.Broken(rowIndex, message) ->
-                    yield
-                        RowOutcome.Structural {
-                            RowIndex = rowIndex
-                            Kind = RowErrorKind.UnparseableRow message
-                        }
+                    RowOutcome.Structural {
+                        RowIndex = rowIndex
+                        Kind = RowErrorKind.UnparseableRow message
+                    }
 
                     // A broken header makes everything after it
                     // unbindable; a broken data row costs only
@@ -494,17 +492,17 @@ module TabularReader =
                         ()
                     else
                         match binding with
-                        | Some plan -> yield validateDataRow schema plan rowIndex cells
+                        | Some plan -> validateDataRow schema plan rowIndex cells
                         | None ->
                             match bindHeader schema plans rowIndex cells with
                             | Error structural ->
                                 for error in structural do
-                                    yield RowOutcome.Structural error
+                                    RowOutcome.Structural error
 
                                 stopped <- true
                             | Ok(plan, extras) ->
                                 for error in extras do
-                                    yield RowOutcome.Structural error
+                                    RowOutcome.Structural error
 
                                 binding <- Some plan
         }

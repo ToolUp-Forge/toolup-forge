@@ -11,10 +11,12 @@ open ToolUp.AI
 
 let private log = Logger.forCategory "ai.sse"
 
+// Sanctioned module-level mutable: per-tab one-shot warn-once latch.
 // Phase 117 parity — one-shot guard for the "authenticated session fell
-// back to query-param identity" AuthDiagnostics warn (mirrors
-// `NotificationClient.queryParamFallbackWarned`). Module-scoped so the
-// per-tab AI stream logs it once rather than on every identity re-key.
+// back to query-param identity" AuthDiagnostics warn (mirrors the
+// `QueryParamFallbackWarned` field on `NotificationClient`'s state
+// record). Module-scoped so the per-tab AI stream logs it once rather
+// than on every identity re-key.
 let mutable private queryParamFallbackWarned = false
 
 // ─── EventSource interop ─────────────────────────────────────────

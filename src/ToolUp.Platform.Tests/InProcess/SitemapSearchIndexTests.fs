@@ -221,7 +221,7 @@ let private sitemap150Tests =
 
         testCase "shardUniverse: cluster key groups by logical content type with stable membership"
         <| fun _ ->
-            let clusterOf (Slug s: Slug) = s.Split('/').[0]
+            let clusterOf (Slug s: Slug) = s.Split('/')[0]
 
             let opts = {
                 SitemapGenerator.SitemapShardingOptions.defaults with
@@ -441,7 +441,7 @@ let private searchIndex157Tests =
             Expect.equal status 200 "served"
             let parsed = parseEntries body
             Expect.equal parsed.Length 1 "consumer entries, not the file universe"
-            Expect.equal (parsed.[0].GetProperty("title").GetString()) "X" "consumer-supplied entry surfaces"
+            Expect.equal (parsed[0].GetProperty("title").GetString()) "X" "consumer-supplied entry surfaces"
 
         testCase "endpoint ETag folds the content version: rolls on change, 304s on a conditional re-fetch"
         <| fun _ ->

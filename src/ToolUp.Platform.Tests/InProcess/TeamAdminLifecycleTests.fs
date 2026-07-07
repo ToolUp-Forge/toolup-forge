@@ -151,7 +151,7 @@ let tests =
             Expect.isOk restoreResult "restore succeeds for admin"
 
             let! myTeamsAfter = memberApi.GetMyTeams()
-            Expect.equal (myTeamsAfter |> List.map (fun t -> t.TeamId)) [ teamId ] "restored team is visible again"
+            Expect.equal (myTeamsAfter |> List.map _.TeamId) [ teamId ] "restored team is visible again"
 
             let! reselectAfter = memberApi.SetActiveTeam teamId
             Expect.isOk reselectAfter "restored team is selectable again"

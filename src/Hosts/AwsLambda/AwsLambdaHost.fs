@@ -104,7 +104,8 @@ type AwsLambdaHost =
         if String.IsNullOrEmpty contentType then
             false
         else
-            let mediaType = contentType.Split(';').[0].Trim().ToLowerInvariant()
+            let segments = contentType.Split(';')
+            let mediaType = segments[0].Trim().ToLowerInvariant()
 
             mediaType.StartsWith "text/"
             || mediaType = "application/json"

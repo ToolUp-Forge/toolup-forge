@@ -96,13 +96,13 @@ let rec private redact (node: JsonNode) : unit =
             // IMPORTANT: System.Text.Json.Nodes.JsonObject throws
             // InvalidOperationException if mutated during enumeration.
             // Snapshot the keys first (the `names` line below), then
-            // iterate the snapshot — never `for kvp in obj do … obj.[k] <- …`.
+            // iterate the snapshot — never `for kvp in obj do … obj[k] <- …`.
             // See docs/migrations/fablejsonconverter-to-stj.md
             // "JsonNode equivalents" for the canonical pattern.
             let names = obj |> Seq.map _.Key |> Seq.toArray
 
             for name in names do
-                let child = obj.[name]
+                let child = obj[name]
 
                 if shouldRedact name then
                     if isNull child then
@@ -112,10 +112,10 @@ let rec private redact (node: JsonNode) : unit =
                         | JsonValueKind.Null -> ()
                         | JsonValueKind.String ->
                             let s = child.GetValue<string>()
-                            obj.[name] <- JsonValue.Create(redactedString s.Length) :> JsonNode
+                            obj[name] <- JsonValue.Create(redactedString s.Length) :> JsonNode
                         | _ ->
                             let serialised = child.ToJsonString()
-                            obj.[name] <- JsonValue.Create(redactedString serialised.Length) :> JsonNode
+                            obj[name] <- JsonValue.Create(redactedString serialised.Length) :> JsonNode
                 else
                     redact child
         | :? JsonArray as arr ->
@@ -418,12 +418,12 @@ let private buildAuditTailJsonl
 
                     let line =
                         let obj = JsonObject()
-                        obj.["Id"] <- JsonValue.Create(string evt.Id)
-                        obj.["OccurredAt"] <- JsonValue.Create(evt.OccurredAt.ToUniversalTime().ToString("o"))
-                        obj.["ScopeId"] <- JsonValue.Create(evt.ScopeId)
-                        obj.["SourceModule"] <- JsonValue.Create(evt.SourceModule)
-                        obj.["EventType"] <- JsonValue.Create(evt.EventType)
-                        obj.["Payload"] <- payloadNode
+                        obj["Id"] <- JsonValue.Create(string evt.Id)
+                        obj["OccurredAt"] <- JsonValue.Create(evt.OccurredAt.ToUniversalTime().ToString("o"))
+                        obj["ScopeId"] <- JsonValue.Create(evt.ScopeId)
+                        obj["SourceModule"] <- JsonValue.Create(evt.SourceModule)
+                        obj["EventType"] <- JsonValue.Create(evt.EventType)
+                        obj["Payload"] <- payloadNode
 
                         obj.ToJsonString()
 

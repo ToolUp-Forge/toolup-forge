@@ -28,7 +28,7 @@ let private reflectedCompanionInterfaces () : Set<string> =
 
         if t.IsGenericType then
             let def = t.GetGenericTypeDefinition()
-            let arg = t.GetGenericArguments().[0]
+            let arg = t.GetGenericArguments()[0]
 
             if
                 (def = typedefof<option<_>> || def = typedefof<list<_>>)

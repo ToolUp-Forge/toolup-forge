@@ -75,7 +75,7 @@ type BuildSource =
 type BuildRetryPolicy = {
     /// Maximum attempts including the first. `1` disables retry.
     MaxAttempts: int
-    /// Wait between attempts, in seconds, in order. `BackoffSeconds.[0]`
+    /// Wait between attempts, in seconds, in order. `BackoffSeconds[0]`
     /// is the wait before attempt 2, etc. Shorter than
     /// `MaxAttempts - 1` extends the last value; longer than
     /// `MaxAttempts - 1` ignores the tail.

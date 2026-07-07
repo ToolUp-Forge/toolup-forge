@@ -108,7 +108,7 @@ let private lineOf (source: string) (offset: int) =
     let mutable line = 1
 
     for i in 0 .. min (offset - 1) (source.Length - 1) do
-        if source.[i] = '\n' then
+        if source[i] = '\n' then
             line <- line + 1
 
     line
@@ -118,7 +118,7 @@ let private lineOf (source: string) (offset: int) =
 /// anti-regression fixture test below can pin the heuristic.
 let scanText (filename: string) (source: string) : Finding list = [
     for m in offenderPattern.Matches(source) do
-        let name = m.Groups.[1].Value
+        let name = m.Groups[1].Value
 
         if isOffendingName name then
             yield {

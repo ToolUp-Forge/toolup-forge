@@ -491,7 +491,7 @@ module IndexNow =
                         return ()
                     else
                         for batchIx in 0 .. totalBatches - 1 do
-                            let batch = batches.[batchIx]
+                            let batch = batches[batchIx]
 
                             if Set.contains batchIx successes then
                                 skippedCount <- skippedCount + 1

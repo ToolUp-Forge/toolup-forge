@@ -221,7 +221,7 @@ let tests =
                     ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
                     ToolUp.RAG.RagVectorStoreLifecycle.create emptyProvider
                 ]
-                |> List.map (fun h -> h.Name)
+                |> List.map _.Name
 
             Expect.equal (List.distinct names |> List.length) names.Length "all hook names are unique"
         }

@@ -37,8 +37,7 @@ module JsonHost =
     let private unicodeEscape (code: int) : string =
         let digits = "0123456789abcdef"
 
-        let nibble shift =
-            string digits.[(code >>> shift) &&& 0xF]
+        let nibble shift = string digits[(code >>> shift) &&& 0xF]
 
         "\\u" + nibble 12 + nibble 8 + nibble 4 + nibble 0
 

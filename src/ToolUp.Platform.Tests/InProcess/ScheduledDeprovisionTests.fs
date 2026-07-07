@@ -20,7 +20,7 @@ type private InMemoryJobScheduler() =
     let jobs = ConcurrentDictionary<JobId, JobDefinition>()
     let mutable triggeredOnce = 0
 
-    member _.Jobs = jobs |> Seq.map (fun kv -> kv.Value) |> List.ofSeq
+    member _.Jobs = jobs |> Seq.map _.Value |> List.ofSeq
     member _.TriggeredOnceCount = triggeredOnce
 
     interface IJobScheduler with
@@ -76,7 +76,7 @@ type private InMemoryJobScheduler() =
         member _.ListJobs(scopeId) = async {
             return
                 jobs
-                |> Seq.map (fun kv -> kv.Value)
+                |> Seq.map _.Value
                 |> Seq.filter (fun j -> j.ScopeId = scopeId)
                 |> List.ofSeq
         }

@@ -214,7 +214,7 @@ module Sbom =
                         let json = buildCycloneDx id version deps timestamp (newSerial ())
                         File.WriteAllText(sbomPath, json)
                         trace $"SBOM: wrote {Path.GetFileName sbomPath} ({List.length deps} declared dependencies)"
-                        yield sbomPath
+                        sbomPath
 
                         match signer with
                         | None -> ()
@@ -226,6 +226,6 @@ module Sbom =
                                 let sigPath = nupkg + ".sig"
                                 File.WriteAllText(sigPath, jws)
                                 trace $"SBOM: wrote provenance sidecar {Path.GetFileName sigPath}"
-                                yield sigPath
+                                sigPath
                             | Error err -> trace $"SBOM: signing failed for {Path.GetFileName nupkg}: {err}"
             ]

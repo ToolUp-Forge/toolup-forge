@@ -481,7 +481,7 @@ module private Rest =
                             el.TryGetProperty("name", &nameProp)
                             && nameProp.ValueKind = JsonValueKind.String
                         then
-                            yield nameProp.GetString()
+                            nameProp.GetString()
                 ]
             else
                 []

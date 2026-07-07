@@ -418,7 +418,7 @@ let cspMiddlewareTests =
                 let mw = CspMiddleware(noOpNext, policy)
                 mw.InvokeAsync(ctx).GetAwaiter().GetResult()
                 resp.FireOnStarting()
-                Csp.requestNonce ctx, ctx.Response.Headers.["Content-Security-Policy"].ToString()
+                Csp.requestNonce ctx, ctx.Response.Headers["Content-Security-Policy"].ToString()
 
             let n1, h1 = run ()
             let n2, _ = run ()
@@ -465,7 +465,7 @@ let cspMiddlewareTests =
             resp.FireOnStarting()
 
             Expect.equal
-                (ctx.Response.Headers.["Content-Security-Policy"].ToString())
+                (ctx.Response.Headers["Content-Security-Policy"].ToString())
                 "script-src 'self' 'sha256-abc'"
                 "static/hash header is byte-stable and safe to stamp on every status code"
 
@@ -481,7 +481,7 @@ let cspMiddlewareTests =
 
             let ctx, resp = nonceCtx 200
 
-            ctx.Response.Headers.["Content-Security-Policy"] <-
+            ctx.Response.Headers["Content-Security-Policy"] <-
                 Microsoft.Extensions.Primitives.StringValues "default-src 'none'"
 
             let mw = CspMiddleware(noOpNext, policy)
@@ -489,7 +489,7 @@ let cspMiddlewareTests =
             resp.FireOnStarting()
 
             Expect.equal
-                (ctx.Response.Headers.["Content-Security-Policy"].ToString())
+                (ctx.Response.Headers["Content-Security-Policy"].ToString())
                 "default-src 'none'"
                 "an already-present CSP header wins (per-route override preserved)"
         }
@@ -506,7 +506,7 @@ let cspMiddlewareTests =
             resp.FireOnStarting()
 
             Expect.equal (Csp.requestNonce ctx) (Some nonce) "the layout reads the same nonce the helper minted"
-            let header = ctx.Response.Headers.["Content-Security-Policy"].ToString()
+            let header = ctx.Response.Headers["Content-Security-Policy"].ToString()
             Expect.stringContains header (sprintf "'nonce-%s'" nonce) "header carries the minted nonce"
             Expect.isFalse (header.Contains "{NONCE}") "the consumer placeholder is fully substituted"
         }
@@ -524,14 +524,14 @@ let cspMiddlewareTests =
         test "applyNonceCsp standalone: a per-route override is not overwritten" {
             let ctx, resp = nonceCtx 200
 
-            ctx.Response.Headers.["Content-Security-Policy"] <-
+            ctx.Response.Headers["Content-Security-Policy"] <-
                 Microsoft.Extensions.Primitives.StringValues "default-src 'none'"
 
             Csp.applyNonceCsp ctx "script-src 'self' 'nonce-{NONCE}'" "{NONCE}" |> ignore
             resp.FireOnStarting()
 
             Expect.equal
-                (ctx.Response.Headers.["Content-Security-Policy"].ToString())
+                (ctx.Response.Headers["Content-Security-Policy"].ToString())
                 "default-src 'none'"
                 "an already-present CSP header wins"
         }

@@ -215,9 +215,9 @@ let baselineFloorTests =
 
         test "non-HTTPS bind: floor is the three always-safe headers, no HSTS" {
             let eff = SecurityHeaders.effective false Map.empty
-            Expect.equal eff.["X-Frame-Options"] "DENY" "clickjacking lockdown by default"
-            Expect.equal eff.["X-Content-Type-Options"] "nosniff" "MIME-sniff lockdown by default"
-            Expect.equal eff.["Referrer-Policy"] "strict-origin-when-cross-origin" "referrer trimmed by default"
+            Expect.equal eff["X-Frame-Options"] "DENY" "clickjacking lockdown by default"
+            Expect.equal eff["X-Content-Type-Options"] "nosniff" "MIME-sniff lockdown by default"
+            Expect.equal eff["Referrer-Policy"] "strict-origin-when-cross-origin" "referrer trimmed by default"
             Expect.isFalse (eff.ContainsKey "Strict-Transport-Security") "no HSTS over a non-HTTPS bind"
             Expect.isFalse (eff.ContainsKey "Content-Security-Policy") "no default CSP in the floor"
         }
@@ -226,26 +226,21 @@ let baselineFloorTests =
             let eff = SecurityHeaders.effective true Map.empty
 
             Expect.equal
-                eff.["Strict-Transport-Security"]
+                eff["Strict-Transport-Security"]
                 SecurityHeaders.hstsHeaderValue
                 "HSTS added under RequireHttps"
 
-            Expect.isFalse
-                (eff.["Strict-Transport-Security"].Contains "preload")
-                "baseline HSTS does not assume preload"
+            Expect.isFalse (eff["Strict-Transport-Security"].Contains "preload") "baseline HSTS does not assume preload"
         }
 
         test "consumer map wins over the floor on a key collision" {
             let configured = Map.ofList [ "X-Frame-Options", "SAMEORIGIN"; "X-Custom", "v" ]
             let eff = SecurityHeaders.effective true configured
 
-            Expect.equal
-                eff.["X-Frame-Options"]
-                "SAMEORIGIN"
-                "consumer-set frame header is not overwritten by the floor"
+            Expect.equal eff["X-Frame-Options"] "SAMEORIGIN" "consumer-set frame header is not overwritten by the floor"
 
-            Expect.equal eff.["X-Custom"] "v" "consumer-only headers pass through"
-            Expect.equal eff.["X-Content-Type-Options"] "nosniff" "untouched floor keys remain"
+            Expect.equal eff["X-Custom"] "v" "consumer-only headers pass through"
+            Expect.equal eff["X-Content-Type-Options"] "nosniff" "untouched floor keys remain"
         }
 
         test "empty config on a non-HTTPS bind still yields a non-empty floor" {

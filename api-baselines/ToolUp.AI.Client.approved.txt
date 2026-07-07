@@ -52,6 +52,7 @@ ToolUp.AI.Client.AIAssistantUI+Msg.IsSSEEvent : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSelectConversation : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSetProviderOverride : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSubmitMessage : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg.IsSubmitMessagePrepared : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsWatchdogFired : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.NewConversation : ToolUp.AI.Client.AIAssistantUI+Msg { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.Tag : System.Int32 { get }
@@ -81,6 +82,8 @@ ToolUp.AI.Client.AIAssistantUI+Msg+SetProviderOverride (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+SetProviderOverride.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+SubmitMessage (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+SubmitMessage.Item : System.String { get }
+ToolUp.AI.Client.AIAssistantUI+Msg+SubmitMessagePrepared (class)
+ToolUp.AI.Client.AIAssistantUI+Msg+SubmitMessagePrepared.Item : ToolUp.AI.Client.AIAssistantUI+PreparedSubmission { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.ApiError : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.CancelTask : System.Int32 (literal)
@@ -97,9 +100,17 @@ ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SSEEvent : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SelectConversation : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SetProviderOverride : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SubmitMessage : System.Int32 (literal)
+ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SubmitMessagePrepared : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.WatchdogFired : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+WatchdogFired (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+WatchdogFired.token : System.Guid { get }
+ToolUp.AI.Client.AIAssistantUI+PreparedSubmission (class)
+ToolUp.AI.Client.AIAssistantUI+PreparedSubmission..ctor(System.String, System.Guid, System.Guid, System.DateTime, System.Guid)
+ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.Content : System.String { get }
+ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.ConversationId : System.Guid { get }
+ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.MessageId : System.Guid { get }
+ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.Timestamp : System.DateTime { get }
+ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.WatchdogId : System.Guid { get }
 ToolUp.AI.Client.AIClientConfig (class)
 ToolUp.AI.Client.AIClientConfig.appendAssistantModule(ToolUp.AI.AIAssistantMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
 ToolUp.AI.Client.AIClientConfig.program(ToolUp.AI.AIAssistantMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.AI.Client.AIClientConfig+OuterModel, ToolUp.AI.Client.AIClientConfig+OuterMsg, Fable.React.ReactElement]

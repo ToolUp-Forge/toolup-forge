@@ -527,16 +527,16 @@ let getSuggestedQuestions (deps: KnowledgeApiDeps) (activeModule: string option)
         let questions =
             [
                 for doc in topDocs do
-                    yield sprintf "What's in \"%s\"?" doc.FileName
+                    sprintf "What's in \"%s\"?" doc.FileName
 
                 if notes.Length >= 1 then
-                    yield "Summarise the team's notes."
+                    "Summarise the team's notes."
 
                 if documents.Length >= 2 then
-                    yield "What themes do these documents share?"
+                    "What themes do these documents share?"
 
                 match activeModule with
-                | Some name when documents.Length > 0 -> yield sprintf "How does our %s data look?" name
+                | Some name when documents.Length > 0 -> sprintf "How does our %s data look?" name
                 | _ -> ()
             ]
             |> List.distinct

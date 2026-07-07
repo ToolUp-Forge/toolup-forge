@@ -29,7 +29,7 @@ module Diagnostics =
             | [||] -> other
             | genericTypeArguments ->
                 let typeParts = other.Split('`')
-                let typeName = typeParts.[0]
+                let typeName = typeParts[0]
 
                 Array.map typePrinter genericTypeArguments
                 |> String.concat ", "

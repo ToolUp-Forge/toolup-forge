@@ -88,16 +88,16 @@ module Docs =
                 List.tryFind (fun routeDocs -> routeDocs.Route = Some fieldInfo.Name) routesDefs
 
             let route = JsonObject()
-            route.["remoteFunction"] <- JsonValue.Create(fieldInfo.Name)
-            route.["httpMethod"] <- JsonValue.Create(routeMethod fieldInfo.PropertyType)
-            route.["route"] <- JsonValue.Create(routeBuilder recordType.Name fieldInfo.Name)
+            route["remoteFunction"] <- JsonValue.Create(fieldInfo.Name)
+            route["httpMethod"] <- JsonValue.Create(routeMethod fieldInfo.PropertyType)
+            route["route"] <- JsonValue.Create(routeBuilder recordType.Name fieldInfo.Name)
 
             let description = routeDocs |> Option.bind _.Description |> Option.defaultValue ""
 
             let alias = routeDocs |> Option.bind _.Alias |> Option.defaultValue fieldInfo.Name
 
-            route.["description"] <- JsonValue.Create(description)
-            route.["alias"] <- JsonValue.Create(alias)
+            route["description"] <- JsonValue.Create(description)
+            route["alias"] <- JsonValue.Create(alias)
 
             let examplesJson = JsonArray()
 
@@ -117,13 +117,13 @@ module Docs =
                         argsJson.Add(JsonNode.Parse argText)
 
                     let exampleJson = JsonObject()
-                    exampleJson.["description"] <- JsonValue.Create(description)
-                    exampleJson.["arguments"] <- argsJson
+                    exampleJson["description"] <- JsonValue.Create(description)
+                    exampleJson["arguments"] <- argsJson
                     examplesJson.Add(exampleJson)
 
-            route.["examples"] <- examplesJson
+            route["examples"] <- examplesJson
             routes.Add(route)
 
-        schema.["name"] <- JsonValue.Create(docsName)
-        schema.["routes"] <- routes
+        schema["name"] <- JsonValue.Create(docsName)
+        schema["routes"] <- routes
         schema

@@ -71,7 +71,7 @@ let download (name: string) : Async<string> = async {
 /// on a JsonValue holding a string returns the string unquoted, matching
 /// the prior converter behaviour.
 let private stringFrom (o: JsonObject) (key: string) : string =
-    match o.[key] with
+    match o[key] with
     | null -> ""
     | n -> n.GetValue<string>()
 

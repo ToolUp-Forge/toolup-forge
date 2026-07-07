@@ -1071,7 +1071,7 @@ let private oidcMetricsTests =
 
                 Expect.equal entries.Length 1 "Exactly one increment expected for a single successful validation"
 
-                let counter, tags = entries.[0]
+                let counter, tags = entries[0]
                 Expect.equal counter AuthMetrics.ValidateSuccess "Success counter name"
 
                 Expect.equal (Map.tryFind AuthMetrics.ProviderTag tags) (Some "oidc") "Provider tag identifies oidc"

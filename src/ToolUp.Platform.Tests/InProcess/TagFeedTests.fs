@@ -44,7 +44,7 @@ let tests =
 
             let titles =
                 NarrativeFeedHandler.selectEntries { cfg with Tag = Some "news" } pages
-                |> List.map (fun d -> d.Title)
+                |> List.map _.Title
 
             Expect.equal (List.sort titles) [ "a"; "c" ] "only news-tagged pages, newest-first"
         }
@@ -52,8 +52,7 @@ let tests =
         test "selectEntries with no Tag is unchanged (back-compat)" {
             let pages = [ mkPage "a" "news" None (Some 1); mkPage "b" "" None (Some 2) ]
 
-            let titles =
-                NarrativeFeedHandler.selectEntries cfg pages |> List.map (fun d -> d.Title)
+            let titles = NarrativeFeedHandler.selectEntries cfg pages |> List.map _.Title
 
             Expect.equal (List.sort titles) [ "a"; "b" ] "all Narrative pages when no tag filter"
         }
@@ -72,7 +71,7 @@ let tests =
                             Collection = Some "blog"
                     }
                     pages
-                |> List.map (fun d -> d.Title)
+                |> List.map _.Title
 
             Expect.equal titles [ "a" ] "only the news page in the blog collection"
         }
@@ -92,7 +91,7 @@ let tests =
                             MaxEntries = 2
                     }
                     pages
-                |> List.map (fun d -> d.Title)
+                |> List.map _.Title
 
             Expect.equal titles [ "new"; "mid" ] "newest two, descending"
         }
@@ -114,7 +113,7 @@ let tests =
                 PublicRenderingServerApp.create ()
                 |> PublicRenderingServerApp.withTagFeeds "Topics" cfg [ "news"; "events" ]
 
-            let urls = app.Feeds |> List.map (fun f -> f.SelfUrl) |> List.sort
+            let urls = app.Feeds |> List.map _.SelfUrl |> List.sort
             Expect.equal urls [ "/tag/events/feed.atom"; "/tag/news/feed.atom" ] "one feed per tag"
             Expect.isTrue (app.Feeds |> List.forall (fun f -> Option.isSome f.Tag)) "every feed is tag-filtered"
         }

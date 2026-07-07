@@ -187,7 +187,7 @@ let private failClosedTests =
                 scanOpens classifyEnterpriseOpen "src/ToolUp.Platform.Client/Client/SomeView.fs" fixture
 
             Expect.hasLength findings 1 "the planted Enterprise open must be the sole finding"
-            Expect.stringContains findings.[0].Detail "AgGridEnterprise" "finding names the Enterprise module"
+            Expect.stringContains findings[0].Detail "AgGridEnterprise" "finding names the Enterprise module"
         }
 
         test "planted cross-module open across two sample units is detected" {
@@ -217,7 +217,7 @@ let private failClosedTests =
                 1
                 "only the cross-unit open (Alpha→Beta) violates; the intra-unit SharedTypes open does not"
 
-            Expect.stringContains findings.[0].Detail "Beta.Module" "finding names the sibling module that was imported"
+            Expect.stringContains findings[0].Detail "Beta.Module" "finding names the sibling module that was imported"
         }
 
         test "intra-module opens within one sample unit are not flagged" {

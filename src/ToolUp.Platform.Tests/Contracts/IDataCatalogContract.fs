@@ -84,7 +84,7 @@ type private InMemoryObjectStore() =
                 let matchedKeys =
                     store
                     |> Seq.filter (fun kvp -> fst kvp.Key = scopeId && namesSubject (fst kvp.Value))
-                    |> Seq.map (fun kvp -> kvp.Key)
+                    |> Seq.map _.Key
                     |> Seq.toList
 
                 if not dryRun then
@@ -174,7 +174,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
             let catalog, _, _ = factory (registrations, store)
 
             let! types = catalog.ListTypes()
-            let ids = types |> List.map (fun t -> t.Id) |> Set.ofList
+            let ids = types |> List.map _.Id |> Set.ofList
             Expect.equal ids (Set.ofList [ "Sales"; "Media" ]) "both types listed"
         }
 

@@ -43,6 +43,25 @@ type Model = {
     WatchdogToken: Guid option
 }
 
+/// Non-deterministic inputs for a chat submission — generated in the
+/// `Cmd` layer (MVU purity: `Guid.NewGuid()` / `DateTime.UtcNow` never
+/// run inside the pure `update`) and folded back into the state via
+/// `SubmitMessagePrepared`.
+type PreparedSubmission = {
+    /// The user's chat input, unchanged from `SubmitMessage`.
+    Content: string
+    /// The active conversation id, or a freshly-generated one when no
+    /// conversation is active.
+    ConversationId: Guid
+    /// Id for the user's `ConversationMessage`.
+    MessageId: Guid
+    /// Timestamp for the user's `ConversationMessage`.
+    Timestamp: DateTime
+    /// Token for the stream-idle watchdog (used only on the
+    /// non-fast-path branch).
+    WatchdogId: Guid
+}
+
 type Msg =
     | LoadConversations of ApiCall<unit, Conversation list>
     | LoadTools of ApiCall<unit, AIToolDefinition list>
@@ -50,6 +69,9 @@ type Msg =
     | SelectConversation of Guid
     | LoadMessages of ApiCall<Guid, ConversationMessage list>
     | SubmitMessage of string
+    /// Second leg of `SubmitMessage`: the `Cmd` layer generated the
+    /// ids/timestamp; this folds the prepared submission into state.
+    | SubmitMessagePrepared of PreparedSubmission
     | MessageSubmitted of ApiCall<Guid * string, AITask>
     | NewConversation
     | DeleteConversation of ApiCall<Guid, Result<unit, string>>
@@ -230,14 +252,33 @@ let update msg model =
         | Finished messages -> { model with Messages = messages }, Cmd.none
 
     | SubmitMessage content ->
-        let conversationId = model.ActiveConversation |> Option.defaultWith Guid.NewGuid
+        // MVU purity (2026-07 idiom sweep): `Guid.NewGuid()` /
+        // `DateTime.UtcNow` are non-deterministic and belong in the
+        // `Cmd` layer, not in the pure `update`. The effect generates
+        // the ids/timestamp and immediately re-dispatches the prepared
+        // submission; `SubmitMessagePrepared` below is the pure fold.
+        model,
+        Cmd.ofEffect (fun dispatch ->
+            dispatch (
+                SubmitMessagePrepared {
+                    Content = content
+                    ConversationId = model.ActiveConversation |> Option.defaultWith Guid.NewGuid
+                    MessageId = Guid.NewGuid()
+                    Timestamp = DateTime.UtcNow
+                    WatchdogId = Guid.NewGuid()
+                }
+            ))
+
+    | SubmitMessagePrepared prepared ->
+        let content = prepared.Content
+        let conversationId = prepared.ConversationId
 
         let userMsg: ConversationMessage = {
-            Id = Guid.NewGuid()
+            Id = prepared.MessageId
             ConversationId = conversationId
             Participant = User
             Content = content
-            Timestamp = DateTime.UtcNow
+            Timestamp = prepared.Timestamp
             ToolCalls = []
             RetrievedSources = []
             Parts = []
@@ -290,7 +331,7 @@ let update msg model =
                 },
                 Cmd.batch [ dispatchCmd; beaconCmd ]
             | FastPathBridge.NoResolution ->
-                let watchdogId = Guid.NewGuid()
+                let watchdogId = prepared.WatchdogId
 
                 {
                     model with

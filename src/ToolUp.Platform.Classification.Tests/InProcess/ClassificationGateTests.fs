@@ -121,7 +121,7 @@ let private gateTests =
             // was redacted.
             let paths = reads |> List.map _.FieldPath |> List.sort
             Expect.equal paths [ "Email"; "HealthNotes" ] "only AuditOnRead fields emit read events"
-            Expect.all reads (fun p -> p.Redacted) "plain user — both reads recorded as redacted"
+            Expect.all reads _.Redacted "plain user — both reads recorded as redacted"
             Expect.all reads (fun p -> p.UserId = "u1") "caller stamped"
 
             Expect.all

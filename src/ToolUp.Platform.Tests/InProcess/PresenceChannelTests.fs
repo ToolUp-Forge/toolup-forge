@@ -31,9 +31,9 @@ let tests =
             ch.Join("team-a", "user-1", Some "Ada") |> Async.RunSynchronously
             let roster = ch.Roster "team-a" |> Async.RunSynchronously
             Expect.equal roster.Length 1 "one member"
-            Expect.equal roster.[0].PrincipalId "user-1" "principal"
-            Expect.equal roster.[0].DisplayName (Some "Ada") "display name"
-            Expect.equal roster.[0].Status Online "online"
+            Expect.equal roster[0].PrincipalId "user-1" "principal"
+            Expect.equal roster[0].DisplayName (Some "Ada") "display name"
+            Expect.equal roster[0].Status Online "online"
         }
 
         test "roster is scope-isolated (GP 4)" {
@@ -51,7 +51,7 @@ let tests =
 
             clock.Advance(TimeSpan.FromSeconds 45.0) // past away threshold (30s), within expiry (90s)
             let away = ch.Roster "team-a" |> Async.RunSynchronously
-            Expect.equal away.[0].Status Away "away after 45s"
+            Expect.equal away[0].Status Away "away after 45s"
 
             clock.Advance(TimeSpan.FromSeconds 60.0) // 105s total — past expiry
             let gone = ch.Roster "team-a" |> Async.RunSynchronously
@@ -65,7 +65,7 @@ let tests =
             clock.Advance(TimeSpan.FromSeconds 45.0)
             ch.Heartbeat("team-a", "user-1") |> Async.RunSynchronously
             let roster = ch.Roster "team-a" |> Async.RunSynchronously
-            Expect.equal roster.[0].Status Online "online again after heartbeat"
+            Expect.equal roster[0].Status Online "online again after heartbeat"
         }
 
         test "leave removes the participant" {

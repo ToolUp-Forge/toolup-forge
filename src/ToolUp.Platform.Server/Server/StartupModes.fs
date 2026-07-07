@@ -62,7 +62,7 @@ let detect (argv: string seq) : StartupMode =
     else NormalBoot
 
 /// The live process mode, read from `Environment.GetCommandLineArgs()`.
-/// (`GetCommandLineArgs().[0]` is the executable path — `detect` only
+/// (`GetCommandLineArgs()[0]` is the executable path — `detect` only
 /// looks for the two flags, so the argv[0] entry is inert.)
 let current () : StartupMode =
     detect (Environment.GetCommandLineArgs())

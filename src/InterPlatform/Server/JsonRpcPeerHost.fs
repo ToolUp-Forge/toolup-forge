@@ -175,7 +175,7 @@ module JsonRpcPeerHost =
                 if isLongRunning then
                     match fusion with
                     | Some f ->
-                        let innerType = retType.GetGenericArguments().[0]
+                        let innerType = retType.GetGenericArguments()[0]
                         let funcValue = field.GetValue impl
                         let hName = PeerJob.handlerName contractId field.Name
                         let dispatch = scheduleDispatch f hName

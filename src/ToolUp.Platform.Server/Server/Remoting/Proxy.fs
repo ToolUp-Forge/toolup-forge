@@ -231,7 +231,7 @@ let rec private makeEndpointProxy<'fieldPart>
         match props.Arguments with
         | _ :: _ ->
             let typeInfo =
-                typeNames makeProps.FlattenedTypes.[0 .. makeProps.FlattenedTypes.Length - 2]
+                typeNames makeProps.FlattenedTypes[0 .. makeProps.FlattenedTypes.Length - 2]
 
             failwithf
                 "The record function '%s' expected %d argument(s) of the types %s but got %d argument(s) in the input JSON array"
@@ -314,7 +314,7 @@ let rec private makeEndpointProxy<'fieldPart>
                             outp (f inp) { props with Arguments = [] }
                         | [] ->
                             let typeInfo =
-                                typeNames makeProps.FlattenedTypes.[0 .. makeProps.FlattenedTypes.Length - 2]
+                                typeNames makeProps.FlattenedTypes[0 .. makeProps.FlattenedTypes.Length - 2]
 
                             failwithf
                                 "The record function '%s' expected %d argument(s) of the types %s but got %d argument(s) in the input"
@@ -380,7 +380,7 @@ let makeApiProxy<'impl, 'ctx>
 
                     let isNoArg =
                         flattenedTypes.Length = 1
-                        || (flattenedTypes.Length = 2 && flattenedTypes.[0] = typeof<unit>)
+                        || (flattenedTypes.Length = 2 && flattenedTypes[0] = typeof<unit>)
 
                     wrap (fun (props: InvocationProps<'impl>) -> task {
                         let mutable requestBodyText = None

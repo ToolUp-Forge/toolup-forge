@@ -74,7 +74,8 @@ module ByteRange =
             Unsatisfiable
         else
             let spec = headerValue.Substring(6).Trim()
-            let firstSpec = spec.Split(',').[0].Trim()
+            let specParts = spec.Split(',')
+            let firstSpec = specParts[0].Trim()
             let dash = firstSpec.IndexOf('-')
 
             if dash < 0 then

@@ -43,7 +43,7 @@ module Branding =
 
         value.StartsWith "#"
         && (value.Length = 4 || value.Length = 7)
-        && value.[1..] |> Seq.forall isHexDigit
+        && value[1..] |> Seq.forall isHexDigit
 
     /// Phase 223 — the allow-listed per-team palette: each `_platform` config
     /// key paired with the `:root` CSS custom property it drives. Colours only;

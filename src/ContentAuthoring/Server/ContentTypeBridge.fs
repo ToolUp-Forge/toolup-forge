@@ -136,7 +136,7 @@ let private bodySection (schema: FormSchema) (values: Map<string, FieldValue>) (
         let heading =
             schema.Fields
             |> List.tryFind (fun f -> f.Key = key)
-            |> Option.map (fun f -> f.DisplayName)
+            |> Option.map _.DisplayName
             |> Option.defaultValue key
 
         let elements =

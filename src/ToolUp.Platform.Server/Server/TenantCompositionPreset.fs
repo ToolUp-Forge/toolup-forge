@@ -117,7 +117,7 @@ module TenantCompositionPreset =
 
     /// Resolve a tenant to its fully-applied `CompositionDescriptor`: the
     /// base preset with *only that tenant's* hole bindings applied.
-    /// Scope-isolated (GP 4) — reads only `preset.Tenants.[tenantId]`, so a
+    /// Scope-isolated (GP 4) — reads only `preset.Tenants[tenantId]`, so a
     /// tenant's resolution can never observe another tenant's bindings.
     /// `Error (UnknownTenant …)` when no composition is registered. The
     /// resolved descriptor may still carry unbound holes (a binding the

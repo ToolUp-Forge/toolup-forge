@@ -134,7 +134,7 @@ let tests =
                 1
                 "the handler ran exactly once — the replay short-circuited before invocation"
 
-            let kinds = emitter.Events |> List.map (fun e -> e.Kind)
+            let kinds = emitter.Events |> List.map _.Kind
 
             Expect.equal
                 (kinds |> List.filter ((=) AuditKind.PolicyChanged) |> List.length)

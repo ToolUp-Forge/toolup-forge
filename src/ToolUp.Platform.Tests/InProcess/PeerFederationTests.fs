@@ -49,9 +49,9 @@ let fanoutTests =
             let call (t: TargetPeer) = async { return Ok(t.Peer.PeerId.Length) }
             let! result = fanout.Fanout(targets, FanoutPolicy.all, call)
             Expect.equal result.Count 3 "map total over targets"
-            Expect.equal result.[peer "a"] (Ok 1) "a answered Ok"
-            Expect.equal result.[peer "b"] (Ok 1) "b answered Ok"
-            Expect.equal result.[peer "c"] (Ok 1) "c answered Ok"
+            Expect.equal result[peer "a"] (Ok 1) "a answered Ok"
+            Expect.equal result[peer "b"] (Ok 1) "b answered Ok"
+            Expect.equal result[peer "c"] (Ok 1) "c answered Ok"
         }
 
         testCaseAsync "partial failure is preserved per-peer, never collapsed"
@@ -66,9 +66,9 @@ let fanoutTests =
             }
 
             let! result = fanout.Fanout(targets, FanoutPolicy.all, call)
-            Expect.equal result.[peer "a"] (Ok 7) "a Ok"
-            Expect.equal result.[peer "b"] (Error(PeerHandler "b refused")) "b's error preserved"
-            Expect.equal result.[peer "c"] (Ok 7) "c Ok"
+            Expect.equal result[peer "a"] (Ok 7) "a Ok"
+            Expect.equal result[peer "b"] (Error(PeerHandler "b refused")) "b's error preserved"
+            Expect.equal result[peer "c"] (Ok 7) "c Ok"
         }
 
         testCaseAsync "an exception in the call thunk becomes a transport error, not a throw"
@@ -83,9 +83,9 @@ let fanoutTests =
             }
 
             let! result = fanout.Fanout(targets, FanoutPolicy.all, call)
-            Expect.equal result.[peer "a"] (Ok 1) "healthy peer unaffected"
+            Expect.equal result[peer "a"] (Ok 1) "healthy peer unaffected"
 
-            match result.[peer "boom"] with
+            match result[peer "boom"] with
             | Error(PeerTransport msg) -> Expect.stringContains msg "kaboom" "exception captured as transport error"
             | other -> failtestf "expected PeerTransport, got %A" other
         }
@@ -104,7 +104,7 @@ let fanoutTests =
 
             let! result = fanout.Fanout(targets, FanoutPolicy.firstSuccess, call)
             Expect.equal result.Count 3 "map total over targets even on early return"
-            Expect.equal result.[peer "fast"] (Ok 42) "the immediate success is captured"
+            Expect.equal result[peer "fast"] (Ok 42) "the immediate success is captured"
         }
 
         testCaseAsync "quorum returns once k peers answer; the k fast peers are captured"
@@ -121,8 +121,8 @@ let fanoutTests =
 
             let! result = fanout.Fanout(targets, FanoutPolicy.quorum 2, call)
             Expect.equal result.Count 3 "map total over targets"
-            Expect.equal result.[peer "f1"] (Ok 9) "first quorum member captured"
-            Expect.equal result.[peer "f2"] (Ok 9) "second quorum member captured"
+            Expect.equal result[peer "f1"] (Ok 9) "first quorum member captured"
+            Expect.equal result[peer "f2"] (Ok 9) "second quorum member captured"
         }
 
         testCaseAsync "timeout records the unanswered peer as an error, not an Ok"
@@ -138,9 +138,9 @@ let fanoutTests =
             }
 
             let! result = fanout.Fanout(targets, FanoutPolicy.withTimeout (TimeSpan.FromMilliseconds 100.0), call)
-            Expect.equal result.[peer "fast"] (Ok 1) "fast peer answered before the deadline"
+            Expect.equal result[peer "fast"] (Ok 1) "fast peer answered before the deadline"
 
-            match result.[peer "slow"] with
+            match result[peer "slow"] with
             | Error _ -> ()
             | Ok _ -> failtest "the timed-out peer must not surface as Ok"
         }

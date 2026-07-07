@@ -77,7 +77,7 @@ type private MirrorInput = {
 }
 
 let private paths (violations: FieldViolation list) =
-    violations |> List.map (fun v -> v.Path) |> List.sort
+    violations |> List.map _.Path |> List.sort
 
 [<Tests>]
 let tests =

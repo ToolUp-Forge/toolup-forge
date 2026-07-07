@@ -17,6 +17,32 @@ open ToolUp.Platform.Narrative
 module StructuredDataHelpers =
     let private opt = Option.defaultValue ""
 
+    // ─── Typed JSON-value builder (2026-07 idiom sweep) ─────────────
+    //
+    // A minimal typed JSON tree replaces the former 116
+    // `dict [ "@type", box … ]` type-erasure sites — the same
+    // `jobj`/`jstr` builder shape proven in the AI wire layer
+    // (`AIProviders/*/…Wire.fs`), replicated locally rather than
+    // referencing that package (an SSR content package must not depend
+    // on the AI wire format). Serialization still goes through STJ's
+    // `Utf8JsonWriter` with the same encoder options the previous
+    // `JsonSerializer.Serialize` path used, so the emitted JSON is
+    // byte-identical.
+
+    /// Typed JSON value for the JSON-LD emitters. Only the shapes the
+    /// schema.org payloads need: strings, integer positions, objects
+    /// (insertion-ordered field lists), arrays.
+    type private JsonLd =
+        | JString of string
+        | JInt of int
+        | JObject of (string * JsonLd) list
+        | JArray of JsonLd list
+
+    let private jstr (s: string) = JString s
+    let private jint (i: int) = JInt i
+    let private jobj (fields: (string * JsonLd) list) = JObject fields
+    let private jarr (items: JsonLd list) = JArray items
+
     // JSON-LD is embedded verbatim in a `<script type="application/ld+json">`
     // block. STJ's default `JavaScriptEncoder` is ASCII-safe but escapes every
     // non-ASCII rune and the HTML-significant set (`<`, `>`, `&`, `+`, `'`) to
@@ -29,11 +55,44 @@ module StructuredDataHelpers =
     // terminate the surrounding block (the relaxed encoder would otherwise emit
     // it verbatim — an XSS breakout). The `</`-rewrite only ever matches inside
     // string values; JSON structure contains no `</`.
-    let private serialiseOptions =
-        JsonSerializerOptions(WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
+    let private writerOptions =
+        JsonWriterOptions(Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
 
-    let private serialise (payload: obj) : string =
-        JsonSerializer.Serialize(payload, serialiseOptions).Replace("</", "<\\/")
+    let private serialise (payload: JsonLd) : string =
+        use stream = new System.IO.MemoryStream()
+        use writer = new Utf8JsonWriter(stream, writerOptions)
+
+        let rec write (value: JsonLd) =
+            match value with
+            | JString s ->
+                // A null string serialises as JSON `null` — matches what
+                // `JsonSerializer.Serialize` emitted for a boxed null on
+                // the previous erased-`dict` path.
+                if isNull s then
+                    writer.WriteNullValue()
+                else
+                    writer.WriteStringValue s
+            | JInt i -> writer.WriteNumberValue i
+            | JObject fields ->
+                writer.WriteStartObject()
+
+                for name, fieldValue in fields do
+                    writer.WritePropertyName name
+                    write fieldValue
+
+                writer.WriteEndObject()
+            | JArray items ->
+                writer.WriteStartArray()
+
+                for item in items do
+                    write item
+
+                writer.WriteEndArray()
+
+        write payload
+        writer.Flush()
+
+        System.Text.Encoding.UTF8.GetString(stream.ToArray()).Replace("</", "<\\/")
 
     /// `Article` schema — news posts, blog entries, long-form pages.
     /// Frontmatter keys read: `author`, `og:image`, `description`,
@@ -48,14 +107,14 @@ module StructuredDataHelpers =
             |> Option.defaultValue ""
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "Article"
-                "headline", box page.Title
-                "description", box page.Description
-                "author", box (dict [ "@type", box "Person"; "name", box author ])
-                "image", box image
-                "datePublished", box datePublished
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "Article"
+                "headline", jstr page.Title
+                "description", jstr page.Description
+                "author", jobj [ "@type", jstr "Person"; "name", jstr author ]
+                "image", jstr image
+                "datePublished", jstr datePublished
             ]
         )
 
@@ -71,14 +130,14 @@ module StructuredDataHelpers =
         let url = page.Frontmatter |> Map.tryFind "url" |> opt
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "Person"
-                "name", box name
-                "jobTitle", box jobTitle
-                "image", box image
-                "email", box email
-                "url", box url
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "Person"
+                "name", jstr name
+                "jobTitle", jstr jobTitle
+                "image", jstr image
+                "email", jstr email
+                "url", jstr url
             ]
         )
 
@@ -91,15 +150,15 @@ module StructuredDataHelpers =
         let image = page.Frontmatter |> Map.tryFind "og:image" |> opt
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "Event"
-                "name", box page.Title
-                "description", box page.Description
-                "startDate", box startDate
-                "endDate", box endDate
-                "location", box (dict [ "@type", box "Place"; "name", box location ])
-                "image", box image
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "Event"
+                "name", jstr page.Title
+                "description", jstr page.Description
+                "startDate", jstr startDate
+                "endDate", jstr endDate
+                "location", jobj [ "@type", jstr "Place"; "name", jstr location ]
+                "image", jstr image
             ]
         )
 
@@ -130,23 +189,23 @@ module StructuredDataHelpers =
         let sameAs = page.Frontmatter |> Map.tryFind "sameAs" |> csvList
 
         let baseFields = [
-            "@context", box "https://schema.org"
-            "@type", box "Organization"
-            "name", box name
-            "url", box url
-            "logo", box logo
-            "description", box page.Description
+            "@context", jstr "https://schema.org"
+            "@type", jstr "Organization"
+            "name", jstr name
+            "url", jstr url
+            "logo", jstr logo
+            "description", jstr page.Description
         ]
 
         // Append `sameAs` only when present so the absent-key output is
-        // byte-for-byte the pre-151 dict (GP 11).
+        // byte-for-byte the pre-151 shape (GP 11).
         let fields =
             if List.isEmpty sameAs then
                 baseFields
             else
-                baseFields @ [ "sameAs", box sameAs ]
+                baseFields @ [ "sameAs", jarr (sameAs |> List.map jstr) ]
 
-        serialise (dict fields)
+        serialise (jobj fields)
 
     /// `Article` schema derived from a `NarrativeDocument`'s
     /// `Provenance`. Returns `None` when the document has no
@@ -174,15 +233,15 @@ module StructuredDataHelpers =
 
             Some(
                 serialise (
-                    dict [
-                        "@context", box "https://schema.org"
-                        "@type", box "Article"
-                        "headline", box headline
-                        "description", box page.Description
-                        "datePublished", box datePublished
-                        "dateModified", box datePublished
-                        "identifier", box prov.SettingsKey
-                        "provider", box (dict [ "@type", box "Organization"; "name", box prov.ModuleId ])
+                    jobj [
+                        "@context", jstr "https://schema.org"
+                        "@type", jstr "Article"
+                        "headline", jstr headline
+                        "description", jstr page.Description
+                        "datePublished", jstr datePublished
+                        "dateModified", jstr datePublished
+                        "identifier", jstr prov.SettingsKey
+                        "provider", jobj [ "@type", jstr "Organization"; "name", jstr prov.ModuleId ]
                     ]
                 )
             )
@@ -259,19 +318,18 @@ module StructuredDataHelpers =
         let itemListElement =
             segments
             |> List.mapi (fun i (name, url) ->
-                dict [
-                    "@type", box "ListItem"
-                    "position", box (i + 1)
-                    "name", box name
-                    "item", box url
-                ]
-                :> obj)
+                jobj [
+                    "@type", jstr "ListItem"
+                    "position", jint (i + 1)
+                    "name", jstr name
+                    "item", jstr url
+                ])
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "BreadcrumbList"
-                "itemListElement", box itemListElement
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "BreadcrumbList"
+                "itemListElement", jarr itemListElement
             ]
         )
 
@@ -284,19 +342,18 @@ module StructuredDataHelpers =
         let itemListElement =
             items
             |> List.mapi (fun i (name, url) ->
-                dict [
-                    "@type", box "SiteNavigationElement"
-                    "position", box (i + 1)
-                    "name", box name
-                    "url", box url
-                ]
-                :> obj)
+                jobj [
+                    "@type", jstr "SiteNavigationElement"
+                    "position", jint (i + 1)
+                    "name", jstr name
+                    "url", jstr url
+                ])
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "ItemList"
-                "itemListElement", box itemListElement
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "ItemList"
+                "itemListElement", jarr itemListElement
             ]
         )
 
@@ -318,26 +375,26 @@ module StructuredDataHelpers =
     /// omits `potentialAction` (a plain `WebSite` node).
     let webSite (name: string) (url: string) (searchUrlTemplate: string option) : string =
         let baseFields = [
-            "@context", box "https://schema.org"
-            "@type", box "WebSite"
-            "name", box name
-            "url", box url
+            "@context", jstr "https://schema.org"
+            "@type", jstr "WebSite"
+            "name", jstr name
+            "url", jstr url
         ]
 
         let fields =
             match searchUrlTemplate with
             | Some template ->
                 let action =
-                    dict [
-                        "@type", box "SearchAction"
-                        "target", box (dict [ "@type", box "EntryPoint"; "urlTemplate", box template ])
-                        "query-input", box "required name=search_term_string"
+                    jobj [
+                        "@type", jstr "SearchAction"
+                        "target", jobj [ "@type", jstr "EntryPoint"; "urlTemplate", jstr template ]
+                        "query-input", jstr "required name=search_term_string"
                     ]
 
-                baseFields @ [ "potentialAction", box action ]
+                baseFields @ [ "potentialAction", action ]
             | None -> baseFields
 
-        serialise (dict fields)
+        serialise (jobj fields)
 
     /// `FAQPage` schema from `(question, answer)` pairs — each pair becomes
     /// a `Question` with an `acceptedAnswer`. An empty list emits an
@@ -346,18 +403,17 @@ module StructuredDataHelpers =
         let mainEntity =
             items
             |> List.map (fun (q, a) ->
-                dict [
-                    "@type", box "Question"
-                    "name", box q
-                    "acceptedAnswer", box (dict [ "@type", box "Answer"; "text", box a ])
-                ]
-                :> obj)
+                jobj [
+                    "@type", jstr "Question"
+                    "name", jstr q
+                    "acceptedAnswer", jobj [ "@type", jstr "Answer"; "text", jstr a ]
+                ])
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "FAQPage"
-                "mainEntity", box mainEntity
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "FAQPage"
+                "mainEntity", jarr mainEntity
             ]
         )
 
@@ -366,15 +422,14 @@ module StructuredDataHelpers =
     let howTo (name: string) (steps: string list) : string =
         let stepElements =
             steps
-            |> List.mapi (fun i text ->
-                dict [ "@type", box "HowToStep"; "position", box (i + 1); "text", box text ] :> obj)
+            |> List.mapi (fun i text -> jobj [ "@type", jstr "HowToStep"; "position", jint (i + 1); "text", jstr text ])
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "HowTo"
-                "name", box name
-                "step", box stepElements
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "HowTo"
+                "name", jstr name
+                "step", jarr stepElements
             ]
         )
 
@@ -385,15 +440,15 @@ module StructuredDataHelpers =
     /// `"en"`) — pass the richer overload when a page needs other values.
     let learningResource (name: string) (description: string) (teaches: string) : string =
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "LearningResource"
-                "name", box name
-                "description", box description
-                "learningResourceType", box "Reference"
-                "educationalLevel", box "Beginner"
-                "teaches", box teaches
-                "inLanguage", box "en"
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "LearningResource"
+                "name", jstr name
+                "description", jstr description
+                "learningResourceType", jstr "Reference"
+                "educationalLevel", jstr "Beginner"
+                "teaches", jstr teaches
+                "inLanguage", jstr "en"
             ]
         )
 
@@ -409,27 +464,27 @@ module StructuredDataHelpers =
         (inLanguage: string)
         : string =
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "LearningResource"
-                "name", box name
-                "description", box description
-                "learningResourceType", box learningResourceType
-                "educationalLevel", box educationalLevel
-                "teaches", box teaches
-                "inLanguage", box inLanguage
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "LearningResource"
+                "name", jstr name
+                "description", jstr description
+                "learningResourceType", jstr learningResourceType
+                "educationalLevel", jstr educationalLevel
+                "teaches", jstr teaches
+                "inLanguage", jstr inLanguage
             ]
         )
 
     /// `Course` schema — name / provider (an `Organization`) / description.
     let course (name: string) (provider: string) (description: string) : string =
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "Course"
-                "name", box name
-                "provider", box (dict [ "@type", box "Organization"; "name", box provider ])
-                "description", box description
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "Course"
+                "name", jstr name
+                "provider", jobj [ "@type", jstr "Organization"; "name", jstr provider ]
+                "description", jstr description
             ]
         )
 
@@ -441,19 +496,18 @@ module StructuredDataHelpers =
         let itemListElement =
             items
             |> List.mapi (fun i (name, url) ->
-                dict [
-                    "@type", box "ListItem"
-                    "position", box (i + 1)
-                    "name", box name
-                    "url", box url
-                ]
-                :> obj)
+                jobj [
+                    "@type", jstr "ListItem"
+                    "position", jint (i + 1)
+                    "name", jstr name
+                    "url", jstr url
+                ])
 
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "ItemList"
-                "itemListElement", box itemListElement
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "ItemList"
+                "itemListElement", jarr itemListElement
             ]
         )
 
@@ -468,10 +522,10 @@ module StructuredDataHelpers =
         (aggregateRating: (string * string) option)
         : string =
         let baseFields = [
-            "@context", box "https://schema.org"
-            "@type", box "Product"
-            "name", box name
-            "description", box description
+            "@context", jstr "https://schema.org"
+            "@type", jstr "Product"
+            "name", jstr name
+            "description", jstr description
         ]
 
         let withOffers =
@@ -479,7 +533,7 @@ module StructuredDataHelpers =
             | Some(price, currency) ->
                 baseFields
                 @ [
-                    "offers", box (dict [ "@type", box "Offer"; "price", box price; "priceCurrency", box currency ])
+                    "offers", jobj [ "@type", jstr "Offer"; "price", jstr price; "priceCurrency", jstr currency ]
                 ]
             | None -> baseFields
 
@@ -489,17 +543,15 @@ module StructuredDataHelpers =
                 withOffers
                 @ [
                     "aggregateRating",
-                    box (
-                        dict [
-                            "@type", box "AggregateRating"
-                            "ratingValue", box ratingValue
-                            "reviewCount", box reviewCount
-                        ]
-                    )
+                    jobj [
+                        "@type", jstr "AggregateRating"
+                        "ratingValue", jstr ratingValue
+                        "reviewCount", jstr reviewCount
+                    ]
                 ]
             | None -> withOffers
 
-        serialise (dict withRating)
+        serialise (jobj withRating)
 
     /// `VideoObject` schema — name / description / thumbnail URL / upload
     /// date (ISO-8601) / content URL. Missing values pass through as the
@@ -512,13 +564,13 @@ module StructuredDataHelpers =
         (contentUrl: string)
         : string =
         serialise (
-            dict [
-                "@context", box "https://schema.org"
-                "@type", box "VideoObject"
-                "name", box name
-                "description", box description
-                "thumbnailUrl", box thumbnailUrl
-                "uploadDate", box uploadDate
-                "contentUrl", box contentUrl
+            jobj [
+                "@context", jstr "https://schema.org"
+                "@type", jstr "VideoObject"
+                "name", jstr name
+                "description", jstr description
+                "thumbnailUrl", jstr thumbnailUrl
+                "uploadDate", jstr uploadDate
+                "contentUrl", jstr contentUrl
             ]
         )

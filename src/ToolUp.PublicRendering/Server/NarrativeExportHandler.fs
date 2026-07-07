@@ -73,7 +73,7 @@ module NarrativeExportHandler =
         fun _next (ctx: HttpContext) -> task {
             let format =
                 match ctx.Request.Query.TryGetValue "format" with
-                | true, values when values.Count > 0 -> Some(values.[0])
+                | true, values when values.Count > 0 -> Some(values[0])
                 | _ -> None
 
             match format with
@@ -132,7 +132,7 @@ module NarrativeExportHandler =
                             let idx =
                                 match ctx.Request.Query.TryGetValue "table" with
                                 | true, values when values.Count > 0 ->
-                                    match System.Int32.TryParse values.[0] with
+                                    match System.Int32.TryParse values[0] with
                                     | true, n -> n
                                     | _ -> 0
                                 | _ -> 0

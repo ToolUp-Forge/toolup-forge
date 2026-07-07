@@ -102,7 +102,7 @@ let lineOf (source: string) (offset: int) : int =
     let mutable line = 1
 
     for i in 0 .. min (offset - 1) (source.Length - 1) do
-        if source.[i] = '\n' then
+        if source[i] = '\n' then
             line <- line + 1
 
     line
@@ -146,7 +146,7 @@ let relative (absolute: string) : string =
 /// into the finding so callers control the displayed path.
 let scanOpens (classify: string -> string option) (filename: string) (source: string) : SourceFinding list = [
     for m in openPattern.Matches source do
-        let opened = m.Groups.[1].Value
+        let opened = m.Groups[1].Value
 
         match classify opened with
         | Some detail ->
@@ -230,7 +230,7 @@ let private declPattern =
 /// Declared module/namespace paths in a source text.
 let declaredNamespaces (source: string) : string list = [
     for m in declPattern.Matches source do
-        yield m.Groups.[1].Value
+        yield m.Groups[1].Value
 ]
 
 let private touches (a: string) (b: string) : bool =
@@ -249,7 +249,7 @@ let crossModuleOpenFindings (units: ModuleUnit list) : SourceFinding list = [
 
         for (filename, source) in unit.Files do
             for m in openPattern.Matches source do
-                let opened = m.Groups.[1].Value
+                let opened = m.Groups[1].Value
 
                 match otherDecls |> List.tryFind (fun (_, d) -> touches opened d) with
                 | Some(ownerUnit, d) ->

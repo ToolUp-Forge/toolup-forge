@@ -68,14 +68,14 @@ let tests =
             // Tombstone purged; the live chunk survives.
             let! remaining = vs.ListChunks scope true
             Expect.hasLength remaining 1 "only the tombstoned chunk is hard-removed"
-            Expect.equal (fst remaining.[0]) "doc:chunk:1" "the live chunk is untouched"
+            Expect.equal (fst remaining[0]) "doc:chunk:1" "the live chunk is untouched"
 
             // Audit event lands in the team's scope with the reclaim outcome.
             let! events = eventStore.ReadByType("t1", "KnowledgeVacuumCompleted")
             Expect.hasLength events 1 "one KnowledgeVacuumCompleted per purged scope"
-            Expect.stringContains events.[0].Payload "\"ChunksRemoved\":1" "records the purged count"
-            Expect.stringContains events.[0].Payload "\"ScopeKey\":\"team:t1\"" "records the scope key"
-            Expect.stringContains events.[0].Payload "BytesReclaimed" "carries a reclaimed-bytes figure"
+            Expect.stringContains events[0].Payload "\"ChunksRemoved\":1" "records the purged count"
+            Expect.stringContains events[0].Payload "\"ScopeKey\":\"team:t1\"" "records the scope key"
+            Expect.stringContains events[0].Payload "BytesReclaimed" "carries a reclaimed-bytes figure"
         }
 
         testCaseAsync "sweep over a scope with no eligible tombstones purges nothing and stays silent"

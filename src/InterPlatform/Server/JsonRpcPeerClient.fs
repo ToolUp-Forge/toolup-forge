@@ -131,7 +131,7 @@ module JsonRpcPeerClient =
                         let _, range = FSharpType.GetFunctionElements cur
                         FSharpValue.MakeFunction(cur, (fun arg -> build (collected @ [ arg ]) range))
                     elif isLongRunning then
-                        let u = retType.GetGenericArguments().[0]
+                        let u = retType.GetGenericArguments()[0]
 
                         longRunningMethod
                             .MakeGenericMethod(u)

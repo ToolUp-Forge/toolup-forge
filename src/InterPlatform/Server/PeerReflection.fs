@@ -37,7 +37,7 @@ module internal PeerReflection =
                 let dom, range = FSharpType.GetFunctionElements cur
                 loop (dom :: acc) range
             else
-                List.rev acc, cur.GetGenericArguments().[0]
+                List.rev acc, cur.GetGenericArguments()[0]
 
         loop [] t
 

@@ -60,7 +60,7 @@ type InMemoryIdempotencyStore(?capacity: int) =
                         false
                     else
                         let node = order.AddLast eventId
-                        seen.[eventId] <- node
+                        seen[eventId] <- node
 
                         if seen.Count > cap then
                             let oldest = order.First

@@ -131,7 +131,7 @@ let tests =
 
             Expect.equal summary.Outcomes.Length 3 "every hook produced an outcome"
 
-            let names = summary.Outcomes |> List.map (fun o -> o.HookName) |> Set.ofList
+            let names = summary.Outcomes |> List.map _.HookName |> Set.ofList
             Expect.equal names (Set.ofList [ "a"; "b"; "c" ]) "all hook names present"
             Expect.equal (LifecycleSummary.completedCount summary) 3 "all completed"
             Expect.equal audit.TypeNames [ "TenantProvisioned" ] "provision marker emitted"

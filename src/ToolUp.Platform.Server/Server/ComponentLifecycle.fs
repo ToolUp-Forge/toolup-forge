@@ -69,20 +69,20 @@ module ComponentLifecycle =
 
         let indeg =
             edges
-            |> List.fold (fun (m: Map<ComponentId, int>) (_, b) -> m |> Map.add b (m.[b] + 1)) indeg0
+            |> List.fold (fun (m: Map<ComponentId, int>) (_, b) -> m |> Map.add b (m[b] + 1)) indeg0
 
         // Kahn's algorithm, selecting the next zero-indegree node in
         // registration order so the sort is deterministic + stable.
         let rec go (emitted: ComponentId list) (emittedSet: Set<ComponentId>) (indeg: Map<ComponentId, int>) =
             let next =
-                nodes |> List.tryFind (fun n -> not (emittedSet.Contains n) && indeg.[n] = 0)
+                nodes |> List.tryFind (fun n -> not (emittedSet.Contains n) && indeg[n] = 0)
 
             match next with
             | Some n ->
                 let indeg' =
                     edges
                     |> List.fold
-                        (fun (m: Map<ComponentId, int>) (a, b) -> if a = n then m |> Map.add b (m.[b] - 1) else m)
+                        (fun (m: Map<ComponentId, int>) (a, b) -> if a = n then m |> Map.add b (m[b] - 1) else m)
                         indeg
 
                 go (n :: emitted) (emittedSet |> Set.add n) indeg'

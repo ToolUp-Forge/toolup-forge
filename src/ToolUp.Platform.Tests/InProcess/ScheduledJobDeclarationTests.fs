@@ -114,11 +114,11 @@ let tests =
 
             Expect.equal logger.Warns.Length 1 "exactly one warn for the whole declaration list"
 
-            Expect.stringContains logger.Warns.[0] "Phase 9b.B" "warn cites the phase that surfaces the contract"
+            Expect.stringContains logger.Warns[0] "Phase 9b.B" "warn cites the phase that surfaces the contract"
 
-            Expect.stringContains logger.Warns.[0] "test.scan-a" "warn names the skipped handler(s)"
-            Expect.stringContains logger.Warns.[0] "test.scan-b" "warn names every skipped handler"
-            Expect.stringContains logger.Warns.[0] "NoJobScheduler" "warn diagnoses the root cause"
+            Expect.stringContains logger.Warns[0] "test.scan-a" "warn names the skipped handler(s)"
+            Expect.stringContains logger.Warns[0] "test.scan-b" "warn names every skipped handler"
+            Expect.stringContains logger.Warns[0] "NoJobScheduler" "warn diagnoses the root cause"
 
         testCase "single declaration registers handler and schedules under default _platform scope"
         <| fun _ ->
@@ -172,9 +172,9 @@ let tests =
             Expect.equal jobsB.Length 1 "team-b got its scheduled copy"
             Expect.equal jobsPlatform.Length 0 "_platform default does NOT apply when Scopes is explicit"
 
-            Expect.equal jobsA.[0].Idempotency.Value.Key "module-test.tenant-scan-team-a" "per-scope key for team-a"
+            Expect.equal jobsA[0].Idempotency.Value.Key "module-test.tenant-scan-team-a" "per-scope key for team-a"
 
-            Expect.equal jobsB.[0].Idempotency.Value.Key "module-test.tenant-scan-team-b" "per-scope key for team-b"
+            Expect.equal jobsB[0].Idempotency.Value.Key "module-test.tenant-scan-team-b" "per-scope key for team-b"
 
         testCase "re-registering the same declaration is idempotent (no duplicate JobDefinition)"
         <| fun _ ->
@@ -215,8 +215,8 @@ let tests =
 
             let jobs = scheduler.ListJobs "_platform" |> Async.RunSynchronously
             Expect.equal jobs.Length 1 "single job persisted"
-            Expect.equal jobs.[0].Idempotency.Value.Key "custom-key-shape" "operator-supplied key wins over auto-built"
-            Expect.equal jobs.[0].Idempotency.Value.TtlSeconds 3600 "operator-supplied TTL preserved"
+            Expect.equal jobs[0].Idempotency.Value.Key "custom-key-shape" "operator-supplied key wins over auto-built"
+            Expect.equal jobs[0].Idempotency.Value.TtlSeconds 3600 "operator-supplied TTL preserved"
 
         testCase "compose-time source tag is stamped on every scheduled job"
         <| fun _ ->
@@ -233,7 +233,7 @@ let tests =
             let jobs = scheduler.ListJobs "_platform" |> Async.RunSynchronously
 
             Expect.equal
-                (jobs.[0].Tags |> Map.tryFind "source")
+                (jobs[0].Tags |> Map.tryFind "source")
                 (Some "compose-time")
                 "auto-stamped source tag distinguishes module-declared crons from admin-UI-scheduled ones"
 
@@ -263,5 +263,5 @@ let tests =
             Expect.isTrue (Set.contains "test.also-valid" scheduledHandlers) "valid after-invalid still scheduled"
 
             Expect.equal logger.Warns.Length 1 "exactly one warn for the failed schedule"
-            Expect.stringContains logger.Warns.[0] "test.invalid" "warn names the failing handler"
+            Expect.stringContains logger.Warns[0] "test.invalid" "warn names the failing handler"
     ]

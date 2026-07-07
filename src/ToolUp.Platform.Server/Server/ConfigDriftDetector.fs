@@ -71,7 +71,7 @@ let rec private redact (node: JsonNode) : unit =
             // IMPORTANT: System.Text.Json.Nodes.JsonObject throws
             // InvalidOperationException if mutated during enumeration.
             // Snapshot the keys first (the `names` line below), then
-            // iterate the snapshot — never `for kvp in obj do … obj.[k] <- …`.
+            // iterate the snapshot — never `for kvp in obj do … obj[k] <- …`.
             // See docs/migrations/fablejsonconverter-to-stj.md
             // "JsonNode equivalents" for the canonical pattern.
             let names = obj |> Seq.map _.Key |> Seq.toArray
@@ -201,8 +201,8 @@ let rec private diffTokens
         |> Seq.fold
             (fun acc key ->
                 let childPath = if path = "" then key else $"{path}.{key}"
-                let p = prevObj.[key]
-                let c = currObj.[key]
+                let p = prevObj[key]
+                let c = currObj[key]
 
                 match isNull p, isNull c with
                 | true, true -> acc
@@ -257,11 +257,11 @@ let run (storage: IBlobStorage) (auditLog: IAuditLog) (logger: ILogger) (config:
         | Ok bytes ->
             try
                 let prevSnapshot = JsonNode.Parse(Encoding.UTF8.GetString bytes) :?> JsonObject
-                let prevConfig = prevSnapshot.["config"]
-                let currConfig = newSnapshot.["config"]
+                let prevConfig = prevSnapshot["config"]
+                let currConfig = newSnapshot["config"]
 
                 let prevHash =
-                    prevSnapshot.["companionSetHash"]
+                    prevSnapshot["companionSetHash"]
                     |> Option.ofObj
                     |> Option.map _.GetValue<string>()
 

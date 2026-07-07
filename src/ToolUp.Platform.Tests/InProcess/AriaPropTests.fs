@@ -110,7 +110,7 @@ let private onlyAriaOrRoleTest = test "every helper wraps an aria-* or role attr
 
     let offenders = [
         for m in matches do
-            let name = m.Groups.[1].Value
+            let name = m.Groups[1].Value
 
             if not (name.StartsWith "aria-" || name = "role") then
                 yield name

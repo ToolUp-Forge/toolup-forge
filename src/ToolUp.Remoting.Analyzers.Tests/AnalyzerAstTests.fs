@@ -37,7 +37,7 @@ let private analyze auditOptIn source =
     parse source |> Analyzer.analyzeParseTree auditOptIn
 
 let private codes (messages: Message list) =
-    messages |> List.map (fun m -> m.Code) |> List.sort
+    messages |> List.map _.Code |> List.sort
 
 // ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ let private astTests =
                 Expect.isNonEmpty m.Fixes "carries a placeholder codefix"
 
                 Expect.stringContains
-                    (m.Fixes |> List.head |> (fun f -> f.ToText))
+                    (m.Fixes |> List.head |> _.ToText)
                     "AllowAnonymous"
                     "codefix inserts the fail-closed placeholder")
         }
@@ -152,7 +152,7 @@ let private auditTests =
             Expect.equal (codes msgs) [ "TUR0002" ] "audited-gap flagged on opt-in"
 
             Expect.stringContains
-                (msgs |> List.head |> (fun m -> m.Fixes |> List.head |> (fun f -> f.ToText)))
+                (msgs |> List.head |> (fun m -> m.Fixes |> List.head |> _.ToText))
                 "Audit"
                 "codefix inserts the audit placeholder"
         }

@@ -20,7 +20,7 @@ module WebhookVerifier =
             let mutable diff = 0
 
             for i in 0 .. a.Length - 1 do
-                diff <- diff ||| (int a.[i] ^^^ int b.[i])
+                diff <- diff ||| (int a[i] ^^^ int b[i])
 
             diff = 0
 

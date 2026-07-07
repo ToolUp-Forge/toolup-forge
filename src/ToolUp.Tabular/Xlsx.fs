@@ -364,15 +364,15 @@ module Xlsx =
                 Error(sprintf "not a readable XLSX workbook: %s" ex.Message)
 
         match opened with
-        | Error message -> yield Error message
+        | Error message -> Error message
         | Ok document ->
             use document = document
 
             match document.WorkbookPart with
-            | null -> yield Error "not a readable XLSX workbook: no workbook part"
+            | null -> Error "not a readable XLSX workbook: no workbook part"
             | workbookPart ->
                 match resolveSheet workbookPart selection with
-                | Error message -> yield Error message
+                | Error message -> Error message
                 | Ok worksheetPart ->
                     let sharedStrings = loadSharedStrings workbookPart
                     let isDateStyle = buildDateStyleLookup workbookPart
@@ -424,8 +424,8 @@ module Xlsx =
                         match step with
                         | Ok Step.Finished -> go <- false
                         | Ok Step.Skip -> ()
-                        | Ok(Step.RowRead row) -> yield Ok row
+                        | Ok(Step.RowRead row) -> Ok row
                         | Error message ->
-                            yield Error message
+                            Error message
                             go <- false
     }

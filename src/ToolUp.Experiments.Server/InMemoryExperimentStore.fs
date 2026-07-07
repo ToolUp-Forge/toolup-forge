@@ -35,7 +35,7 @@ type InMemoryExperimentStore() =
         }
 
         member _.Set(scopeId, experiment) = async {
-            (scopeMap scopeId).[experiment.Id] <- experiment
+            (scopeMap scopeId)[experiment.Id] <- experiment
             return Ok()
         }
 

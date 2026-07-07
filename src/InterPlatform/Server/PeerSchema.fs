@@ -113,9 +113,9 @@ module PeerSchema =
         elif t.IsArray then
             ListOf(typeRef records (t.GetElementType()))
         elif t.IsGenericType && t.GetGenericTypeDefinition() = optionDef then
-            OptionOf(typeRef records (t.GetGenericArguments().[0]))
+            OptionOf(typeRef records (t.GetGenericArguments()[0]))
         elif t.IsGenericType && t.GetGenericTypeDefinition() = listDef then
-            ListOf(typeRef records (t.GetGenericArguments().[0]))
+            ListOf(typeRef records (t.GetGenericArguments()[0]))
         elif FSharpType.IsRecord t then
             // Reserve the name first so a self-referential record does not
             // recurse forever, then fill its fields.
@@ -142,7 +142,7 @@ module PeerSchema =
             retType.IsGenericType
             && retType.GetGenericTypeDefinition() = typedefof<PeerJobHandle<_>>
         then
-            typeRef records (retType.GetGenericArguments().[0]), LongRunningMethod
+            typeRef records (retType.GetGenericArguments()[0]), LongRunningMethod
         else
             typeRef records retType, ImmediateMethod
 

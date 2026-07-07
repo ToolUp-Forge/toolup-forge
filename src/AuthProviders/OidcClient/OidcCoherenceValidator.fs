@@ -115,27 +115,23 @@ let private looksLikeCiam (issuer: string) =
 let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
     // ─── Rule 1 — Issuer empty ──────────────────────────────
     if String.IsNullOrWhiteSpace cfg.Issuer then
-        yield
-            RuleError
-                "OidcAppConfig.Issuer is empty. Provide the identity provider's issuer URL — via OidcPresets.entraWorkforce / .entraExternalId / .auth0 / .generic, or via OidcAppConfig.create."
+        RuleError
+            "OidcAppConfig.Issuer is empty. Provide the identity provider's issuer URL — via OidcPresets.entraWorkforce / .entraExternalId / .auth0 / .generic, or via OidcAppConfig.create."
 
     // ─── Rule 2 — ClientId empty ────────────────────────────
     if String.IsNullOrWhiteSpace cfg.ClientId then
-        yield
-            RuleError
-                "OidcAppConfig.ClientId is empty. Provide the app-registration client id (defaults the access-token audience the server-side validator binds against)."
+        RuleError
+            "OidcAppConfig.ClientId is empty. Provide the app-registration client id (defaults the access-token audience the server-side validator binds against)."
 
     // ─── Rule 3 — RedirectUri empty ─────────────────────────
     if String.IsNullOrWhiteSpace cfg.RedirectUri then
-        yield
-            RuleError
-                "OidcAppConfig.RedirectUri is empty. Provide the registered callback URL (e.g. `https://app.example.com/auth/callback`)."
+        RuleError
+            "OidcAppConfig.RedirectUri is empty. Provide the registered callback URL (e.g. `https://app.example.com/auth/callback`)."
 
     // ─── Rule 4 — `openid` scope missing ────────────────────
     if not (List.contains "openid" cfg.Scopes) then
-        yield
-            RuleError
-                "OidcAppConfig.Scopes does not contain `openid`. The OIDC spec requires it on every authorize request; the issuer will reject sign-in (and the nonce-binding check in handleCallback assumes an id_token is returned, which requires the `openid` scope)."
+        RuleError
+            "OidcAppConfig.Scopes does not contain `openid`. The OIDC spec requires it on every authorize request; the issuer will reject sign-in (and the nonce-binding check in handleCallback assumes an id_token is returned, which requires the `openid` scope)."
 
     // ─── Rule 5 — Issuer not HTTPS ──────────────────────────
     if
@@ -143,12 +139,11 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
         && not (isHttps cfg.Issuer)
         && not (isDevAcceptableHttp cfg.Issuer)
     then
-        yield
-            RuleWarning(
-                sprintf
-                    "OidcAppConfig.Issuer (`%s`) is not `https://`. Production OIDC deployments require TLS — the issuer's discovery document and JWKS endpoint are fetched over the wire on every JWKS refresh."
-                    cfg.Issuer
-            )
+        RuleWarning(
+            sprintf
+                "OidcAppConfig.Issuer (`%s`) is not `https://`. Production OIDC deployments require TLS — the issuer's discovery document and JWKS endpoint are fetched over the wire on every JWKS refresh."
+                cfg.Issuer
+        )
 
     // ─── Rule 6 — RedirectUri not HTTPS ─────────────────────
     if
@@ -156,12 +151,11 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
         && not (isHttps cfg.RedirectUri)
         && not (isDevAcceptableHttp cfg.RedirectUri)
     then
-        yield
-            RuleWarning(
-                sprintf
-                    "OidcAppConfig.RedirectUri (`%s`) is not `https://`. Production OIDC issuers reject non-localhost http:// redirect URIs at the authorize endpoint as a phishing-defence."
-                    cfg.RedirectUri
-            )
+        RuleWarning(
+            sprintf
+                "OidcAppConfig.RedirectUri (`%s`) is not `https://`. Production OIDC issuers reject non-localhost http:// redirect URIs at the authorize endpoint as a phishing-defence."
+                cfg.RedirectUri
+        )
 
     // ─── Preset-aware rules (7–11) ──────────────────────────
     match cfg.Preset with
@@ -174,30 +168,27 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
             label = "entra-workforce"
             && not (cfg.Issuer.Contains "login.microsoftonline.com")
         then
-            yield
-                RuleWarning(
-                    sprintf
-                        "Preset `entra-workforce` declared but OidcAppConfig.Issuer is `%s`, which does not contain `login.microsoftonline.com`. `OidcPresets.entraWorkforce` is for workforce Entra ID / Azure AD only — for Entra External ID use `OidcPresets.entraExternalId`."
-                        cfg.Issuer
-                )
+            RuleWarning(
+                sprintf
+                    "Preset `entra-workforce` declared but OidcAppConfig.Issuer is `%s`, which does not contain `login.microsoftonline.com`. `OidcPresets.entraWorkforce` is for workforce Entra ID / Azure AD only — for Entra External ID use `OidcPresets.entraExternalId`."
+                    cfg.Issuer
+            )
 
         // Rule 8 — entra-external-id + non-CIAM issuer.
         if label = "entra-external-id" && not (looksLikeCiam cfg.Issuer) then
-            yield
-                RuleWarning(
-                    sprintf
-                        "Preset `entra-external-id` declared but OidcAppConfig.Issuer is `%s`, which doesn't look like a CIAM issuer (`{tenant}.ciamlogin.com/{tenant}/v2.0` or a custom-domain equivalent). Verify the preset matches your identity provider."
-                        cfg.Issuer
-                )
+            RuleWarning(
+                sprintf
+                    "Preset `entra-external-id` declared but OidcAppConfig.Issuer is `%s`, which doesn't look like a CIAM issuer (`{tenant}.ciamlogin.com/{tenant}/v2.0` or a custom-domain equivalent). Verify the preset matches your identity provider."
+                    cfg.Issuer
+            )
 
         // Rule 9 — auth0 preset but Microsoft-shaped issuer.
         if label = "auth0" && cfg.Issuer.Contains "microsoftonline.com" then
-            yield
-                RuleWarning(
-                    sprintf
-                        "Preset `auth0` declared but OidcAppConfig.Issuer is `%s`, which is a Microsoft Entra issuer. Did you mean `OidcPresets.entraWorkforce`?"
-                        cfg.Issuer
-                )
+            RuleWarning(
+                sprintf
+                    "Preset `auth0` declared but OidcAppConfig.Issuer is `%s`, which is a Microsoft Entra issuer. Did you mean `OidcPresets.entraWorkforce`?"
+                    cfg.Issuer
+            )
 
         // Rule 10 — preset auto-added scopes dropped by override.
         // Severity is preset-aware: EntraWorkforce dropping its
@@ -218,26 +209,24 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
                     (String.concat "; " missing)
 
             if label = "entra-workforce" then
-                yield RuleError message
+                RuleError message
             else
-                yield RuleWarning message
+                RuleWarning message
 
         // Rule 11 — informational provenance.
-        yield
-            RuleOk(
-                sprintf
-                    "preset `%s` applied (issuer form: %s; auto-added scopes: [%s]; expects decodable access token: %b)"
-                    label
-                    (PresetKind.issuerForm kind)
-                    (String.concat "; " added)
-                    (PresetKind.expectsDecodableAccessToken kind)
-            )
+        RuleOk(
+            sprintf
+                "preset `%s` applied (issuer form: %s; auto-added scopes: [%s]; expects decodable access token: %b)"
+                label
+                (PresetKind.issuerForm kind)
+                (String.concat "; " added)
+                (PresetKind.expectsDecodableAccessToken kind)
+        )
 
         // Rule 12 — Generic + ValidateIdToken = None explicit opt-out.
         if label = "generic" && cfg.ValidateIdToken = None then
-            yield
-                RuleWarning
-                    "Preset `generic` was used with `ValidateIdToken = None` (explicit opt-out). The 0.4.3 default flipped to `Some true` because the `generic` preset has no per-IdP knowledge to judge whether the channel is internal or customer-facing. Confirm the post-callback channel is trusted; otherwise set `ValidateIdToken = Some true` so id_token signature / iss / aud / exp are re-checked on every callback."
+            RuleWarning
+                "Preset `generic` was used with `ValidateIdToken = None` (explicit opt-out). The 0.4.3 default flipped to `Some true` because the `generic` preset has no per-IdP knowledge to judge whether the channel is internal or customer-facing. Confirm the post-callback channel is trusted; otherwise set `ValidateIdToken = Some true` so id_token signature / iss / aud / exp are re-checked on every callback."
 ]
 
 let private joinMessages (msgs: string list) =

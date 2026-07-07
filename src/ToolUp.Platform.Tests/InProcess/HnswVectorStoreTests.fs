@@ -189,12 +189,12 @@ let tests =
                 let! second = store.Search [ Team "T" ] query 1
 
                 Expect.equal
-                    (first |> List.map (fun m -> m.ChunkId))
-                    (second |> List.map (fun m -> m.ChunkId))
+                    (first |> List.map _.ChunkId)
+                    (second |> List.map _.ChunkId)
                     "repeated identical queries must return the same chunk"
 
                 Expect.equal
-                    (first |> List.head |> (fun m -> m.ChunkId))
+                    (first |> List.head |> _.ChunkId)
                     "v2"
                     "v2 is the closest unit-vector to the query and must rank first"
             finally
