@@ -43,6 +43,11 @@
         <Compile Include="Contracts\ISmokeTestContract.fs" />
         <Compile Include="Contracts\IConfigValidatorContract.fs" />
         <Compile Include="Contracts\IEntityStoreContract.fs" />
+        <!-- Phase 68 — IGraphStore conformance pack + subset-floor corpus +
+             in-memory binding (the graph-shaped peer of the entity store). -->
+        <Compile Include="Graph\SubsetFloorCorpus.fs" />
+        <Compile Include="Graph\GraphStoreContract.fs" />
+        <Compile Include="Graph\InMemoryGraphStoreTests.fs" />
         <Compile Include="Contracts\IColumnMappingStoreContract.fs" />
         <!-- Phase 26 — deploy-plane substrate contract packs. -->
         <Compile Include="Contracts\IBuildOrchestratorContract.fs" />
@@ -908,6 +913,10 @@
         <!-- SDK substrate. ToolUp.Platform.Server transitively pulls Core. -->
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <!-- Phase 68 — graph store substrate: contract pack binds to the
+             in-memory default; Core carries the IGraphStore contract. -->
+        <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" />
         <!-- Phase 81 — BrandKit primitives test coverage lands in
              Platform.Tests rather than a dedicated test project (the
              primitive shape is small enough that splitting adds more

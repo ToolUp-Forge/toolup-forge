@@ -5,6 +5,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
 open ToolUp.Platform.Tests.AI
 open ToolUp.Platform.Tests.RAG
+open ToolUp.Platform.Tests.Graph
 
 let allTests =
     testList "ToolUp.Platform.Tests" [
@@ -202,6 +203,10 @@ let allTests =
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
         EntityQueryTests.tests
+        // Phase 68 — IGraphStore conformance pack bound to InMemoryGraphStore
+        // (six-rule GP12 audit + tenant isolation + subset-floor corpus +
+        // cycle-safe termination + out-of-subset-throws).
+        InMemoryGraphStoreTests.tests
         UsageLogTests.tests
         PrometheusMetricsSinkTests.tests
         OtelActivitySinkTests.tests
