@@ -382,6 +382,24 @@ type EntityStoreMode =
     /// via `ServerApp.withEntity<'T> registration`.
     | EnabledEntityStore
 
+/// Phase 68 — selects the graph-data store backend (`IGraphStore`), the
+/// graph-shaped peer of `IEntityStore`. Default: `InMemoryGraphStore` —
+/// the zero-dependency in-memory default (GP 2, no engine-by-default) is
+/// registered *lazily*, so a deployment that never calls a graph API pays
+/// nothing (GP 13). Engine companions (Kùzu / Neo4j / AGE) register their
+/// own `IGraphStore` singleton in DI and select `CustomGraphStore`.
+type GraphStoreMode =
+    /// The zero-dependency in-memory `IGraphStore` (from
+    /// `ToolUp.Graph.InMemory`), registered lazily. The default — a
+    /// consumer gets a working graph store with no external dependency.
+    /// Interprets the documented openCypher subset (the portability floor).
+    | InMemoryGraphStore
+    /// A companion-provided `IGraphStore` (e.g. an engine-backed
+    /// `ToolUp.Graph.Kuzu`) is registered in DI by the deployment;
+    /// `compose` registers no default and leaves the consumer's singleton
+    /// in place.
+    | CustomGraphStore
+
 /// Phase 161 — selects the time-series storage backend (`ITimeSeriesStore`)
 /// for high-frequency numeric/analytical series. Default:
 /// `NoTimeSeriesStore` — no `ITimeSeriesStore` registered, zero cost.
@@ -1963,6 +1981,12 @@ type ServerConfig = {
     /// with `EnabledEntityStore` to activate the substrate; entity
     /// types register via `ServerApp.withEntity<'T> registration`.
     EntityStore: EntityStoreMode
+    /// Phase 68 — graph-data store selection (`IGraphStore`). Default:
+    /// `InMemoryGraphStore` — the zero-dependency in-memory default is
+    /// registered lazily (GP 13: never instantiated until a graph API is
+    /// resolved). `CustomGraphStore` leaves an engine companion's own
+    /// `IGraphStore` singleton in place.
+    GraphStore: GraphStoreMode
     /// Phase 161 — time-series storage selection. Default:
     /// `NoTimeSeriesStore` — no `ITimeSeriesStore` registered, zero cost.
     /// `InMemoryTimeSeries` registers the dev/test in-memory default;
@@ -2925,6 +2949,9 @@ module ServerConfig =
         MappingDryRun = WarnOnValidationFailure
         OAuthRefresher = NoOAuthRefresher
         EntityStore = NoEntityStore
+        // Phase 68 — the in-memory graph store is the default (registered
+        // lazily; zero cost until a graph API is resolved — GP 13).
+        GraphStore = InMemoryGraphStore
         TimeSeriesStore = NoTimeSeriesStore
         TelemetrySink = NoTelemetrySink
         UsageMetering = NoUsageMetering

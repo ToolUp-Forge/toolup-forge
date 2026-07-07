@@ -547,6 +547,11 @@ let compose
     // companion singleton in place.
     registerTimeSeriesStore services config
 
+    // Phase 68 — graph-data substrate. InMemoryGraphStore (default)
+    // registers the zero-dependency in-memory IGraphStore lazily;
+    // CustomGraphStore leaves an engine companion's singleton in place.
+    registerGraphStore services config
+
     // Phase 163 — end-user telemetry sink. NoTelemetrySink (default)
     // registers the NoOpTelemetrySink; CustomTelemetrySink leaves the
     // consumer's companion sink in place.

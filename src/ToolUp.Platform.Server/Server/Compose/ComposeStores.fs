@@ -169,6 +169,24 @@ let registerTimeSeriesStore (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ITimeSeriesStore>(InMemoryTimeSeriesStore.create ())
         |> ignore
 
+/// Phase 68 — register the graph-data store. `InMemoryGraphStore` (the
+/// default) registers the zero-dependency in-memory `IGraphStore` via a
+/// *lazy* factory, so a deployment that never resolves `IGraphStore` pays
+/// nothing (GP 13) yet a consumer that does gets a working store with no
+/// external dependency (GP 2 — no engine-by-default). `CustomGraphStore`
+/// registers nothing, leaving an engine companion's own `IGraphStore`
+/// singleton in DI.
+let registerGraphStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.GraphStore with
+    | CustomGraphStore -> () // consumer / engine companion composed its own IGraphStore
+    | InMemoryGraphStore ->
+        // Lazy factory: the InMemoryGraphStore is not constructed until the
+        // first IGraphStore resolve, so an app with no graph usage allocates
+        // nothing.
+        services.AddSingleton<ToolUp.Graph.IGraphStore>(fun _ ->
+            ToolUp.Graph.InMemory.InMemoryGraphStore() :> ToolUp.Graph.IGraphStore)
+        |> ignore
+
 /// Phase 163 — register the end-user telemetry sink. `NoTelemetrySink`
 /// (the default) registers the `NoOpTelemetrySink` (a true no-op), so
 /// `ITelemetrySink` always resolves and emission sites are free at runtime

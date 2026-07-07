@@ -20,6 +20,11 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <!-- Phase 68 — the in-memory IGraphStore default (transitively pulls
+             ToolUp.Graph.Core, which carries the IGraphStore contract). The
+             GP-2 zero-dependency graph substrate; registered lazily by
+             ComposeStores.registerGraphStore. -->
+        <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.B follow-up Tests fsproj migration (2026-05-08): the
