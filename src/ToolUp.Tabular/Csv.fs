@@ -105,7 +105,7 @@ module Csv =
                 // contributed to it. A file ending in a clean
                 // newline yields nothing extra here.
                 if field.Length > 0 || fields.Count > 0 || malformed.IsSome then
-                    yield takeRecord ()
+                    takeRecord ()
             else
                 let c = char code
 
@@ -116,12 +116,12 @@ module Csv =
                     elif c = delimiter then
                         commitField ()
                     elif c = '\n' then
-                        yield takeRecord ()
+                        takeRecord ()
                     elif c = '\r' then
                         if reader.Peek() = int '\n' then
                             reader.Read() |> ignore
 
-                        yield takeRecord ()
+                        takeRecord ()
                     else
                         field.Append c |> ignore
                         state <- State.Unquoted
@@ -130,12 +130,12 @@ module Csv =
                         commitField ()
                         state <- State.FieldStart
                     elif c = '\n' then
-                        yield takeRecord ()
+                        takeRecord ()
                     elif c = '\r' then
                         if reader.Peek() = int '\n' then
                             reader.Read() |> ignore
 
-                        yield takeRecord ()
+                        takeRecord ()
                     else
                         // RFC 4180 forbids a bare quote inside an
                         // unquoted field; real-world exports contain
@@ -157,12 +157,12 @@ module Csv =
                         commitField ()
                         state <- State.FieldStart
                     elif c = '\n' then
-                        yield takeRecord ()
+                        takeRecord ()
                     elif c = '\r' then
                         if reader.Peek() = int '\n' then
                             reader.Read() |> ignore
 
-                        yield takeRecord ()
+                        takeRecord ()
                     else
                         // Content after a closing quote (`"ab"x`) —
                         // malformed. Mark the record and resync:

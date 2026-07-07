@@ -154,38 +154,33 @@ module Layout =
             // `tag "article"` rather than the `article` element helper —
             // inside `module Layout` the bare name resolves to the layout
             // function defined here, not the Giraffe element.
-            yield
-                tag "article" [ _class "bk-article" ] [
-                    yield
-                        tag "header" [ _class "bk-article-header" ] [
-                            yield! Slot.text BkText.eyebrow spec.Eyebrow
-                            yield h1 [ _class "bk-article-title" ] [ str spec.Title ]
-                            yield! Slot.text (fun lede -> p [ _class "bk-article-lede" ] [ str lede ]) spec.Lede
-                            yield! Slot.list (div [ _class "bk-article-meta" ]) spec.Meta
-                        ]
-                    yield! Slot.wrap (fun h -> figure [ _class "bk-article-hero" ] [ h ]) spec.Hero
-                    yield
-                        div [ _class "bk-article-columns" ] [
-                            yield div [ _class "bk-article-body" ] [ spec.Body ]
-                            yield! Slot.wrap (fun a -> aside [ _class "bk-article-aside" ] [ a ]) spec.Aside
-                        ]
+            tag "article" [ _class "bk-article" ] [
+                tag "header" [ _class "bk-article-header" ] [
+                    yield! Slot.text BkText.eyebrow spec.Eyebrow
+                    h1 [ _class "bk-article-title" ] [ str spec.Title ]
+                    yield! Slot.text (fun lede -> p [ _class "bk-article-lede" ] [ str lede ]) spec.Lede
+                    yield! Slot.list (div [ _class "bk-article-meta" ]) spec.Meta
                 ]
+                yield! Slot.wrap (fun h -> figure [ _class "bk-article-hero" ] [ h ]) spec.Hero
+                div [ _class "bk-article-columns" ] [
+                    div [ _class "bk-article-body" ] [ spec.Body ]
+                    yield! Slot.wrap (fun a -> aside [ _class "bk-article-aside" ] [ a ]) spec.Aside
+                ]
+            ]
         ]
 
     /// Marketing / product landing page.
     let landing (chrome: ChromeSpec) (spec: LandingSpec) : XmlNode =
         LayoutShell.page chrome "bk-layout-landing" [
-            yield
-                section [ _class "bk-landing-hero" ] [
-                    yield
-                        div [ _class "bk-landing-hero-copy" ] [
-                            yield! Slot.text BkText.eyebrow spec.HeroEyebrow
-                            yield h1 [ _class "bk-landing-title" ] [ str spec.HeroTitle ]
-                            yield! Slot.text (fun lede -> p [ _class "bk-landing-lede" ] [ str lede ]) spec.HeroLede
-                            yield! Slot.list (div [ _class "bk-landing-actions" ]) spec.HeroActions
-                        ]
-                    yield! Slot.wrap (fun v -> div [ _class "bk-landing-visual" ] [ v ]) spec.HeroVisual
+            section [ _class "bk-landing-hero" ] [
+                div [ _class "bk-landing-hero-copy" ] [
+                    yield! Slot.text BkText.eyebrow spec.HeroEyebrow
+                    h1 [ _class "bk-landing-title" ] [ str spec.HeroTitle ]
+                    yield! Slot.text (fun lede -> p [ _class "bk-landing-lede" ] [ str lede ]) spec.HeroLede
+                    yield! Slot.list (div [ _class "bk-landing-actions" ]) spec.HeroActions
                 ]
+                yield! Slot.wrap (fun v -> div [ _class "bk-landing-visual" ] [ v ]) spec.HeroVisual
+            ]
             yield!
                 spec.Sections
                 |> List.map (fun s -> section [ _class "bk-landing-section" ] [ s ])
@@ -194,11 +189,10 @@ module Layout =
     /// Analytics / status dashboard.
     let dashboard (chrome: ChromeSpec) (spec: DashboardSpec) : XmlNode =
         LayoutShell.page chrome "bk-layout-dashboard" [
-            yield
-                tag "header" [ _class "bk-dashboard-header" ] [
-                    yield h1 [ _class "bk-dashboard-title" ] [ str spec.Title ]
-                    yield! Slot.list (div [ _class "bk-dashboard-toolbar" ]) spec.Toolbar
-                ]
+            tag "header" [ _class "bk-dashboard-header" ] [
+                h1 [ _class "bk-dashboard-title" ] [ str spec.Title ]
+                yield! Slot.list (div [ _class "bk-dashboard-toolbar" ]) spec.Toolbar
+            ]
             yield! Slot.list (section [ _class "bk-dashboard-kpis bk-grid" ]) spec.Kpis
             yield! Slot.list (section [ _class "bk-dashboard-panels bk-grid" ]) spec.Panels
         ]
