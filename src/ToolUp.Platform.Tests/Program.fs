@@ -115,6 +115,11 @@ let allTests =
         WarningConfigValidatorTests.tests
         ErrorConfigValidatorTests.tests
         ConfigValidatorAggregatorTests.tests
+        // Security-class classification guard: every shipped auth/secret/
+        // CSRF/provenance validator declares IsSecurityClass = true (so a
+        // new one can't drift out of the SkipPreflight always-run set) +
+        // the aggregator derives that set from the member.
+        ConfigValidatorSecurityClassTests.tests
         // Phase 279 — stable component identity (ComponentId).
         ComponentIdentityTests.tests
         // Phase 280 — introspectable composition manifest.

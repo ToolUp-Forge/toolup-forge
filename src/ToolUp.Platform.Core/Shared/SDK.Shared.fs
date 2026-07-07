@@ -2097,9 +2097,9 @@ type ServerConfig = {
     /// caught.
     ///
     /// NOTE: `SkipPreflight` does NOT bypass the security-class
-    /// validators (`ConfigValidatorAggregator.securityClassValidatorNames`
-    /// — the auth / secret / cross-instance-auth-state guards). Those
-    /// always run and still abort startup on `Error`; a single boolean
+    /// validators (every validator that also implements
+    /// `ISecurityClassValidator` — the auth / secret / cross-instance-auth-state
+    /// guards). Those always run and still abort startup on `Error`; a single boolean
     /// must not silently disable identity-spoofing / unauthenticated-
     /// access protection. The skipped validators' names are logged at
     /// `Warn` so the bypass is visible in the deployment log.

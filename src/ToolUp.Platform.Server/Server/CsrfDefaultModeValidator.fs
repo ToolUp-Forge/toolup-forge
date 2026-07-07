@@ -44,6 +44,10 @@ open ToolUp.Platform.ConfigValidation
 type CsrfDefaultModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // Cookie auth without server-side CSRF is a request-forgery
+    // surface — security-class, so its warning must survive SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "csrf-default-mode"
         member _.Timeout = timeout

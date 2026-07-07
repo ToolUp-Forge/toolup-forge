@@ -14,10 +14,13 @@ open ToolUp.Platform.ConfigValidation
 // (capped at the 10s aggregator budget), captures outcomes for the
 // `/dev/inspect` validators panel, and aborts startup if any returns
 // `Error`. `ServerConfig.SkipPreflight = true` skips only the
-// non-security-class validators — `securityClassValidatorNames` (auth /
-// secret / cross-instance-auth-state guards) always run and still abort
-// on `Error`, so one boolean cannot silently disable the auth-class
-// safety net.
+// non-security-class validators — every validator that also implements
+// the `ISecurityClassValidator` marker (auth / secret /
+// cross-instance-auth-state guards) always runs and still aborts on
+// `Error`, so one boolean cannot silently disable the auth-class safety
+// net. The always-run set is derived from the validators themselves (a
+// type-test for the marker), not a name set the aggregator maintains, so
+// a newly-authored security validator cannot drift out of it.
 //
 // **Registration timing**: must be called near the END of `compose`,
 // after every companion has had a chance to call
@@ -74,12 +77,12 @@ let private truncate (max: int) (s: string) =
 
 /// Throw with a cryptic-startup-friendly message when two or more
 /// validators share the same `Name`. Names are the dictionary key for
-/// outcome aggregation and the lookup key for `securityClassValidatorNames`
-/// + the `/dev/inspect` validators panel — a collision silently
-/// overwrites whichever entry was registered last and the operator sees
-/// only one of the two probes running, with no diagnostic surface.
-/// Called from `validate` immediately after `collectValidators` so the
-/// failure fires BEFORE the first `Validate` invocation.
+/// outcome aggregation and the `/dev/inspect` validators panel — a
+/// collision silently overwrites whichever entry was registered last and
+/// the operator sees only one of the two probes running, with no
+/// diagnostic surface. Called from `validate` immediately after
+/// `collectValidators` so the failure fires BEFORE the first `Validate`
+/// invocation.
 ///
 /// Surfaces the colliding validators' .NET type names so the operator
 /// can grep `src/` for the registration sites. The interface itself
@@ -203,30 +206,20 @@ let private logOutcome (logger: ILogger option) (o: ValidatorOutcome) =
         | Warning msg -> l.Warn(sprintf "[preflight] %s: Warning — %s (%dms)" o.Name msg o.ElapsedMs)
         | Error msg -> l.Error(sprintf "[preflight] %s: Error — %s (%dms)" o.Name msg o.ElapsedMs, None)
 
-/// Validators whose bypass is an identity-spoofing, unauthenticated-
-/// access, plaintext-secret, or cross-instance-auth-state hole. These
-/// run even when `ServerConfig.SkipPreflight = true`. `SkipPreflight`
-/// is an emergency-boot lever for a noisy companion probe — it must
-/// never be the single switch that silently disables every auth-class
-/// guard at once. Keyed by the validator's `Name`, which
-/// `IConfigValidator` defines as a stable identifier contract
-/// (see `IConfigValidator.fs` — Name is the registration key).
-let securityClassValidatorNames: Set<string> =
-    Set.ofList [
-        "header-auth-mode" // HeaderAuthProvider in an auth Mode (spoofable X-User-Id)
-        "oidc-config-completeness" // auth=oidc with unset issuer (insecure fallback)
-        "oidc-audience-binding" // auth=oidc with unbound audience (token reuse)
-        "sse-auth-mode" // QueryParamFallback SSE in an auth Mode (userId leak)
-        "encrypted-secret-store-mode" // plaintext secrets in an auth Mode
-        "oauth-secret-encryption-mode" // OAuth connector tokens persisted to a non-encrypting store (Phase 138)
-        "oauth-state-store-instance" // in-memory OAuth state under multi-instance
-        "per-scope-key-resolver-distributed" // crypto-shred key resolver under multi-instance
-        "auto-bootstrap-dev-admin-mode" // first sign-in auto-promotes to Platform Admin (privilege-escalation surface) — warning must survive the SkipPreflight bypass lever
-        "csrf-default-mode" // cookie auth without server-side CSRF (Phase 129) — warning must survive SkipPreflight
-    ]
-
+/// A validator is security-class when it opts in by also implementing
+/// the `ISecurityClassValidator` marker — its bypass is an
+/// identity-spoofing, unauthenticated-access, plaintext-secret, or
+/// cross-instance-auth-state hole. Security-class validators run even
+/// when `ServerConfig.SkipPreflight = true`. `SkipPreflight` is an
+/// emergency-boot lever for a noisy companion probe — it must never be
+/// the single switch that silently disables every auth-class guard at
+/// once. The classification is a type-test for the marker, not a name set
+/// here, so a newly-authored security validator can't drift out of the
+/// always-run set.
 let private isSecurityClass (v: IConfigValidator) =
-    securityClassValidatorNames.Contains v.Name
+    match box v with
+    | :? ISecurityClassValidator -> true
+    | _ -> false
 
 /// Run a validator list in parallel (per-validator + global timeout),
 /// log each outcome, throw `ConfigPreflightFailedException` if any
@@ -256,8 +249,8 @@ let private runSet (logger: ILogger option) (validators: IConfigValidator list) 
 ///
 /// `skipPreflight = true` skips the *non*-security-class validators
 /// (the emergency-boot lever for a noisy companion probe) but still
-/// runs every `securityClassValidatorNames` validator and still aborts
-/// on their `Error` — a single boolean must not silently disable the
+/// runs every `ISecurityClassValidator` and still aborts on
+/// their `Error` — a single boolean must not silently disable the
 /// auth-class guards. The skipped validators' names are enumerated in
 /// the log so the bypass is visible at `Warn` level, not just in the
 /// `/dev/inspect` panel. Returns the outcomes so the caller can
@@ -267,8 +260,8 @@ let validate (services: IServiceCollection) (logger: ILogger option) (skipPrefli
 
     // Fire BEFORE any Validate call — a name collision otherwise
     // silently drops one probe's outcome in the dictionary-keyed
-    // aggregation paths (e.g. /dev/inspect, securityClassValidatorNames
-    // lookup). Diagnostic surface > silent overwrite.
+    // aggregation paths (e.g. /dev/inspect). Diagnostic surface > silent
+    // overwrite.
     assertUniqueValidatorNames validators
 
     if skipPreflight then

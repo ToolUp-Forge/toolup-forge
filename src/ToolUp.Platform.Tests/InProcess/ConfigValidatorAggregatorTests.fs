@@ -24,6 +24,18 @@ let private mkValidator (name: string) (timeout: TimeSpan) (body: unit -> Async<
         member _.Validate() = body ()
     }
 
+/// A security-class stub — implements the `ISecurityClassValidator`
+/// marker, which is what the aggregator type-tests to build the
+/// always-run-under-SkipPreflight set (the classification is an opt-in
+/// marker on the validator, not a name lookup).
+let private mkSecurityValidator (name: string) (timeout: TimeSpan) (body: unit -> Async<ValidationResult>) =
+    { new IConfigValidator with
+        member _.Name = name
+        member _.Timeout = timeout
+        member _.Validate() = body ()
+      interface ISecurityClassValidator
+    }
+
 let tests =
     testList "ConfigValidatorAggregator" [
         testCase "Returns empty list when no validators registered (GP 13 — lightweight default)"
@@ -106,12 +118,12 @@ let tests =
 
         testCase "SkipPreflight = true — a security-class Error validator STILL runs and throws"
         <| fun _ ->
-            // "header-auth-mode" is in securityClassValidatorNames —
+            // A validator implementing ISecurityClassValidator always runs —
             // SkipPreflight must not silently disable the auth guards.
             let services = ServiceCollection()
 
             services.AddSingleton<IConfigValidator>(
-                mkValidator "header-auth-mode" (TimeSpan.FromSeconds 1.0) (fun () -> async {
+                mkSecurityValidator "header-auth-mode" (TimeSpan.FromSeconds 1.0) (fun () -> async {
                     return Error "spoofable auth"
                 })
             )
@@ -133,7 +145,7 @@ let tests =
             |> ignore
 
             services.AddSingleton<IConfigValidator>(
-                mkValidator "sse-auth-mode" (TimeSpan.FromSeconds 1.0) (fun () -> async { return Ok })
+                mkSecurityValidator "sse-auth-mode" (TimeSpan.FromSeconds 1.0) (fun () -> async { return Ok })
             )
             |> ignore
 

@@ -44,6 +44,10 @@ open ToolUp.Platform.ConfigValidation
 type HeaderAuthProviderModeValidator(config: ServerConfig, authProvider: IAuthProvider, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // HeaderAuthProvider in an auth Mode is a spoofable-X-User-Id identity
+    // hole — security-class, so it runs even under SkipPreflight (GP 4).
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "header-auth-mode"
         member _.Timeout = timeout

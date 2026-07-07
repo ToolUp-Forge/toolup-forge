@@ -37,10 +37,13 @@ open ToolUp.Platform.ConfigValidation
 // rotation procedure. A single-instance / non-public deployment, or one
 // that already has the key provisioned, is silent.
 //
-// Not security-class: an unmanaged-but-present key is a governance /
-// operability concern, not an unauthenticated-access hole, so it must
-// not be bypassed-as-emergency-lever the way `SkipPreflight` handles
-// security-class refusals — it is a plain `Warning`.
+// Security-class (provenance): an auto-generated, operator-unknown HMAC
+// signing key is a security-critical secret with no rotation / backup
+// governance — the same class of hole as an unmanaged auth secret. It is
+// a `Warning` (never a refusal — the auto-generate path still functions),
+// but a security-class one: the warning must survive the `SkipPreflight`
+// emergency-boot lever rather than being silently bypassable, so an
+// operator can't lose the provenance signal by flipping one boolean.
 
 /// Wave 19 — warns when the share-token HMAC signing key would be
 /// auto-generated (absent from `ISecretStore` at startup) in a
@@ -51,6 +54,11 @@ open ToolUp.Platform.ConfigValidation
 type ShareTokenSigningKeyProvenanceValidator
     (config: ServerConfig, secretStore: Secrets.ISecretStore, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    // An auto-generated, unmanaged share-token HMAC key is a
+    // security-critical secret with no rotation / backup governance —
+    // security-class, so its Warning must survive SkipPreflight (see file header).
+    interface ISecurityClassValidator
 
     interface IConfigValidator with
         member _.Name = "share-token-signing-key-provenance"

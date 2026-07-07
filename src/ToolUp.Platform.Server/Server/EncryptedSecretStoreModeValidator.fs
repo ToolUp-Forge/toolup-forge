@@ -65,6 +65,10 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
             | "gcp-secret-manager" -> true
             | _ -> false
 
+    // Plaintext secrets in an auth Mode is a secret-exposure hole —
+    // security-class, so it runs even under SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "encrypted-secret-store-mode"
         member _.Timeout = timeout

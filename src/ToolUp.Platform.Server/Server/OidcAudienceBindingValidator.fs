@@ -52,6 +52,10 @@ let private envValue (name: string) =
 type OidcAudienceBindingValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // An unbound OIDC audience allows cross-service token reuse — a
+    // token-forgery hole; security-class, so it survives SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "oidc-audience-binding"
         member _.Timeout = timeout

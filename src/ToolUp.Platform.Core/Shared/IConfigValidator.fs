@@ -16,9 +16,9 @@ open System
 //
 // `ServerConfig.SkipPreflight = true` skips only the non-security-class
 // validators; the auth / secret / cross-instance-auth-state guards
-// (`ConfigValidatorAggregator.securityClassValidatorNames`) always run
-// and still abort on `Error`. One boolean must not silently disable the
-// identity-spoofing / unauthenticated-access protection.
+// (every validator that also implements `ISecurityClassValidator`) always
+// run and still abort on `Error`. One boolean must not silently disable
+// the identity-spoofing / unauthenticated-access protection.
 //
 // The pattern is a near-clone of `IHealthCheck`, with two
 // intentional divergences:
@@ -95,6 +95,25 @@ type IConfigValidator =
     /// concurrently (the aggregator runs every validator in parallel)
     /// and must not assume in-memory state between calls.
     abstract member Validate: unit -> Async<ValidationResult>
+
+/// Opt-in marker for an `IConfigValidator` whose bypass under
+/// `ServerConfig.SkipPreflight = true` is a security hole — an
+/// identity-spoofing, unauthenticated-access, plaintext-secret, CSRF, or
+/// cross-instance-auth-state guard. A validator that *also* implements
+/// this interface runs even when `SkipPreflight` is set and still aborts
+/// on `Error`, so a boolean bypass lever intended for a noisy companion
+/// probe can never silently disable an auth-class guard. The aggregator
+/// derives its always-run set by testing for this marker, so a new
+/// security validator cannot drift out of a hand-maintained name set.
+///
+/// **Additive (GP 11).** Absence of the marker is the non-security
+/// classification: an existing `IConfigValidator` implementer — in this
+/// repo or downstream — needs no change and keeps a deployment's prior
+/// preflight behaviour byte-for-byte. The marker has no members, so a
+/// validator opts into security-class simply by adding
+/// `interface ISecurityClassValidator` alongside its `IConfigValidator`
+/// implementation.
+type ISecurityClassValidator = interface end
 
 module ValidationResult =
     /// String form of the variant — used in log lines, abort summary,

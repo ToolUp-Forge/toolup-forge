@@ -68,6 +68,10 @@ let secretStoreProvidesEncryptionAtRest (store: Secrets.ISecretStore) =
 type OAuthSecretEncryptionModeValidator(config: ServerConfig, secretStore: Secrets.ISecretStore, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // OAuth connector tokens persisted to a non-encrypting store is a
+    // secret-exposure hole — security-class, so it runs even under SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "oauth-secret-encryption-mode"
         member _.Timeout = timeout

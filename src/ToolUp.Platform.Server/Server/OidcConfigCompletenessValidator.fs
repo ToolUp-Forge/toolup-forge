@@ -50,6 +50,10 @@ let private envValue (name: string) =
 type OidcConfigCompletenessValidator(?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // An unset OIDC issuer falls back to an insecure default — an
+    // unauthenticated-access hole; security-class, so it survives SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "oidc-config-completeness"
         member _.Timeout = timeout

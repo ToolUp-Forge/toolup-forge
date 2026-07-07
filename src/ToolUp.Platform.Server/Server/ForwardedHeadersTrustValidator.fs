@@ -92,6 +92,11 @@ open ToolUp.Platform.ConfigValidation
 type ForwardedHeadersTrustValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // Unscoped forwarded-header trust is an identity-adjacent spoof surface
+    // (X-Forwarded-Proto / X-Forwarded-For) — security-class, so it runs even
+    // under SkipPreflight and the auth-mode escalation can't be bypassed.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "forwarded-headers-trust"
         member _.Timeout = timeout

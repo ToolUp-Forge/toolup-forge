@@ -72,6 +72,10 @@ type PerScopeKeyResolverDistributedValidator
     (encryptionKeyResolver: IBlobEncryptionKeyResolver option, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // A crypto-shred key resolver under multi-instance is a
+    // cross-instance key-state hole — security-class, so it runs even under SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "per-scope-key-resolver-distributed"
         member _.Timeout = timeout

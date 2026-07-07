@@ -48,6 +48,10 @@ open ToolUp.Platform.ConfigValidation
 type SseAuthModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // QueryParamFallback SSE in an auth Mode leaks userId via URL — an
+    // identity-leak hole; security-class, so it survives SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "sse-auth-mode"
         member _.Timeout = timeout

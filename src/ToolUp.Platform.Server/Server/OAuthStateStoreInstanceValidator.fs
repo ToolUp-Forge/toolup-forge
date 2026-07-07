@@ -34,6 +34,10 @@ open ToolUp.Platform.ConfigValidation
 type OAuthStateStoreInstanceValidator(config: ServerConfig, stateStore: IOAuthStateStore, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // In-memory OAuth state under multi-instance is a
+    // cross-instance-auth-state hole — security-class, so it runs even under SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "oauth-state-store-instance"
         member _.Timeout = timeout

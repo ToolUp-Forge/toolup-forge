@@ -29,6 +29,10 @@ open ToolUp.Platform.ConfigValidation
 type CorsConfigValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // Wildcard-origins + AllowCredentials is a cross-origin auth
+    // misconfiguration — security-class, so it runs even under SkipPreflight (GP 4).
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "cors-config"
         member _.Timeout = timeout

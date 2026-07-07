@@ -244,6 +244,7 @@
         <Compile Include="InProcess\WarningConfigValidatorTests.fs" />
         <Compile Include="InProcess\ErrorConfigValidatorTests.fs" />
         <Compile Include="InProcess\ConfigValidatorAggregatorTests.fs" />
+        <Compile Include="InProcess\ConfigValidatorSecurityClassTests.fs" />
         <!-- Phase 279 — stable component identity (ComponentId): derivation
              determinism, module id stable across rename + re-order,
              default-derived determinism, duplicate explicit id rejected at

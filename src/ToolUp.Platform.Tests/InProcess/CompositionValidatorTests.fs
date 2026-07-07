@@ -213,7 +213,15 @@ let tests =
         // ── the validator is non-security-class (SkipPreflight bypasses) ─
         testCase "the composition validator is not a security-class validator"
         <| fun _ ->
+            let manifest = CompositionManifest.empty
+            let refs = { ToolSources = [] }
+
+            let validator =
+                CompositionValidator.CompositionWellFormednessValidator(manifest, refs) :> IConfigValidator
+
             Expect.isFalse
-                (ConfigValidatorAggregator.securityClassValidatorNames.Contains CompositionValidator.ValidatorName)
+                (match box validator with
+                 | :? ISecurityClassValidator -> true
+                 | _ -> false)
                 "well-formedness is bypassable by the SkipPreflight emergency-boot lever (GP 11)"
     ]

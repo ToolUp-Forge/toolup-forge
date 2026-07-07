@@ -30,6 +30,11 @@ open ToolUp.Platform.ConfigValidation
 type AutoBootstrapDevAdminModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
+    // First-sign-in auto-promotion to Platform Admin is a
+    // privilege-escalation surface — security-class, so its warning
+    // must survive SkipPreflight.
+    interface ISecurityClassValidator
+
     interface IConfigValidator with
         member _.Name = "auto-bootstrap-dev-admin-mode"
         member _.Timeout = timeout
