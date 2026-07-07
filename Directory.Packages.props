@@ -220,6 +220,7 @@
     <PackageVersion Include="System.CodeDom" Version="10.0.6" />
     <PackageVersion Include="System.Collections.Immutable" Version="8.0" />
     <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.2" />
+    <PackageVersion Include="System.DirectoryServices.Protocols" Version="10.0.7" />
     <PackageVersion Include="System.Formats.Asn1" Version="10.0.7" />
     <PackageVersion Include="System.IO.Hashing" Version="10.0.6" />
     <PackageVersion Include="System.IO.Packaging" Version="10.0.6" />

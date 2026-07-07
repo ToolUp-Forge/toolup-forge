@@ -380,6 +380,7 @@
         <Compile Include="InProcess\OidcSignInContractTests.fs" />
         <Compile Include="InProcess\GitHubAuthProviderTests.fs" />
         <Compile Include="InProcess\GitHubAppFlowTests.fs" />
+        <Compile Include="InProcess\LdapAuthProviderTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
         <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
@@ -960,6 +961,11 @@
         <!-- GitHub App OAuth credential-flow companion — IOAuthCredentialFlow
              contract binding + rotation/revoke tests via stub GitHub. -->
         <ProjectReference Include="..\DataSources\GitHub\GitHubApp.fsproj" />
+        <!-- LDAP / Active Directory auth companion — bind-based identity,
+             group→role mapping, health probe, and security-class config
+             validator, all exercised via an in-memory fake directory (no
+             live LDAP server needed). -->
+        <ProjectReference Include="..\AuthProviders\LdapActiveDirectory\LdapActiveDirectory.fsproj" />
         <!-- Phase 23 — Reporting Core (Markdown/Html renderers + IReportRenderer). -->
         <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
         <!-- Phase 11.B follow-up — companion DLLs replacing prior

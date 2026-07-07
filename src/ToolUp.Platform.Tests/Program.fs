@@ -192,6 +192,7 @@ let allTests =
         OidcSignInContractTests.tests
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
+        LdapAuthProviderTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
         TenantLifecycleAggregatorTests.tests

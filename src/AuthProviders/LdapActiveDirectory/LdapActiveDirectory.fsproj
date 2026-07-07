@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.LdapActiveDirectory</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.LdapActiveDirectory</AssemblyName>
+    <Description>LDAP / Active Directory server-side IAuthProvider for ToolUp.Platform: authenticates against Active Directory or generic LDAP by binding as the user (proof-of-possession), with service-bind user search, RFC-4515 injection-safe filters, LDAPS-by-default channel binding, nested-group resolution, and group-to-role mapping. For regulated / on-premise / air-gapped deployments that cannot reach an external OIDC issuer. System.DirectoryServices.Protocols only, no vendor SDK.</Description>
+    <PackageTags>fsharp;sdk;auth;ldap;active-directory;ad;server;provider;on-premise</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="LdapConfig.fs" />
+    <Compile Include="LdapDirectory.fs" />
+    <Compile Include="LdapGroupMapper.fs" />
+    <Compile Include="LdapConnection.fs" />
+    <Compile Include="LdapAuthProvider.fs" />
+    <Compile Include="LdapHealthCheck.fs" />
+    <Compile Include="LdapConfigValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- AspNetCore framework reference for HttpContext visibility. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- LDAP directory access. Managed API that P/Invokes the OS LDAP
+         client (wldap32 on Windows, OpenLDAP libldap on Linux/macOS);
+         no third-party vendor SDK reaches ToolUp.Platform.* (GP 1). -->
+    <PackageReference Include="System.DirectoryServices.Protocols" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>
