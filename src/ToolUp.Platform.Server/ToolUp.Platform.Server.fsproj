@@ -34,7 +34,7 @@
     </ItemGroup>
     <ItemGroup>
         <!-- 0.4.4 — ToolUp.Remoting.{Json,Server,Giraffe,AspNetCore}
-             folded in from the formerly-separate sibling repo. The
+             folded in from a formerly-separate repository. The
              transport is a forge implementation detail; one package
              instead of four. Namespace `ToolUp.Remoting.*` is preserved
              across every moved file so every existing

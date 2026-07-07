@@ -86,7 +86,7 @@ module HelloWorld.Server
 
 let echoRoutine (input: string) : string = sprintf "echo: %s" input
 
-// Server.fs (in the App composition root, src/ToolUpApp-Server/Server.fs)
+// Server.fs (in the app's server composition root)
 open HelloWorld
 
 let helloApiFactory (ctx: HttpContext) : HelloApi =

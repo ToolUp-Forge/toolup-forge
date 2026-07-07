@@ -391,7 +391,7 @@ Public surface (`ToolUp.RAG.Evaluation`):
 | Module | API |
 |---|---|
 | `EvalTypes` | `Fixture`, `LabelledQuery`, `CorpusEntry`, `QueryResult`, `EvalReport` |
-| `FixtureLoader` | `load : string -> Fixture` (Newtonsoft, accepts the JSON shape under `fixtures/`) |
+| `FixtureLoader` | `load : string -> Fixture` (System.Text.Json via the `FableConverters` options; accepts the JSON shape under `fixtures/`) |
 | `Metrics` | `recallAt`, `ndcgAt`, `mrr`, `buildReport` (binary-relevance nDCG with ideal-ordering normalisation) |
 | `RetrievalEval` | `evaluate : IRetrievalPipeline -> Fixture -> Async<EvalReport>`; `seedCorpus`; `detectRegression : tolerance -> baseline -> candidate -> Result<unit, string>` |
 

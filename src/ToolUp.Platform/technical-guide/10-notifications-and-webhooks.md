@@ -25,7 +25,7 @@ The synchronous `Broadcast` method is a shim over an internal `task { ... }` —
 
 ### Serialization rule (non-negotiable)
 
-Notifications cross the manual server→Fable boundary — they are not ToolUp.Remoting. `NotificationHandler` serialises every envelope with `FableJsonConverter` (under the preserved `Fable.Remoting.Json` namespace; ships inside `ToolUp.Platform.Server`). Do **not** replace this with `Newtonsoft.Json.Converters.DiscriminatedUnionConverter` — the output shape `{"Case":"X","Fields":[...]}` is not parseable by `Fable.SimpleJson` on the client. Do **not** add a `CamelCasePropertyNamesContractResolver`. This matches the existing SSE rule documented in `ToolUp.AI/TECHNICAL_GUIDE.md`; AI inherited the rule, notifications reaffirm it.
+Notifications cross the manual server→Fable boundary — they are not ToolUp.Remoting. `NotificationHandler` serialises every envelope with the System.Text.Json options from `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()` (ships inside `ToolUp.Platform.Server`). Do **not** replace this with a plain `JsonSerializerOptions()` — without the converter set, F# DUs serialise to the bare-STJ `{"Case":"X","Fields":[...]}` contract shape, which `Fable.SimpleJson` on the client cannot parse. Do **not** add a camelCase naming policy on this path. This matches the existing SSE rule documented in `ToolUp.AI/TECHNICAL_GUIDE.md`; AI inherited the rule, notifications reaffirm it.
 
 ### Named events, not generic `data:`
 
@@ -58,9 +58,9 @@ The transport is swappable — the default `InMemoryNotificationChannel` works i
 
 **Scope isolation is structural, not a filter.** The Redis companion uses one Redis channel per `scopeId` (`toolup:notifications:{scopeId}`) — subscribers for scope A listen on a different Redis channel from scope B and cannot see B's publishes even if the post-hoc filter is bugged. Any new companion should enforce scope isolation at the transport layer in the same way (dedicated topic / subject / stream per `scopeId`), not via subscriber-side filtering on a shared topic. GP 4 (team isolation) is enforced by the transport, not by application code.
 
-**Serialization shape.** Serialise envelopes with `Fable.Remoting.Json.FableJsonConverter` for the same reason as the SSE path — this is future-proofing, so a distributed deployment can replay an envelope straight from the transport into an SSE stream without a re-serialisation hop. `Notification` is a DU; without the converter, `Fable.SimpleJson` on future client-side replay paths could not deserialise the `{"Case":"X","Fields":[...]}` shape Newtonsoft produces by default.
+**Serialization shape.** Serialise envelopes with `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()` for the same reason as the SSE path — this is future-proofing, so a distributed deployment can replay an envelope straight from the transport into an SSE stream without a re-serialisation hop. `Notification` is a DU; without the converter set, `Fable.SimpleJson` on future client-side replay paths could not deserialise the `{"Case":"X","Fields":[...]}` shape bare System.Text.Json produces by default.
 
-**Wiring.** Apps resolve a channel from environment variables and pass it via `ServerApp.withNotifications (Some channel)` on their `ServerApp`/`AIServerApp`/`RAGServerApp` pipeline; that forwards it into the underlying `compose` / `composeWithAI` / `composeWithRAG` call. The reference resolver in `src/ToolUpApp-Server/Server.fs` keys on `TOOLUP_NOTIFICATION_CHANNEL` with a fail-soft policy — a selected-but-misconfigured backend falls back to the in-process default with a warning, matching the `TOOLUP_BLOB_STORAGE` pattern. `None` keeps the in-process default; core `compose` constructs `InMemoryNotificationChannel` itself so the `logger` capture stays in core.
+**Wiring.** Apps resolve a channel from environment variables and pass it via `ServerApp.withNotifications (Some channel)` on their `ServerApp`/`AIServerApp`/`RAGServerApp` pipeline; that forwards it into the underlying `compose` / `composeWithAI` / `composeWithRAG` call. A typical resolver in the consuming app's server entry point (`Server.fs`) keys on `TOOLUP_NOTIFICATION_CHANNEL` with a fail-soft policy — a selected-but-misconfigured backend falls back to the in-process default with a warning, matching the `TOOLUP_BLOB_STORAGE` pattern. `None` keeps the in-process default; core `compose` constructs `InMemoryNotificationChannel` itself so the `logger` capture stays in core.
 
 **Contract test binding.** Bind your companion to the shared `INotificationChannelContract` pack (`src/ToolUp.Platform.Tests/Contracts/INotificationChannelContract.fs`) — the same pack the in-memory default passes. When external infrastructure is required, env-gate the binding with `ptestCase "skipped — ENV_VAR not set"` so CI shows "skipped" rather than silent green; `RedisNotificationChannelTests.fs` demonstrates the pattern. Every new companion must pass the pack unchanged — if it doesn't, the interface is the bug.
 
@@ -220,7 +220,7 @@ The dispatcher uses a reserved `UserId = "system"` for system-driven publishes (
 | SMS | `Twilio` | no | yes | One POST per recipient (no native fan-out); Basic auth, token from `ISecretStore`. |
 | Push | `WebPush` | no | no | Uses the `WebPush` NuGet package (RFC 8030 + VAPID). VAPID private key in `ISecretStore`; public key + subject in env. Includes `examples/sw.js` reference service worker. |
 
-Every companion follows the established pattern: `<Vendor>NotificationSink.fs` + `.Server.props` + `.fsproj` + `paket.references` under `src/NotificationChannels/<Family>/<Vendor>/`. The reference app's `ToolupApp-Server.fsproj` imports all four `.Server.props` files plus `<ProjectReference>`s; deployments not using a vendor strip the import + project reference to remove the corresponding client SDK from the bundle.
+Every companion follows the established pattern: `<Vendor>NotificationSink.fs` + `.Server.props` + `.fsproj` + `paket.references` under `src/NotificationChannels/<Family>/<Vendor>/`. A consuming server project (`ToolupApp-Server.fsproj` in the template scaffold) imports all four `.Server.props` files plus `<ProjectReference>`s; deployments not using a vendor strip the import + project reference to remove the corresponding client SDK from the bundle.
 
 ### Six-rule portability audit (Phase 9c)
 
@@ -252,7 +252,7 @@ The pipeline has four collaborators:
 
 ### Two outbound JSON shapes
 
-Outbound delivery payloads to third-party receivers use plain `System.Text.Json` with `JsonNamingPolicy.CamelCase` — receivers (Slack incoming-webhook handlers, Zapier triggers, customer ingestion) expect camelCase, not Newtonsoft's `Case`/`Fields` DU shape. Persisted audit-event payloads and the delivery log use `Fable.Remoting.Json.FableJsonConverter` because the admin UI deserialises them via Fable.Remoting / SimpleJson. Two converters, one per audience — do not unify them.
+Outbound delivery payloads to third-party receivers use plain `System.Text.Json` with `JsonNamingPolicy.CamelCase` — receivers (Slack incoming-webhook handlers, Zapier triggers, customer ingestion) expect camelCase plain JSON, not the F# DU wire shape the `FableConverters` options produce. Persisted audit-event payloads and the delivery log use the `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options because the admin UI deserialises them via ToolUp.Remoting / `Fable.SimpleJson`. Two converter setups, one per audience — do not unify them.
 
 ### HMAC-SHA256 signed delivery
 

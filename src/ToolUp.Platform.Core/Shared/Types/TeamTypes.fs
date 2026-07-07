@@ -87,9 +87,9 @@ type PlatformInfo = { RequiresAuth: bool }
 /// setting `AnyAuthenticatedUser`), or (b) ship their own team UI via
 /// `ClientConfig.TeamManager = ExternalTeamManager …` that calls
 /// `TeamApi.CreateTeam` directly and relies on the server-side gate. A
-/// 2026-06-27 consumer audit found at least one in-tree configurer
-/// (`cookbook-apps/expense-receipt-tracker` sets `AnyAuthenticatedUser`),
-/// so dropping the legacy `CreateTeam` / `GetTeamCreationPolicy` surface
+/// 2026-06-27 consumer audit found at least one downstream consumer
+/// app configuring a self-service policy (`AnyAuthenticatedUser`), so
+/// dropping the legacy `CreateTeam` / `GetTeamCreationPolicy` surface
 /// would be a breaking change, not a cleanup — keep it.
 ///
 /// Lives in `TeamTypes.fs` (not next to the other `ServerConfig`

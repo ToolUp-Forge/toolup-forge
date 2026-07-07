@@ -292,7 +292,7 @@ Paths are JSON-pointer-like dotted: `summary.revenue`, `rows[2].region`. Non-JSO
 
 ### Lineage as a query layer
 
-`ILineageStore` has no dedicated persistence. Every `Record` call writes a `ModuleEvent` to `IEventStore` with `EventType = "LineageLink"` and `SourceModule = "_platform.lineage"` (constants in `Shared/LineageTypes.fs`). Queries fan out from `IEventStore.ReadByType(scopeId, "LineageLink")`, deserialize payloads (Newtonsoft + FableJsonConverter for lossless `LinkType` DU round-trip), and walk the in-memory edge list:
+`ILineageStore` has no dedicated persistence. Every `Record` call writes a `ModuleEvent` to `IEventStore` with `EventType = "LineageLink"` and `SourceModule = "_platform.lineage"` (constants in `Shared/LineageTypes.fs`). Queries fan out from `IEventStore.ReadByType(scopeId, "LineageLink")`, deserialize payloads (the STJ `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options for lossless `LinkType` DU round-trip), and walk the in-memory edge list:
 
 - `GetAncestors` / `GetDescendants`: BFS from the root in the chosen orientation. Visited-link set prevents cycles. Producer `ModuleName` is recorded against the node on the link's `ToObjectId`; upstream-only nodes get `ModuleName = None`.
 - `GetPath`: BFS along outgoing edges (`From -> To`), returning the shortest edge-path or `None`.

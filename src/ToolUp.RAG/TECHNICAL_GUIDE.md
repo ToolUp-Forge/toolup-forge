@@ -449,7 +449,7 @@ This is a hard contract: implementing `IRetrievalTracer` is allowed, but reachin
 
 ### `KnowledgeRetrieved` payload — wire format
 
-`KnowledgeRetrievedPayload` (in `RetrievalTracers.fs`) is the JSON-serialised shape, distinct from `RetrievalTrace`. The serialiser uses `FableJsonConverter` (matches every other event in the platform), and `VectorScope` is flattened to a string form (`"platform"` / `"deployment"` / `"team:<id>"`) before serialisation so the payload is readable without the SDK on hand. The reserved literals — `KnowledgeRetrievedEventType = "KnowledgeRetrieved"` and `RetrievalTraceSourceModule = "_platform.retrieval"` — are wire-format contracts; downstream consumers match on these strings. Renaming either is a breaking change for trace consumers.
+`KnowledgeRetrievedPayload` (in `RetrievalTracers.fs`) is the JSON-serialised shape, distinct from `RetrievalTrace`. The serialiser uses the STJ `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options (matches every other event in the platform), and `VectorScope` is flattened to a string form (`"platform"` / `"deployment"` / `"team:<id>"`) before serialisation so the payload is readable without the SDK on hand. The reserved literals — `KnowledgeRetrievedEventType = "KnowledgeRetrieved"` and `RetrievalTraceSourceModule = "_platform.retrieval"` — are wire-format contracts; downstream consumers match on these strings. Renaming either is a breaking change for trace consumers.
 
 The event's `ScopeId` is the per-request resolved scope (`"team-<id>"` for team users, `"_platform"` for platform-mode / anonymous requests). Trace consumers filter the event store by scope to recover per-team retrieval streams without scanning the global event store. Indexing shape is identical to other platform events (`PersistentEventStore` puts each `_platform/events/<scopeId>/` partition on its own append-log file).
 
@@ -465,9 +465,9 @@ The lower flush interval is the only deviation from production wiring. Every oth
 
 ### Fixture format (`FixtureLoader`)
 
-JSON fixtures use a flat string form for `VectorScope` (`"platform"`, `"deployment"`, `"team:<id>"`) because Newtonsoft cannot round-trip the `VectorScope` DU without a custom converter, and the harness intentionally avoids depending on `Fable.Remoting.Json` for fixture parsing — fixtures are user-authored JSON, not platform wire payloads. `parseScope` does the lookup and `failwithf`s on unknown values so a typo in a fixture aborts the run rather than producing silent zero recall.
+JSON fixtures use a flat string form for `VectorScope` (`"platform"`, `"deployment"`, `"team:<id>"`) so fixtures stay hand-authorable and readable alongside `EventStoreRetrievalTracer` payloads — fixtures are user-authored JSON, not platform wire payloads, so the loader parses the scope explicitly rather than routing it through a DU converter. `parseScope` does the lookup and `failwithf`s on unknown values so a typo in a fixture aborts the run rather than producing silent zero recall.
 
-The three JSON-shape records are `[<CLIMutable>]` so Newtonsoft can deserialise them via reflection; F# records with no parameterless constructor cannot otherwise be deserialised. Arrays (`'a array`) rather than F# lists are used at the JSON boundary because Newtonsoft handles them natively; `toCorpusEntry` / `toLabelledQuery` convert to lists for downstream code. Null guards on `corpus` and `queries` keep an empty fixture from crashing the loader.
+The three JSON-shape records are `[<CLIMutable>]` and deserialise through the STJ `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options, constructed once at module level in `FixtureLoader`. Arrays (`'a array`) rather than F# lists are used at the JSON boundary to keep the fixture shape plain-JSON-friendly; `toCorpusEntry` / `toLabelledQuery` convert to lists for downstream code. Null guards on `corpus` and `queries` keep an empty fixture from crashing the loader.
 
 ### Metrics (`Metrics`)
 

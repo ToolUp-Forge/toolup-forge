@@ -43,12 +43,12 @@ let register (licenseKey: string) =
 ### Integration
 
 - `AgGridEnterprise.Client.props` injects the `.fs` file into the client project's compile order, before `Client.fs`
-- `src/ToolUpApp-Client/Client.fs` calls `AgGridEnterprise.register licenseKey` before `Client.run` to set the license key
+- The consuming app's client entry point (`Client.fs`) calls `AgGridEnterprise.register licenseKey` before `Client.run` to set the license key
 - Module rendering code (`AgGrid.grid [...]`, `AgChart.chart [...]`) is unchanged — the Fable bindings in `AgGrid.fs`/`AgChart.fs` import from `ag-grid-react`/`ag-charts-react` (Community packages) and work identically with both editions
 
 ### Community-only deployment
 
-Remove the `.props` import from `ToolupApp-Client.fsproj` and the `AgGridEnterprise.register` call from `Client.fs`. The app builds and runs with Community-level grid features. `AgChart.fs` falls back to `AgChartsCommunityModule.setup()` via `ensureChartsModulesRegistered()`.
+Remove the `.props` import from the consuming app's client `.fsproj` and the `AgGridEnterprise.register` call from `Client.fs`. The app builds and runs with Community-level grid features. `AgChart.fs` falls back to `AgChartsCommunityModule.setup()` via `ensureChartsModulesRegistered()`.
 
 ### Rules
 

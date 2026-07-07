@@ -57,7 +57,7 @@ Five event types written to `IEventStore` under `SourceModule = "_platform.jobs"
 | `JobFailed` | `{ JobId; ScopeId; Handler; RunId; Attempt; Error; DurationMs }` |
 | `JobDeadLettered` | `{ JobId; ScopeId; Handler; Error; Attempts }` |
 
-Serialised via `FableJsonConverter` so the admin UI deserialises them through `Fable.SimpleJson` without an extra converter (canonical SDK pattern). Audit emission failures log `Warn` and are swallowed — the event-store write must never fail the primary dispatch.
+Serialised via the STJ `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options so the admin UI deserialises them through `Fable.SimpleJson` without an extra converter (canonical SDK pattern). Audit emission failures log `Warn` and are swallowed — the event-store write must never fail the primary dispatch.
 
 ### Persistence layout
 
@@ -274,7 +274,7 @@ Two event types written to `IEventStore` under `SourceModule = DataIngestor.Data
 | `IngestionRunCompleted` | `IDataSource.Query` succeeded and `IDataObjectStore.Save` returned `Ok` |
 | `IngestionRunFailed` | Any failure: config missing, connector unregistered, credential missing, `Connect`/`Query` returned `Error`, `Save` failed |
 
-Webhook subscribers (Phase 6d) and audit consumers pick these up automatically. Serialised via `FableJsonConverter` so admin UIs deserialise through `Fable.SimpleJson` without an extra converter (canonical SDK pattern).
+Webhook subscribers (Phase 6d) and audit consumers pick these up automatically. Serialised via the STJ `FableConverters` options so admin UIs deserialise through `Fable.SimpleJson` without an extra converter (canonical SDK pattern).
 
 ### Scheduled refresh
 
@@ -459,7 +459,7 @@ The endpoint is **runtime-gated only** by `ServerConfig.EnableDevEndpoints: bool
 
 A deployment enables it for itself with `{ ServerConfig.defaults with EnableDevEndpoints = true }`.
 
-**History.** Before Phase 11.B (2026-05-08) the endpoint was double-gated by `#if DEBUG` (compile-time) plus the runtime flag. The compile-time gate was removed when ToolUp.Platform stopped carrying compile-time `#if DEBUG` blocks — the OSS SDK does not assume Debug vs Release configuration; the runtime flag is now the sole gate. The default-off posture preserves the safety property: production deployments never expose the endpoint without explicit operator opt-in, which is a deliberate config decision rather than a build-flag accident. Apps that previously relied on the compile-time safety net can re-establish it App-side by reading `#if DEBUG` in their own composition root and setting `EnableDevEndpoints` accordingly (this is what the reference `ToolupApp-Server` does).
+**History.** Before Phase 11.B (2026-05-08) the endpoint was double-gated by `#if DEBUG` (compile-time) plus the runtime flag. The compile-time gate was removed when ToolUp.Platform stopped carrying compile-time `#if DEBUG` blocks — the OSS SDK does not assume Debug vs Release configuration; the runtime flag is now the sole gate. The default-off posture preserves the safety property: production deployments never expose the endpoint without explicit operator opt-in, which is a deliberate config decision rather than a build-flag accident. Apps that previously relied on the compile-time safety net can re-establish it App-side by reading `#if DEBUG` in their own composition root and setting `EnableDevEndpoints` accordingly (the reference consumer composition roots do exactly this).
 
 ### Sections in the report
 
@@ -467,7 +467,7 @@ A deployment enables it for itself with `{ ServerConfig.defaults with EnableDevE
 {
   "Generated":     "2026-04-28T...",
   "BuildMode":     "Debug",
-  "PlatformMode":  "Team",
+  "Surfaces":      "Team",
   "Caller": {
     "UserId":          "u_abc123",
     "IsAnonymous":     false,
@@ -496,7 +496,7 @@ The endpoint emits the *caller's* `StorageScope` only — never another team's. 
 
 ### Wire format
 
-Hand-shaped DTO of primitives, strings, and lists. Every F# DU on the report path (`PlatformMode`, `ModulePermission`, scope-error sum types) is pre-mapped to its case-name as a `string` so the JSON is human-readable in `curl` / a browser, with no `{"Case": "X", "Fields": [...]}` shape. Serialisation goes through `Newtonsoft.Json + FableJsonConverter` (the SDK's canonical pattern; see "Consumer dependency contract" in the SDK README) for `option<T>` round-trip — `None` renders as `null`, `Some x` as the unwrapped value.
+Hand-shaped DTO of primitives, strings, and lists. Every F# DU on the report path (`SurfaceProfile` — rendered via `DeploymentConfig.surfacesLabel` — `ModulePermission`, scope-error sum types) is pre-mapped to a `string` so the JSON is human-readable in `curl` / a browser, with no `{"Case": "X", "Fields": [...]}` shape. Serialisation goes through the STJ `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options (the SDK's canonical pattern; see "Consumer dependency contract" in the SDK README) for `option<T>` round-trip — `None` renders as `null`, `Some x` as the unwrapped value.
 
 Both responses set `Cache-Control: no-store` so browser caches don't surprise developers with a stale view of mid-edit DI state.
 

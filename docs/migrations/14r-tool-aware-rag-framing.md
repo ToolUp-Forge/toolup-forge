@@ -44,8 +44,8 @@ is byte-for-byte unchanged (GP 11).
 
 The one optional cleanup: a consumer that hand-wrote a system-prompt nudge to route on-screen
 questions to `_platform_ui_inspect_active_module` can **remove** it — the SDK framing now covers the
-case. (`toolup-app`'s `platformPromptPrefix` is the reference example; removal is optional and does
-not change model behaviour.)
+case. (A downstream consumer's `platformPromptPrefix` is the reference example; removal is optional
+and does not change model behaviour.)
 
 ## Verification
 
