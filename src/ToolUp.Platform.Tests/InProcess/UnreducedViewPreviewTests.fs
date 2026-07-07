@@ -180,8 +180,9 @@ let private boundaryTests =
                 Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "UnreducedViewPreview.fs")
 
             Expect.isTrue (File.Exists path) $"expected seam file at {path}"
-            let contents = (File.ReadAllText path).ToLowerInvariant()
-            Expect.isFalse (contents.Contains "fuaran") $"{path} must carry no Fuaran token (GP 1)"
+            NeutralityTokens.assertNoBannedTokens path (File.ReadAllText path)
+
+            NeutralityTokens.skipUnlessExternalSource ()
     ]
 
 let tests =

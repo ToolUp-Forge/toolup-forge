@@ -248,8 +248,9 @@ let private boundaryTests =
 
             for path in seamFiles do
                 Expect.isTrue (File.Exists path) $"expected seam file at {path}"
-                let contents = (File.ReadAllText path).ToLowerInvariant()
-                Expect.isFalse (contents.Contains "fuaran") $"{path} must carry no Fuaran token (GP 1)"
+                NeutralityTokens.assertNoBannedTokens path (File.ReadAllText path)
+
+            NeutralityTokens.skipUnlessExternalSource ()
     ]
 
 // These cases subscribe to `NavigationRequest.subscribe` and fire

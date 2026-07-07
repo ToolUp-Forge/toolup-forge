@@ -188,8 +188,9 @@ let private zeroCostTests =
 
             for path in seamFiles do
                 Expect.isTrue (File.Exists path) (sprintf "expected seam file at %s" path)
-                let contents = (File.ReadAllText path).ToLowerInvariant()
-                Expect.isFalse (contents.Contains "fuaran") (sprintf "%s must carry no Fuaran token (GP 1)" path)
+                NeutralityTokens.assertNoBannedTokens path (File.ReadAllText path)
+
+            NeutralityTokens.skipUnlessExternalSource ()
     ]
 
 [<Tests>]

@@ -245,23 +245,13 @@ let private authorizerTests =
 
 // ─── 4. Open-core boundary + client-binding shape ─────────────────────
 
-/// Forge-banned vocabulary (a representative high-signal subset of the
-/// ToolUp-estate list) — a forge-public sample must reference no private
-/// project / product / strategy artefact. The renderer-neutral seam must
-/// accept a stranger to the substrate, so the toy is held to that bar.
-let private bannedTokens = [
-    "Fuaran"
-    "Diametrical"
-    "Concord"
-    "Xcelsys"
-    "TaxTimeMachine"
-    "KnowledgeMart"
-    "Marketplace-app"
-    "cookbook"
-    "CHEF-GUIDE"
-    "Vision Plan"
-    "Refine Roadmap"
-]
+// Forge-banned vocabulary — a forge-public sample must reference no
+// private project / product / strategy artefact. The token list itself
+// is private (publishing it here would leak exactly what the guard
+// hides), so it is loaded at run time via `NeutralityTokens` — local
+// file / env var, skip-loudly when absent, hardcoded public-safe canary
+// always enforced. The renderer-neutral seam must accept a stranger to
+// the substrate, so the toy is held to that bar.
 
 let private boundaryTests =
     testList "Open-core boundary + client-binding shape" [
@@ -272,12 +262,9 @@ let private boundaryTests =
             Expect.isNonEmpty files "the toy source files must be locatable from the test assembly"
 
             for path in files do
-                let text = File.ReadAllText path
+                NeutralityTokens.assertNoBannedTokens (Path.GetFileName path) (File.ReadAllText path)
 
-                for token in bannedTokens do
-                    Expect.isFalse
-                        (text.Contains token)
-                        $"{Path.GetFileName path} must not reference the banned token '{token}' (GP 1 / open-core)"
+            NeutralityTokens.skipUnlessExternalSource ()
 
         testCase "the client binding routes all four ClientHostCapabilities through the toy"
         <| fun _ ->

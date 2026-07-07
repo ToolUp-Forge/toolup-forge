@@ -530,6 +530,11 @@
              export is scope-isolated (a scope excludes another's usage); the
              NoOp default records nothing. -->
         <Compile Include="InProcess\HostedTreeUsageExportTests.fs" />
+        <!-- OSS-boundary neutrality-guard token source: loads the private
+             banned-vocabulary list from an untracked local file / env var
+             (skip-loudly when absent; hardcoded public-safe canary always
+             enforced). Shared by every OSS grep-guard test below. -->
+        <Compile Include="InProcess\NeutralityTokens.fs" />
         <!-- Phase 274 — hosted-tree content sanitization seam: script/iframe/
              javascript: URL / on* handler / inline style / unknown tag+attr
              stripped; safe HTML + markdown preserved; escape-first markdown;

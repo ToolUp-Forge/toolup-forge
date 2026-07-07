@@ -102,8 +102,8 @@ let private ossTests =
                 Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "HostStateProjection.fs")
 
             Expect.isTrue (File.Exists path) (sprintf "expected the seam file at %s" path)
-            let contents = (File.ReadAllText path).ToLowerInvariant()
-            Expect.isFalse (contents.Contains "fuaran") "the identity-bridge seam must name no private layer (GP 1)"
+            NeutralityTokens.assertNoBannedTokens path (File.ReadAllText path)
+            NeutralityTokens.skipUnlessExternalSource ()
     ]
 
 let tests =
