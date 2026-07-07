@@ -69,9 +69,11 @@ The server-side `IAuthProvider` only validates tokens the browser hands it — i
 
 ### Delegate registry
 
-`src/ToolUp.Platform/Client/AuthUIProvider.fs` owns a mutable `Map<string, Handler>` where `Handler = obj -> ReactElement -> ReactElement`. Companions call `AuthUIProvider.register tag handler` at module load (top-level `do` binding) — the shell calls `AuthUIProvider.gate authUI mode shell` on every render and dispatches to the matching handler. Missing handler fails loud with a message naming the `.Client.props` that needs to be imported.
+`src/ToolUp.Platform/Client/AuthUIProvider.fs` owns a tag-keyed `Map<string, AuthUIHandler>` where `AuthUIHandler = obj -> ReactElement -> ReactElement`. Companions export a `(tag, handler)` value (e.g. `ClerkRegister.handler`, `OidcRegister.handler`); consumers add them to `ClientConfig.Handlers.AuthUIHandlers` at compose time, and the shell calls `AuthUIProvider.gate authUI subjectKind shell` on every render, dispatching to the handler matching the active mode's tag. A missing handler fails loud (at `Client.run` validation, and defensively per-render) with a message naming the handler value that needs to be wired.
 
-The same registry serves Clerk (`src/AuthProviders/ClerkUI/`) and the generic OIDC client (`src/AuthProviders/OidcClient/`) — the core SDK never references either companion's types, and removing a companion's `.Client.props` import from the consuming client `.fsproj` removes its code from the Fable bundle.
+Selection in `ClientConfig.AuthUI` mirrors the registry's own keying: the vendor-neutral `ProviderAuthUI (tag, config)` case selects any registered companion by tag, with the provider-specific config payload handed to the handler (which unboxes it — the same sanctioned erasure boundary the handler signature already carries). Companions export typed smart constructors so consumers never box by hand — a Clerk deployment writes `AuthUI = ClerkRegister.authUI { PublishableKey = key }`. The protocol-named `OidcAuthUI` case remains as a typed convenience for the OIDC companion; the vendor-named `ClerkAuthUI` case is deprecated in favour of the neutral form (see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../../../docs/migrations/494-vendor-neutral-auth-ui.md) and the design note [`docs/platform/auth-ui-vendor-neutrality.md`](../../../docs/platform/auth-ui-vendor-neutrality.md)).
+
+The same registry serves Clerk (`src/AuthProviders/ClerkUI/`), the generic OIDC client (`src/AuthProviders/OidcClient/`), and any third-party sign-in companion — peers under the same tag-based contract. The core SDK never references any companion's types, and removing a companion's handler entry + import removes its code from the Fable bundle.
 
 The registry also resolves the "companion imports AuthUIMode but AuthUIMode ships in core" chicken-and-egg — `OidcUIConfig` / `ClerkUIConfig` are declared in `SDK.ClientTypes.fs` (core) so `ClientConfig.AuthUI` always compiles, but the runtime handlers live only in the companions.
 
@@ -122,7 +124,7 @@ let config = {
 - Some issuers do not expose `end_session_endpoint` in discovery (Clerk uses its own React SDK for sign-out). The companion degrades to local sign-out + origin reload in that case.
 - For multi-audience tokens (e.g. Azure AD with both `api://…` and Graph scopes), the server-side `OidcAuthProvider` accepts any configured audience — the client does not need to do anything special.
 
-**Swapping for Clerk.** The companion pattern is symmetric. An app that was using Clerk (`AuthUI = ClerkAuthUI _` + `ClerkUI.Client.props` imported) can switch to OIDC by changing the import and the config; no SDK-level code changes. Both handlers can be registered simultaneously — the active `AuthUIMode` case decides which runs.
+**Swapping for Clerk.** The companion pattern is symmetric — Clerk is one provider among peers. An app that was using Clerk (`AuthUI = ClerkRegister.authUI { PublishableKey = … }` — the neutral `ProviderAuthUI ("clerk", _)` form — with `ClerkRegister.handler` in `Handlers.AuthUIHandlers`) can switch to OIDC by changing the handler entry and the config; no SDK-level code changes. Both handlers can be registered simultaneously — the active `ClientConfig.AuthUI` value decides which runs.
 
 ## Build-time constants
 

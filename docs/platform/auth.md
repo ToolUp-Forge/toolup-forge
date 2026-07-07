@@ -99,7 +99,19 @@ See [`docs/companions/auth-providers.md`](../companions/auth-providers.md) and t
 
 ### `ToolUp.AuthProviders.ClerkUI` (client-side)
 
-Wraps Clerk's React components and surfaces them through the `AuthUIProvider` registry. The server still validates the bearer token via a separate provider (typically `StaticJwtAuthProvider` configured against Clerk's signing key, or a custom Clerk-specific impl).
+Wraps Clerk's React components and surfaces them through the `AuthUIProvider` registry — one provider among peers, registered under the `"clerk"` tag and selected through the vendor-neutral `ProviderAuthUI` config case:
+
+```fsharp
+open ToolUp.AuthProviders
+
+{ ClientConfig.defaults with
+    AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
+    Handlers =
+        { ClientHandlerRegistry.empty with
+            AuthUIHandlers = [ ClerkRegister.handler ] } }
+```
+
+(The vendor-named `ClerkAuthUI` core case is deprecated — see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../migrations/494-vendor-neutral-auth-ui.md).) The server still validates the bearer token via a separate provider (typically `StaticJwtAuthProvider` configured against Clerk's signing key, or a custom Clerk-specific impl).
 
 Clerk is a commercial product with its own licence and pricing — this companion is a thin client-side integration shim, not a Clerk redistribution.
 

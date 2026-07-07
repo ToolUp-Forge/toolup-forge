@@ -72,7 +72,9 @@ let authUI =
 #if DEBUG
     NoAuthUI
 #else
-    ClerkAuthUI { PublishableKey = BundleConstants.clerkPublishableKey }
+    // Vendor-neutral form — the ClerkUI companion's typed smart
+    // constructor returns ProviderAuthUI ("clerk", box cfg).
+    ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
 #endif
 
 // 2. ClientConfig from bundle constants + curated overrides.

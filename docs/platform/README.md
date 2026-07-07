@@ -94,6 +94,7 @@ See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRe
 
 - [`portability-rules.md`](portability-rules.md) — six rules every distributed-implementation-friendly interface satisfies.
 - [`auth.md`](auth.md) — auth providers and how to write one.
+- [`auth-ui-vendor-neutrality.md`](auth-ui-vendor-neutrality.md) — the vendor-neutral `ProviderAuthUI` config case, why its payload is `obj`, and the companion smart-constructor convention (`ClerkAuthUI` is deprecated).
 - [`storage.md`](storage.md) — `IBlobStorage` companions and the encryption-at-rest decorator.
 - [`events.md`](events.md) — event store, audit log, audit-sink replication.
 - [`jobs.md`](jobs.md) — cron + event-triggered + manual background jobs.

@@ -315,20 +315,24 @@ For the full operator playbook including federated-IdP wiring and the invitation
 
 ### `ToolUp.AuthProviders.ClerkUI` (Clerk integration)
 
-Wraps Clerk's React components and surfaces them through the `AuthUIProvider` registry. Clerk is a commercial product — this companion is a thin integration shim, not a Clerk redistribution.
+Wraps Clerk's React components and surfaces them through the `AuthUIProvider` registry — one provider among peers: it registers under the `"clerk"` tag and is selected through the vendor-neutral `ProviderAuthUI` config case like any other sign-in companion. Clerk is a commercial product — this companion is a thin integration shim, not a Clerk redistribution.
 
 Setup:
 
 ```fsharp
-open ToolUp.AuthProviders.ClerkUI
+open ToolUp.AuthProviders
 
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        Mode = Individual
-        AuthUI = ConfiguredAuthUI ClerkUI.uiProvider }
+        AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
+        Handlers =
+            { ClientHandlerRegistry.empty with
+                AuthUIHandlers = [ ClerkRegister.handler ] } }
     modules
 ```
+
+`ClerkRegister.authUI` is the companion's typed smart constructor for the neutral case — it returns `ProviderAuthUI ("clerk", box cfg)`. (The vendor-named `ClerkAuthUI` core case is deprecated; see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../migrations/494-vendor-neutral-auth-ui.md).)
 
 Server-side, validate the bearer token via:
 - `StaticJwtAuthProvider` with Clerk's signing key.
