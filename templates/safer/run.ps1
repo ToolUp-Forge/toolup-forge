@@ -43,16 +43,20 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-# ─── Sibling launcher conventions ───────────────────────────────────────
-# Per workspace CLAUDE.md "Sibling launcher conventions (mandate)":
-# Node 22.x's npm.ps1 / npx.ps1 shims mangle args via Substring slice
-# when invoked from inside another .ps1. Resolving npm.cmd / npx.cmd
-# directly bypasses the broken shim.
-
+# Sibling launcher conventions — see workspace CLAUDE.md "Sibling launcher conventions (mandate)".
+# Copy-pasted from the canonical body there; do not diverge without updating the workspace doc.
 function Invoke-Npm {
+    # Node 22.x ships an npm.ps1 shim that rebuilds args from the caller's command-line text via
+    # Substring(InvocationName.Length). Called from inside another .ps1 as `& npm ci ...`, the
+    # 3-char slice eats `& n` and npm sees `pm ci ...` — `Unknown command: "pm"`. Resolving npm.cmd
+    # directly skips the shim.
+    #
+    # `Get-Command npm.cmd` returns EVERY npm.cmd on PATH — typically two (Program Files installer
+    # shim + %APPDATA%\npm self-update shim). `$cmd.Source` would then be an array and `& $cmd.Source`
+    # concatenates the paths into one bogus string. Pin to the first match — both shims behave alike.
     [CmdletBinding()]
     param([Parameter(ValueFromRemainingArguments = $true)] $Arguments)
-    $cmd = Get-Command npm.cmd -CommandType Application -ErrorAction Stop
+    $cmd = Get-Command npm.cmd -CommandType Application -ErrorAction Stop | Select-Object -First 1
     & $cmd.Source @Arguments
 }
 
