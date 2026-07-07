@@ -6,6 +6,16 @@ ToolUp.BrandKit.Card.card(Microsoft.FSharp.Collections.FSharpList`1[Giraffe.View
 ToolUp.BrandKit.Card.cardDeep(Microsoft.FSharp.Collections.FSharpList`1[Giraffe.ViewEngine.HtmlElements+XmlNode]) : Giraffe.ViewEngine.HtmlElements+XmlNode
 ToolUp.BrandKit.Card.cardOutlined(Microsoft.FSharp.Collections.FSharpList`1[Giraffe.ViewEngine.HtmlElements+XmlNode]) : Giraffe.ViewEngine.HtmlElements+XmlNode
 ToolUp.BrandKit.Card.cardTight(Microsoft.FSharp.Collections.FSharpList`1[Giraffe.ViewEngine.HtmlElements+XmlNode]) : Giraffe.ViewEngine.HtmlElements+XmlNode
+ToolUp.BrandKit.HostThemeTokens (class)
+ToolUp.BrandKit.HostThemeTokens..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.BrandKit.HostThemeTokens.Variables : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.BrandKit.HostThemeTokensModule (class)
+ToolUp.BrandKit.HostThemeTokensModule.brandKitVars : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.BrandKit.HostThemeTokensModule.empty : ToolUp.BrandKit.HostThemeTokens { get }
+ToolUp.BrandKit.HostThemeTokensModule.ofBrandKitValues(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.BrandKit.HostThemeTokens
+ToolUp.BrandKit.HostThemeTokensModule.toDeclarations(ToolUp.BrandKit.HostThemeTokens) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.BrandKit.HostThemeTokensModule.toRootCss(ToolUp.BrandKit.HostThemeTokens) : System.String
+ToolUp.BrandKit.HostThemeTokensModule.withPaletteOverrides(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.BrandKit.HostThemeTokens) : ToolUp.BrandKit.HostThemeTokens
 ToolUp.BrandKit.Icon (class)
 ToolUp.BrandKit.Icon.DefaultSize : System.Int32 (literal)
 ToolUp.BrandKit.Icon.iconSvg(ToolUp.BrandKit.Icon+IconSpec) : Giraffe.ViewEngine.HtmlElements+XmlNode

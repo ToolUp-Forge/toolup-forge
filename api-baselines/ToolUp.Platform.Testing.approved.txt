@@ -26,6 +26,66 @@ ToolUp.Platform.Testing.Fakes+TestSecretStore.Seed(System.String, System.String,
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver (class)
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(System.String)
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(ToolUp.Platform.StorageScope)
+ToolUp.Platform.Testing.HostedTreeA11y (class)
+ToolUp.Platform.Testing.HostedTreeA11y.check(System.String) : ToolUp.Platform.Testing.HostedTreeA11y+A11yResult
+ToolUp.Platform.Testing.HostedTreeA11y.conformantFixture : ToolUp.Platform.Testing.HostedTreeA11y+Fixture { get }
+ToolUp.Platform.Testing.HostedTreeA11y.describe(ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation) : System.String
+ToolUp.Platform.Testing.HostedTreeA11y.violationFixtures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Testing.HostedTreeA11y+Fixture] { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult.Conformant : ToolUp.Platform.Testing.HostedTreeA11y+A11yResult { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult.IsConformant : System.Boolean { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult.IsViolations : System.Boolean { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult.Tag : System.Int32 { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult+Tags (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult+Tags.Conformant : System.Int32 (literal)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult+Tags.Violations : System.Int32 (literal)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult+Violations (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yResult+Violations.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation] { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation.IsFocusOrderBreak : System.Boolean { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation.IsHeadingSkip : System.Boolean { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation.IsMissingRole : System.Boolean { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation.IsUnlabelledControl : System.Boolean { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation.Tag : System.Int32 { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+FocusOrderBreak (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+FocusOrderBreak.detail : System.String { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+HeadingSkip (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+HeadingSkip.fromLevel : System.Int32 { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+HeadingSkip.toLevel : System.Int32 { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+MissingRole (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+MissingRole.element : System.String { get }
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+Tags (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+Tags.FocusOrderBreak : System.Int32 (literal)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+Tags.HeadingSkip : System.Int32 (literal)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+Tags.MissingRole : System.Int32 (literal)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+Tags.UnlabelledControl : System.Int32 (literal)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+UnlabelledControl (class)
+ToolUp.Platform.Testing.HostedTreeA11y+A11yViolation+UnlabelledControl.element : System.String { get }
+ToolUp.Platform.Testing.HostedTreeA11y+Fixture (class)
+ToolUp.Platform.Testing.HostedTreeA11y+Fixture..ctor(System.String, System.String, System.Boolean)
+ToolUp.Platform.Testing.HostedTreeA11y+Fixture.ExpectConformant : System.Boolean { get }
+ToolUp.Platform.Testing.HostedTreeA11y+Fixture.Html : System.String { get }
+ToolUp.Platform.Testing.HostedTreeA11y+Fixture.Name : System.String { get }
+ToolUp.Platform.Testing.HydrationParity (class)
+ToolUp.Platform.Testing.HydrationParity.check(System.String, System.String) : ToolUp.Platform.Testing.HydrationParity+ParityResult
+ToolUp.Platform.Testing.HydrationParity.divergenceClassFixtures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Testing.HydrationParity+Fixture] { get }
+ToolUp.Platform.Testing.HydrationParity.mismatchedFixture : ToolUp.Platform.Testing.HydrationParity+Fixture { get }
+ToolUp.Platform.Testing.HydrationParity.normalise(System.String) : System.String
+ToolUp.Platform.Testing.HydrationParity+Fixture (class)
+ToolUp.Platform.Testing.HydrationParity+Fixture..ctor(System.String, System.String, System.String)
+ToolUp.Platform.Testing.HydrationParity+Fixture.Csr : System.String { get }
+ToolUp.Platform.Testing.HydrationParity+Fixture.Name : System.String { get }
+ToolUp.Platform.Testing.HydrationParity+Fixture.Ssr : System.String { get }
+ToolUp.Platform.Testing.HydrationParity+ParityResult (class)
+ToolUp.Platform.Testing.HydrationParity+ParityResult.IsDivergence : System.Boolean { get }
+ToolUp.Platform.Testing.HydrationParity+ParityResult.IsParity : System.Boolean { get }
+ToolUp.Platform.Testing.HydrationParity+ParityResult.Parity : ToolUp.Platform.Testing.HydrationParity+ParityResult { get }
+ToolUp.Platform.Testing.HydrationParity+ParityResult.Tag : System.Int32 { get }
+ToolUp.Platform.Testing.HydrationParity+ParityResult+Divergence (class)
+ToolUp.Platform.Testing.HydrationParity+ParityResult+Divergence.message : System.String { get }
+ToolUp.Platform.Testing.HydrationParity+ParityResult+Tags (class)
+ToolUp.Platform.Testing.HydrationParity+ParityResult+Tags.Divergence : System.Int32 (literal)
+ToolUp.Platform.Testing.HydrationParity+ParityResult+Tags.Parity : System.Int32 (literal)
 ToolUp.Platform.Testing.ModuleHarness (class)
 ToolUp.Platform.Testing.ModuleHarness.fromClientModule`2(ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.Testing.ModuleHarness+ModuleHarness`2[Model, Msg]
 ToolUp.Platform.Testing.ModuleHarness.fromContextInit`2(ToolUp.Platform.ClientModuleContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]]) : ToolUp.Platform.Testing.ModuleHarness+ModuleHarness`2[Model, Msg]

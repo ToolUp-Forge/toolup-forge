@@ -188,6 +188,54 @@ KnowledgeListView+KnowledgeListConfig..ctor(System.String, Microsoft.FSharp.Core
 KnowledgeListView+KnowledgeListConfig.EmptyStateText : System.String { get }
 KnowledgeListView+KnowledgeListConfig.InstanceKey : System.String { get }
 KnowledgeListView+KnowledgeListConfig.RowAction : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeDocument, Fable.React.ReactElement]] { get }
+KnowledgeListView+SizeRange (class)
+KnowledgeListView+SizeRange.AllSizes : KnowledgeListView+SizeRange { get }
+KnowledgeListView+SizeRange.IsAllSizes : System.Boolean { get }
+KnowledgeListView+SizeRange.IsOneToTenMb : System.Boolean { get }
+KnowledgeListView+SizeRange.IsOverTenMb : System.Boolean { get }
+KnowledgeListView+SizeRange.IsUnderOneMb : System.Boolean { get }
+KnowledgeListView+SizeRange.OneToTenMb : KnowledgeListView+SizeRange { get }
+KnowledgeListView+SizeRange.OverTenMb : KnowledgeListView+SizeRange { get }
+KnowledgeListView+SizeRange.Tag : System.Int32 { get }
+KnowledgeListView+SizeRange.UnderOneMb : KnowledgeListView+SizeRange { get }
+KnowledgeListView+SizeRange+Tags (class)
+KnowledgeListView+SizeRange+Tags.AllSizes : System.Int32 (literal)
+KnowledgeListView+SizeRange+Tags.OneToTenMb : System.Int32 (literal)
+KnowledgeListView+SizeRange+Tags.OverTenMb : System.Int32 (literal)
+KnowledgeListView+SizeRange+Tags.UnderOneMb : System.Int32 (literal)
+KnowledgeListView+SortDir (class)
+KnowledgeListView+SortDir.Ascending : KnowledgeListView+SortDir { get }
+KnowledgeListView+SortDir.Descending : KnowledgeListView+SortDir { get }
+KnowledgeListView+SortDir.IsAscending : System.Boolean { get }
+KnowledgeListView+SortDir.IsDescending : System.Boolean { get }
+KnowledgeListView+SortDir.Tag : System.Int32 { get }
+KnowledgeListView+SortDir+Tags (class)
+KnowledgeListView+SortDir+Tags.Ascending : System.Int32 (literal)
+KnowledgeListView+SortDir+Tags.Descending : System.Int32 (literal)
+KnowledgeListView+SortKey (class)
+KnowledgeListView+SortKey.IsSortByAdded : System.Boolean { get }
+KnowledgeListView+SortKey.IsSortByName : System.Boolean { get }
+KnowledgeListView+SortKey.IsSortBySize : System.Boolean { get }
+KnowledgeListView+SortKey.IsSortBySource : System.Boolean { get }
+KnowledgeListView+SortKey.IsSortByStatus : System.Boolean { get }
+KnowledgeListView+SortKey.IsSortByType : System.Boolean { get }
+KnowledgeListView+SortKey.IsSortByUploader : System.Boolean { get }
+KnowledgeListView+SortKey.SortByAdded : KnowledgeListView+SortKey { get }
+KnowledgeListView+SortKey.SortByName : KnowledgeListView+SortKey { get }
+KnowledgeListView+SortKey.SortBySize : KnowledgeListView+SortKey { get }
+KnowledgeListView+SortKey.SortBySource : KnowledgeListView+SortKey { get }
+KnowledgeListView+SortKey.SortByStatus : KnowledgeListView+SortKey { get }
+KnowledgeListView+SortKey.SortByType : KnowledgeListView+SortKey { get }
+KnowledgeListView+SortKey.SortByUploader : KnowledgeListView+SortKey { get }
+KnowledgeListView+SortKey.Tag : System.Int32 { get }
+KnowledgeListView+SortKey+Tags (class)
+KnowledgeListView+SortKey+Tags.SortByAdded : System.Int32 (literal)
+KnowledgeListView+SortKey+Tags.SortByName : System.Int32 (literal)
+KnowledgeListView+SortKey+Tags.SortBySize : System.Int32 (literal)
+KnowledgeListView+SortKey+Tags.SortBySource : System.Int32 (literal)
+KnowledgeListView+SortKey+Tags.SortByStatus : System.Int32 (literal)
+KnowledgeListView+SortKey+Tags.SortByType : System.Int32 (literal)
+KnowledgeListView+SortKey+Tags.SortByUploader : System.Int32 (literal)
 PlatformKnowledgeAdminUI (class)
 PlatformKnowledgeAdminUI.init() : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PlatformKnowledgeAdminUI.register() : ToolUp.Platform.ErasedModule

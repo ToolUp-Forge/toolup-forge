@@ -26,8 +26,54 @@ ToolUp.Cli.DockerEmitCommand+Options.ImageName : Microsoft.FSharp.Core.FSharpOpt
 ToolUp.Cli.DockerEmitCommand+Options.OutputDir : System.String { get }
 ToolUp.Cli.DockerEmitCommand+Options.ServerDll : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.DockerEmitCommand+Options.ServerProject : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.ModuleCommand (class)
+ToolUp.Cli.ModuleCommand.FsMarker : System.String (literal)
+ToolUp.Cli.ModuleCommand.MsBuildMarker : System.String (literal)
+ToolUp.Cli.ModuleCommand.addCommand : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.ModuleCommand.insertAfterMarker(System.String, System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Cli.ModuleCommand.removeCommand : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.ModuleCommand.removeLine(System.String, System.String) : System.String
+ToolUp.Cli.ModuleCommand+Options (class)
+ToolUp.Cli.ModuleCommand+Options..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Cli.ModuleCommand+Options.AppRoot : System.String { get }
+ToolUp.Cli.ModuleCommand+Options.ModulesDir : System.String { get }
+ToolUp.Cli.ModuleCommand+Options.Name : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.ModuleCommand+Options.Register : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Cli.Program (class)
 ToolUp.Cli.Program.main(System.String[]) : System.Int32
+ToolUp.Cli.StampCommand (class)
+ToolUp.Cli.StampCommand.command : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.StampCommand.mintJws(System.Security.Cryptography.ECDsa, System.String, System.String) : System.Text.Json.Nodes.JsonObject
+ToolUp.Cli.StampCommand.mintMac(System.Byte[], System.String, System.String) : System.Text.Json.Nodes.JsonObject
+ToolUp.Cli.StampCommand.sbomCanonicalBytes(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]]) : System.Byte[]
+ToolUp.Cli.StampCommand.sbomJson(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]]) : System.Text.Json.Nodes.JsonObject
+ToolUp.Cli.StampCommand+KeySource (class)
+ToolUp.Cli.StampCommand+KeySource.IsEcKeyFile : System.Boolean { get }
+ToolUp.Cli.StampCommand+KeySource.IsMacKeyBase64 : System.Boolean { get }
+ToolUp.Cli.StampCommand+KeySource.IsMacKeyFile : System.Boolean { get }
+ToolUp.Cli.StampCommand+KeySource.IsNoKey : System.Boolean { get }
+ToolUp.Cli.StampCommand+KeySource.NoKey : ToolUp.Cli.StampCommand+KeySource { get }
+ToolUp.Cli.StampCommand+KeySource.Tag : System.Int32 { get }
+ToolUp.Cli.StampCommand+KeySource+EcKeyFile (class)
+ToolUp.Cli.StampCommand+KeySource+EcKeyFile.Item : System.String { get }
+ToolUp.Cli.StampCommand+KeySource+MacKeyBase64 (class)
+ToolUp.Cli.StampCommand+KeySource+MacKeyBase64.Item : System.String { get }
+ToolUp.Cli.StampCommand+KeySource+MacKeyFile (class)
+ToolUp.Cli.StampCommand+KeySource+MacKeyFile.Item : System.String { get }
+ToolUp.Cli.StampCommand+KeySource+Tags (class)
+ToolUp.Cli.StampCommand+KeySource+Tags.EcKeyFile : System.Int32 (literal)
+ToolUp.Cli.StampCommand+KeySource+Tags.MacKeyBase64 : System.Int32 (literal)
+ToolUp.Cli.StampCommand+KeySource+Tags.MacKeyFile : System.Int32 (literal)
+ToolUp.Cli.StampCommand+KeySource+Tags.NoKey : System.Int32 (literal)
+ToolUp.Cli.StampCommand+Options (class)
+ToolUp.Cli.StampCommand+Options..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Cli.StampCommand+KeySource, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]])
+ToolUp.Cli.StampCommand+Options.Key : ToolUp.Cli.StampCommand+KeySource { get }
+ToolUp.Cli.StampCommand+Options.KeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.StampCommand+Options.Manifest : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.StampCommand+Options.Modules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.StampCommand+Options.SbomFiles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.StampCommand+Options.SbomPackages : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]] { get }
+ToolUp.Cli.StampCommand+Options.Unbind : System.Boolean { get }
 ToolUp.Cli.Templating (class)
 ToolUp.Cli.Templating.readEmbedded(System.String) : System.String
 ToolUp.Cli.Templating.substitute(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String) : System.String

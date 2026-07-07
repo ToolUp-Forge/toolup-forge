@@ -53,12 +53,15 @@ ToolUp.Stripe.Server.Routes (class)
 ToolUp.Stripe.Server.Routes.StripeSignatureHeader : System.String (literal)
 ToolUp.Stripe.Server.Routes.stripeWebhook(ToolUp.Stripe.Server.StripeConfig, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Stripe.Webhook.VerifiedEvent, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Stripe.Server.Routes.stripeWebhookWith(ToolUp.Stripe.Server.WebhookOptions, ToolUp.Stripe.Server.StripeConfig, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Stripe.Webhook.VerifiedEvent, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Stripe.Server.StripeBillingProvider (class)
+ToolUp.Stripe.Server.StripeBillingProvider..ctor(ToolUp.Stripe.Server.StripeConfig, Microsoft.FSharp.Core.FSharpOption`1[System.Net.Http.HttpClient])
 ToolUp.Stripe.Server.StripeConfig (class)
 ToolUp.Stripe.Server.StripeConfig..ctor(System.String, System.String)
 ToolUp.Stripe.Server.StripeConfig.ApiKey : System.String { get }
 ToolUp.Stripe.Server.StripeConfig.WebhookSecret : System.String { get }
 ToolUp.Stripe.Server.StripeHttp (class)
 ToolUp.Stripe.Server.StripeHttp.ApiBase : System.String (literal)
+ToolUp.Stripe.Server.StripeHttp.getJson(System.Net.Http.HttpClient, System.String, System.String) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[System.Text.Json.JsonElement, System.String]]
 ToolUp.Stripe.Server.StripeHttp.postForm(System.Net.Http.HttpClient, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[System.Text.Json.JsonElement, System.String]]
 ToolUp.Stripe.Server.StripeHttp.readUri(System.Text.Json.JsonElement, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Uri, System.String]
 ToolUp.Stripe.Server.StripeHttp.shared() : System.Net.Http.HttpClient

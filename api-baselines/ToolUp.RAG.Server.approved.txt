@@ -146,7 +146,9 @@ ToolUp.RAG.RAGCompose.composeRAG(ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.Pl
 ToolUp.RAG.RAGCompose.defaultRetrievalFraming : System.String { get }
 ToolUp.RAG.RAGCompose.emitIngestionDrop(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.RAGCompose.resolveFraming(ToolUp.RAG.RAGCompose+GroundingMode, System.String) : System.String
+ToolUp.RAG.RAGCompose.resolveFramingWithTools(ToolUp.RAG.RAGCompose+GroundingMode, System.String, ToolUp.RAG.RAGPromptBuilder+ToolFraming) : System.String
 ToolUp.RAG.RAGCompose.strictlyGroundedDirective : System.String { get }
+ToolUp.RAG.RAGCompose.uiToolFramingCompanion : System.String { get }
 ToolUp.RAG.RAGCompose.withRAG(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.RAG.RAGCompose+RAGServerApp, ToolUp.RAG.RAGCompose+RAGServerApp], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.RAG.RAGCompose+GroundingMode (class)
 ToolUp.RAG.RAGCompose+GroundingMode.IsPermissive : System.Boolean { get }
@@ -249,6 +251,13 @@ ToolUp.RAG.RAGCompose+RAGServerAppModule.withVectorStore(ToolUp.Platform.IVector
 ToolUp.RAG.RAGPromptBuilder (class)
 ToolUp.RAG.RAGPromptBuilder.toRetrievedSource(System.Int32, ToolUp.Platform.VectorKnowledgeTypes+VectorMatch) : ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource
 ToolUp.RAG.RAGPromptBuilder.withRetrieval(ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalTracer+IRetrievalTracer], ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline, ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.RAG.RAGPromptBuilder.withRetrievalToolAware(ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalTracer+IRetrievalTracer], ToolUp.RAG.RAGPromptBuilder+ToolFraming, ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline, ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.RAG.RAGPromptBuilder+ToolFraming (class)
+ToolUp.RAG.RAGPromptBuilder+ToolFraming..ctor(System.Boolean)
+ToolUp.RAG.RAGPromptBuilder+ToolFraming.HasLiveUiTools : System.Boolean { get }
+ToolUp.RAG.RAGPromptBuilder+ToolFramingModule (class)
+ToolUp.RAG.RAGPromptBuilder+ToolFramingModule.fromTools(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : ToolUp.RAG.RAGPromptBuilder+ToolFraming
+ToolUp.RAG.RAGPromptBuilder+ToolFramingModule.none : ToolUp.RAG.RAGPromptBuilder+ToolFraming { get }
 ToolUp.RAG.RAGVacuumJobHandler (class)
 ToolUp.RAG.RAGVacuumJobHandler.DefaultVacuumCron : System.String (literal)
 ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName : System.String (literal)

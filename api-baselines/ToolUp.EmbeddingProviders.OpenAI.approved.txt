@@ -3,12 +3,57 @@
 # accept a deliberate breaking removal (regenerate with TOOLUP_APPROVE_API=1).
 OpenAIEmbeddingProvider (class)
 OpenAIEmbeddingProvider.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
+OpenAIEmbeddingProvider.createLiveValidator(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.ConfigValidation+IConfigValidator
 OpenAIEmbeddingProvider.createValidator(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.ConfigValidation+IConfigValidator
 OpenAIEmbeddingProvider.createWithBatchSize(ToolUp.Platform.Secrets+ISecretStore, System.Int32) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 OpenAIEmbeddingProvider.createWithModel(ToolUp.Platform.Secrets+ISecretStore, System.String, System.Int32) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
+OpenAIEmbeddingProvider.createWithOptions(ToolUp.Platform.Secrets+ISecretStore, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
+OpenAIEmbeddingProvider.defaultModel : System.String (literal)
+OpenAIEmbeddingProvider.probeEmbeddingsApi(ToolUp.Platform.Secrets+ISecretStore, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[OpenAIEmbeddingProvider+EmbeddingProbeResult]
+OpenAIEmbeddingProvider.withEmbedderAudit(ToolUp.Platform.IEventStore, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider.withEmbedderBatchSize(System.Int32, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider.withEmbedderCircuitBreaker(ToolUp.Platform.IEmbeddingProvider+EmbedderCircuitBreaker, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider.withEmbedderMetrics(ToolUp.Platform.Metrics.IMetricsSink, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider.withEmbedderModel(System.String, System.Int32, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider.withEmbedderResilience(ToolUp.Platform.IEmbeddingProvider+EmbedderResilience, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider.withEmbedderRetryPolicy(ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicy, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider.withEmbedderTimeout(System.TimeSpan, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions
+OpenAIEmbeddingProvider+EmbeddingProbeResult (class)
+OpenAIEmbeddingProvider+EmbeddingProbeResult.IsProbeMissingKey : System.Boolean { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult.IsProbeOk : System.Boolean { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult.IsProbePermanent : System.Boolean { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult.IsProbeTransient : System.Boolean { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult.ProbeMissingKey : OpenAIEmbeddingProvider+EmbeddingProbeResult { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult.ProbeOk : OpenAIEmbeddingProvider+EmbeddingProbeResult { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult.Tag : System.Int32 { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult+ProbePermanent (class)
+OpenAIEmbeddingProvider+EmbeddingProbeResult+ProbePermanent.body : System.String { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult+ProbePermanent.statusCode : System.Int32 { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult+ProbeTransient (class)
+OpenAIEmbeddingProvider+EmbeddingProbeResult+ProbeTransient.message : System.String { get }
+OpenAIEmbeddingProvider+EmbeddingProbeResult+Tags (class)
+OpenAIEmbeddingProvider+EmbeddingProbeResult+Tags.ProbeMissingKey : System.Int32 (literal)
+OpenAIEmbeddingProvider+EmbeddingProbeResult+Tags.ProbeOk : System.Int32 (literal)
+OpenAIEmbeddingProvider+EmbeddingProbeResult+Tags.ProbePermanent : System.Int32 (literal)
+OpenAIEmbeddingProvider+EmbeddingProbeResult+Tags.ProbeTransient : System.Int32 (literal)
 OpenAIEmbeddingProvider+OpenAIEmbeddingConfigValidator (class)
 OpenAIEmbeddingProvider+OpenAIEmbeddingConfigValidator..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+OpenAIEmbeddingProvider+OpenAIEmbeddingLiveConfigValidator (class)
+OpenAIEmbeddingProvider+OpenAIEmbeddingLiveConfigValidator..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions (class)
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions..ctor(System.String, System.Int32, System.Int32, ToolUp.Platform.IEmbeddingProvider+EmbedderResilience, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore])
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions.BatchSize : System.Int32 { get }
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions.Dimensions : System.Int32 { get }
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions.EventSink : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore] { get }
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions.Metrics : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink] { get }
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions.Model : System.String { get }
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptions.Resilience : ToolUp.Platform.IEmbeddingProvider+EmbedderResilience { get }
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptionsModule (class)
+OpenAIEmbeddingProvider+OpenAIEmbeddingOptionsModule.defaults : OpenAIEmbeddingProvider+OpenAIEmbeddingOptions { get }
 OpenAIEmbeddingProviderHealth (class)
 OpenAIEmbeddingProviderHealth.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.HealthChecks+IHealthCheck
+OpenAIEmbeddingProviderHealth.createLive(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.HealthChecks+IHealthCheck
 OpenAIEmbeddingProviderHealth+OpenAIEmbeddingProviderHealthCheck (class)
 OpenAIEmbeddingProviderHealth+OpenAIEmbeddingProviderHealthCheck..ctor(ToolUp.Platform.Secrets+ISecretStore)
+OpenAIEmbeddingProviderHealth+OpenAIEmbeddingProviderLiveHealthCheck (class)
+OpenAIEmbeddingProviderHealth+OpenAIEmbeddingProviderLiveHealthCheck..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.String])

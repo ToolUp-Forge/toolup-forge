@@ -2508,6 +2508,8 @@ ToolUp.Platform.Client+Msg+Tags.ToggleShowAllModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+TeamSwitched (class)
 ToolUp.Platform.Client+Msg+TeamSwitched.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientBoundHostView (class)
+ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PageConfig, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, ToolUp.Platform.PageContent]]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
+ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
 ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth)
@@ -2607,7 +2609,17 @@ ToolUp.Platform.ClientHostCapabilities`1.Call`1(Microsoft.FSharp.Control.FSharpA
 ToolUp.Platform.ClientHostCapabilities`1.Dispatch(Msg) : System.Void
 ToolUp.Platform.ClientHostCapabilities`1.Navigate(System.String) : System.Void
 ToolUp.Platform.ClientHostCapabilities`1.Notify(ToolUp.Platform.ToastIntent) : System.Void
+ToolUp.Platform.ClientHostInvoke (interface)
+ToolUp.Platform.ClientHostInvoke.Invoke(ToolUp.Platform.CapabilityId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HostCapabilityOutcome]
+ToolUp.Platform.ClientHostInvokeModule (class)
+ToolUp.Platform.ClientHostInvokeModule.create(ToolUp.Platform.IHostCapabilityRegistry) : ToolUp.Platform.ClientHostInvoke
+ToolUp.Platform.ClientHostInvokeView (class)
+ToolUp.Platform.ClientHostInvokeView.withInvokableElementView`2(ToolUp.Platform.IHostCapabilityRegistry, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostInvoke, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
+ToolUp.Platform.ClientHostNegotiatedView (class)
+ToolUp.Platform.ClientHostNegotiatedView.withNegotiatedElementView`2(ToolUp.Platform.HostCapabilitySet, ToolUp.Platform.HostCapabilitySet, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostCapabilityMismatch, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Fable.React.ReactElement]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientHostView (class)
+ToolUp.Platform.ClientHostView.withElementPages`2(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PageConfig, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], ToolUp.Platform.PageContent]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
+ToolUp.Platform.ClientHostView.withElementPanes`2(Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientHostView.withElementView`2(Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Fable.React.ReactElement]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule (class)
 ToolUp.Platform.ClientModule.create`2(ToolUp.Platform.ClientModule+ClientModuleSpec`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
@@ -2655,6 +2667,8 @@ ToolUp.Platform.ClientModule`2.ProvidesProcessedData : Microsoft.FSharp.Core.FSh
 ToolUp.Platform.ClientModule`2.Update : Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]] { get }
 ToolUp.Platform.ClientModule`2.View : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]] { get }
 ToolUp.Platform.ClientModule`2.Visibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean] { get }
+ToolUp.Platform.ClientOwnedHostView (class)
+ToolUp.Platform.ClientOwnedHostView.withOwnedBoundElementView`2(ToolUp.Platform.HostOwnership, ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostOwnership, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientRequestSeam (class)
 ToolUp.Platform.ClientRequestSeam..ctor(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[System.String, System.String][]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]])
 ToolUp.Platform.ClientRequestSeam.ApiOrigin : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[System.String]] { get }
@@ -2920,6 +2934,105 @@ ToolUp.Platform.HomeWidgetRegistry (class)
 ToolUp.Platform.HomeWidgetRegistry.registeredIds() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.HomeWidgetRegistry.setContributors(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IHomeWidgetContributor]) : System.Void
 ToolUp.Platform.HomeWidgetRegistry.widgets() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HomeWidget]
+ToolUp.Platform.HostBudgetBreach (class)
+ToolUp.Platform.HostBudgetBreach.IsDepthExceeded : System.Boolean { get }
+ToolUp.Platform.HostBudgetBreach.IsNodesExceeded : System.Boolean { get }
+ToolUp.Platform.HostBudgetBreach.IsRenderTimeExceeded : System.Boolean { get }
+ToolUp.Platform.HostBudgetBreach.Tag : System.Int32 { get }
+ToolUp.Platform.HostBudgetBreach+DepthExceeded (class)
+ToolUp.Platform.HostBudgetBreach+DepthExceeded.actual : System.Int32 { get }
+ToolUp.Platform.HostBudgetBreach+DepthExceeded.budget : System.Int32 { get }
+ToolUp.Platform.HostBudgetBreach+NodesExceeded (class)
+ToolUp.Platform.HostBudgetBreach+NodesExceeded.actual : System.Int32 { get }
+ToolUp.Platform.HostBudgetBreach+NodesExceeded.budget : System.Int32 { get }
+ToolUp.Platform.HostBudgetBreach+RenderTimeExceeded (class)
+ToolUp.Platform.HostBudgetBreach+RenderTimeExceeded.actualMs : System.Double { get }
+ToolUp.Platform.HostBudgetBreach+RenderTimeExceeded.budgetMs : System.Double { get }
+ToolUp.Platform.HostBudgetBreach+Tags (class)
+ToolUp.Platform.HostBudgetBreach+Tags.DepthExceeded : System.Int32 (literal)
+ToolUp.Platform.HostBudgetBreach+Tags.NodesExceeded : System.Int32 (literal)
+ToolUp.Platform.HostBudgetBreach+Tags.RenderTimeExceeded : System.Int32 (literal)
+ToolUp.Platform.HostCapabilityMismatch (class)
+ToolUp.Platform.HostCapabilityMismatch.IsMissingCapabilities : System.Boolean { get }
+ToolUp.Platform.HostCapabilityMismatch.IsVersionTooLow : System.Boolean { get }
+ToolUp.Platform.HostCapabilityMismatch.Tag : System.Int32 { get }
+ToolUp.Platform.HostCapabilityMismatch+MissingCapabilities (class)
+ToolUp.Platform.HostCapabilityMismatch+MissingCapabilities.missing : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.HostCapabilityMismatch+Tags (class)
+ToolUp.Platform.HostCapabilityMismatch+Tags.MissingCapabilities : System.Int32 (literal)
+ToolUp.Platform.HostCapabilityMismatch+Tags.VersionTooLow : System.Int32 (literal)
+ToolUp.Platform.HostCapabilityMismatch+VersionTooLow (class)
+ToolUp.Platform.HostCapabilityMismatch+VersionTooLow.hostVersion : System.Int32 { get }
+ToolUp.Platform.HostCapabilityMismatch+VersionTooLow.required : System.Int32 { get }
+ToolUp.Platform.HostCapabilityMismatchModule (class)
+ToolUp.Platform.HostCapabilityMismatchModule.describe(ToolUp.Platform.HostCapabilityMismatch) : System.String
+ToolUp.Platform.HostCapabilityNegotiation (class)
+ToolUp.Platform.HostCapabilityNegotiation.negotiate(ToolUp.Platform.HostCapabilitySet, ToolUp.Platform.HostCapabilitySet) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.HostCapabilityMismatch]
+ToolUp.Platform.HostCapabilitySet (class)
+ToolUp.Platform.HostCapabilitySet..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Platform.HostCapabilitySet.Capabilities : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.HostCapabilitySet.Version : System.Int32 { get }
+ToolUp.Platform.HostCapabilitySetModule (class)
+ToolUp.Platform.HostCapabilitySetModule.CurrentVersion : System.Int32 (literal)
+ToolUp.Platform.HostCapabilitySetModule.builtInCapabilities : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.HostCapabilitySetModule.defaultRequired : ToolUp.Platform.HostCapabilitySet { get }
+ToolUp.Platform.HostCapabilitySetModule.host(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.CapabilityId]) : ToolUp.Platform.HostCapabilitySet
+ToolUp.Platform.HostCapabilitySetModule.requires(System.Int32, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.CapabilityId]) : ToolUp.Platform.HostCapabilitySet
+ToolUp.Platform.HostI18nResolver (class)
+ToolUp.Platform.HostI18nResolver.create(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.LocaleCode, System.String]], ToolUp.Platform.LocaleCode, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.LocaleCode, Microsoft.FSharp.Core.Unit]]) : ToolUp.Platform.IHostI18nResolver
+ToolUp.Platform.HostI18nResolver.ofTranslations(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.LocaleCode, System.String]], ToolUp.Platform.LocaleCode) : ToolUp.Platform.IHostI18nResolver
+ToolUp.Platform.HostI18nResolver+MissRecordingHostI18nResolver (class)
+ToolUp.Platform.HostI18nResolver+MissRecordingHostI18nResolver..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.LocaleCode, System.String]], ToolUp.Platform.LocaleCode)
+ToolUp.Platform.HostI18nResolver+MissRecordingHostI18nResolver.Misses : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.LocaleCode]] { get }
+ToolUp.Platform.HostOwnership (class)
+ToolUp.Platform.HostOwnership..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId])
+ToolUp.Platform.HostOwnership.OwningComponent : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId] { get }
+ToolUp.Platform.HostOwnershipModule (class)
+ToolUp.Platform.HostOwnershipModule.attribute`1(ToolUp.Platform.HostOwnership, a) : System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId], a]
+ToolUp.Platform.HostOwnershipModule.ofComponent(ToolUp.Platform.ComponentId) : ToolUp.Platform.HostOwnership
+ToolUp.Platform.HostOwnershipModule.owner(ToolUp.Platform.HostOwnership) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId]
+ToolUp.Platform.HostOwnershipModule.untagged : ToolUp.Platform.HostOwnership { get }
+ToolUp.Platform.HostRenderBudget (class)
+ToolUp.Platform.HostRenderBudget..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Double])
+ToolUp.Platform.HostRenderBudget.MaxDepth : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.HostRenderBudget.MaxNodes : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.HostRenderBudget.MaxRenderMillis : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.HostRenderBudgetModule (class)
+ToolUp.Platform.HostRenderBudgetModule.describeBreach(ToolUp.Platform.HostBudgetBreach) : System.String
+ToolUp.Platform.HostRenderBudgetModule.enforce(ToolUp.Platform.IHostRenderTelemetrySink, System.String, ToolUp.Platform.HostRenderBudgetResult) : System.Void
+ToolUp.Platform.HostRenderBudgetModule.evaluate(ToolUp.Platform.HostRenderBudget, ToolUp.Platform.HostRenderMeasure) : ToolUp.Platform.HostRenderBudgetResult
+ToolUp.Platform.HostRenderBudgetModule.isConfigured(ToolUp.Platform.HostRenderBudget) : System.Boolean
+ToolUp.Platform.HostRenderBudgetModule.measureOf`1(Microsoft.FSharp.Core.FSharpFunc`2[n, Microsoft.FSharp.Collections.FSharpList`1[n]], Microsoft.FSharp.Core.FSharpOption`1[System.Double], n) : ToolUp.Platform.HostRenderMeasure
+ToolUp.Platform.HostRenderBudgetModule.measureTree`1(Microsoft.FSharp.Core.FSharpFunc`2[n, Microsoft.FSharp.Collections.FSharpList`1[n]], n) : System.Tuple`2[System.Int32, System.Int32]
+ToolUp.Platform.HostRenderBudgetModule.ofShape(System.Int32, System.Int32) : ToolUp.Platform.HostRenderBudget
+ToolUp.Platform.HostRenderBudgetModule.reportBreaches(ToolUp.Platform.IHostRenderTelemetrySink, System.String, ToolUp.Platform.HostRenderBudgetResult) : System.Boolean
+ToolUp.Platform.HostRenderBudgetModule.unlimited : ToolUp.Platform.HostRenderBudget { get }
+ToolUp.Platform.HostRenderBudgetResult (class)
+ToolUp.Platform.HostRenderBudgetResult.IsOverBudget : System.Boolean { get }
+ToolUp.Platform.HostRenderBudgetResult.IsWithinBudget : System.Boolean { get }
+ToolUp.Platform.HostRenderBudgetResult.Tag : System.Int32 { get }
+ToolUp.Platform.HostRenderBudgetResult.WithinBudget : ToolUp.Platform.HostRenderBudgetResult { get }
+ToolUp.Platform.HostRenderBudgetResult+OverBudget (class)
+ToolUp.Platform.HostRenderBudgetResult+OverBudget.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HostBudgetBreach] { get }
+ToolUp.Platform.HostRenderBudgetResult+Tags (class)
+ToolUp.Platform.HostRenderBudgetResult+Tags.OverBudget : System.Int32 (literal)
+ToolUp.Platform.HostRenderBudgetResult+Tags.WithinBudget : System.Int32 (literal)
+ToolUp.Platform.HostRenderMeasure (class)
+ToolUp.Platform.HostRenderMeasure..ctor(System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double])
+ToolUp.Platform.HostRenderMeasure.Depth : System.Int32 { get }
+ToolUp.Platform.HostRenderMeasure.NodeCount : System.Int32 { get }
+ToolUp.Platform.HostRenderMeasure.RenderMillis : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.HostRenderTelemetry (class)
+ToolUp.Platform.HostRenderTelemetry.defaultSink : ToolUp.Platform.IHostRenderTelemetrySink { get }
+ToolUp.Platform.HostRenderTelemetry.forwardingToLogger(ToolUp.Platform.ILogger) : ToolUp.Platform.IHostRenderTelemetrySink
+ToolUp.Platform.HostRenderTelemetry.onMismatch(ToolUp.Platform.IHostRenderTelemetrySink, System.String, ToolUp.Platform.HostCapabilityMismatch) : System.Void
+ToolUp.Platform.HostRenderTelemetry+CountingHostRenderTelemetrySink (class)
+ToolUp.Platform.HostRenderTelemetry+CountingHostRenderTelemetrySink..ctor(ToolUp.Platform.IHostRenderTelemetrySink)
+ToolUp.Platform.HostRenderTelemetry+CountingHostRenderTelemetrySink.Count : System.Int32 { get }
+ToolUp.Platform.HostRouteContract (class)
+ToolUp.Platform.HostRouteContract.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HostRoute]) : ToolUp.Platform.IHostRouteContract
+ToolUp.Platform.HostRouteContract.deepLink(ToolUp.Platform.IHostRouteContract, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HostBindingSources]
+ToolUp.Platform.HostRouteContract.navigate(ToolUp.Platform.HostRoute, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Platform.HostBindingSources
 ToolUp.Platform.I18n (class)
 ToolUp.Platform.I18n.formatCurrency(System.String, System.Double) : System.String
 ToolUp.Platform.I18n.formatDate(System.DateTime) : System.String
@@ -2937,6 +3050,11 @@ ToolUp.Platform.IAuthBridge.GetUserId() : Microsoft.FSharp.Core.FSharpOption`1[S
 ToolUp.Platform.IAuthBridge.ProviderName : System.String { get }
 ToolUp.Platform.IHomeWidgetContributor (interface)
 ToolUp.Platform.IHomeWidgetContributor.Widgets() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HomeWidget]
+ToolUp.Platform.IHostI18nResolver (interface)
+ToolUp.Platform.IHostI18nResolver.Resolve(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.LocaleCode) : System.String
+ToolUp.Platform.IHostRouteContract (interface)
+ToolUp.Platform.IHostRouteContract.Routes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HostRoute] { get }
+ToolUp.Platform.IHostRouteContract.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.HostRoute, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]]
 ToolUp.Platform.IHostStateProjection (class)
 ToolUp.Platform.IHostStateProjection.ofFunc`1(Microsoft.FSharp.Core.FSharpFunc`2[Model, ToolUp.Platform.HostBindingSources]) : ToolUp.Platform.IHostStateProjection`1[Model]
 ToolUp.Platform.IHostStateProjection`1 (interface)
@@ -3192,6 +3310,16 @@ ToolUp.Platform.PresenceClient+PresenceTransport..ctor(Microsoft.FSharp.Core.FSh
 ToolUp.Platform.PresenceClient+PresenceTransport.FetchRoster : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry]]] { get }
 ToolUp.Platform.PresenceClient+PresenceTransport.Heartbeat : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.PresenceClient+PresenceTransport.Leave : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.PreviewOutcome (class)
+ToolUp.Platform.PreviewOutcome.IsPlaceholder : System.Boolean { get }
+ToolUp.Platform.PreviewOutcome.IsRendered : System.Boolean { get }
+ToolUp.Platform.PreviewOutcome.Rendered : ToolUp.Platform.PreviewOutcome { get }
+ToolUp.Platform.PreviewOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.PreviewOutcome+Placeholder (class)
+ToolUp.Platform.PreviewOutcome+Placeholder.unresolved : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PreviewOutcome+Tags (class)
+ToolUp.Platform.PreviewOutcome+Tags.Placeholder : System.Int32 (literal)
+ToolUp.Platform.PreviewOutcome+Tags.Rendered : System.Int32 (literal)
 ToolUp.Platform.RegisteredModules (class)
 ToolUp.Platform.RegisteredModules.publish(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RegisteredModules+ModuleEntry]) : System.Void
 ToolUp.Platform.RegisteredModules.snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RegisteredModules+ModuleEntry]
@@ -3327,6 +3455,16 @@ ToolUp.Platform.ToastIntentModule (class)
 ToolUp.Platform.ToastIntentModule.error(System.String) : ToolUp.Platform.ToastIntent
 ToolUp.Platform.ToastIntentModule.info(System.String) : ToolUp.Platform.ToastIntent
 ToolUp.Platform.ToastIntentModule.warning(System.String) : ToolUp.Platform.ToastIntent
+ToolUp.Platform.UnreducedViewPreview (class)
+ToolUp.Platform.UnreducedViewPreview.outcome(ToolUp.Platform.UnreducedViewSubtree, ToolUp.Platform.HostBindingSources) : ToolUp.Platform.PreviewOutcome
+ToolUp.Platform.UnreducedViewPreview.outcomes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UnreducedViewSubtree], ToolUp.Platform.HostBindingSources) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PreviewOutcome]]
+ToolUp.Platform.UnreducedViewPreview.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UnreducedViewSubtree], ToolUp.Platform.HostBindingSources) : Fable.React.ReactElement
+ToolUp.Platform.UnreducedViewPreview.unresolvedBindings(ToolUp.Platform.UnreducedViewSubtree, ToolUp.Platform.HostBindingSources) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.UnreducedViewSubtree (class)
+ToolUp.Platform.UnreducedViewSubtree..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement])
+ToolUp.Platform.UnreducedViewSubtree.Label : System.String { get }
+ToolUp.Platform.UnreducedViewSubtree.Render : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement] { get }
+ToolUp.Platform.UnreducedViewSubtree.RequiredBindings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.UsageDashboardConfig (class)
 ToolUp.Platform.UsageDashboardConfig..ctor(System.String, Fable.React.ReactElement)
 ToolUp.Platform.UsageDashboardConfig.Icon : Fable.React.ReactElement { get }

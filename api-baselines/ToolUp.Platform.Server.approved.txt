@@ -732,7 +732,6 @@ ToolUp.Platform.ConfigValidator+SecretStoreValidator..ctor(ToolUp.Platform.Secre
 ToolUp.Platform.ConfigValidatorAggregator (class)
 ToolUp.Platform.ConfigValidatorAggregator.aggregatorBudget : System.TimeSpan { get }
 ToolUp.Platform.ConfigValidatorAggregator.assertUniqueValidatorNames(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidation+IConfigValidator]) : System.Void
-ToolUp.Platform.ConfigValidatorAggregator.securityClassValidatorNames : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.ConfigValidatorAggregator.validate(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], System.Boolean) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]
 ToolUp.Platform.ConfigValidatorAggregator+ConfigPreflightFailedException (class)
 ToolUp.Platform.ConfigValidatorAggregator+ConfigPreflightFailedException..ctor(System.String)

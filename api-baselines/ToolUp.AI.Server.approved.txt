@@ -262,6 +262,8 @@ ToolUp.AI.NoOpCitationCounters (class)
 ToolUp.AI.NoOpCitationCounters..ctor()
 ToolUp.AI.PlatformAIKeysHandler (class)
 ToolUp.AI.PlatformAIKeysHandler.platformAIKeysApi(ToolUp.AI.IAIProviderFactory, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.PlatformAIKeysApi
+ToolUp.AI.PlatformAITools (class)
+ToolUp.AI.PlatformAITools.builtIn : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool] { get }
 ToolUp.AI.SSEHandler (class)
 ToolUp.AI.SSEHandler.sendEvent(ToolUp.Platform.SSEConnectionManager, System.String, ToolUp.AI.AIStreamEvent) : System.Void
 ToolUp.AI.SSEHandler.sseHandler(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.SseAuthMode, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]

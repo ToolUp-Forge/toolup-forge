@@ -33,6 +33,7 @@ ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor(Microsoft.FSharp.Colle
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule (class)
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.createWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], ToolUp.Platform.IBindingRevocationList, ToolUp.Platform.IBindingTransparencyLog) : ToolUp.Platform.IModuleBindingVerifier
+ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifySbom(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.ModuleSbomStamp) : ToolUp.Platform.BindingOutcome
 ToolUp.ArtefactSigning.IArtefactSigner (interface)
 ToolUp.ArtefactSigning.IArtefactSigner.KeyId() : System.String
 ToolUp.ArtefactSigning.IArtefactSigner.Sign(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.ArtefactSignature, ToolUp.ArtefactSigning.SigningError]]
@@ -64,6 +65,8 @@ ToolUp.ArtefactSigning.ModuleBindingTrustResolver (class)
 ToolUp.ArtefactSigning.ModuleBindingTrustResolver.resolve(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IModuleBindingVerifier, System.String]]
 ToolUp.ArtefactSigning.ModuleBindingTrustValidator (class)
 ToolUp.ArtefactSigning.ModuleBindingTrustValidator..ctor(ToolUp.Platform.ModuleBindingTrustConfig, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.ArtefactSigning.ModuleSbomSigning (class)
+ToolUp.ArtefactSigning.ModuleSbomSigning.canonicalBytes(System.String, ToolUp.Platform.ModuleSbom) : System.Byte[]
 ToolUp.ArtefactSigning.PublicKeyMetadata (class)
 ToolUp.ArtefactSigning.PublicKeyMetadata..ctor(System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String)
 ToolUp.ArtefactSigning.PublicKeyMetadata.Algorithm : ToolUp.ArtefactSigning.SigningAlgorithm { get }
