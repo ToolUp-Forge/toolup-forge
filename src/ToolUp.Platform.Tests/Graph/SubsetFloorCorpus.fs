@@ -205,10 +205,14 @@ let cases: CorpusCase list = [
         ExpectedRowCount = 3
     }
     {
+        // Within 5 hops Alice is reachable back to herself through the
+        // cycle (Alice→Carol→Dave→Alice = 3 hops), so the distinct
+        // reachable set is all four people. Terminates via the visited
+        // (node, depth) state guard.
         Name = "variable-length across a cycle (terminates)"
         Query = q "MATCH (a:Person {name: 'Alice'})-[:KNOWS*1..5]->(b:Person) RETURN b.name AS reachable"
         ExpectedColumns = [ "reachable" ]
-        ExpectedRowCount = 3
+        ExpectedRowCount = 4
     }
     // ── ORDER BY + LIMIT ───────────────────────────────────────
     {
