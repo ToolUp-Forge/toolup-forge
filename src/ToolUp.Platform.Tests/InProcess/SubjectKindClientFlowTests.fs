@@ -80,9 +80,11 @@ let tests =
         test "UserSession.configure takes SubjectKind" {
             let contents = readClient "UserSession.fs"
 
+            // Phase 496 — the subject kind now lives in the consolidated
+            // `session` state record; the pin tracks the record-update form.
             Expect.stringContains
                 contents
-                "let configure (kind: SubjectKind) = currentSubjectKind <- kind"
+                "let configure (kind: SubjectKind) =\n    session <- { session with SubjectKind = kind }"
                 "UserSession.configure must accept the resolved SubjectKind, not the \
                  retiring PlatformMode. Phase 66 Stream B.8 retired the per-deployment \
                  Mode in favour of per-render SubjectKind resolution."
@@ -93,7 +95,7 @@ let tests =
 
             Expect.stringContains
                 contents
-                "let getSubjectKind () = currentSubjectKind"
+                "let getSubjectKind () = session.SubjectKind"
                 "UserSession.getSubjectKind replaces the retired getMode (). \
                  Phase 66 Stream B.8 — the KnowledgeBase AI-context panel \
                  (and any future consumer) reads through this accessor."
@@ -130,7 +132,7 @@ let tests =
 
             Expect.stringContains
                 contents
-                "match currentSubjectKind with\n    | AnonymousKind -> [| userIdHeader, getUserId () |]"
+                "match session.SubjectKind with\n    | AnonymousKind -> [| userIdHeader, getUserId () |]"
                 "identityHeaderPairs must use AnonymousKind for the X-User-Id \
                  path. Authenticated kinds (UserKind / TeamMemberKind / \
                  ClaimBearerKind) fall through to the Authorization: Bearer \

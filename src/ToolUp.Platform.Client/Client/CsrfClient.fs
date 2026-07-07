@@ -53,30 +53,41 @@ open ToolUp.Platform
 // is unmounted, the cache stays `None`, no `X-CSRF-Token` is added,
 // and the identity pairs are exactly what the old splice sent (GP 13).
 //
-// Module-level mutables here are sanctioned process-singleton state:
-//   * `cachedToken` / `inFlight` — fetch-result cache + shared
-//     in-flight Promise so multiple `ensure()` callers share one
-//     `/api/csrf-token` round-trip.
-//   * `guardInstalled` — one-time-install sentinel for the XHR /
-//     fetch wrappers.
-// These are sanctioned process-singleton state, not registry-style
-// mutables — `setIdentityProvider` and `setApiOrigin` (the legacy
-// registry seams) have been replaced by parameters on
-// `installRequestGuard`.
-
 /// Header the server's `CsrfMiddleware` validates.
 [<Literal>]
 let HeaderName = "X-CSRF-Token"
 
-let mutable private cachedToken: string option = None
+/// Sanctioned process-singleton state for the request-guard concern —
+/// this module's ONE ambient mutable (see `state` below). These are
+/// process-singleton caches / sentinels, not registry-style mutables —
+/// `setIdentityProvider` and `setApiOrigin` (the legacy registry
+/// seams) have been replaced by parameters on `installRequestGuard`.
+/// Phase 496 consolidated the previous three scattered module-level
+/// mutables into this record.
+type private CsrfClientState = {
+    /// Fetch-result cache: the per-session CSRF token, if the startup
+    /// pre-fetch (or a later `ensure`) succeeded.
+    CachedToken: string option
+    /// Shared in-flight Promise so multiple `ensure()` callers share
+    /// one `/api/csrf-token` round-trip (a JS promise is multicast).
+    InFlight: JS.Promise<string> option
+    /// One-time-install sentinel for the XHR / fetch wrappers.
+    GuardInstalled: bool
+}
+
+let mutable private state = {
+    CachedToken = None
+    InFlight = None
+    GuardInstalled = false
+}
 
 /// The cached token, if the startup pre-fetch succeeded.
-let currentToken () : string option = cachedToken
+let currentToken () : string option = state.CachedToken
 
 /// Header pairs to splice into `Remoting.withCustomHeader`. Empty
 /// until/unless a token has been fetched.
 let headerPairs () : (string * string) list =
-    match cachedToken with
+    match state.CachedToken with
     | Some t -> [ HeaderName, t ]
     | None -> []
 
@@ -98,21 +109,19 @@ let private cache (raw: string) : unit =
                 let s = string t
 
                 if not (System.String.IsNullOrEmpty s) then
-                    cachedToken <- Some s
+                    state <- { state with CachedToken = Some s }
     with _ ->
         ()
 
-// One shared in-flight fetch. A JS promise is multicast, so the eager
-// `prefetch` warm-up and a later awaited `ensure` resolve from the same
-// single `/api/csrf-token` round-trip.
-let mutable private inFlight: JS.Promise<string> option = None
-
+// One shared in-flight fetch (`state.InFlight`). A JS promise is
+// multicast, so the eager `prefetch` warm-up and a later awaited
+// `ensure` resolve from the same single `/api/csrf-token` round-trip.
 let private fetchOnce () : JS.Promise<string> =
-    match inFlight with
+    match state.InFlight with
     | Some p -> p
     | None ->
         let p = fetchTokenRaw ()
-        inFlight <- Some p
+        state <- { state with InFlight = Some p }
         p
 
 /// Await the per-session CSRF token fetch. Completes once the token is
@@ -121,7 +130,7 @@ let private fetchOnce () : JS.Promise<string> =
 /// unchanged). Safe to await from several boot loaders; they share one
 /// round-trip. Never throws.
 let ensure () : Async<unit> = async {
-    if Option.isNone cachedToken then
+    if Option.isNone state.CachedToken then
         try
             let! raw = fetchOnce () |> Async.AwaitPromise
             cache raw
@@ -130,7 +139,7 @@ let ensure () : Async<unit> = async {
 }
 
 let private tokenOrEmpty () : string =
-    match cachedToken with
+    match state.CachedToken with
     | Some t -> t
     | None -> ""
 
@@ -146,8 +155,6 @@ let private ensureTokenForGuard () : JS.Promise<string> =
             return tokenOrEmpty ()
         }
     )
-
-let mutable private guardInstalled = false
 
 // One-time wrap of `XMLHttpRequest.prototype.{open,send,setRequestHeader}`
 // and `window.fetch`. $0 = CSRF-token getter, $1 = identity-pairs getter
@@ -369,8 +376,8 @@ let installRequestGuard
     (correlationGetter: unit -> string)
     (csrfEnabled: bool)
     : unit =
-    if not guardInstalled then
-        guardInstalled <- true
+    if not state.GuardInstalled then
+        state <- { state with GuardInstalled = true }
 
         // A6 — the JS `warnOnce` call also fans out to F# AuthDiagnostics
         // + Logger so structured observability (Datadog forwarder, audit

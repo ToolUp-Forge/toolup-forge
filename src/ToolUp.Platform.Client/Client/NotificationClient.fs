@@ -61,51 +61,53 @@ let private parseEnvelope (json: string) : NotificationEnvelope option =
 // below. Multiple callers (ToastCentre, shell `ModuleAction` router, AI
 // companion streams) register independent handlers; the single connection
 // fans each envelope out to all of them.
-//
-// Module-level mutables for this per-tab singleton (documented under
-// "No new side effects" in `src/ToolUp.Platform/README.md`):
-//
-//   connection         — lazily opened on first `subscribe` /
-//                        `publishLocal` call; closed by `reset` /
-//                        `reconnect` (auth transitions) and by the
-//                        fatal-close handling in `onError`.
-//   nextHandlerId      — monotonic id seed handed out on `subscribe`
-//                        so the returned dispose thunk can find its
-//                        slot.
-//   handlers           — list of (id, handler) pairs rebuilt on every
-//                        subscribe/unsubscribe so each subscriber can
-//                        dispose independently without holding a
-//                        reference to the function value.
-//   connectionGivenUp  — latch set when the Phase 117 bounded retry
-//                        budget (`fatalCloseRetryPolicy`) is
-//                        exhausted; subsequent `ensureConnected` calls
-//                        early-return so a dead endpoint does not
-//                        retry-loop forever. Cleared by `reset` /
-//                        `reconnect` — an auth transition earns a
-//                        fresh budget. (Phase 58 shipped this as a
-//                        permanent first-strike latch; Phase 117 made
-//                        it the post-retry terminal state.)
-//   explicitOffLogged  — Phase 58 one-shot guard so the
-//                        "notifications explicitly disabled" info
-//                        line is logged once per tab rather than on
-//                        every `subscribe`.
-//   connectedUserId    — identity the live EventSource was opened
-//                        under; `reconnect` compares it against the
-//                        fresh `UserSession.getUserId ()` so same-user
-//                        token refreshes don't cycle the stream.
-//   retryAttempts      — fatal-close retries consumed since the last
-//                        successful open (reset on `onopen`).
-//   retryTimerHandle   — pending `setTimeout` handle for the next
-//                        retry, so `reset` can cancel it.
-//   queryParamFallbackWarned — one-shot guard for the Phase 117
-//                        "authenticated session fell back to
-//                        query-param identity" AuthDiagnostics warn.
-//
-// All survive until the tab is closed. No per-request state lives here.
 
-let mutable private connection: EventSource option = None
-let mutable private nextHandlerId = 0
-let mutable private handlers: (int * (NotificationEnvelope -> unit)) list = []
+/// Per-tab singleton connection state for the notification stream —
+/// this module's ONE ambient mutable (see `state` below; documented
+/// under "No new side effects" in `src/ToolUp.Platform/README.md`).
+/// Phase 496 consolidated the previous six-plus scattered module-level
+/// mutables into this single record so the concern carries one
+/// documented exception instead of many and the fields cannot drift
+/// out of step. All fields survive until the tab is closed; no
+/// per-request state lives here.
+type private NotificationClientState = {
+    /// Lazily opened on first `subscribe` / `publishLocal` call;
+    /// closed by `reset` / `reconnect` (auth transitions) and by the
+    /// fatal-close handling in `onError`.
+    Connection: EventSource option
+    /// Monotonic id seed handed out on `subscribe` so the returned
+    /// dispose thunk can find its slot.
+    NextHandlerId: int
+    /// List of (id, handler) pairs rebuilt on every subscribe /
+    /// unsubscribe so each subscriber can dispose independently
+    /// without holding a reference to the function value.
+    Handlers: (int * (NotificationEnvelope -> unit)) list
+    /// Latch set when the Phase 117 bounded retry budget
+    /// (`fatalCloseRetryDelaysMs`) is exhausted; subsequent
+    /// `ensureConnected` calls early-return so a dead endpoint does
+    /// not retry-loop forever. Cleared by `reset` / `reconnect` — an
+    /// auth transition earns a fresh budget. (Phase 58 shipped this as
+    /// a permanent first-strike latch; Phase 117 made it the
+    /// post-retry terminal state.)
+    ConnectionGivenUp: bool
+    /// Phase 58 one-shot guard so the "notifications explicitly
+    /// disabled" info line is logged once per tab rather than on every
+    /// `subscribe`.
+    ExplicitOffLogged: bool
+    /// Identity the live EventSource was opened under; `reconnect`
+    /// compares it against the fresh `UserSession.getUserId ()` so
+    /// same-user token refreshes don't cycle the stream.
+    ConnectedUserId: string option
+    /// Fatal-close retries consumed since the last successful open
+    /// (reset on `onopen`).
+    RetryAttempts: int
+    /// Pending `setTimeout` handle for the next retry, so `reset` can
+    /// cancel it.
+    RetryTimerHandle: int option
+    /// One-shot guard for the Phase 117 "authenticated session fell
+    /// back to query-param identity" AuthDiagnostics warn.
+    QueryParamFallbackWarned: bool
+}
 
 // Phase 117 — fatal-close retry budget, as data. Fatal closes
 // (`readyState = CLOSED` — the browser will not auto-retry) were
@@ -117,12 +119,17 @@ let mutable private handlers: (int * (NotificationEnvelope -> unit)) list = []
 // latches, preserving Phase 58's no-retry-loop guarantee.
 let private fatalCloseRetryDelaysMs = [ 5_000; 15_000; 40_000 ]
 
-let mutable private connectionGivenUp = false
-let mutable private explicitOffLogged = false
-let mutable private connectedUserId: string option = None
-let mutable private retryAttempts = 0
-let mutable private retryTimerHandle: int option = None
-let mutable private queryParamFallbackWarned = false
+let mutable private state = {
+    Connection = None
+    NextHandlerId = 0
+    Handlers = []
+    ConnectionGivenUp = false
+    ExplicitOffLogged = false
+    ConnectedUserId = None
+    RetryAttempts = 0
+    RetryTimerHandle = None
+    QueryParamFallbackWarned = false
+}
 
 [<Emit("setTimeout($0, $1)")>]
 let private setTimeout (callback: unit -> unit) (delayMs: int) : int = jsNative
@@ -136,7 +143,7 @@ let private onOpen (es: EventSource) (handler: obj -> unit) : unit = jsNative
 let private fanOut (envelope: NotificationEnvelope) =
     // Iterate against a snapshot — if a handler unsubscribes during
     // dispatch we don't want to skip siblings or revisit them.
-    let snapshot = handlers
+    let snapshot = state.Handlers
 
     for _, handler in snapshot do
         try
@@ -167,8 +174,11 @@ let rec private openConnection () =
              | UserKind
              | TeamMemberKind
              | ClaimBearerKind ->
-                 if not queryParamFallbackWarned then
-                     queryParamFallbackWarned <- true
+                 if not state.QueryParamFallbackWarned then
+                     state <- {
+                         state with
+                             QueryParamFallbackWarned = true
+                     }
 
                      log.Warn
                          "authenticated session has no auth token; SSE falling back to query-param identity (dev escape hatch — production deployments should wire an IAuthBridge so the cookie handshake carries identity)"
@@ -181,7 +191,11 @@ let rec private openConnection () =
             $"/api/notifications?userId={userId}"
 
     let es = createEventSource url
-    connectedUserId <- Some userId
+
+    state <- {
+        state with
+            ConnectedUserId = Some userId
+    }
 
     let forward (event: obj) =
         match parseEnvelope (getData event) with
@@ -203,7 +217,7 @@ let rec private openConnection () =
     // Each successful open earns a fresh fatal-close retry budget —
     // a server that restarts twice a week should not creep towards
     // the latch.
-    onOpen es (fun _ -> retryAttempts <- 0)
+    onOpen es (fun _ -> state <- { state with RetryAttempts = 0 })
 
     // Phase 58 / Phase 117 fatal-close handling. EventSource
     // auto-reconnects on transient failures (readyState = CONNECTING),
@@ -214,35 +228,45 @@ let rec private openConnection () =
     // with no `/api/notifications` mounted, a 401 under CookieRequired,
     // or a 502 mid-deploy), retry on the bounded
     // `fatalCloseRetryDelaysMs` backoff schedule and only then latch
-    // `connectionGivenUp` so later `subscribe` calls stop re-opening.
+    // `ConnectionGivenUp` so later `subscribe` calls stop re-opening.
     // Phase 58 latched on the first fatal close and asserted "404" in
     // the log without evidence — one 502 during a deploy killed
     // notifications for the life of the tab.
     onError es (fun _ ->
         if getReadyState es = eventSourceClosed then
             closeEventSource es
-            connection <- None
-            connectedUserId <- None
 
-            match List.tryItem retryAttempts fatalCloseRetryDelaysMs with
+            state <- {
+                state with
+                    Connection = None
+                    ConnectedUserId = None
+            }
+
+            match List.tryItem state.RetryAttempts fatalCloseRetryDelaysMs with
             | Some delayMs ->
-                retryAttempts <- retryAttempts + 1
+                state <- {
+                    state with
+                        RetryAttempts = state.RetryAttempts + 1
+                }
 
                 log.Warn
-                    $"SSE connection closed fatally (HTTP error or non-SSE response); retrying ({retryAttempts}/{List.length fatalCloseRetryDelaysMs}) in {delayMs}ms"
+                    $"SSE connection closed fatally (HTTP error or non-SSE response); retrying ({state.RetryAttempts}/{List.length fatalCloseRetryDelaysMs}) in {delayMs}ms"
 
-                retryTimerHandle <-
-                    Some(
-                        setTimeout
-                            (fun () ->
-                                retryTimerHandle <- None
+                let timerHandle =
+                    setTimeout
+                        (fun () ->
+                            state <- { state with RetryTimerHandle = None }
 
-                                if not connectionGivenUp && connection.IsNone then
-                                    openConnection ())
-                            delayMs
-                    )
+                            if not state.ConnectionGivenUp && state.Connection.IsNone then
+                                openConnection ())
+                        delayMs
+
+                state <- {
+                    state with
+                        RetryTimerHandle = Some timerHandle
+                }
             | None ->
-                connectionGivenUp <- true
+                state <- { state with ConnectionGivenUp = true }
 
                 log.Warn
                     "notifications unavailable after exhausting reconnect attempts; giving up for this session (the server may not mount /api/notifications, or the endpoint kept failing)"
@@ -254,7 +278,7 @@ let rec private openConnection () =
         else
             log.Warn "SSE connection error — EventSource will retry automatically")
 
-    connection <- Some es
+    state <- { state with Connection = Some es }
 
 let private ensureConnected () =
     // Phase 58 — `Notifications = NoNotificationsExplicit` on the
@@ -263,18 +287,18 @@ let private ensureConnected () =
     // never open EventSource, so no `/api/notifications` request fires
     // and no 404 retry loop burns CPU.
     if BundleConstants.notificationsDisabledExplicitly then
-        if not explicitOffLogged then
+        if not state.ExplicitOffLogged then
             log.Info
                 "Notifications explicitly disabled (__TOOLUP_NOTIFICATIONS_DISABLED__); skipping EventSource for this session"
 
-            explicitOffLogged <- true
-    elif connectionGivenUp then
+            state <- { state with ExplicitOffLogged = true }
+    elif state.ConnectionGivenUp then
         // The bounded fatal-close retry above already exhausted its
         // budget for this session; skip without re-attempting. `reset`
         // / `reconnect` (auth transitions) clear the latch.
         ()
     else
-        match connection with
+        match state.Connection with
         | Some _ -> ()
         | None -> openConnection ()
 
@@ -285,21 +309,22 @@ let private ensureConnected () =
 /// lazily. The shell calls this on sign-out so the previous user's
 /// stream is closed rather than outliving the session.
 let reset () =
-    match retryTimerHandle with
-    | Some handle ->
-        clearTimeout handle
-        retryTimerHandle <- None
+    match state.RetryTimerHandle with
+    | Some handle -> clearTimeout handle
     | None -> ()
 
-    match connection with
-    | Some es ->
-        closeEventSource es
-        connection <- None
+    match state.Connection with
+    | Some es -> closeEventSource es
     | None -> ()
 
-    connectedUserId <- None
-    connectionGivenUp <- false
-    retryAttempts <- 0
+    state <- {
+        state with
+            RetryTimerHandle = None
+            Connection = None
+            ConnectedUserId = None
+            ConnectionGivenUp = false
+            RetryAttempts = 0
+    }
 
 /// Phase 117 — cycle the stream onto the current identity
 /// (`UserSession.getUserId ()` at call time, not at original connect
@@ -314,7 +339,7 @@ let reconnect () =
     let freshUserId = UserSession.getUserId ()
 
     let alreadyCurrent =
-        match connection, connectedUserId with
+        match state.Connection, state.ConnectedUserId with
         | Some _, Some current -> current = freshUserId
         | _ -> false
 
@@ -341,11 +366,19 @@ let reconnect () =
 /// lets `publishLocal` work.
 let subscribe (handler: NotificationEnvelope -> unit) : unit -> unit =
     ensureConnected ()
-    let id = nextHandlerId
-    nextHandlerId <- nextHandlerId + 1
-    handlers <- (id, handler) :: handlers
+    let id = state.NextHandlerId
 
-    fun () -> handlers <- handlers |> List.filter (fun (hid, _) -> hid <> id)
+    state <- {
+        state with
+            NextHandlerId = id + 1
+            Handlers = (id, handler) :: state.Handlers
+    }
+
+    fun () ->
+        state <- {
+            state with
+                Handlers = state.Handlers |> List.filter (fun (hid, _) -> hid <> id)
+        }
 
 /// Dispatch a locally-synthesised envelope to every registered handler
 /// as though it had arrived from the server. Used by the shell's

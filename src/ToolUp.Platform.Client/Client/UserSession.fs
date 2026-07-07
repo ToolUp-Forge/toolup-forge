@@ -50,61 +50,127 @@ let private tokenEmailKey = "toolup-token-email"
 /// key name.
 let private authCookieName = "toolup-auth-token"
 
-// ─── Subject kind ──────────────────────────────────────────────────
+// ─── Ambient session state (Phase 496 consolidation) ───────────────
+//
+// This module's ambient state lives in TWO mutable records split by
+// lifetime — the subject / auth-bridge state (`session`) and the
+// bearer-credential storage state (`tokenState`) — instead of the ten
+// scattered `let mutable` bindings it previously carried. Each record
+// is the concern's single documented module-level-mutable exception
+// (per the "No new side effects" principle); consolidating means the
+// related fields cannot be updated inconsistently and the audit
+// surface stays one binding per concern.
 
-/// Phase 66 Stream B.8 — current resolved `SubjectKind` for storage
-/// selection + identity-header assembly. The retiring `PlatformMode`
-/// shape (`Anonymous` / `Individual` / `Team` / `MultiTeam` / …)
-/// collapses into the four `SubjectKind` cases (`AnonymousKind` /
-/// `UserKind` / `TeamMemberKind` / `ClaimBearerKind`) — single
-/// per-deployment dimension; runtime subject upgrade is the server's
-/// responsibility, the client mirrors the latest known kind.
-///
-/// Set by `SDK.Client.run` before any API call; defaults to
-/// `AnonymousKind` until `configure` runs.
-let mutable private currentSubjectKind = AnonymousKind
+/// Subject + auth-bridge ambient state — configured at boot by
+/// `SDK.Client.run` (`SubjectKind` / `DevDefaultUserId`), then evolved
+/// by the bridge install / refresh / health machinery over the life of
+/// the page. Phase 496 consolidated the previous eight scattered
+/// mutables into this record.
+type private SubjectAndBridgeState = {
+    /// Phase 66 Stream B.8 — current resolved `SubjectKind` for
+    /// storage selection + identity-header assembly. The retiring
+    /// per-deployment shape collapsed into the four `SubjectKind`
+    /// cases (`AnonymousKind` / `UserKind` / `TeamMemberKind` /
+    /// `ClaimBearerKind`); runtime subject upgrade is the server's
+    /// responsibility, the client mirrors the latest known kind. Set
+    /// by `SDK.Client.run` before any API call; defaults to
+    /// `AnonymousKind` until `configure` runs.
+    SubjectKind: SubjectKind
+    /// Phase 4b dev convenience — when set, `getUserId` seeds an empty
+    /// `toolup-user-id` localStorage entry with this value instead of
+    /// an auto-generated GUID. Set by `SDK.Client.run` from
+    /// `ClientConfig.DevDefaultUserId`. Stays `None` in production.
+    DevDefaultUserId: string option
+    /// Phase 6k Workstream A — optional bridge to a deployment-chosen
+    /// identity SDK (Clerk, Microsoft Entra via MSAL, Auth0, WorkOS).
+    /// When installed, the bridge's `GetJwt` is polled periodically
+    /// and the resulting JWT is mirrored through `setAuthToken`.
+    Bridge: IAuthBridge option
+    /// Phase 121 — consecutive bridge-refresh failures since the last
+    /// clean round-trip; surfaces the degradation once it crosses
+    /// `bridgeFailureThreshold`.
+    BridgeFailureStreak: int
+    /// Phase 121 — latch so the degradation is announced once per
+    /// transition, not once per failing poll.
+    BridgeDegradationNotified: bool
+    /// Monotonic id seed for `onBridgeHealthChange` subscriptions so
+    /// the returned dispose thunk can find its slot.
+    NextBridgeHealthHandlerId: int
+    /// Registered bridge-health observers, rebuilt on subscribe /
+    /// dispose.
+    BridgeHealthHandlers: (int * (string option -> unit)) list
+    /// Phase 121 — handle of the live bridge-refresh interval, so a
+    /// re-install (or `uninstallBridge`) can stop the prior loop
+    /// instead of leaking one interval per install.
+    BridgeRefreshIntervalHandle: int option
+}
+
+let mutable private session = {
+    SubjectKind = AnonymousKind
+    DevDefaultUserId = None
+    Bridge = None
+    BridgeFailureStreak = 0
+    BridgeDegradationNotified = false
+    NextBridgeHealthHandlerId = 0
+    BridgeHealthHandlers = []
+    BridgeRefreshIntervalHandle = None
+}
+
+/// Bearer-credential storage state — which storage strategy the
+/// deployment configured, plus the transient in-memory token the
+/// `ServerSetHttpOnlyCookie` path holds. Phase 496 consolidated the
+/// two token-storage mutables into this record.
+type private TokenStorageState = {
+    /// Phase 133 — where the bearer JWT lives once acquired. Set once
+    /// during client initialisation by `SDK.Client.run` from
+    /// `ClientConfig.AuthTokenStorage`.
+    ///
+    /// `ClientCookieAndLocalStorage` (default): `setAuthToken` writes
+    /// the JWT to `localStorage` + a JS-readable `document.cookie` —
+    /// the legacy path, XSS-reachable from either store.
+    ///
+    /// `ServerSetHttpOnlyCookie`: `setAuthToken` POSTs the JWT to
+    /// `POST /api/auth/session` (the server reflects it into an
+    /// `HttpOnly; Secure; SameSite=Strict` cookie) and keeps it only
+    /// in transient in-memory state — never in `localStorage`, never
+    /// in a JS-readable cookie. Requires
+    /// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`.
+    Strategy: AuthTokenStorage
+    /// In-memory bearer token for the `ServerSetHttpOnlyCookie` path.
+    /// Lost on reload (the durable credential is the HttpOnly cookie;
+    /// the bridge re-populates this on boot). Never persisted.
+    ServerCookieToken: string option
+}
+
+let mutable private tokenState = {
+    Strategy = ClientCookieAndLocalStorage
+    ServerCookieToken = None
+}
+
+// ─── Subject kind ──────────────────────────────────────────────────
 
 /// Configure the resolved subject kind. Called once during client
 /// initialisation; updates the cached value the storage / header
 /// helpers branch on. Idempotent — subsequent calls overwrite.
-let configure (kind: SubjectKind) = currentSubjectKind <- kind
+let configure (kind: SubjectKind) =
+    session <- { session with SubjectKind = kind }
 
 /// Read the configured subject kind. Returns `AnonymousKind` until
 /// `configure` runs.
-let getSubjectKind () = currentSubjectKind
+let getSubjectKind () = session.SubjectKind
 
-/// Phase 4b dev convenience — when set, `getUserId` seeds an empty
-/// `toolup-user-id` localStorage entry with this value instead of an
-/// auto-generated GUID. Set by `SDK.Client.run` from
-/// `ClientConfig.DevDefaultUserId`. Stays `None` in production.
-let mutable private devDefaultUserId: string option = None
+/// Configure the dev-default user-id (Phase 4b). Called once during
+/// client initialisation by `SDK.Client.run`. `None` (default) preserves
+/// the auto-generated-GUID behaviour; `Some` overrides only the
+/// first-visit generation path (existing localStorage values are
+/// preserved either way).
+let configureDevDefault (id: string option) =
+    session <- { session with DevDefaultUserId = id }
 
-/// Configure the dev-default user-id. Called once during client
-/// initialisation by `SDK.Client.run`. `None` (default) preserves the
-/// auto-generated-GUID behaviour; `Some` overrides only the first-visit
-/// generation path (existing localStorage values are preserved either
-/// way).
-let configureDevDefault (id: string option) = devDefaultUserId <- id
-
-/// Phase 133 — where the bearer JWT lives once acquired. Set once during
-/// client initialisation by `SDK.Client.run` from
-/// `ClientConfig.AuthTokenStorage`.
-///
-/// `ClientCookieAndLocalStorage` (default): `setAuthToken` writes the JWT
-/// to `localStorage` + a JS-readable `document.cookie` — the legacy path,
-/// XSS-reachable from either store.
-///
-/// `ServerSetHttpOnlyCookie`: `setAuthToken` POSTs the JWT to
-/// `POST /api/auth/session` (the server reflects it into an
-/// `HttpOnly; Secure; SameSite=Strict` cookie) and keeps it only in
-/// transient in-memory state — never in `localStorage`, never in a
-/// JS-readable cookie. Requires
-/// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`.
-let mutable private authTokenStorage = ClientCookieAndLocalStorage
-
-/// Configure the auth-token storage strategy. Idempotent — subsequent
-/// calls overwrite. Called once during client initialisation.
-let configureAuthTokenStorage (storage: AuthTokenStorage) = authTokenStorage <- storage
+/// Configure the auth-token storage strategy (Phase 133). Idempotent —
+/// subsequent calls overwrite. Called once during client initialisation.
+let configureAuthTokenStorage (storage: AuthTokenStorage) =
+    tokenState <- { tokenState with Strategy = storage }
 
 // ─── JWT decode (sub claim only — server validates signature) ──────
 
@@ -239,16 +305,11 @@ let private clearAuthCookie () =
 //
 // On the `ServerSetHttpOnlyCookie` path the JWT is never written to
 // `localStorage` or `document.cookie`. It is held only in transient
-// in-memory state (`serverCookieToken`) and reflected into a server-set
-// `HttpOnly; Secure; SameSite=Strict` cookie via `POST /api/auth/session`.
-// `getAuthToken` reads this in-memory value so the OIDC `exp` reader,
-// `onAuthTokenChange`, and the bridge-dedup keep working without the
-// token ever touching JS-readable storage.
-
-/// In-memory bearer token for the `ServerSetHttpOnlyCookie` path. Lost
-/// on reload (the durable credential is the HttpOnly cookie; the bridge
-/// re-populates this on boot). Never persisted.
-let mutable private serverCookieToken: string option = None
+// in-memory state (`tokenState.ServerCookieToken`) and reflected into a
+// server-set `HttpOnly; Secure; SameSite=Strict` cookie via
+// `POST /api/auth/session`. `getAuthToken` reads this in-memory value so
+// the OIDC `exp` reader, `onAuthTokenChange`, and the bridge-dedup keep
+// working without the token ever touching JS-readable storage.
 
 /// POST the JWT to the server reflection endpoint. `credentials:
 /// 'same-origin'` so the response `Set-Cookie` is honoured and the CSRF
@@ -276,7 +337,7 @@ let private clearServerCookie () : unit = jsNative
 /// Always reads from localStorage so the SSE EventSource `?userId=`
 /// query-param path and the Fable.Remoting `X-User-Id` POST path
 /// resolve the same value regardless of when each is called or what
-/// `currentSubjectKind` was at the time. The pre-fix design forked
+/// `session.SubjectKind` was at the time. The pre-fix design forked
 /// storage on the mode (sessionStorage for Anonymous, localStorage
 /// for authenticated), which produced two parallel id pools any time
 /// `configure` ran between two `getUserId` calls — and the Cmd-driven
@@ -299,7 +360,7 @@ let getUserId () =
     let storage = Browser.Dom.window.localStorage
 
     let isAuth =
-        match currentSubjectKind with
+        match session.SubjectKind with
         | AnonymousKind -> false
         | UserKind
         | TeamMemberKind
@@ -327,7 +388,7 @@ let getUserId () =
             // GUID per first-visit (existing localStorage values are
             // always preserved regardless of this setting).
             let newId =
-                match devDefaultUserId with
+                match session.DevDefaultUserId with
                 | Some id when not (System.String.IsNullOrWhiteSpace id) -> id
                 | _ -> System.Guid.NewGuid().ToString()
 
@@ -380,16 +441,24 @@ let setAuthToken (token: string) =
 
     // The bearer credential itself: storage depends on the configured
     // strategy.
-    match authTokenStorage with
+    match tokenState.Strategy with
     | ClientCookieAndLocalStorage ->
-        serverCookieToken <- None
+        tokenState <- {
+            tokenState with
+                ServerCookieToken = None
+        }
+
         Browser.Dom.window.localStorage.setItem (tokenKey, token)
         setAuthCookie token
     | ServerSetHttpOnlyCookie ->
         // Never touch localStorage / document.cookie for the token.
         // Hold it in memory only and reflect it into the server-set
         // HttpOnly cookie.
-        serverCookieToken <- Some token
+        tokenState <- {
+            tokenState with
+                ServerCookieToken = Some token
+        }
+
         reflectTokenToServer token
 
 /// Clear the auth token (called on sign-out). Also clears the
@@ -406,11 +475,15 @@ let clearAuthToken () =
     // Clear the JS-readable cookie unconditionally (cheap, belt-and-
     // suspenders) and reset the in-memory token.
     clearAuthCookie ()
-    serverCookieToken <- None
+
+    tokenState <- {
+        tokenState with
+            ServerCookieToken = None
+    }
 
     // On the server-cookie path also clear the HttpOnly cookie the
     // server set — the client cannot touch it directly.
-    match authTokenStorage with
+    match tokenState.Strategy with
     | ClientCookieAndLocalStorage -> ()
     | ServerSetHttpOnlyCookie -> clearServerCookie ()
 
@@ -443,7 +516,7 @@ let getEmail () : string option =
 /// working identically on both paths without the token ever touching
 /// JS-readable storage.
 let getAuthToken () =
-    match serverCookieToken with
+    match tokenState.ServerCookieToken with
     | Some _ as t -> t
     | None ->
         match Browser.Dom.window.localStorage.getItem tokenKey with
@@ -452,19 +525,18 @@ let getAuthToken () =
         | token -> Some token
 
 // ─── Auth bridge (Phase 6k Workstream A) ───────────────────────────
-
-/// Phase 6k Workstream A. Optional bridge to a deployment-chosen
-/// identity SDK (Clerk, Microsoft Entra via MSAL, Auth0, WorkOS).
-/// When installed, the bridge's `GetJwt` is polled periodically and
-/// the resulting JWT is mirrored through `setAuthToken` — so the
-/// existing synchronous `withRequestHeaders` path continues to work,
-/// and the JWT cookie + localStorage stay current as the provider
-/// SDK refreshes the token silently in the background.
-///
-/// `setAuthToken` continues to work without a bridge — the bridge is
-/// the *preferred* path for production but deployments without one can
-/// drive `setAuthToken` directly from their auth UI.
-let mutable private currentBridge: IAuthBridge option = None
+//
+// The bridge itself (`session.Bridge`) is optional and deployment-
+// chosen (Clerk, Microsoft Entra via MSAL, Auth0, WorkOS). When
+// installed, the bridge's `GetJwt` is polled periodically and the
+// resulting JWT is mirrored through `setAuthToken` — so the existing
+// synchronous `withRequestHeaders` path continues to work, and the JWT
+// cookie + localStorage stay current as the provider SDK refreshes the
+// token silently in the background.
+//
+// `setAuthToken` continues to work without a bridge — the bridge is
+// the *preferred* path for production but deployments without one can
+// drive `setAuthToken` directly from their auth UI.
 
 /// Refresh interval for the installed bridge. JWT lifetimes are
 /// typically 1 hour; checking every 60 s catches expiry without
@@ -477,19 +549,16 @@ let private bridgeRefreshIntervalMs = 60_000
 // (`with _ -> ()`): a persistently failing bridge (Clerk misconfig,
 // expired MSAL session, CSP blocking the IdP iframe) silently let the
 // cached JWT expire and degraded the user to an effectively-anonymous
-// subject with zero observability. The streak counter below surfaces
-// the failure once it is clearly persistent rather than transient:
-// at `bridgeFailureThreshold` consecutive failures it emits through
+// subject with zero observability. The streak counter
+// (`session.BridgeFailureStreak`) surfaces the failure once it is
+// clearly persistent rather than transient: at
+// `bridgeFailureThreshold` consecutive failures it emits through
 // `AuthDiagnostics` + the `client.auth.bridge` category logger and
 // notifies `onBridgeHealthChange` subscribers (the shell maps the
 // notification to a boot-degradation banner entry). A subsequent
 // clean round-trip resets the streak and notifies recovery.
 
 let private bridgeFailureThreshold = 3
-let mutable private bridgeFailureStreak = 0
-let mutable private bridgeDegradationNotified = false
-let mutable private nextBridgeHealthHandlerId = 0
-let mutable private bridgeHealthHandlers: (int * (string option -> unit)) list = []
 
 let private bridgeLog = Logger.forCategory "client.auth.bridge"
 
@@ -499,21 +568,29 @@ let private bridgeLog = Logger.forCategory "client.auth.bridge"
 /// `None` when a later refresh succeeds (recovered). Fires once per
 /// transition, not per failing poll. Returns a dispose callback.
 let onBridgeHealthChange (handler: string option -> unit) : unit -> unit =
-    let id = nextBridgeHealthHandlerId
-    nextBridgeHealthHandlerId <- nextBridgeHealthHandlerId + 1
-    bridgeHealthHandlers <- (id, handler) :: bridgeHealthHandlers
+    let id = session.NextBridgeHealthHandlerId
 
-    fun () -> bridgeHealthHandlers <- bridgeHealthHandlers |> List.filter (fun (hid, _) -> hid <> id)
+    session <- {
+        session with
+            NextBridgeHealthHandlerId = id + 1
+            BridgeHealthHandlers = (id, handler) :: session.BridgeHealthHandlers
+    }
+
+    fun () ->
+        session <- {
+            session with
+                BridgeHealthHandlers = session.BridgeHealthHandlers |> List.filter (fun (hid, _) -> hid <> id)
+        }
 
 let private notifyBridgeHealth (health: string option) =
-    for _, handler in bridgeHealthHandlers do
+    for _, handler in session.BridgeHealthHandlers do
         try
             handler health
         with _ ->
             ()
 
 let private refreshFromBridgeOnce () = async {
-    match currentBridge with
+    match session.Bridge with
     | None -> return ()
     | Some bridge ->
         try
@@ -522,10 +599,14 @@ let private refreshFromBridgeOnce () = async {
             // Phase 121 — a clean round-trip (token present OR a
             // definitive signed-out answer) resets the failure streak;
             // if a degradation had been surfaced, announce recovery.
-            bridgeFailureStreak <- 0
+            session <- { session with BridgeFailureStreak = 0 }
 
-            if bridgeDegradationNotified then
-                bridgeDegradationNotified <- false
+            if session.BridgeDegradationNotified then
+                session <- {
+                    session with
+                        BridgeDegradationNotified = false
+                }
+
                 bridgeLog.Info "auth-bridge refresh recovered"
                 AuthDiagnostics.emitOk None "bridge-refresh-recovered" None
                 notifyBridgeHealth None
@@ -553,15 +634,24 @@ let private refreshFromBridgeOnce () = async {
             // failures via its own affordances). Phase 121: count the
             // consecutive failures instead of discarding them, and
             // surface the streak once it crosses the threshold.
-            bridgeFailureStreak <- bridgeFailureStreak + 1
+            session <- {
+                session with
+                    BridgeFailureStreak = session.BridgeFailureStreak + 1
+            }
 
-            if bridgeFailureStreak >= bridgeFailureThreshold && not bridgeDegradationNotified then
-                bridgeDegradationNotified <- true
+            if
+                session.BridgeFailureStreak >= bridgeFailureThreshold
+                && not session.BridgeDegradationNotified
+            then
+                session <- {
+                    session with
+                        BridgeDegradationNotified = true
+                }
 
                 bridgeLog.Warn(
                     sprintf
                         "auth-bridge GetJwt failed %d times in a row (%s) — the cached JWT will expire and this session will degrade to effectively-anonymous. Check the identity-provider SDK configuration (Clerk/MSAL/Auth0), the provider session validity, and any CSP rule blocking the IdP iframe."
-                        bridgeFailureStreak
+                        session.BridgeFailureStreak
                         ex.Message
                 )
 
@@ -579,11 +669,6 @@ let private setInterval (cb: unit -> unit) (ms: int) : int = jsNative
 [<Emit("clearInterval($0)")>]
 let private clearInterval (handle: int) : unit = jsNative
 
-/// Phase 121 — handle of the live bridge-refresh interval, so a
-/// re-install (or `uninstallBridge`) can stop the prior loop instead
-/// of leaking one interval per install.
-let mutable private bridgeRefreshIntervalHandle: int option = None
-
 /// Install a deployment-specific auth bridge. Called once during
 /// `SDK.Client.run` if `ClientConfig.AuthBridge` is `Some`. Kicks off
 /// an immediate JWT fetch + a periodic refresh loop. Idempotent — a
@@ -591,39 +676,48 @@ let mutable private bridgeRefreshIntervalHandle: int option = None
 /// refresh interval (pre-121 the old interval leaked and kept polling
 /// the replaced bridge).
 let installBridge (bridge: IAuthBridge) =
-    match bridgeRefreshIntervalHandle with
-    | Some handle ->
-        clearInterval handle
-        bridgeRefreshIntervalHandle <- None
+    match session.BridgeRefreshIntervalHandle with
+    | Some handle -> clearInterval handle
     | None -> ()
 
-    currentBridge <- Some bridge
+    session <- {
+        session with
+            Bridge = Some bridge
+            BridgeRefreshIntervalHandle = None
+    }
 
     // Immediate fetch so the cookie + localStorage are populated
     // before the first request flies. Subsequent refreshes happen on
     // the interval below.
     Async.StartImmediate(refreshFromBridgeOnce ())
 
-    bridgeRefreshIntervalHandle <-
-        Some(setInterval (fun () -> Async.StartImmediate(refreshFromBridgeOnce ())) bridgeRefreshIntervalMs)
+    let handle =
+        setInterval (fun () -> Async.StartImmediate(refreshFromBridgeOnce ())) bridgeRefreshIntervalMs
+
+    session <- {
+        session with
+            BridgeRefreshIntervalHandle = Some handle
+    }
 
 /// Phase 121 — remove the installed bridge and stop its refresh
 /// interval. Sign-out cleanup affordance (and test teardown); the
 /// bridge-health streak resets so a later install starts clean.
 let uninstallBridge () =
-    match bridgeRefreshIntervalHandle with
-    | Some handle ->
-        clearInterval handle
-        bridgeRefreshIntervalHandle <- None
+    match session.BridgeRefreshIntervalHandle with
+    | Some handle -> clearInterval handle
     | None -> ()
 
-    currentBridge <- None
-    bridgeFailureStreak <- 0
-    bridgeDegradationNotified <- false
+    session <- {
+        session with
+            BridgeRefreshIntervalHandle = None
+            Bridge = None
+            BridgeFailureStreak = 0
+            BridgeDegradationNotified = false
+    }
 
 /// Read the installed bridge, if any. Used by trace logging in
 /// `withRequestHeaders` and the dev panel's auth surface.
-let getBridge () = currentBridge
+let getBridge () = session.Bridge
 
 /// Force an immediate JWT refresh from the installed bridge. Useful
 /// for deployments that know a sign-in/sign-out just happened (e.g.
@@ -689,7 +783,7 @@ let userIdHeader = "X-User-Id"
 /// JWT refresh instead of freezing at proxy-build time (the bug that
 /// `Remoting.withCustomHeader` caused for module-level proxies).
 let identityHeaderPairs () : (string * string)[] =
-    match currentSubjectKind with
+    match session.SubjectKind with
     | AnonymousKind -> [| userIdHeader, getUserId () |]
     | UserKind
     | TeamMemberKind
