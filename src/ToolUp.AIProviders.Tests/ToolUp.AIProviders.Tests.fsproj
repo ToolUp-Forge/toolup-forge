@@ -21,6 +21,7 @@
         <Compile Include="Tests\ClaudeProviderTests.fs" />
         <Compile Include="Tests\OpenAIProviderTests.fs" />
         <Compile Include="Tests\GeminiProviderTests.fs" />
+        <Compile Include="Tests\CopilotProviderTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -37,6 +38,7 @@
         <ProjectReference Include="..\AIProviders\Claude\ClaudeAIProvider.fsproj" />
         <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" />
         <ProjectReference Include="..\AIProviders\Gemini\Gemini.fsproj" />
+        <ProjectReference Include="..\AIProviders\Copilot\CopilotAIProvider.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />

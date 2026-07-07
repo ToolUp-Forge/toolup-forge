@@ -11,6 +11,7 @@ let allTests =
         ClaudeProviderTests.tests
         OpenAIProviderTests.tests
         GeminiProviderTests.tests
+        CopilotProviderTests.tests
     ]
 
 [<EntryPoint>]

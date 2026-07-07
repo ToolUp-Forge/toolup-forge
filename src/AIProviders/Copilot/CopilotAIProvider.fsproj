@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AIProviders.Copilot</PackageId>
+    <AssemblyName>ToolUp.AIProviders.Copilot</AssemblyName>
+    <Description>Azure OpenAI ("Microsoft Copilot") IAIProvider implementation for ToolUp.AI. Supports static api-key and Microsoft Entra ID (Azure.Identity TokenCredential) auth. BYOK-capable; reads api-keys from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;ai;azure;azure-openai;copilot;entra;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Azure OpenAI's chat/completions wire is byte-identical to OpenAI's,
+         so we compile the OpenAI wire source directly rather than duplicate
+         it (zero drift). It stays `module internal` within this assembly. -->
+    <Compile Include="..\OpenAI\OpenAIProvider.Wire.fs">
+      <Link>OpenAIProvider.Wire.fs</Link>
+    </Compile>
+    <Compile Include="CopilotAIProvider.fs" />
+    <Compile Include="CopilotAIProviderHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Azure.Identity" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+  </ItemGroup>
+</Project>
