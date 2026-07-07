@@ -174,10 +174,11 @@ let private parseSurfacesString (raw: string) (fallback: SurfaceProfile list) : 
 /// `agGridLicense` and `clerkPublishableKey` are not directly used by
 /// this helper — the consumer typically constructs `GridModules =
 /// AgGridEnterprise.gridModuleConfig agGridLicense` and `AuthUI =
-/// ClerkAuthUI { PublishableKey = clerkPublishableKey }` and supplies
-/// them via the overrides record. They are accepted here so a
-/// composition root that wants to surface them in a single block
-/// can do so without re-`[<Emit>]`-declaring.
+/// ProviderAuthUI ("clerk", box { PublishableKey = clerkPublishableKey })`
+/// (via the ClerkUI companion's `ClerkRegister.authUI` smart
+/// constructor) and supplies them via the overrides record. They are
+/// accepted here so a composition root that wants to surface them in
+/// a single block can do so without re-`[<Emit>]`-declaring.
 let fromBundleConstantValues
     (moduleFilter: string)
     (_agGridLicense: string)

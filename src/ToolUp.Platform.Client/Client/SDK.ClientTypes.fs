@@ -467,8 +467,11 @@ module OidcUIConfig =
     }
 
 /// Configuration for the Clerk sign-in flow, used when
-/// `ClientConfig.AuthUI = ClerkAuthUI _`. The ClerkUI companion reads
-/// this to configure the Clerk React provider.
+/// `ClientConfig.AuthUI = ProviderAuthUI ("clerk", box clerkUIConfig)`
+/// (or the deprecated `ClerkAuthUI _` alias). The ClerkUI companion
+/// reads this to configure the Clerk React provider; its
+/// `ClerkRegister.authUI` smart constructor builds the neutral case
+/// from this record without the consumer boxing by hand.
 type ClerkUIConfig = {
     /// Clerk publishable key. Visible to the browser by design —
     /// Clerk's security model assumes this is shipped to the client.
@@ -482,8 +485,9 @@ type CustomAuthUI = { Wrap: ReactElement -> ReactElement }
 
 /// How the shell handles sign-in UI in authenticated modes. Ignored
 /// in `Anonymous` mode (there is nothing to sign in to). The actual
-/// sign-in provider code lives in companion packages which register
-/// themselves with `AuthUIProvider` at module load time.
+/// sign-in provider code lives in companion packages whose exported
+/// handler values are added to `ClientConfig.Handlers.AuthUIHandlers`
+/// (tag-keyed — see `AuthUIProvider`).
 type AuthUIMode =
     /// No SDK-provided sign-in UI. The shell runs as-is; the app is
     /// expected to obtain tokens by some other means and hand them to
@@ -492,14 +496,29 @@ type AuthUIMode =
     /// SDK-provided OIDC Authorization Code + PKCE flow via the
     /// OidcClient companion. Requires importing
     /// `src/AuthProviders/OidcClient/OidcClient.Client.props`.
+    /// (OIDC is a protocol, not a vendor — this case stays.)
     | OidcAuthUI of OidcUIConfig
-    /// Clerk-managed flow via the ClerkUI sub-companion. Requires
-    /// importing `src/AuthProviders/ClerkUI/ClerkUI.Client.props`.
-    | ClerkAuthUI of ClerkUIConfig
+    /// Deprecated vendor-named alias for
+    /// `ProviderAuthUI ("clerk", box clerkUIConfig)` — Phase 494. Kept
+    /// compiling for source compat; removal is a later major-version
+    /// act. See `docs/migrations/494-vendor-neutral-auth-ui.md`.
+    | [<System.Obsolete("Vendor-named case — use ProviderAuthUI (\"clerk\", box clerkUIConfig) (or ToolUp.AuthProviders.ClerkRegister.authUI from the ClerkUI companion) instead. See docs/migrations/494-vendor-neutral-auth-ui.md. ClerkAuthUI will be removed in a future major version.")>] ClerkAuthUI of
+        ClerkUIConfig
     /// App-supplied wrapper. Bypasses the companion indirection —
     /// useful for deployments that have a custom sign-in flow the
     /// SDK shouldn't know about.
     | CustomAuthUI of CustomAuthUI
+    /// Vendor-neutral companion-backed sign-in flow (Phase 494). `tag`
+    /// names the handler entry in
+    /// `ClientConfig.Handlers.AuthUIHandlers` (the same key the
+    /// `AuthUIProvider` registry dispatches on — e.g. `"clerk"`,
+    /// `"oidc"`, or any third-party companion's tag); `config` is the
+    /// provider-specific config payload, type-erased at this sanctioned
+    /// boundary exactly as `AuthUIHandler` already receives it — the
+    /// registered handler knows the concrete type and unboxes.
+    /// Companions export typed smart constructors (e.g.
+    /// `ClerkRegister.authUI`) so consumers never box by hand.
+    | ProviderAuthUI of tag: string * config: obj
 
 /// Phase 133 — where the client keeps the bearer JWT once acquired.
 ///
@@ -1198,10 +1217,12 @@ type ClientConfig = {
     DataSubjectRequestAdmin: DataSubjectRequestAdminMode
     /// Controls the real-time toast renderer. Default: SDK built-in.
     ToastCentre: ToastCentreMode
-    /// Sign-in / sign-out UI. Companion-delegated: `OidcAuthUI` needs
-    /// the OidcClient companion imported in the client .fsproj;
-    /// `ClerkAuthUI` needs ClerkUI. Default `NoAuthUI` — no SDK-provided
-    /// sign-in flow, the app takes responsibility for obtaining tokens.
+    /// Sign-in / sign-out UI. Companion-delegated:
+    /// `ProviderAuthUI (tag, config)` needs the matching companion's
+    /// handler in `Handlers.AuthUIHandlers` (e.g. the ClerkUI
+    /// companion's `"clerk"` handler); `OidcAuthUI` needs OidcClient.
+    /// Default `NoAuthUI` — no SDK-provided sign-in flow, the app
+    /// takes responsibility for obtaining tokens.
     AuthUI: AuthUIMode
     /// Phase 133 — where the client keeps the bearer JWT.
     /// `ClientCookieAndLocalStorage` (default) preserves the legacy

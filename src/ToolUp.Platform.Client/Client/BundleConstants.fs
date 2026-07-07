@@ -38,7 +38,8 @@ let moduleFilter: string = jsNative
 let agGridLicense: string = jsNative
 
 /// Read from the `__CLERK_PUBLISHABLE_KEY__` Vite define. Empty
-/// string when unset — Release builds wiring `ClerkAuthUI` should
+/// string when unset — Release builds wiring the Clerk auth UI
+/// (`ProviderAuthUI ("clerk", _)` via `ClerkRegister.authUI`) should
 /// fail loud rather than silently fall through to anonymous mode.
 [<Emit("(typeof __CLERK_PUBLISHABLE_KEY__ === 'string' ? __CLERK_PUBLISHABLE_KEY__ : '')")>]
 let clerkPublishableKey: string = jsNative

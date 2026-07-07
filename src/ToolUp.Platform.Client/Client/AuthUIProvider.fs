@@ -3,6 +3,11 @@
 
 namespace ToolUp.Platform
 
+// Phase 494 — this file must keep dispatching the deprecated
+// `ClerkAuthUI` case (an [<Obsolete>] alias for
+// `ProviderAuthUI ("clerk", _)`) until its major-version removal.
+#nowarn "44"
+
 open Feliz
 
 /// Registry for sign-in UI handlers supplied by companion packages.
@@ -57,7 +62,8 @@ module AuthUIProvider =
     /// (e.g. a custom external redirect) and hand them to
     /// `UserSession.setAuthToken`.
     ///
-    /// `OidcAuthUI` / `ClerkAuthUI` require the matching handler to
+    /// `ProviderAuthUI (tag, _)` — and the tag-fixed forms `OidcAuthUI`
+    /// / the deprecated `ClerkAuthUI` — require the matching handler to
     /// be wired into `ClientConfig.Handlers.AuthUIHandlers`; missing
     /// handlers normally fail loud at `Client.run` (validator step),
     /// but the per-render fallback path here also `failwith`s
@@ -75,6 +81,23 @@ module AuthUIProvider =
         | ClaimBearerKind, _ -> shell
         | _, NoAuthUI -> shell
         | _, CustomAuthUI cfg -> cfg.Wrap shell
+        | _, ProviderAuthUI(tag, cfg) ->
+            // Phase 494 — the vendor-neutral case: dispatch on the
+            // caller-supplied tag, exactly as the tag-fixed arms below
+            // do for their hardcoded tags. The `obj` payload is handed
+            // to the handler untouched (the handler unboxes; sanctioned
+            // erasure boundary).
+            match Map.tryFind tag handlers with
+            | Some h -> h cfg shell
+            | None ->
+                failwithf
+                    "ClientConfig.AuthUI = ProviderAuthUI (\"%s\", _) but no handler with tag \"%s\" is registered \
+                     in ClientConfig.Handlers.AuthUIHandlers. Add the companion-exported handler value for that tag \
+                     (e.g. `ToolUp.AuthProviders.ClerkRegister.handler` for \"clerk\") to \
+                     ClientConfig.Handlers.AuthUIHandlers, or set ClientConfig.AuthUI to \
+                     NoAuthUI / a different provider."
+                    tag
+                    tag
         | _, OidcAuthUI cfg ->
             match Map.tryFind "oidc" handlers with
             | Some h -> h (box cfg) shell

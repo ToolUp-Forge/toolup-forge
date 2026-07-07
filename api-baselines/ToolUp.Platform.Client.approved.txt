@@ -2264,6 +2264,7 @@ ToolUp.Platform.AuthUIMode.IsClerkAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.IsCustomAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.IsNoAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.IsOidcAuthUI : System.Boolean { get }
+ToolUp.Platform.AuthUIMode.IsProviderAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.NoAuthUI : ToolUp.Platform.AuthUIMode { get }
 ToolUp.Platform.AuthUIMode.Tag : System.Int32 { get }
 ToolUp.Platform.AuthUIMode+ClerkAuthUI (class)
@@ -2272,11 +2273,15 @@ ToolUp.Platform.AuthUIMode+CustomAuthUI (class)
 ToolUp.Platform.AuthUIMode+CustomAuthUI.Item : ToolUp.Platform.CustomAuthUI { get }
 ToolUp.Platform.AuthUIMode+OidcAuthUI (class)
 ToolUp.Platform.AuthUIMode+OidcAuthUI.Item : ToolUp.Platform.OidcUIConfig { get }
+ToolUp.Platform.AuthUIMode+ProviderAuthUI (class)
+ToolUp.Platform.AuthUIMode+ProviderAuthUI.config : System.Object { get }
+ToolUp.Platform.AuthUIMode+ProviderAuthUI.tag : System.String { get }
 ToolUp.Platform.AuthUIMode+Tags (class)
 ToolUp.Platform.AuthUIMode+Tags.ClerkAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIMode+Tags.CustomAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIMode+Tags.NoAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIMode+Tags.OidcAuthUI : System.Int32 (literal)
+ToolUp.Platform.AuthUIMode+Tags.ProviderAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIProvider (class)
 ToolUp.Platform.AuthUIProvider.gate(ToolUp.Platform.AuthUIMode, ToolUp.Platform.SubjectKind, Fable.React.ReactElement) : Fable.React.ReactElement
 ToolUp.Platform.AuthUIProvider.setHandlers(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]) : System.Void

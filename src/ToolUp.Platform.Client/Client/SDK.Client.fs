@@ -3,6 +3,11 @@
 
 namespace ToolUp.Platform
 
+// Phase 494 — validateHandlers + bootSummary must keep handling the
+// deprecated `ClerkAuthUI` case (an [<Obsolete>] alias for
+// `ProviderAuthUI ("clerk", _)`) until its major-version removal.
+#nowarn "44"
+
 open ToolUp.Elmish
 open ToolUp.Elmish.React
 open Feliz
@@ -2864,6 +2869,10 @@ module Client =
     let private validateHandlers (config: ClientConfig) : unit =
         let authUITag =
             match config.AuthUI with
+            // Phase 494 — the vendor-neutral case validates on its
+            // caller-supplied tag; the hint names the companion-export
+            // convention rather than a specific vendor.
+            | ProviderAuthUI(tag, _) -> Some(tag, sprintf "the companion-exported handler value for tag \"%s\"" tag)
             | OidcAuthUI _ -> Some("oidc", "ToolUp.AuthProviders.OidcRegister.handler")
             | ClerkAuthUI _ -> Some("clerk", "ToolUp.AuthProviders.ClerkRegister.handler")
             | NoAuthUI
@@ -3017,6 +3026,9 @@ module Client =
             | OidcAuthUI _ -> "oidc"
             | ClerkAuthUI _ -> "clerk"
             | CustomAuthUI _ -> "custom"
+            // Phase 494 — the neutral case reports its own tag, so a
+            // Clerk deployment on the neutral form still logs "clerk".
+            | ProviderAuthUI(tag, _) -> tag
 
         // Phase 66 Stream B.8 — log the canonical surfaces label.
         // Single-surface deployments render their pre-66 mode name
