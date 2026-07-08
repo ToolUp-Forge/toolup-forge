@@ -31,6 +31,13 @@ open ToolUp.Remoting.Json.SystemTextJson
 // ever revealed to that team. Portability (GP 12): identity by value,
 // async at every boundary, no ordering promise across refs, stateless
 // between calls.
+//
+// Composition: `ServerConfig.Presence = EnabledPresence` registers the
+// in-memory default into DI (see `ComposeNotifications`); `NoPresence`
+// (the default) registers nothing. The SDK mounts no lock HTTP surface —
+// a deployment exposes its own module-owned API over the resolved store
+// (the `useEntityLock` hook's `LockTransport` is consumer-supplied to
+// match).
 
 /// Scope-isolated advisory soft-lock store. `Acquire` grants a lease or
 /// returns the current holder (never blocks); `Renew` extends the

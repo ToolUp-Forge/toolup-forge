@@ -2736,9 +2736,11 @@ type ServerConfig = {
     /// `IEntityLockStore` in DI, no heartbeat cost, no
     /// `_platform.presence` / `_platform.lock` fan-out; an existing
     /// deployment that upgrades stays byte-for-byte identical until it
-    /// opts in (GP 11 + GP 13). Enable with `EnabledPresence` to unlock
-    /// who's-here awareness + advisory TTL entity soft-locks over the
-    /// existing real-time channel (awareness only — not co-editing).
+    /// opts in (GP 11 + GP 13). `EnabledPresence` registers the two
+    /// in-memory defaults into DI over the notification channel —
+    /// substrate only: the deployment exposes its own API over them and
+    /// mounts `PresenceContext.provider` client-side (awareness only —
+    /// not co-editing).
     Presence: PresenceMode
 }
 

@@ -179,9 +179,13 @@ type PresenceMode =
     /// compose them in.
     | NoPresence
     /// Register the in-memory `IPresenceTracker` + `IEntityLockStore`
-    /// defaults (single-instance; a multi-instance deployment supplies
-    /// distributed implementations over the distributed
+    /// defaults into DI (single-instance; a multi-instance deployment
+    /// supplies distributed implementations over the distributed
     /// `INotificationChannel` companion — see the Phase 9c
     /// distributed-companion family). Presence / lock events fan out on
     /// the reserved `_platform.*` keys, scope-isolated per team.
+    /// Substrate only: the SDK mounts no presence / lock HTTP surface —
+    /// a deployment exposes its own (module-owned) API over the resolved
+    /// services and mounts `PresenceContext.provider` client-side; the
+    /// client hooks are transport-parameterised by design.
     | EnabledPresence

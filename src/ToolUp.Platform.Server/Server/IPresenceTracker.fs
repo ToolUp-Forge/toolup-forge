@@ -28,6 +28,13 @@ open ToolUp.Remoting.Json.SystemTextJson
 // (a distributed impl may serve successive calls from different nodes),
 // per-scope sharding with no cross-scope ordering claim, expiry
 // precision declared by the implementation's heartbeat window.
+//
+// Composition: `ServerConfig.Presence = EnabledPresence` registers the
+// in-memory default into DI (see `ComposeNotifications`); `NoPresence`
+// (the default) registers nothing. The SDK mounts no presence HTTP
+// surface — a deployment exposes its own module-owned API over the
+// resolved tracker (the client hooks in `PresenceClient` /
+// `PresenceContext` are transport-parameterised to match).
 
 /// Scope-isolated presence tracker with per-peer location. `Join`
 /// announces arrival at a location; `Heartbeat` keeps a peer live

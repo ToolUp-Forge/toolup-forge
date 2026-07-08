@@ -633,6 +633,11 @@ let compose
     // to `ComposeNotifications.registerShareTokenStore`).
     registerShareTokenStore services shareTokenStoreInstance
 
+    // Phase 442 — register the presence + soft-lock substrate when
+    // `ServerConfig.Presence = EnabledPresence` (extracted to
+    // `ComposeNotifications.registerPresenceSubstrate`).
+    registerPresenceSubstrate services notificationStack.PresenceSubstrate
+
     // Phase 9v — outbound `IRateLimiter` registration (extracted to
     // `ComposeRuntimeServices.registerOutboundRateLimiter`). Populates
     // `rateLimiterCell` so the webhook dispatcher's per-attempt `Wait`

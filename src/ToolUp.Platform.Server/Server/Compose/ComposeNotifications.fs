@@ -41,6 +41,10 @@ type NotificationStack = {
     /// the wire transport and ride the dispatcher's queue instead.
     /// Non-transactional kinds pass through unchanged.
     ResolvedNotificationChannel: INotificationChannel
+    /// Phase 442 — opt-in presence + soft-lock substrate. `None` when
+    /// `ServerConfig.Presence = NoPresence` (the default): no DI
+    /// registration, no allocation, byte-for-byte unchanged (GP 13).
+    PresenceSubstrate: (IPresenceTracker * IEntityLockStore) option
     NarrativeStore: INarrativeStore
 }
 
@@ -225,6 +229,27 @@ let buildNotificationStack
         | Some dispatcher ->
             TransactionalDispatcher.DispatchingNotificationChannel(baseNotificationChannel, dispatcher) :> _
 
+    // Phase 442 — opt-in presence + soft-lock collaboration substrate.
+    // `EnabledPresence` constructs the in-memory `IPresenceTracker` /
+    // `IEntityLockStore` defaults over the resolved (dispatcher-wrapped)
+    // notification channel so join / move / leave and lock events fan out
+    // on the same per-scope SSE pipeline every other server event rides.
+    // Registration into DI happens in `registerPresenceSubstrate` further
+    // down (mirrors the share-token store split). The SDK registers the
+    // substrate only — a deployment exposes its own (module-owned)
+    // presence / lock API over the resolved services and mounts
+    // `PresenceContext.provider` client-side; both in-memory defaults are
+    // single-instance (a multi-instance deployment supplies distributed
+    // implementations, per the impl file headers).
+    let presenceSubstrate: (IPresenceTracker * IEntityLockStore) option =
+        match config.Presence with
+        | NoPresence -> None
+        | EnabledPresence ->
+            Some(
+                InMemoryPresenceTracker(resolvedNotificationChannel) :> IPresenceTracker,
+                InMemoryEntityLockStore(resolvedNotificationChannel) :> IEntityLockStore
+            )
+
     // Narrative store. Default to the blob-backed persistent
     // implementation so narratives survive process restarts — the
     // in-memory variant lost everything on every reboot, which left AI
@@ -259,6 +284,7 @@ let buildNotificationStack
         ShareTokenStoreInstance = shareTokenStoreInstance
         TransactionalDispatcher = transactionalDispatcher
         ResolvedNotificationChannel = resolvedNotificationChannel
+        PresenceSubstrate = presenceSubstrate
         NarrativeStore = narrativeStore
     }
 
@@ -270,6 +296,22 @@ let registerShareTokenStore (services: IServiceCollection) (shareTokenStoreInsta
     match shareTokenStoreInstance with
     | None -> ()
     | Some store -> services.AddSingleton<IShareTokenStore>(store) |> ignore
+
+/// Phase 442 — register the presence + soft-lock substrate when
+/// `ServerConfig.Presence = EnabledPresence`. The pair was constructed in
+/// `buildNotificationStack` (over the resolved notification channel);
+/// only the DI registration happens here. `NoPresence` registers nothing
+/// — a module that resolves either interface then receives `null` and
+/// must handle absence explicitly (same contract as `IShareTokenStore`).
+let registerPresenceSubstrate
+    (services: IServiceCollection)
+    (presenceSubstrate: (IPresenceTracker * IEntityLockStore) option)
+    : unit =
+    match presenceSubstrate with
+    | None -> ()
+    | Some(tracker, lockStore) ->
+        services.AddSingleton<IPresenceTracker>(tracker) |> ignore
+        services.AddSingleton<IEntityLockStore>(lockStore) |> ignore
 
 /// Phase 6f — transactional dispatcher hosted service. Registered only
 /// when at least one `INotificationSink` was supplied (the dispatcher is

@@ -11,13 +11,14 @@ open ToolUp.Platform
 //
 // The declarative client half of the presence + soft-lock substrate:
 // module views read "who else is here" and "is this entity locked, and
-// by whom" from a React context the shell provides at the root of the
-// view tree — the same idiomatic path as `ProcessedDataContext` /
-// `LoadingIndicatorContext`. The shell keeps the context value fresh by
-// subscribing to the reserved `_platform.presence` / `_platform.lock`
-// notification keys (Phase 6a SSE bridge) and re-providing on each
-// roster / lock change; module views never poll and never thread the
-// state through props.
+// by whom" from a React context provided at the root of the view tree —
+// the same idiomatic path as `ProcessedDataContext` /
+// `LoadingIndicatorContext`. The DEPLOYMENT mounts `provider` (the SDK
+// shell does not auto-mount it) and keeps the value fresh by subscribing
+// to the reserved `_platform.presence` / `_platform.lock` notification
+// keys (Phase 6a SSE bridge) and re-providing on each roster / lock
+// change; module views never poll and never thread the state through
+// props.
 //
 // The `useEntityLock` helper hook wraps the acquire-on-edit /
 // release-on-blur lifecycle with auto-renew — the ergonomic path for a
@@ -59,9 +60,9 @@ let private context =
     React.createContext<PresenceContextValue> (defaultValue = PresenceContextValue.empty)
 
 /// Wrap children in a provider supplying the current presence + lock
-/// state. Mounted by the shell near the root of the view tree; module
-/// views read it via the hooks below rather than threading it through
-/// props.
+/// state. Mounted by the deployment near the root of its view tree (the
+/// SDK shell does not auto-mount it); module views read it via the hooks
+/// below rather than threading it through props.
 let provider (value: PresenceContextValue) (children: ReactElement) = context.Provider(value, children)
 
 /// Declarative reads for module views. Each must be called from a React
