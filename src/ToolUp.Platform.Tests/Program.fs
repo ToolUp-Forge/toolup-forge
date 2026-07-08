@@ -52,6 +52,9 @@ let allTests =
         WebhookSecretRotationTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
+        // Phase 442 — presence tracker + advisory soft-lock conformance.
+        IPresenceTrackerContract.tests
+        IEntityLockStoreContract.tests
         // Phase 242 — A/B experiment substrate.
         ExperimentSubstrateTests.tests
         // Phase 243 — BPMN-shaped workflow engine.

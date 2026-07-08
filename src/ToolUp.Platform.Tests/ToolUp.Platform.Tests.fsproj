@@ -49,6 +49,9 @@
         <Compile Include="Graph\GraphStoreContract.fs" />
         <Compile Include="Graph\InMemoryGraphStoreTests.fs" />
         <Compile Include="Contracts\IColumnMappingStoreContract.fs" />
+        <!-- Phase 442 — presence tracker + advisory soft-lock conformance. -->
+        <Compile Include="Contracts\IPresenceTrackerContract.fs" />
+        <Compile Include="Contracts\IEntityLockStoreContract.fs" />
         <!-- Phase 26 — deploy-plane substrate contract packs. -->
         <Compile Include="Contracts\IBuildOrchestratorContract.fs" />
         <Compile Include="Contracts\ITenantFleetContract.fs" />
