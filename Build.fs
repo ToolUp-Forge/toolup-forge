@@ -31,6 +31,9 @@ let config = {
             // Phase 167 — `toolup` CLI substrate (dispatch + docker-emit
             // token substitution). Pure-BCL host; no env gating.
             TestPack.create "Cli" "src/ToolUp.Cli.Tests/ToolUp.Cli.Tests.fsproj"
+            // Phase 518 — ToolUp.Voice: Transcript model + error taxonomy
+            // + the Whisper / AzureSpeech pure Wire surfaces. No env gating.
+            TestPack.create "Voice" "src/ToolUp.Voice.Tests/ToolUp.Voice.Tests.fsproj"
         ]
 }
 

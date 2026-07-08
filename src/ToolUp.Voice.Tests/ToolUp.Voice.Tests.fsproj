@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Pure unit pack for ToolUp.Voice: the Transcript model + error
+         taxonomy, and the two providers' pure Wire surfaces (request
+         shaping + response parsing) asserted without any HTTP call. No
+         credentials, no network — green on a fresh checkout. -->
+    <ItemGroup>
+        <Compile Include="TranscriptTests.fs" />
+        <Compile Include="WhisperWireTests.fs" />
+        <Compile Include="AzureSpeechWireTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Voice.Core\ToolUp.Voice.Core.fsproj" />
+        <ProjectReference Include="..\VoiceProviders\Whisper\WhisperTranscriptionProvider.fsproj" />
+        <ProjectReference Include="..\VoiceProviders\AzureSpeech\AzureSpeechTranscriptionProvider.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>
