@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Voice Core — the portable speech-to-text abstraction: ITranscriptionProvider (batch + optional streaming), the Transcript model, TranscriptionRequest / TranscriptionError. FSharp.Core only — the "minimum viable voice consumer" floor, Fable-safe so the client companion reuses the Transcript shapes.</Description>
+        <PackageTags>fsharp;sdk;types;voice;speech;transcription</PackageTags>
+    </PropertyGroup>
+    <!-- Client-tier closure: pack source for Fable consumers under fable/
+         so the client companion reuses the Transcript / TranscriptSegment
+         model without a DLL round-trip. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\Transcript.fs" />
+        <Compile Include="Shared\ITranscriptionProvider.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. No other dependency —
+         this is the SDK's minimum-viable voice floor. -->
+</Project>
