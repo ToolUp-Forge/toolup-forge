@@ -114,6 +114,13 @@
         <Compile Include="Server\Notifications\NotificationChannel.fs" />
         <!-- Phase 241 — in-memory presence channel (single-instance default). -->
         <Compile Include="Server\Notifications\PresenceChannel.fs" />
+        <!-- Phase 442 — presence tracker + advisory soft-lock store
+             (interfaces + single-instance in-memory defaults). Publish
+             join/move/leave + lock taken/released/expired events on the
+             reserved `_platform.*` keys via INotificationChannel (Phase 6a);
+             no new transport. -->
+        <Compile Include="Server\IPresenceTracker.fs" />
+        <Compile Include="Server\IEntityLockStore.fs" />
         <Compile Include="Server\INotificationSink.fs" />
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />

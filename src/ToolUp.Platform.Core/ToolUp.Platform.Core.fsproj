@@ -204,6 +204,12 @@
         <Compile Include="Shared\INotificationChannel.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="Shared\IPresenceChannel.fs" />
+        <!-- Phase 442 — presence + soft-lock collaboration value types
+             (PresenceLocation / PresencePeer / PresenceEvent / EntityLockRef /
+             LockLease / LockEvent) + the PresenceMode opt-in DU. Before
+             SDK.Shared.fs so ServerConfig can carry a `Presence` field. Pure /
+             Fable-safe (BCL primitives + EntityId). -->
+        <Compile Include="Shared\PresenceTypes.fs" />
         <Compile Include="Shared\IHealthCheck.fs" />
         <!-- Phase 178 — declarative alert-rule / threshold data (AlertSource
              / ThresholdCondition / AlertDelivery / AlertRule). After

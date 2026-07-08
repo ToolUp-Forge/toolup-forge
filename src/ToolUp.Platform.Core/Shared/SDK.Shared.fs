@@ -2731,6 +2731,15 @@ type ServerConfig = {
     /// and aborts startup, naming the missing key + locale. Checked
     /// against `RegisteredLocales`.
     I18nCoverageMode: I18nCoverageMode
+    /// Phase 442 — presence + soft-lock collaboration substrate
+    /// selection. Default `NoPresence` — no `IPresenceTracker` /
+    /// `IEntityLockStore` in DI, no heartbeat cost, no
+    /// `_platform.presence` / `_platform.lock` fan-out; an existing
+    /// deployment that upgrades stays byte-for-byte identical until it
+    /// opts in (GP 11 + GP 13). Enable with `EnabledPresence` to unlock
+    /// who's-here awareness + advisory TTL entity soft-locks over the
+    /// existing real-time channel (awareness only — not co-editing).
+    Presence: PresenceMode
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -3031,6 +3040,7 @@ module ServerConfig =
         DeploymentReadiness = NoReadinessReport
         RegisteredLocales = [ LocaleCode.en ]
         I18nCoverageMode = NoCoverageCheck
+        Presence = NoPresence
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

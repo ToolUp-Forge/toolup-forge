@@ -1564,6 +1564,9 @@ ToolUp.Platform.ClientModuleContext.TeamId : Microsoft.FSharp.Core.FSharpOption`
 ToolUp.Platform.ClientModuleContext.UserId : System.String { get }
 ToolUp.Platform.ClientModuleContextModule (class)
 ToolUp.Platform.ClientModuleContextModule.empty : ToolUp.Platform.ClientModuleContext { get }
+ToolUp.Platform.CollaborationTopics (class)
+ToolUp.Platform.CollaborationTopics.Lock : System.String (literal)
+ToolUp.Platform.CollaborationTopics.Presence : System.String (literal)
 ToolUp.Platform.ColumnInfo (class)
 ToolUp.Platform.ColumnInfo..ctor(System.String, System.String, System.Boolean)
 ToolUp.Platform.ColumnInfo.DataType : System.String { get }
@@ -1704,7 +1707,6 @@ ToolUp.Platform.ConfigValidation+IConfigValidator.Timeout : System.TimeSpan { ge
 ToolUp.Platform.ConfigValidation+IConfigValidator.Validate() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConfigValidation+ValidationResult]
 ToolUp.Platform.ConfigValidation+IConfigValidatorModule (class)
 ToolUp.Platform.ConfigValidation+IConfigValidatorModule.defaultTimeout : System.TimeSpan { get }
-ToolUp.Platform.ConfigValidation+ISecurityClassValidator (interface)
 ToolUp.Platform.ConfigValidation+ValidationResult (class)
 ToolUp.Platform.ConfigValidation+ValidationResult.IsError : System.Boolean { get }
 ToolUp.Platform.ConfigValidation+ValidationResult.IsOk : System.Boolean { get }
@@ -2523,6 +2525,16 @@ ToolUp.Platform.EntityLifecycleEventPayload.EntityId : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.EntityType : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.UserId : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.Version : System.Int32 { get }
+ToolUp.Platform.EntityLock (class)
+ToolUp.Platform.EntityLock.isExpired(System.DateTime, ToolUp.Platform.LockLease) : System.Boolean
+ToolUp.Platform.EntityLock.isLive(System.DateTime, ToolUp.Platform.LockLease) : System.Boolean
+ToolUp.Platform.EntityLockRef (class)
+ToolUp.Platform.EntityLockRef..ctor(System.String, System.String)
+ToolUp.Platform.EntityLockRef.EntityId : System.String { get }
+ToolUp.Platform.EntityLockRef.EntityType : System.String { get }
+ToolUp.Platform.EntityLockRefModule (class)
+ToolUp.Platform.EntityLockRefModule.ofEntityRef`1(ToolUp.Platform.EntityTypes+EntityRef`1[T]) : ToolUp.Platform.EntityLockRef
+ToolUp.Platform.EntityLockRefModule.toKey(ToolUp.Platform.EntityLockRef) : System.String
 ToolUp.Platform.EntityQuery (class)
 ToolUp.Platform.EntityQuery.andWhere`1(ToolUp.Platform.EntityQueryTypes+Predicate, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]
 ToolUp.Platform.EntityQuery.forType`1(System.String) : ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]
@@ -3002,15 +3014,6 @@ ToolUp.Platform.FormSubmittedPayload.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.FormSubmittedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.UserId : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.WorkflowId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.GraphStoreMode (class)
-ToolUp.Platform.GraphStoreMode.CustomGraphStore : ToolUp.Platform.GraphStoreMode { get }
-ToolUp.Platform.GraphStoreMode.InMemoryGraphStore : ToolUp.Platform.GraphStoreMode { get }
-ToolUp.Platform.GraphStoreMode.IsCustomGraphStore : System.Boolean { get }
-ToolUp.Platform.GraphStoreMode.IsInMemoryGraphStore : System.Boolean { get }
-ToolUp.Platform.GraphStoreMode.Tag : System.Int32 { get }
-ToolUp.Platform.GraphStoreMode+Tags (class)
-ToolUp.Platform.GraphStoreMode+Tags.CustomGraphStore : System.Int32 (literal)
-ToolUp.Platform.GraphStoreMode+Tags.InMemoryGraphStore : System.Int32 (literal)
 ToolUp.Platform.HealthChecks (class)
 ToolUp.Platform.HealthChecks+HealthKind (class)
 ToolUp.Platform.HealthChecks+HealthKind.IsLiveness : System.Boolean { get }
@@ -3837,6 +3840,39 @@ ToolUp.Platform.LocaleCodeModule.fr : ToolUp.Platform.LocaleCode { get }
 ToolUp.Platform.LocaleCodeModule.frCA : ToolUp.Platform.LocaleCode { get }
 ToolUp.Platform.LocaleCodeModule.language(ToolUp.Platform.LocaleCode) : ToolUp.Platform.LocaleCode
 ToolUp.Platform.LocaleCodeModule.value(ToolUp.Platform.LocaleCode) : System.String
+ToolUp.Platform.LockChange (class)
+ToolUp.Platform.LockChange.Expired : ToolUp.Platform.LockChange { get }
+ToolUp.Platform.LockChange.IsExpired : System.Boolean { get }
+ToolUp.Platform.LockChange.IsReleased : System.Boolean { get }
+ToolUp.Platform.LockChange.IsTaken : System.Boolean { get }
+ToolUp.Platform.LockChange.Released : ToolUp.Platform.LockChange { get }
+ToolUp.Platform.LockChange.Tag : System.Int32 { get }
+ToolUp.Platform.LockChange.Taken : ToolUp.Platform.LockChange { get }
+ToolUp.Platform.LockChange+Tags (class)
+ToolUp.Platform.LockChange+Tags.Expired : System.Int32 (literal)
+ToolUp.Platform.LockChange+Tags.Released : System.Int32 (literal)
+ToolUp.Platform.LockChange+Tags.Taken : System.Int32 (literal)
+ToolUp.Platform.LockEvent (class)
+ToolUp.Platform.LockEvent..ctor(ToolUp.Platform.LockChange, ToolUp.Platform.LockLease)
+ToolUp.Platform.LockEvent.Change : ToolUp.Platform.LockChange { get }
+ToolUp.Platform.LockEvent.Lease : ToolUp.Platform.LockLease { get }
+ToolUp.Platform.LockLease (class)
+ToolUp.Platform.LockLease..ctor(ToolUp.Platform.EntityLockRef, System.String, System.DateTime, System.DateTime)
+ToolUp.Platform.LockLease.AcquiredAt : System.DateTime { get }
+ToolUp.Platform.LockLease.ExpiresAt : System.DateTime { get }
+ToolUp.Platform.LockLease.Holder : System.String { get }
+ToolUp.Platform.LockLease.Ref : ToolUp.Platform.EntityLockRef { get }
+ToolUp.Platform.LockOutcome (class)
+ToolUp.Platform.LockOutcome.IsAcquired : System.Boolean { get }
+ToolUp.Platform.LockOutcome.IsHeldByOther : System.Boolean { get }
+ToolUp.Platform.LockOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.LockOutcome+Acquired (class)
+ToolUp.Platform.LockOutcome+Acquired.Item : ToolUp.Platform.LockLease { get }
+ToolUp.Platform.LockOutcome+HeldByOther (class)
+ToolUp.Platform.LockOutcome+HeldByOther.Item : ToolUp.Platform.LockLease { get }
+ToolUp.Platform.LockOutcome+Tags (class)
+ToolUp.Platform.LockOutcome+Tags.Acquired : System.Int32 (literal)
+ToolUp.Platform.LockOutcome+Tags.HeldByOther : System.Int32 (literal)
 ToolUp.Platform.LogEntry (class)
 ToolUp.Platform.LogEntry..ctor(System.DateTime, ToolUp.Platform.LogStream, System.String)
 ToolUp.Platform.LogEntry.At : System.DateTime { get }
@@ -5030,12 +5066,49 @@ ToolUp.Platform.PrerenderRoute..ctor(System.String, Microsoft.FSharp.Core.FSharp
 ToolUp.Platform.PrerenderRoute.InitStateKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.PrerenderRoute.Meta : ToolUp.Platform.PrerenderMeta { get }
 ToolUp.Platform.PrerenderRoute.Path : System.String { get }
+ToolUp.Platform.PresenceChange (class)
+ToolUp.Platform.PresenceChange.IsJoined : System.Boolean { get }
+ToolUp.Platform.PresenceChange.IsLeft : System.Boolean { get }
+ToolUp.Platform.PresenceChange.IsMoved : System.Boolean { get }
+ToolUp.Platform.PresenceChange.Joined : ToolUp.Platform.PresenceChange { get }
+ToolUp.Platform.PresenceChange.Left : ToolUp.Platform.PresenceChange { get }
+ToolUp.Platform.PresenceChange.Moved : ToolUp.Platform.PresenceChange { get }
+ToolUp.Platform.PresenceChange.Tag : System.Int32 { get }
+ToolUp.Platform.PresenceChange+Tags (class)
+ToolUp.Platform.PresenceChange+Tags.Joined : System.Int32 (literal)
+ToolUp.Platform.PresenceChange+Tags.Left : System.Int32 (literal)
+ToolUp.Platform.PresenceChange+Tags.Moved : System.Int32 (literal)
 ToolUp.Platform.PresenceEntry (class)
 ToolUp.Platform.PresenceEntry..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, ToolUp.Platform.PresenceStatus)
 ToolUp.Platform.PresenceEntry.DisplayName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.PresenceEntry.LastSeen : System.DateTime { get }
 ToolUp.Platform.PresenceEntry.PrincipalId : System.String { get }
 ToolUp.Platform.PresenceEntry.Status : ToolUp.Platform.PresenceStatus { get }
+ToolUp.Platform.PresenceEvent (class)
+ToolUp.Platform.PresenceEvent..ctor(ToolUp.Platform.PresenceChange, ToolUp.Platform.PresencePeer)
+ToolUp.Platform.PresenceEvent.Change : ToolUp.Platform.PresenceChange { get }
+ToolUp.Platform.PresenceEvent.Peer : ToolUp.Platform.PresencePeer { get }
+ToolUp.Platform.PresenceLocation (class)
+ToolUp.Platform.PresenceLocation..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.PresenceLocation.Module : System.String { get }
+ToolUp.Platform.PresenceLocation.Page : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PresenceLocationModule (class)
+ToolUp.Platform.PresenceLocationModule.ofModule(System.String) : ToolUp.Platform.PresenceLocation
+ToolUp.Platform.PresenceMode (class)
+ToolUp.Platform.PresenceMode.EnabledPresence : ToolUp.Platform.PresenceMode { get }
+ToolUp.Platform.PresenceMode.IsEnabledPresence : System.Boolean { get }
+ToolUp.Platform.PresenceMode.IsNoPresence : System.Boolean { get }
+ToolUp.Platform.PresenceMode.NoPresence : ToolUp.Platform.PresenceMode { get }
+ToolUp.Platform.PresenceMode.Tag : System.Int32 { get }
+ToolUp.Platform.PresenceMode+Tags (class)
+ToolUp.Platform.PresenceMode+Tags.EnabledPresence : System.Int32 (literal)
+ToolUp.Platform.PresenceMode+Tags.NoPresence : System.Int32 (literal)
+ToolUp.Platform.PresencePeer (class)
+ToolUp.Platform.PresencePeer..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.PresenceLocation, System.DateTime)
+ToolUp.Platform.PresencePeer.DisplayName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PresencePeer.LastSeen : System.DateTime { get }
+ToolUp.Platform.PresencePeer.Location : ToolUp.Platform.PresenceLocation { get }
+ToolUp.Platform.PresencePeer.UserId : System.String { get }
 ToolUp.Platform.PresenceStatus (class)
 ToolUp.Platform.PresenceStatus.Away : ToolUp.Platform.PresenceStatus { get }
 ToolUp.Platform.PresenceStatus.IsAway : System.Boolean { get }
@@ -5529,7 +5602,7 @@ ToolUp.Platform.SecurityHardeningMode+Tags.DefaultSecurityHardening : System.Int
 ToolUp.Platform.SecurityHardeningMode+Tags.NoSecurityHardening : System.Int32 (literal)
 ToolUp.Platform.SecurityHardeningMode+Tags.StrictSecurityHardening : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode)
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode)
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptHeaderAuthWhenAuthRequired : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptInMemoryOAuthStateInMultiInstance : System.Boolean { get }
@@ -5571,7 +5644,6 @@ ToolUp.Platform.ServerConfig.EntityStore : ToolUp.Platform.EntityStoreMode { get
 ToolUp.Platform.ServerConfig.EphemeralStoreEvictionMinutes : System.Double { get }
 ToolUp.Platform.ServerConfig.EventStore : ToolUp.Platform.EventStoreMode { get }
 ToolUp.Platform.ServerConfig.FeatureFlags : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag] { get }
-ToolUp.Platform.ServerConfig.GraphStore : ToolUp.Platform.GraphStoreMode { get }
 ToolUp.Platform.ServerConfig.HealthStateTracking : System.Boolean { get }
 ToolUp.Platform.ServerConfig.I18nCoverageMode : ToolUp.Platform.I18nCoverageMode { get }
 ToolUp.Platform.ServerConfig.IncludePlatformDefaults : System.Boolean { get }
@@ -5584,7 +5656,6 @@ ToolUp.Platform.ServerConfig.MaxSseConnectionsPerScope : Microsoft.FSharp.Core.F
 ToolUp.Platform.ServerConfig.MediaLibrary : ToolUp.Platform.MediaLibraryMode { get }
 ToolUp.Platform.ServerConfig.MetricsEndpoint : ToolUp.Platform.MetricsEndpointMode { get }
 ToolUp.Platform.ServerConfig.MetricsSink : ToolUp.Platform.MetricsSinkConfig { get }
-ToolUp.Platform.ServerConfig.MigrateWebhookSecretsAtRest : System.Boolean { get }
 ToolUp.Platform.ServerConfig.ModuleBindingTrust : ToolUp.Platform.ModuleBindingTrustConfig { get }
 ToolUp.Platform.ServerConfig.ModuleConfigs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry] { get }
 ToolUp.Platform.ServerConfig.ModuleFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -5596,6 +5667,7 @@ ToolUp.Platform.ServerConfig.PeerRoutePrefixes : Microsoft.FSharp.Collections.FS
 ToolUp.Platform.ServerConfig.PeerSubstrate : ToolUp.Platform.PeerSubstrateMode { get }
 ToolUp.Platform.ServerConfig.PlatformKnowledgeBase : ToolUp.Platform.PlatformKnowledgeBaseMode { get }
 ToolUp.Platform.ServerConfig.Port : System.Int32 { get }
+ToolUp.Platform.ServerConfig.Presence : ToolUp.Platform.PresenceMode { get }
 ToolUp.Platform.ServerConfig.ProcessProfile : ToolUp.Platform.ProcessProfile { get }
 ToolUp.Platform.ServerConfig.PublicBaseUrl : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ServerConfig.PublicPath : System.String { get }
@@ -6766,14 +6838,18 @@ ToolUp.Platform.VectorKnowledgeTypes+VectorScope.Deployment : ToolUp.Platform.Ve
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope.IsDeployment : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope.IsPlatform : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope.IsTeam : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+VectorScope.IsUser : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope.Platform : ToolUp.Platform.VectorKnowledgeTypes+VectorScope { get }
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope.Tag : System.Int32 { get }
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Tags (class)
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Tags.Deployment : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Tags.Platform : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Tags.Team : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Tags.User : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Team (class)
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Team.teamId : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+VectorScope+User (class)
+ToolUp.Platform.VectorKnowledgeTypes+VectorScope+User.userId : System.String { get }
 ToolUp.Platform.VectorisationTypes (class)
 ToolUp.Platform.VectorisationTypes+VectorisationHandler (class)
 ToolUp.Platform.VectorisationTypes+VectorisationHandler..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]]])
@@ -6851,7 +6927,6 @@ ToolUp.Platform.WebhookDeliveryPayload.Event : ToolUp.Platform.ModuleEvent { get
 ToolUp.Platform.WebhookDeliveryPayload.SubscriptionId : System.Guid { get }
 ToolUp.Platform.WebhookEventTypes (class)
 ToolUp.Platform.WebhookEventTypes.DeliveryFailed : System.String (literal)
-ToolUp.Platform.WebhookEventTypes.SecretAccessed : System.String (literal)
 ToolUp.Platform.WebhookEventTypes.SubscriptionAutoDisabled : System.String (literal)
 ToolUp.Platform.WebhookEventTypes.SubscriptionCreated : System.String (literal)
 ToolUp.Platform.WebhookEventTypes.SubscriptionDeleted : System.String (literal)
@@ -6875,11 +6950,6 @@ ToolUp.Platform.WebhookRetryPolicy.MaxBackoff : System.TimeSpan { get }
 ToolUp.Platform.WebhookRetryPolicyModule (class)
 ToolUp.Platform.WebhookRetryPolicyModule.defaults : ToolUp.Platform.WebhookRetryPolicy { get }
 ToolUp.Platform.WebhookRetryPolicyModule.delayFor(ToolUp.Platform.WebhookRetryPolicy, System.Int32) : System.TimeSpan
-ToolUp.Platform.WebhookSecretRef (class)
-ToolUp.Platform.WebhookSecretRef.Scope : System.String (literal)
-ToolUp.Platform.WebhookSecretRef.current(System.Guid) : System.String
-ToolUp.Platform.WebhookSecretRef.keyOf(System.String) : System.String
-ToolUp.Platform.WebhookSecretRef.previous(System.Guid) : System.String
 ToolUp.Platform.WebhookStatus (class)
 ToolUp.Platform.WebhookStatus.Active : ToolUp.Platform.WebhookStatus { get }
 ToolUp.Platform.WebhookStatus.Disabled : ToolUp.Platform.WebhookStatus { get }
@@ -6893,26 +6963,24 @@ ToolUp.Platform.WebhookStatus+Tags.Active : System.Int32 (literal)
 ToolUp.Platform.WebhookStatus+Tags.Disabled : System.Int32 (literal)
 ToolUp.Platform.WebhookStatus+Tags.Paused : System.Int32 (literal)
 ToolUp.Platform.WebhookSubscription (class)
-ToolUp.Platform.WebhookSubscription..ctor(System.Guid, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.WebhookStatus, System.String, System.DateTime, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.WebhookSubscription..ctor(System.Guid, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.WebhookStatus, System.String, System.DateTime, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
 ToolUp.Platform.WebhookSubscription.ConsecutiveFailures : System.Int32 { get }
 ToolUp.Platform.WebhookSubscription.CreatedAt : System.DateTime { get }
 ToolUp.Platform.WebhookSubscription.CreatedBy : System.String { get }
 ToolUp.Platform.WebhookSubscription.EventTypes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.WebhookSubscription.PreviousSecret : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.WebhookSubscription.PreviousSecretExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
-ToolUp.Platform.WebhookSubscription.PreviousSecretRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.WebhookSubscription.ScopeId : System.String { get }
-ToolUp.Platform.WebhookSubscription.Secret : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.WebhookSubscription.SecretRef : System.String { get }
+ToolUp.Platform.WebhookSubscription.Secret : System.String { get }
 ToolUp.Platform.WebhookSubscription.Status : ToolUp.Platform.WebhookStatus { get }
 ToolUp.Platform.WebhookSubscription.SubscriptionId : System.Guid { get }
 ToolUp.Platform.WebhookSubscription.TargetUrl : System.String { get }
 ToolUp.Platform.WebhookSubscriptionModule (class)
-ToolUp.Platform.WebhookSubscriptionModule.acceptedSecretRefs(System.DateTime, ToolUp.Platform.WebhookSubscription) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.WebhookSubscriptionModule.acceptedSecrets(System.DateTime, ToolUp.Platform.WebhookSubscription) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.WebhookSubscriptionModule.acceptsEventType(System.String, ToolUp.Platform.WebhookSubscription) : System.Boolean
 ToolUp.Platform.WebhookSubscriptionModule.maskSecret(ToolUp.Platform.WebhookSubscription) : ToolUp.Platform.WebhookSubscription
 ToolUp.Platform.WebhookSubscriptionModule.secretRotationGracePeriod : System.TimeSpan { get }
-ToolUp.Platform.WebhookSubscriptionModule.withRotatedSecret(System.String, System.String, System.DateTime, ToolUp.Platform.WebhookSubscription) : ToolUp.Platform.WebhookSubscription
+ToolUp.Platform.WebhookSubscriptionModule.withRotatedSecret(System.String, System.DateTime, ToolUp.Platform.WebhookSubscription) : ToolUp.Platform.WebhookSubscription
 ToolUp.Platform.WebhookTestResult (class)
 ToolUp.Platform.WebhookTestResult..ctor(System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.WebhookTestResult.DeliveryId : System.Guid { get }

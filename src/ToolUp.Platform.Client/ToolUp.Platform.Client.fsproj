@@ -119,6 +119,11 @@
         <Compile Include="Client\UserSession.fs" />
         <!-- Phase 241 — presence client hook (heartbeat + roster). -->
         <Compile Include="Client\PresenceClient.fs" />
+        <!-- Phase 442 — presence + soft-lock React context: declarative
+             "who's here" / "is this locked" reads + the acquire-on-edit /
+             release-on-blur auto-renew helper hook. Mirrors
+             ProcessedDataContext / LoadingIndicatorContext. -->
+        <Compile Include="Client\PresenceContext.fs" />
         <Compile Include="Client\NotificationClient.fs" />
         <Compile Include="Client\ModuleQueryClient.fs" />
         <Compile Include="Client\ModuleStateObserver.fs" />
