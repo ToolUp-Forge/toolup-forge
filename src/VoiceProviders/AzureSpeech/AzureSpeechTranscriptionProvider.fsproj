@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.VoiceProviders.AzureSpeech</PackageId>
+    <AssemblyName>ToolUp.VoiceProviders.AzureSpeech</AssemblyName>
+    <Description>Azure AI Speech ITranscriptionProvider for ToolUp.Voice. Batch speech-to-text over the REST short-audio endpoint; BYOK — reads azure-speech-key + azure-speech-region from ISecretStore. HttpClient only, no vendor SDK.</Description>
+    <PackageTags>fsharp;sdk;voice;speech;transcription;azure;cognitive-services;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AzureSpeechTranscriptionProvider.fs" />
+    <Compile Include="AzureSpeechTranscriptionProviderHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Voice.Core\ToolUp.Voice.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. System.Net.Http +
+       System.Text.Json ship in the BCL — no vendor SDK (GP 1). -->
+</Project>
