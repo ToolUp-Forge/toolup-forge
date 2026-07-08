@@ -1327,6 +1327,34 @@ let View
                                                 setInputText userHistory[newIdx - 1].Content
                                         | _ -> ())
                                 ]
+
+                                // Phase 518 — optional prompt-input accessory
+                                // (e.g. a voice mic toggle). Rendered only when a
+                                // companion has registered one via
+                                // PromptAccessoryBridge; otherwise nothing is laid
+                                // out here and the input row is byte-for-byte
+                                // unchanged (GP 13). The accessory reads/drives the
+                                // input through the supplied context so it never
+                                // owns the textarea's React state.
+                                match
+                                    PromptAccessoryBridge.render {
+                                        CurrentText = inputText
+                                        SetText = setInputText
+                                        Submit =
+                                            (fun text ->
+                                                let trimmed = text.Trim()
+
+                                                if trimmed <> "" then
+                                                    onSendMessage trimmed
+                                                    setInputText ""
+                                                    setHistoryIndex 0
+                                                    setSavedDraft "")
+                                        IsBusy = onCancel.IsSome
+                                    }
+                                with
+                                | Some accessory -> accessory
+                                | None -> ()
+
                                 Html.button [
                                     prop.className
                                         "bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"

@@ -23,6 +23,7 @@
         <Compile Include="Client\AIClientTypes.fs" />
         <Compile Include="Client\ClientToolRuntime.fs" />
         <Compile Include="Client\FastPathBridge.fs" />
+        <Compile Include="Client\PromptAccessoryBridge.fs" />
         <Compile Include="Client\SSEClient.fs" />
         <Compile Include="Client\SidePanelExtensions.fs" />
         <Compile Include="Client\ConversationPanel.fs" />

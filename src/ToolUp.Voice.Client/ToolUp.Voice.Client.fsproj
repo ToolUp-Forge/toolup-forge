@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Voice Client — a VoiceInput mic affordance (Fable + Feliz) attachable to any text input, with local (browser Web Speech API) and remote (MediaRecorder → server ITranscriptionProvider) capture modes. Opt-in wiring into the AI chat prompt box via the ToolUp.AI.Client prompt-accessory seam.</Description>
+        <PackageTags>fsharp;fable;feliz;sdk;client;voice;speech;transcription</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Voice.Core\ToolUp.Voice.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Client\ToolUp.AI.Client.fsproj" />
+    </ItemGroup>
+    <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Voice.Core\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Client\VoiceInput.fs" />
+    </ItemGroup>
+    <!-- Feliz / Fable.Core / Browser.Dom flow transitively from
+         ToolUp.Platform.Client via ToolUp.AI.Client. FSharp.Core is
+         implicit via the .NET SDK. -->
+</Project>
