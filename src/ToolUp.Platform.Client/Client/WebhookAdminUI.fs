@@ -164,7 +164,9 @@ let update (msg: Msg) (model: Model) =
         // session until `DismissCreatedSecret` clears it.
         {
             model with
-                NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret)
+                // Phase 6d.A — `Secret` is now an option; the create
+                // response reveals the value transiently as `Some`.
+                NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret |> Option.defaultValue "")
                 SelectedId = Some sub.SubscriptionId
         },
         loadSubscriptionsCmd ()
@@ -254,7 +256,9 @@ let update (msg: Msg) (model: Model) =
         // session until `DismissCreatedSecret` clears it.
         {
             model with
-                NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret)
+                // Phase 6d.A — `Secret` is now an option; the rotate
+                // response reveals the new value transiently as `Some`.
+                NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret |> Option.defaultValue "")
                 SelectedId = Some sub.SubscriptionId
                 Status = model.Status |> Map.add id (Done "Secret rotated — copy the new value below.")
         },

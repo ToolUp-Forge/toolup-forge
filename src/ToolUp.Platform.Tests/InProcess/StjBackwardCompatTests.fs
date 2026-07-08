@@ -64,16 +64,23 @@ let private webhookSubFixture: WebhookSubscription = {
     SubscriptionId = Guid("11111111-2222-3333-4444-555555555555")
     ScopeId = "team-acme"
     TargetUrl = "https://example.com/hook"
-    Secret = "shhh"
+    // Phase 6d.A — the signing secret lives in ISecretStore; the blob
+    // carries only the reference. A migrated / freshly-created blob has
+    // `Secret = None`. A pre-6d.A blob instead has `"Secret":"<value>"`
+    // and no `SecretRef` key; FableConverters reads the missing `SecretRef`
+    // back as null and the present `Secret` string back as `Some`, so the
+    // dispatcher's inline fallback + the migration keep it readable.
+    SecretRef = "_platform/webhooks/11111111222233334444555555555555.secret"
+    Secret = None
     EventTypes = [ "FlagChanged"; "JobCompleted" ]
     Status = WebhookStatus.Active
     CreatedBy = "user-001"
     CreatedAt = DateTime(2026, 1, 15, 12, 30, 0, DateTimeKind.Utc)
     ConsecutiveFailures = 0
-    // Phase 235 — never-rotated subscription: both grace-window fields
-    // are None. A pre-235 persisted blob lacks these keys entirely;
-    // FableConverters reads the missing option fields back as None, so
-    // the additive growth is backward-compatible on the read path.
+    // Phase 235 / 6d.A — never-rotated subscription: all grace-window
+    // fields are None. FableConverters reads missing option fields back as
+    // None, so the additive growth is backward-compatible on the read path.
+    PreviousSecretRef = None
     PreviousSecret = None
     PreviousSecretExpiresAt = None
 }
@@ -161,7 +168,7 @@ let private frozenFlagValueVariant =
 let private frozenWebhookStatus = "\"Active\""
 
 let private frozenWebhookSub =
-    """{"SubscriptionId":"11111111-2222-3333-4444-555555555555","ScopeId":"team-acme","TargetUrl":"https://example.com/hook","Secret":"shhh","EventTypes":["FlagChanged","JobCompleted"],"Status":"Active","CreatedBy":"user-001","CreatedAt":"2026-01-15T12:30:00.0000000Z","ConsecutiveFailures":0,"PreviousSecret":null,"PreviousSecretExpiresAt":null}"""
+    """{"SubscriptionId":"11111111-2222-3333-4444-555555555555","ScopeId":"team-acme","TargetUrl":"https://example.com/hook","SecretRef":"_platform/webhooks/11111111222233334444555555555555.secret","Secret":null,"EventTypes":["FlagChanged","JobCompleted"],"Status":"Active","CreatedBy":"user-001","CreatedAt":"2026-01-15T12:30:00.0000000Z","ConsecutiveFailures":0,"PreviousSecretRef":null,"PreviousSecret":null,"PreviousSecretExpiresAt":null}"""
 
 let private frozenShareTokenClaim =
     """{"TokenId":"tok_abc123","ScopeId":"team-acme","ResourceKind":"forms.publishable","ResourceId":"form-001","AttributedHandle":"respondent@example.com","IssuedBy":"user-001","IssuedAt":"2026-01-15T12:30:00+00:00","ExpiresAt":"2026-02-14T12:30:00+00:00","UseLimit":1,"UsedCount":0,"Revoked":false,"RateLimit":null}"""

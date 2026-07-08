@@ -26,20 +26,35 @@ type WebhookStatus =
 /// A registered webhook target. One blob per subscription under
 /// `_platform/webhooks/{scopeId}/subscriptions/{subscriptionId:N}.json`.
 ///
-/// `Secret` is sensitive — server-side responses for `List` /
-/// `GetSubscription` mask it (`***`). Only `CreateSubscription` and
-/// `RotateSecret` return it (unmasked, once) so the admin can copy it
-/// into the receiving service.
+/// **Secret storage (Phase 6d.A — encryption at rest).** The signing
+/// secret VALUE is never persisted on this record; it lives in
+/// `ISecretStore` (encrypted at rest by whichever store is composed —
+/// `EncryptedSecretStore` by default, cloud-KMS in production). The blob
+/// holds only `SecretRef`, the store key
+/// (`_platform/webhooks/{subscriptionId:N}.secret`). The dispatcher
+/// resolves the ref to a value immediately before HMAC signing and never
+/// caches it beyond the request.
 ///
-/// `PreviousSecret` / `PreviousSecretExpiresAt` carry the *grace-window*
-/// state for a rotated secret (Phase 235). On rotation the new secret
-/// becomes `Secret`; the prior `Secret` is retained as `PreviousSecret`
-/// until `PreviousSecretExpiresAt`, so the dispatcher dual-signs
-/// deliveries (new + previous) during the window — a receiver still
-/// configured with the old secret keeps verifying while it updates,
-/// then the previous secret expires. `None` on a never-rotated
-/// subscription and after the window closes. `PreviousSecret` is masked
-/// alongside `Secret` on the wire.
+/// `Secret` is the LEGACY inline plaintext, kept as an `option` for
+/// backward-compat: `Some` only on a pre-6d.A blob that has not yet run
+/// the migration (the dispatcher falls back to it, the migration moves it
+/// into `ISecretStore`, and the preflight validator Errors on any
+/// residual populated value), or transiently on a create / rotate
+/// RESPONSE so the admin can copy the value once. `None` on every
+/// migrated / freshly-created persisted blob. Server-side responses for
+/// `List` / `GetSubscription` mask any inline value; only
+/// `CreateSubscription` and `RotateSecret` reveal it (once).
+///
+/// `PreviousSecretRef` / `PreviousSecret` / `PreviousSecretExpiresAt`
+/// carry the *grace-window* state for a rotated secret (Phase 235). On
+/// rotation the new secret is written at `SecretRef` and the prior
+/// current secret is copied to a `.secret.previous` store key referenced
+/// by `PreviousSecretRef` until `PreviousSecretExpiresAt`, so the
+/// dispatcher dual-signs deliveries (new + previous) during the window —
+/// a receiver still configured with the old secret keeps verifying while
+/// it updates, then the previous secret expires. `PreviousSecret` is the
+/// legacy inline counterpart (same migration semantics as `Secret`);
+/// both are `None` on a never-rotated / migrated subscription.
 ///
 /// `EventTypes = []` means "all event types" — empty as wildcard
 /// matches the event-store filter convention (no entries =
@@ -54,15 +69,57 @@ type WebhookSubscription = {
     SubscriptionId: Guid
     ScopeId: string
     TargetUrl: string
-    Secret: string
+    /// Phase 6d.A — `ISecretStore` key for the current signing secret.
+    /// Empty / null on a pre-6d.A blob not yet migrated (the dispatcher
+    /// then falls back to the legacy inline `Secret`).
+    SecretRef: string
+    /// Legacy inline signing secret — see the type doc. `None` on every
+    /// migrated / freshly-created persisted blob.
+    Secret: string option
     EventTypes: string list
     Status: WebhookStatus
     CreatedBy: string
     CreatedAt: DateTime
     ConsecutiveFailures: int
+    /// Phase 6d.A — `ISecretStore` key for the grace-window previous
+    /// secret. `Some` only while a rotation grace window is open.
+    PreviousSecretRef: string option
+    /// Legacy inline previous secret — same migration semantics as
+    /// `Secret`. `None` on migrated / fresh records.
     PreviousSecret: string option
     PreviousSecretExpiresAt: DateTime option
 }
+
+/// Phase 6d.A — `ISecretStore` reference conventions for webhook signing
+/// secrets. The secret VALUE lives in `ISecretStore`; the subscription
+/// blob carries only these deployment-namespaced keys. Webhook secrets
+/// are deployment-wide (GP 4: keyed under the reserved `_platform`
+/// scope), so `GetSecret` / `SetSecret` / `DeleteSecret` all pass
+/// `Scope` as the scope and `keyOf ref` as the key.
+module WebhookSecretRef =
+    /// The reserved scope every webhook secret is stored under.
+    [<Literal>]
+    let Scope = "_platform"
+
+    /// Persisted reference for a subscription's current signing secret.
+    let current (subscriptionId: Guid) : string =
+        sprintf "_platform/webhooks/%s.secret" (subscriptionId.ToString "N")
+
+    /// Persisted reference for a subscription's grace-window previous
+    /// secret (set during a rotation, cleared when the window closes).
+    let previous (subscriptionId: Guid) : string =
+        sprintf "_platform/webhooks/%s.secret.previous" (subscriptionId.ToString "N")
+
+    /// The `ISecretStore` key for a persisted ref — the ref with the
+    /// `_platform/` scope prefix stripped (the scope is passed separately
+    /// to the store). Robust to a ref that already lacks the prefix.
+    let keyOf (reference: string) : string =
+        let prefix = Scope + "/"
+
+        if not (String.IsNullOrEmpty reference) && reference.StartsWith prefix then
+            reference.Substring prefix.Length
+        else
+            reference
 
 module WebhookSubscription =
     /// Default grace window for a rotated signing secret. While the
@@ -74,14 +131,16 @@ module WebhookSubscription =
     /// This is the only rotation knob — rotation is otherwise immediate.
     let secretRotationGracePeriod = TimeSpan.FromHours 24.0
 
-    /// Mask sensitive secrets for outbound list/get responses. The
-    /// masked representation preserves each secret's length so admin
-    /// UIs can hint at "secret is set" without leaking the value. Both
-    /// the current `Secret` and any grace-window `PreviousSecret` are
-    /// masked.
+    /// Mask any residual inline secret material for outbound list/get
+    /// responses. Post-migration both `Secret` and `PreviousSecret` are
+    /// `None` (the values live in `ISecretStore`), so masking is a no-op;
+    /// on a not-yet-migrated blob it masks the inline value, preserving
+    /// its length so admin UIs can hint at "secret is set" without leaking
+    /// it. The reference fields (`SecretRef` / `PreviousSecretRef`) are
+    /// store keys, not secrets, and cross the wire unmasked.
     let maskSecret (sub: WebhookSubscription) : WebhookSubscription = {
         sub with
-            Secret = String.replicate (max 1 sub.Secret.Length) "*"
+            Secret = sub.Secret |> Option.map (fun s -> String.replicate (max 1 s.Length) "*")
             PreviousSecret =
                 sub.PreviousSecret
                 |> Option.map (fun s -> String.replicate (max 1 s.Length) "*")
@@ -92,31 +151,42 @@ module WebhookSubscription =
     let acceptsEventType (eventType: string) (sub: WebhookSubscription) : bool =
         List.isEmpty sub.EventTypes || List.contains eventType sub.EventTypes
 
-    /// Apply a secret rotation as a pure transition: `newSecret` becomes
-    /// the current `Secret`, the prior `Secret` becomes `PreviousSecret`
-    /// (valid until `graceExpiresAt`), and the subscription id is
-    /// unchanged. Used by the registry's rotate path.
+    /// Apply a secret rotation as a pure transition on the REFERENCE
+    /// fields (Phase 6d.A). `SecretRef` is set to `currentSecretRef` (a
+    /// no-op for an already-migrated subscription; on a legacy blob being
+    /// rotated for the first time it adopts the canonical ref) and the
+    /// previous secret's store key becomes the grace-window
+    /// `PreviousSecretRef` (valid until `graceExpiresAt`). Both inline
+    /// legacy secrets are cleared — after a rotation every signing secret
+    /// is resolved from `ISecretStore`. The subscription id is unchanged.
+    /// The secret VALUES are moved in `ISecretStore` by the handler; this
+    /// transition only tracks the refs + expiry.
     let withRotatedSecret
-        (newSecret: string)
+        (currentSecretRef: string)
+        (previousSecretRef: string)
         (graceExpiresAt: DateTime)
         (sub: WebhookSubscription)
         : WebhookSubscription =
         {
             sub with
-                Secret = newSecret
-                PreviousSecret = Some sub.Secret
+                SecretRef = currentSecretRef
+                Secret = None
+                PreviousSecretRef = Some previousSecretRef
+                PreviousSecret = None
                 PreviousSecretExpiresAt = Some graceExpiresAt
         }
 
-    /// The secrets a delivery should be signed with / a receiver may
-    /// verify against at instant `now`: always the current `Secret`,
-    /// plus the grace-window `PreviousSecret` while it is unexpired.
-    /// Once `PreviousSecretExpiresAt` has passed, only the current
-    /// secret is returned — the previous secret stops verifying.
-    let acceptedSecrets (now: DateTime) (sub: WebhookSubscription) : string list =
-        match sub.PreviousSecret, sub.PreviousSecretExpiresAt with
-        | Some prev, Some expiresAt when now < expiresAt -> [ sub.Secret; prev ]
-        | _ -> [ sub.Secret ]
+    /// The `ISecretStore` refs a delivery at instant `now` should be
+    /// signed with: always the current `SecretRef`, plus the grace-window
+    /// `PreviousSecretRef` while unexpired. Once `PreviousSecretExpiresAt`
+    /// has passed, only the current ref is returned. The dispatcher
+    /// resolves these refs to values (with an inline-secret fallback for
+    /// not-yet-migrated blobs) immediately before signing. Current-first,
+    /// mirroring the prior `acceptedSecrets` order.
+    let acceptedSecretRefs (now: DateTime) (sub: WebhookSubscription) : string list =
+        match sub.PreviousSecretRef, sub.PreviousSecretExpiresAt with
+        | Some prevRef, Some expiresAt when now < expiresAt -> [ sub.SecretRef; prevRef ]
+        | _ -> [ sub.SecretRef ]
 
 // ─── Retry policy ────────────────────────────────────────────────
 
@@ -230,6 +300,14 @@ module WebhookEventTypes =
 
     [<Literal>]
     let SubscriptionSecretRotated = "WebhookSubscriptionSecretRotated"
+
+    /// Phase 6d.A — emitted once per dispatcher secret-resolve (the
+    /// dispatcher reads the signing secret from `ISecretStore` before
+    /// HMAC signing a delivery). Forensic completeness: the audit trail
+    /// records every access to a subscription's signing material. Never
+    /// carries the secret value — only the subscription id + ref.
+    [<Literal>]
+    let SecretAccessed = "WebhookSecretAccessed"
 
     [<Literal>]
     let DeliveryFailed = "WebhookDeliveryFailed"

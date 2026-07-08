@@ -10,6 +10,7 @@ open System.Threading.Channels
 open Microsoft.Extensions.Hosting
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tracing
 
 // ─── Public surface ──────────────────────────────────────────────
@@ -77,14 +78,12 @@ module WebhookSignature =
         $"sha256={hex}"
 
     /// Build the `X-ToolUp-Signature` header value: one `sha256=<hex>`
-    /// per accepted secret, comma-joined. Order is current-first.
+    /// per accepted secret, comma-joined. Order is current-first. The
+    /// dispatcher resolves the accepted secret VALUES from `ISecretStore`
+    /// immediately before calling this (Phase 6d.A) — the subscription
+    /// record no longer carries the plaintext to sign with.
     let headerFor (secrets: string list) (body: byte[]) : string =
         secrets |> List.map (fun s -> signOne s body) |> String.concat ","
-
-    /// The header a delivery at instant `now` should carry — signed with
-    /// every secret the subscription's grace window currently accepts.
-    let header (now: DateTime) (sub: WebhookSubscription) (body: byte[]) : string =
-        headerFor (WebhookSubscription.acceptedSecrets now sub) body
 
     /// Receiver-side verification: does `headerValue` (the comma-joined
     /// signature header the dispatcher emitted) contain a signature
@@ -175,14 +174,17 @@ let private toAuditJson (value: 'T) =
 let private deliverOnce
     (httpClient: HttpClient)
     (sub: WebhookSubscription)
+    (signingSecrets: string list)
     (payload: WebhookDeliveryPayload)
     : Async<WebhookDeliveryOutcome> =
     async {
         let body = serialiseOutbound payload
-        // Phase 235 — sign with every secret the grace window accepts
-        // (current + unexpired previous). Evaluated per attempt so a
+        // Phase 235 / 6d.A — sign with every secret the grace window
+        // accepts (current + unexpired previous). The values are resolved
+        // from `ISecretStore` by the caller immediately before this call
+        // and passed in; the accepted set is evaluated per attempt so a
         // grace window that closes mid-retry-loop drops the old secret.
-        let signature = WebhookSignature.header DateTime.UtcNow sub body
+        let signature = WebhookSignature.headerFor signingSecrets body
         let stopwatch = System.Diagnostics.Stopwatch.StartNew()
 
         try
@@ -249,6 +251,12 @@ type WebhookDispatcherService
         retryPolicy: WebhookRetryPolicy,
         logger: ILogger,
         activitySink: IActivitySink,
+        // Phase 6d.A — resolves a subscription's signing secret from
+        // encrypted-at-rest storage immediately before HMAC signing. The
+        // subscription blob carries only a `SecretRef`; the plaintext
+        // never lands in blob storage. Resolved per delivery, never
+        // cached beyond the request.
+        secretStore: ISecretStore,
         // Phase 9v — resolved lazily because the limiter is constructed
         // downstream of the dispatcher in `compose` (transitive
         // dependency on `auditLog` / `resolvedMetricsSink`, both of
@@ -285,6 +293,56 @@ type WebhookDispatcherService
             )
     }
 
+    /// Phase 6d.A — resolve one signing-secret VALUE from `ISecretStore`,
+    /// falling back to the legacy inline value when the ref is unset (a
+    /// pre-migration blob) or the store has no entry for it (defensive —
+    /// e.g. a blob rewritten with a ref before the secret write landed).
+    /// Never caches the resolved value.
+    let resolveRefOrInline (reference: string) (inlineValue: string option) : Async<string option> = async {
+        if String.IsNullOrEmpty reference then
+            return inlineValue
+        else
+            let! resolved = secretStore.GetSecret(WebhookSecretRef.Scope, WebhookSecretRef.keyOf reference)
+
+            match resolved with
+            | Some _ -> return resolved
+            | None -> return inlineValue
+    }
+
+    /// Resolve the current + grace-window-previous signing secrets for a
+    /// subscription (Phase 6d.A). Returns `(current, previous)`; `current`
+    /// is `None` only for a structurally-broken subscription (no ref, no
+    /// inline value). Emits one `WebhookSecretAccessed` audit row per
+    /// resolve for forensic completeness — never carrying a secret value.
+    let resolveSigningSecrets (sub: WebhookSubscription) : Async<string option * string option> = async {
+        let! current = resolveRefOrInline sub.SecretRef sub.Secret
+
+        let! previous = resolveRefOrInline (sub.PreviousSecretRef |> Option.defaultValue "") sub.PreviousSecret
+
+        do!
+            emitAudit sub.ScopeId WebhookEventTypes.SecretAccessed {|
+                SubscriptionId = sub.SubscriptionId
+                SecretRef = sub.SecretRef
+                GraceWindowSecretPresent = Option.isSome previous
+            |}
+
+        return current, previous
+    }
+
+    /// The signing secret VALUES a delivery at instant `now` should carry:
+    /// always the resolved current secret, plus the grace-window previous
+    /// secret while `PreviousSecretExpiresAt` is unexpired. Current-first,
+    /// mirroring `WebhookSubscription.acceptedSecretRefs`.
+    let acceptedSecretsAt
+        (now: DateTime)
+        (sub: WebhookSubscription)
+        (current: string)
+        (previous: string option)
+        : string list =
+        match previous, sub.PreviousSecretExpiresAt with
+        | Some p, Some expiresAt when now < expiresAt -> [ current; p ]
+        | _ -> [ current ]
+
     /// Run the retry loop for one subscription/event pair. Records
     /// every attempt to the delivery log; on dead-letter emits a
     /// `WebhookDeliveryFailed` audit event and bumps
@@ -292,145 +350,187 @@ type WebhookDispatcherService
     /// (and emits `WebhookSubscriptionAutoDisabled`) once
     /// `DisableAfterConsecutiveFailures` is hit.
     let runDeliveryInner (sub: WebhookSubscription) (event: ModuleEvent) = async {
-        let mutable attempt = 1
-        let mutable finalOutcome = WebhookDeliveryOutcome.DeadLettered "no attempts run"
+        // Phase 6d.A — resolve the signing secret(s) from ISecretStore ONCE
+        // per delivery (audited), then re-derive the accepted set per
+        // attempt from the resolved values so a grace window that closes
+        // mid-retry-loop still drops the old secret without a second store
+        // read. A structurally-broken subscription (no ref, no inline
+        // value) can't be signed — dead-letter it with a clear reason.
+        let! currentSecretOpt, previousSecretOpt = resolveSigningSecrets sub
 
-        // Phase 9l — child activity per (subscription, event) pair so
-        // the trace tree shows one webhook delivery span (including
-        // every retry) under whichever ancestor wrote the event. The
-        // delivery span covers the full retry loop so an OTel viewer
-        // shows "webhook foo: 3 attempts, 4.2s" as one node rather
-        // than three independent dispatches.
-        let deliveryActivityOpt =
-            activitySink.StartActivity(sprintf "webhook %s" event.EventType, None)
+        match currentSecretOpt with
+        | None ->
+            let err =
+                "no signing secret resolvable — SecretRef points at no ISecretStore entry and no legacy inline secret is present"
 
-        // Phase 9v — `Refused` from the limiter is a platform-side
-        // throttling decision, not a receiver-health signal. Distinguish
-        // it from delivery failures so the post-loop dead-letter path
-        // can skip the ConsecutiveFailures bump and auto-disable (a
-        // healthy receiver shouldn't get auto-disabled because the
-        // operator's long-window quota happened to be exhausted).
-        let mutable wasRateLimitRefused = false
-
-        try
-            while attempt <= retryPolicy.MaxAttempts do
-                let delay = WebhookRetryPolicy.delayFor retryPolicy attempt
-
-                if delay > TimeSpan.Zero then
-                    do! Async.Sleep delay
-
-                let payload: WebhookDeliveryPayload = {
+            do!
+                recordDelivery sub.ScopeId {
                     DeliveryId = Guid.NewGuid()
                     SubscriptionId = sub.SubscriptionId
-                    Event = event
-                    DeliveredAt = DateTime.UtcNow
-                    Attempt = attempt
+                    EventId = Some event.Id
+                    Attempt = 1
+                    AttemptedAt = DateTime.UtcNow
+                    Outcome = WebhookDeliveryOutcome.DeadLettered err
                 }
 
-                // Phase 9v — gate per outbound POST on `IRateLimiter`.
-                // `Proceed` / `DelayedBy` (held inside `Wait` until the
-                // short window opens up) admit the delivery normally;
-                // `Refused` (long-window quota exhausted) records a
-                // failure row and exits the retry loop — retries inside
-                // the same window would only re-refuse.
-                let! rateLimitDecision = (getRateLimiter ()).Wait(rateLimitKeyFor sub)
+            do!
+                emitAudit sub.ScopeId WebhookEventTypes.DeliveryFailed {|
+                    SubscriptionId = sub.SubscriptionId
+                    EventId = event.Id
+                    EventType = event.EventType
+                    FinalError = err
+                |}
 
-                match rateLimitDecision with
-                | Refused reason ->
-                    let outcome =
-                        WebhookDeliveryOutcome.Failure(None, sprintf "Rate-limit refused: %s" reason, 0L)
+            logger.Error(
+                $"[WebhookDispatcher] event=secret_unresolvable subscriptionId={sub.SubscriptionId} scope={sub.ScopeId}: {err}",
+                None
+            )
+        | Some currentSecret ->
 
-                    do!
-                        recordDelivery sub.ScopeId {
-                            DeliveryId = payload.DeliveryId
-                            SubscriptionId = sub.SubscriptionId
-                            EventId = Some event.Id
-                            Attempt = attempt
-                            AttemptedAt = payload.DeliveredAt
-                            Outcome = outcome
-                        }
+            let mutable attempt = 1
+            let mutable finalOutcome = WebhookDeliveryOutcome.DeadLettered "no attempts run"
 
-                    finalOutcome <- outcome
-                    wasRateLimitRefused <- true
-                    attempt <- retryPolicy.MaxAttempts + 1 // exit
-                | Proceed
-                | DelayedBy _ ->
-                    let! outcome = deliverOnce httpClient sub payload
+            // Phase 9l — child activity per (subscription, event) pair so
+            // the trace tree shows one webhook delivery span (including
+            // every retry) under whichever ancestor wrote the event. The
+            // delivery span covers the full retry loop so an OTel viewer
+            // shows "webhook foo: 3 attempts, 4.2s" as one node rather
+            // than three independent dispatches.
+            let deliveryActivityOpt =
+                activitySink.StartActivity(sprintf "webhook %s" event.EventType, None)
 
-                    do!
-                        recordDelivery sub.ScopeId {
-                            DeliveryId = payload.DeliveryId
-                            SubscriptionId = sub.SubscriptionId
-                            EventId = Some event.Id
-                            Attempt = attempt
-                            AttemptedAt = payload.DeliveredAt
-                            Outcome = outcome
-                        }
+            // Phase 9v — `Refused` from the limiter is a platform-side
+            // throttling decision, not a receiver-health signal. Distinguish
+            // it from delivery failures so the post-loop dead-letter path
+            // can skip the ConsecutiveFailures bump and auto-disable (a
+            // healthy receiver shouldn't get auto-disabled because the
+            // operator's long-window quota happened to be exhausted).
+            let mutable wasRateLimitRefused = false
 
-                    finalOutcome <- outcome
+            try
+                while attempt <= retryPolicy.MaxAttempts do
+                    let delay = WebhookRetryPolicy.delayFor retryPolicy attempt
 
-                    match outcome with
-                    | WebhookDeliveryOutcome.Success _ ->
-                        // Reset the consecutive-failure counter on success
-                        // so a recovered receiver flips the subscription
-                        // back out of the auto-disable trigger zone.
-                        if sub.ConsecutiveFailures > 0 then
-                            let! _ = registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, 0)
+                    if delay > TimeSpan.Zero then
+                        do! Async.Sleep delay
 
-                            ()
-
-                        attempt <- retryPolicy.MaxAttempts + 1 // exit
-                    | _ -> attempt <- attempt + 1
-
-            match finalOutcome with
-            | WebhookDeliveryOutcome.Success _ -> return ()
-            | _ ->
-                // Dead-letter: record one more row marking the terminal
-                // state and emit the audit event. Then update the
-                // consecutive-failure counter and possibly auto-disable.
-                let finalError =
-                    match finalOutcome with
-                    | WebhookDeliveryOutcome.Failure(_, msg, _) -> msg
-                    | _ -> "unknown"
-
-                do!
-                    recordDelivery sub.ScopeId {
+                    let payload: WebhookDeliveryPayload = {
                         DeliveryId = Guid.NewGuid()
                         SubscriptionId = sub.SubscriptionId
-                        EventId = Some event.Id
-                        Attempt = retryPolicy.MaxAttempts
-                        AttemptedAt = DateTime.UtcNow
-                        Outcome = WebhookDeliveryOutcome.DeadLettered finalError
+                        Event = event
+                        DeliveredAt = DateTime.UtcNow
+                        Attempt = attempt
                     }
 
-                do!
-                    emitAudit sub.ScopeId WebhookEventTypes.DeliveryFailed {|
-                        SubscriptionId = sub.SubscriptionId
-                        EventId = event.Id
-                        EventType = event.EventType
-                        FinalError = finalError
-                    |}
+                    // Phase 9v — gate per outbound POST on `IRateLimiter`.
+                    // `Proceed` / `DelayedBy` (held inside `Wait` until the
+                    // short window opens up) admit the delivery normally;
+                    // `Refused` (long-window quota exhausted) records a
+                    // failure row and exits the retry loop — retries inside
+                    // the same window would only re-refuse.
+                    let! rateLimitDecision = (getRateLimiter ()).Wait(rateLimitKeyFor sub)
 
-                // Phase 9v — rate-limit refusals don't count toward
-                // auto-disable. The substrate already emitted its own
-                // `RateLimitRefused` audit row from inside `Wait`, so
-                // the operator has visibility into the throttle event
-                // without the subscription being penalised.
-                if not wasRateLimitRefused then
-                    let newCount = sub.ConsecutiveFailures + 1
-
-                    let! _ = registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, newCount)
-
-                    if newCount >= retryPolicy.DisableAfterConsecutiveFailures then
-                        let! _ = registry.UpdateStatus(sub.ScopeId, sub.SubscriptionId, WebhookStatus.Disabled)
+                    match rateLimitDecision with
+                    | Refused reason ->
+                        let outcome =
+                            WebhookDeliveryOutcome.Failure(None, sprintf "Rate-limit refused: %s" reason, 0L)
 
                         do!
-                            emitAudit sub.ScopeId WebhookEventTypes.SubscriptionAutoDisabled {|
+                            recordDelivery sub.ScopeId {
+                                DeliveryId = payload.DeliveryId
                                 SubscriptionId = sub.SubscriptionId
-                                ConsecutiveFailures = newCount
-                            |}
-        finally
-            deliveryActivityOpt |> Option.iter _.Dispose()
+                                EventId = Some event.Id
+                                Attempt = attempt
+                                AttemptedAt = payload.DeliveredAt
+                                Outcome = outcome
+                            }
+
+                        finalOutcome <- outcome
+                        wasRateLimitRefused <- true
+                        attempt <- retryPolicy.MaxAttempts + 1 // exit
+                    | Proceed
+                    | DelayedBy _ ->
+                        // Accepted signing set evaluated at this attempt's
+                        // delivery instant (grace window may close mid-loop).
+                        let signingSecrets =
+                            acceptedSecretsAt payload.DeliveredAt sub currentSecret previousSecretOpt
+
+                        let! outcome = deliverOnce httpClient sub signingSecrets payload
+
+                        do!
+                            recordDelivery sub.ScopeId {
+                                DeliveryId = payload.DeliveryId
+                                SubscriptionId = sub.SubscriptionId
+                                EventId = Some event.Id
+                                Attempt = attempt
+                                AttemptedAt = payload.DeliveredAt
+                                Outcome = outcome
+                            }
+
+                        finalOutcome <- outcome
+
+                        match outcome with
+                        | WebhookDeliveryOutcome.Success _ ->
+                            // Reset the consecutive-failure counter on success
+                            // so a recovered receiver flips the subscription
+                            // back out of the auto-disable trigger zone.
+                            if sub.ConsecutiveFailures > 0 then
+                                let! _ = registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, 0)
+
+                                ()
+
+                            attempt <- retryPolicy.MaxAttempts + 1 // exit
+                        | _ -> attempt <- attempt + 1
+
+                match finalOutcome with
+                | WebhookDeliveryOutcome.Success _ -> return ()
+                | _ ->
+                    // Dead-letter: record one more row marking the terminal
+                    // state and emit the audit event. Then update the
+                    // consecutive-failure counter and possibly auto-disable.
+                    let finalError =
+                        match finalOutcome with
+                        | WebhookDeliveryOutcome.Failure(_, msg, _) -> msg
+                        | _ -> "unknown"
+
+                    do!
+                        recordDelivery sub.ScopeId {
+                            DeliveryId = Guid.NewGuid()
+                            SubscriptionId = sub.SubscriptionId
+                            EventId = Some event.Id
+                            Attempt = retryPolicy.MaxAttempts
+                            AttemptedAt = DateTime.UtcNow
+                            Outcome = WebhookDeliveryOutcome.DeadLettered finalError
+                        }
+
+                    do!
+                        emitAudit sub.ScopeId WebhookEventTypes.DeliveryFailed {|
+                            SubscriptionId = sub.SubscriptionId
+                            EventId = event.Id
+                            EventType = event.EventType
+                            FinalError = finalError
+                        |}
+
+                    // Phase 9v — rate-limit refusals don't count toward
+                    // auto-disable. The substrate already emitted its own
+                    // `RateLimitRefused` audit row from inside `Wait`, so
+                    // the operator has visibility into the throttle event
+                    // without the subscription being penalised.
+                    if not wasRateLimitRefused then
+                        let newCount = sub.ConsecutiveFailures + 1
+
+                        let! _ = registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, newCount)
+
+                        if newCount >= retryPolicy.DisableAfterConsecutiveFailures then
+                            let! _ = registry.UpdateStatus(sub.ScopeId, sub.SubscriptionId, WebhookStatus.Disabled)
+
+                            do!
+                                emitAudit sub.ScopeId WebhookEventTypes.SubscriptionAutoDisabled {|
+                                    SubscriptionId = sub.SubscriptionId
+                                    ConsecutiveFailures = newCount
+                                |}
+            finally
+                deliveryActivityOpt |> Option.iter _.Dispose()
     }
 
     /// Gap audit pass-2 #1 (delivery-time) — SSRF re-validation wrapper around
@@ -541,6 +641,11 @@ type WebhookDispatcherService
                 // should observe the throttle, not burst past it.
                 let! rateLimitDecision = (getRateLimiter ()).Wait(rateLimitKeyFor sub)
 
+                // Phase 6d.A — resolve the signing secret(s) from
+                // ISecretStore (audited) before the test fire leaves the
+                // process, exactly as production deliveries do.
+                let! currentSecretOpt, previousSecretOpt = resolveSigningSecrets sub
+
                 let! outcome = async {
                     // Delivery-time SSRF re-validation (same DNS-rebinding guard
                     // as runDelivery) before the test fire leaves the process.
@@ -553,11 +658,24 @@ type WebhookDispatcherService
                                 0L
                             )
                     | Ok() ->
-                        match rateLimitDecision with
-                        | Refused reason ->
-                            return WebhookDeliveryOutcome.Failure(None, sprintf "Rate-limit refused: %s" reason, 0L)
-                        | Proceed
-                        | DelayedBy _ -> return! deliverOnce httpClient sub payload
+                        match currentSecretOpt with
+                        | None ->
+                            return
+                                WebhookDeliveryOutcome.Failure(
+                                    None,
+                                    "no signing secret resolvable — SecretRef points at no ISecretStore entry and no legacy inline secret is present",
+                                    0L
+                                )
+                        | Some currentSecret ->
+                            match rateLimitDecision with
+                            | Refused reason ->
+                                return WebhookDeliveryOutcome.Failure(None, sprintf "Rate-limit refused: %s" reason, 0L)
+                            | Proceed
+                            | DelayedBy _ ->
+                                let signingSecrets =
+                                    acceptedSecretsAt payload.DeliveredAt sub currentSecret previousSecretOpt
+
+                                return! deliverOnce httpClient sub signingSecrets payload
                 }
 
                 // Record the test-fire row so admins see it in the log
@@ -621,6 +739,7 @@ let create
     (retryPolicy: WebhookRetryPolicy)
     (logger: ILogger)
     (activitySink: IActivitySink)
+    (secretStore: ISecretStore)
     (getRateLimiter: unit -> IRateLimiter)
     (urlPolicy: WebhookUrlValidator.WebhookUrlPolicy)
     : WebhookDispatcherService =
@@ -632,6 +751,7 @@ let create
         retryPolicy,
         logger,
         activitySink,
+        secretStore,
         getRateLimiter,
         urlPolicy
     )

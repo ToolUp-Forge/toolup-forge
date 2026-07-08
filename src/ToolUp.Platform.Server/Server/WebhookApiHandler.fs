@@ -65,6 +65,12 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
 
     let eventStore = ctx.RequestServices.GetService(typeof<IEventStore>) :?> IEventStore
 
+    // Phase 6d.A — the signing secret lives in ISecretStore (encrypted at
+    // rest), not the subscription blob. Resolved per request; create /
+    // rotate write to it, delete removes from it.
+    let secretStore =
+        ctx.RequestServices.GetService(typeof<Secrets.ISecretStore>) :?> Secrets.ISecretStore
+
     // Gap audit pass-2 #1 — webhook URL SSRF defence. Read the
     // operator-supplied allowlist from DI-registered ServerConfig
     // (compose registers the live config so the validator picks up
@@ -106,6 +112,23 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
             AccessContext.unrestricted (AnonymousSession userId)
 
     let scopeOpt = AccessContext.configScope accessContext
+
+    /// Phase 6d.A — resolve a subscription's CURRENT signing-secret value
+    /// for the rotate path: from `ISecretStore` when a ref is set, else
+    /// the legacy inline value on a not-yet-migrated blob. `None` only for
+    /// a structurally-broken subscription (no ref, no inline value) — the
+    /// rotation then simply has no prior secret to carry into the grace
+    /// window.
+    let resolveCurrentSecret (sub: WebhookSubscription) : Async<string option> = async {
+        if not (String.IsNullOrEmpty sub.SecretRef) then
+            let! resolved = secretStore.GetSecret(WebhookSecretRef.Scope, WebhookSecretRef.keyOf sub.SecretRef)
+
+            match resolved with
+            | Some _ -> return resolved
+            | None -> return sub.Secret
+        else
+            return sub.Secret
+    }
 
     /// Team-mode write gate. Mirrors `ConfigHandler.ensureWriteAllowed`:
     /// Owner/Admin may write team subscriptions; Member is read-only;
@@ -172,40 +195,75 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
                         return Error reason
                     | Ok() ->
 
-                        let sub: WebhookSubscription = {
-                            SubscriptionId = Guid.NewGuid()
-                            ScopeId = scope.ScopeId
-                            TargetUrl = req.TargetUrl
-                            Secret = req.Secret
-                            EventTypes = req.EventTypes
-                            Status = WebhookStatus.Active
-                            CreatedBy = accessContext.UserId
-                            CreatedAt = DateTime.UtcNow
-                            ConsecutiveFailures = 0
-                            PreviousSecret = None
-                            PreviousSecretExpiresAt = None
-                        }
+                        let subscriptionId = Guid.NewGuid()
+                        let secretRef = WebhookSecretRef.current subscriptionId
 
-                        match! registry.CreateSubscription sub with
+                        // Phase 6d.A — persist the signing secret in
+                        // ISecretStore (encrypted at rest) FIRST, then store
+                        // only the reference on the blob. A store-write
+                        // failure aborts before any blob is written, so we
+                        // never persist a subscription whose secret is
+                        // unrecoverable.
+                        match!
+                            secretStore.SetSecret(WebhookSecretRef.Scope, WebhookSecretRef.keyOf secretRef, req.Secret)
+                        with
                         | Error e ->
-                            logger.Warn $"Webhook: create failed scope={scope.ScopeId} target={req.TargetUrl}: {e}"
+                            logger.Warn
+                                $"Webhook: secret persist failed scope={scope.ScopeId} target={req.TargetUrl}: {e}"
 
-                            return Error e
+                            return Error(sprintf "Failed to persist webhook signing secret: %s" e)
                         | Ok() ->
-                            do!
-                                emitAudit scope.ScopeId WebhookEventTypes.SubscriptionCreated {|
-                                    SubscriptionId = sub.SubscriptionId
-                                    TargetUrl = req.TargetUrl
-                                    EventTypes = req.EventTypes
-                                    CreatedBy = sub.CreatedBy
-                                |}
 
-                            logger.Info
-                                $"Webhook: created sub={sub.SubscriptionId:N} scope={scope.ScopeId} target={req.TargetUrl}"
+                            let sub: WebhookSubscription = {
+                                SubscriptionId = subscriptionId
+                                ScopeId = scope.ScopeId
+                                TargetUrl = req.TargetUrl
+                                SecretRef = secretRef
+                                Secret = None
+                                EventTypes = req.EventTypes
+                                Status = WebhookStatus.Active
+                                CreatedBy = accessContext.UserId
+                                CreatedAt = DateTime.UtcNow
+                                ConsecutiveFailures = 0
+                                PreviousSecretRef = None
+                                PreviousSecret = None
+                                PreviousSecretExpiresAt = None
+                            }
 
-                            // Return the unmasked record so the admin UI
-                            // can show the secret once for copy-out.
-                            return Ok sub
+                            match! registry.CreateSubscription sub with
+                            | Error e ->
+                                logger.Warn $"Webhook: create failed scope={scope.ScopeId} target={req.TargetUrl}: {e}"
+
+                                // Best-effort cleanup of the orphaned secret so
+                                // a failed create doesn't leak a dangling entry.
+                                try
+                                    do!
+                                        secretStore.DeleteSecret(
+                                            WebhookSecretRef.Scope,
+                                            WebhookSecretRef.keyOf secretRef
+                                        )
+                                        |> Async.Ignore
+                                with cleanupEx ->
+                                    logger.Warn
+                                        $"Webhook: orphaned-secret cleanup failed sub={subscriptionId:N}: {cleanupEx.Message}"
+
+                                return Error e
+                            | Ok() ->
+                                do!
+                                    emitAudit scope.ScopeId WebhookEventTypes.SubscriptionCreated {|
+                                        SubscriptionId = sub.SubscriptionId
+                                        TargetUrl = req.TargetUrl
+                                        EventTypes = req.EventTypes
+                                        CreatedBy = sub.CreatedBy
+                                    |}
+
+                                logger.Info
+                                    $"Webhook: created sub={sub.SubscriptionId:N} scope={scope.ScopeId} target={req.TargetUrl}"
+
+                                // Reveal the secret once (transiently — never
+                                // persisted with a value) so the admin UI can
+                                // copy it into the receiving service.
+                                return Ok { sub with Secret = Some req.Secret }
                 })
 
         ListSubscriptions =
@@ -253,38 +311,82 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
                 withWriteScope (fun scope -> async {
                     match! registry.GetSubscription(scope.ScopeId, id) with
                     | None -> return Error "Subscription not found."
-                    | Some _ ->
+                    | Some existing ->
                         // Generate the new secret server-side (the admin
                         // never supplies it on rotation — they copy out
                         // the returned value once). Grace window keeps the
                         // prior secret valid so deliveries are not missed
                         // while the receiver updates.
                         let newSecret = generateSecret ()
+                        let currentRef = WebhookSecretRef.current id
+                        let previousRef = WebhookSecretRef.previous id
 
                         let graceExpiresAt = DateTime.UtcNow + WebhookSubscription.secretRotationGracePeriod
 
-                        match! registry.RotateSecret(scope.ScopeId, id, newSecret, graceExpiresAt) with
+                        // Phase 6d.A — move the secret VALUES in ISecretStore
+                        // before recording the ref bookkeeping on the blob:
+                        //   1. copy the current secret to the grace-window
+                        //      `.secret.previous` key (skipped only for a
+                        //      structurally-broken sub with no prior secret);
+                        //   2. write the new secret to the canonical current
+                        //      key. On a legacy blob this also lands the
+                        //      first-ever ref value.
+                        let! currentValueOpt = resolveCurrentSecret existing
+
+                        let! graceWrite = async {
+                            match currentValueOpt with
+                            | Some currentValue ->
+                                return!
+                                    secretStore.SetSecret(
+                                        WebhookSecretRef.Scope,
+                                        WebhookSecretRef.keyOf previousRef,
+                                        currentValue
+                                    )
+                            | None -> return Ok()
+                        }
+
+                        match graceWrite with
                         | Error e ->
-                            logger.Warn $"Webhook: secret rotation failed sub={id:N}: {e}"
+                            logger.Warn $"Webhook: grace-secret persist failed sub={id:N}: {e}"
+                            return Error(sprintf "Failed to persist grace-window secret: %s" e)
+                        | Ok() ->
 
-                            return Error e
-                        | Ok rotated ->
-                            // Audit the rotation — actor + subscription id
-                            // + grace-window expiry, but NEVER the secret
-                            // value (old or new).
-                            do!
-                                emitAudit scope.ScopeId WebhookEventTypes.SubscriptionSecretRotated {|
-                                    SubscriptionId = id
-                                    RotatedBy = accessContext.UserId
-                                    PreviousSecretExpiresAt = graceExpiresAt
-                                |}
+                            match!
+                                secretStore.SetSecret(
+                                    WebhookSecretRef.Scope,
+                                    WebhookSecretRef.keyOf currentRef,
+                                    newSecret
+                                )
+                            with
+                            | Error e ->
+                                logger.Warn $"Webhook: new-secret persist failed sub={id:N}: {e}"
+                                return Error(sprintf "Failed to persist rotated secret: %s" e)
+                            | Ok() ->
 
-                            logger.Info
-                                $"Webhook: secret rotated sub={id:N} scope={scope.ScopeId} grace-until={graceExpiresAt:o}"
+                                match!
+                                    registry.RotateSecret(scope.ScopeId, id, currentRef, previousRef, graceExpiresAt)
+                                with
+                                | Error e ->
+                                    logger.Warn $"Webhook: secret rotation failed sub={id:N}: {e}"
 
-                            // Return the unmasked record so the admin UI
-                            // can reveal the new secret once for copy-out.
-                            return Ok rotated
+                                    return Error e
+                                | Ok rotated ->
+                                    // Audit the rotation — actor + subscription id
+                                    // + grace-window expiry, but NEVER the secret
+                                    // value (old or new).
+                                    do!
+                                        emitAudit scope.ScopeId WebhookEventTypes.SubscriptionSecretRotated {|
+                                            SubscriptionId = id
+                                            RotatedBy = accessContext.UserId
+                                            PreviousSecretExpiresAt = graceExpiresAt
+                                        |}
+
+                                    logger.Info
+                                        $"Webhook: secret rotated sub={id:N} scope={scope.ScopeId} grace-until={graceExpiresAt:o}"
+
+                                    // Reveal the new secret once (transiently — never
+                                    // persisted with a value) for copy-out.
+                                    return Ok { rotated with Secret = Some newSecret }
                 })
 
         DeleteSubscription =
@@ -298,6 +400,30 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
 
                         return Error e
                     | Ok() ->
+                        // Phase 6d.A — remove the signing secret(s) from
+                        // ISecretStore (current + any grace-window
+                        // previous). Best-effort: a failure is logged but
+                        // does not fail the delete — the subscription blob
+                        // is already gone and `ISecretStore.DeleteSecret`
+                        // is idempotent, so a re-run or the migration's
+                        // orphan handling stays safe.
+                        try
+                            do!
+                                secretStore.DeleteSecret(
+                                    WebhookSecretRef.Scope,
+                                    WebhookSecretRef.keyOf (WebhookSecretRef.current id)
+                                )
+                                |> Async.Ignore
+
+                            do!
+                                secretStore.DeleteSecret(
+                                    WebhookSecretRef.Scope,
+                                    WebhookSecretRef.keyOf (WebhookSecretRef.previous id)
+                                )
+                                |> Async.Ignore
+                        with ex ->
+                            logger.Warn $"Webhook: secret cleanup after delete failed sub={id:N}: {ex.Message}"
+
                         // Cascade-delete the delivery log for this
                         // subscription. `Prune` filters by
                         // `olderThan`; `DateTime.MaxValue` matches

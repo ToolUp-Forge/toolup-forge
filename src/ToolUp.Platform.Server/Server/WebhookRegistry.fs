@@ -136,11 +136,12 @@ type BlobWebhookRegistry(storage: IBlobStorage) =
                 return! save updated
         }
 
-        member _.RotateSecret(scopeId, subscriptionId, newSecret, graceExpiresAt) = async {
+        member _.RotateSecret(scopeId, subscriptionId, currentSecretRef, previousSecretRef, graceExpiresAt) = async {
             match! load scopeId subscriptionId with
             | None -> return Error "Subscription not found."
             | Some sub ->
-                let rotated = WebhookSubscription.withRotatedSecret newSecret graceExpiresAt sub
+                let rotated =
+                    WebhookSubscription.withRotatedSecret currentSecretRef previousSecretRef graceExpiresAt sub
 
                 match! save rotated with
                 | Ok() -> return Ok rotated
@@ -181,6 +182,43 @@ type BlobWebhookRegistry(storage: IBlobStorage) =
 
 let createRegistry (storage: IBlobStorage) : IWebhookRegistry =
     BlobWebhookRegistry(storage) :> IWebhookRegistry
+
+// ─── Storage-level helpers (Phase 6d.A migration + validator) ────
+//
+// The one-shot secret-at-rest migration and the preflight validator both
+// need to walk EVERY persisted subscription regardless of status (a
+// half-migrated Paused/Disabled subscription still carries a plaintext
+// secret) and to re-persist a rewritten record. `IWebhookRegistry`
+// deliberately exposes neither — `ListAllActive` filters to Active and
+// there is no "raw save" on the interface — so these live as module
+// functions over the same blob layout / JSON codec.
+
+/// Every persisted subscription across every scope, any status. Used by
+/// the Phase 6d.A migration + secret-at-rest validator; NOT on the hot
+/// path (the dispatcher uses the per-scope / active-only registry
+/// methods). Tolerates individual deserialisation failures by skipping.
+let listAllSubscriptions (storage: IBlobStorage) : Async<WebhookSubscription list> = async {
+    let! names = storage.List(platformContainer, allSubscriptionsRoot)
+
+    let subscriptionNames =
+        names
+        |> List.filter (fun n -> n.Contains "/subscriptions/" && n.EndsWith ".json")
+
+    return! downloadAll<WebhookSubscription> storage subscriptionNames
+}
+
+/// Re-persist a subscription record at its canonical blob path. Used by
+/// the Phase 6d.A migration to rewrite a blob with `SecretRef` after
+/// moving its inline secret into `ISecretStore`. Same read-modify-write
+/// last-write-wins window as the registry's own `save`.
+let saveSubscription (storage: IBlobStorage) (sub: WebhookSubscription) : Async<Result<unit, string>> = async {
+    let bytes = Json.serialize sub
+    let! result = storage.Upload(platformContainer, subscriptionBlob sub.ScopeId sub.SubscriptionId, bytes)
+
+    match result with
+    | Ok _ -> return Ok()
+    | Error e -> return Error e
+}
 
 // ─── IWebhookDeliveryLog — blob-backed ───────────────────────────
 

@@ -1927,6 +1927,19 @@ type ServerConfig = {
     /// case-insensitive against `Uri.Host`. Empty list = no
     /// allowlist (every webhook URL goes through full validation).
     WebhookUrlAllowedHosts: string list
+    /// Phase 6d.A — opt-in one-shot migration of pre-6d.A webhook
+    /// signing secrets to encryption-at-rest. Default `false`. When
+    /// `true` AND `Webhooks = EnabledWebhooks`, compose runs
+    /// `WebhookSecretMigration.migrate` once at startup (before
+    /// preflight): every persisted subscription still carrying a
+    /// plaintext `Secret` has it moved into `ISecretStore` and the blob
+    /// rewritten with only a `SecretRef`. Idempotent — a subscription
+    /// already migrated is skipped, so leaving this `true` costs one
+    /// blob scan per boot. A deployment upgrading from a pre-6d.A
+    /// version sets this `true` for the first boot so the
+    /// `WebhookSecretAtRestValidator` (which Errors on any residual
+    /// inline secret) passes. Env: `TOOLUP_MIGRATE_WEBHOOK_SECRETS`.
+    MigrateWebhookSecretsAtRest: bool
     /// Base URL the SDK uses to compose share-link URLs
     /// from issued tokens. Companions issuing tokens (Forms
     /// `IssueTokens`) read this when building the embed URL —
@@ -2943,6 +2956,7 @@ module ServerConfig =
         PeerRoutePrefixes = []
         MaxRequestBodyBytes = None
         WebhookUrlAllowedHosts = []
+        MigrateWebhookSecretsAtRest = false
         PublicBaseUrl = None
         DataIngestion = NoDataIngestion
         ColumnMapping = NoColumnMapping
@@ -3668,6 +3682,7 @@ module ServerConfig =
                 // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
                 // preserves GP 11: unset → the prior `defaults.X` value.
                 BackfillMissedTicks = envFlag "TOOLUP_BACKFILL_MISSED_TICKS"
+                MigrateWebhookSecretsAtRest = envFlag "TOOLUP_MIGRATE_WEBHOOK_SECRETS"
                 SkipPreflight = envFlag "TOOLUP_SKIP_PREFLIGHT"
                 HealthStateTracking = envFlag "TOOLUP_HEALTH_STATE_TRACKING"
                 EnableCitationDevEndpoint = envFlagOpt "TOOLUP_ENABLE_CITATION_DEV_ENDPOINT"

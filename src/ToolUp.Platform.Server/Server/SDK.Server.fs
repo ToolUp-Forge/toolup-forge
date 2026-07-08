@@ -375,6 +375,7 @@ let compose
             effectiveInnerEventStore
             resolvedLogger
             resolvedActivitySink
+            secretStore
             rateLimiterLookup
 
     // Phase 9b — chicken-and-egg break for the job substrate. The
@@ -657,7 +658,7 @@ let compose
     // skips the dispatcher's `IHostedService` registration while
     // keeping the DI singletons that admin routes / sibling worker
     // silos need to resolve.
-    registerWebhookSubsystem services config webhookSubsystem
+    registerWebhookSubsystem services config resolvedBlobStorage webhookSubsystem
 
     // Phase 6f — transactional dispatcher hosted service (extracted to
     // `ComposeNotifications.registerTransactionalDispatcher`).

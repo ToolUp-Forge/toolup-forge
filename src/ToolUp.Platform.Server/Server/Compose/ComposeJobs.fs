@@ -50,6 +50,7 @@ let buildWebhookSubsystem
     (effectiveInnerEventStore: IEventStore)
     (resolvedLogger: ILogger)
     (resolvedActivitySink: IActivitySink)
+    (secretStore: Secrets.ISecretStore)
     (rateLimiterLookup: unit -> IRateLimiter)
     : (IWebhookRegistry * IWebhookDeliveryLog * WebhookDispatcher.WebhookDispatcherService * IEventStore) option =
     match config.Webhooks with
@@ -58,6 +59,18 @@ let buildWebhookSubsystem
         let registry = WebhookRegistry.createRegistry resolvedBlobStorage
         let deliveryLog = WebhookRegistry.createDeliveryLog resolvedBlobStorage
         let httpClient = new System.Net.Http.HttpClient()
+
+        // Phase 6d.A — opt-in one-shot secret-at-rest migration. Runs
+        // synchronously at compose (before preflight) so a deployment
+        // upgrading from a pre-6d.A version can move plaintext secrets
+        // into ISecretStore and pass the WebhookSecretAtRestValidator on
+        // the same boot. Idempotent — a no-op once every blob is
+        // migrated (GP 11/13: default off, byte-for-byte unchanged unless
+        // the flag is set).
+        if config.MigrateWebhookSecretsAtRest then
+            WebhookSecretMigration.migrate resolvedBlobStorage secretStore resolvedLogger
+            |> Async.RunSynchronously
+            |> ignore
 
         // Same SSRF allowlist the registration-time guard uses
         // (WebhookApiHandler) — threaded into the dispatcher so delivery-time
@@ -75,6 +88,7 @@ let buildWebhookSubsystem
                 WebhookRetryPolicy.defaults
                 resolvedLogger
                 resolvedActivitySink
+                secretStore
                 rateLimiterLookup
                 urlPolicy
 
@@ -126,6 +140,7 @@ let applyEventStoreDecorators
 let registerWebhookSubsystem
     (services: IServiceCollection)
     (config: ServerConfig)
+    (resolvedBlobStorage: IBlobStorage)
     (webhookSubsystem:
         (IWebhookRegistry * IWebhookDeliveryLog * WebhookDispatcher.WebhookDispatcherService * IEventStore) option)
     : unit =
@@ -136,6 +151,16 @@ let registerWebhookSubsystem
             .AddSingleton<IWebhookRegistry>(registry)
             .AddSingleton<IWebhookDeliveryLog>(deliveryLog)
             .AddSingleton<IWebhookDispatcher>(dispatcher :> IWebhookDispatcher)
+        |> ignore
+
+        // Phase 6d.A — refuse startup if any persisted subscription still
+        // carries a plaintext signing secret inline (a half-migrated or
+        // tampered deployment). Security-class, scoped to webhooks being
+        // active.
+        services.AddSingleton<ConfigValidation.IConfigValidator>(
+            WebhookSecretValidator.WebhookSecretAtRestValidator(resolvedBlobStorage)
+            :> ConfigValidation.IConfigValidator
+        )
         |> ignore
 
         // Phase 16 + 16a — gate dispatcher BackgroundService on the

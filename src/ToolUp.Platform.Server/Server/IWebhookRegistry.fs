@@ -46,17 +46,25 @@ type IWebhookRegistry =
     /// state on re-activation).
     abstract UpdateStatus: scopeId: string * subscriptionId: Guid * status: WebhookStatus -> Async<Result<unit, string>>
 
-    /// Rotate the signing secret. The new secret becomes the current
-    /// `Secret`; the prior current secret is retained as
-    /// `PreviousSecret` until `graceExpiresAt`, so the dispatcher
-    /// dual-signs deliveries during the grace window and receivers can
-    /// verify against either. The subscription id is unchanged. Returns
-    /// the updated record (unmasked) so the caller can reveal the new
-    /// secret once. `Error` when the subscription does not exist in the
-    /// scope. Read-modify-write, same last-write-wins window as
-    /// `UpdateStatus` / `SetConsecutiveFailures`.
+    /// Record a secret rotation on the subscription record (Phase 6d.A).
+    /// The new + previous secret VALUES are moved in `ISecretStore` by
+    /// the caller (the API handler) *before* this call; the registry only
+    /// updates the reference bookkeeping: `SecretRef` is set to
+    /// `currentSecretRef` (canonicalising a legacy blob) and
+    /// `PreviousSecretRef` to `previousSecretRef` (the grace-window store
+    /// key) valid until `graceExpiresAt`, so the dispatcher dual-signs
+    /// deliveries during the window and receivers can verify against
+    /// either. Both inline legacy secrets are cleared. The subscription
+    /// id is unchanged. Returns the updated record so the caller can
+    /// populate the transient reveal. `Error` when the subscription does
+    /// not exist in the scope. Read-modify-write, same last-write-wins
+    /// window as `UpdateStatus` / `SetConsecutiveFailures`.
     abstract RotateSecret:
-        scopeId: string * subscriptionId: Guid * newSecret: string * graceExpiresAt: DateTime ->
+        scopeId: string *
+        subscriptionId: Guid *
+        currentSecretRef: string *
+        previousSecretRef: string *
+        graceExpiresAt: DateTime ->
             Async<Result<WebhookSubscription, string>>
 
     /// Persist the current `ConsecutiveFailures` value. Called by the
