@@ -3310,6 +3310,31 @@ ToolUp.Platform.PresenceClient+PresenceTransport..ctor(Microsoft.FSharp.Core.FSh
 ToolUp.Platform.PresenceClient+PresenceTransport.FetchRoster : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresenceEntry]]] { get }
 ToolUp.Platform.PresenceClient+PresenceTransport.Heartbeat : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.PresenceClient+PresenceTransport.Leave : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.PresenceContext (class)
+ToolUp.Platform.PresenceContext.provider(ToolUp.Platform.PresenceContext+PresenceContextValue, Fable.React.ReactElement) : Fable.React.ReactElement
+ToolUp.Platform.PresenceContext.useEntityLock(ToolUp.Platform.PresenceContext+LockTransport, ToolUp.Platform.EntityLockRef, System.Int32) : ToolUp.Platform.PresenceContext+EntityLockHandle
+ToolUp.Platform.PresenceContext+EntityLockHandle (class)
+ToolUp.Platform.PresenceContext+EntityLockHandle..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LockOutcome])
+ToolUp.Platform.PresenceContext+EntityLockHandle.BeginEdit : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.PresenceContext+EntityLockHandle.EndEdit : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.PresenceContext+EntityLockHandle.Outcome : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LockOutcome] { get }
+ToolUp.Platform.PresenceContext+LockTransport (class)
+ToolUp.Platform.PresenceContext+LockTransport..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.PresenceContext+LockTransport.Acquire : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]] { get }
+ToolUp.Platform.PresenceContext+LockTransport.Release : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.PresenceContext+LockTransport.Renew : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityLockRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]] { get }
+ToolUp.Platform.PresenceContext+Presence (class)
+ToolUp.Platform.PresenceContext+Presence.useIsReadOnly(ToolUp.Platform.EntityLockRef, System.String) : System.Boolean
+ToolUp.Platform.PresenceContext+Presence.useLock(ToolUp.Platform.EntityLockRef) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LockLease]
+ToolUp.Platform.PresenceContext+Presence.usePeers() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]
+ToolUp.Platform.PresenceContext+Presence.usePeersAt(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]
+ToolUp.Platform.PresenceContext+PresenceContextValue (class)
+ToolUp.Platform.PresenceContext+PresenceContextValue..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.LockLease])
+ToolUp.Platform.PresenceContext+PresenceContextValue.Locks : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.LockLease] { get }
+ToolUp.Platform.PresenceContext+PresenceContextValue.Peers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer] { get }
+ToolUp.Platform.PresenceContext+PresenceContextValueModule (class)
+ToolUp.Platform.PresenceContext+PresenceContextValueModule.empty : ToolUp.Platform.PresenceContext+PresenceContextValue { get }
+ToolUp.Platform.PresenceContext+PresenceContextValueModule.ofState(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LockLease]) : ToolUp.Platform.PresenceContext+PresenceContextValue
 ToolUp.Platform.PreviewOutcome (class)
 ToolUp.Platform.PreviewOutcome.IsPlaceholder : System.Boolean { get }
 ToolUp.Platform.PreviewOutcome.IsRendered : System.Boolean { get }

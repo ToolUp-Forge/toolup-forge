@@ -410,6 +410,16 @@ ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg+TestPlatformKey.providerId : System.S
 ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg+TestTeamKey (class)
 ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg+TestTeamKey.providerId : System.String { get }
 ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg+TestTeamKey.teamId : System.String { get }
+ToolUp.AI.Client.PromptAccessoryBridge (class)
+ToolUp.AI.Client.PromptAccessoryBridge.hasAccessory() : System.Boolean
+ToolUp.AI.Client.PromptAccessoryBridge.render(ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext) : Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement]
+ToolUp.AI.Client.PromptAccessoryBridge.setAccessory(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext, Fable.React.ReactElement]]) : System.Void
+ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext (class)
+ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], System.Boolean)
+ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext.CurrentText : System.String { get }
+ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext.IsBusy : System.Boolean { get }
+ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext.SetText : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.AI.Client.PromptAccessoryBridge+PromptAccessoryContext.Submit : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.AI.Client.SSEClient (class)
 ToolUp.AI.Client.SSEClient.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.AI.Client.SSEClient+EventSource (interface)
