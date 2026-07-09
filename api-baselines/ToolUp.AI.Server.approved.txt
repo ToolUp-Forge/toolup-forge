@@ -133,6 +133,27 @@ ToolUp.AI.AIProviderUsageMiddleware+QuotaEnforcingProviderFactory (class)
 ToolUp.AI.AIProviderUsageMiddleware+QuotaEnforcingProviderFactory..ctor(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Usage.ITeamQuotaPolicy)
 ToolUp.AI.AISettingsHandler (class)
 ToolUp.AI.AISettingsHandler.aiSettingsApi(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.AISettingsApi
+ToolUp.AI.AISurfaceCapability (class)
+ToolUp.AI.AISurfaceCapability.CookieName : System.String (literal)
+ToolUp.AI.AISurfaceCapability.DefaultLifetimeSeconds : System.Int32 (literal)
+ToolUp.AI.AISurfaceCapability.FullPageClaim : System.String (literal)
+ToolUp.AI.AISurfaceCapability.clearCookie(Microsoft.AspNetCore.Http.HttpContext) : System.Void
+ToolUp.AI.AISurfaceCapability.issueFullPageCookie(System.Int32, System.DateTimeOffset, System.Byte[], Microsoft.AspNetCore.Http.HttpContext) : System.Void
+ToolUp.AI.AISurfaceCapability.mintToken(System.String, System.Int32, System.DateTimeOffset, System.Byte[]) : System.String
+ToolUp.AI.AISurfaceCapability.readCookie(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.AISurfaceCapability.resolveSurface(ToolUp.AI.AISurfaceDerivationMode, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.AISurface) : System.Tuple`2[ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.AISurfaceCapability.resolveSurfaceFromRequest(ToolUp.AI.AISurfaceDerivationMode, System.DateTimeOffset, Microsoft.AspNetCore.Http.HttpContext, ToolUp.AI.AISurface) : System.Tuple`2[ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.AISurfaceCapability.validateToken(System.DateTimeOffset, System.Byte[], System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.AISurfaceDerivationMode (class)
+ToolUp.AI.AISurfaceDerivationMode.IsDeriveFromCookie : System.Boolean { get }
+ToolUp.AI.AISurfaceDerivationMode.IsTrustClient : System.Boolean { get }
+ToolUp.AI.AISurfaceDerivationMode.Tag : System.Int32 { get }
+ToolUp.AI.AISurfaceDerivationMode.TrustClient : ToolUp.AI.AISurfaceDerivationMode { get }
+ToolUp.AI.AISurfaceDerivationMode+DeriveFromCookie (class)
+ToolUp.AI.AISurfaceDerivationMode+DeriveFromCookie.signingKey : System.Byte[] { get }
+ToolUp.AI.AISurfaceDerivationMode+Tags (class)
+ToolUp.AI.AISurfaceDerivationMode+Tags.DeriveFromCookie : System.Int32 (literal)
+ToolUp.AI.AISurfaceDerivationMode+Tags.TrustClient : System.Int32 (literal)
 ToolUp.AI.AIToolRegistry (class)
 ToolUp.AI.AIToolRegistry.createTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
 ToolUp.AI.AIToolRegistry.isToolVisibleOnSurface(ToolUp.AI.AISurface, ToolUp.Platform.AIToolDefinition) : System.Boolean
@@ -269,7 +290,8 @@ ToolUp.AI.SSEHandler.sendEvent(ToolUp.Platform.SSEConnectionManager, System.Stri
 ToolUp.AI.SSEHandler.sseHandler(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.SseAuthMode, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.SystemPromptBuilder (class)
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig (class)
-ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.AI.AISurfaceDerivationMode)
+ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.AISurfaceDerivation : ToolUp.AI.AISurfaceDerivationMode { get }
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.Branding : ToolUp.AI.AIAssistantBranding { get }
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.MaxHistoryMessages : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.SystemPrompt : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]] { get }
