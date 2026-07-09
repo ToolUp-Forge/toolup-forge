@@ -21,6 +21,25 @@ module WebhookSigner =
     [<Literal>]
     let private MaxDriftSeconds = 300L
 
+    /// Minimum signing-secret length, in bytes of its UTF-8 encoding. An
+    /// HMAC-SHA256 key below the 32-byte SHA-256 block offers less than the
+    /// full keyspace, and an EMPTY key is publicly computable — so a blank
+    /// `WebhookSecret` (the unset-env-var case) would let anyone forge a
+    /// "verified" event. Every real Stripe `whsec_…` secret clears this
+    /// floor. Mirrored — not shared — with the identical guard in
+    /// `ToolUp.Stripe.TierToken.Token` and the peer auth provider; the three
+    /// signing packages are deliberately decoupled (same rationale as the
+    /// constant-time compare duplicated across them).
+    [<Literal>]
+    let private MinSecretBytes = 32
+
+    /// `true` when the secret is present and at least `MinSecretBytes`
+    /// bytes — the fail-closed strength gate applied before any HMAC is
+    /// computed (GP 4). A well-formed secret is unchanged (GP 11).
+    let private secretIsStrong (secret: string) : bool =
+        not (String.IsNullOrEmpty secret)
+        && Encoding.UTF8.GetByteCount secret >= MinSecretBytes
+
     /// Constant-time byte comparison so an attacker can't time-side-
     /// channel the secret bit-by-bit.
     let private constantTimeEquals (a: byte[]) (b: byte[]) : bool =
@@ -68,41 +87,51 @@ module WebhookSigner =
         (body: string)
         (header: string)
         : Result<VerifiedEvent, WebhookError> =
-        match parseHeader header with
-        | None -> Error MalformedHeader
-        | Some(timestamp, providedSig) ->
-            let driftSeconds = now.ToUnixTimeSeconds() - timestamp
+        // Fail closed on a blank/weak signing secret BEFORE computing the
+        // HMAC. An HMAC-SHA256 with an empty key is publicly computable, so
+        // without this guard `WebhookSecret = ""` would let a forged
+        // `checkout.session.completed` / `invoice.paid` verify. The sibling
+        // `TierToken.Token` already guards its key length — this closes the
+        // matching omission here.
+        if not (secretIsStrong secret) then
+            Error SecretMissing
+        else
 
-            if abs driftSeconds > MaxDriftSeconds then
-                Error(TimestampDrift driftSeconds)
-            else
-                let payload = sprintf "%d.%s" timestamp body
-                let secretBytes = Encoding.UTF8.GetBytes secret
+            match parseHeader header with
+            | None -> Error MalformedHeader
+            | Some(timestamp, providedSig) ->
+                let driftSeconds = now.ToUnixTimeSeconds() - timestamp
 
-                use h = new HMACSHA256(secretBytes)
-                let expected = h.ComputeHash(Encoding.UTF8.GetBytes payload)
-                let expectedHex = Convert.ToHexString(expected).ToLowerInvariant()
-
-                let sigOk =
-                    constantTimeEquals
-                        (Encoding.UTF8.GetBytes(providedSig.ToLowerInvariant()))
-                        (Encoding.UTF8.GetBytes expectedHex)
-
-                if sigOk then
-                    // Signature is good — decode the body into the typed
-                    // event catalogue. A decode failure (unparseable JSON)
-                    // surfaces as BodyParseError; an unknown `type` decodes
-                    // to StripeEvent.Unknown (never an error).
-                    match StripeEvent.decode body with
-                    | Ok ev ->
-                        Ok {
-                            Body = body
-                            Timestamp = timestamp
-                            Event = ev
-                        }
-                    | Error msg -> Error(BodyParseError msg)
+                if abs driftSeconds > MaxDriftSeconds then
+                    Error(TimestampDrift driftSeconds)
                 else
-                    Error SignatureMismatch
+                    let payload = sprintf "%d.%s" timestamp body
+                    let secretBytes = Encoding.UTF8.GetBytes secret
+
+                    use h = new HMACSHA256(secretBytes)
+                    let expected = h.ComputeHash(Encoding.UTF8.GetBytes payload)
+                    let expectedHex = Convert.ToHexString(expected).ToLowerInvariant()
+
+                    let sigOk =
+                        constantTimeEquals
+                            (Encoding.UTF8.GetBytes(providedSig.ToLowerInvariant()))
+                            (Encoding.UTF8.GetBytes expectedHex)
+
+                    if sigOk then
+                        // Signature is good — decode the body into the typed
+                        // event catalogue. A decode failure (unparseable JSON)
+                        // surfaces as BodyParseError; an unknown `type` decodes
+                        // to StripeEvent.Unknown (never an error).
+                        match StripeEvent.decode body with
+                        | Ok ev ->
+                            Ok {
+                                Body = body
+                                Timestamp = timestamp
+                                Event = ev
+                            }
+                        | Error msg -> Error(BodyParseError msg)
+                    else
+                        Error SignatureMismatch
 
     /// Verify a Stripe webhook signature using
     /// `DateTimeOffset.UtcNow` as the freshness reference.

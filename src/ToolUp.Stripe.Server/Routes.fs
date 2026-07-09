@@ -57,6 +57,10 @@ module Routes =
     let private statusForError (err: WebhookError) : int =
         match err with
         | TimestampDrift _ -> 408
+        // A blank/weak signing secret is a server misconfiguration, not a
+        // bad request — the boot-time StripeConfigValidator normally
+        // catches it first; this is the defence-in-depth backstop.
+        | SecretMissing -> 500
         | MalformedHeader
         | SignatureMismatch
         | BodyParseError _
@@ -67,6 +71,7 @@ module Routes =
     let private describe (err: WebhookError) : string =
         match err with
         | MalformedHeader -> "malformed Stripe-Signature header"
+        | SecretMissing -> "webhook signing secret is empty or below the minimum strength (server misconfiguration)"
         | TimestampDrift seconds -> sprintf "timestamp drift %ds outside the 5-minute window" seconds
         | SignatureMismatch -> "signature mismatch"
         | BodyParseError message -> sprintf "body parse error: %s" message

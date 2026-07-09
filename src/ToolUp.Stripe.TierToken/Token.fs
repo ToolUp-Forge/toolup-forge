@@ -8,12 +8,14 @@ open System.Text
 type MintError =
     /// Caller passed a zero-or-negative `lifetimeSeconds`.
     | InvalidLifetime
-    /// Caller passed an empty `secret` byte array.
+    /// Signing secret was empty or below the 32-byte minimum strength —
+    /// too weak to sign a token with. Fails closed.
     | SecretMissing
 
 /// Token validate errors.
 type ValidateError =
-    /// Caller passed an empty `secret` byte array.
+    /// Signing secret was empty or below the 32-byte minimum strength —
+    /// too weak to verify against. Fails closed (never returns a tier).
     | SecretMissing
     /// Token didn't parse to three dot-separated parts.
     | MalformedToken
@@ -35,6 +37,20 @@ type ValidateError =
 /// federation provider lands, swap the signer for a JWT validator
 /// without touching the cookie name or claim shape.
 module Token =
+    /// Minimum signing-secret length, in bytes. An HMAC-SHA256 key below
+    /// the 32-byte SHA-256 block offers less than the full keyspace, and an
+    /// empty key is publicly computable. Mirrored — not shared — with the
+    /// identical guard in `ToolUp.Stripe.Webhook.WebhookSigner` and the peer
+    /// auth provider; the three signing packages are deliberately decoupled
+    /// (same rationale as the constant-time compare duplicated across them).
+    [<Literal>]
+    let private MinSecretBytes = 32
+
+    /// `true` when the secret meets the minimum strength. An empty OR
+    /// too-short key fails closed (GP 4); a well-formed ≥32-byte key is
+    /// unchanged (GP 11).
+    let private secretIsStrong (secret: byte[]) : bool = secret.Length >= MinSecretBytes
+
     /// Base64-URL encoding (RFC 4648 §5) without padding.
     let private base64UrlEncode (bytes: byte[]) : string =
         let standard = Convert.ToBase64String bytes
@@ -59,7 +75,7 @@ module Token =
 
     /// Mint a signed token for the given tier + lifetime (in seconds).
     let mint (tier: Tier) (lifetimeSeconds: int) (now: DateTimeOffset) (secret: byte[]) : Result<string, MintError> =
-        if secret.Length = 0 then
+        if not (secretIsStrong secret) then
             Error MintError.SecretMissing
         elif lifetimeSeconds <= 0 then
             Error InvalidLifetime
@@ -74,7 +90,7 @@ module Token =
     /// on bad format, bad signature, or expired. Caller falls back to
     /// `Tier.Anonymous` on `Error`.
     let validate (now: DateTimeOffset) (token: string) (secret: byte[]) : Result<Tier, ValidateError> =
-        if secret.Length = 0 then
+        if not (secretIsStrong secret) then
             Error ValidateError.SecretMissing
         else
             let parts = token.Split('.')

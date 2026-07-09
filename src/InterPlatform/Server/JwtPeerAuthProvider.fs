@@ -44,6 +44,25 @@ module private PeerJwt =
     /// Secret-store key holding a peer's symmetric HS256 signing key.
     let signingKeyFor (peerId: string) = $"peers/{peerId}/signing-key"
 
+    /// Minimum per-peer signing-key length, in bytes of its UTF-8 encoding.
+    /// An HMAC-SHA256 key below the 32-byte SHA-256 block offers less than
+    /// the full keyspace, and a blank key is publicly computable — a peer
+    /// whose stored key is `""` (or a placeholder a few bytes long) would
+    /// otherwise mint / accept a valid-but-public MAC. Mirrored — not
+    /// shared — with the identical guard in `ToolUp.Stripe.Webhook` and
+    /// `ToolUp.Stripe.TierToken`; the packages are deliberately decoupled.
+    [<Literal>]
+    let minSigningKeyBytes = 32
+
+    /// A per-peer signing key must be present and at least
+    /// `minSigningKeyBytes` bytes. Applied to the per-call `GetSecret`
+    /// read on every issue / validate / delegation path so blank or
+    /// too-short signing material fails closed (GP 4) rather than
+    /// producing a valid-but-public HMAC.
+    let signingKeyIsStrong (secret: string) : bool =
+        not (String.IsNullOrEmpty secret)
+        && Encoding.UTF8.GetByteCount secret >= minSigningKeyBytes
+
     /// Constant-time comparison of two already-encoded strings (UTF-8
     /// bytes). Used for the delegation signature; delegates to the shared
     /// BCL-backed `JwtCrypto.fixedTimeEquals` (which is itself
@@ -190,6 +209,15 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
 
             match secretOpt with
             | None -> return Error(PeerUnauthorized $"No signing key registered for peer '{caller.PeerId}'")
+            | Some secret when not (PeerJwt.signingKeyIsStrong secret) ->
+                // Blank / too-short signing material fails closed — issuing a
+                // token signed with an empty or weak key would produce a
+                // valid-but-publicly-forgeable MAC.
+                return
+                    Error(
+                        PeerUnauthorized
+                            $"Signing key for peer '{caller.PeerId}' is empty or below the {PeerJwt.minSigningKeyBytes}-byte minimum — refusing to issue a token signed with a weak key"
+                    )
             | Some secret ->
                 let token = PeerJwt.encode (Encoding.UTF8.GetBytes secret) caller audience user
                 return Ok token
@@ -211,6 +239,15 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
 
                         match secretOpt with
                         | None -> return Error(PeerUnauthorized $"No signing key registered for peer '{iss}'")
+                        | Some secret when not (PeerJwt.signingKeyIsStrong secret) ->
+                            // Fail closed on a blank / too-short stored key: verifying
+                            // against an empty key would accept a publicly-computable
+                            // HMAC, so any inbound token would "validate".
+                            return
+                                Error(
+                                    PeerUnauthorized
+                                        $"Signing key for peer '{iss}' is empty or below the {PeerJwt.minSigningKeyBytes}-byte minimum — refusing to validate a token against a weak key"
+                                )
                         | Some secret ->
                             let secretBytes = Encoding.UTF8.GetBytes secret
 
@@ -253,6 +290,14 @@ type JwtPeerAuthProvider(secrets: ISecretStore, ?expectedAudience: string) =
                 match secretOpt with
                 | None ->
                     return Error(PeerUnauthorized $"No signing key registered for delegating peer '{delegatingPeer}'")
+                | Some secret when not (PeerJwt.signingKeyIsStrong secret) ->
+                    // Fail closed: a blank / too-short delegating-peer key would
+                    // verify a publicly-computable delegation signature.
+                    return
+                        Error(
+                            PeerUnauthorized
+                                $"Signing key for delegating peer '{delegatingPeer}' is empty or below the {PeerJwt.minSigningKeyBytes}-byte minimum — refusing to verify a delegation against a weak key"
+                        )
                 | Some secret ->
                     let canonical = PeerJwt.canonicalAssertion assertion
 

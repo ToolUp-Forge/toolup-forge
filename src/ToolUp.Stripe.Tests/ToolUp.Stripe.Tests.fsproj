@@ -15,6 +15,8 @@
     <Compile Include="TierTokenSinkTests.fs" />
     <Compile Include="StripeHttpWrapperTests.fs" />
     <Compile Include="StripeBillingProviderTests.fs" />
+    <!-- Phase 332 — empty/weak HMAC secret fail-closed gates (billing + peer). -->
+    <Compile Include="SecretStrengthGateTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
@@ -23,6 +25,8 @@
     <ProjectReference Include="..\ToolUp.Stripe.Server\ToolUp.Stripe.Server.fsproj" />
     <!-- TestBlobStorage for the durable idempotency-store conformance pack. -->
     <ProjectReference Include="..\ToolUp.Platform.Testing\ToolUp.Platform.Testing.fsproj" />
+    <!-- Phase 332 — exercises JwtPeerAuthProvider's per-call signing-key strength guard. -->
+    <ProjectReference Include="..\InterPlatform\InterPlatform.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
