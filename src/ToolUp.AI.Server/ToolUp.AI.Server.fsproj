@@ -28,6 +28,11 @@
              portable ToolUp.AI.Wire IHttpTransport seam. No deps on other
              AI.Server files; placed first. -->
         <Compile Include="Server\HttpClientTransport.fs" />
+        <!-- Phase 6g.F — AISurfaceDerivationMode + signed capability
+             cookie + pure surface resolver. No deps on other AI.Server
+             files; must precede SystemPromptBuilder (AIAssistantServerConfig
+             carries the mode). -->
+        <Compile Include="Server\AISurfaceCapability.fs" />
         <Compile Include="Server\SystemPromptBuilder.fs" />
         <Compile Include="Server\ToolContext.fs" />
         <Compile Include="Server\ToolHelpers.fs" />

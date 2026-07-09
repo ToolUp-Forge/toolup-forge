@@ -138,6 +138,15 @@ type AIAssistantServerConfig = {
     /// keeps only the most recent `n` messages; older turns are dropped
     /// with a Warn log so the truncation is observable.
     MaxHistoryMessages: int option
+    /// Phase 6g.F — how the server decides each turn's authoritative
+    /// `AISurface` (which drives `FullPageOnly` tool gating). Default
+    /// `TrustClient` takes the client-supplied `AIMessageRequest.Surface`
+    /// at face value — byte-for-byte the pre-6g.F behaviour.
+    /// `DeriveFromCookie key` derives the surface from a signed
+    /// server-issued capability cookie and demotes a client that lies
+    /// about its surface (defence in depth). See `AISurfaceCapability`
+    /// and TECHNICAL_GUIDE §"Surface determination & trust model".
+    AISurfaceDerivation: AISurfaceDerivationMode
 }
 
 /// Companion helpers for `AIAssistantServerConfig`.

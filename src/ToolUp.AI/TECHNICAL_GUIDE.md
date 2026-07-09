@@ -524,6 +524,45 @@ The agent loop's behavioural promise on the Deny path is the trust boundary that
 
 **Reference companion.** The Apache-2.0 in-tree sample at [`src/AI.Samples/ToolUp.AI.SampleClientTool.{Core,Server,Client}/`](../AI.Samples/) is the worked example of every step above. Its server-side `Compose.register` / `registerWithPolicy` matches the recommended shape; its Fable handler in `SampleHandler.fs` runs `CalcOps.compute` shared with the server tier. The sample's own README walks new companion authors through the four-step pattern (Core types → server `register` → client handler → compose) in ≤10 minutes. Use it as the starting point for any new client-resident-tool companion — the calculator-shaped sample deliberately strips out the module + policy translation layers a larger companion might layer on top.
 
+## Surface determination & trust model
+
+`AIMessageRequest.Surface : AISurface` (`SidePanel | FullPage`) tells the server which chat surface the user submitted from. The agent loop filters the per-turn tool list by it (`AIToolRegistry.isToolVisibleOnSurface`, applied in `runAgentLoop`): a tool declaring `Surface = FullPageOnly` is offered to the model only when the request's `Surface = FullPage`; `SidePanelOnly` only on `SidePanel`; `Both` (the default every existing tool carries) always passes. This is how the lightweight side panel hides tools that only make sense on the full-page assistant.
+
+### The field is client-supplied — surface gating is NOT a security boundary
+
+`Surface` arrives on the wire inside `AIMessageRequest`, set by the browser that opened the chat. **In the default configuration the server does not verify it.** A client submitting from a side-panel context can put `Surface = FullPage` on the request and the agent loop will expose `FullPageOnly` tools to that turn. Treat the surface filter as a **UX affordance that keeps the model focused on the right tools for the surface — not as an authorization gate.**
+
+### Blast radius — why the default is a bounded risk
+
+`FullPageOnly` marks tools that only belong on the full-page assistant — in practice the **client-resident** family (`Location = ClientResident`) that drives the UI in front of the user (set a form field, click a button, navigate a page). A client-resident tool executes in **the calling client's own browser**: the agent loop emits a `ClientToolInvoke` SSE event that only that user's session receives, the tool body runs there, and the result POSTs back keyed by the same `ToolCallId` (see [Client-resident companion authoring](#client-resident-companion-authoring)). So a client that lies about its surface unlocks tools that act on **its own** browser and **its own** session — there is no cross-user or cross-tenant reach.
+
+Crucially, the surface field gates nothing that the resolved `AccessContext` gates:
+
+- **Tenant / team isolation (GP 4)** is carried by the storage-scope resolver and the `Subject` resolution, never by `Surface`. Spoofing the surface cannot read another tenant's data.
+- **The per-invocation `IClientToolAuthorizer` Deny path** evaluates server-side on every client-resident call regardless of surface. A tool the policy denies never reaches the browser even if the surface filter let the model see it.
+
+The residual risk is confined to a single client coaxing the model into offering it a UI action it could equally have performed by hand in its own browser. **Module authors wiring `FullPageOnly` tools must not treat the surface filter as withholding a capability the caller shouldn't have at all** — put that authorization in the tool's own `AccessContext` check or its `IClientToolAuthorizer` (both server-evaluated, neither client-supplied). The surface filter decides *which tools the model is shown*; it is not the boundary that decides *what the caller is allowed to do*.
+
+### Opt-in: server-derived surface (`AISurfaceDerivation`)
+
+Deployments that want defence-in-depth — a surface the server can corroborate rather than trust — set the mode on `AIAssistantServerConfig`:
+
+```fsharp
+type AISurfaceDerivationMode =
+    | TrustClient                        // default — trust AIMessageRequest.Surface
+    | DeriveFromCookie of signingKey: byte[]
+
+// on AIAssistantServerConfig
+{ …; AISurfaceDerivation = DeriveFromCookie signingKey }
+```
+
+- **`TrustClient` (default)** takes `AIMessageRequest.Surface` at face value. A deployment that leaves the default is **byte-for-byte unchanged** — no cookie read, no signing key, no behavioural difference (GP 11 / GP 13).
+- **`DeriveFromCookie signingKey`** ignores the request field for the *authoritative* surface and derives it from a short-lived HMAC-SHA256-signed capability cookie: `toolup-ai-surface=fullpage; HttpOnly; Secure; SameSite=Strict`. `AIAssistantHandler` reads it off the **original** request context (`AISurfaceCapability.resolveSurfaceFromRequest`) — the synthetic background context the agent loop runs under carries no cookies, so the read must happen up front — and passes the resolved surface into `runAgentLoop`. A client presenting `Surface = FullPage` without a valid, unexpired, correctly-signed cookie is **demoted to `SidePanel`**, and the disagreement is logged at Warn.
+
+**Issuing the cookie.** The server mints the capability cookie when the user actually navigates into a full-page AI module. Forge supplies the substrate — `AISurfaceCapability.issueFullPageCookie` (mint + `Set-Cookie` with the hardened attributes) and `clearCookie` — while the *navigation trigger* is a consumer concern: the consumer calls `issueFullPageCookie` from the server-side handler backing its full-page-module route, and `clearCookie` on navigation away or sign-out. The security-meaningful half (mint / validate / the pure `resolveSurface` demotion gate) lives entirely in forge and is covered by `AISurfaceCapabilityTests`.
+
+**Signing key.** The key is carried inline on the mode (`DeriveFromCookie of byte[]`) so the resolver stays a pure function with no secret-store plumbing; a deployment sources it however it sources its other signing material (e.g. from `ISecretStore` at compose time). An empty key never validates — a mis-wired `DeriveFromCookie` demotes every turn to `SidePanel` rather than silently granting.
+
 ## SSE — [`../ToolUp.AI.Server/Server/SSEHandler.fs`](../ToolUp.AI.Server/Server/SSEHandler.fs) + [`../ToolUp.AI.Client/Client/SSEClient.fs`](../ToolUp.AI.Client/Client/SSEClient.fs)
 
 ### Connection lifecycle

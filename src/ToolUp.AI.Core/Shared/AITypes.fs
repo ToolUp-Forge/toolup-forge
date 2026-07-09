@@ -258,6 +258,22 @@ type AIMessageRequest = {
     /// (Fable.Remoting will see no field on the wire and fall through
     /// to default-record-construction; explicit construction sites
     /// must set this field).
+    ///
+    /// TRUST MODEL (Phase 6g.F): this is a **client-supplied** field.
+    /// Under the default `ServerConfig.AISurfaceDerivation = TrustClient`
+    /// the server does not verify it, so a caller can send `FullPage`
+    /// from a side-panel context and unlock `FullPageOnly` tools. The
+    /// blast radius is bounded — `FullPageOnly` tools are client-resident
+    /// and act on the *calling client's own browser/session*, so there is
+    /// no cross-user reach, and tenant isolation + the per-call
+    /// `IClientToolAuthorizer` gate on the resolved `AccessContext`, never
+    /// on `Surface`. Surface gating is a UX affordance, **not** a security
+    /// boundary; do not use it to withhold a capability the caller should
+    /// not have at all. Deployments that want defence-in-depth set
+    /// `AISurfaceDerivation = DeriveFromCookie` to derive the surface from
+    /// a signed server-issued capability cookie instead of this field.
+    /// See `src/ToolUp.AI/TECHNICAL_GUIDE.md` §"Surface determination &
+    /// trust model".
     Surface: AISurface
 }
 

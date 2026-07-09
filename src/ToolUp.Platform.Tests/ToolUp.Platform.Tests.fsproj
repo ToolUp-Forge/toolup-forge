@@ -437,6 +437,10 @@
              admin-pass-through coverage for the underlying validation
              error paths. -->
         <Compile Include="AI\PlatformAIKeysHandlerRbacTests.fs" />
+        <!-- Phase 6g.F — AISurface trust model: TrustClient preserves the
+             client-supplied surface; DeriveFromCookie derives it from a
+             signed capability cookie and demotes a lying client. -->
+        <Compile Include="AI\AISurfaceCapabilityTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\EntraExternalIdConfigTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />

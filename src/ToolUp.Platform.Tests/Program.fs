@@ -232,6 +232,7 @@ let allTests =
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests
         PlatformAIKeysHandlerRbacTests.tests
+        AISurfaceCapabilityTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         SseTraceContributorTests.tests

@@ -1003,6 +1003,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 }
                 SystemPrompt = Some(SystemPromptBuilder.compose ragLayers)
                 MaxHistoryMessages = None
+                AISurfaceDerivation = TrustClient
             }
         | Some cfg ->
             let composedBuilder =

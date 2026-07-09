@@ -561,6 +561,21 @@ let aiAssistantApi
                 let content = request.Content
                 let taskId = Guid.NewGuid()
 
+                // Phase 6g.F — resolve the authoritative surface for this
+                // turn. Under `TrustClient` (default) this is byte-for-byte
+                // `request.Surface`; under `DeriveFromCookie` the surface
+                // comes from the signed capability cookie on the ORIGINAL
+                // request context (`ctx`, not the synthetic background
+                // context — the bg context carries no cookies), so a client
+                // lying about `Surface = FullPage` is demoted to SidePanel.
+                let surfaceMode =
+                    config |> Option.map _.AISurfaceDerivation |> Option.defaultValue TrustClient
+
+                let effectiveSurface, surfaceWarning =
+                    AISurfaceCapability.resolveSurfaceFromRequest surfaceMode DateTimeOffset.UtcNow ctx request.Surface
+
+                surfaceWarning |> Option.iter logger.Warn
+
                 let task: AITask = {
                     TaskId = taskId
                     ConversationId = conversationId
@@ -909,7 +924,7 @@ let aiAssistantApi
                                     bgCtx
                                     taskId
                                     conversationId
-                                    request.Surface
+                                    effectiveSurface
                                     request.ActiveModule
                                     request.ActivePage
                                     cancelToken
