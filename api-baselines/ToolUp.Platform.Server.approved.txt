@@ -248,6 +248,11 @@ ToolUp.Platform.BlobBackedPublisherKeyStore (class)
 ToolUp.Platform.BlobBackedPublisherKeyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule (class)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IPublisherKeyStore
+ToolUp.Platform.BlobDatasetStore (class)
+ToolUp.Platform.BlobDatasetStore..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDatasetCodec)
+ToolUp.Platform.BlobDatasetStoreModule (class)
+ToolUp.Platform.BlobDatasetStoreModule.create(ToolUp.Platform.IDataObjectStore) : ToolUp.Platform.IDatasetStore
+ToolUp.Platform.BlobDatasetStoreModule.createWithCodec(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDatasetCodec) : ToolUp.Platform.IDatasetStore
 ToolUp.Platform.BlobEncryption (class)
 ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver (interface)
 ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver.ResolveKey(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.EncryptionTypes+EncryptionKey]
@@ -503,6 +508,7 @@ ToolUp.Platform.ComposeStores.buildOptionalStoreValues(ToolUp.Platform.ServerCon
 ToolUp.Platform.ComposeStores.registerColumnMappingStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerConfigQueryAndFlagStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IConfigStore, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleQueryHandler]], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : System.Void
 ToolUp.Platform.ComposeStores.registerConsentStateStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
+ToolUp.Platform.ComposeStores.registerDatasetStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerDeployPlane(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeStores.registerEntityStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.Unit]]) : System.Void
 ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -1014,6 +1020,14 @@ ToolUp.Platform.DataSubjectRequestLifecycle.create(System.IServiceProvider) : To
 ToolUp.Platform.DataSubjectRequestLifecycle.exportArchive(System.IServiceProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleExportArchive, System.String]]
 ToolUp.Platform.DataSubjectRequestLifecycle+DataSubjectRequestLifecycle (class)
 ToolUp.Platform.DataSubjectRequestLifecycle+DataSubjectRequestLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.DatasetContentRef (class)
+ToolUp.Platform.DatasetContentRef..ctor(System.String, System.String, System.Int32, System.String, System.String, System.Int64)
+ToolUp.Platform.DatasetContentRef.ContentHash : System.String { get }
+ToolUp.Platform.DatasetContentRef.DatasetId : System.String { get }
+ToolUp.Platform.DatasetContentRef.Format : System.String { get }
+ToolUp.Platform.DatasetContentRef.RowCount : System.Int64 { get }
+ToolUp.Platform.DatasetContentRef.ScopeId : System.String { get }
+ToolUp.Platform.DatasetContentRef.Version : System.Int32 { get }
 ToolUp.Platform.DefaultDeployPipeline (class)
 ToolUp.Platform.DefaultDeployPipeline.DeployScopeId : System.String (literal)
 ToolUp.Platform.DefaultDeployPipeline.DeploySourceModule : System.String (literal)
@@ -1624,6 +1638,19 @@ ToolUp.Platform.IDataSourceConfigStore.Delete(System.String, System.String) : Mi
 ToolUp.Platform.IDataSourceConfigStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig]]
 ToolUp.Platform.IDataSourceConfigStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig]]
 ToolUp.Platform.IDataSourceConfigStore.Save(System.String, ToolUp.Platform.DataSourceConfig) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IDatasetCodec (interface)
+ToolUp.Platform.IDatasetCodec.Decode(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], System.String]
+ToolUp.Platform.IDatasetCodec.Encode(ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : System.Byte[]
+ToolUp.Platform.IDatasetCodec.Format : System.String { get }
+ToolUp.Platform.IDatasetStore (interface)
+ToolUp.Platform.IDatasetStore.Create(System.String, System.String, ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.VersioningPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersion, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDatasetStore.CreateFromContent(System.String, System.String, ToolUp.Platform.DatasetSchema, System.Byte[], System.String, System.Int64, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.VersioningPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersion, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDatasetStore.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDatasetStore.GetContentRef(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetContentRef, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDatasetStore.GetLatest(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersion, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDatasetStore.GetVersion(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersion, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDatasetStore.ListVersions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetVersion]]
+ToolUp.Platform.IDatasetStore.ReadPage(System.String, System.String, System.Int32, ToolUp.Platform.DatasetPageQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetPage, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.IDeployPipeline (interface)
 ToolUp.Platform.IDeployPipeline.BeginDeploy(System.String, System.String, ToolUp.Platform.DeployManifest, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.IDeployPipeline.GetDeployHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploySummary]]
@@ -2237,6 +2264,8 @@ ToolUp.Platform.JsonConsoleLogger (class)
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger (class)
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor()
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor(ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.JsonFrameDatasetCodec (class)
+ToolUp.Platform.JsonFrameDatasetCodec..ctor()
 ToolUp.Platform.LedgerDisposition (class)
 ToolUp.Platform.LedgerDisposition.Completed : ToolUp.Platform.LedgerDisposition { get }
 ToolUp.Platform.LedgerDisposition.IsCompleted : System.Boolean { get }

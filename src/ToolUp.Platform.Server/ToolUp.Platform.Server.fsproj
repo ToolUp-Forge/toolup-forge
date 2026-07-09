@@ -163,6 +163,8 @@
         <Compile Include="Server\Infra\PersistentEventStore.fs" />
         <Compile Include="Server\IDataObjectStore.fs" />
         <Compile Include="Server\DataObjectStore.fs" />
+        <Compile Include="Server\IDatasetStore.fs" />
+        <Compile Include="Server\BlobDatasetStore.fs" />
         <Compile Include="Server\IColumnMappingStore.fs" />
         <Compile Include="Server\ColumnMappingStore.fs" />
         <!-- Phase 173 — per-file RAG ingestion-status store (seam +

@@ -169,6 +169,25 @@ let registerTimeSeriesStore (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ITimeSeriesStore>(InMemoryTimeSeriesStore.create ())
         |> ignore
 
+/// Phase 448 — register the dataset store when `ServerConfig.Datasets`
+/// selects a backend. `BlobDatasets` registers the blob-backed
+/// `BlobDatasetStore` over the composed `IDataObjectStore` (BCL-only
+/// JSON-frame codec, no vendor dependency) via a lazy factory, so a
+/// deployment that never resolves `IDatasetStore` pays nothing (GP 13);
+/// `CustomDatasetStore` registers nothing, leaving the consumer's own
+/// `IDatasetStore` singleton (e.g. a Parquet-codec store) in DI;
+/// `NoDatasets` (the default) registers nothing — zero runtime cost when
+/// unused (GP 13). Uses `TryAddSingleton` so a consumer that pre-registered
+/// its own `IDatasetStore` under `BlobDatasets` is never overridden.
+let registerDatasetStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.Datasets with
+    | NoDatasets -> ()
+    | CustomDatasetStore -> () // consumer / companion composed its own IDatasetStore singleton
+    | BlobDatasets ->
+        services.TryAddSingleton<IDatasetStore>(fun (sp: System.IServiceProvider) ->
+            let dataObjects = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
+            BlobDatasetStore.create dataObjects)
+
 /// Phase 68 — register the graph-data store. `InMemoryGraphStore` (the
 /// default) registers the zero-dependency in-memory `IGraphStore` via a
 /// *lazy* factory, so a deployment that never resolves `IGraphStore` pays

@@ -2213,6 +2213,195 @@ ToolUp.Platform.DataSubjectRequestMode+Enabled.config : ToolUp.Platform.DataSubj
 ToolUp.Platform.DataSubjectRequestMode+Tags (class)
 ToolUp.Platform.DataSubjectRequestMode+Tags.Disabled : System.Int32 (literal)
 ToolUp.Platform.DataSubjectRequestMode+Tags.Enabled : System.Int32 (literal)
+ToolUp.Platform.DatasetColumn (class)
+ToolUp.Platform.DatasetColumn..ctor(System.String, ToolUp.Platform.DatasetDType, System.Boolean, ToolUp.Platform.DatasetColumnRole)
+ToolUp.Platform.DatasetColumn.DType : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetColumn.Name : System.String { get }
+ToolUp.Platform.DatasetColumn.Nullable : System.Boolean { get }
+ToolUp.Platform.DatasetColumn.Role : ToolUp.Platform.DatasetColumnRole { get }
+ToolUp.Platform.DatasetColumnRole (class)
+ToolUp.Platform.DatasetColumnRole.IsPanelPeriod : System.Boolean { get }
+ToolUp.Platform.DatasetColumnRole.IsPanelUnit : System.Boolean { get }
+ToolUp.Platform.DatasetColumnRole.IsPlain : System.Boolean { get }
+ToolUp.Platform.DatasetColumnRole.IsTarget : System.Boolean { get }
+ToolUp.Platform.DatasetColumnRole.PanelPeriod : ToolUp.Platform.DatasetColumnRole { get }
+ToolUp.Platform.DatasetColumnRole.PanelUnit : ToolUp.Platform.DatasetColumnRole { get }
+ToolUp.Platform.DatasetColumnRole.Plain : ToolUp.Platform.DatasetColumnRole { get }
+ToolUp.Platform.DatasetColumnRole.Tag : System.Int32 { get }
+ToolUp.Platform.DatasetColumnRole.Target : ToolUp.Platform.DatasetColumnRole { get }
+ToolUp.Platform.DatasetColumnRole+Tags (class)
+ToolUp.Platform.DatasetColumnRole+Tags.PanelPeriod : System.Int32 (literal)
+ToolUp.Platform.DatasetColumnRole+Tags.PanelUnit : System.Int32 (literal)
+ToolUp.Platform.DatasetColumnRole+Tags.Plain : System.Int32 (literal)
+ToolUp.Platform.DatasetColumnRole+Tags.Target : System.Int32 (literal)
+ToolUp.Platform.DatasetColumnRoleModule (class)
+ToolUp.Platform.DatasetColumnRoleModule.name(ToolUp.Platform.DatasetColumnRole) : System.String
+ToolUp.Platform.DatasetColumnRoleModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetColumnRole]
+ToolUp.Platform.DatasetDType (class)
+ToolUp.Platform.DatasetDType.Bool : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType.Categorical : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType.Float : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType.Int : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType.IsBool : System.Boolean { get }
+ToolUp.Platform.DatasetDType.IsCategorical : System.Boolean { get }
+ToolUp.Platform.DatasetDType.IsFloat : System.Boolean { get }
+ToolUp.Platform.DatasetDType.IsInt : System.Boolean { get }
+ToolUp.Platform.DatasetDType.IsText : System.Boolean { get }
+ToolUp.Platform.DatasetDType.IsTimestamp : System.Boolean { get }
+ToolUp.Platform.DatasetDType.Tag : System.Int32 { get }
+ToolUp.Platform.DatasetDType.Text : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType.Timestamp : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType+Tags (class)
+ToolUp.Platform.DatasetDType+Tags.Bool : System.Int32 (literal)
+ToolUp.Platform.DatasetDType+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.DatasetDType+Tags.Float : System.Int32 (literal)
+ToolUp.Platform.DatasetDType+Tags.Int : System.Int32 (literal)
+ToolUp.Platform.DatasetDType+Tags.Text : System.Int32 (literal)
+ToolUp.Platform.DatasetDType+Tags.Timestamp : System.Int32 (literal)
+ToolUp.Platform.DatasetDTypeModule (class)
+ToolUp.Platform.DatasetDTypeModule.name(ToolUp.Platform.DatasetDType) : System.String
+ToolUp.Platform.DatasetDTypeModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetDType]
+ToolUp.Platform.DatasetError (class)
+ToolUp.Platform.DatasetError.DeleteForbidden : ToolUp.Platform.DatasetError { get }
+ToolUp.Platform.DatasetError.IsDeleteForbidden : System.Boolean { get }
+ToolUp.Platform.DatasetError.IsInvalidPage : System.Boolean { get }
+ToolUp.Platform.DatasetError.IsNotFound : System.Boolean { get }
+ToolUp.Platform.DatasetError.IsSchemaMismatch : System.Boolean { get }
+ToolUp.Platform.DatasetError.IsStorageFailure : System.Boolean { get }
+ToolUp.Platform.DatasetError.IsUnreadableFormat : System.Boolean { get }
+ToolUp.Platform.DatasetError.IsVersionNotFound : System.Boolean { get }
+ToolUp.Platform.DatasetError.NotFound : ToolUp.Platform.DatasetError { get }
+ToolUp.Platform.DatasetError.Tag : System.Int32 { get }
+ToolUp.Platform.DatasetError+InvalidPage (class)
+ToolUp.Platform.DatasetError+InvalidPage.reason : System.String { get }
+ToolUp.Platform.DatasetError+SchemaMismatch (class)
+ToolUp.Platform.DatasetError+SchemaMismatch.reason : System.String { get }
+ToolUp.Platform.DatasetError+StorageFailure (class)
+ToolUp.Platform.DatasetError+StorageFailure.reason : System.String { get }
+ToolUp.Platform.DatasetError+Tags (class)
+ToolUp.Platform.DatasetError+Tags.DeleteForbidden : System.Int32 (literal)
+ToolUp.Platform.DatasetError+Tags.InvalidPage : System.Int32 (literal)
+ToolUp.Platform.DatasetError+Tags.NotFound : System.Int32 (literal)
+ToolUp.Platform.DatasetError+Tags.SchemaMismatch : System.Int32 (literal)
+ToolUp.Platform.DatasetError+Tags.StorageFailure : System.Int32 (literal)
+ToolUp.Platform.DatasetError+Tags.UnreadableFormat : System.Int32 (literal)
+ToolUp.Platform.DatasetError+Tags.VersionNotFound : System.Int32 (literal)
+ToolUp.Platform.DatasetError+UnreadableFormat (class)
+ToolUp.Platform.DatasetError+UnreadableFormat.format : System.String { get }
+ToolUp.Platform.DatasetError+VersionNotFound (class)
+ToolUp.Platform.DatasetError+VersionNotFound.Item : System.Int32 { get }
+ToolUp.Platform.DatasetErrorModule (class)
+ToolUp.Platform.DatasetErrorModule.describe(ToolUp.Platform.DatasetError) : System.String
+ToolUp.Platform.DatasetFilter (class)
+ToolUp.Platform.DatasetFilter..ctor(System.String, ToolUp.Platform.DatasetFilterOp, ToolUp.Platform.DatasetValue)
+ToolUp.Platform.DatasetFilter.Column : System.String { get }
+ToolUp.Platform.DatasetFilter.Op : ToolUp.Platform.DatasetFilterOp { get }
+ToolUp.Platform.DatasetFilter.Value : ToolUp.Platform.DatasetValue { get }
+ToolUp.Platform.DatasetFilterOp (class)
+ToolUp.Platform.DatasetFilterOp.Eq : ToolUp.Platform.DatasetFilterOp { get }
+ToolUp.Platform.DatasetFilterOp.Gt : ToolUp.Platform.DatasetFilterOp { get }
+ToolUp.Platform.DatasetFilterOp.Gte : ToolUp.Platform.DatasetFilterOp { get }
+ToolUp.Platform.DatasetFilterOp.IsEq : System.Boolean { get }
+ToolUp.Platform.DatasetFilterOp.IsGt : System.Boolean { get }
+ToolUp.Platform.DatasetFilterOp.IsGte : System.Boolean { get }
+ToolUp.Platform.DatasetFilterOp.IsLt : System.Boolean { get }
+ToolUp.Platform.DatasetFilterOp.IsLte : System.Boolean { get }
+ToolUp.Platform.DatasetFilterOp.IsNe : System.Boolean { get }
+ToolUp.Platform.DatasetFilterOp.Lt : ToolUp.Platform.DatasetFilterOp { get }
+ToolUp.Platform.DatasetFilterOp.Lte : ToolUp.Platform.DatasetFilterOp { get }
+ToolUp.Platform.DatasetFilterOp.Ne : ToolUp.Platform.DatasetFilterOp { get }
+ToolUp.Platform.DatasetFilterOp.Tag : System.Int32 { get }
+ToolUp.Platform.DatasetFilterOp+Tags (class)
+ToolUp.Platform.DatasetFilterOp+Tags.Eq : System.Int32 (literal)
+ToolUp.Platform.DatasetFilterOp+Tags.Gt : System.Int32 (literal)
+ToolUp.Platform.DatasetFilterOp+Tags.Gte : System.Int32 (literal)
+ToolUp.Platform.DatasetFilterOp+Tags.Lt : System.Int32 (literal)
+ToolUp.Platform.DatasetFilterOp+Tags.Lte : System.Int32 (literal)
+ToolUp.Platform.DatasetFilterOp+Tags.Ne : System.Int32 (literal)
+ToolUp.Platform.DatasetPage (class)
+ToolUp.Platform.DatasetPage..ctor(ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], System.Int64, System.Int64)
+ToolUp.Platform.DatasetPage.Offset : System.Int64 { get }
+ToolUp.Platform.DatasetPage.Rows : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow] { get }
+ToolUp.Platform.DatasetPage.Schema : ToolUp.Platform.DatasetSchema { get }
+ToolUp.Platform.DatasetPage.TotalRows : System.Int64 { get }
+ToolUp.Platform.DatasetPageQuery (class)
+ToolUp.Platform.DatasetPageQuery..ctor(System.Int64, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetFilter])
+ToolUp.Platform.DatasetPageQuery.Filters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetFilter] { get }
+ToolUp.Platform.DatasetPageQuery.Limit : System.Int32 { get }
+ToolUp.Platform.DatasetPageQuery.Offset : System.Int64 { get }
+ToolUp.Platform.DatasetPageQueryModule (class)
+ToolUp.Platform.DatasetPageQueryModule.firstPage(System.Int32) : ToolUp.Platform.DatasetPageQuery
+ToolUp.Platform.DatasetRow (class)
+ToolUp.Platform.DatasetRow..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetValue])
+ToolUp.Platform.DatasetRow.Cells : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetValue] { get }
+ToolUp.Platform.DatasetSchema (class)
+ToolUp.Platform.DatasetSchema..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetColumn])
+ToolUp.Platform.DatasetSchema.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetColumn] { get }
+ToolUp.Platform.DatasetSchemaModule (class)
+ToolUp.Platform.DatasetSchemaModule.columnsWithRole(ToolUp.Platform.DatasetColumnRole, ToolUp.Platform.DatasetSchema) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetColumn]
+ToolUp.Platform.DatasetSchemaModule.indexOf(System.String, ToolUp.Platform.DatasetSchema) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
+ToolUp.Platform.DatasetSchemaModule.panelPeriod(ToolUp.Platform.DatasetSchema) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetColumn]
+ToolUp.Platform.DatasetSchemaModule.panelUnit(ToolUp.Platform.DatasetSchema) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetColumn]
+ToolUp.Platform.DatasetSchemaModule.targets(ToolUp.Platform.DatasetSchema) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetColumn]
+ToolUp.Platform.DatasetSchemaModule.validateRow(ToolUp.Platform.DatasetSchema, ToolUp.Platform.DatasetRow) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.DatasetStoreMode (class)
+ToolUp.Platform.DatasetStoreMode.BlobDatasets : ToolUp.Platform.DatasetStoreMode { get }
+ToolUp.Platform.DatasetStoreMode.CustomDatasetStore : ToolUp.Platform.DatasetStoreMode { get }
+ToolUp.Platform.DatasetStoreMode.IsBlobDatasets : System.Boolean { get }
+ToolUp.Platform.DatasetStoreMode.IsCustomDatasetStore : System.Boolean { get }
+ToolUp.Platform.DatasetStoreMode.IsNoDatasets : System.Boolean { get }
+ToolUp.Platform.DatasetStoreMode.NoDatasets : ToolUp.Platform.DatasetStoreMode { get }
+ToolUp.Platform.DatasetStoreMode.Tag : System.Int32 { get }
+ToolUp.Platform.DatasetStoreMode+Tags (class)
+ToolUp.Platform.DatasetStoreMode+Tags.BlobDatasets : System.Int32 (literal)
+ToolUp.Platform.DatasetStoreMode+Tags.CustomDatasetStore : System.Int32 (literal)
+ToolUp.Platform.DatasetStoreMode+Tags.NoDatasets : System.Int32 (literal)
+ToolUp.Platform.DatasetValue (class)
+ToolUp.Platform.DatasetValue.IsBool : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsCategorical : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsFloat : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsInt : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsNull : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsText : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsTimestamp : System.Boolean { get }
+ToolUp.Platform.DatasetValue.Null : ToolUp.Platform.DatasetValue { get }
+ToolUp.Platform.DatasetValue.Tag : System.Int32 { get }
+ToolUp.Platform.DatasetValue+Bool (class)
+ToolUp.Platform.DatasetValue+Bool.Item : System.Boolean { get }
+ToolUp.Platform.DatasetValue+Categorical (class)
+ToolUp.Platform.DatasetValue+Categorical.Item : System.String { get }
+ToolUp.Platform.DatasetValue+Float (class)
+ToolUp.Platform.DatasetValue+Float.Item : System.Double { get }
+ToolUp.Platform.DatasetValue+Int (class)
+ToolUp.Platform.DatasetValue+Int.Item : System.Int64 { get }
+ToolUp.Platform.DatasetValue+Tags (class)
+ToolUp.Platform.DatasetValue+Tags.Bool : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Float : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Int : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Null : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Text : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Timestamp : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Text (class)
+ToolUp.Platform.DatasetValue+Text.Item : System.String { get }
+ToolUp.Platform.DatasetValue+Timestamp (class)
+ToolUp.Platform.DatasetValue+Timestamp.Item : System.DateTimeOffset { get }
+ToolUp.Platform.DatasetValueModule (class)
+ToolUp.Platform.DatasetValueModule.compare(ToolUp.Platform.DatasetValue, ToolUp.Platform.DatasetValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
+ToolUp.Platform.DatasetValueModule.dtypeOf(ToolUp.Platform.DatasetValue) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetDType]
+ToolUp.Platform.DatasetValueModule.fits(ToolUp.Platform.DatasetDType, System.Boolean, ToolUp.Platform.DatasetValue) : System.Boolean
+ToolUp.Platform.DatasetVersion (class)
+ToolUp.Platform.DatasetVersion..ctor(System.String, System.Int32, System.String, ToolUp.Platform.DatasetSchema, System.Int64, System.String, System.String, System.DateTimeOffset, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.DatasetVersion.ContentHash : System.String { get }
+ToolUp.Platform.DatasetVersion.CreatedAt : System.DateTimeOffset { get }
+ToolUp.Platform.DatasetVersion.CreatedBy : System.String { get }
+ToolUp.Platform.DatasetVersion.DatasetId : System.String { get }
+ToolUp.Platform.DatasetVersion.Format : System.String { get }
+ToolUp.Platform.DatasetVersion.Metadata : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.DatasetVersion.RowCount : System.Int64 { get }
+ToolUp.Platform.DatasetVersion.Schema : ToolUp.Platform.DatasetSchema { get }
+ToolUp.Platform.DatasetVersion.ScopeId : System.String { get }
+ToolUp.Platform.DatasetVersion.Version : System.Int32 { get }
 ToolUp.Platform.DegradedCapability (class)
 ToolUp.Platform.DegradedCapability..ctor(System.String, System.DateTimeOffset, System.String, System.String, System.String)
 ToolUp.Platform.DegradedCapability.Capability : System.String { get }
@@ -5612,7 +5801,7 @@ ToolUp.Platform.SecurityHardeningMode+Tags.DefaultSecurityHardening : System.Int
 ToolUp.Platform.SecurityHardeningMode+Tags.NoSecurityHardening : System.Int32 (literal)
 ToolUp.Platform.SecurityHardeningMode+Tags.StrictSecurityHardening : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode)
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode)
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptHeaderAuthWhenAuthRequired : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptInMemoryOAuthStateInMultiInstance : System.Boolean { get }
@@ -5645,6 +5834,7 @@ ToolUp.Platform.ServerConfig.ConversationStore : ToolUp.Platform.ConversationSto
 ToolUp.Platform.ServerConfig.Cors : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig] { get }
 ToolUp.Platform.ServerConfig.DataIngestion : ToolUp.Platform.DataIngestionMode { get }
 ToolUp.Platform.ServerConfig.DataSubjectRequests : ToolUp.Platform.DataSubjectRequestMode { get }
+ToolUp.Platform.ServerConfig.Datasets : ToolUp.Platform.DatasetStoreMode { get }
 ToolUp.Platform.ServerConfig.DefaultTeamStorageQuotaBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.Platform.ServerConfig.DeployPlane : ToolUp.Platform.DeployPlaneMode { get }
 ToolUp.Platform.ServerConfig.DeploymentReadiness : ToolUp.Platform.DeploymentReadinessMode { get }

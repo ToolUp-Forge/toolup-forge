@@ -417,6 +417,23 @@ type TimeSeriesStoreMode =
     /// singleton in place.
     | CustomTimeSeriesStore
 
+/// Phase 448 — selects the dataset substrate (`IDatasetStore`) for immutable,
+/// versioned, rectangular typed datasets. Default: `NoDatasets` — no
+/// `IDatasetStore` registered, zero cost (GP 13).
+type DatasetStoreMode =
+    /// No dataset substrate registered (default). A deployment with no
+    /// datasets pays nothing (GP 13).
+    | NoDatasets
+    /// Register the blob-backed `BlobDatasetStore` over the composed
+    /// `IDataObjectStore` with the BCL-only JSON-frame codec — no vendor
+    /// dependency (GP 1 / GP 2). A new vintage is a new immutable version.
+    | BlobDatasets
+    /// A companion-provided `IDatasetStore` (or a `BlobDatasetStore` with a
+    /// Parquet companion codec) is registered in DI by the deployment;
+    /// `compose` registers no default and leaves the consumer's singleton in
+    /// place.
+    | CustomDatasetStore
+
 /// Phase 163 — selects the end-user product-telemetry sink (`ITelemetrySink`).
 /// Default: `NoTelemetrySink` — the `NoOpTelemetrySink` (a true no-op) is
 /// registered, so `Track` emission sites are free at runtime (GP 13).
@@ -2006,6 +2023,12 @@ type ServerConfig = {
     /// `CustomTimeSeriesStore` leaves a companion-registered singleton
     /// (e.g. `ToolUp.TimeSeriesStores.Timescale`) in place.
     TimeSeriesStore: TimeSeriesStoreMode
+    /// Phase 448 — dataset substrate selection. Default: `NoDatasets` — no
+    /// `IDatasetStore` registered, zero cost. `BlobDatasets` registers the
+    /// blob-backed default over `IDataObjectStore` (JSON-frame codec, no
+    /// vendor dependency); `CustomDatasetStore` leaves a companion-registered
+    /// singleton (e.g. a Parquet-codec store) in place.
+    Datasets: DatasetStoreMode
     /// Phase 163 — end-user product-telemetry sink selection. Default:
     /// `NoTelemetrySink` — the `NoOpTelemetrySink` is registered (a true
     /// no-op). `CustomTelemetrySink` leaves a companion-registered sink
@@ -2978,6 +3001,7 @@ module ServerConfig =
         // lazily; zero cost until a graph API is resolved — GP 13).
         GraphStore = InMemoryGraphStore
         TimeSeriesStore = NoTimeSeriesStore
+        Datasets = NoDatasets
         TelemetrySink = NoTelemetrySink
         UsageMetering = NoUsageMetering
         MetricsEndpoint = NoMetricsEndpoint

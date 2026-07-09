@@ -548,6 +548,12 @@ let compose
     // companion singleton in place.
     registerTimeSeriesStore services config
 
+    // Phase 448 — dataset substrate. Conditional on `ServerConfig.Datasets`;
+    // `NoDatasets` (default) skips registration entirely; `BlobDatasets`
+    // registers the blob-backed default lazily; `CustomDatasetStore` leaves
+    // the consumer's own `IDatasetStore` singleton in place.
+    registerDatasetStore services config
+
     // Phase 68 — graph-data substrate. InMemoryGraphStore (default)
     // registers the zero-dependency in-memory IGraphStore lazily;
     // CustomGraphStore leaves an engine companion's singleton in place.

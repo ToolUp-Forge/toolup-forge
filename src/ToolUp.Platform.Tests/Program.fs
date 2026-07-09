@@ -13,6 +13,8 @@ let allTests =
         InMemoryEventStoreTests.tests
         PersistentEventStoreTests.tests
         DataObjectStoreTests.tests
+        // Phase 448 — IDatasetStore conformance (blob-backed default).
+        DatasetStoreTests.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).

@@ -280,6 +280,7 @@
         <Compile Include="Shared\WebhookTypes.fs" />
         <Compile Include="Shared\WebhookApi.fs" />
         <Compile Include="Shared\DataObjectTypes.fs" />
+        <Compile Include="Shared\DatasetTypes.fs" />
         <Compile Include="Shared\ResultTypes.fs" />
         <Compile Include="Shared\LineageTypes.fs" />
         <Compile Include="Shared\JobTypes.fs" />
