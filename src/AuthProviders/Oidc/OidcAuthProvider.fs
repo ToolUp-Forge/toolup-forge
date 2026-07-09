@@ -10,6 +10,46 @@ open ToolUp.Platform.Metrics
 open ToolUp.AuthProviders.OidcAuthProviderJwt
 open ToolUp.AuthProviders.OidcAuthProviderJwks
 
+// ─── Phase 341 — opt-in token-validation hardening knobs ─────────────
+//
+// A small OIDC-provider-owned options record carrying the RFC-8725-
+// adjacent hardening switches that are NOT expressible as a claim-
+// validation input on `AuthConfig` (which stays the declarative
+// issuer/audience/keysource contract shared with every auth provider).
+// Every field defaults to "prior behaviour", so a deployment that keeps
+// `OidcHardening.defaults` is byte-for-byte unchanged (GP 11); the
+// existing `fromConfig*` entry points delegate with the defaults, and
+// the `*Hardened` variants below let a caller opt in.
+//
+// The `azp` multi-audience binding (RFC 8725 §3.9) is NOT a knob here —
+// it is an always-on correctness fix that only changes behaviour for the
+// genuinely-dangerous multi-audience-without-`azp` case; a single-
+// audience token is unaffected.
+type OidcHardening = {
+    /// Maximum absolute token age in seconds, enforced as
+    /// `iat + MaxTokenAgeSeconds > now` (with the same clock-skew
+    /// tolerance as `exp`). `None` (default) applies no age bound beyond
+    /// `exp`, preserving prior behaviour. When `Some`, a token with no
+    /// `iat` claim is rejected (an age bound cannot be honoured without
+    /// it, and an attacker must not bypass the bound by omitting `iat`).
+    MaxTokenAgeSeconds: int64 option
+    /// When `true`, a JWKS refresh that fails (or is within the refresh
+    /// cooldown) fails validation closed rather than serving the cached
+    /// (possibly-revoked) keys. `false` (default) keeps the
+    /// availability-first stale-fallback. High-security deployments that
+    /// prefer revocation-safety over availability opt in.
+    FailClosedOnStaleJwks: bool
+}
+
+module OidcHardening =
+    /// Behaviour-preserving defaults: no max-age bound, availability-
+    /// first stale-JWKS fallback. Equivalent to the pre-Phase-341
+    /// provider (GP 11).
+    let defaults = {
+        MaxTokenAgeSeconds = None
+        FailClosedOnStaleJwks = false
+    }
+
 // ─── Shared default HttpClient ───────────────────────────────────────
 //
 // `fromConfig` callers don't supply an HttpClient; this lazy single
@@ -133,20 +173,71 @@ let private validateIssuer (expected: string option) (payload: JwtPayload) : Res
     | Some e, Some a -> Error(InvalidIssuer(e, a))
     | Some e, None -> Error(InvalidIssuer(e, "(no iss claim)"))
 
+let private renderAudience (audience: string list) : string =
+    match audience with
+    | [] -> "(no aud claim)"
+    | [ a ] -> a
+    | many -> String.concat "," many
+
 let private validateAudience (expected: string option) (payload: JwtPayload) : Result<unit, JwtValidationError> =
     match expected with
     | None -> Ok()
     | Some e ->
-        if payload.Audience |> List.contains e then
-            Ok()
+        if not (payload.Audience |> List.contains e) then
+            Error(InvalidAudience(e, renderAudience payload.Audience))
         else
-            let rendered =
-                match payload.Audience with
-                | [] -> "(no aud claim)"
-                | [ a ] -> a
-                | many -> String.concat "," many
+            // RFC 8725 §3.9 — a MULTI-audience token (`aud` carries more
+            // than one entry) additionally requires the authorized-party
+            // claim (`azp`, or `client_id`) to name THIS application.
+            // Without it a token minted for `[thisApp, attackerApp]` by
+            // the shared issuer would validate here even though it was
+            // authorized for a different party. Single-audience tokens
+            // are unaffected — the `azp` binding does not apply and the
+            // membership check above is the whole test (GP 11).
+            match payload.Audience with
+            | _ :: _ :: _ ->
+                match payload.AuthorizedParty with
+                | Some azp when azp = e -> Ok()
+                | Some azp ->
+                    Error(
+                        InvalidAudience(
+                            e,
+                            sprintf
+                                "multi-audience token [%s] with azp/client_id=%s that does not match the expected audience (RFC 8725 §3.9)"
+                                (renderAudience payload.Audience)
+                                azp
+                        )
+                    )
+                | None ->
+                    Error(
+                        InvalidAudience(
+                            e,
+                            sprintf
+                                "multi-audience token [%s] carries no azp/client_id to disambiguate the authorized party (RFC 8725 §3.9)"
+                                (renderAudience payload.Audience)
+                        )
+                    )
+            | _ -> Ok()
 
-            Error(InvalidAudience(e, rendered))
+/// Phase 341 — bound the absolute age of an accepted token via `iat`,
+/// independent of `exp`. `None` max-age applies no bound (prior
+/// behaviour). When configured, a token with no `iat` is rejected (the
+/// bound cannot be honoured, and must not be bypassable by omitting the
+/// claim). The same clock-skew tolerance as `exp` is applied so a small
+/// NTP drift between IdP and host doesn't spuriously age a fresh token.
+let private validateMaxAge
+    (clockSkewSeconds: int64)
+    (maxAgeSeconds: int64 option)
+    (payload: JwtPayload)
+    : Result<unit, JwtValidationError> =
+    match maxAgeSeconds with
+    | None -> Ok()
+    | Some maxAge ->
+        match payload.IssuedAt with
+        | None ->
+            Error(MalformedToken "OidcHardening.MaxTokenAgeSeconds is configured but the token carries no iat claim")
+        | Some iat when iat + maxAge + clockSkewSeconds < unixNow () -> Error(TokenTooOld maxAge)
+        | Some _ -> Ok()
 
 // ─── Token extraction ────────────────────────────────────────────────
 
@@ -250,6 +341,7 @@ let private validate
     (metrics: IMetricsSink)
     (logger: ILogger)
     (config: AuthConfig)
+    (hardening: OidcHardening)
     (ctx: HttpContext)
     : Async<Result<AuthenticatedUser, JwtValidationError>> =
     let incr (counter: string) : unit = metrics.Increment(counter, oidcTags)
@@ -295,7 +387,7 @@ let private validate
                         | Error e -> return Error e
                         | Ok jwksUrl ->
                             // First look: current cache / fetch if cold.
-                            let! keysResult = getJwks httpClient logger jwksUrl false
+                            let! keysResult = getJwks httpClient logger jwksUrl false hardening.FailClosedOnStaleJwks
 
                             match keysResult with
                             | Error e -> return Error e
@@ -305,7 +397,8 @@ let private validate
                                     | Some k -> return Ok k
                                     | None ->
                                         // kid miss: refresh once in case the provider rotated keys.
-                                        let! refreshed = getJwks httpClient logger jwksUrl true
+                                        let! refreshed =
+                                            getJwks httpClient logger jwksUrl true hardening.FailClosedOnStaleJwks
 
                                         match refreshed with
                                         | Ok refreshedKeys ->
@@ -332,11 +425,20 @@ let private validate
                                             validateExpiry skew jwt.Payload
                                             |> Result.bind (fun () -> validateIssuer config.Issuer jwt.Payload)
                                             |> Result.bind (fun () -> validateAudience config.Audience jwt.Payload)
+                                            |> Result.bind (fun () ->
+                                                validateMaxAge skew hardening.MaxTokenAgeSeconds jwt.Payload)
 
                                         match chain with
                                         | Error TokenExpired ->
                                             incr AuthMetrics.ValidateExpired
                                             return Error TokenExpired
+                                        | Error(TokenTooOld _ as e) ->
+                                            // Age-bound rejection is an expiry-class outcome —
+                                            // count it under the same `validate.expired` meter so
+                                            // dashboards see "token too old" alongside "token
+                                            // expired" without a new counter.
+                                            incr AuthMetrics.ValidateExpired
+                                            return Error e
                                         | Error(InvalidIssuer _ as e) ->
                                             incr AuthMetrics.ValidateInvalidIssuer
                                             return Error e
@@ -375,12 +477,15 @@ let private noOpLogger: ILogger =
 // ─── Public entry point ──────────────────────────────────────────────
 
 /// Build an OIDC `IAuthProvider` over an explicit HttpClient + optional
-/// metrics sink. Single private implementation; the four public entry
-/// points delegate here with their own argument defaults.
+/// metrics sink. Single private implementation; the public entry points
+/// delegate here with their own argument defaults. `hardening` carries
+/// the Phase 341 opt-in switches; the non-`*Hardened` entry points pass
+/// `OidcHardening.defaults` (byte-for-byte prior behaviour, GP 11).
 let private buildProvider
     (httpClient: HttpClient)
     (metrics: IMetricsSink option)
     (logger: ILogger option)
+    (hardening: OidcHardening)
     (config: AuthConfig)
     : IAuthProvider =
     // Gap audit 2026-06-12 Auth G3 — refuse cleartext key-fetch URLs at
@@ -420,7 +525,7 @@ let private buildProvider
     { new IAuthProvider with
         member _.GetUser ctx = async {
             let httpCtx = RequestContext.value ctx :?> HttpContext
-            let! result = validate httpClient sink log config httpCtx
+            let! result = validate httpClient sink log config hardening httpCtx
 
             match result with
             | Ok user ->
@@ -447,7 +552,7 @@ let private buildProvider
 
         member _.ValidateRequest ctx = async {
             let httpCtx = RequestContext.value ctx :?> HttpContext
-            let! result = validate httpClient sink log config httpCtx
+            let! result = validate httpClient sink log config hardening httpCtx
 
             match result with
             | Ok user ->
@@ -485,14 +590,18 @@ let private buildProvider
 /// Variants: `fromConfigWith` accepts a custom `HttpClient` for tests
 /// and advanced callers. `fromConfigMetered` / `fromConfigWithMetrics`
 /// thread an `IMetricsSink` so the provider emits the standard
-/// `toolup.auth.*` counters; the no-metrics variants emit nothing.
+/// `toolup.auth.*` counters; the no-metrics variants emit nothing. The
+/// `*Hardened` variants (Phase 341) additionally take an `OidcHardening`
+/// record to opt into the max-token-age / fail-closed-on-stale-JWKS
+/// switches; every non-`*Hardened` entry point uses
+/// `OidcHardening.defaults` (prior behaviour, GP 11).
 let fromConfigWith (httpClient: HttpClient) (logger: ILogger option) (config: AuthConfig) : IAuthProvider =
-    buildProvider httpClient None logger config
+    buildProvider httpClient None logger OidcHardening.defaults config
 
 /// Production shorthand — uses a process-wide lazy `HttpClient`.
 /// Equivalent to `fromConfigWith` with the default client supplied.
 let fromConfig (logger: ILogger option) (config: AuthConfig) : IAuthProvider =
-    buildProvider defaultHttpClient.Value None logger config
+    buildProvider defaultHttpClient.Value None logger OidcHardening.defaults config
 
 /// Metrics-enabled production shorthand — pair with a resolved
 /// `IMetricsSink` (e.g. from the SDK's DI container at compose time)
@@ -501,7 +610,7 @@ let fromConfig (logger: ILogger option) (config: AuthConfig) : IAuthProvider =
 /// useful for call sites that want a single conditional construction
 /// path keyed off whether metrics are configured.
 let fromConfigMetered (logger: ILogger option) (metrics: IMetricsSink option) (config: AuthConfig) : IAuthProvider =
-    buildProvider defaultHttpClient.Value metrics logger config
+    buildProvider defaultHttpClient.Value metrics logger OidcHardening.defaults config
 
 /// Metrics-enabled variant of `fromConfigWith` — same role as
 /// `fromConfigMetered` but accepts a custom `HttpClient`. Tests typically
@@ -513,4 +622,34 @@ let fromConfigWithMetrics
     (metrics: IMetricsSink option)
     (config: AuthConfig)
     : IAuthProvider =
-    buildProvider httpClient metrics logger config
+    buildProvider httpClient metrics logger OidcHardening.defaults config
+
+/// Phase 341 — production shorthand with the token-validation hardening
+/// switches. Equivalent to `fromConfig` but with an explicit
+/// `OidcHardening` (max-token-age bound and/or fail-closed-on-stale
+/// JWKS). `OidcHardening.defaults` reproduces `fromConfig` exactly.
+let fromConfigHardened (logger: ILogger option) (hardening: OidcHardening) (config: AuthConfig) : IAuthProvider =
+    buildProvider defaultHttpClient.Value None logger hardening config
+
+/// Phase 341 — `fromConfigWith` with the hardening switches. Accepts a
+/// custom `HttpClient` (tests / advanced callers) alongside the
+/// `OidcHardening` record.
+let fromConfigWithHardened
+    (httpClient: HttpClient)
+    (logger: ILogger option)
+    (hardening: OidcHardening)
+    (config: AuthConfig)
+    : IAuthProvider =
+    buildProvider httpClient None logger hardening config
+
+/// Phase 341 — metrics-enabled variant with the hardening switches:
+/// `fromConfigWithMetrics` plus an `OidcHardening` record, so a metered
+/// deployment can also opt into max-token-age / fail-closed-on-stale.
+let fromConfigWithMetricsHardened
+    (httpClient: HttpClient)
+    (logger: ILogger option)
+    (metrics: IMetricsSink option)
+    (hardening: OidcHardening)
+    (config: AuthConfig)
+    : IAuthProvider =
+    buildProvider httpClient metrics logger hardening config

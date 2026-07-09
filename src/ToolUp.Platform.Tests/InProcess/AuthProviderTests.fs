@@ -1028,6 +1028,198 @@ let private oidcTests =
                     "ES256"
                     "Error message should name the rejected algorithm so the operator can widen the whitelist if intentional"
         }
+
+        // ─── Phase 341 — azp multi-audience binding (RFC 8725 §3.9) ──
+
+        testCaseAsync "Rejects a multi-audience token without a matching azp (RFC 8725 §3.9)"
+        <| async {
+            // aud carries THIS app plus a second party; without azp the
+            // token was never disambiguated to this app, so it must not
+            // validate even though the expected audience is a member.
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None (Some "my-app")
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "alice"
+                    "aud", box [| "my-app"; "attacker-app" |]
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "multi-audience token without azp must be rejected"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Accepts a multi-audience token whose azp matches the expected audience"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None (Some "my-app")
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "alice"
+                    "aud", box [| "my-app"; "other-app" |]
+                    "azp", box "my-app"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "matching azp should validate; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "multi-aud + matching azp accepted"
+        }
+
+        testCaseAsync "Rejects a multi-audience token whose azp names a different party"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None (Some "my-app")
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "alice"
+                    "aud", box [| "my-app"; "attacker-app" |]
+                    "azp", box "attacker-app"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "azp naming a different party must be rejected"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Single-audience token is unaffected by the azp rule (no azp required)"
+        <| async {
+            // Backward-compat (GP 11): the azp binding only applies when
+            // aud carries MORE THAN ONE entry. A single-audience token
+            // with no azp continues to validate exactly as before.
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None (Some "my-app")
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "alice"; "aud", box "my-app"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "single-audience token should validate without azp; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "single-aud unchanged"
+        }
+
+        // ─── Phase 341 — iat-based maximum token age ─────────────────
+
+        testCaseAsync "Rejects a token older than the configured max age"
+        <| async {
+            let key = OidcFixture.mkKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = None
+                PreferOidWhenPresent = None
+            }
+
+            let hardening = {
+                OidcAuthProvider.OidcHardening.defaults with
+                    MaxTokenAgeSeconds = Some 300L
+            }
+
+            let p = OidcAuthProvider.fromConfigWithHardened client None hardening config
+
+            // iat two hours ago, exp still in the future — expiry is fine,
+            // but the absolute age exceeds the 300s bound.
+            let oldIat = DateTimeOffset.UtcNow.AddHours(-2.0).ToUnixTimeSeconds() |> box
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "alice"; "iat", oldIat; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "token older than the configured max age must be rejected"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Accepts a fresh token within the configured max age"
+        <| async {
+            let key = OidcFixture.mkKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = None
+                PreferOidWhenPresent = None
+            }
+
+            let hardening = {
+                OidcAuthProvider.OidcHardening.defaults with
+                    MaxTokenAgeSeconds = Some 300L
+            }
+
+            let p = OidcAuthProvider.fromConfigWithHardened client None hardening config
+            let freshIat = DateTimeOffset.UtcNow.ToUnixTimeSeconds() |> box
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "alice"; "iat", freshIat; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "fresh token within max age should validate; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "fresh token accepted"
+        }
+
+        testCaseAsync "Rejects a token with no iat when a max age is configured"
+        <| async {
+            let key = OidcFixture.mkKey ()
+
+            let client =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+            let config = {
+                Issuer = None
+                Audience = None
+                KeySource = JwksExplicit key.JwksUrl
+                TokenLocation = BearerHeader
+                ClockSkewSeconds = None
+                AcceptedAlgorithms = None
+                PreferOidWhenPresent = None
+            }
+
+            let hardening = {
+                OidcAuthProvider.OidcHardening.defaults with
+                    MaxTokenAgeSeconds = Some 300L
+            }
+
+            let p = OidcAuthProvider.fromConfigWithHardened client None hardening config
+            // No iat minted — the age bound cannot be honoured, so reject.
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok _ -> failtest "max-age configured but no iat must be rejected"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "Default provider ignores iat when no max age is configured (GP 11)"
+        <| async {
+            // A very old iat is harmless without a configured bound — the
+            // default provider preserves prior behaviour byte-for-byte.
+            let key = OidcFixture.mkKey ()
+            let p = mkProviderExplicit key None None
+            let oldIat = DateTimeOffset.UtcNow.AddDays(-30.0).ToUnixTimeSeconds() |> box
+
+            let token =
+                OidcFixture.mintRs256 key [ "sub", box "alice"; "iat", oldIat; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "old iat with no max age should validate; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "iat ignored without a max-age bound"
+        }
     ]
 
 // ─── OidcAuthProvider — metrics emission (Phase 9e.A) ───────────────
@@ -1326,6 +1518,94 @@ let private fromEnvTests =
         ]
     )
 
+// ─── Phase 341 — strict fail-closed on stale JWKS ────────────────────
+//
+// Drives the internal `OidcAuthProviderJwks.getJwksCore` directly (via
+// InternalsVisibleTo) so the time-gated stale window is deterministic:
+// seed the process cache with a successful fetch, then force a re-fetch
+// (ttl 0) against a failing client. Default mode serves the stale cache;
+// strict mode (fail-closed) surfaces the fetch error instead.
+
+let private oidcStaleJwksTests =
+    testList "OidcAuthProvider — strict JWKS fail-closed (Phase 341)" [
+        testCaseAsync "default serves stale cached keys on refresh failure; strict mode fails closed"
+        <| async {
+            let key = OidcFixture.mkKey ()
+
+            let okClient =
+                new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+            // Empty route map → every fetch 404s (JwksUnavailable).
+            let failClient = new HttpClient(new StubHttpHandler(Map.empty))
+
+            let tenMin = TimeSpan.FromMinutes 10.0
+            let oneMin = TimeSpan.FromMinutes 1.0
+
+            // 1. Seed the process cache with a successful fetch.
+            let! seeded = OidcAuthProviderJwks.getJwksCore okClient silentLogger key.JwksUrl false false tenMin oneMin
+
+            // 2. Default (failClosed=false): ttl 0 forces a re-fetch that
+            //    fails → the stale fallback serves the seeded key set.
+            let! staleDefault =
+                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false false TimeSpan.Zero oneMin
+
+            // 3. Strict (failClosed=true): same stale window → Error, no serve.
+            let! staleStrict =
+                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false true TimeSpan.Zero oneMin
+
+            match seeded with
+            | Ok keys -> Expect.equal keys.Count 1 "seed fetch returns the one JWKS key"
+            | Error e -> failtestf "seed fetch should succeed; got %A" e
+
+            match staleDefault with
+            | Ok keys -> Expect.equal keys.Count 1 "default mode serves the stale cached key set"
+            | Error e -> failtestf "default mode should serve stale keys on fetch failure; got %A" e
+
+            match staleStrict with
+            | Ok _ -> failtest "strict mode must fail closed on a stale-key window, not serve cached keys"
+            | Error _ -> ()
+        }
+    ]
+
+// ─── Phase 341 — OidcAuthValidator audience-none preflight warning ───
+//
+// A reachable issuer (MockOidcServer) is required so the reachability
+// probe succeeds and the audience-none advisory can surface as a
+// `Warning` (a probe failure would be the more-severe `Error`).
+
+let private oidcAudiencePreflightTests =
+    let server = lazy (MockOidcServer.start MockOidcConfig.defaults)
+
+    testSequenced (
+        testList "OidcAuthValidator audience preflight (Phase 341)" [
+            testCaseAsync "warns when audience is unset (aud check would be skipped)"
+            <| async {
+                let s = server.Value
+                let v = OidcAuthValidator.createWithAudience s.IssuerUrl None
+
+                match! v.Validate() with
+                | ConfigValidation.Warning msg ->
+                    Expect.stringContains msg "audience" "warning names the unbound audience"
+                | other -> failtestf "expected a Warning for unset audience; got %A" other
+            }
+
+            testCaseAsync "ok when an audience is configured"
+            <| async {
+                let s = server.Value
+                let v = OidcAuthValidator.createWithAudience s.IssuerUrl (Some "my-app")
+
+                match! v.Validate() with
+                | ConfigValidation.Ok -> ()
+                | other -> failtestf "expected Ok with a configured audience; got %A" other
+            }
+
+            testCase "teardown: stop mock issuer"
+            <| fun () ->
+                if server.IsValueCreated then
+                    (server.Value :> IDisposable).Dispose()
+        ]
+    )
+
 // ─── Aggregated ─────────────────────────────────────────────────────
 
 let tests =
@@ -1337,4 +1617,6 @@ let tests =
         fromEnvTests
         oidcMetricsTests
         oidcMockIssuerContract
+        oidcStaleJwksTests
+        oidcAudiencePreflightTests
     ]

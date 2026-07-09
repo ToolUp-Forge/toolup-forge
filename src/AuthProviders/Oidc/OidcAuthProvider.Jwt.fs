@@ -46,6 +46,13 @@ type JwtValidationError =
     | InvalidIssuer of expected: string * actual: string
     | InvalidAudience of expected: string * actual: string
     | TokenExpired
+    /// Phase 341 — the token's `iat` is older than the configured
+    /// maximum token age (`iat + maxAge < now`). Independent of `exp`:
+    /// bounds absolute token age even when the IdP mints long-lived
+    /// access tokens. Only reachable when a deployment opts in via
+    /// `OidcHardening.MaxTokenAgeSeconds`; unset preserves prior
+    /// behaviour (no age bound beyond `exp`).
+    | TokenTooOld of maxAgeSeconds: int64
     | TokenNotYetValid
     | MissingExpiry
     | JwksUnavailable of reason: string
@@ -62,6 +69,7 @@ module JwtValidationError =
         | InvalidIssuer(e, a) -> $"Token issuer mismatch: expected {e}, got {a}"
         | InvalidAudience(e, a) -> $"Token audience mismatch: expected {e}, got {a}"
         | TokenExpired -> "Token is expired"
+        | TokenTooOld maxAge -> $"Token is older than the configured maximum age of {maxAge}s (iat + maxAge < now)"
         | TokenNotYetValid -> "Token is not yet valid"
         | MissingExpiry -> "Token has no exp claim"
         | JwksUnavailable r -> $"JWKS unavailable: {r}"
@@ -108,7 +116,22 @@ type JwtPayload = {
     /// `UserSession.fs` fallback chain.
     PreferredUsername: string option
     ExpiresAt: int64 option
+    /// Phase 341 — `iat` (issued-at) claim. Parsed so a deployment can
+    /// bound the *absolute* age of an accepted token (`iat + maxAge >
+    /// now`) independently of `exp` — an IdP that mints long-lived
+    /// access tokens can still have a tight max-age enforced locally.
+    /// `None` when the claim is absent; the age bound only fires when
+    /// `OidcHardening.MaxTokenAgeSeconds` is configured (GP 11).
+    IssuedAt: int64 option
     NotBefore: int64 option
+    /// Phase 341 — the `azp` (authorized party) claim, falling back to
+    /// `client_id`. RFC 8725 §3.9: when a token carries MORE THAN ONE
+    /// audience, the party the token was actually issued to must be
+    /// disambiguated by `azp` — otherwise a token minted for
+    /// `[thisApp, attackerApp]` by the shared issuer validates here even
+    /// though it was authorized for the attacker. Single-audience tokens
+    /// ignore this field entirely (behaviour unchanged).
+    AuthorizedParty: string option
     /// Well-known role/group claim names present on the token that the
     /// provider does NOT map into `AuthenticatedUser.Roles` (the SDK
     /// permission model is team-membership driven; a configurable
@@ -189,7 +212,11 @@ let parseJwt (raw: string) : Result<ParsedJwt, JwtValidationError> =
                     Email = tryGetString "email" root
                     PreferredUsername = tryGetString "preferred_username" root
                     ExpiresAt = tryGetInt64 "exp" root
+                    IssuedAt = tryGetInt64 "iat" root
                     NotBefore = tryGetInt64 "nbf" root
+                    // RFC 8725 §3.9 — prefer `azp`, fall back to the
+                    // `client_id` claim some IdPs use for the same role.
+                    AuthorizedParty = tryGetString "azp" root |> Option.orElse (tryGetString "client_id" root)
                     UnmappedRoleClaims = unmappedRoleClaims
                 }
 

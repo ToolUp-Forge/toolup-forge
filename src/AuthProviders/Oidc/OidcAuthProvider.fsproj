@@ -18,6 +18,15 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Phase 341 — the SDK contract test pack drives the internal
+         `OidcAuthProviderJwks.getJwksCore` directly to exercise the
+         time-gated stale-JWKS fail-closed window deterministically
+         (the module constants make it otherwise reachable only after a
+         10-minute TTL / 1-minute cooldown). Test-only visibility; no
+         shipped public surface. -->
+    <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
   </ItemGroup>

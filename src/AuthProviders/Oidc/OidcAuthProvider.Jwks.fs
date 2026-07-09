@@ -228,37 +228,49 @@ let private fetchJwks (httpClient: HttpClient) (url: string) : Async<Result<Map<
             return Error(JwksUnavailable ex.Message)
 }
 
-/// Get JWKS keys for `url`, using the cache when fresh. `forceRefresh`
-/// bypasses the TTL check and is used on `kid` miss. A failed refresh
-/// falls back to the stale entry if one exists — prefer stale over
-/// nothing during brief provider outages.
+/// Phase 341 — `getJwksCore` factors the cache-freshness / cooldown /
+/// stale-fallback logic behind explicit `ttl` + `cooldown` parameters so
+/// the time-gated stale-key window is deterministically exercisable in
+/// tests (the public `getJwks` always passes the module constants, so a
+/// deployment is byte-for-byte unchanged — GP 11). Internal test seam,
+/// never a shipped surface: `getJwks` is the only production entry point.
 ///
-/// Bounded-staleness security note (Auth-core audit, by-design): the
-/// stale-fallback below means a key the issuer *revoked* (e.g. after a
-/// signing-key compromise) keeps validating tokens here until a
-/// refresh fetch succeeds. The staleness window is bounded only by
-/// provider availability, not by `jwksTtl` — once a fetch is failing,
-/// the cooldown branch above also keeps serving the cached keys. This
-/// is a deliberate availability-over-strict-revocation trade-off
-/// (matching how mainstream OIDC libraries behave); a deployment that
-/// needs hard revocation must front this with a provider that supports
-/// it (token introspection / short-lived access tokens). No behaviour
-/// change is implied by this note.
-let getJwks
+/// `failClosedOnStale` closes the availability-over-revocation trade-off
+/// described below for high-security deployments (opt-in via
+/// `OidcHardening.FailClosedOnStaleJwks`): instead of serving cached
+/// (possibly-revoked) keys when a refresh fetch fails / is within the
+/// cooldown, it returns the fetch `Error` so validation fails closed.
+let internal getJwksCore
     (httpClient: HttpClient)
     (logger: ILogger)
     (url: string)
     (forceRefresh: bool)
+    (failClosedOnStale: bool)
+    (ttl: TimeSpan)
+    (cooldown: TimeSpan)
     : Async<Result<Map<string, JwkKey>, JwtValidationError>> =
     async {
         let now = DateTime.UtcNow
 
         match jwksCache.TryGetValue url with
-        | true, cached when not forceRefresh && now - cached.FetchedAt < jwksTtl -> return Ok cached.Keys
-        | true, cached when forceRefresh && now - cached.LastRefreshAttemptAt < jwksRefreshCooldown ->
+        | true, cached when not forceRefresh && now - cached.FetchedAt < ttl -> return Ok cached.Keys
+        | true, cached when forceRefresh && now - cached.LastRefreshAttemptAt < cooldown ->
             // Rate-limited: a very recent refresh attempt is already
             // in our cache or just failed. Don't thrash on forged kids.
-            return Ok cached.Keys
+            // Strict mode treats this cooldown-served cache as a stale
+            // window and fails closed rather than serving keys that may
+            // have been revoked since the last successful fetch.
+            if failClosedOnStale then
+                logger.Warn
+                    $"OIDC JWKS strict mode: refusing to serve cached keys for {url} within the refresh cooldown (fail-closed-on-stale is enabled)"
+
+                return
+                    Error(
+                        JwksUnavailable
+                            $"strict JWKS mode: refresh cooldown active for {url}, refusing to serve cached keys"
+                    )
+            else
+                return Ok cached.Keys
         | _ ->
             // Opportunistic sweep: this branch only runs on TTL expiry,
             // a kid-miss, or a cold cache, so the eviction is naturally
@@ -303,11 +315,50 @@ let getJwks
                         cached with
                             LastRefreshAttemptAt = now
                     }
-                    // Prefer stale cache over failing during a provider
-                    // outage. See the function docstring's bounded-
-                    // staleness note: a revoked key keeps validating
-                    // until a fetch succeeds — deliberate availability
-                    // trade-off, not a gap to "fix" by failing closed here.
-                    return Ok cached.Keys
+
+                    if failClosedOnStale then
+                        // Strict mode: a revoked key must NOT keep
+                        // validating. Fail closed with the fetch error
+                        // rather than serving the (possibly-revoked)
+                        // stale cache. The cooldown/LastRefreshAttempt
+                        // above is still recorded so healthy retries stay
+                        // rate-limited.
+                        logger.Warn
+                            $"OIDC JWKS strict mode: fetch failed for {url} and fail-closed-on-stale is enabled — refusing to serve the stale cache"
+
+                        return Error e
+                    else
+                        // Prefer stale cache over failing during a provider
+                        // outage. See the module note: a revoked key keeps
+                        // validating until a fetch succeeds — deliberate
+                        // availability trade-off, opt out via
+                        // `OidcHardening.FailClosedOnStaleJwks`.
+                        return Ok cached.Keys
                 | _ -> return Error e
     }
+
+/// Get JWKS keys for `url`, using the cache when fresh. `forceRefresh`
+/// bypasses the TTL check and is used on `kid` miss. A failed refresh
+/// falls back to the stale entry if one exists — prefer stale over
+/// nothing during brief provider outages — UNLESS `failClosedOnStale`
+/// is set, in which case the fetch error is surfaced instead.
+///
+/// Bounded-staleness security note (Auth-core audit, by-design): the
+/// stale-fallback below means a key the issuer *revoked* (e.g. after a
+/// signing-key compromise) keeps validating tokens here until a
+/// refresh fetch succeeds. The staleness window is bounded only by
+/// provider availability, not by `jwksTtl` — once a fetch is failing,
+/// the cooldown branch also keeps serving the cached keys. This is a
+/// deliberate availability-over-strict-revocation default (matching how
+/// mainstream OIDC libraries behave). Phase 341 adds `failClosedOnStale`
+/// (`OidcHardening.FailClosedOnStaleJwks`) so a deployment that prefers
+/// revocation-safety over availability opts into failing closed; the
+/// default (`false`) preserves prior behaviour byte-for-byte (GP 11).
+let getJwks
+    (httpClient: HttpClient)
+    (logger: ILogger)
+    (url: string)
+    (forceRefresh: bool)
+    (failClosedOnStale: bool)
+    : Async<Result<Map<string, JwkKey>, JwtValidationError>> =
+    getJwksCore httpClient logger url forceRefresh failClosedOnStale jwksTtl jwksRefreshCooldown

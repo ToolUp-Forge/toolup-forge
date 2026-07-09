@@ -65,13 +65,31 @@ let timeoutEnvVar = "TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS"
 [<Literal>]
 let maxTimeoutMs = 300_000 // 5 minutes
 
-/// Validator implementation. Hidden behind `create` / `tryFromEnv`
-/// because the outer module shares its name and exposing the type
-/// directly produces an ambiguous `OidcAuthValidator.OidcAuthValidator`
-/// resolution path on call sites.
-type private Impl(issuer: string, ?timeout: TimeSpan) =
+/// Validator implementation. Hidden behind `create` / `createWithAudience`
+/// / `tryFromEnv` because the outer module shares its name and exposing
+/// the type directly produces an ambiguous
+/// `OidcAuthValidator.OidcAuthValidator` resolution path on call sites.
+///
+/// Phase 341 — `warnAudienceNone` surfaces a preflight `Warning` when the
+/// deployment configured no audience (`AuthConfig.Audience = None` /
+/// `TOOLUP_OIDC_AUDIENCE` unset). Reaching this validator at all means an
+/// auth-requiring OIDC intent (a JWKS-discovery issuer is set), so an
+/// unset audience means `OidcAuthProvider.validateAudience` silently
+/// skips the `aud` check — every token the issuer minted is accepted,
+/// including one issued for a different relying party on the same IdP.
+/// The refusal for the hard case lives in the server-side
+/// `OidcAudienceBindingValidator` (an `Error` when auth is required and
+/// the escape hatch is unset); this `Warning` makes the silent skip
+/// visible for the remaining cases (e.g. the operator opted into the
+/// unbound-audience escape hatch) without itself aborting startup.
+type private Impl(issuer: string, warnAudienceNone: bool, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
     let url = discoveryUrl issuer
+
+    let audienceNoneWarning =
+        sprintf
+            "OIDC issuer %s is configured with no audience (TOOLUP_OIDC_AUDIENCE / AuthConfig.Audience is unset), so the provider skips the aud-claim check and accepts ANY token this issuer minted — including a token issued for a different relying party sharing the same IdP. Set the audience to this application's client id / audience to bind tokens to this app."
+            issuer
 
     interface IConfigValidator with
         member _.Name = sprintf "oidc-auth (%s)" issuer
@@ -94,7 +112,14 @@ type private Impl(issuer: string, ?timeout: TimeSpan) =
                     let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
                     if hasField body "authorization_endpoint" && hasField body "token_endpoint" then
-                        return Ok
+                        // Reachability is fine; surface the unbound-audience
+                        // advisory (Phase 341) if configured. A reachability
+                        // Error above takes precedence — the more severe
+                        // outcome wins.
+                        if warnAudienceNone then
+                            return Warning audienceNoneWarning
+                        else
+                            return Ok
                     else
                         return
                             Error(sprintf "discovery doc at %s is missing authorization_endpoint or token_endpoint" url)
@@ -145,8 +170,17 @@ let private parseTimeoutOverride () : Result<TimeSpan option, string> =
 
 /// Construct a validator for an explicit issuer URL. Apps with
 /// per-deployment custom config (a YAML file, KMS secrets) build the
-/// URL themselves and call this directly.
-let create (issuer: string) : IConfigValidator = Impl(issuer) :> IConfigValidator
+/// URL themselves and call this directly. No audience awareness — prior
+/// behaviour; use `createWithAudience` to surface the Phase 341 unbound-
+/// audience preflight warning.
+let create (issuer: string) : IConfigValidator = Impl(issuer, false) :> IConfigValidator
+
+/// Phase 341 — construct a validator that additionally emits a preflight
+/// `Warning` when `audience` is `None` (the provider then skips the
+/// `aud` check and accepts any token the issuer minted). Pass the
+/// deployment's configured `AuthConfig.Audience`.
+let createWithAudience (issuer: string) (audience: string option) : IConfigValidator =
+    Impl(issuer, Option.isNone audience) :> IConfigValidator
 
 /// Read `TOOLUP_OIDC_ISSUER` from the environment and return a
 /// validator if set, `None` otherwise. Mirrors the
@@ -164,7 +198,15 @@ let tryFromEnv () : IConfigValidator option =
     | null
     | "" -> None
     | issuer ->
+        // Phase 341 — an unset TOOLUP_OIDC_AUDIENCE means the provider
+        // skips the aud-claim check; warn so the silent skip is visible.
+        let warnAudienceNone =
+            match Environment.GetEnvironmentVariable "TOOLUP_OIDC_AUDIENCE" with
+            | null
+            | "" -> true
+            | _ -> false
+
         match parseTimeoutOverride () with
-        | Result.Ok None -> Some(Impl issuer :> IConfigValidator)
-        | Result.Ok(Some ts) -> Some(Impl(issuer, ts) :> IConfigValidator)
+        | Result.Ok None -> Some(Impl(issuer, warnAudienceNone) :> IConfigValidator)
+        | Result.Ok(Some ts) -> Some(Impl(issuer, warnAudienceNone, ts) :> IConfigValidator)
         | Result.Error msg -> Some(InvalidConfig(issuer, msg) :> IConfigValidator)
