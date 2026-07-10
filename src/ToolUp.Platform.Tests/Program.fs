@@ -241,6 +241,11 @@ let allTests =
         StoreIdSanitisingTests.tests
         SecureByDefaultValidatorTests.tests
         InMemoryPendingInviteStoreTests.tests
+        // Phase 205 — blob-corruption chaos / fault-injection pack: the shipped
+        // Phase 116 fail-closed RMW sites under corrupt / torn / dropped writes
+        // and concurrency (pending-invites decode+quarantine, share-token
+        // MarkUsed UseLimit=1, KB index-container lock). Deterministic seed.
+        BlobCorruptionChaosTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests
         PlatformAIKeysHandlerRbacTests.tests

@@ -26,6 +26,11 @@
              Modelled on HydrationParity; consumes the fragment string so any
              tree language (the ToyNode witness included) is checkable. -->
         <Compile Include="Testing\HostedTreeA11y.fs" />
+        <!-- Phase 205 — fault-injecting IBlobStorage decorator (chaos/
+             fault-injection test kit): truncated / corrupt / garbage reads,
+             torn / dropped / failing writes, a widen-able read→write gap and
+             a before-upload race hook. Inert with no faults registered. -->
+        <Compile Include="Testing\FaultInjectingBlobStorage.fs" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

@@ -426,6 +426,12 @@
         <Compile Include="InProcess\StoreIdSanitisingTests.fs" />
         <Compile Include="InProcess\SecureByDefaultValidatorTests.fs" />
         <Compile Include="InProcess\InMemoryPendingInviteStoreTests.fs" />
+        <!-- Phase 205 — blob-corruption chaos / fault-injection pack: drives the
+             shipped Phase 116 fail-closed RMW sites (pending-invites decode +
+             quarantine, share-token MarkUsed single-instance UseLimit=1, KB
+             index-container lock) through the FaultInjectingBlobStorage decorator
+             (Testing). Deterministic seed. -->
+        <Compile Include="InProcess\BlobCorruptionChaosTests.fs" />
         <!-- Phase 70 — BlobPlatformAIKeyStore over an in-memory ISecretStore.
              Binds the IPlatformAIKeyStoreContract pack to the default impl. -->
         <Compile Include="InProcess\BlobPlatformAIKeyStoreTests.fs" />
