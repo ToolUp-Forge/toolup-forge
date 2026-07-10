@@ -2313,6 +2313,71 @@ type ModelFitGateFailedPayload = {
     ScopeId: string
 }
 
+// ─── Phase 453 — model-registry audit payloads ─────────────────────────
+//
+// Every registry lifecycle event is audited under `_platform.audit` (GP 6)
+// carrying the artifact's composite-key hash (plan D5), so an operator can
+// reconstruct an evidence base's governance history — registered, promoted,
+// retired, and any refused promotion — from the trail alone. PII-free:
+// identity + status only; no diagnostics, no parameter bytes, no opaque spec
+// payload travel.
+
+/// A model artifact was registered from a completed fit (plan Stage 4). The
+/// first-seen registration only — an idempotent re-register of an existing
+/// composite key emits nothing (no state changed). Reserved
+/// `SourceModule = "_platform.audit"`.
+type ModelArtifactRegisteredPayload = {
+    /// SHA-256 hex of the artifact's composite identity (plan D5). Correlates
+    /// the registered / transitioned rows for one artifact.
+    CompositeKeyHash: string
+    /// SHA-256 hex of the opaque model spec.
+    SpecHash: string
+    /// `{scopeId}/{datasetId}@v{version}` of the vintage the fit read.
+    DatasetVersion: string
+    /// Resolved provider `Kind`.
+    ProviderId: string
+    /// Resolved provider version — a component of the composite identity.
+    ProviderVersion: string
+    /// Lifecycle status at registration (always `"Fitted"` today, carried as
+    /// data so a future pre-fit `Draft` path stays wire-compatible).
+    Status: string
+    /// Actor who registered the artifact.
+    RegisteredBy: string
+    /// Scope the artifact lives under.
+    ScopeId: string
+}
+
+/// A model artifact's lifecycle status transitioned (plan Stage 4). Emitted
+/// after the new version is persisted. Reserved
+/// `SourceModule = "_platform.audit"`.
+type ModelArtifactTransitionedPayload = {
+    CompositeKeyHash: string
+    /// Status the artifact held before the transition.
+    FromStatus: string
+    /// Status the artifact entered.
+    ToStatus: string
+    /// Actor who performed the transition.
+    ActorUserId: string
+    ScopeId: string
+}
+
+/// A model artifact lifecycle transition was refused (plan Stage 4 / GP 4).
+/// A denied `Approved` promotion from a non-Owner/Admin, or an edge the
+/// lifecycle graph forbids — the refusal is itself audit-worthy (repeated
+/// denials are a governance-gate signal, like `TeamCreationDenied`).
+/// Reserved `SourceModule = "_platform.audit"`.
+type ModelArtifactTransitionDeniedPayload = {
+    CompositeKeyHash: string
+    /// Status the caller attempted to move the artifact into.
+    AttemptedStatus: string
+    /// Actor whose transition was refused.
+    ActorUserId: string
+    /// Why the transition was refused (`"requires Owner/Admin"` /
+    /// `"illegal transition Fitted → Approved"` / …).
+    Reason: string
+    ScopeId: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2788,6 +2853,12 @@ type AuditEvent =
     /// Phase 449 — one or more diagnostic gates failed on a completed fit.
     /// A typed, audited verdict — not an exception.
     | ModelFitGateFailed of ModelFitGateFailedPayload
+    /// Phase 453 — a model artifact was registered from a completed fit.
+    | ModelArtifactRegistered of ModelArtifactRegisteredPayload
+    /// Phase 453 — a model artifact's lifecycle status transitioned.
+    | ModelArtifactTransitioned of ModelArtifactTransitionedPayload
+    /// Phase 453 — a model artifact lifecycle transition was refused (GP 4).
+    | ModelArtifactTransitionDenied of ModelArtifactTransitionDeniedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2910,6 +2981,9 @@ module AuditEvent =
         | ModelFitStarted _ -> "ModelFitStarted"
         | ModelFitCompleted _ -> "ModelFitCompleted"
         | ModelFitGateFailed _ -> "ModelFitGateFailed"
+        | ModelArtifactRegistered _ -> "ModelArtifactRegistered"
+        | ModelArtifactTransitioned _ -> "ModelArtifactTransitioned"
+        | ModelArtifactTransitionDenied _ -> "ModelArtifactTransitionDenied"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

@@ -1098,6 +1098,31 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelFitGateFailed(fromAuditJson<ModelFitGateFailedPayload> j)
     }
+    // Phase 453 — model-registry lifecycle audit rows (append-only registration).
+    {
+        EventType = "ModelArtifactRegistered"
+        TryEncode =
+            (function
+            | ModelArtifactRegistered p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelArtifactRegistered(fromAuditJson<ModelArtifactRegisteredPayload> j)
+    }
+    {
+        EventType = "ModelArtifactTransitioned"
+        TryEncode =
+            (function
+            | ModelArtifactTransitioned p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelArtifactTransitioned(fromAuditJson<ModelArtifactTransitionedPayload> j)
+    }
+    {
+        EventType = "ModelArtifactTransitionDenied"
+        TryEncode =
+            (function
+            | ModelArtifactTransitionDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelArtifactTransitionDenied(fromAuditJson<ModelArtifactTransitionDeniedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

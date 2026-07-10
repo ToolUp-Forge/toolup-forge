@@ -123,6 +123,8 @@
         <Compile Include="Contracts\IDatasetStoreContract.fs" />
         <!-- Phase 449 — model-fit envelope conformance (bound to the reference provider). -->
         <Compile Include="Contracts\IModelFitProviderContract.fs" />
+        <!-- Phase 453 — model registry conformance (bound to the blob-backed default). -->
+        <Compile Include="Contracts\IModelRegistryContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->

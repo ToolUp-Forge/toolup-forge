@@ -222,6 +222,12 @@
         <Compile Include="Server\ModelFitTypes.fs" />
         <Compile Include="Server\IModelFitProvider.fs" />
         <Compile Include="Server\ModelFitJobHandler.fs" />
+        <!-- Phase 453 — model registry: governed-artifact types, the seam,
+             then the blob-backed default (rides IDataObjectStore + ILineageStore
+             above; carries the Phase 449 fit envelope's composite key). -->
+        <Compile Include="Server\ModelRegistryTypes.fs" />
+        <Compile Include="Server\IModelRegistry.fs" />
+        <Compile Include="Server\BlobModelRegistry.fs" />
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
         <Compile Include="Server\JobScheduler.fs" />
