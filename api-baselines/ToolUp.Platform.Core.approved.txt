@@ -5149,9 +5149,10 @@ ToolUp.Platform.PeerSubstrateMode+Tags (class)
 ToolUp.Platform.PeerSubstrateMode+Tags.EnabledPeerSubstrate : System.Int32 (literal)
 ToolUp.Platform.PeerSubstrateMode+Tags.NoPeerSubstrate : System.Int32 (literal)
 ToolUp.Platform.PendingInviteByEmail (class)
-ToolUp.Platform.PendingInviteByEmail..ctor(System.String, ToolUp.Platform.TeamRole, System.DateTime, System.String)
+ToolUp.Platform.PendingInviteByEmail..ctor(System.String, ToolUp.Platform.TeamRole, System.DateTime, System.String, System.DateTime)
 ToolUp.Platform.PendingInviteByEmail.ExpiresAt : System.DateTime { get }
 ToolUp.Platform.PendingInviteByEmail.InviterUserId : System.String { get }
+ToolUp.Platform.PendingInviteByEmail.IssuedAt : System.DateTime { get }
 ToolUp.Platform.PendingInviteByEmail.Role : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.PendingInviteByEmail.TeamId : System.String { get }
 ToolUp.Platform.PendingInviteIssueRequest (class)

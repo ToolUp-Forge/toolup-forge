@@ -523,7 +523,7 @@ ToolUp.Platform.ComposeStores.registerTelemetrySink(Microsoft.Extensions.Depende
 ToolUp.Platform.ComposeStores.registerTimeSeriesStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeTeamRuntime (class)
 ToolUp.Platform.ComposeTeamRuntime.registerPostBootstrapValidators(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], ToolUp.Platform.IPlatformAdminStore, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], System.Int32) : System.Void
-ToolUp.Platform.ComposeTeamRuntime.registerTeamPermissionStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore]
+ToolUp.Platform.ComposeTeamRuntime.registerTeamPermissionStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore]
 ToolUp.Platform.ComposeTeamRuntime.runBootstrapTeam(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore], ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog) : System.Void
 ToolUp.Platform.ComposeTenantLifecycle (class)
 ToolUp.Platform.ComposeTenantLifecycle.registerTenantLifecycle(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -3534,6 +3534,7 @@ ToolUp.Platform.TeamQuotaPolicy+RequestTokenEstimator.estimateChars(System.Int32
 ToolUp.Platform.TeamQuotaPolicy+RequestTokenEstimator.estimateMessages(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : System.Decimal
 ToolUp.Platform.Teams.InMemoryPendingInviteStore (class)
 ToolUp.Platform.Teams.InMemoryPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.Platform.Teams.InMemoryPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.Platform.Teams.PendingInviteStore (class)
 ToolUp.Platform.Teams.PendingInviteStore.listAll(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]]]
 ToolUp.Platform.Teams.PendingInviteStore.remove(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
