@@ -15,6 +15,8 @@ let allTests =
         DataObjectStoreTests.tests
         // Phase 448 — IDatasetStore conformance (blob-backed default).
         DatasetStoreTests.tests
+        // Phase 449 — model-fit envelope conformance (reference provider).
+        IModelFitProviderContract.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).

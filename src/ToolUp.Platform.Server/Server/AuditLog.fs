@@ -1065,6 +1065,31 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> PasskeyCredentialRemoved(fromAuditJson<PasskeyCredentialRemovedPayload> j)
     }
+    // Phase 449 — model-fit envelope lifecycle audit rows (append-only registration).
+    {
+        EventType = "ModelFitStarted"
+        TryEncode =
+            (function
+            | ModelFitStarted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelFitStarted(fromAuditJson<ModelFitStartedPayload> j)
+    }
+    {
+        EventType = "ModelFitCompleted"
+        TryEncode =
+            (function
+            | ModelFitCompleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelFitCompleted(fromAuditJson<ModelFitCompletedPayload> j)
+    }
+    {
+        EventType = "ModelFitGateFailed"
+        TryEncode =
+            (function
+            | ModelFitGateFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelFitGateFailed(fromAuditJson<ModelFitGateFailedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

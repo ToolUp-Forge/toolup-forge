@@ -216,6 +216,12 @@
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
         <Compile Include="Server\IJobScheduler.fs" />
+        <!-- Phase 449 — model-fit envelope: core types, provider seam +
+             registry, then the fit-run job handler (needs IJobHandler above +
+             IAuditLog from Core). Composed by ComposeJobs.registerModelFitting. -->
+        <Compile Include="Server\ModelFitTypes.fs" />
+        <Compile Include="Server\IModelFitProvider.fs" />
+        <Compile Include="Server\ModelFitJobHandler.fs" />
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
         <Compile Include="Server\JobScheduler.fs" />

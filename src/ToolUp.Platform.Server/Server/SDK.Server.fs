@@ -737,6 +737,14 @@ let compose
         rateLimiter
         resolvedLogger
 
+    // Phase 449 — opt-in model-fit envelope (extracted to
+    // `ComposeJobs.registerModelFitting`). `EnabledModelFitting` indexes the
+    // registered `IModelFitProvider` companions + binds the fit-run job
+    // handler; requires `JobScheduler = InProcessJobScheduler` (misconfigured
+    // pair logs a Warn and skips). `NoModelFitting` (default) registers
+    // nothing — zero cost (GP 13).
+    registerModelFitting services config jobSchedulerInstance auditLog resolvedLogger
+
     // Phase 9b.B — register and schedule module-/app-declared
     // `ScheduledJobDeclaration`s against the resolved scheduler. The
     // declarations were accumulated by `ServerApp.addModule` (from

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.ModelProviders.Reference</PackageId>
+    <AssemblyName>ToolUp.ModelProviders.Reference</AssemblyName>
+    <Description>Trivial deterministic reference IModelFitProvider for the ToolUp model-fit envelope (Phase 449). A seeded mean/identity fitter — deliberately NOT statistics — that binds the provider contract and proves the seam. Not for production fitting.</Description>
+    <PackageTags>fsharp;sdk;model-fit;provider;reference;dev</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ReferenceModelFitProvider.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

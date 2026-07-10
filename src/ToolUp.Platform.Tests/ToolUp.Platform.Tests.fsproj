@@ -121,6 +121,8 @@
         <Compile Include="Contracts\IConsentStateStoreContract.fs" />
         <Compile Include="Contracts\ITimeSeriesStoreContract.fs" />
         <Compile Include="Contracts\IDatasetStoreContract.fs" />
+        <!-- Phase 449 — model-fit envelope conformance (bound to the reference provider). -->
+        <Compile Include="Contracts\IModelFitProviderContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
@@ -949,6 +951,8 @@
         <ProjectReference Include="..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
         <!-- Phase 161 — Timescale time-series companion (env-gated live contract pack). -->
         <ProjectReference Include="..\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj" />
+        <!-- Phase 449 — reference IModelFitProvider for the model-fit contract pack. -->
+        <ProjectReference Include="..\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj" />
         <!-- Phase 163 — GA4 telemetry companion (env-gated live contract pack). -->
         <ProjectReference Include="..\TelemetrySinks\Ga4\Ga4TelemetrySink.fsproj" />
         <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />

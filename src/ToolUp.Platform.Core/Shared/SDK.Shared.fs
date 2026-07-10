@@ -434,6 +434,22 @@ type DatasetStoreMode =
     /// place.
     | CustomDatasetStore
 
+/// Phase 449 — selects the model-fit substrate (the `IModelFitProvider`
+/// envelope + `_platform.modelfit.run` job handler). Default:
+/// `NoModelFitting` — no registry, no job handler, zero cost (GP 13).
+/// Modelling math never lives in forge; a fit executes through a
+/// consumer-composed `IModelFitProvider` companion (plan D9).
+type ModelFittingMode =
+    /// No model-fit substrate registered (default). A deployment that never
+    /// fits a model pays nothing (GP 13).
+    | NoModelFitting
+    /// Register the model-fit envelope: index every DI-registered
+    /// `IModelFitProvider` into a `ModelFitProviderRegistry` (duplicate
+    /// `Kind` rejected at startup) and bind the `ModelFitJobHandler` to
+    /// `_platform.modelfit.run`. Requires `JobScheduler` to be composed and
+    /// at least one `IModelFitProvider` companion registered.
+    | EnabledModelFitting
+
 /// Phase 163 — selects the end-user product-telemetry sink (`ITelemetrySink`).
 /// Default: `NoTelemetrySink` — the `NoOpTelemetrySink` (a true no-op) is
 /// registered, so `Track` emission sites are free at runtime (GP 13).
@@ -2029,6 +2045,12 @@ type ServerConfig = {
     /// vendor dependency); `CustomDatasetStore` leaves a companion-registered
     /// singleton (e.g. a Parquet-codec store) in place.
     Datasets: DatasetStoreMode
+    /// Phase 449 — model-fit substrate selection. Default: `NoModelFitting`
+    /// — no fit envelope, zero cost. `EnabledModelFitting` indexes the
+    /// registered `IModelFitProvider` companions + binds the fit-run job
+    /// handler (requires a composed `JobScheduler`). Modelling math stays in
+    /// the provider companion; forge only stores + compares (plan D10).
+    ModelFitting: ModelFittingMode
     /// Phase 163 — end-user product-telemetry sink selection. Default:
     /// `NoTelemetrySink` — the `NoOpTelemetrySink` is registered (a true
     /// no-op). `CustomTelemetrySink` leaves a companion-registered sink
@@ -3002,6 +3024,7 @@ module ServerConfig =
         GraphStore = InMemoryGraphStore
         TimeSeriesStore = NoTimeSeriesStore
         Datasets = NoDatasets
+        ModelFitting = NoModelFitting
         TelemetrySink = NoTelemetrySink
         UsageMetering = NoUsageMetering
         MetricsEndpoint = NoMetricsEndpoint

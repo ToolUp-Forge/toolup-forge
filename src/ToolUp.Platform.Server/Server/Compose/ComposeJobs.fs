@@ -443,6 +443,65 @@ let registerOAuthRefresher
                     })
                 |> ignore
 
+/// Phase 449 — register the model-fit envelope when
+/// `ServerConfig.ModelFitting = EnabledModelFitting`. Indexes every
+/// DI-registered `IModelFitProvider` into a `ModelFitProviderRegistry`
+/// (duplicate `Kind` rejected at construction) and binds the
+/// `ModelFitJobHandler` to `_platform.modelfit.run`. The provider list is
+/// only resolvable from the *built* container, so the registry is
+/// constructed + validated and the handler is registered with the
+/// scheduler inside a startup `IHostedService` (mirrors the OAuth-refresher
+/// `Recover` pattern) — a duplicate-`Kind` deployment fails to start loudly.
+/// `NoModelFitting` (the default) registers nothing — zero runtime cost
+/// when unused (GP 13); modelling math never lives in forge (plan D10).
+let registerModelFitting
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (jobSchedulerInstance: IJobScheduler option)
+    (auditLog: IAuditLog)
+    (resolvedLogger: ILogger)
+    : unit =
+    match config.ModelFitting with
+    | NoModelFitting -> ()
+    | EnabledModelFitting ->
+        match jobSchedulerInstance with
+        | None ->
+            resolvedLogger.Warn(
+                "[Phase 449] ModelFitting = EnabledModelFitting but JobScheduler = NoJobScheduler — fit envelope not registered. Pair with JobScheduler = InProcessJobScheduler."
+            )
+        | Some scheduler ->
+            // Lazy singleton: the registry (and its duplicate-`Kind` guard)
+            // is not constructed until first resolved — at StartAsync below.
+            services.AddSingleton<ModelFitProviderRegistry>(fun (sp: System.IServiceProvider) ->
+                let providers = sp.GetServices<IModelFitProvider>() |> List.ofSeq
+                ModelFitProviderRegistry(providers))
+            |> ignore
+
+            // Register the handler with the scheduler at startup, once the
+            // container (and every IModelFitProvider) is built. Resolving the
+            // registry here triggers the duplicate-`Kind` validation, so a
+            // misconfigured deployment fails on startup.
+            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: System.IServiceProvider) ->
+                { new Microsoft.Extensions.Hosting.IHostedService with
+                    member _.StartAsync(_ct) =
+                        let registry = sp.GetRequiredService<ModelFitProviderRegistry>()
+                        let handler = ModelFitJobHandler.create registry auditLog resolvedLogger
+                        scheduler.RegisterHandler(ModelFitJobHandler.HandlerName, handler)
+
+                        resolvedLogger.Info(
+                            sprintf
+                                "[Phase 449] ModelFit envelope registered — %d provider(s): %s"
+                                registry.Providers.Length
+                                (String.concat ", " registry.Kinds)
+                        )
+
+                        System.Threading.Tasks.Task.CompletedTask
+
+                    member _.StopAsync(_ct) =
+                        System.Threading.Tasks.Task.CompletedTask
+                })
+            |> ignore
+
 /// Phase 9b.B — register and schedule module-/app-declared
 /// `ScheduledJobDeclaration`s against the resolved `IJobScheduler`.
 /// Called once at the end of compose, after the scheduler singleton

@@ -2223,6 +2223,66 @@ type PasskeyCredentialRemovedPayload = {
     CredentialIdPrefix: string
 }
 
+// ─── Phase 449 — model-fit envelope audit payloads ─────────────────────
+//
+// Every fit run is audited under `_platform.audit` (GP 6) carrying the
+// composite key (`CompositeKeyHash`), so an operator can reconstruct the
+// full lifecycle of a reproducible fit — started, completed, and any gate
+// failures — from the trail alone. PII-free: identity + cardinality only;
+// no dataset rows, no artifact bytes, no opaque spec payload travel.
+
+/// A fit run began — the provider was resolved and the composite identity
+/// computed. Reserved `SourceModule = "_platform.audit"`.
+type ModelFitStartedPayload = {
+    /// SHA-256 hex of the run's composite identity (plan D5). Correlates
+    /// the started / completed / gate-failed rows for one fit.
+    CompositeKeyHash: string
+    /// SHA-256 hex of the opaque model spec.
+    SpecHash: string
+    /// `{scopeId}/{datasetId}@v{version}` of the vintage the fit read.
+    DatasetVersion: string
+    /// Seed making the fit reproducible.
+    Seed: int64
+    /// Resolved provider `Kind`.
+    ProviderId: string
+    /// Resolved provider version — a component of the composite identity.
+    ProviderVersion: string
+    /// Scope the fit ran under.
+    ScopeId: string
+}
+
+/// A fit run produced an outcome — diagnostics + gate verdicts persisted.
+/// Emitted whether or not gates passed (a failed gate is a verdict, not a
+/// failure of the run). Reserved `SourceModule = "_platform.audit"`.
+type ModelFitCompletedPayload = {
+    CompositeKeyHash: string
+    ProviderId: string
+    ProviderVersion: string
+    /// Number of diagnostics the provider reported. Cardinality only.
+    DiagnosticCount: int
+    /// Number of gates evaluated against the diagnostics.
+    GatesEvaluated: int
+    /// Number of those gates that failed (`0` on a clean pass).
+    GatesFailed: int
+    /// SHA-256 hex of the produced artifact — cross-references the outcome
+    /// without the bytes travelling.
+    ArtifactHash: string
+    ScopeId: string
+}
+
+/// One or more diagnostic gates failed on an otherwise-completed fit. A
+/// typed, audited verdict — never an exception (acceptance). One row per
+/// run with at least one failed gate; the names travel so an operator can
+/// see which gates failed without re-reading the outcome. Reserved
+/// `SourceModule = "_platform.audit"`.
+type ModelFitGateFailedPayload = {
+    CompositeKeyHash: string
+    ProviderId: string
+    /// Names of the gates that failed (the `GateSpec.Name` diagnostic keys).
+    FailedGates: string list
+    ScopeId: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2683,6 +2743,15 @@ type AuditEvent =
     | PasskeyCredentialRegistered of PasskeyCredentialRegisteredPayload
     /// Phase 443 — a passkey credential was removed for a user.
     | PasskeyCredentialRemoved of PasskeyCredentialRemovedPayload
+    /// Phase 449 — a model-fit run began (provider resolved, composite
+    /// identity computed). Reserved `SourceModule = "_platform.audit"`.
+    | ModelFitStarted of ModelFitStartedPayload
+    /// Phase 449 — a model-fit run produced an outcome (diagnostics + gate
+    /// verdicts). Emitted whether or not gates passed.
+    | ModelFitCompleted of ModelFitCompletedPayload
+    /// Phase 449 — one or more diagnostic gates failed on a completed fit.
+    /// A typed, audited verdict — not an exception.
+    | ModelFitGateFailed of ModelFitGateFailedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2801,6 +2870,9 @@ module AuditEvent =
         | KnowledgeDocumentDeduplicated _ -> "KnowledgeDocumentDeduplicated"
         | PasskeyCredentialRegistered _ -> "PasskeyCredentialRegistered"
         | PasskeyCredentialRemoved _ -> "PasskeyCredentialRemoved"
+        | ModelFitStarted _ -> "ModelFitStarted"
+        | ModelFitCompleted _ -> "ModelFitCompleted"
+        | ModelFitGateFailed _ -> "ModelFitGateFailed"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
