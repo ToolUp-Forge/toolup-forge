@@ -78,6 +78,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (RateLimitConfigValidator.RateLimitConfigValidator(config)) // range-check ServerConfig.RateLimit (out-of-range = cannot serve)
     addConfigValidator (RateLimiterInstanceValidator.RateLimiterInstanceValidator(config)) // warn in-process/in-memory rate limiters under multi-instance (effective limit is N×)
     addConfigValidator (SessionFileStoreInstanceValidator.SessionFileStoreInstanceValidator(config)) // warn in-memory SessionFileStore under multi-instance + persistent surface (per-replica dictionaries drift from the shared store)
+    addConfigValidator (IdempotencyStoreInstanceValidator.IdempotencyStoreInstanceValidator(config, services)) // warn DI-registered in-memory InMemoryIdempotencyStore under multi-instance (per-instance cache lost across replicas → handler re-execution; steer to distributed BlobIdempotencyStore / CAS backend)
     addConfigValidator (SseAuthModeValidator.SseAuthModeValidator(config)) // refuse SseAuthMode = QueryParamFallback in authenticated modes
     addConfigValidator (SecurityHeadersValidator.SecurityHeadersValidator(config)) // warn internet-facing auth-mode deployment with no security headers
     addConfigValidator (SecurityHeadersValidator.CspNonceCacheValidator(services)) // Phase 156 — warn nonce CSP source mode composed with a registered IRenderCache (stale-nonce-on-cache-hit)

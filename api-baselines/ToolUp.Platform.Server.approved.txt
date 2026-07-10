@@ -2102,6 +2102,9 @@ ToolUp.Platform.IWebhookRegistry.ListSubscriptions(System.String) : Microsoft.FS
 ToolUp.Platform.IWebhookRegistry.RotateSecret(System.String, System.Guid, System.String, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]
 ToolUp.Platform.IWebhookRegistry.SetConsecutiveFailures(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IWebhookRegistry.UpdateStatus(System.String, System.Guid, ToolUp.Platform.WebhookStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IdempotencyStoreInstanceValidator (class)
+ToolUp.Platform.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator (class)
+ToolUp.Platform.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.InMemoryAuditSink (class)
 ToolUp.Platform.InMemoryAuditSink..ctor(System.String)
 ToolUp.Platform.InMemoryAuditSink.FailAlways(System.String) : System.Void

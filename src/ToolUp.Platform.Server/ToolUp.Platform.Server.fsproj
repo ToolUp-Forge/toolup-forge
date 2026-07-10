@@ -399,6 +399,7 @@
         <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
         <Compile Include="Server\MultiInstanceAdminCoherenceValidator.fs" />
         <Compile Include="Server\Files\SessionFileStoreInstanceValidator.fs" />
+        <Compile Include="Server\IdempotencyStoreInstanceValidator.fs" />
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />
         <Compile Include="Server\ICspContributor.fs" />

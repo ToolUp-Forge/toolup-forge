@@ -260,6 +260,7 @@ let allTests =
         JobSchedulerInstanceValidatorTests.tests
         OAuthStateStoreInstanceValidatorTests.tests
         NotificationChannelInstanceValidatorTests.tests
+        IdempotencyStoreInstanceValidatorTests.tests
         MultiInstanceAdminCoherenceValidatorTests.tests
         NotificationsExplicitOffTests.tests
         RateLimitModeValidatorTests.tests

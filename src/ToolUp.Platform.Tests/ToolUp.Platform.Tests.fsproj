@@ -474,6 +474,7 @@
         <Compile Include="InProcess\ScheduledJobDeclarationTests.fs" />
         <Compile Include="InProcess\OAuthStateStoreInstanceValidatorTests.fs" />
         <Compile Include="InProcess\NotificationChannelInstanceValidatorTests.fs" />
+        <Compile Include="InProcess\IdempotencyStoreInstanceValidatorTests.fs" />
         <Compile Include="InProcess\MultiInstanceAdminCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\NotificationsExplicitOffTests.fs" />
         <Compile Include="InProcess\RateLimitModeValidatorTests.fs" />
