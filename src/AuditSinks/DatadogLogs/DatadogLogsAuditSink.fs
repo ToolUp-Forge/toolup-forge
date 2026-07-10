@@ -249,6 +249,12 @@ let private extractEventScopeId (audit: AuditEvent) : string option =
         // ScopeId. Datadog queries filter via the EventStore-level
         // scope, same posture as the Phase 39 asset cases.
         None
+    | PasskeyCredentialRegistered _
+    | PasskeyCredentialRemoved _ ->
+        // Phase 443 — `_platform.auth.passkey` credential-lifecycle
+        // events recorded under `_platform`; the payload carries the
+        // UserId + a truncated credential id but no tenant ScopeId.
+        None
 
 /// Sanitise a tag value for Datadog's CSV tag list. Datadog reserves
 /// `,` (tag separator) and `:` (key/value separator); we replace both

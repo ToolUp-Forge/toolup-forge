@@ -1049,6 +1049,22 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> KnowledgeDocumentDeduplicated(fromAuditJson<KnowledgeDocumentDeduplicatedPayload> j)
     }
+    {
+        EventType = "PasskeyCredentialRegistered"
+        TryEncode =
+            (function
+            | PasskeyCredentialRegistered p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PasskeyCredentialRegistered(fromAuditJson<PasskeyCredentialRegisteredPayload> j)
+    }
+    {
+        EventType = "PasskeyCredentialRemoved"
+        TryEncode =
+            (function
+            | PasskeyCredentialRemoved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PasskeyCredentialRemoved(fromAuditJson<PasskeyCredentialRemovedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

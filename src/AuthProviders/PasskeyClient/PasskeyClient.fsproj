@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.Passkey.Client</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.Passkey.Client</AssemblyName>
+    <Description>Client-side WebAuthn / passkey sign-in UI for ToolUp.Platform: navigator.credentials registration + assertion ceremonies against the passkey server companion, zero npm dependencies (browser-native APIs, mirroring the OidcClient precedent).</Description>
+    <PackageTags>fsharp;fable;feliz;sdk;auth;webauthn;passkey;client;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="PasskeyClient.fs" />
+    <Compile Include="PasskeyAuthUI.fs" />
+    <Compile Include="PasskeyRegister.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Fable.Core / Fable.SimpleJson / Feliz / FSharp.Core flow
+         transitively from ToolUp.Platform.Client + the .NET SDK.
+         Fable.Browser.Dom is used by UserMenu's window.location.reload. -->
+    <PackageReference Include="Fable.Browser.Dom" />
+  </ItemGroup>
+</Project>

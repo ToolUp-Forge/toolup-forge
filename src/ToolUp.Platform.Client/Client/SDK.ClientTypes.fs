@@ -483,6 +483,32 @@ type ClerkUIConfig = {
 /// component that gates the shell behind its own sign-in screen.
 type CustomAuthUI = { Wrap: ReactElement -> ReactElement }
 
+/// Phase 443 — configuration for the WebAuthn / passkey sign-in flow,
+/// used when `ClientConfig.AuthUI = PasskeyAuthUI _`. The PasskeyClient
+/// companion reads this to orchestrate the `navigator.credentials`
+/// ceremonies against the server-side passkey companion's endpoints.
+/// The relying-party id + origin allow-list live server-side (the
+/// authoritative ceremony config); the client only needs the endpoint
+/// base and UX affordances.
+type PasskeyUIConfig = {
+    /// Base path for the server ceremony endpoints (default
+    /// `"/api/passkey"`; the companion posts to `{ApiBase}/register/*`
+    /// and `{ApiBase}/assert/*`).
+    ApiBase: string
+    /// Whether the sign-in screen offers a "Register a passkey"
+    /// affordance. Registration is still gated server-side (invite /
+    /// session / bootstrap); this only controls the UI.
+    AllowRegistration: bool
+}
+
+module PasskeyUIConfig =
+    /// Default config — `/api/passkey` endpoints, registration affordance
+    /// shown.
+    let defaults: PasskeyUIConfig = {
+        ApiBase = "/api/passkey"
+        AllowRegistration = true
+    }
+
 /// How the shell handles sign-in UI in authenticated modes. Ignored
 /// in `Anonymous` mode (there is nothing to sign in to). The actual
 /// sign-in provider code lives in companion packages whose exported
@@ -498,6 +524,15 @@ type AuthUIMode =
     /// `src/AuthProviders/OidcClient/OidcClient.Client.props`.
     /// (OIDC is a protocol, not a vendor — this case stays.)
     | OidcAuthUI of OidcUIConfig
+    /// Phase 443 — SDK-provided WebAuthn / passkey sign-in flow via the
+    /// PasskeyClient companion (`navigator.credentials`, zero npm deps).
+    /// WebAuthn is a protocol, not a vendor — this case stays alongside
+    /// `OidcAuthUI` rather than folding into `ProviderAuthUI`. Requires
+    /// `ToolUp.AuthProviders.PasskeyRegister.handler` in
+    /// `ClientConfig.Handlers.AuthUIHandlers`. Additive DU case (pre-1.0
+    /// window) — consumers pattern-matching `AuthUIMode` exhaustively get
+    /// a compile-time prompt; see `docs/migrations/443-passkey-companion.md`.
+    | PasskeyAuthUI of PasskeyUIConfig
     /// Deprecated vendor-named alias for
     /// `ProviderAuthUI ("clerk", box clerkUIConfig)` — Phase 494. Kept
     /// compiling for source compat; removal is a later major-version

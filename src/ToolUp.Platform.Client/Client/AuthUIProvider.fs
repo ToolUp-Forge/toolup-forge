@@ -108,6 +108,18 @@ module AuthUIProvider =
                      `ToolUp.AuthProviders.OidcRegister.handler` from the OidcClient companion \
                      to ClientConfig.Handlers.AuthUIHandlers, or set ClientConfig.AuthUI to \
                      NoAuthUI / a different provider."
+        | _, PasskeyAuthUI cfg ->
+            // Phase 443 — WebAuthn / passkey. Same tag-dispatch shape as
+            // OidcAuthUI (protocol-named case).
+            match Map.tryFind "passkey" handlers with
+            | Some h -> h (box cfg) shell
+            | None ->
+                failwith
+                    "ClientConfig.AuthUI = PasskeyAuthUI _ but no handler with tag \"passkey\" is registered \
+                     in ClientConfig.Handlers.AuthUIHandlers. Add \
+                     `ToolUp.AuthProviders.PasskeyRegister.handler` from the PasskeyClient companion \
+                     to ClientConfig.Handlers.AuthUIHandlers, or set ClientConfig.AuthUI to \
+                     NoAuthUI / a different provider."
         | _, ClerkAuthUI cfg ->
             match Map.tryFind "clerk" handlers with
             | Some h -> h (box cfg) shell

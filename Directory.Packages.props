@@ -103,6 +103,12 @@
          (ToolUp.PublicRendering FelizLayout adapter). MIT; depends on
          FSharp.Core only. See docs/design/feliz-viewengine-evaluation.md. -->
     <PackageVersion Include="Feliz.ViewEngine" Version="1.0.3" />
+    <!-- Phase 443 — WebAuthn / passkey auth companion
+         (src/AuthProviders/Passkey). MIT-licensed (GP 2); isolated to the
+         companion package (GP 1) — ToolUp.Platform.* carries no Fido2NetLib
+         reference. Pulls Fido2.Models + NSec.Cryptography + System.Formats.Cbor
+         + Microsoft.IdentityModel.JsonWebTokens transitively. -->
+    <PackageVersion Include="Fido2" Version="4.0.1" />
     <PackageVersion Include="FParsec" Version="1.1.1" />
     <PackageVersion Include="FSharp.Control.Reactive" Version="5.0.5" />
     <PackageVersion Include="FSharp.Core" Version="10.1.300" />

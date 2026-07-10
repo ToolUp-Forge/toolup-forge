@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -362,6 +362,7 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Graph.Core", "src\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj", "{3F729AEA-A5C6-4FA7-AF5F-DB164F970AA4}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Graph.InMemory", "src\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj", "{71A786A1-BC4E-4C10-A5E0-713F27E70102}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AIProviders", "AIProviders", "{BCFB1E82-42DD-3334-1B12-D34753CF290C}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CopilotAIProvider", "src\AIProviders\Copilot\CopilotAIProvider.fsproj", "{2318B595-8D04-4B4A-B73B-250A97D1D370}"
@@ -381,6 +382,12 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Voice.Client", "src\ToolUp.Voice.Client\ToolUp.Voice.Client.fsproj", "{65EE31F5-C751-495E-8A85-4910C62A0585}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Voice.Tests", "src\ToolUp.Voice.Tests\ToolUp.Voice.Tests.fsproj", "{3A6F95FD-B798-49C9-A540-D43756C11D7B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Passkey", "Passkey", "{B4000C04-759F-89DD-19D7-DFB19239BD3C}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "PasskeyAuthProvider", "src\AuthProviders\Passkey\PasskeyAuthProvider.fsproj", "{5C6EF067-2F0E-437E-896B-A76351396BF7}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "PasskeyClient", "src\AuthProviders\PasskeyClient\PasskeyClient.fsproj", "{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -2084,6 +2091,30 @@ Global
 		{3A6F95FD-B798-49C9-A540-D43756C11D7B}.Release|x64.Build.0 = Release|Any CPU
 		{3A6F95FD-B798-49C9-A540-D43756C11D7B}.Release|x86.ActiveCfg = Release|Any CPU
 		{3A6F95FD-B798-49C9-A540-D43756C11D7B}.Release|x86.Build.0 = Release|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Debug|x64.Build.0 = Debug|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Debug|x86.Build.0 = Debug|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Release|x64.ActiveCfg = Release|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Release|x64.Build.0 = Release|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Release|x86.ActiveCfg = Release|Any CPU
+		{5C6EF067-2F0E-437E-896B-A76351396BF7}.Release|x86.Build.0 = Release|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Debug|x64.Build.0 = Debug|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Debug|x86.Build.0 = Debug|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Release|x64.ActiveCfg = Release|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Release|x64.Build.0 = Release|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Release|x86.ActiveCfg = Release|Any CPU
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -2266,5 +2297,8 @@ Global
 		{DE9ABD2A-2C05-457A-92D8-650A6E49411C} = {042A6E56-63CD-73AA-5FEF-08E913D6D56D}
 		{65EE31F5-C751-495E-8A85-4910C62A0585} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{3A6F95FD-B798-49C9-A540-D43756C11D7B} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
+		{B4000C04-759F-89DD-19D7-DFB19239BD3C} = {E113DBCE-65B5-4091-B851-068D1E926DEF}
+		{5C6EF067-2F0E-437E-896B-A76351396BF7} = {B4000C04-759F-89DD-19D7-DFB19239BD3C}
+		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA} = {E113DBCE-65B5-4091-B851-068D1E926DEF}
 	EndGlobalSection
 EndGlobal

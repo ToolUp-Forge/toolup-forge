@@ -1,0 +1,11 @@
+{
+    "name": "@toolup/passkey-client",
+    "version": "1.0.0",
+    "private": true,
+    "comment": "No npm dependencies — the WebAuthn flow uses the browser-native navigator.credentials + fetch APIs.",
+    "dependencies": {},
+    "peerDependencies": {
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
+    }
+}

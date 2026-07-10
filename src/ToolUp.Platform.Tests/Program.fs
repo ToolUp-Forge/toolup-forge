@@ -199,6 +199,10 @@ let allTests =
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
         LdapAuthProviderTests.tests
+        // Phase 443 — WebAuthn / passkey companion: ceremony round-trip
+        // (stub IFido2), counter-regression clone detection, invite
+        // gating, challenge expiry, session-token round-trip, preflight.
+        PasskeyAuthProviderTests.tests
         SSEHandshakeTests.tests
         EncryptedBlobStorageTests.tests
         TenantLifecycleAggregatorTests.tests

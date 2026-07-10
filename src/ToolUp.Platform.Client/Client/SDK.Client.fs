@@ -2874,6 +2874,7 @@ module Client =
             // convention rather than a specific vendor.
             | ProviderAuthUI(tag, _) -> Some(tag, sprintf "the companion-exported handler value for tag \"%s\"" tag)
             | OidcAuthUI _ -> Some("oidc", "ToolUp.AuthProviders.OidcRegister.handler")
+            | PasskeyAuthUI _ -> Some("passkey", "ToolUp.AuthProviders.PasskeyRegister.handler")
             | ClerkAuthUI _ -> Some("clerk", "ToolUp.AuthProviders.ClerkRegister.handler")
             | NoAuthUI
             | CustomAuthUI _ -> None
@@ -3024,6 +3025,7 @@ module Client =
             match config.AuthUI with
             | NoAuthUI -> "none"
             | OidcAuthUI _ -> "oidc"
+            | PasskeyAuthUI _ -> "passkey"
             | ClerkAuthUI _ -> "clerk"
             | CustomAuthUI _ -> "custom"
             // Phase 494 — the neutral case reports its own tag, so a

@@ -2199,6 +2199,30 @@ type RemotingMethodAuditedPayload = {
     Payload: Map<string, string>
 }
 
+/// Phase 443 — a WebAuthn passkey credential was enrolled for a user via
+/// the passkey auth companion's registration ceremony. PII-free apart
+/// from the platform `UserId` (already the audit actor). The credential
+/// id is truncated so the trail correlates without persisting the full
+/// authenticator handle. Source-module label `_platform.auth.passkey`.
+type PasskeyCredentialRegisteredPayload = {
+    UserId: string
+    /// First 12 chars of the base64url credential id — correlatable,
+    /// non-reversible to the raw authenticator handle.
+    CredentialIdPrefix: string
+    /// How the registration was authorised: `ExistingSession` /
+    /// `Bootstrap` / `PendingInvite` / `OpenRegistration`.
+    Grant: string
+}
+
+/// Phase 443 — a passkey credential was removed for a user (self-service
+/// deregistration or admin revocation). Source-module label
+/// `_platform.auth.passkey`.
+type PasskeyCredentialRemovedPayload = {
+    UserId: string
+    /// First 12 chars of the base64url credential id.
+    CredentialIdPrefix: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2653,6 +2677,12 @@ type AuditEvent =
     /// (idempotent upload; ingestion skipped). Recorded under the
     /// caller's scope.
     | KnowledgeDocumentDeduplicated of KnowledgeDocumentDeduplicatedPayload
+    /// Phase 443 — a WebAuthn passkey credential was enrolled via the
+    /// passkey auth companion's registration ceremony. Recorded under
+    /// `_platform` scope; source-module `_platform.auth.passkey`.
+    | PasskeyCredentialRegistered of PasskeyCredentialRegisteredPayload
+    /// Phase 443 — a passkey credential was removed for a user.
+    | PasskeyCredentialRemoved of PasskeyCredentialRemovedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2769,6 +2799,8 @@ module AuditEvent =
         | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
         | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
         | KnowledgeDocumentDeduplicated _ -> "KnowledgeDocumentDeduplicated"
+        | PasskeyCredentialRegistered _ -> "PasskeyCredentialRegistered"
+        | PasskeyCredentialRemoved _ -> "PasskeyCredentialRemoved"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

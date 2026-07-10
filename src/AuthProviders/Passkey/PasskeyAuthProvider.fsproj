@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.Passkey</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.Passkey</AssemblyName>
+    <Description>WebAuthn / passkey server-side IAuthProvider for ToolUp.Platform: phishing-resistant, passwordless sign-in over Fido2NetLib for self-hosted deployments with no external IdP. Registration (attestation) + assertion ceremonies, invite-gated by default, sessions minted as the same short-lived platform JWT StaticJwtAuthProvider validates.</Description>
+    <PackageTags>fsharp;sdk;auth;webauthn;passkey;fido2;server;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="PasskeyTypes.fs" />
+    <Compile Include="PasskeyStores.fs" />
+    <Compile Include="PasskeySessionToken.fs" />
+    <Compile Include="PasskeyRegistrationPolicy.fs" />
+    <Compile Include="PasskeyCeremony.fs" />
+    <Compile Include="PasskeyAuthProvider.fs" />
+    <Compile Include="PasskeyConfigValidator.fs" />
+    <Compile Include="PasskeyHost.fs" />
+    <Compile Include="PasskeyCompose.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- AspNetCore framework reference for HttpContext + Giraffe route visibility. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- GP 1 — the WebAuthn ceremony vendor dependency is isolated to this
+         companion; ToolUp.Platform.* carries no Fido2NetLib reference.
+         Fido2 is MIT-licensed (GP 2). Fido2.Models + NSec.Cryptography +
+         System.Formats.Cbor + Microsoft.IdentityModel.JsonWebTokens flow
+         transitively. -->
+    <PackageReference Include="Fido2" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

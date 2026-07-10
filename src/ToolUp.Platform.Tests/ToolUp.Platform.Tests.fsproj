@@ -388,6 +388,7 @@
         <Compile Include="InProcess\GitHubAuthProviderTests.fs" />
         <Compile Include="InProcess\GitHubAppFlowTests.fs" />
         <Compile Include="InProcess\LdapAuthProviderTests.fs" />
+        <Compile Include="InProcess\PasskeyAuthProviderTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
         <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
         <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
@@ -957,6 +958,9 @@
              HttpMessageHandler (no env-gate; the handler removes the
              need for a real OIDC issuer). -->
         <ProjectReference Include="..\AuthProviders\Oidc\OidcAuthProvider.fsproj" />
+        <!-- Phase 443 — WebAuthn / passkey companion. Test pack drives the
+             ceremony orchestration through a stub IFido2 + in-memory stores. -->
+        <ProjectReference Include="..\AuthProviders\Passkey\PasskeyAuthProvider.fsproj" />
         <!-- Phase 3b.A — client-side id_token validation. Test pack drives
              the pure-F# claim validators + the runtime-injectable
              `validateIdTokenWith` orchestrator with stubbed signature
