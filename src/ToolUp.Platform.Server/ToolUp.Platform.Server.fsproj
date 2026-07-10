@@ -624,6 +624,10 @@
              default). After the aggregator; consumed by the resumable
              sweep via LifecycleJobHandler. -->
         <Compile Include="Server\ILifecycleLedger.fs" />
+        <!-- Phase 543 — derived principal enumeration. After AuditLog
+             (payload wire shape) + the IEventStore/IBlobStorage
+             substrate; before the tenant API handler that surfaces it. -->
+        <Compile Include="Server\PrincipalRegistry.fs" />
         <Compile Include="Server\PlatformTenantApiHandler.fs" />
         <!-- Phase 54a — background offboard IJobHandler. After
              PlatformTenantApiHandler (reads TenantLifecycleSnapshot) +

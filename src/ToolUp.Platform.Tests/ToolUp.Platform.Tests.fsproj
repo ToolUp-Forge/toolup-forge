@@ -403,6 +403,9 @@
         <!-- Phase 54f — scheduled / grace-period offboard (handler Schedule/
              Get/Cancel + the poll IJobHandler's due/not-due behaviour). -->
         <Compile Include="InProcess\ScheduledDeprovisionTests.fs" />
+        <!-- Phase 543 — derived principal enumeration (evidence-source
+             discovery + merge, look-back bound, admin/substrate gates). -->
+        <Compile Include="InProcess\PrincipalRegistryTests.fs" />
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />

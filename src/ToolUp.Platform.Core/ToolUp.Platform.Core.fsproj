@@ -304,6 +304,11 @@
              / TenantLifecycleEvent). Async-free + Fable-compatible; the
              ITenantLifecycle interface + aggregator are server-tier. -->
         <Compile Include="Shared\Types\TenantLifecycleTypes.fs" />
+        <!-- Phase 543 — derived principal-enumeration shared types
+             (PrincipalSummary). After RoleTypes (carries TeamRole);
+             before PlatformTenantApi (ListPrincipals returns it).
+             Async-free + Fable-compatible. -->
+        <Compile Include="Shared\Types\PrincipalRegistryTypes.fs" />
         <!-- Phase 54 — IPlatformTenantApi Fable.Remoting contract. After
              TenantLifecycleTypes (returns LifecycleSummary) + DeployPlaneTypes
              (ProvisionTenant carries ProvisioningRequest). -->

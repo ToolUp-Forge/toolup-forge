@@ -3,6 +3,7 @@ module ToolUp.Platform.PlatformTenantApiHandler
 open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 
 // ─── Phase 54 — IPlatformTenantApi server handler ────────────────────
 //
@@ -63,6 +64,14 @@ let offboardConfirmationRequired = "offboard confirmation required"
 /// `IShareTokenStore` is composed to mint/redeem tokens.
 let offboardConfirmationNoStore =
     "offboard confirmation requires an IShareTokenStore (compose the share-token substrate)"
+
+/// Phase 543 — clear error when principal enumeration lacks its
+/// substrate: the derived sweep reads membership blobs (`IBlobStorage`)
+/// and scope events (`IEventStore`), so a wiring without both cannot
+/// enumerate honestly — fail closed with the remedy, never return a
+/// silently-partial list.
+let principalEnumerationNoSubstrate =
+    "principal enumeration requires IBlobStorage + IEventStore (compose the storage and event-store substrate)"
 
 /// Phase 54h — returned to the loser when a distributed `ILifecycleLock`
 /// reports another replica already mid-offboard of this scope. Under the
@@ -138,6 +147,20 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     let shareTokens =
         match services.GetService(typeof<IShareTokenStore>) with
         | :? IShareTokenStore as s -> Some s
+        | _ -> None
+
+    // Phase 543 — substrate for the derived principal enumeration.
+    // Both `None` only in minimal/test wiring; `ListPrincipals` then
+    // returns `principalEnumerationNoSubstrate` rather than a
+    // silently-partial list.
+    let blobStorage =
+        match services.GetService(typeof<IBlobStorage>) with
+        | :? IBlobStorage as s -> Some s
+        | _ -> None
+
+    let eventStore =
+        match services.GetService(typeof<IEventStore>) with
+        | :? IEventStore as s -> Some s
         | _ -> None
 
     // Phase 54b — completed-step offboard ledger. A fresh provision of a
@@ -589,5 +612,21 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                     | Some sch ->
                         let! sd = TenantLifecycleAggregator.getScheduledDeprovision sch scopeId
                         return Ok sd
+            }
+
+        // Phase 543 — derived principal enumeration (read-only, no
+        // audit, no mutation). Admin-gated like every other method on
+        // this contract; fails closed with a clear remedy when the
+        // storage / event-store substrate is not composed.
+        ListPrincipals =
+            fun () -> async {
+                if not isAdmin then
+                    return Error adminError
+                else
+                    match blobStorage, eventStore with
+                    | Some storage, Some events ->
+                        let! principals = PrincipalRegistry.listPrincipals storage events
+                        return Ok principals
+                    | _ -> return Error principalEnumerationNoSubstrate
             }
     }

@@ -195,6 +195,22 @@ type IPlatformTenantApi = {
     /// only; read-only, no audit.
     [<RequiresRole "PlatformAdmin">]
     GetScheduledDeprovision: string -> Async<Result<ScheduledDeprovision option, string>>
+
+    // ─── Phase 543 — derived principal enumeration (append-only) ─────
+
+    /// Phase 543 — enumerate every principal the substrate has evidence
+    /// for: `_platform/memberships/` blob owners, `user-*` storage
+    /// scopes, and distinct `UserLoggedIn` audit subjects within a
+    /// bounded look-back window, merged per `UserId`
+    /// (`PrincipalRegistry.listPrincipals`). A **derived, read-only
+    /// projection** — no stored registry, nothing to drift; a fresh call
+    /// reflects a membership added one second ago. `TeamLess = true`
+    /// exactly when no membership row exists — the surface behind every
+    /// stray team-less-login investigation. Owner / Platform-Admin only;
+    /// read-only, no audit. Returns a clear error when the storage /
+    /// event-store substrate is not resolvable (fail-closed, GP 13).
+    [<RequiresRole "PlatformAdmin">]
+    ListPrincipals: unit -> Async<Result<PrincipalSummary list, string>>
 }
 
 module PlatformTenantApi =

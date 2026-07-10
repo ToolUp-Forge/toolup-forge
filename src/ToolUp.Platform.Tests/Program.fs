@@ -215,6 +215,7 @@ let allTests =
         LifecycleSummaryStoreTests.tests
         OffboardConfirmationTests.tests
         ScheduledDeprovisionTests.tests
+        PrincipalRegistryTests.tests
         ITenantLifecycleContract.tests
         ILifecycleLockContract.tests
         LocalStorageEncryptionValidatorTests.tests
