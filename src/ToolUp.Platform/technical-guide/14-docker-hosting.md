@@ -117,6 +117,8 @@ Phase 16d (forwarded-headers default-on, shipped 0.4.4) made `ServerConfig.Trust
 
 Set the env var explicitly only to opt **out** (`=0`) for a deployment that intentionally exposes Kestrel directly without a proxy.
 
+**Phase 325 update — auth-requiring modes must scope the trust.** Since Phase 325, `TrustForwardedHeaders = true` with an empty `TrustedProxyCidrs` allowlist is a preflight **Error** on any non-Anonymous (auth-requiring) surface — the deployment refuses to start until you either scope the trust to the terminator's network(s) via `TOOLUP_TRUSTED_PROXY_CIDRS` (e.g. `10.0.0.0/8`) or attest that a single header-stripping proxy fronts every request path via the `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY=1` escape hatch. The "works with no knob behind any TLS terminator" posture above therefore holds unchanged only for **anonymous-mode** deployments (which keep a Warning, not an Error) or once one of those two knobs is set. See [Phase 325 migration doc](../../../docs/migrations/325-forwarded-headers-cidr-trust.md).
+
 ## Per-platform deployment
 
 The same image targets every major container platform. The Dockerfile is portable; only the orchestrator's deployment manifest differs.
@@ -136,7 +138,7 @@ az webapp config appsettings set \
                WEBSITES_PORT=5000
 ```
 
-`WEBSITES_PORT` tells App Service that the container listens on 5000 (App Service maps the public 443 ingress to that internal port). The platform handles TLS termination + forwarded headers; the SDK's `TrustForwardedHeaders = true` default reads the `X-Forwarded-Proto` / `X-Forwarded-For` chain correctly.
+`WEBSITES_PORT` tells App Service that the container listens on 5000 (App Service maps the public 443 ingress to that internal port). The platform handles TLS termination + forwarded headers; the SDK's `TrustForwardedHeaders = true` default reads the `X-Forwarded-Proto` / `X-Forwarded-For` chain correctly. On an **auth-requiring** deployment, set `TOOLUP_TRUSTED_PROXY_CIDRS` to the App Service ingress network (or `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY=1`) per the Phase 325 update above, otherwise preflight refuses to start.
 
 ### GCP Cloud Run
 
@@ -249,3 +251,4 @@ A consumer's repo with even modest node_modules / bin / obj baggage typically pu
 - [Chapter 13 — Deployment Shapes](13-deployment-shapes.md) — pure-Kestrel single-process / web+worker / web+worker+dispatcher partitioning via `ProcessProfile`.
 - Phase 16b — the phase that authored this companion.
 - [Phase 16d migration doc](../../../docs/migrations/16d-forwarded-headers-default-on.md) — forwarded-headers default-flip rationale.
+- [Phase 325 migration doc](../../../docs/migrations/325-forwarded-headers-cidr-trust.md) — CIDR-scoped proxy trust + the auth-mode preflight escalation.

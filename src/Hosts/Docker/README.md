@@ -86,6 +86,8 @@ If you remove `tini` from the Dockerfile, `docker stop` will fall through to `SI
 
 Phase 16d (forwarded-headers default-on, shipped 0.4.4) made `TrustForwardedHeaders = true` the SDK default. This Dockerfile **does not** set `TOOLUP_TRUST_FORWARDED_HEADERS=1` — the SDK already trusts `X-Forwarded-*` headers in the inbound request when Kestrel runs behind a reverse proxy (nginx / Traefik / Azure App Service ingress / Cloud Run front door / ALB). Set the env var explicitly only to opt **out** (`=0`), not to opt in.
 
+**Phase 325 — auth-requiring modes must scope the trust.** The knob-free posture above holds only for **anonymous-mode** deployments. On any auth-requiring (non-Anonymous) surface, `TrustForwardedHeaders = true` with no CIDR allowlist is now a preflight **Error** — the container refuses to start until you either scope the trust to the terminator's network(s) with `TOOLUP_TRUSTED_PROXY_CIDRS` (e.g. `10.0.0.0/8`) or attest a single header-stripping proxy fronts every request path with `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY=1`. See `docs/migrations/325-forwarded-headers-cidr-trust.md` in the forge repo.
+
 ## Healthcheck wrapper
 
 `healthcheck.sh` wraps `curl -fsS http://localhost:5000/health` with `--max-time` to bound the probe duration. Two env vars override the defaults:

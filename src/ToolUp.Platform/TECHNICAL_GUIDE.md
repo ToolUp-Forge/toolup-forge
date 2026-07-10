@@ -148,7 +148,7 @@ Packaging a Kestrel deployment as a container — the OCI image layout, `tini` s
 - Non-root by convention (uid/gid 10001, per-platform support matrix)
 - Healthcheck wrapper (`/health` Liveness, `TOOLUP_HEALTHCHECK_URL` / `TOOLUP_HEALTHCHECK_TIMEOUT` overrides)
 - `ProcessProfile` interaction — one image, env-var-driven role (`WorkerOnly` + multi-replica caveat)
-- Forwarded-headers trust (Phase 16d default-on; opt-out only)
+- Forwarded-headers trust (Phase 16d default-on; opt-out only — but Phase 325 makes an unscoped auth-requiring deployment a preflight Error until `TOOLUP_TRUSTED_PROXY_CIDRS` or the any-proxy escape hatch is set)
 - Per-platform deployment (Azure App Service Linux, GCP Cloud Run, AWS ECS Fargate, Kubernetes)
 - Build-context hygiene — `.dockerignore`
 - Limitations (no streaming caveat — pass-through, no multi-replica `WorkerOnly`, no signing pipeline / SBOM)
