@@ -682,6 +682,29 @@ type HealthMonitorMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalHealthMonitor of ErasedModule
 
+/// Branding for the platform-users admin module (Phase 544). Unlike the
+/// other Platform-Management built-ins this is **opt-in** — a deployment
+/// enables it explicitly (GP 11/13).
+type PlatformUsersConfig = { Name: string; Icon: ReactElement }
+
+/// Controls the built-in platform-users admin (Phase 544). The module
+/// lists every principal the substrate has evidence for
+/// (`IPlatformTenantApi.ListPrincipals`, Phase 543), flags team-less
+/// ones, and drives the existing Phase 54-family offboard flow
+/// (preview → confirm → summary) per row against the `user-<id>` scope.
+/// **Default `NoPlatformUsers`** — off unless a deployment opts in, so an
+/// existing app is byte-for-byte unchanged (GP 11/13). Platform-Admin
+/// gated client-side by the "Platform Management" sidebar group; the
+/// underlying `IPlatformTenantApi` is admin-gated server-side regardless.
+/// Zero-cost on `NoTenantLifecycle` deployments (GP 13): the offboard
+/// surface 404s and the panel's per-row actions degrade to the empty
+/// state.
+type PlatformUsersMode =
+    /// No platform-users module in the sidebar (default — opt-in).
+    | NoPlatformUsers
+    /// SDK built-in platform-users admin.
+    | DefaultPlatformUsers
+
 /// Branding for the service-status-board admin module (Phase 9p.A).
 /// Auto-injected in any non-Anonymous mode unless `NoServiceStatusBoard`.
 type ServiceStatusBoardConfig = { Name: string; Icon: ReactElement }
@@ -1160,6 +1183,16 @@ type ClientConfig = {
     /// the SDK composes — a deployment that ships only a custom client
     /// can still query the API directly.
     HealthMonitor: HealthMonitorMode
+    /// Controls the platform-users admin (Phase 544). **Opt-in** — default
+    /// `NoPlatformUsers`, so an existing deployment's sidebar is unchanged
+    /// until it sets `DefaultPlatformUsers` (GP 11/13). When enabled, the
+    /// module lists every principal (Phase 543 `ListPrincipals`), flags
+    /// team-less ones, and drives the Phase 54-family offboard flow per
+    /// row. Platform-Admin gated by the "Platform Management" sidebar
+    /// group; pair with `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`
+    /// server-side for the offboard actions (the list still renders under
+    /// `NoTenantLifecycle`, the per-row offboard degrades gracefully).
+    PlatformUsers: PlatformUsersMode
     /// Controls the service-status-board admin (Phase 9p.A). Active in
     /// every non-Anonymous mode; `NoServiceStatusBoard` opts out
     /// explicitly. Default: SDK built-in. Server-side surface auto-
@@ -1486,6 +1519,9 @@ module ClientConfig =
         PlatformAdmin = DefaultPlatformAdmin
         PermissionsAdmin = DefaultPermissionsAdmin
         HealthMonitor = DefaultHealthMonitor
+        // Phase 544 — opt-in (GP 11/13); existing deployments keep no
+        // platform-users module until they set DefaultPlatformUsers.
+        PlatformUsers = NoPlatformUsers
         ServiceStatusBoard = DefaultServiceStatusBoard
         UsageDashboard = DefaultUsageDashboard
         // Phase 171 — off by default (GP 13); existing deployments

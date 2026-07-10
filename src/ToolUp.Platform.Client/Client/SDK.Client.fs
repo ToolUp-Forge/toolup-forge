@@ -2811,6 +2811,19 @@ module Client =
         // surface 404s and the panel renders its empty state.
         let tenantLifecycleAdmin = [ TenantLifecycleAdminUI.create () ]
 
+        // Phase 544 — platform user-management admin. Opt-in (GP 11/13):
+        // default `NoPlatformUsers` omits it, so an existing deployment's
+        // sidebar is byte-for-byte unchanged. Same Platform-Management
+        // gating as TenantLifecycleAdmin — the sidebar role filter hides
+        // the group from non-admins, and every IPlatformTenantApi method
+        // is admin-gated server-side. Zero-cost on `NoTenantLifecycle`
+        // deployments: the offboard endpoints 404 and the per-row actions
+        // degrade to an error banner; the list itself still renders.
+        let platformUsers =
+            match config.PlatformUsers with
+            | NoPlatformUsers -> []
+            | DefaultPlatformUsers -> [ PlatformUsersUI.create None ]
+
         // Trailing order is load-bearing: the sidebar renders groups
         // in first-occurrence order across the full module list, so
         // whichever group is named first in `trailing` lands earlier in
@@ -2836,6 +2849,7 @@ module Client =
             @ serviceStatusBoard
             @ dataSubjectRequestAdmin
             @ tenantLifecycleAdmin
+            @ platformUsers
 
         home @ noActiveTeamLanding @ leading @ workApp @ trailing @ debugApp
 

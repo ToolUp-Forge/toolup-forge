@@ -259,6 +259,12 @@
              per scope; Platform-Admin gated like the other _sdk.* admin
              modules. Before SDK.Client.fs (prepareModules calls create). -->
         <Compile Include="Client\TenantLifecycleAdminUI.fs" />
+        <!-- Phase 544 — platform user-management admin. Lists every
+             principal (IPlatformTenantApi.ListPrincipals) + drives the
+             Phase 54-family offboard flow per row; opt-in (ClientConfig
+             .PlatformUsers) + Platform-Admin gated. Before SDK.Client.fs
+             (prepareModules calls create). -->
+        <Compile Include="Client\PlatformUsersUI.fs" />
         <Compile Include="Components\ModuleBoundary.fs" />
         <Compile Include="Client\SDK.Client.fs" />
         <!-- Phase 57 — hydration-aware bootstrap + per-route metadata
