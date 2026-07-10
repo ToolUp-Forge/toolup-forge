@@ -139,6 +139,22 @@ type ServerModule = {
     /// the resolved id is accumulated onto `ServerApp` and checked for
     /// uniqueness at compose time.
     ComponentId: ComponentId option
+    /// Phase 519 — grounding **metric** declarations: the business
+    /// quantities this module computes (a KPI vocabulary), declared the
+    /// way `DataType`s are. Distinct from the observability
+    /// `MetricDefinitions` above (Prometheus counters) — a
+    /// `MetricDefinition` here carries a unit, direction-of-better,
+    /// staleness policy, and optional producing-operation link.
+    /// `addModule` fans these into the app-level registry with
+    /// duplicate-id rejection (a metric id declared by two modules fails
+    /// compose). Empty (the default) — a module that computes no
+    /// registered quantities composes byte-for-byte as before (GP 13).
+    Metrics: Grounding.MetricDefinition list
+    /// Phase 519 — grounding **subject** declarations: the entity
+    /// hierarchies this module computes its metrics over (product
+    /// hierarchy, geography, org chart). Same fan-in + duplicate-id
+    /// rejection as `Metrics`. Empty by default (GP 13).
+    Subjects: Grounding.SubjectDefinition list
 }
 
 module ServerModule =
@@ -158,6 +174,8 @@ module ServerModule =
         JobHandlers = []
         BindingStamp = None
         ComponentId = None
+        Metrics = []
+        Subjects = []
     }
 
     /// Attach a permission-guarded Fable.Remoting api factory. Uses the
@@ -225,6 +243,26 @@ module ServerModule =
     let withMetrics (defs: Metrics.MetricDefinition list) (m: ServerModule) : ServerModule = {
         m with
             MetricDefinitions = m.MetricDefinitions @ defs
+    }
+
+    /// Phase 519 — declare one or more grounding **metrics** (business
+    /// quantities this module computes: a KPI vocabulary). Fanned into
+    /// the app-level `IMetricRegistry` at compose; a metric id declared
+    /// by two modules fails compose with a naming-both-modules
+    /// diagnostic. Distinct from `withMetrics` (observability / Prometheus
+    /// signals). Optional — a module that declares none composes
+    /// unchanged (GP 13).
+    let declareMetrics (defs: Grounding.MetricDefinition list) (m: ServerModule) : ServerModule = {
+        m with
+            Metrics = m.Metrics @ defs
+    }
+
+    /// Phase 519 — declare one or more grounding **subject** hierarchies
+    /// (the entity dimensions this module computes its metrics over).
+    /// Same fan-in + duplicate-id rejection as `declareMetrics`.
+    let declareSubjects (defs: Grounding.SubjectDefinition list) (m: ServerModule) : ServerModule = {
+        m with
+            Subjects = m.Subjects @ defs
     }
 
     /// Declare a per-route latency ceiling for one of this module's
@@ -538,6 +576,18 @@ type ServerApp = {
     /// `Metrics.StandardMetrics.registrations`. Empty (the default) =
     /// only the SDK standard metrics are registered.
     MetricRegistrations: Metrics.MetricRegistration list
+    /// Phase 519 — accumulated grounding **metric** registrations across
+    /// every registered `ServerModule` that declared metrics via
+    /// `ServerModule.declareMetrics`. Each entry pairs the module name
+    /// with a `MetricDefinition`; `run` folds them into an
+    /// `IMetricRegistry` DI singleton, rejecting a metric id declared by
+    /// two modules. Empty (the default) — no registry singleton is
+    /// registered, so composition is byte-for-byte the pre-519 graph
+    /// (GP 13). Distinct from `MetricRegistrations` (observability).
+    RegisteredMetrics: Grounding.MetricRegistration list
+    /// Phase 519 — accumulated grounding **subject** registrations, the
+    /// hierarchy twin of `RegisteredMetrics`.
+    RegisteredSubjects: Grounding.SubjectRegistration list
     /// Phase 9l — optional distributed-tracing sink. `None` (default)
     /// registers `NoOpActivitySink` so every instrumented seam in the
     /// pipeline (`ScopeResolutionMiddleware`, `JobScheduler.dispatchOne`,
@@ -762,6 +812,8 @@ module ServerApp =
         AuditSinks = []
         AuditReplicator = None
         MetricRegistrations = []
+        RegisteredMetrics = []
+        RegisteredSubjects = []
         ActivitySink = None
         RateLimitDescriptors = []
         SmokeTests = []
@@ -1556,6 +1608,26 @@ module ServerApp =
                 let queryRegistrations = m.QueryHandlers |> List.map (fun h -> m.Name, h)
                 let dataTypeRegistrations = m.DataTypes |> List.map (fun dt -> m.Name, dt)
 
+                // Phase 519 — fan the module's grounding metric / subject
+                // declarations into app-level registration lists, each
+                // tagged with the declaring module so the registry can
+                // answer `MetricsByModule` and the duplicate-id diagnostic
+                // can name the producer. A module declaring neither
+                // contributes empty lists (byte-identical, GP 13).
+                let metricRegistryRegistrations: Grounding.MetricRegistration list =
+                    m.Metrics
+                    |> List.map (fun d -> {
+                        Grounding.MetricRegistration.Module = m.Name
+                        Definition = d
+                    })
+
+                let subjectRegistryRegistrations: Grounding.SubjectRegistration list =
+                    m.Subjects
+                    |> List.map (fun d -> {
+                        Grounding.SubjectRegistration.Module = m.Name
+                        Definition = d
+                    })
+
                 // Phase 283 — permit the `component_id` correlation
                 // dimension on every module metric's tag allowlist so
                 // per-component telemetry can be keyed by the stable
@@ -1607,6 +1679,8 @@ module ServerApp =
                         DataTypeRegistrations = app.DataTypeRegistrations @ dataTypeRegistrations
                         AITools = app.AITools @ m.AITools
                         MetricRegistrations = app.MetricRegistrations @ metricRegistrations
+                        RegisteredMetrics = app.RegisteredMetrics @ metricRegistryRegistrations
+                        RegisteredSubjects = app.RegisteredSubjects @ subjectRegistryRegistrations
                         ModuleSurfaceDefaults = app.ModuleSurfaceDefaults @ surfaceDefaultsForModule
                         RouteSurfaceOverrides = app.RouteSurfaceOverrides @ m.RouteSurfaceRequirements
                         // Phase 9b.B — fan module-level job declarations
@@ -1750,6 +1824,33 @@ module ServerApp =
                 | ModuleBindingRejected reason ->
                     logger.Warn(sprintf "module-load: %s binding-rejected: %s" moduleId reason))
 
+        // Phase 519 — metric/subject registration audit. Emit the composed
+        // grounding registry (ids + producing modules) through the startup
+        // logger so a deploy-over-deploy change in what the app can be
+        // planned against is visible in diagnostics (GP 6 at compose time).
+        // Silent when nothing is registered — a composition that declares
+        // no grounding vocabulary logs nothing (GP 13).
+        app.Logger
+        |> Option.iter (fun logger ->
+            if
+                not (List.isEmpty app.RegisteredMetrics)
+                || not (List.isEmpty app.RegisteredSubjects)
+            then
+                let metricIds =
+                    app.RegisteredMetrics |> List.map (fun r -> r.Definition.Id) |> List.distinct
+
+                let subjectIds =
+                    app.RegisteredSubjects |> List.map (fun r -> r.Definition.Id) |> List.distinct
+
+                logger.Info(
+                    sprintf
+                        "metric-registry: %d metric(s) [%s], %d subject(s) [%s] registered"
+                        metricIds.Length
+                        (String.concat ", " metricIds)
+                        subjectIds.Length
+                        (String.concat ", " subjectIds)
+                ))
+
         let config = {
             app.Config with
                 ModuleNames =
@@ -1838,6 +1939,23 @@ module ServerApp =
                 | Some directory ->
                     appendRegistration withOAuthFlows (fun s -> s.AddSingleton<IUserDirectory>(directory))
 
+            // Phase 519 — build the grounding metric & subject registry
+            // from the accumulated module declarations and fold
+            // `IMetricRegistry` into DI. `MetricRegistry.build` rejects a
+            // duplicate metric/subject id declared by two modules with a
+            // naming-both-modules diagnostic (fail-fast at compose). A
+            // composition that registered nothing appends no registration
+            // and constructs no registry — byte-for-byte the pre-519
+            // graph (GP 13).
+            let withMetricRegistry =
+                if List.isEmpty app.RegisteredMetrics && List.isEmpty app.RegisteredSubjects then
+                    withUserDirectory
+                else
+                    let registry =
+                        Grounding.MetricRegistry.build app.RegisteredMetrics app.RegisteredSubjects
+
+                    appendRegistration withUserDirectory (fun s -> s.AddSingleton<Grounding.IMetricRegistry>(registry))
+
             // Phase 281 — fold the composition well-formedness validator into
             // the Phase 9m preflight set. Built here (not in `compose`) because
             // the manifest projector + the AITools accumulator live on this
@@ -1855,7 +1973,7 @@ module ServerApp =
             }
 
             appendRegistration
-                withUserDirectory
+                withMetricRegistry
                 (CompositionValidator.serviceRegistration (compositionManifest app) compositionReferences)
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default

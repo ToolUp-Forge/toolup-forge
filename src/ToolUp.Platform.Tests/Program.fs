@@ -33,6 +33,9 @@ let allTests =
         ResultStoreTests.tests
         ConversationStoreTests.tests
         LineageStoreTests.tests
+        // Phase 519 — grounding metric & subject registry: dedup / conflict
+        // diagnostics, read-surface lookups, ServerModule → ServerApp fan-in.
+        MetricRegistryTests.tests
         JobStoreTests.tests
         CronExpressionTests.tests
         JobSchedulerTests.tests

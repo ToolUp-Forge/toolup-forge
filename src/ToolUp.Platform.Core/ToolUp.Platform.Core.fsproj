@@ -323,6 +323,10 @@
              types + optional IActiveAiProbe DI seam). -->
         <Compile Include="Shared\HomeOverviewApi.fs" />
         <Compile Include="Shared\MetricsTypes.fs" />
+        <!-- Phase 519 — grounding metric & subject registry (business-quantity
+             vocabulary + IMetricRegistry read surface). Distinct from
+             MetricsTypes.fs (observability). Depends only on System. -->
+        <Compile Include="Shared\MetricRegistryTypes.fs" />
         <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
         <Compile Include="Shared\Interfaces\IProviderProfile.fs" />
         <!-- Phase 240 — IPaymentProvider direct-billing substrate. -->

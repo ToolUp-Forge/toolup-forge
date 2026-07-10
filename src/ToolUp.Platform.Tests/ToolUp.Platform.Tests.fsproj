@@ -193,6 +193,8 @@
         <Compile Include="InProcess\ResultStoreTests.fs" />
         <Compile Include="InProcess\ConversationStoreTests.fs" />
         <Compile Include="InProcess\LineageStoreTests.fs" />
+        <!-- Phase 519 — grounding metric & subject registry. -->
+        <Compile Include="InProcess\MetricRegistryTests.fs" />
         <Compile Include="InProcess\JobStoreTests.fs" />
         <Compile Include="InProcess\CronExpressionTests.fs" />
         <Compile Include="InProcess\JobSchedulerTests.fs" />
