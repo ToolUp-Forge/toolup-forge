@@ -949,12 +949,21 @@
              113 action authorizer (default-deny intact), plus the open-core
              grep-guard + the all-four-capabilities client-binding shape pin. -->
         <Compile Include="InProcess\SecondBindingNeutralityTests.fs" />
+        <!-- Phase 208 — codified threat-lens security-regression suite: the six
+             manual audit lenses (JWT/JWKS crypto, mode-gating/dev-bypass, tenant
+             scope isolation, authz/RBAC fail-closed, request-edge auth,
+             session/OAuth lifecycle) as red-team regression cases + a
+             reverted-control proof that the suite catches regressions, not just
+             passes. Test-only; reached through the shipped public surface. -->
+        <Compile Include="InProcess\ThreatLensRegressionSuite.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
         <!-- SDK substrate. ToolUp.Platform.Server transitively pulls Core. -->
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <!-- Phase 520 — grounding fact store companion (IFactStore contract binding). -->
+        <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
         <!-- Phase 68 — graph store substrate: contract pack binds to the
              in-memory default; Core carries the IGraphStore contract. -->
         <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />

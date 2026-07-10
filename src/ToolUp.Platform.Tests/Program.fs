@@ -692,6 +692,11 @@ let allTests =
         // registry. A regression fails `Build.fsproj -- VerifyAll`.
         ComponentRegistryContract.tests
         ComponentRegistryContract.selfTests
+        // Phase 208 — codified threat-lens security-regression suite: the six
+        // manual audit lenses as recurring red-team regression cases + a
+        // reverted-control proof that the suite catches regressions, not just
+        // passes. A reverted security control fails the matching lens here.
+        ThreatLensRegressionSuite.tests
     ]
 
 [<EntryPoint>]
