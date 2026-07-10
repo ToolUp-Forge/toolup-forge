@@ -43,6 +43,14 @@ module PublicPageHandler =
         | Some f -> Some f
         | None -> layouts |> Map.toSeq |> Seq.tryHead |> Option.map snd
 
+    /// Phase 199 — a process-shared default coalescer, used only when a
+    /// render cache is composed without its DI-registered coalescer (a
+    /// custom-wired cache). `withRenderCache` always registers a per-app
+    /// coalescer, so this is a defensive fallback; it is `lazy` so a
+    /// deployment that never composes a cache allocates nothing (GP 13).
+    let private fallbackCoalescer: Lazy<IRenderCoalescer> =
+        lazy (InProcessRenderCoalescer.create ())
+
     // ─── Phase 84 — render-cache helpers ─────────────────────────────
 
     /// Outcome of resolving + rendering a slug, independent of the
@@ -58,6 +66,24 @@ module PublicPageHandler =
         /// Phase 86 — principal failed the audience role / relationship
         /// gate (→ 403).
         | AccessForbidden
+
+    /// Phase 199 — the shareable result of the coalesced produce-and-store
+    /// step: the **principal-independent** part of a cold-key miss (the
+    /// freshly-stored render + its policy, or a terminal non-render
+    /// outcome), which every coalesced caller for the key observes
+    /// identically. The principal-*dependent* audience gate runs per caller
+    /// *after* coalescing (mirroring the cache-hit path), so two same-scope
+    /// principals with different roles still gate independently against the
+    /// produced page's stored `Audience`. The produce is therefore rendered
+    /// gate-free (a forbidden caller that happens to win the single-flight
+    /// still warms the cache for the role-holders in its scope, then gets
+    /// its own 401/403); the render is a pure function of the cache key
+    /// within its scope, exactly the invariant the Phase 84 cache already
+    /// relies on.
+    type private CoalescedMiss =
+        | MissRendered of page: RenderedPage * policy: CachePolicy
+        | MissNoLayout
+        | MissNotFound
 
     /// Resolve a slug through the Phase 83 chain, apply the Phase 89
     /// publish-visibility filter, run the Phase 86 audience authorization
@@ -253,10 +279,19 @@ module PublicPageHandler =
     /// The Phase 84 cached path: cache lookup, stale-while-revalidate,
     /// HTTP cache headers, and `If-None-Match` / `If-Modified-Since` →
     /// `304`.
+    ///
+    /// Phase 199 — when the deployment opted a cacheable *default* policy in
+    /// (`withRenderCacheDefaultPolicy (Cache …)`), the cold-key miss path
+    /// (the produce-and-store step) routes through `coalescer` so M
+    /// concurrent misses for one key collapse to a single render. Under the
+    /// SDK-default `NoCache` default policy the miss path is byte-for-byte
+    /// the pre-199 per-request path — the coalescer is never touched (GP 11
+    /// / GP 13).
     let private serveCached
         (api: IPublicContentApi)
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)
         (cache: IRenderCache)
+        (coalescer: IRenderCoalescer)
         (settings: RenderCacheSettings)
         (metrics: IMetricsSink)
         (cacheKeySlug: string)
@@ -265,6 +300,24 @@ module PublicPageHandler =
         (ctx: HttpContext)
         : System.Threading.Tasks.Task<HttpContext option> =
         task {
+            /// Emit the conditional-GET validators + serve `304` or the body
+            /// (shared by the Phase 199 coalesced miss-serve path).
+            let serveEntry
+                (html: string)
+                (contentHash: string)
+                (lastModified: DateTimeOffset)
+                (cacheControl: string)
+                : System.Threading.Tasks.Task<HttpContext option> =
+                task {
+                    if ConditionalGet.isNotModified ctx contentHash lastModified then
+                        ConditionalGet.setValidators ctx contentHash lastModified cacheControl
+                        ctx.Response.StatusCode <- 304
+                        return Some ctx
+                    else
+                        ConditionalGet.setValidators ctx contentHash lastModified cacheControl
+                        ctx.Response.ContentType <- "text/html; charset=utf-8"
+                        return! ctx.WriteStringAsync html
+                }
             // Phase 114 — `cacheKeySlug` may carry a per-site prefix so two
             // sites sharing a slug (e.g. "index") never share a cache
             // entry; single-site pipelines pass the slug through unchanged.
@@ -333,47 +386,134 @@ module PublicPageHandler =
 
             | None ->
                 emitCacheMetric metrics "miss"
-                let! outcome = resolveAndRender api layouts slug accessContext
 
-                match outcome with
-                | Rendered(html, page) ->
-                    let renderedAt = DateTimeOffset.UtcNow
-                    let policy = policyForPage settings page
+                // Phase 199 — the cold-key miss path. When the deployment
+                // opted a cacheable default policy in, route the
+                // produce-and-store step through the coalescer so M
+                // concurrent misses for this key collapse to one render
+                // (stampede protection). Under the SDK-default `NoCache`
+                // default policy the pre-199 per-request path runs
+                // byte-for-byte — the coalescer is never touched (GP 11 /
+                // GP 13). A page whose own `cache:` frontmatter overrides
+                // the default is stored/served per its own policy either
+                // way; only the *engage-the-coalescer* decision keys off the
+                // deployment-level default (the pre-resolve signal available
+                // without paying the very resolve we mean to collapse).
+                match settings.DefaultPolicy with
+                | CachePolicy.NoCache ->
+                    let! outcome = resolveAndRender api layouts slug accessContext
 
-                    // Phase 86 — carry the page's audience into the stored
-                    // entry so a cache hit can re-gate without re-resolving.
-                    // Phase 147 — stamp the content-stable `Last-Modified`
-                    // so a later cache hit reproduces this render's exact
-                    // validator (and a SWR refresh never churns it).
-                    let lastModified = contentStableLastModified page
+                    match outcome with
+                    | Rendered(html, page) ->
+                        let renderedAt = DateTimeOffset.UtcNow
+                        let policy = policyForPage settings page
 
-                    let rendered = {
-                        RenderedPage.forStore html renderedAt with
-                            Audience = page.Audience
-                            LastModified = lastModified
+                        // Phase 86 — carry the page's audience into the stored
+                        // entry so a cache hit can re-gate without re-resolving.
+                        // Phase 147 — stamp the content-stable `Last-Modified`
+                        // so a later cache hit reproduces this render's exact
+                        // validator (and a SWR refresh never churns it).
+                        let lastModified = contentStableLastModified page
+
+                        let rendered = {
+                            RenderedPage.forStore html renderedAt with
+                                Audience = page.Audience
+                                LastModified = lastModified
+                        }
+
+                        // Store only when the policy opts in (Set is a no-op
+                        // for NoCache, but skip the await to keep the off
+                        // path allocation-light).
+                        match policy with
+                        | CachePolicy.NoCache -> ()
+                        | CachePolicy.Cache _ -> do! cache.Set key rendered policy
+
+                        if ConditionalGet.isNotModified ctx rendered.ContentHash lastModified then
+                            ConditionalGet.setValidators
+                                ctx
+                                rendered.ContentHash
+                                lastModified
+                                (cacheControlValue policy)
+
+                            ctx.Response.StatusCode <- 304
+                            return Some ctx
+                        else
+                            ConditionalGet.setValidators
+                                ctx
+                                rendered.ContentHash
+                                lastModified
+                                (cacheControlValue policy)
+
+                            ctx.Response.ContentType <- "text/html; charset=utf-8"
+                            return! ctx.WriteStringAsync html
+                    | NoLayoutRegistered ->
+                        ctx.Response.StatusCode <- 500
+                        return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+                    | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
+                    | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
+                    | PageNotFound -> return None
+
+                | CachePolicy.Cache _ ->
+                    // The coalesced produce is rendered *gate-free* and
+                    // shared across concurrent same-key misses; the audience
+                    // gate then runs per caller below (mirroring the cache-
+                    // hit path), so two same-scope principals with different
+                    // roles still gate independently against the produced
+                    // page's stored `Audience`.
+                    let produce () : Async<CoalescedMiss> = async {
+                        let! pageOpt = api.GetPageInContext(slug, accessContext)
+
+                        let visiblePage =
+                            pageOpt |> Option.filter (PublicPage.isPubliclyVisible DateTimeOffset.UtcNow)
+
+                        match visiblePage with
+                        | None -> return MissNotFound
+                        | Some page ->
+                            match resolveLayout layouts page with
+                            | None -> return MissNoLayout
+                            | Some layout ->
+                                let html =
+                                    layout page
+                                    |> RenderView.AsString.htmlDocument
+                                    |> PageHeadInjection.injectFromPage page
+
+                                let renderedAt = DateTimeOffset.UtcNow
+                                let policy = policyForPage settings page
+                                let lastModified = contentStableLastModified page
+
+                                let rendered = {
+                                    RenderedPage.forStore html renderedAt with
+                                        Audience = page.Audience
+                                        LastModified = lastModified
+                                }
+
+                                match policy with
+                                | CachePolicy.NoCache -> ()
+                                | CachePolicy.Cache _ -> do! cache.Set key rendered policy
+
+                                return MissRendered(rendered, policy)
                     }
 
-                    // Store only when the policy opts in (Set is a no-op
-                    // for NoCache, but skip the await to keep the off
-                    // path allocation-light).
-                    match policy with
-                    | CachePolicy.NoCache -> ()
-                    | CachePolicy.Cache _ -> do! cache.Set key rendered policy
+                    let! produced = coalescer.Coalesce key produce
 
-                    if ConditionalGet.isNotModified ctx rendered.ContentHash lastModified then
-                        ConditionalGet.setValidators ctx rendered.ContentHash lastModified (cacheControlValue policy)
-                        ctx.Response.StatusCode <- 304
-                        return Some ctx
-                    else
-                        ConditionalGet.setValidators ctx rendered.ContentHash lastModified (cacheControlValue policy)
-                        ctx.Response.ContentType <- "text/html; charset=utf-8"
-                        return! ctx.WriteStringAsync html
-                | NoLayoutRegistered ->
-                    ctx.Response.StatusCode <- 500
-                    return! ctx.WriteStringAsync "PublicRendering: no layout registered"
-                | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
-                | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
-                | PageNotFound -> return None
+                    match produced with
+                    | MissRendered(rendered, policy) ->
+                        // Phase 199 / Phase 86 — re-gate per caller against
+                        // the produced page's stored audience.
+                        match AudienceGate.evaluate accessContext rendered.Audience with
+                        | AudienceDecision.RequireAuthentication -> return! writeDenied ctx 401 "Unauthorized"
+                        | AudienceDecision.Forbidden -> return! writeDenied ctx 403 "Forbidden"
+                        | AudienceDecision.Allow ->
+                            return!
+                                serveEntry
+                                    rendered.Html
+                                    rendered.ContentHash
+                                    (entryLastModified rendered)
+                                    (cacheControlValue policy)
+                    | MissNoLayout ->
+                        ctx.Response.StatusCode <- 500
+                        return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+                    | MissNotFound -> return None
         }
 
     /// Phase 114 — handler variant whose render-cache entries are
@@ -429,7 +569,28 @@ module PublicPageHandler =
                             | :? RenderCacheSettings as s -> s
                             | _ -> RenderCacheSettings.defaults
 
-                        serveCached api layouts cache settings metrics cacheKeySlug slugOrIndex accessContext ctx
+                        // Phase 199 — the render coalescer is registered as a
+                        // DI singleton alongside the cache (so its in-flight
+                        // map is shared across requests). Fall back to a
+                        // process-shared default if a custom cache was wired
+                        // without one — a defensive branch; `withRenderCache`
+                        // always registers it.
+                        let coalescer =
+                            match ctx.RequestServices.GetService(typeof<IRenderCoalescer>) with
+                            | :? IRenderCoalescer as c -> c
+                            | _ -> fallbackCoalescer.Value
+
+                        serveCached
+                            api
+                            layouts
+                            cache
+                            coalescer
+                            settings
+                            metrics
+                            cacheKeySlug
+                            slugOrIndex
+                            accessContext
+                            ctx
                     | _ ->
                         // Phase 147 — no render cache, but the deployment may
                         // have opted into cache-independent conditional-GET

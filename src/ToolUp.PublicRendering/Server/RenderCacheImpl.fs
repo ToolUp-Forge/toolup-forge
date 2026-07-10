@@ -5,6 +5,8 @@ namespace ToolUp.PublicRendering
 
 open System
 open System.Collections.Concurrent
+open System.Collections.Generic
+open System.Threading.Tasks
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.BlobStorage
@@ -180,3 +182,68 @@ module BlobRenderCache =
     /// name (for deployments that partition blob containers per concern).
     let createIn (container: string) (blobStorage: IBlobStorage) : IRenderCache =
         BlobRenderCache(blobStorage, container) :> IRenderCache
+
+// ─── Phase 199 — default request-coalescer (stampede protection) ─────
+//
+// `InProcessRenderCoalescer` is the default `IRenderCoalescer`: a
+// process-local single-flight keyed by `RenderKey`. It collapses a
+// cold-key traffic spike within one replica so the expensive
+// produce-and-store step runs once per in-flight key instead of once per
+// concurrent request. Like `InMemoryRenderCache`, it is single-instance —
+// each replica coalesces its own stampede; a multi-replica deployment MAY
+// supply a distributed coalescer for cross-replica single-flight (the seam
+// allows it, the SDK does not mandate it — GP 12).
+
+/// Process-local per-`RenderKey` single-flight. While a render for a key
+/// is in flight, all concurrent callers for that key share the one
+/// computation; once it completes the key is released so a later miss
+/// starts a fresh round.
+type InProcessRenderCoalescer() =
+
+    // One in-flight entry per key. The value is a `Lazy` wrapping the
+    // shared task so the produce thunk starts *exactly once* even under a
+    // `GetOrAdd` factory race: `ConcurrentDictionary` may invoke the
+    // factory more than once under contention, but it publishes and returns
+    // a single `Lazy`, and only that published `Lazy` is ever forced —
+    // the discarded ones never run their thunk. The result is boxed to
+    // `obj` so one non-generic map serves every `Coalesce<'T>` call site.
+    let inFlight = ConcurrentDictionary<RenderKey, Lazy<Task<obj>>>()
+
+    interface IRenderCoalescer with
+        member _.Coalesce (key: RenderKey) (produce: unit -> Async<'T>) : Async<'T> =
+            let entry =
+                inFlight.GetOrAdd(
+                    key,
+                    fun _ ->
+                        lazy
+                            (Async.StartAsTask(
+                                async {
+                                    let! result = produce ()
+                                    return box result
+                                }
+                            ))
+                )
+
+            async {
+                try
+                    // Forcing `.Value` starts the shared task once; every
+                    // concurrent awaiter of the same `entry` awaits it.
+                    let! boxed = Async.AwaitTask entry.Value
+                    return unbox<'T> boxed
+                finally
+                    // Release the key once the shared render is done (the
+                    // single-flight is per cold-key *round*, not permanent —
+                    // permanent memoisation is the render cache's job, not
+                    // the coalescer's). Remove by (key, value) identity so a
+                    // newer round's entry, if one already replaced ours, is
+                    // left untouched.
+                    inFlight.TryRemove(KeyValuePair(key, entry)) |> ignore
+            }
+
+module InProcessRenderCoalescer =
+    /// Construct the default process-local render coalescer. One instance
+    /// per composed render cache (registered as a DI singleton alongside
+    /// it) so its in-flight map is shared across every request on the
+    /// replica.
+    let create () : IRenderCoalescer =
+        InProcessRenderCoalescer() :> IRenderCoalescer

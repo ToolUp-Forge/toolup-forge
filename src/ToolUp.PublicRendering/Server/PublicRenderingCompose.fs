@@ -200,6 +200,16 @@ type PublicRenderingServerApp = {
     /// GP 13). `Some config` mounts a compact content-versioned JSON index
     /// over the public universe at `config.Path`. Set via `withSearchIndex`.
     SearchIndex: SearchIndexConfig option
+    /// Phase 199 — optional custom render-cache request coalescer (cold-key
+    /// stampede protection). `None` (default) → when a render cache is
+    /// composed, the SDK registers the process-local
+    /// `InProcessRenderCoalescer` (coalesces within one replica, like
+    /// `InMemoryRenderCache`). `Some coalescer` supplies a custom impl — a
+    /// multi-instance `BlobRenderCache` deployment MAY provide a distributed
+    /// coalescer (e.g. a Redis lock keyed by `RenderKey`) to collapse the
+    /// stampede across replicas. Ignored unless `RenderCache` is `Some`. Set
+    /// via `withRenderCoalescer`.
+    RenderCoalescer: IRenderCoalescer option
 }
 
 module PublicRenderingServerApp =
@@ -231,6 +241,7 @@ module PublicRenderingServerApp =
         SitemapShardThreshold = 50_000
         SitemapClusterKey = None
         SearchIndex = None
+        RenderCoalescer = None
     }
 
     /// Phase 80c composition seam — lift an existing `ServerApp` into a
@@ -268,6 +279,7 @@ module PublicRenderingServerApp =
         SitemapShardThreshold = 50_000
         SitemapClusterKey = None
         SearchIndex = None
+        RenderCoalescer = None
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -629,6 +641,20 @@ module PublicRenderingServerApp =
                 RenderCacheInvalidation = Some invalidator
         }
 
+    /// Phase 199 — supply a custom render-cache request coalescer for
+    /// cold-key stampede protection. The default (when `withRenderCache` is
+    /// composed and this is not called) is the process-local
+    /// `InProcessRenderCoalescer`, which collapses a stampede *within* one
+    /// replica — the dominant win. Supply this only for a multi-instance
+    /// deployment that wants cross-replica single-flight: a distributed
+    /// coalescer (e.g. a Redis lock keyed by `RenderKey`) so a cold key is
+    /// rendered once across the whole fleet, not once per replica. No effect
+    /// unless `withRenderCache` is also composed.
+    let withRenderCoalescer (coalescer: IRenderCoalescer) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            RenderCoalescer = Some coalescer
+    }
+
     /// Phase 147 — opt into cache-independent conditional-GET emission.
     /// Makes a deterministic SSR site emit `ETag` (weak, content-hash) +
     /// content-stable `Last-Modified` + `Cache-Control` on the *uncached*
@@ -932,6 +958,7 @@ module PublicRenderingServerApp =
             let semanticSearch = app.SemanticSearch // Phase 91
             let renderCache = app.RenderCache
             let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
+            let renderCoalescer = app.RenderCoalescer
             let conditionalGetSettings = app.ConditionalGet // Phase 147
             let indexNowOptions = app.IndexNow // Phase 109
             let satelliteDefs = app.Sites // Phase 114
@@ -1162,6 +1189,17 @@ module PublicRenderingServerApp =
                                     RenderCacheSettings.defaults with
                                         DefaultPolicy = renderCacheDefaultPolicy
                                 }
+                            )
+
+                        // Phase 199 — register the render-cache request
+                        // coalescer as a singleton alongside the cache (the
+                        // page handler resolves it to single-flight cold-key
+                        // misses). A custom one (`withRenderCoalescer`, e.g. a
+                        // distributed coalescer) wins; otherwise the
+                        // process-local default.
+                        let s =
+                            s.AddSingleton<IRenderCoalescer>(
+                                renderCoalescer |> Option.defaultWith InProcessRenderCoalescer.create
                             )
 
                         match renderCacheInvalidator with

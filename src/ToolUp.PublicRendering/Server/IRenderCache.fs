@@ -244,6 +244,51 @@ type IRenderCacheInvalidation =
     /// content versions. Idempotent.
     abstract PurgeSlug: slug: string -> Async<unit>
 
+/// Phase 199 — per-`RenderKey` single-flight coordination for the render
+/// cache's cold-key miss path (request coalescing / stampede protection).
+///
+/// On a cold-`RenderKey` traffic spike, M concurrent requests for the same
+/// `(Slug, ScopeId, ContentVersion)` all miss the cache and re-run the
+/// expensive `IContentSource` resolution + render — the classic
+/// cache-stampede / dog-pile. The stale-while-revalidate path only lets one
+/// request refresh an *already-populated* entry in the background; it does
+/// not cover the *cold* key that has no entry yet. An `IRenderCoalescer`
+/// closes that hole: the first caller for an in-flight key runs the
+/// produce-and-store step, and every concurrent caller for the *same* key
+/// awaits its single result instead of launching its own render.
+///
+/// **Off by default and zero-cost when unused (GP 11 / GP 13).** The
+/// coalescer is consulted only on the cached serve path (a deployment that
+/// never composes a render cache never resolves one), and only when the
+/// deployment opted a cacheable default policy in — the configuration under
+/// which the stampede-prone content-source pages are cacheable at all. A
+/// lone miss with no concurrent caller runs `produce` straight through, so
+/// coalescing is observable only under concurrency.
+///
+/// **Portability (GP 12).** The default impl (`InProcessRenderCoalescer`)
+/// is process-local — it coalesces within one replica, exactly as
+/// `InMemoryRenderCache` caches within one replica. A per-replica coalescer
+/// already collapses each replica's own stampede (the dominant win: at most
+/// one render per replica instead of one per request). A multi-instance
+/// `BlobRenderCache` deployment MAY supply a *distributed* coalescer (e.g. a
+/// Redis lock keyed by `RenderKey`) to collapse the stampede across replicas
+/// too — the seam allows it, the SDK does not mandate it. The interface
+/// satisfies the six portability rules: identity by value (`RenderKey` +
+/// the caller's own `produce` thunk), async at the boundary, no live handle,
+/// stateless between calls (each `Coalesce` carries its full key), no
+/// cross-key ordering promise (distinct keys never block each other).
+type IRenderCoalescer =
+    /// Run `produce` at most once per in-flight `key`: the first caller for
+    /// a key with no render in flight runs `produce`; every concurrent
+    /// caller for the same key awaits that same computation and observes its
+    /// result. Distinct keys never block each other. Once `produce`
+    /// completes (and its result is handed to all awaiters) the key is no
+    /// longer in flight — a later miss for the same key (e.g. after the
+    /// stored entry expires) starts a fresh single-flight round. An
+    /// exception from `produce` propagates to every awaiter of that round;
+    /// the key is then free to retry.
+    abstract Coalesce: key: RenderKey -> produce: (unit -> Async<'T>) -> Async<'T>
+
 /// Compose-time render-cache settings. Carries the default policy
 /// applied to a resolved page that declares no explicit `cache:`
 /// frontmatter key — the lever a deployment uses to cache its
