@@ -556,6 +556,23 @@ type PeerSubstrateMode =
     /// `PeerCompose.compose`.
     | EnabledPeerSubstrate
 
+/// Phase 520 — selects whether a bitemporal fact store (the `ToolUp.Facts`
+/// companion) participates in the composition. Default `NoFactStore` — no
+/// `IFactStore` is expected in DI; a deployment that stores no facts is
+/// byte-for-byte unchanged (GP 11 + GP 13). `BlobFactStore` selects the
+/// blob-backed default. The knob is the introspectable *slot* the
+/// composition manifest / composable-surface descriptor report as the
+/// resolved fact-store kind; the `ToolUp.Facts` companion also exposes
+/// `BlobFactStore.create` for direct composition. Mirrors
+/// `PeerSubstrateMode` / `EntityStoreMode` (binary, opt-in).
+type FactStoreMode =
+    /// No fact store composed — the default. Nothing in the grounding
+    /// fact tier is active.
+    | NoFactStore
+    /// A fact store (the blob-backed `BlobFactStore` default — append-only,
+    /// bitemporal, content-addressed) participates in the composition.
+    | EnabledFactStore
+
 /// Phase 54 — selects whether `compose` registers the tenant-lifecycle
 /// substrate: the four first-party `ITenantLifecycle` hooks
 /// (encryption-key destroy, membership-cache invalidate, scheduled-job
@@ -2731,6 +2748,13 @@ type ServerConfig = {
     /// over JSON-RPC 2.0 with identity propagation, version handshake,
     /// and job-substrate fusion. Zero cost when not enabled (GP 13).
     PeerSubstrate: PeerSubstrateMode
+    /// Phase 520 — grounding fact-store selection. Default `NoFactStore`
+    /// — no `IFactStore` composed, the grounding fact tier inert, the
+    /// deployment byte-for-byte unchanged (GP 11 + GP 13). `EnabledFactStore`
+    /// declares that a fact store (the `ToolUp.Facts` `BlobFactStore`
+    /// default) participates; the composition manifest / composable-surface
+    /// descriptor report the resolved kind from this knob.
+    FactStore: FactStoreMode
     /// Phase 54 — tenant-lifecycle substrate selection. Default
     /// `NoTenantLifecycle` — no `/api/_platform/tenants/*` route, no
     /// first-party `ITenantLifecycle` hooks in DI, no tenant-lifecycle
@@ -3084,6 +3108,7 @@ module ServerConfig =
         TeamCreationQuota = None
         NarrativeRetention = NarrativeRetentionPolicy.defaults
         PeerSubstrate = NoPeerSubstrate
+        FactStore = NoFactStore
         TenantLifecycle = NoTenantLifecycle
         TenantOffboardConfirmation = NoConfirmation
         DeploymentReadiness = NoReadinessReport

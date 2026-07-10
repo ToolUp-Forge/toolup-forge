@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Facts Server — IFactStore (append-only, bitemporal, content-addressed fact base with derived supersession + AsOf reconstruction) + BlobFactStore default. Depends on ToolUp.Platform.Server + ToolUp.Facts.Core. Phase 520.</Description>
+        <PackageTags>fsharp;sdk;server;facts;grounding;provenance</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Facts\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Server\IFactStore.fs" />
+        <Compile Include="Server\BlobFactStore.fs" />
+    </ItemGroup>
+    <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
+         FSharp.Core is implicit via the .NET SDK. -->
+</Project>

@@ -125,6 +125,8 @@
         <Compile Include="Contracts\IModelFitProviderContract.fs" />
         <!-- Phase 453 — model registry conformance (bound to the blob-backed default). -->
         <Compile Include="Contracts\IModelRegistryContract.fs" />
+        <!-- Phase 520 — grounding fact store contract pack. -->
+        <Compile Include="Contracts\IFactStoreContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
@@ -197,6 +199,8 @@
         <Compile Include="InProcess\LineageStoreTests.fs" />
         <!-- Phase 519 — grounding metric & subject registry. -->
         <Compile Include="InProcess\MetricRegistryTests.fs" />
+        <!-- Phase 520 — grounding fact store (contract binding + audit/freshness). -->
+        <Compile Include="InProcess\FactStoreTests.fs" />
         <Compile Include="InProcess\JobStoreTests.fs" />
         <Compile Include="InProcess\CronExpressionTests.fs" />
         <Compile Include="InProcess\JobSchedulerTests.fs" />

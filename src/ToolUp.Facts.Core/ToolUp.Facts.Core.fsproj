@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Facts Core — bitemporal, content-addressed fact model (Fact, FactValue, MethodRef, Disclosure, TemporalExtent) + content-address / lineage / freshness laws. Phase 520.</Description>
+        <PackageTags>fsharp;sdk;types;facts;grounding;provenance</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Facts\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\FactTypes.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

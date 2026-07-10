@@ -283,6 +283,10 @@
     <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
 
+    <!-- Phase 520 — grounding fact store companion -->
+    <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />
+
     <!-- AI provider companions -->
     <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpSdkVersion)" />

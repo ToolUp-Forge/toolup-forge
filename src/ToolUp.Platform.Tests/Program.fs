@@ -38,6 +38,12 @@ let allTests =
         // Phase 519 — grounding metric & subject registry: dedup / conflict
         // diagnostics, read-surface lookups, ServerModule → ServerApp fan-in.
         MetricRegistryTests.tests
+        // Phase 520 — grounding fact store: IFactStore contract pack (content-
+        // address idempotency, AsOf reconstruction, supersession, competing
+        // facts, scope isolation, disclosure/Absent round-trips) + BlobFactStore
+        // audit emission + freshness derivation.
+        FactStoreTests.tests
+        FactStoreTests.auditAndFreshnessTests
         JobStoreTests.tests
         CronExpressionTests.tests
         JobSchedulerTests.tests
