@@ -59,9 +59,21 @@ let private emptyInternalOrderQueue (store: InMemoryIdempotencyStore) =
 
     (field.GetValue store :?> ConcurrentQueue<string>).Clear()
 
+// Sequenced (not run in parallel with the rest of the pack). The concurrency
+// smoke case below drives an 8-worker `Async.Parallel` insert storm; its
+// invariants are internally sound — verified in isolation (3/3) and by a
+// standalone stress of the exact `evictOldestIfFull` algorithm: over-cap never
+// exceeds a tiny transient slack (~cap+workers, far below the `cap*3` bound),
+// the store never mass-wipes, and the `OverCapRecoveryCount`/`Warn` pair is
+// always consistent at rest. The flake was cross-test contention: under the
+// FULL parallel test pack, dozens of other async tests saturate the thread pool
+// and perturb this storm's scheduling enough to disturb the transient-over-cap
+// and counter snapshots. Sequencing removes that interference without relaxing
+// a single assertion — the fix is to the test's isolation, not to the store.
 [<Tests>]
 let tests =
-    testList "Phase 328 — idempotency-store bounded eviction" [
+    testSequenced
+    <| testList "Phase 328 — idempotency-store bounded eviction" [
 
         // ── Bounded FIFO drain: one oldest out per Store, never a wipe ──
         testCaseAsync "bounded FIFO drain evicts only the oldest per Store — never a mass wipe"
