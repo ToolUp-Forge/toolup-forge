@@ -637,6 +637,11 @@
         <!-- Phase 84 — render-cache contract bindings + policy/hash unit
              tests + PublicPageHandler cache-integration tests. -->
         <Compile Include="InProcess\RenderCacheTests.fs" />
+        <!-- Phase 199 — render-cache request coalescing: IRenderCoalescer
+             contract (single-flight, distinct-key non-blocking, release,
+             exception propagation) + PublicPageHandler concurrent-miss
+             stampede-collapse integration. -->
+        <Compile Include="InProcess\RenderCoalescingTests.fs" />
         <!-- Phase 111 — resolved-content head metadata: PageHeadMetadata
              codec round-trip, PublicContentApiImpl synthesis (GP 11
              bare-body parity), PageHeadInjection emission + handler
@@ -833,6 +838,10 @@
         <Compile Include="InProcess\ValidationTests.fs" />
         <Compile Include="InProcess\IdempotencyTests.fs" />
         <Compile Include="InProcess\IdempotencyReplayAuditTests.fs" />
+        <!-- Phase 328 — bounded idempotency-store eviction + mass-eviction
+             observability (bounded FIFO drain replaces the entries.Clear()
+             mass-wipe; recovery path emits Warn + OverCapRecoveryCount). -->
+        <Compile Include="InProcess\IdempotencyStoreEvictionTests.fs" />
         <Compile Include="InProcess\AuditBodyDisposalTests.fs" />
         <Compile Include="InProcess\StreamingTests.fs" />
         <Compile Include="InProcess\StreamingDispatchTests.fs" />

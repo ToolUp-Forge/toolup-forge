@@ -41,8 +41,23 @@ type IdempotentAttribute() =
 /// the cap is reached, the oldest entry (by insertion order) is evicted
 /// on next `Store`. Cardinality-bounded so a burst of unique keys
 /// (e.g. retry storms with fresh GUIDs) can't OOM the host.
-type InMemoryIdempotencyStore(?maxEntries: int) =
+///
+/// Phase 328 — eviction is a **bounded FIFO drain**, never a mass wipe. If
+/// the FIFO queue is momentarily empty while the dictionary is still over
+/// cap (a count/queue race under concurrent inserts), the store accepts a
+/// transient slight over-cap rather than discarding live keys, and records
+/// the event (`OverCapRecoveryCount` + an optional `logger` `Warn`) so the
+/// over-cap path is observable. The optional `logger` is used only for that
+/// signal; omit it to stay silent (behaviour-preserving default, GP 11).
+type InMemoryIdempotencyStore(?maxEntries: int, ?logger: ToolUp.Platform.ILogger) =
     let cap = defaultArg maxEntries 100_000
+
+    // Phase 328 — bound the per-`Store` eviction work. A single `Store` adds
+    // exactly one entry, so steady-state eviction removes one victim; this
+    // caps the catch-up drain after a concurrent-insert burst so no one call
+    // spins unboundedly. Leaving a residue is fine — the next `Store`
+    // continues the drain (transient slight over-cap).
+    let drainBatch = 64
 
     let entries =
         ConcurrentDictionary<string, struct (DateTimeOffset * MemoisedResponse)>()
@@ -50,6 +65,14 @@ type InMemoryIdempotencyStore(?maxEntries: int) =
     // exceeds `cap`. ConcurrentQueue is approximately ordered; exact
     // ordering isn't required for the LRU semantics.
     let order = ConcurrentQueue<string>()
+
+    // Phase 328 — cumulative count of over-cap recovery events (the branch
+    // that formerly wiped the entire cache with `entries.Clear()`). A
+    // heap-backed single-element int64 so the lock-free `Interlocked`
+    // increment can take a byref to it from inside the `evictOldestIfFull`
+    // closure — a `let mutable` field cannot be address-taken through a
+    // closure, an array element can. Surfaced via `OverCapRecoveryCount`.
+    let overCapRecoveries: int64[] = Array.zeroCreate 1
 
     let compositeKey scope key = scope + "|" + key
 
@@ -69,21 +92,61 @@ type InMemoryIdempotencyStore(?maxEntries: int) =
                 let mutable _ignored = Unchecked.defaultof<string>
                 order.TryDequeue(&_ignored) |> ignore
 
+    /// Phase 328 — the over-cap recovery signal. Increments the cumulative
+    /// counter and emits an operator-visible `Warn`. This fires only on the
+    /// genuine cap-race (a non-empty FIFO queue never reaches here), so it
+    /// is self-throttling — no log flood under normal at-cap operation. It
+    /// replaces the silent `entries.Clear()` mass-wipe.
+    let recordOverCapRecovery () =
+        let total = System.Threading.Interlocked.Increment(&overCapRecoveries[0])
+
+        match logger with
+        | Some log ->
+            log.Warn(
+                sprintf
+                    "InMemoryIdempotencyStore: FIFO eviction queue empty while at/over the %d-entry cap — accepting a transient over-cap instead of clearing the cache (cumulative over-cap recoveries: %d). Sustained occurrences mean the idempotency store is under-provisioned for this instance's traffic; raise maxEntries or wire a distributed IIdempotencyStore."
+                    cap
+                    total
+            )
+        | None -> ()
+
+    // Phase 328 — bounded FIFO drain. Formerly the `else` branch below
+    // called `entries.Clear()`: under a count/queue race at the cap (a
+    // concurrent inserter has added to `entries` but not yet enqueued its
+    // key, so `order` is momentarily empty while `entries.Count >= cap`)
+    // that wiped EVERY memoised response — so every in-flight idempotency
+    // key then missed and re-executed its handler (double-charge / duplicate
+    // side effect), silently, and only under cap pressure. The drain now
+    // evicts at most `drainBatch` oldest entries and, when the queue is
+    // empty, accepts a transient slight over-cap rather than discarding live
+    // keys, recording the recovery so it is observable.
     let evictOldestIfFull () =
         compactStaleHeads ()
 
-        while entries.Count >= cap do
+        let mutable drained = 0
+        let mutable keepDraining = true
+
+        while keepDraining && entries.Count >= cap do
             let mutable victim = Unchecked.defaultof<string>
 
             if order.TryDequeue(&victim) then
                 entries.TryRemove victim |> ignore
+                drained <- drained + 1
+                // Bounded: cap a single `Store`'s eviction work. If still
+                // over cap after a full batch (a large concurrent-insert
+                // burst), accept the transient over-cap — the next `Store`
+                // continues the drain.
+                if drained >= drainBatch then
+                    keepDraining <- false
             else
-                // Queue empty but dictionary still over cap — recover by
-                // exiting the loop; counter race resolves on next Store.
-                ()
-                // break-equivalent: forcibly set a non-overflowing state
-                if entries.Count >= cap then
-                    entries.Clear()
+                // Cap-race: dictionary at/over cap but the FIFO queue is
+                // momentarily empty. Accept a transient slight over-cap and
+                // record the recovery; NEVER wipe the cache (that would
+                // re-execute every in-flight idempotency key). The next
+                // `Store` drains the residue once the concurrent enqueue
+                // lands.
+                keepDraining <- false
+                recordOverCapRecovery ()
 
     interface IIdempotencyStore with
         member _.TryGet(key, scope) = async {
@@ -113,6 +176,15 @@ type InMemoryIdempotencyStore(?maxEntries: int) =
     member _.Count = entries.Count
     /// Diagnostics: configured cap.
     member _.MaxEntries = cap
+
+    /// Phase 328 — diagnostics: cumulative number of over-cap recovery
+    /// events (the FIFO queue was momentarily empty at/over the cap, so a
+    /// transient over-cap was accepted rather than discarding live keys). A
+    /// non-zero and climbing value is the observable signal that this
+    /// instance's idempotency store is under cap pressure. This path
+    /// formerly wiped the entire cache silently.
+    member _.OverCapRecoveryCount =
+        System.Threading.Interlocked.Read(&overCapRecoveries[0])
 
 // -----------------------------------------------------------------------------
 

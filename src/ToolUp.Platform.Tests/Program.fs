@@ -92,6 +92,10 @@ let allTests =
         ValidationTests.tests
         IdempotencyTests.tests
         IdempotencyReplayAuditTests.tests
+        // Phase 328 — bounded idempotency-store eviction: the entries.Clear()
+        // mass-wipe is replaced by a bounded FIFO drain; the over-cap
+        // recovery path is observable (Warn + OverCapRecoveryCount).
+        IdempotencyStoreEvictionTests.tests
         AuditBodyDisposalTests.tests
         StreamingTests.tests
         StreamingDispatchTests.tests
@@ -394,6 +398,10 @@ let allTests =
         // PublicPageHandler cache-integration (miss→hit, 304, headers,
         // off-route, pre-84 path, stale-while-revalidate).
         RenderCacheTests.tests
+        // Phase 199 — render-cache request coalescing (cold-key stampede
+        // protection): IRenderCoalescer single-flight contract + handler
+        // concurrent-miss collapse (resolve-once) integration.
+        RenderCoalescingTests.tests
         // Phase 111 — resolved-content head metadata: codec round-trip,
         // synthesis (GP 11 bare-body parity), head injection + handler
         // integration (Phase 84 cache-ownership), enumerable reach.

@@ -4143,9 +4143,10 @@ ToolUp.Remoting.Server.IdempotencySweepJob..ctor(ToolUp.Platform.BlobStorage+IBl
 ToolUp.Remoting.Server.IdempotentAttribute (class)
 ToolUp.Remoting.Server.IdempotentAttribute..ctor()
 ToolUp.Remoting.Server.InMemoryIdempotencyStore (class)
-ToolUp.Remoting.Server.InMemoryIdempotencyStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Remoting.Server.InMemoryIdempotencyStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Remoting.Server.InMemoryIdempotencyStore.Count : System.Int32 { get }
 ToolUp.Remoting.Server.InMemoryIdempotencyStore.MaxEntries : System.Int32 { get }
+ToolUp.Remoting.Server.InMemoryIdempotencyStore.OverCapRecoveryCount : System.Int64 { get }
 ToolUp.Remoting.Server.InMemoryJobDispatcher (class)
 ToolUp.Remoting.Server.InMemoryJobDispatcher..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Remoting.Server.InMemoryJobDispatcher.JobCount : System.Int32 { get }
