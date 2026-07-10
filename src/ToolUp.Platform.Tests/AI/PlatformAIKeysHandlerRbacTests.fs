@@ -170,6 +170,9 @@ let private stubTeamStore (teams: TeamInfo list) : ITeamStore =
 
         member _.PurgeTeam _ =
             failwith "stubTeamStore.PurgeTeam not used"
+
+        member _.PurgeUser _ =
+            failwith "stubTeamStore.PurgeUser not used"
     }
 
 // ─── AccessContext + HttpContext helpers ─────────────────────────

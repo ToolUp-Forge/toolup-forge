@@ -123,6 +123,13 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> ConversationStoreLifecycle.create sp)
         |> ignore
 
+        // Phase 545 — user-scope membership teardown (`PurgeUser`
+        // symmetry). Self-`Skipped`s on non-user scopes and when no
+        // `ITeamStore` is composed, so registering it unconditionally
+        // under the enabled mode is safe.
+        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> UserMembershipTeardownLifecycle.create sp)
+        |> ignore
+
         // Phase 54g — provisioning hooks that do real work. Each
         // self-`Skipped`s when its substrate is inactive (no `IConfigStore` /
         // `ITeamStore` / `PerScopeKeyResolver`), so registering them

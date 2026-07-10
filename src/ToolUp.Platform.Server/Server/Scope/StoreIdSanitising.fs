@@ -99,6 +99,9 @@ type SanitisingTeamStore(inner: ITeamStore) =
         member _.PurgeTeam(teamId) =
             guard (validate "teamId" teamId) (fun () -> inner.PurgeTeam(teamId))
 
+        member _.PurgeUser(userId) =
+            guard (validate "userId" userId) (fun () -> inner.PurgeUser(userId))
+
         // Reads delegate unchanged.
         member _.GetTeam(teamId) = inner.GetTeam(teamId)
         member _.ListTeams() = inner.ListTeams()

@@ -178,6 +178,13 @@ let tests =
             Expect.isTrue (isSkipped result) "skipped without a conversation store"
         }
 
+        testCaseAsync "UserMembershipTeardownLifecycle skips when no ITeamStore is registered"
+        <| async {
+            let hook = UserMembershipTeardownLifecycle.create emptyProvider
+            let! result = hook.OnDeprovisioned("user-x", "admin")
+            Expect.isTrue (isSkipped result) "skipped without a team store"
+        }
+
         testCaseAsync "KnowledgeBaseLifecycle skips when no IBlobStorage is registered"
         <| async {
             let hook = ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
@@ -200,6 +207,7 @@ let tests =
                 JobSchedulerLifecycle.create emptyProvider
                 DataSubjectRequestLifecycle.create emptyProvider
                 ConversationStoreLifecycle.create emptyProvider
+                UserMembershipTeardownLifecycle.create emptyProvider
                 ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
                 ToolUp.RAG.RagVectorStoreLifecycle.create emptyProvider
             ]
@@ -218,6 +226,7 @@ let tests =
                     JobSchedulerLifecycle.create emptyProvider
                     DataSubjectRequestLifecycle.create emptyProvider
                     ConversationStoreLifecycle.create emptyProvider
+                    UserMembershipTeardownLifecycle.create emptyProvider
                     ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
                     ToolUp.RAG.RagVectorStoreLifecycle.create emptyProvider
                 ]

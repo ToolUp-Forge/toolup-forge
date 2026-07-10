@@ -612,6 +612,10 @@
         <!-- Phase 54d — conversation-store offboard purge (core-tier).
              After the aggregator; before ComposeTenantLifecycle registers it. -->
         <Compile Include="Server\Lifecycle\ConversationStoreLifecycle.fs" />
+        <!-- Phase 545 — user-scope membership teardown (PurgeUser symmetry).
+             After ITeamStore (TeamManagement) + the aggregator; before
+             ComposeTenantLifecycle registers it. -->
+        <Compile Include="Server\Lifecycle\UserMembershipTeardownLifecycle.fs" />
         <!-- Phase 54e — durable last-LifecycleSummary store (blob-backed
              default). After the aggregator (consumes LifecycleSummary);
              before the handler that reads through it. -->

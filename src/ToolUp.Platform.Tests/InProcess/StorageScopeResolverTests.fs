@@ -311,6 +311,7 @@ let private teamTests =
                     member _.SetActiveTeam(_, _) = async { return Error "unused" }
                     member _.SetArchived(_, _) = async { return Error "unused" }
                     member _.PurgeTeam _ = async { return Error "unused" }
+                    member _.PurgeUser _ = async { return Error "unused" }
                 }
 
             let cache = new MemoryCache(MemoryCacheOptions()) :> IMemoryCache

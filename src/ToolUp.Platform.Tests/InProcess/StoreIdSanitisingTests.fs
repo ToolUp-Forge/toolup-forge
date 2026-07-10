@@ -58,6 +58,11 @@ type private RecordingTeamStore() =
             return Ok()
         }
 
+        member _.PurgeUser(userId) = async {
+            calls.Add($"PurgeUser:{userId}")
+            return Ok()
+        }
+
         member _.GetTeam _ = failwith "read not exercised"
         member _.ListTeams() = failwith "read not exercised"
         member _.GetTeamsForUser _ = failwith "read not exercised"

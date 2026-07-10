@@ -474,6 +474,11 @@ let allTests =
         // Platform-Admin team lifecycle — ListAllTeams / Archive / Restore
         // / DeleteTeamHard gating + archived-team access enforcement.
         TeamAdminLifecycleTests.tests
+        // Phase 545 — user-scope offboard completeness: PurgeUser
+        // (last-Owner refusal / multi-team strip / pointer cleanup /
+        // idempotent re-purge) + the user-membership-teardown hook +
+        // end-to-end DeprovisionTenant("user-<id>").
+        UserMembershipTeardownTests.tests
         TeamInvitationTests.tests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests

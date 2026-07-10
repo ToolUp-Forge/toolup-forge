@@ -596,6 +596,7 @@ type private AddMemberFailingStore(inner: ITeamStore) =
         member _.SetActiveTeam(userId, teamId) = inner.SetActiveTeam(userId, teamId)
         member _.SetArchived(teamId, archived) = inner.SetArchived(teamId, archived)
         member _.PurgeTeam(teamId) = inner.PurgeTeam(teamId)
+        member _.PurgeUser(userId) = inner.PurgeUser(userId)
 
 [<Tests>]
 let integrityTests =

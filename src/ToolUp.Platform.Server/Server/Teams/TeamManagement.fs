@@ -154,6 +154,16 @@ type ITeamStore =
     /// removes the team blob (the create-rollback primitive). `Error`
     /// when the team does not exist.
     abstract PurgeTeam: teamId: string -> Async<Result<unit, string>>
+    /// **Irreversibly** purge a user's platform membership state — the
+    /// user-scope twin of `PurgeTeam` (Phase 545): strip every
+    /// membership row, delete the active-team pointer, and publish
+    /// `MembershipChanged.Removed` per affected team so resolver caches
+    /// evict. Refuses when the user is the last Owner of any team (the
+    /// error names the team) — the operator must transfer ownership or
+    /// purge that team first, the same unmanageable-team safeguard as
+    /// `RemoveMember`. Idempotent — purging a user with no membership
+    /// state returns `Ok`.
+    abstract PurgeUser: userId: string -> Async<Result<unit, string>>
 
 // ─── TeamStore ───────────────────────────────────────────────────
 
@@ -560,6 +570,60 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
             return! storage.Delete(platformContainer, teamBlobName teamId)
     }
 
+    member this.PurgeUser(userId: string) = async {
+        // Last-Owner safeguard: purging the sole Owner of a team would
+        // leave it unmanageable — the operator must transfer ownership
+        // or purge that team first. `IsLastOwner` is a cross-user scan,
+        // so (like `RemoveMember`) it runs OUTSIDE the per-user lock;
+        // the same accepted concurrent-Owner-removal race applies (a
+        // Phase 9c concern requiring distributed primitives).
+        let! memberships = this.LoadMemberships(userId)
+
+        let! lastOwnerChecks =
+            memberships
+            |> List.map (fun m -> async {
+                let! isLast = this.IsLastOwner(m.TeamId, userId)
+                return if isLast then Some m.TeamId else None
+            })
+            |> Async.Sequential
+
+        let blocking = lastOwnerChecks |> Array.choose id |> Array.toList
+
+        if not (List.isEmpty blocking) then
+            let teams = blocking |> List.map (sprintf "'%s'") |> String.concat ", "
+
+            return
+                Error(
+                    sprintf
+                        "Cannot purge user '%s' — they are the last Owner of team(s) %s. Transfer ownership or purge the team first."
+                        userId
+                        teams
+                )
+        else
+            return!
+                withUserLock
+                    userId
+                    (async {
+                        // Re-read under the lock so a concurrent membership
+                        // write for this user can't be lost by the purge.
+                        let! current = this.LoadMemberships(userId)
+
+                        if not current.IsEmpty then
+                            let! _ = storage.Delete(platformContainer, membershipBlobName userId)
+                            ()
+
+                        // Unconditional pointer delete — `IBlobStorage.Delete`
+                        // is idempotent (Ok on a missing blob), which is what
+                        // makes a re-purge of an already-purged user succeed.
+                        let! _ = storage.Delete(platformContainer, activeTeamBlobName userId)
+
+                        for m in current do
+                            do! publishChange m.TeamId userId MembershipChangeKind.Removed
+
+                        return Ok()
+                    })
+    }
+
     // ── ITeamStore routing ───────────────────────────────────
     // Public members above are the implementation; the interface
     // block delegates to them so consumers typed against the
@@ -584,6 +648,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel) =
         member this.SetActiveTeam(userId, teamId) = this.SetActiveTeam(userId, teamId)
         member this.SetArchived(teamId, archived) = this.SetArchived(teamId, archived)
         member this.PurgeTeam(teamId) = this.PurgeTeam(teamId)
+        member this.PurgeUser(userId) = this.PurgeUser(userId)
 
 // ─── First-team-becomes-active policy ────────────────────────────
 

@@ -718,6 +718,10 @@
         <Compile Include="InProcess\TeamCreationPolicyTests.fs" />
         <Compile Include="InProcess\TeamOwnershipTransferTests.fs" />
         <Compile Include="InProcess\TeamAdminLifecycleTests.fs" />
+        <!-- Phase 545 — user-scope offboard completeness: PurgeUser +
+             the user-membership-teardown lifecycle hook + end-to-end
+             DeprovisionTenant("user-<id>"). -->
+        <Compile Include="InProcess\UserMembershipTeardownTests.fs" />
         <Compile Include="InProcess\WithRequestHeadersPassthroughTests.fs" />
         <Compile Include="InProcess\CsrfPrefetchAnonymousGateTests.fs" />
         <Compile Include="InProcess\SvgPropTests.fs" />
