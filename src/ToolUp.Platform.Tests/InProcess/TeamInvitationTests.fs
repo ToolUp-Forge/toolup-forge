@@ -409,6 +409,7 @@ let tests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
                     InviterUserId = "alice@example.com"
+                    IssuedAt = DateTime.UtcNow
                 }
 
             do! ToolUp.Platform.Teams.PendingInviteStore.remove storage recipientEmail
@@ -520,6 +521,7 @@ let tests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(-1.0)
                     InviterUserId = "alice"
+                    IssuedAt = DateTime.UtcNow.AddDays(-8.0)
                 }
 
             do!
@@ -528,6 +530,7 @@ let tests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(-7.0)
                     InviterUserId = "alice"
+                    IssuedAt = DateTime.UtcNow.AddDays(-14.0)
                 }
 
             do!
@@ -536,6 +539,7 @@ let tests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
                     InviterUserId = "alice"
+                    IssuedAt = DateTime.UtcNow
                 }
 
             // upsert opportunistically compacts, so the two expired
@@ -557,6 +561,7 @@ let tests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddMilliseconds(200.0)
                     InviterUserId = "alice"
+                    IssuedAt = DateTime.UtcNow
                 }
 
             do! Async.Sleep 500
@@ -589,6 +594,7 @@ let tests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddSeconds(-60.0)
                     InviterUserId = "alice@example.com"
+                    IssuedAt = DateTime.UtcNow.AddDays(-1.0)
                 }
 
             let carol = {
@@ -618,10 +624,144 @@ let tests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
                     InviterUserId = "alice@example.com"
+                    IssuedAt = DateTime.UtcNow
                 }
 
             let! consumedFresh = tryConsumePendingForUser (pendingStore storage) ts (audit :> IAuditLog) carol
             Expect.isSome consumedFresh "re-issued (non-expired) entry auto-joins on next sign-in"
+        }
+    ]
+
+// ─── Phase 547 — pending-invite expiry observability ───────────────────
+//
+// The store's expiry sweep was silent before Phase 547: an invite that
+// lapsed unconsumed left the invitee in neither Members nor Pending
+// Invites and emitted no audit row. These tests pin the new behaviour:
+// every dropped entry produces exactly one `TeamInviteExpired` under the
+// team scope, repeat sweeps don't re-emit, and a store composed without
+// an audit log stays byte-for-byte silent (GP 11).
+
+let private expiredEntry teamId inviter issuedAt : PendingInviteByEmail = {
+    TeamId = teamId
+    Role = Member
+    ExpiresAt = DateTime.UtcNow.AddSeconds -60.0
+    InviterUserId = inviter
+    IssuedAt = issuedAt
+}
+
+let private teamInviteExpiredRows (audit: CapturingAuditLog) =
+    audit.Recorded
+    |> List.choose (fun (scope, e) ->
+        match e with
+        | TeamInviteExpired p -> Some(scope, p)
+        | _ -> None)
+
+[<Tests>]
+let pendingInviteExpiryAuditTests =
+    testList "PendingInviteExpiryAudit" [
+        testCaseAsync "sweepExpired emits one TeamInviteExpired per dropped entry; repeat sweep emits none"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let audit = CapturingAuditLog()
+
+            let store =
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                :> IPendingInviteStore
+
+            // Seed three entries that are still valid at upsert time (so
+            // upsert's opportunistic compaction leaves them in place and
+            // emits nothing), then let them all lapse together and sweep.
+            let soon email : PendingInviteByEmail = {
+                TeamId = "teamA"
+                Role = Member
+                ExpiresAt = DateTime.UtcNow.AddSeconds 2.0
+                InviterUserId = "alice@example.com"
+                IssuedAt = DateTime.UtcNow
+            }
+
+            for email in [ "a@x.com"; "b@x.com"; "c@x.com" ] do
+                let! upserted = store.Upsert(email, soon email)
+                Expect.isOk upserted "seed upsert succeeds"
+
+            Expect.isEmpty (teamInviteExpiredRows audit) "no expiry rows while entries are still valid"
+
+            // Sleep past the 2s expiry (plus margin for CI scheduler jitter).
+            do! Async.Sleep 2600
+
+            let! swept = store.SweepExpired()
+            Expect.equal swept (Ok 3) "sweep drops all three lapsed entries"
+
+            let rows = teamInviteExpiredRows audit
+            Expect.equal (List.length rows) 3 "exactly one TeamInviteExpired per dropped entry"
+
+            Expect.isTrue
+                (rows |> List.forall (fun (scope, _) -> scope = "team-teamA"))
+                "each row recorded under the team scope"
+
+            let emails = rows |> List.map (fun (_, p) -> p.InviteeEmail) |> List.sort
+            Expect.equal emails [ "a@x.com"; "b@x.com"; "c@x.com" ] "each dropped email named once"
+
+            // Repeat sweep: nothing left, no re-emission.
+            let! sweptAgain = store.SweepExpired()
+            Expect.equal sweptAgain (Ok 0) "second sweep finds nothing further"
+            Expect.equal (List.length (teamInviteExpiredRows audit)) 3 "no re-emission on repeat sweep"
+        }
+
+        testCaseAsync "TryConsumeForEmail on a lapsed entry drops it and emits one TeamInviteExpired"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let audit = CapturingAuditLog()
+
+            let store =
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                :> IPendingInviteStore
+
+            let issuedAt = DateTime.UtcNow.AddDays -3.0
+            // Seed via the no-audit module function so the seeding is silent
+            // and only the consume path's emission is under test.
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                    storage
+                    "late@x.com"
+                    (expiredEntry "teamB" "alice@example.com" issuedAt)
+
+            let! consumed = store.TryConsumeForEmail "late@x.com"
+            Expect.equal consumed (Ok None) "a lapsed entry consumes as absent"
+
+            let rows = teamInviteExpiredRows audit
+            Expect.equal (List.length rows) 1 "exactly one expiry row on the consume path"
+
+            let scope, payload = rows.Head
+            Expect.equal scope "team-teamB" "recorded under the team scope"
+            Expect.equal payload.InviteeEmail "late@x.com" "names the invitee email"
+            Expect.equal payload.InviterUserId "alice@example.com" "names the inviter"
+            Expect.equal payload.Role Member "carries the role"
+            Expect.equal payload.IssuedAt issuedAt "carries the stored issue timestamp"
+        }
+
+        testCaseAsync "store composed without an audit log stays silent on expiry (GP 11)"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let audit = CapturingAuditLog()
+
+            // 2-arg constructor — no audit log wired. The store must still
+            // sweep correctly; it simply records nothing.
+            let store =
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
+
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                    storage
+                    "x@x.com"
+                    (expiredEntry "teamC" "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
+
+            let! consumed = store.TryConsumeForEmail "x@x.com"
+            Expect.equal consumed (Ok None) "lapsed entry still consumes as absent without a log"
+
+            let! swept = store.SweepExpired()
+            Expect.equal swept (Ok 0) "nothing left for the sweep after the consume dropped it"
+
+            Expect.isEmpty audit.Recorded "no audit log wired into the store → no emission (GP 11)"
         }
     ]
 
@@ -711,6 +851,7 @@ let activeTeamPolicyTests =
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
                     InviterUserId = "alice@example.com"
+                    IssuedAt = DateTime.UtcNow
                 }
 
             let carol = {

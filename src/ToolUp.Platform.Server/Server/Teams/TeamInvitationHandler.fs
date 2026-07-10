@@ -454,6 +454,7 @@ let teamInvitationApi
                             Role = req.Role
                             ExpiresAt = expiresAt
                             InviterUserId = access.UserId
+                            IssuedAt = DateTime.UtcNow
                         }
 
                         let pendingStore =

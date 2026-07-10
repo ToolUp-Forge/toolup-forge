@@ -828,6 +828,7 @@ let compose
             resolvedBlobStorage
             resolvedNotificationChannel
             resolvedLogger
+            auditLog
             pendingInviteStoreOverride
 
     // Phase 4b — Platform Admin store + one-shot bootstrap from

@@ -1555,6 +1555,36 @@ type TeamInviteRedeemedPayload = {
     RemainingUses: int
 }
 
+/// Phase 547 — an email-keyed pending invite expired unconsumed and was
+/// swept from `IPendingInviteStore`. Emitted once per dropped entry by
+/// every sweep site in the store impl (`SweepExpired`, the opportunistic
+/// compaction inside `Upsert`, and the expired-branch of
+/// `TryConsumeForEmail`), recorded under the `team-{TeamId}` scope.
+/// Without it the sweep is silent — the invitee ends up in neither the
+/// Members panel nor Pending Invites and nobody is told, so the
+/// operator's mental model diverges permanently from system state
+/// (GP 6, "audit the silent path"). PII envelope matches the sibling
+/// `TeamInviteAcceptedFromPending*` events, which already carry the
+/// invitee email verbatim for this team-scoped, admin-only trail.
+type TeamInviteExpiredPayload = {
+    TeamId: string
+    /// Lower-cased email the invite was keyed on (the store's map key).
+    InviteeEmail: string
+    /// Inviter captured at issue time — the natural recipient of the
+    /// optional expiry notification (Phase 547.C).
+    InviterUserId: string
+    /// Role the invitee would have been granted had they signed in in
+    /// time.
+    Role: TeamRole
+    /// When the invite was issued. `DateTime.MinValue` for entries
+    /// persisted before Phase 547 added `PendingInviteByEmail.IssuedAt`
+    /// (the record decodes leniently — a missing field defaults rather
+    /// than quarantining the blob).
+    IssuedAt: System.DateTime
+    /// The entry's `ExpiresAt` — the instant it became unconsumable.
+    ExpiredAt: System.DateTime
+}
+
 /// Phase 66 Stream C.1 (continuation) — an `IAnonymousSessionMigrator`
 /// ran on the first authenticated request following an anonymous
 /// session in the same browser. Emitted by
@@ -2548,6 +2578,12 @@ type AuditEvent =
     /// invite token. Emitted alongside `TeamInviteAccepted` for
     /// substrate-level observability.
     | TeamInviteRedeemed of TeamInviteRedeemedPayload
+    /// Phase 547 — an email-keyed pending invite expired unconsumed and
+    /// was swept from the store. One row per dropped entry, recorded
+    /// under `team-{TeamId}` scope. Makes the previously-silent expiry
+    /// sweep observable so an operator can see (and re-issue) an invite
+    /// that lapsed before the invitee signed in (GP 6).
+    | TeamInviteExpired of TeamInviteExpiredPayload
     /// Phase 21d — workflow-action invocation outcome (succeeded /
     /// failed / skipped_replay / skipped_pending). Emitted by the
     /// `WorkflowEngine` for every action the ledger resolves, so
@@ -2827,6 +2863,7 @@ module AuditEvent =
         | TeamInviteAcceptedFromPendingFailed _ -> "TeamInviteAcceptedFromPendingFailed"
         | TeamInviteRevoked _ -> "TeamInviteRevoked"
         | TeamInviteRedeemed _ -> "TeamInviteRedeemed"
+        | TeamInviteExpired _ -> "TeamInviteExpired"
         | WorkflowActionExecuted _ -> "WorkflowActionExecuted"
         | ConsentRecorded _ -> "ConsentRecorded"
         | AdImpressionRecorded _ -> "AdImpressionRecorded"

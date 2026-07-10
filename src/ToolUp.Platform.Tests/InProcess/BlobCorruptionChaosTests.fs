@@ -63,6 +63,7 @@ let private freshPending teamId : PendingInviteByEmail = {
     Role = Member
     ExpiresAt = DateTime.UtcNow.AddDays 7.0
     InviterUserId = "alice@example.com"
+    IssuedAt = DateTime.UtcNow
 }
 
 // ─── Share-token fixtures ────────────────────────────────────────────

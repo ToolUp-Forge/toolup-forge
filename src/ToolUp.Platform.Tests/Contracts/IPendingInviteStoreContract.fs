@@ -26,6 +26,7 @@ let private freshPending teamId : PendingInviteByEmail = {
     Role = Member
     ExpiresAt = DateTime.UtcNow.AddDays 7.0
     InviterUserId = "alice@example.com"
+    IssuedAt = DateTime.UtcNow
 }
 
 let private expiredPending teamId : PendingInviteByEmail = {
@@ -33,6 +34,7 @@ let private expiredPending teamId : PendingInviteByEmail = {
     Role = Member
     ExpiresAt = DateTime.UtcNow.AddSeconds -60.0
     InviterUserId = "alice@example.com"
+    IssuedAt = DateTime.UtcNow.AddDays -7.0
 }
 
 let private okOrFail label result =

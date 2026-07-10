@@ -219,6 +219,7 @@ let private extractEventScopeId (audit: AuditEvent) : string option =
     | TeamInviteAcceptedFromPendingFailed p -> Some p.TeamId
     | TeamInviteRevoked p -> Some p.TeamId
     | TeamInviteRedeemed p -> Some p.TeamId
+    | TeamInviteExpired p -> Some p.TeamId
     | WorkflowActionExecuted _ ->
         // Phase 21d — payload carries SubmissionId + TransitionId +
         // ActionName + Status + Reason but no tenant ScopeId field.

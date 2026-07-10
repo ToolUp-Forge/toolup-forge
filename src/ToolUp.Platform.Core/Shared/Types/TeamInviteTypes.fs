@@ -135,6 +135,13 @@ type PendingInviteByEmail = {
     ExpiresAt: DateTime
     /// Inviter — captured at issue time for audit attribution.
     InviterUserId: string
+    /// Phase 547 — issue timestamp, captured when the pending entry is
+    /// created. Fed into the `TeamInviteExpired` audit payload so the
+    /// trail records how long the invite sat before it lapsed. Entries
+    /// persisted before Phase 547 lack this field and decode leniently
+    /// to `DateTime.MinValue` (the record converter defaults a missing
+    /// value-type field rather than quarantining the blob).
+    IssuedAt: DateTime
 }
 
 module TeamInviteTypes =

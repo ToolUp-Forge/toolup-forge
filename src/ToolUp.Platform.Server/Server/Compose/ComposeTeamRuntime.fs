@@ -37,6 +37,7 @@ let registerTeamPermissionStores
     (resolvedBlobStorage: IBlobStorage)
     (resolvedNotificationChannel: INotificationChannel)
     (resolvedLogger: ILogger)
+    (auditLog: IAuditLog)
     (pendingInviteStoreOverride: IPendingInviteStore option)
     : TeamStore option =
 
@@ -64,10 +65,14 @@ let registerTeamPermissionStores
     // unconditionally so `TeamInvitationHandler` resolves the
     // interface from DI without a mode-conditional fallback —
     // non-team modes never call into the store.
+    // Phase 547 — pass the resolved `IAuditLog` so the default store emits
+    // `TeamInviteExpired` under `team-{TeamId}` scope on every expiry sweep
+    // (GP 6). A consumer-supplied override owns its own audit wiring; the
+    // default single-instance store gets the log via its 3-arg constructor.
     let resolvedPendingInviteStore: IPendingInviteStore =
         pendingInviteStoreOverride
         |> Option.defaultWith (fun () ->
-            ToolUp.Platform.Teams.InMemoryPendingInviteStore(resolvedBlobStorage, resolvedLogger)
+            ToolUp.Platform.Teams.InMemoryPendingInviteStore(resolvedBlobStorage, resolvedLogger, Some auditLog)
             :> IPendingInviteStore)
 
     services.AddSingleton<IPendingInviteStore>(resolvedPendingInviteStore) |> ignore

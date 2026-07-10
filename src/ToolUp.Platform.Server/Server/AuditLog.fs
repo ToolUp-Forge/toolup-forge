@@ -657,6 +657,14 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> TeamInviteRedeemed(fromAuditJson<TeamInviteRedeemedPayload> j)
     }
     {
+        EventType = "TeamInviteExpired"
+        TryEncode =
+            (function
+            | TeamInviteExpired p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> TeamInviteExpired(fromAuditJson<TeamInviteExpiredPayload> j)
+    }
+    {
         EventType = "WorkflowActionExecuted"
         TryEncode =
             (function

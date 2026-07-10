@@ -166,37 +166,67 @@ module PendingInviteStore =
             }
     }
 
-    /// Drop every entry whose `ExpiresAt` is in the past. Returns the
-    /// compacted map and the count of removed entries. Pure over the
-    /// input — callers decide whether to persist the result.
-    let private dropExpired
+    /// Split the blob into the entries to keep (`ExpiresAt` at or after
+    /// `now`) and the expired entries to drop (`ExpiresAt` strictly before
+    /// `now`). Pure over the input — callers decide whether to persist the
+    /// kept map and whether to emit a `TeamInviteExpired` audit row per
+    /// dropped entry (Phase 547). Supersedes the earlier count-only
+    /// `dropExpired`: the dropped entries themselves are needed so the
+    /// audit hook can name inviter / invitee / team on each one.
+    let private partitionExpired
         (now: DateTime)
         (map: Map<string, PendingInviteByEmail>)
-        : Map<string, PendingInviteByEmail> * int =
+        : Map<string, PendingInviteByEmail> * (string * PendingInviteByEmail) list =
         let kept = map |> Map.filter (fun _ entry -> entry.ExpiresAt >= now)
 
-        let removed = map.Count - kept.Count
-        kept, removed
+        let expired =
+            map |> Map.toList |> List.filter (fun (_, entry) -> entry.ExpiresAt < now)
+
+        kept, expired
+
+    /// No-op expiry hook — the default the backward-compat module surface
+    /// (`sweepExpired` / `upsert` / `tryConsumeForEmail`) passes, so a
+    /// caller resolving the module functions directly, or an
+    /// `IPendingInviteStore` impl composed without an `IAuditLog`, behaves
+    /// byte-for-byte as before Phase 547 (GP 11). `InMemoryPendingInviteStore`
+    /// supplies a real hook only when an audit log was composed.
+    let private noExpiryHook: (string * PendingInviteByEmail) list -> Async<unit> =
+        fun _ -> async { return () }
 
     /// Walk the blob, remove every entry whose `ExpiresAt` is in the past,
     /// persist the compacted map iff anything was removed. Returns the
     /// number of removed entries. Useful as a scheduled background sweep
     /// (via `IJobScheduler`); also invoked opportunistically from `upsert`
     /// to keep storage growth bounded without a separate scheduled job.
-    let sweepExpired (storage: IBlobStorage) : Async<int> = async {
-        do! writeLock.WaitAsync() |> Async.AwaitTask
+    let internal sweepExpiredWith
+        (onExpired: (string * PendingInviteByEmail) list -> Async<unit>)
+        (storage: IBlobStorage)
+        : Async<int> =
+        async {
+            let! expired = async {
+                do! writeLock.WaitAsync() |> Async.AwaitTask
 
-        try
-            let! current = loadFromStore storage
-            let compacted, removed = dropExpired DateTime.UtcNow current
+                try
+                    let! current = loadFromStore storage
+                    let compacted, expired = partitionExpired DateTime.UtcNow current
 
-            if removed > 0 then
-                do! writeAndInvalidate storage compacted
+                    if not (List.isEmpty expired) then
+                        do! writeAndInvalidate storage compacted
 
-            return removed
-        finally
-            writeLock.Release() |> ignore
-    }
+                    return expired
+                finally
+                    writeLock.Release() |> ignore
+            }
+
+            // Emit AFTER the lock is released — audit `Record` may itself do
+            // storage IO (an `IEventStore` append), and holding the
+            // pending-invite write-lock across it would serialise every
+            // other store write behind audit emission.
+            do! onExpired expired
+            return List.length expired
+        }
+
+    let sweepExpired (storage: IBlobStorage) : Async<int> = sweepExpiredWith noExpiryHook storage
 
     /// Add or replace the pending entry for `email`. The caller is
     /// responsible for the Owner/Admin gate on the supplied
@@ -207,17 +237,35 @@ module PendingInviteStore =
     /// sweep. The full-blob overwrite is the cheap path here (the blob is
     /// flat JSON of typically dozens of entries; the read-compact-write
     /// round-trip is dominated by the storage round-trip regardless).
-    let upsert (storage: IBlobStorage) (email: string) (pending: PendingInviteByEmail) : Async<unit> = async {
-        do! writeLock.WaitAsync() |> Async.AwaitTask
+    let internal upsertWith
+        (onExpired: (string * PendingInviteByEmail) list -> Async<unit>)
+        (storage: IBlobStorage)
+        (email: string)
+        (pending: PendingInviteByEmail)
+        : Async<unit> =
+        async {
+            let! expired = async {
+                do! writeLock.WaitAsync() |> Async.AwaitTask
 
-        try
-            let! current = loadFromStore storage
-            let compacted, _ = dropExpired DateTime.UtcNow current
-            let updated = compacted |> Map.add (email.ToLowerInvariant()) pending
-            do! writeAndInvalidate storage updated
-        finally
-            writeLock.Release() |> ignore
-    }
+                try
+                    let! current = loadFromStore storage
+                    let compacted, expired = partitionExpired DateTime.UtcNow current
+                    let updated = compacted |> Map.add (email.ToLowerInvariant()) pending
+                    do! writeAndInvalidate storage updated
+                    return expired
+                finally
+                    writeLock.Release() |> ignore
+            }
+
+            // A re-issue to an email whose prior entry had already expired
+            // drops that stale entry here — emit its expiry alongside the
+            // fresh `TeamInviteIssued` the caller records, so the trail is
+            // complete rather than swallowing the lapse.
+            do! onExpired expired
+        }
+
+    let upsert (storage: IBlobStorage) (email: string) (pending: PendingInviteByEmail) : Async<unit> =
+        upsertWith noExpiryHook storage email pending
 
     /// Remove the pending entry for `email` and report whether anything
     /// was removed. Internal — the public `remove` (preserved below)
@@ -262,24 +310,42 @@ module PendingInviteStore =
     /// not expired. Returns the consumed entry so the caller can act on
     /// it (typically `ITeamStore.AddMember`). On stale (expired) entry,
     /// removes it from the blob and returns `None`.
-    let tryConsumeForEmail (storage: IBlobStorage) (email: string) : Async<PendingInviteByEmail option> = async {
-        do! writeLock.WaitAsync() |> Async.AwaitTask
+    let internal tryConsumeForEmailWith
+        (onExpired: (string * PendingInviteByEmail) list -> Async<unit>)
+        (storage: IBlobStorage)
+        (email: string)
+        : Async<PendingInviteByEmail option> =
+        async {
+            let! result, expired = async {
+                do! writeLock.WaitAsync() |> Async.AwaitTask
 
-        try
-            let! current = loadFromStore storage
-            let key = email.ToLowerInvariant()
+                try
+                    let! current = loadFromStore storage
+                    let key = email.ToLowerInvariant()
 
-            match Map.tryFind key current with
-            | None -> return None
-            | Some entry when entry.ExpiresAt < DateTime.UtcNow ->
-                do! writeAndInvalidate storage (Map.remove key current)
-                return None
-            | Some entry ->
-                do! writeAndInvalidate storage (Map.remove key current)
-                return Some entry
-        finally
-            writeLock.Release() |> ignore
-    }
+                    match Map.tryFind key current with
+                    | None -> return None, []
+                    | Some entry when entry.ExpiresAt < DateTime.UtcNow ->
+                        // The sign-in matched a pending entry that had
+                        // already lapsed — drop it AND surface the expiry
+                        // as an audit row. This is the worst silent path:
+                        // the invitee lands in neither Members nor Pending
+                        // Invites, so without the row nobody is told.
+                        do! writeAndInvalidate storage (Map.remove key current)
+                        return None, [ key, entry ]
+                    | Some entry ->
+                        do! writeAndInvalidate storage (Map.remove key current)
+                        return Some entry, []
+                finally
+                    writeLock.Release() |> ignore
+            }
+
+            do! onExpired expired
+            return result
+        }
+
+    let tryConsumeForEmail (storage: IBlobStorage) (email: string) : Async<PendingInviteByEmail option> =
+        tryConsumeForEmailWith noExpiryHook storage email
 
 /// Single-instance, in-memory-cached implementation of
 /// `IPendingInviteStore`. Wraps the `PendingInviteStore` module's
@@ -300,7 +366,42 @@ module PendingInviteStore =
 /// (raised as `PendingInvitesBlobCorrupt` by the load path) is surfaced
 /// at `Error` level rather than disappearing into a generic
 /// `StorageFailed` string.
-type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger) =
+type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger, auditLog: IAuditLog option) =
+
+    /// Phase 547 — per-expiry audit hook. Emits one `TeamInviteExpired`
+    /// under the entry's `team-{TeamId}` scope for every entry a sweep
+    /// drops. Best-effort: a throwing `IAuditLog.Record` (misconfigured
+    /// sink, unreachable `IEventStore`) must never fail the sweep — the
+    /// entry is already durably gone — so each emission is guarded and a
+    /// failure degrades to a `Warn`. No audit log composed → no-op (GP 11
+    /// / GP 13).
+    let onExpired: (string * PendingInviteByEmail) list -> Async<unit> =
+        match auditLog with
+        | None -> fun _ -> async { return () }
+        | Some log ->
+            fun expired -> async {
+                for email, entry in expired do
+                    try
+                        do!
+                            log.Record(
+                                $"team-{entry.TeamId}",
+                                TeamInviteExpired {
+                                    TeamId = entry.TeamId
+                                    InviteeEmail = email
+                                    InviterUserId = entry.InviterUserId
+                                    Role = entry.Role
+                                    IssuedAt = entry.IssuedAt
+                                    ExpiredAt = entry.ExpiresAt
+                                }
+                            )
+                    with ex ->
+                        logger.Warn(
+                            sprintf
+                                "[PendingInviteStore] TeamInviteExpired audit emission failed for team %s: %s"
+                                entry.TeamId
+                                ex.Message
+                        )
+            }
 
     /// Map a load-path failure onto the interface's error shape. A
     /// `PendingInvitesBlobCorrupt` is logged at `Error` (operator must
@@ -321,10 +422,16 @@ type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger) =
             PendingInviteStoreError.StorageFailed(sprintf "pending-invites blob was corrupt (quarantined to %s)" path)
         | _ -> PendingInviteStoreError.StorageFailed ex.Message
 
+    /// Phase 5h backward-compatible 2-arg constructor — composes the store
+    /// without an audit log, so the expiry sweep stays silent exactly as
+    /// before Phase 547 (GP 11). `ComposeTeamRuntime` uses the 3-arg form
+    /// to wire the resolved `IAuditLog` when one is present.
+    new(storage: IBlobStorage, logger: ILogger) = InMemoryPendingInviteStore(storage, logger, None)
+
     interface IPendingInviteStore with
         member _.Upsert(email, pending) = async {
             try
-                do! PendingInviteStore.upsert storage email pending
+                do! PendingInviteStore.upsertWith onExpired storage email pending
                 return Ok()
             with ex ->
                 return Error(toStorageError "Upsert" ex)
@@ -344,7 +451,7 @@ type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger) =
 
         member _.TryConsumeForEmail(email) = async {
             try
-                let! result = PendingInviteStore.tryConsumeForEmail storage email
+                let! result = PendingInviteStore.tryConsumeForEmailWith onExpired storage email
                 return Ok result
             with ex ->
                 return Error(toStorageError "TryConsumeForEmail" ex)
@@ -360,7 +467,7 @@ type InMemoryPendingInviteStore(storage: IBlobStorage, logger: ILogger) =
 
         member _.SweepExpired() = async {
             try
-                let! removed = PendingInviteStore.sweepExpired storage
+                let! removed = PendingInviteStore.sweepExpiredWith onExpired storage
                 return Ok removed
             with ex ->
                 return Error(toStorageError "SweepExpired" ex)
