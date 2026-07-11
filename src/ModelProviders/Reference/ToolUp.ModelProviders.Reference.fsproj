@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ReferenceModelFitProvider.fs" />
+    <Compile Include="ReferenceModelScoreProvider.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

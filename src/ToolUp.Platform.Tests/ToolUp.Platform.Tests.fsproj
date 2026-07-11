@@ -125,6 +125,8 @@
         <Compile Include="Contracts\IModelFitProviderContract.fs" />
         <!-- Phase 453 — model registry conformance (bound to the blob-backed default). -->
         <Compile Include="Contracts\IModelRegistryContract.fs" />
+        <!-- Phase 454 — model-scoring seam conformance (reference scorer + blob store). -->
+        <Compile Include="Contracts\IModelScorerContract.fs" />
         <!-- Phase 520 — grounding fact store contract pack. -->
         <Compile Include="Contracts\IFactStoreContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />
@@ -511,6 +513,7 @@
         <Compile Include="InProcess\InviteEmailCapabilityValidatorTests.fs" />
         <Compile Include="InProcess\SubjectDowngradeObservabilityTests.fs" />
         <Compile Include="InProcess\SecurityHeadersValidatorTests.fs" />
+        <Compile Include="InProcess\InternetReadinessScorecardTests.fs" />
         <Compile Include="InProcess\SecurityHardeningTests.fs" />
         <Compile Include="InProcess\ForwardedHeadersTrustValidatorTests.fs" />
         <Compile Include="InProcess\ForwardedHeadersTrustTests.fs" />

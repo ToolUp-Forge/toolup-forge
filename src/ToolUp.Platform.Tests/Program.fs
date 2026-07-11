@@ -19,6 +19,8 @@ let allTests =
         IModelFitProviderContract.tests
         // Phase 453 — model registry conformance (blob-backed default).
         IModelRegistryContract.tests
+        // Phase 454 — model-scoring seam conformance (reference scorer + blob store).
+        IModelScorerContract.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).

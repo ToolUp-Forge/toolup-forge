@@ -2378,6 +2378,56 @@ type ModelArtifactTransitionDeniedPayload = {
     ScopeId: string
 }
 
+// ─── Phase 454 — model-scoring audit payloads ──────────────────────────
+//
+// A scoring run applies a governed artifact (Phase 453) to a new dataset
+// vintage (Phase 448), landing predictions as a NEW dataset version. Both
+// the success and the typed refusals are audited under `_platform.audit`
+// (GP 6) carrying the artifact's composite-key hash, so an operator can
+// reconstruct which artifact scored which vintage into which output — and
+// which scores were refused and why — from the trail alone. PII-free:
+// identity + cardinality only; no dataset rows, no artifact bytes, no
+// prediction values travel.
+
+/// A scoring run produced predictions — a new dataset version whose
+/// provenance names the scoring artifact + input vintage. Reserved
+/// `SourceModule = "_platform.audit"`.
+type ModelScoredPayload = {
+    /// SHA-256 hex of the scoring artifact's composite identity (plan D5).
+    CompositeKeyHash: string
+    /// Resolved provider `Kind` that produced the predictions.
+    ProviderId: string
+    /// Provider version — a component of the artifact's composite identity.
+    ProviderVersion: string
+    /// `{scopeId}/{datasetId}@v{version}` of the input vintage scored.
+    InputVersion: string
+    /// `{scopeId}/{datasetId}@v{version}` of the predictions dataset version
+    /// the run wrote.
+    OutputVersion: string
+    /// Number of prediction rows written. Cardinality only.
+    RowCount: int64
+    /// Scope the score ran under.
+    ScopeId: string
+}
+
+/// A scoring run was refused as typed data — the approved-only guard
+/// rejected a non-`Approved` artifact (task C / GP 4), the input schema
+/// lacked a provider-required column, the input vintage was unavailable, or
+/// the provider raised. The refusal is itself audit-worthy (repeated denials
+/// are a governance-gate signal, like `ModelArtifactTransitionDenied`).
+/// Reserved `SourceModule = "_platform.audit"`.
+type ModelScoreRefusedPayload = {
+    CompositeKeyHash: string
+    /// Resolved provider `Kind` from the artifact's composite identity.
+    ProviderId: string
+    /// `{scopeId}/{datasetId}@v{version}` of the input vintage the caller
+    /// asked to score.
+    InputVersion: string
+    /// Why the score was refused (the `ScoreError` case name + detail).
+    Reason: string
+    ScopeId: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2859,6 +2909,13 @@ type AuditEvent =
     | ModelArtifactTransitioned of ModelArtifactTransitionedPayload
     /// Phase 453 — a model artifact lifecycle transition was refused (GP 4).
     | ModelArtifactTransitionDenied of ModelArtifactTransitionDeniedPayload
+    /// Phase 454 — a scoring run produced predictions as a new dataset
+    /// version (provenance names the artifact + input vintage).
+    | ModelScored of ModelScoredPayload
+    /// Phase 454 — a scoring run was refused (approved-guard / schema
+    /// mismatch / input unavailable / provider raised). A typed, audited
+    /// refusal — not an exception.
+    | ModelScoreRefused of ModelScoreRefusedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -2984,6 +3041,8 @@ module AuditEvent =
         | ModelArtifactRegistered _ -> "ModelArtifactRegistered"
         | ModelArtifactTransitioned _ -> "ModelArtifactTransitioned"
         | ModelArtifactTransitionDenied _ -> "ModelArtifactTransitionDenied"
+        | ModelScored _ -> "ModelScored"
+        | ModelScoreRefused _ -> "ModelScoreRefused"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

@@ -231,6 +231,12 @@
         <Compile Include="Server\ModelRegistryTypes.fs" />
         <Compile Include="Server\IModelRegistry.fs" />
         <Compile Include="Server\BlobModelRegistry.fs" />
+        <!-- Phase 454 — model scoring: the IModelScorer seam + default
+             envelope (rides IDatasetStore for the output vintage, the Phase 449
+             ArtifactRef / DatasetVersionRef, and the Phase 453 ModelArtifact),
+             then the batch IJobHandler over IModelRegistry + IJobScheduler. -->
+        <Compile Include="Server\IModelScorer.fs" />
+        <Compile Include="Server\ModelScoringJobHandler.fs" />
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
         <Compile Include="Server\JobScheduler.fs" />
@@ -435,6 +441,11 @@
         <Compile Include="Server\LocalSecretFilePermissionsValidator.fs" />
         <Compile Include="Server\OAuthFlowValidator.fs" />
         <Compile Include="Server\ConfigValidatorAggregator.fs" />
+        <!-- Phase 209 — internet-readiness secure-default scorecard: a
+             read-side projection over the aggregated preflight outcomes
+             (must compile after ConfigValidatorAggregator, which defines
+             ValidatorOutcome). Introduces no new validation. -->
+        <Compile Include="Server\InternetReadinessScorecard.fs" />
         <Compile Include="Server\RequestTimingMiddleware.fs" />
         <Compile Include="Server\MetricsMiddleware.fs" />
         <Compile Include="Server\MetricsEndpoint.fs" />
