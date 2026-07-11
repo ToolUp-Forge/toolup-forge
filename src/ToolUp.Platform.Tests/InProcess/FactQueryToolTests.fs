@@ -77,6 +77,7 @@ let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : 
                 DisplayFormat = displayFormat
                 Staleness = staleness
                 ProducingOperation = None
+                CanonicalMethod = None
             }
         }
     ] []
@@ -334,6 +335,11 @@ type private LeakyStore(leaked: Fact list) =
         member _.Assert(_, _) = async { return Error "read-only double" }
         member _.Get(_, _) = async { return None }
         member _.Query(_, _) = async { return leaked }
+
+        member _.QueryWithCompetition(_, _) = async {
+            return leaked |> List.map (fun f -> { Fact = f; CompetingMethods = [] })
+        }
+
         member _.QuerySupersessionChain(_, _) = async { return [] }
 
 let auditAndScopeTests =
