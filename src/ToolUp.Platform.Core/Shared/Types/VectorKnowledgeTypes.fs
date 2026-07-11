@@ -353,9 +353,9 @@ type IFactResolver =
 // re-implemented per surface; every choke point consults this seam.
 
 /// The egress surface a disclosure check is being made for — the first
-/// choke points (Phase 525). Later doors (exports, external doors,
-/// write-back, webhooks, certificates) extend this DU as their surfaces
-/// land.
+/// choke points (Phase 525), extended additively as later doors land
+/// with their surfaces (Phase 564: exports + webhooks). Remaining doors
+/// (external write-back, certificates) extend this DU the same way.
 type FactEgressSurface =
     /// Fact resolution into retrieval results / prompt context. Default-
     /// deny at retrieval — the model never *sees* a denied fact ("see but
@@ -367,6 +367,17 @@ type FactEgressSurface =
     /// Committing / publishing a narrative that references facts to a
     /// surfaceable store (KB commit, public-page publication).
     | FactNarrativePublication
+    /// A rendered export leaving the deployment as a document — the
+    /// Reporting render path over fact-referencing narrative content
+    /// (Phase 564.B). Denied values are redacted to the policy-naming
+    /// marker before rendering; the output notes withheld refs (id +
+    /// policy, never the value).
+    | FactExport
+    /// An outbound fact-event webhook payload (Phase 564.C — contract-
+    /// first: the surface + gate contract land before the emitter
+    /// exists, so the emitter is born consulting the gate; see
+    /// `FactWebhookEgress` for the pinned contract).
+    | FactWebhook
 
 module FactEgressSurface =
     /// Canonical string form, shared by audit events and diagnostics.
@@ -375,6 +386,8 @@ module FactEgressSurface =
         | FactRetrieval -> "Retrieval"
         | FactToolResult -> "ToolResult"
         | FactNarrativePublication -> "NarrativePublication"
+        | FactExport -> "Export"
+        | FactWebhook -> "Webhook"
 
 /// Per-fact outcome of the disclosure predicate at one egress surface.
 type FactDisclosureVerdict =
@@ -411,6 +424,63 @@ type IFactDisclosureGate =
     abstract Check:
         scopeId: string * principal: string * surface: FactEgressSurface * factIds: string list ->
             Async<Map<string, FactDisclosureVerdict>>
+
+// ─── Webhook egress contract (Phase 564.C) ───────────────────────────
+//
+// The outbound fact-event webhook emitter is a later surface that does
+// not exist yet; its gate contract lands FIRST so the emitter is born
+// consulting the gate rather than retrofitted ("doors land with their
+// surfaces"). THE CONTRACT — pinned by the disclosure test pack:
+//
+//   1. Every outbound fact-event payload MUST pass the fact ids it
+//      carries through the one `IFactDisclosureGate` at the
+//      `FactWebhook` surface before emission. The predicate is never
+//      re-implemented emitter-side — `permittedFactIds` below is the
+//      filter the emitter builds on.
+//   2. **Suppression-on-deny**: a denied fact is ABSENT from the
+//      outbound payload (the retrieval-door posture) — never annotated,
+//      never marker-substituted. A webhook subscriber sits outside the
+//      deployment's trust boundary; even a policy-naming marker would
+//      leak the fact's existence.
+//   3. Fail-closed: an id without an affirmative `FactDisclosable`
+//      verdict (denied, unknown, or unresolvable in scope) is
+//      suppressed.
+//   4. Audit rides the gate: every deny is audited by the gate itself
+//      (surface `"Webhook"`, fact id, policy ref, principal — GP 6);
+//      the emitter adds nothing.
+
+/// The `FactWebhook`-surface egress filter every outbound fact-event
+/// emitter consults at birth (Phase 564.C). No gate composed ⇒ the
+/// emitter must not emit fact ids at all or must treat the payload as
+/// unclassified per its own composition contract — this helper takes
+/// the gate, so "forgot the gate" is unrepresentable at the call site.
+module FactWebhookEgress =
+
+    /// Filter an outbound payload's fact ids through the disclosure
+    /// gate at the `FactWebhook` surface. Suppression-on-deny: only ids
+    /// with an affirmative `FactDisclosable` verdict survive; input
+    /// order and multiplicity are preserved. An empty input never
+    /// consults the gate.
+    let permittedFactIds
+        (gate: IFactDisclosureGate)
+        (scopeId: string)
+        (principal: string)
+        (factIds: string list)
+        : Async<string list> =
+        async {
+            match factIds with
+            | [] -> return []
+            | ids ->
+                let! verdicts = gate.Check(scopeId, principal, FactWebhook, ids)
+
+                return
+                    ids
+                    |> List.filter (fun id ->
+                        match verdicts.TryFind id with
+                        | Some FactDisclosable -> true
+                        | Some(FactNotDisclosable _)
+                        | None -> false)
+        }
 
 /// Wire-format record for a retrieved chunk surfaced to the AI client. A
 /// projection of `VectorMatch` that strips the embedding-pipeline internals

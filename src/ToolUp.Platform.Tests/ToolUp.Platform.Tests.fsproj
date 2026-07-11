@@ -721,6 +721,8 @@
         <Compile Include="InProcess\AnswerVerifierTests.fs" />
         <!-- Phase 525 — disclosure egress filtering, first choke points. -->
         <Compile Include="InProcess\DisclosureEgressTests.fs" />
+        <!-- Phase 564 — disclosure egress: export door + webhook contract. -->
+        <Compile Include="InProcess\DisclosureExportWebhookTests.fs" />
         <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
@@ -1056,6 +1058,8 @@
         <ProjectReference Include="..\AuthProviders\LdapActiveDirectory\LdapActiveDirectory.fsproj" />
         <!-- Phase 23 — Reporting Core (Markdown/Html renderers + IReportRenderer). -->
         <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
+        <!-- Phase 564 — Reporting Server (the disclosure export door in ReportApiHandler). -->
+        <ProjectReference Include="..\ToolUp.Reporting.Server\ToolUp.Reporting.Server.fsproj" />
         <!-- Phase 11.B follow-up — companion DLLs replacing prior
              <Compile Link> entries (each carries its own implementation
              plus Health / Validator types where present). -->

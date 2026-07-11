@@ -68,7 +68,7 @@ type PlaceholderSchema = {
     Required: bool
 }
 
-/// Concrete value supplied at render time. The DU mirrors
+/// Concrete value supplied at render time. The scalar cases mirror
 /// `PlaceholderKind` one-for-one. Supplying a value whose case
 /// doesn't match the schema's kind surfaces as `PlaceholderTypeMismatch`.
 type PlaceholderValue =
@@ -77,6 +77,21 @@ type PlaceholderValue =
     | DateValue of DateTimeOffset
     | ImageValue of bytes: byte[] * mimeType: string
     | TableValue of rows: Map<string, PlaceholderValue> list
+    /// Fact-referencing narrative content supplied for a `Text`-kind
+    /// placeholder — the typed channel through which narrative output
+    /// (whose `Metric` spans may carry fact refs) enters a rendered
+    /// export. Resolved by the report API handler *before* the renderer
+    /// runs: the handler applies the fact-disclosure export door (deny ⇒
+    /// the value is redacted to a policy-naming marker and the output
+    /// notes the withheld ref), then projects the document to the
+    /// format-appropriate text (`Html` templates get an HTML fragment —
+    /// substitute via a `{{key_raw}}` token to avoid double-escaping;
+    /// every other format gets markdown). Top-level values only: a
+    /// `NarrativeValue` nested inside `TableValue` rows is not resolved
+    /// (it renders as an empty cell). Handed directly to a renderer
+    /// without the handler, it fails validation as a kind mismatch — the
+    /// render path through the handler IS the egress door.
+    | NarrativeValue of document: ToolUp.Platform.Narrative.NarrativeDocument
 
 /// A typed template — the body bytes + schema + identifying metadata.
 /// Persisted via `IReportTemplateStore` (which delegates to
