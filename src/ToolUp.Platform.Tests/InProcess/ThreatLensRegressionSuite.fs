@@ -272,7 +272,11 @@ let private lens2ModeGating =
             AutoBootstrapDevAdminModeValidator.AutoBootstrapDevAdminModeValidator(config) :> IConfigValidator
             |> runValidator)
 
-    testList "Lens 2 — mode-gating / dev-bypass" [
+    // Sequenced: these cases mutate the process-global dev-admin-bootstrap env var,
+    // which SecureByDefaultValidatorTests (also testSequenced) reads — running them
+    // in Expecto's parallel batch would race. Matches the codebase env-var convention.
+    testSequenced
+    <| testList "Lens 2 — mode-gating / dev-bypass" [
         test "insecure: HeaderAuthProvider in Individual (production) mode with no escape hatch → Error" {
             let config = {
                 ServerConfig.defaults with
