@@ -595,6 +595,9 @@
              to Ok [] when no companion is wired. -->
         <Compile Include="Server\UserDirectoryApiHandler.fs" />
         <Compile Include="Server\BlobXmlRepository.fs" />
+        <!-- Phase 329 — DataProtection key-ring backend preflight. After
+             BlobXmlRepository.fs (shares its BlobDpKeyRing constants). -->
+        <Compile Include="Server\DataProtectionBackendValidator.fs" />
         <Compile Include="Server\LocaleResolver.fs" />
         <!-- Phase 11.G — reference-app probe + validator list helpers. -->
         <Compile Include="Server\HealthChecksFromEnv.fs" />

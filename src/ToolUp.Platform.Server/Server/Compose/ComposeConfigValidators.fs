@@ -100,6 +100,8 @@ let registerFirstPartyConfigValidators
         ShareTokenSigningKeyProvenanceValidator.ShareTokenSigningKeyProvenanceValidator(config, secretStore)
     ) // warn share-token signing key would auto-generate (unmanaged) in a production/multi-instance share-token deployment (Wave 19; self-gates to Ok otherwise)
 
+    addConfigValidator (DataProtectionBackendValidator.DataProtectionBackendValidator(resolvedBlobStorage)) // Phase 329 — refuse a misconfigured/unreachable DataProtection key-ring backend (silent ephemeral-key boot → cross-replica CSRF seal failure); security-class
+
     // Companion-contributed `IConfigValidator` instances (OIDC, Redis,
     // SMTP), wired through `ServerApp.withConfigValidator`. Registered
     // after the first-party set so their preflight messages follow.

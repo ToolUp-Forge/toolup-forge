@@ -65,6 +65,8 @@ let allTests =
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
+        // Phase 329 — fail-loud DataProtection key-ring backend (validator + Warn).
+        DataProtectionBackendTests.tests
         FileSecretStoreTests.tests
         FileSecretStoreAtomicityTests.tests
         // Phase 176 — transient-fault decorator substrate.

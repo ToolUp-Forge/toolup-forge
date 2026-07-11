@@ -34,8 +34,11 @@ open ToolUp.Platform.BlobStorage
 // ASP.NET Core has no synchronization context, so `RunSynchronously`
 // cannot deadlock here.
 
+// Shared with `DataProtectionBackendValidator` (Phase 329) so the
+// startup probe and the runtime repository can never drift onto
+// different container / prefix values. Not `private` for that reason.
 [<RequireQualifiedAccess>]
-module private BlobDpKeyRing =
+module BlobDpKeyRing =
     [<Literal>]
     let Container = "_platform"
 
@@ -43,8 +46,15 @@ module private BlobDpKeyRing =
     let Prefix = "dataprotection/"
 
 /// `IXmlRepository` that persists the DataProtection key ring through
-/// the resolved `IBlobStorage`.
-type BlobXmlRepository(blob: IBlobStorage) =
+/// the resolved `IBlobStorage`. A read failure is logged at `Warn`
+/// (Phase 329) — an empty result caused by an unreachable backend must
+/// not look identical to a genuinely-empty first-boot ring, because
+/// DataProtection responds to an empty ring by minting a fresh
+/// ephemeral key and every previously-sealed payload (CSRF tokens)
+/// then fails verification with nothing pointing at the blob store.
+type BlobXmlRepository(blob: IBlobStorage, ?logger: ILogger) =
+    let warn (message: string) = logger |> Option.iter _.Warn(message)
+
     interface IXmlRepository with
         member _.GetAllElements() : IReadOnlyCollection<XElement> =
             let elements = ResizeArray<XElement>()
@@ -53,15 +63,39 @@ type BlobXmlRepository(blob: IBlobStorage) =
                 try
                     blob.List(BlobDpKeyRing.Container, BlobDpKeyRing.Prefix)
                     |> Async.RunSynchronously
-                with _ -> []
+                with ex ->
+                    warn (
+                        sprintf
+                            "DataProtection key-ring List failed for container '%s' prefix '%s' — treating the ring as EMPTY for this read. If this deployment has previously persisted keys this is a read failure, NOT a first boot: DataProtection will mint a fresh ephemeral key and existing sealed payloads (e.g. CSRF tokens) will fail verification. Underlying error: %s"
+                            BlobDpKeyRing.Container
+                            BlobDpKeyRing.Prefix
+                            ex.Message
+                    )
+
+                    []
 
             for name in names do
                 try
                     match blob.Download(BlobDpKeyRing.Container, name) |> Async.RunSynchronously with
                     | Ok bytes -> elements.Add(XElement.Parse(Encoding.UTF8.GetString bytes))
-                    | Error _ -> ()
-                with _ ->
-                    ()
+                    | Error msg ->
+                        warn (
+                            sprintf
+                                "DataProtection key-ring Download failed for blob '%s' in container '%s' (prefix '%s') — skipping this key. A skipped key can invalidate payloads it sealed. Underlying error: %s"
+                                name
+                                BlobDpKeyRing.Container
+                                BlobDpKeyRing.Prefix
+                                msg
+                        )
+                with ex ->
+                    warn (
+                        sprintf
+                            "DataProtection key-ring Download/parse threw for blob '%s' in container '%s' (prefix '%s') — skipping this key. A skipped key can invalidate payloads it sealed. Underlying error: %s"
+                            name
+                            BlobDpKeyRing.Container
+                            BlobDpKeyRing.Prefix
+                            ex.Message
+                    )
 
             elements :> IReadOnlyCollection<XElement>
 

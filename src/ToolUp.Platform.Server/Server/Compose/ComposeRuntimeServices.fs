@@ -33,8 +33,15 @@ open ToolUp.Platform.Usage
 /// makes the hardened CSRF posture correct multi-instance (cloud blob
 /// = shared across replicas) and restart-safe (local file blob) with
 /// no session store / sticky LB. Harmless under `NoSecurityHardening`
-/// (nothing seals anything).
-let registerCachingAndDataProtection (services: IServiceCollection) (resolvedBlobStorage: IBlobStorage) : unit =
+/// (nothing seals anything). The resolved logger rides into
+/// `BlobXmlRepository` (Phase 329) so a key-ring read failure emits a
+/// `Warn` instead of being silently indistinguishable from an empty
+/// first-boot ring.
+let registerCachingAndDataProtection
+    (services: IServiceCollection)
+    (resolvedBlobStorage: IBlobStorage)
+    (resolvedLogger: ILogger)
+    : unit =
     services.AddMemoryCache() |> ignore
     services.AddDistributedMemoryCache() |> ignore
     services.AddResponseCompression() |> ignore
@@ -44,7 +51,7 @@ let registerCachingAndDataProtection (services: IServiceCollection) (resolvedBlo
     services.Configure<Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions>
         (fun (o: Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions) ->
             o.XmlRepository <-
-                (BlobXmlRepository(resolvedBlobStorage)
+                (BlobXmlRepository(resolvedBlobStorage, resolvedLogger)
                 :> Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository))
     |> ignore
 

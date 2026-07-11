@@ -258,6 +258,9 @@ ToolUp.Platform.BlobDatasetStore..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.
 ToolUp.Platform.BlobDatasetStoreModule (class)
 ToolUp.Platform.BlobDatasetStoreModule.create(ToolUp.Platform.IDataObjectStore) : ToolUp.Platform.IDatasetStore
 ToolUp.Platform.BlobDatasetStoreModule.createWithCodec(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDatasetCodec) : ToolUp.Platform.IDatasetStore
+ToolUp.Platform.BlobDpKeyRing (class)
+ToolUp.Platform.BlobDpKeyRing.Container : System.String (literal)
+ToolUp.Platform.BlobDpKeyRing.Prefix : System.String (literal)
 ToolUp.Platform.BlobEncryption (class)
 ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver (interface)
 ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver.ResolveKey(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.EncryptionTypes+EncryptionKey]
@@ -285,7 +288,7 @@ ToolUp.Platform.BlobStorageSelectionValidator+BlobStorageSelectionValidator..cto
 ToolUp.Platform.BlobWorkerCspContributor (class)
 ToolUp.Platform.BlobWorkerCspContributor..ctor()
 ToolUp.Platform.BlobXmlRepository (class)
-ToolUp.Platform.BlobXmlRepository..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Platform.BlobXmlRepository..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.BootstrapTeam (class)
 ToolUp.Platform.BootstrapTeam.bootstrap(ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog, ToolUp.Platform.TeamManagement+ITeamStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.BootstrapTeam.initialAdminEnvVar : System.String (literal)
@@ -509,7 +512,7 @@ ToolUp.Platform.ComposeNotifications+NotificationStack.SseConnectionManager : To
 ToolUp.Platform.ComposeNotifications+NotificationStack.TransactionalDispatcher : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher] { get }
 ToolUp.Platform.ComposeRuntimeServices (class)
 ToolUp.Platform.ComposeRuntimeServices.registerAlertRuleEngine(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger) : System.Void
-ToolUp.Platform.ComposeRuntimeServices.registerCachingAndDataProtection(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.BlobStorage+IBlobStorage) : System.Void
+ToolUp.Platform.ComposeRuntimeServices.registerCachingAndDataProtection(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerCoreSdkSingletons(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDataCatalog, ToolUp.Platform.IEventStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.INotificationChannel, ToolUp.Platform.INarrativeStore) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerCors(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerFileManagementRuntime(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.Usage.IUsageLog, ToolUp.Platform.ILogger) : System.Void
@@ -983,6 +986,9 @@ ToolUp.Platform.DataObjectStoreErasureHandler+DataObjectStoreErasureHandler (cla
 ToolUp.Platform.DataObjectStoreErasureHandler+DataObjectStoreErasureHandler..ctor(ToolUp.Platform.IDataObjectStore)
 ToolUp.Platform.DataObjectStoreErasureHandler+DataObjectStoreExporter (class)
 ToolUp.Platform.DataObjectStoreErasureHandler+DataObjectStoreExporter..ctor(ToolUp.Platform.IDataObjectStore)
+ToolUp.Platform.DataProtectionBackendValidator (class)
+ToolUp.Platform.DataProtectionBackendValidator+DataProtectionBackendValidator (class)
+ToolUp.Platform.DataProtectionBackendValidator+DataProtectionBackendValidator..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.DataSourceCallContext (class)
 ToolUp.Platform.DataSourceCallContext..ctor(System.String, ToolUp.Platform.DataSourceConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.DataSourceCallContext.Config : ToolUp.Platform.DataSourceConfig { get }
@@ -1983,6 +1989,13 @@ ToolUp.Platform.IModelRegistry.QueryBySpecHash(System.String, System.String) : M
 ToolUp.Platform.IModelRegistry.QueryByStatus(System.String, ToolUp.Platform.ModelArtifactStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]]
 ToolUp.Platform.IModelRegistry.Register(System.String, ToolUp.Platform.FitOutcome, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
 ToolUp.Platform.IModelRegistry.TransitionStatus(System.String, System.String, ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.TeamRole, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
+ToolUp.Platform.IModelScoreProvider (interface)
+ToolUp.Platform.IModelScoreProvider.Kind : System.String { get }
+ToolUp.Platform.IModelScoreProvider.Predict(ToolUp.Platform.ArtifactRef, ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScorePrediction, ToolUp.Platform.ScoreError]]
+ToolUp.Platform.IModelScoreProvider.ProviderVersion : System.String { get }
+ToolUp.Platform.IModelScoreProvider.RequiredInputColumns() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.IModelScorer (interface)
+ToolUp.Platform.IModelScorer.Score(ToolUp.Platform.ScoreRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.ScoreError]]
 ToolUp.Platform.INarrativePagePublisher (interface)
 ToolUp.Platform.INarrativePagePublisher.PublishAsync(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.SlugCollisionPolicy, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativePublishOutcome]
 ToolUp.Platform.INarrativeStore (interface)
@@ -2299,6 +2312,78 @@ ToolUp.Platform.IngestionStatusStore (class)
 ToolUp.Platform.IngestionStatusStore.DataType : System.String (literal)
 ToolUp.Platform.IngestionStatusStore.create(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IIngestionStatusStore
 ToolUp.Platform.IngestionStatusStore.createInMemory() : ToolUp.Platform.IIngestionStatusStore
+ToolUp.Platform.InternetReadinessScorecard (class)
+ToolUp.Platform.InternetReadinessScorecard.assess(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport
+ToolUp.Platform.InternetReadinessScorecard.catalog : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor] { get }
+ToolUp.Platform.InternetReadinessScorecard.gradeOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InternetReadinessScorecard+ControlStatus]) : ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade
+ToolUp.Platform.InternetReadinessScorecard.logIfEnabled(System.Boolean, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport]
+ToolUp.Platform.InternetReadinessScorecard.logScorecard(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport
+ToolUp.Platform.InternetReadinessScorecard.ofOutcomes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport
+ToolUp.Platform.InternetReadinessScorecard.render(ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport) : System.String
+ToolUp.Platform.InternetReadinessScorecard+ControlAssessment (class)
+ToolUp.Platform.InternetReadinessScorecard+ControlAssessment..ctor(System.String, ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory, System.Int32, ToolUp.Platform.InternetReadinessScorecard+ControlStatus, System.String)
+ToolUp.Platform.InternetReadinessScorecard+ControlAssessment.Category : ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlAssessment.Detail : System.String { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlAssessment.Name : System.String { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlAssessment.Status : ToolUp.Platform.InternetReadinessScorecard+ControlStatus { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlAssessment.Weight : System.Int32 { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor (class)
+ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor..ctor(System.String, ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory, System.Int32)
+ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor.Category : ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor.Name : System.String { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor.Weight : System.Int32 { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus (class)
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.Fail : ToolUp.Platform.InternetReadinessScorecard+ControlStatus { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.IsFail : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.IsNotAssessed : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.IsPass : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.IsWarn : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.NotAssessed : ToolUp.Platform.InternetReadinessScorecard+ControlStatus { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.Pass : ToolUp.Platform.InternetReadinessScorecard+ControlStatus { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.Tag : System.Int32 { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus.Warn : ToolUp.Platform.InternetReadinessScorecard+ControlStatus { get }
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus+Tags (class)
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus+Tags.Fail : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus+Tags.NotAssessed : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus+Tags.Pass : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ControlStatus+Tags.Warn : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport (class)
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport..ctor(ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InternetReadinessScorecard+ControlAssessment], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32)
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport.Controls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InternetReadinessScorecard+ControlAssessment] { get }
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport.Failing : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport.Grade : ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade { get }
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport.NotAssessed : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport.Score : System.Int32 { get }
+ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport.Warnings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory (class)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.Auth : ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.Edge : ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.IsAuth : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.IsEdge : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.IsLimits : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.IsTransport : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.Limits : ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.Tag : System.Int32 { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory.Transport : ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory+Tags (class)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory+Tags.Auth : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory+Tags.Edge : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory+Tags.Limits : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory+Tags.Transport : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategoryModule (class)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessCategoryModule.label(ToolUp.Platform.InternetReadinessScorecard+ReadinessCategory) : System.String
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade (class)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade.IsNotReady : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade.IsReady : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade.IsReadyWithWarnings : System.Boolean { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade.NotReady : ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade.Ready : ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade.ReadyWithWarnings : ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade.Tag : System.Int32 { get }
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade+Tags (class)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade+Tags.NotReady : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade+Tags.Ready : System.Int32 (literal)
+ToolUp.Platform.InternetReadinessScorecard+ReadinessGrade+Tags.ReadyWithWarnings : System.Int32 (literal)
 ToolUp.Platform.InviteEmailCapabilityValidator (class)
 ToolUp.Platform.InviteEmailCapabilityValidator+InviteEmailCapabilityValidator (class)
 ToolUp.Platform.InviteEmailCapabilityValidator+InviteEmailCapabilityValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -2612,6 +2697,29 @@ ToolUp.Platform.ModelRegistryErrorModule (class)
 ToolUp.Platform.ModelRegistryErrorModule.describe(ToolUp.Platform.ModelRegistryError) : System.String
 ToolUp.Platform.ModelRegistrySourceModule (class)
 ToolUp.Platform.ModelRegistrySourceModule.value : System.String (literal)
+ToolUp.Platform.ModelScorePolicy (class)
+ToolUp.Platform.ModelScorePolicy..ctor(System.Boolean)
+ToolUp.Platform.ModelScorePolicy.RequireApproved : System.Boolean { get }
+ToolUp.Platform.ModelScorePolicyModule (class)
+ToolUp.Platform.ModelScorePolicyModule.approvedOnly : ToolUp.Platform.ModelScorePolicy { get }
+ToolUp.Platform.ModelScorePolicyModule.permissive : ToolUp.Platform.ModelScorePolicy { get }
+ToolUp.Platform.ModelScoreProviderRegistry (class)
+ToolUp.Platform.ModelScoreProviderRegistry..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelScoreProvider])
+ToolUp.Platform.ModelScoreProviderRegistry.Kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelScoreProviderRegistry.Providers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelScoreProvider] { get }
+ToolUp.Platform.ModelScoreProviderRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelScoreProvider]
+ToolUp.Platform.ModelScorer (class)
+ToolUp.Platform.ModelScorer..ctor(ToolUp.Platform.ModelScoreProviderRegistry, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ModelScorePolicy)
+ToolUp.Platform.ModelScorerModule (class)
+ToolUp.Platform.ModelScorerModule.create(ToolUp.Platform.ModelScoreProviderRegistry, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ModelScorePolicy) : ToolUp.Platform.IModelScorer
+ToolUp.Platform.ModelScoringEnvelope (class)
+ToolUp.Platform.ModelScoringEnvelope.serialiseRequest(ToolUp.Platform.ScoreJobRequest) : System.String
+ToolUp.Platform.ModelScoringEnvelope.tryParseRequest(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScoreJobRequest, System.String]
+ToolUp.Platform.ModelScoringJobHandler (class)
+ToolUp.Platform.ModelScoringJobHandler..ctor(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelScorer, ToolUp.Platform.ILogger)
+ToolUp.Platform.ModelScoringJobHandlerModule (class)
+ToolUp.Platform.ModelScoringJobHandlerModule.HandlerName : System.String (literal)
+ToolUp.Platform.ModelScoringJobHandlerModule.create(ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelScorer, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.ModelSpecRef (class)
 ToolUp.Platform.ModelSpecRef..ctor(System.String, System.String)
 ToolUp.Platform.ModelSpecRef.Payload : System.String { get }
@@ -2752,6 +2860,8 @@ ToolUp.Platform.NarrativeSettingsModule (class)
 ToolUp.Platform.NarrativeSettingsModule.create(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : ToolUp.Platform.NarrativeSettings
 ToolUp.Platform.NarrativeSettingsModule.key(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : System.String
 ToolUp.Platform.NarrativeSettingsModule.ofPairs(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : ToolUp.Platform.NarrativeSettings
+ToolUp.Platform.NarrativeSupersession (class)
+ToolUp.Platform.NarrativeSupersession.findStaleNarratives(ToolUp.Platform.INarrativeStore, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.NarrativeEntryInfo, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag]]]]
 ToolUp.Platform.NoOpAnonymousSessionMigrator (class)
 ToolUp.Platform.NoOpAnonymousSessionMigrator..ctor()
 ToolUp.Platform.NoOpHostedTreeUsageExport (class)
@@ -3246,6 +3356,60 @@ ToolUp.Platform.ScopeAtCapacity..ctor(System.String, System.Int32, System.Int32)
 ToolUp.Platform.ScopeAtCapacity.Cap : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.CurrentCount : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.ScopeId : System.String { get }
+ToolUp.Platform.ScoreError (class)
+ToolUp.Platform.ScoreError.IsInputSchemaMismatch : System.Boolean { get }
+ToolUp.Platform.ScoreError.IsInputUnavailable : System.Boolean { get }
+ToolUp.Platform.ScoreError.IsNotApproved : System.Boolean { get }
+ToolUp.Platform.ScoreError.IsProviderFailed : System.Boolean { get }
+ToolUp.Platform.ScoreError.IsProviderNotFound : System.Boolean { get }
+ToolUp.Platform.ScoreError.IsStorageFailure : System.Boolean { get }
+ToolUp.Platform.ScoreError.Tag : System.Int32 { get }
+ToolUp.Platform.ScoreError+InputSchemaMismatch (class)
+ToolUp.Platform.ScoreError+InputSchemaMismatch.reason : System.String { get }
+ToolUp.Platform.ScoreError+InputUnavailable (class)
+ToolUp.Platform.ScoreError+InputUnavailable.reason : System.String { get }
+ToolUp.Platform.ScoreError+NotApproved (class)
+ToolUp.Platform.ScoreError+NotApproved.status : System.String { get }
+ToolUp.Platform.ScoreError+ProviderFailed (class)
+ToolUp.Platform.ScoreError+ProviderFailed.message : System.String { get }
+ToolUp.Platform.ScoreError+ProviderFailed.providerId : System.String { get }
+ToolUp.Platform.ScoreError+ProviderNotFound (class)
+ToolUp.Platform.ScoreError+ProviderNotFound.providerId : System.String { get }
+ToolUp.Platform.ScoreError+StorageFailure (class)
+ToolUp.Platform.ScoreError+StorageFailure.reason : System.String { get }
+ToolUp.Platform.ScoreError+Tags (class)
+ToolUp.Platform.ScoreError+Tags.InputSchemaMismatch : System.Int32 (literal)
+ToolUp.Platform.ScoreError+Tags.InputUnavailable : System.Int32 (literal)
+ToolUp.Platform.ScoreError+Tags.NotApproved : System.Int32 (literal)
+ToolUp.Platform.ScoreError+Tags.ProviderFailed : System.Int32 (literal)
+ToolUp.Platform.ScoreError+Tags.ProviderNotFound : System.Int32 (literal)
+ToolUp.Platform.ScoreError+Tags.StorageFailure : System.Int32 (literal)
+ToolUp.Platform.ScoreErrorModule (class)
+ToolUp.Platform.ScoreErrorModule.describe(ToolUp.Platform.ScoreError) : System.String
+ToolUp.Platform.ScoreJobRequest (class)
+ToolUp.Platform.ScoreJobRequest..ctor(System.String, System.String, ToolUp.Platform.DatasetVersionRef, System.String, System.String)
+ToolUp.Platform.ScoreJobRequest.ArtifactKeyHash : System.String { get }
+ToolUp.Platform.ScoreJobRequest.Input : ToolUp.Platform.DatasetVersionRef { get }
+ToolUp.Platform.ScoreJobRequest.OutputDatasetId : System.String { get }
+ToolUp.Platform.ScoreJobRequest.ScopeId : System.String { get }
+ToolUp.Platform.ScoreJobRequest.ScoredBy : System.String { get }
+ToolUp.Platform.ScorePrediction (class)
+ToolUp.Platform.ScorePrediction..ctor(ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow])
+ToolUp.Platform.ScorePrediction.Rows : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow] { get }
+ToolUp.Platform.ScorePrediction.Schema : ToolUp.Platform.DatasetSchema { get }
+ToolUp.Platform.ScoreProvenance (class)
+ToolUp.Platform.ScoreProvenance.InputVersionKey : System.String (literal)
+ToolUp.Platform.ScoreProvenance.ProviderKey : System.String (literal)
+ToolUp.Platform.ScoreProvenance.ProviderVersionKey : System.String (literal)
+ToolUp.Platform.ScoreProvenance.ScoredByKey : System.String (literal)
+ToolUp.Platform.ScoreProvenance.forOutput(ToolUp.Platform.ModelArtifact, ToolUp.Platform.DatasetVersionRef) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
+ToolUp.Platform.ScoreRequest (class)
+ToolUp.Platform.ScoreRequest..ctor(System.String, ToolUp.Platform.ModelArtifact, ToolUp.Platform.DatasetVersionRef, System.String, System.String)
+ToolUp.Platform.ScoreRequest.Artifact : ToolUp.Platform.ModelArtifact { get }
+ToolUp.Platform.ScoreRequest.Input : ToolUp.Platform.DatasetVersionRef { get }
+ToolUp.Platform.ScoreRequest.OutputDatasetId : System.String { get }
+ToolUp.Platform.ScoreRequest.ScopeId : System.String { get }
+ToolUp.Platform.ScoreRequest.ScoredBy : System.String { get }
 ToolUp.Platform.SecondaryIndex (class)
 ToolUp.Platform.SecondaryIndex+BlobIndex (class)
 ToolUp.Platform.SecondaryIndex+BlobIndex.create`2(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[TKey, System.String], Microsoft.FSharp.Core.FSharpFunc`2[TValue, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[TValue]]) : ToolUp.Platform.SecondaryIndex+BlobIndex`2[TKey, TValue]

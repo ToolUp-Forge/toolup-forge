@@ -468,7 +468,7 @@ let compose
     // Memory caches + response compression + Phase 9j DataProtection
     // key ring (extracted to
     // `ComposeRuntimeServices.registerCachingAndDataProtection`).
-    registerCachingAndDataProtection services resolvedBlobStorage
+    registerCachingAndDataProtection services resolvedBlobStorage resolvedLogger
 
     // Phase 1f — CORS service registration (extracted to
     // `ComposeRuntimeServices.registerCors`).
