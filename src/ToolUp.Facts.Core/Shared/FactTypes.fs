@@ -4,6 +4,7 @@
 namespace ToolUp.Facts
 
 open System
+open System.Globalization
 open System.Security.Cryptography
 open System.Text
 
@@ -188,6 +189,37 @@ module Disclosure =
         | Surfaceable -> "Surfaceable"
         | Internal -> "Internal"
         | Restricted policyRef -> sprintf "Restricted(%s)" policyRef
+
+/// Canonical display rendering of a `FactValue` under a metric's declared
+/// `DisplayFormat` (a .NET numeric format string, or "" for verbatim) —
+/// THE display form an answer quotes verbatim, shared by the retrieval
+/// resolver and the fact-reading tool surfaces so a value never renders
+/// two ways at two doors. Invariant culture throughout — the rendering is
+/// a wire/prompt value, never localised.
+module FactRendering =
+
+    let render (displayFormat: string) (value: FactValue) : string =
+        let fmt (d: decimal) =
+            if String.IsNullOrWhiteSpace displayFormat then
+                d.ToString CultureInfo.InvariantCulture
+            else
+                d.ToString(displayFormat, CultureInfo.InvariantCulture)
+
+        match value with
+        | Scalar d -> fmt d
+        | Interval(lo, hi) -> sprintf "%s to %s" (fmt lo) (fmt hi)
+        // A series fact references a data-object vintage, never inlines
+        // points (the scale rule) — render the reference.
+        | Series version -> sprintf "series %s" version
+        | Distribution buckets ->
+            buckets
+            |> Map.toList
+            |> List.map (fun (k, d) -> sprintf "%s: %s" k (fmt d))
+            |> String.concat "; "
+        | Categorical c -> c
+        // An `Absent` fact is a queryable data gap — surfaced honestly
+        // (GP 9: never fabricated into a number).
+        | Absent reason -> sprintf "absent (%s)" reason
 
 /// Content-addressing, lineage keys, and freshness — the decidable laws
 /// (L1–L4) the store is built on, factored out so both the store and its

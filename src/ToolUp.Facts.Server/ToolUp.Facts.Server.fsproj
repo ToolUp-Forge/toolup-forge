@@ -22,6 +22,7 @@
         <Compile Include="Server\FactStoreEvidenceSource.fs" />
         <Compile Include="Server\FactDisclosureGate.fs" />
         <Compile Include="Server\FactStoreFactResolver.fs" />
+        <Compile Include="Server\FactQueryTool.fs" />
         <Compile Include="Server\FactsCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.

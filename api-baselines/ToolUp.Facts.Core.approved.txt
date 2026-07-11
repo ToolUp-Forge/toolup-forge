@@ -70,6 +70,8 @@ ToolUp.Facts.FactModule.isForecast(ToolUp.Facts.Fact) : System.Boolean
 ToolUp.Facts.FactModule.lineageKey(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef) : System.String
 ToolUp.Facts.FactModule.methodIdentity(ToolUp.Facts.MethodRef) : System.String
 ToolUp.Facts.FactModule.valueHash(ToolUp.Facts.FactValue) : System.String
+ToolUp.Facts.FactRendering (class)
+ToolUp.Facts.FactRendering.render(System.String, ToolUp.Facts.FactValue) : System.String
 ToolUp.Facts.FactValue (class)
 ToolUp.Facts.FactValue.IsAbsent : System.Boolean { get }
 ToolUp.Facts.FactValue.IsCategorical : System.Boolean { get }

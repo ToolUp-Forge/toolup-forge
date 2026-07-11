@@ -45,6 +45,10 @@ ToolUp.Facts.FactQueryModule (class)
 ToolUp.Facts.FactQueryModule.all : ToolUp.Facts.FactQuery { get }
 ToolUp.Facts.FactQueryModule.asOf(System.DateTime, ToolUp.Facts.FactQuery) : ToolUp.Facts.FactQuery
 ToolUp.Facts.FactQueryModule.forSubjectMetric(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef) : ToolUp.Facts.FactQuery
+ToolUp.Facts.FactQueryTool (class)
+ToolUp.Facts.FactQueryTool.definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.FactQueryTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.FactQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactStoreEvidenceSource (class)
 ToolUp.Facts.FactStoreEvidenceSource..ctor(ToolUp.Facts.IFactStore)
 ToolUp.Facts.FactStoreEvidenceSourceModule (class)
