@@ -18,7 +18,11 @@ let rec private renderSpan (span: InlineSpan) : string =
     | Text t -> t
     | Emphasis t -> t
     | Strong t -> t
-    | Metric(label, value) -> sprintf "%s = %s" label value
+    // Phase 521 — plaintext has no attribute channel, so the optional
+    // `factRef` is intentionally dropped (the plaintext form is unchanged).
+    // An empty label degrades to the bare value (the fact-bearing metric
+    // grid carries the label elsewhere).
+    | Metric(label, value, _) -> if label = "" then value else sprintf "%s = %s" label value
     | Code t -> t
     | Link(href, spans) ->
         // Plaintext readers can't follow href on their own; surface the

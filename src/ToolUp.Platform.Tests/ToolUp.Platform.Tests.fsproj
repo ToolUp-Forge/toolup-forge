@@ -648,6 +648,8 @@
         <!-- Phase 85 — NarrativeFromData projector output-shape +
              determinism + graceful-degradation tests. -->
         <Compile Include="InProcess\NarrativeFromDataTests.fs" />
+        <!-- Phase 521 — fact-referencing narrative Metric spans. -->
+        <Compile Include="InProcess\NarrativeFactsTests.fs" />
         <Compile Include="InProcess\NarrativeChartsTests.fs" />
         <Compile Include="InProcess\EnumerableRoutesTests.fs" />
         <Compile Include="InProcess\NavStructuredDataTests.fs" />

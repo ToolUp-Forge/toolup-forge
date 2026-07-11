@@ -136,13 +136,13 @@ let tests =
 
                 Expect.equal
                     v0
-                    [ Strong "£21,800"; Text " "; Metric("▲", "+23.0%") ]
+                    [ Strong "£21,800"; Text " "; Metric("▲", "+23.0%", None) ]
                     "positive delta: up arrow + signed percent"
 
                 let (_, v1) = pairs[1]
-                Expect.equal v1 [ Strong "1,204"; Text " "; Metric("▼", "-4.0%") ] "negative delta: down arrow"
+                Expect.equal v1 [ Strong "1,204"; Text " "; Metric("▼", "-4.0%", None) ] "negative delta: down arrow"
                 let (_, v2) = pairs[2]
-                Expect.equal v2 [ Strong "10"; Text " "; Metric("■", "0.0%") ] "zero delta: neutral marker"
+                Expect.equal v2 [ Strong "10"; Text " "; Metric("■", "0.0%", None) ] "zero delta: neutral marker"
                 let (_, v3) = pairs[3]
                 Expect.equal v3 [ Strong "5" ] "no delta: value only"
             | other -> failtestf "expected KeyValueGrid, got %A" other

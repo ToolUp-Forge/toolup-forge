@@ -34,7 +34,7 @@ module NarrativeData =
         | Emphasis t -> t
         | Strong t -> t
         | Code t -> t
-        | Metric(label, value) -> sprintf "%s %s" label value
+        | Metric(label, value, _) -> if label = "" then value else sprintf "%s %s" label value
         | Link(_, spans) -> spans |> List.map spanText |> String.concat ""
         | Image(_, alt, _) -> alt
         | Br -> " "

@@ -56,7 +56,24 @@ let rec private renderSpan (span: InlineSpan) : string =
     | Text t -> escape t
     | Emphasis t -> sprintf "_%s_" (escape t)
     | Strong t -> sprintf "**%s**" (escape t)
-    | Metric(label, value) -> sprintf "**%s** %s" (escape label) (escape value)
+    | Metric(label, value, factRef) ->
+        // Phase 521 — the number renders as before; an optional `factRef`
+        // trails as an HTML annotation comment (Markdown passes raw HTML
+        // through, and a comment is invisible once the Markdown is rendered
+        // to HTML) so the fact pointer survives the Markdown form without
+        // altering the visible prose. Absent a ref the output is
+        // byte-identical to before (GP 11). An empty label drops the bold
+        // wrapper (the fact-bearing metric grid supplies the label as the
+        // grid key, not on the span).
+        let core =
+            if label = "" then
+                escape value
+            else
+                sprintf "**%s** %s" (escape label) (escape value)
+
+        match factRef with
+        | Some f -> sprintf "%s<!--fact:%s-->" core f
+        | None -> core
     | Code t -> sprintf "`%s`" t
     | Link(href, spans) -> sprintf "[%s](%s)" (renderSpans spans) (escapeUrl href)
     | Image(src, alt, title) ->

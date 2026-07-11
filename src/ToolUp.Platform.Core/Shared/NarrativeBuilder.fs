@@ -32,7 +32,14 @@ open System
 let text (s: string) : InlineSpan = Text s
 let emphasis (s: string) : InlineSpan = Emphasis s
 let strong (s: string) : InlineSpan = Strong s
-let metric (label: string) (value: string) : InlineSpan = Metric(label, value)
+let metric (label: string) (value: string) : InlineSpan = Metric(label, value, None)
+
+/// A fact-referencing metric span (Phase 521): the labelled number carries
+/// the content-addressed id of the fact it was quoted from, so renderers
+/// can pass the pointer through as a `data-fact` attribute / Markdown
+/// annotation. `metric` (above) is the fact-free form.
+let metricRef (label: string) (value: string) (factRef: string) : InlineSpan = Metric(label, value, Some factRef)
+
 let code (s: string) : InlineSpan = Code s
 
 /// Inline link. `spans` are the visible content of the link (so a link

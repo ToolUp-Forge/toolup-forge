@@ -414,6 +414,8 @@ let allTests =
         SitemapSearchIndexTests.tests
         // Phase 85 — NarrativeFromData analytics → Narrative projectors.
         NarrativeFromDataTests.tests
+        // Phase 521 — fact-referencing narrative Metric spans.
+        NarrativeFactsTests.tests
         NarrativeChartsTests.tests
         EnumerableRoutesTests.tests
         NavStructuredDataTests.tests

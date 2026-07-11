@@ -19,6 +19,17 @@ type Severity =
 /// both consumers format labelled numeric values (`r = 0.42`, `γ = 1.04`)
 /// frequently enough that renderers benefit from styling them distinctly.
 ///
+/// `Metric` additionally carries an optional `factRef` (Phase 521) — the
+/// content-addressed id of the fact this number is quoted from, so every
+/// number in a narrative can be a live pointer into the fact base rather
+/// than a copied value. `None` is the fact-free default: a metric span
+/// without a ref renders byte-identically to before (GP 11) and costs a
+/// fact-free deployment nothing (GP 13). When `Some`, renderers pass the
+/// ref through as a machine-readable annotation (an HTML `data-fact`
+/// attribute / a Markdown annotation comment); plaintext is unchanged
+/// because it has no attribute channel. The ref is an opaque id string —
+/// this file takes no dependency on the fact companion's types.
+///
 /// `Link` and `Image` extend the original analytics-shaped set with the
 /// two inline primitives marketing-shape pages need (Phase 80). `Link`
 /// carries its visible spans separately from its `href` so a link can
@@ -30,7 +41,7 @@ type InlineSpan =
     | Text of string
     | Emphasis of string
     | Strong of string
-    | Metric of label: string * value: string
+    | Metric of label: string * value: string * factRef: string option
     | Code of string
     | Link of href: string * spans: InlineSpan list
     | Image of src: string * alt: string * title: string option

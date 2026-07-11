@@ -82,6 +82,12 @@ module dataProp =
     /// scroll-target can locate the matching DOM node.
     let citeIdx (v: int) : IReactProperty = prop.custom ("data-cite-idx", string v)
 
+    /// `data-fact` — the content-addressed id of the fact a narrative
+    /// number (`InlineSpan.Metric`) was quoted from (Phase 521), so a
+    /// rendered metric can be traced back to the fact it references.
+    /// Read by fact-aware UI surfaces; inert otherwise.
+    let fact (v: string) : IReactProperty = prop.custom ("data-fact", v)
+
     /// `data-testid` — the de-facto convention for test selectors
     /// (Playwright / React Testing Library / Cypress). Not currently
     /// consumed by any forge code path but offered for downstream

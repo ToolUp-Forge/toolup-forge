@@ -111,6 +111,16 @@ module ChunkMetadata =
     [<Literal>]
     let OriginalRefKey = "_originalRef"
 
+    /// Referenced fact ids (Phase 521.D) — a comma-separated list of the
+    /// content-addressed fact ids the chunk's narrative spans cite
+    /// (`InlineSpan.Metric.factRef`). Stamped by narrative-commit when a
+    /// section carries fact-referencing metric spans; absent for chunks
+    /// with no fact references. Retrieval's fact→narrative join (Phase
+    /// 522.E) reads this so a resolved fact can prefer the narrative
+    /// chunks that cite it over generic similarity matches.
+    [<Literal>]
+    let FactRefsKey = "_factRefs"
+
 /// Coarse classification of where a chunk came from. Stamped onto chunk
 /// metadata at ingestion time under `ChunkMetadata.OriginKey`. RAG stays
 /// agnostic to the producer's domain types — KB / narrative / AI-context

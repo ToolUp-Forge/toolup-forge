@@ -260,7 +260,7 @@ module NarrativeFromData =
         let magnitude =
             (delta * 100.0).ToString(numberFormatString false opts.PercentDecimals, inv)
 
-        Metric(arrow, sprintf "%s%s%%" signPrefix magnitude)
+        Metric(arrow, sprintf "%s%s%%" signPrefix magnitude, None)
 
     /// Project a list of `(label, value, delta)` KPIs into a
     /// `KeyValueGrid`: each label keys a row whose value is the
@@ -281,6 +281,53 @@ module NarrativeFromData =
     /// `metricGridWith` under `FormatOptions.Default`.
     let metricGrid (kpis: (string * string * float option) list) : NarrativeElement =
         metricGridWith FormatOptions.Default kpis
+
+    // ─── Fact-referencing projectors (Phase 521) ─────────────────────
+    //
+    // The fact-bearing counterparts of the metric projectors: they emit
+    // `Metric` spans carrying the content-addressed id of the fact each
+    // number was quoted from, so a narrative references facts rather than
+    // copying them (plan D4). The fact-less overloads above are unchanged
+    // (plan D17 — a fact-free app pays nothing and is byte-identical), and
+    // a `None` fact ref on any row degrades to the fact-less rendering.
+
+    /// A fact-referencing metric inline span — a labelled number that
+    /// points into the fact base (Phase 521). `factRef = None` is
+    /// byte-identical to a plain metric span; `Some factId` carries the
+    /// live pointer, which renderers surface as an HTML `data-fact`
+    /// attribute / a Markdown annotation. `factId` is an opaque id string,
+    /// so this projector takes no dependency on the fact companion.
+    let factMetric (label: string) (value: string) (factRef: string option) : InlineSpan = Metric(label, value, factRef)
+
+    /// Fact-bearing KPI grid: like `metricGridWith`, but each KPI carries a
+    /// fourth `factRef` slot. When a KPI's `factRef` is `Some`, its value
+    /// renders as a fact-referencing `Metric` span (the number gains a live
+    /// fact pointer); the grid key already names the KPI, so the span's own
+    /// label is left empty. When `None`, the value renders as the plain
+    /// `Strong value` the fact-less grid emits — so a null-fact row is
+    /// byte-identical to `metricGridWith` (GP 11 / plan D17).
+    let metricGridWithFactsWith
+        (opts: FormatOptions)
+        (kpis: (string * string * float option * string option) list)
+        : NarrativeElement =
+        let row (label: string, value: string, delta: float option, factRef: string option) =
+            let valueSpan =
+                match factRef with
+                | Some _ -> Metric("", value, factRef)
+                | None -> Strong value
+
+            let valueSpans =
+                match delta with
+                | Some d -> [ valueSpan; Text " "; deltaSpan opts d ]
+                | None -> [ valueSpan ]
+
+            (label, valueSpans)
+
+        KeyValueGrid(kpis |> List.map row)
+
+    /// `metricGridWithFactsWith` under `FormatOptions.Default`.
+    let metricGridWithFacts (kpis: (string * string * float option * string option) list) : NarrativeElement =
+        metricGridWithFactsWith FormatOptions.Default kpis
 
     // ─── File-snapshot projector ─────────────────────────────────────
 

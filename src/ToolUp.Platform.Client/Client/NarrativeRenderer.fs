@@ -23,14 +23,28 @@ let rec private renderSpan (span: InlineSpan) : ReactElement =
             prop.className "font-mono text-[0.92em] px-1 py-[1px] bg-gray-100 rounded border border-gray-200"
             prop.text s
         ]
-    | Metric(label, value) ->
+    | Metric(label, value, factRef) ->
+        // Phase 521 — an optional `factRef` surfaces as a `data-fact`
+        // attribute so the number can be traced back to the fact it was
+        // quoted from; absent a ref the markup is unchanged (GP 11). An
+        // empty label drops the label + separator spans (the fact-bearing
+        // metric grid carries the label as its grid key).
+        let children =
+            if label = "" then
+                [ Html.span [ prop.className "font-semibold text-gray-900"; prop.text value ] ]
+            else
+                [
+                    Html.span [ prop.className "text-gray-500"; prop.text label ]
+                    Html.span [ prop.className "text-gray-800"; prop.text "=" ]
+                    Html.span [ prop.className "font-semibold text-gray-900"; prop.text value ]
+                ]
+
         Html.span [
             prop.className "inline-flex items-baseline gap-1 font-mono text-[0.92em]"
-            prop.children [
-                Html.span [ prop.className "text-gray-500"; prop.text label ]
-                Html.span [ prop.className "text-gray-800"; prop.text "=" ]
-                Html.span [ prop.className "font-semibold text-gray-900"; prop.text value ]
-            ]
+            match factRef with
+            | Some f -> dataProp.fact f
+            | None -> ()
+            prop.children children
         ]
     | Link(href, spans) ->
         Html.a [

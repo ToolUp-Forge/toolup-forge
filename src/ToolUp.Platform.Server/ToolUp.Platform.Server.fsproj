@@ -522,6 +522,8 @@
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
         <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />
         <Compile Include="Server\NotifyingNarrativeStore.fs" />
+        <!-- Phase 521.C — stale-narrative discovery (supersession walk). -->
+        <Compile Include="Server\NarrativeSupersession.fs" />
         <!-- Phase 495 — module API-factory helper: the per-module consumer
              factory shape (scope-aware getFileContents + settings-key
              convention + narrative-provenance publish) captured once.

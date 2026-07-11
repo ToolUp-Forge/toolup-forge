@@ -104,8 +104,25 @@ let rec private renderSpan (options: RenderOptions) (span: InlineSpan) : string 
     | Text t -> escape t
     | Emphasis t -> sprintf "<em>%s</em>" (escape t)
     | Strong t -> sprintf "<strong>%s</strong>" (escape t)
-    | Metric(label, value) ->
-        sprintf "<span class=\"narrative-metric\"><strong>%s</strong> %s</span>" (escape label) (escape value)
+    | Metric(label, value, factRef) ->
+        // Phase 521 — an optional `factRef` passes through as a
+        // machine-readable `data-fact` attribute so a rendered number can
+        // be traced back to the fact it was quoted from. Absent a ref the
+        // markup is byte-identical to before (GP 11). An empty label drops
+        // the `<strong>` wrapper (the fact-bearing metric grid uses the
+        // grid key as the label, leaving the span's own label empty).
+        let dataAttr =
+            match factRef with
+            | Some f -> sprintf " data-fact=\"%s\"" (escape f)
+            | None -> ""
+
+        let inner =
+            if label = "" then
+                escape value
+            else
+                sprintf "<strong>%s</strong> %s" (escape label) (escape value)
+
+        sprintf "<span class=\"narrative-metric\"%s>%s</span>" dataAttr inner
     | Code t -> sprintf "<code>%s</code>" (escape t)
     | Link(href, spans) ->
         let relAttr =
@@ -663,7 +680,7 @@ let tableOfContents (includeHeadings: bool) (doc: NarrativeDocument) : string =
                                 | Emphasis t
                                 | Strong t
                                 | Code t -> t
-                                | Metric(label, value) -> sprintf "%s %s" label value
+                                | Metric(label, value, _) -> if label = "" then value else sprintf "%s %s" label value
                                 | Link(_, inner) ->
                                     inner
                                     |> List.map (fun s ->

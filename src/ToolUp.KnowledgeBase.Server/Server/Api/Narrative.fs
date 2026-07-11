@@ -77,7 +77,21 @@ let ingestNarrative
                         }
 
                         let header = sprintf "Section %d · %s" (i + 1) section.Heading
-                        makeChunk Narrative fileName header body src)
+                        let chunk = makeChunk Narrative fileName header body src
+
+                        // Phase 521.D — record the fact ids this section's
+                        // metric spans reference in chunk metadata, so a
+                        // retrieval of the narrative chunk can surface its
+                        // underlying facts (transitive citation) and the
+                        // fact→narrative join (Phase 522.E) can prefer this
+                        // chunk when one of those facts is resolved. Absent
+                        // any reference the chunk is stamped as before.
+                        match NarrativeFacts.factRefsInSection section |> Set.toList with
+                        | [] -> chunk
+                        | refs -> {
+                            chunk with
+                                Metadata = chunk.Metadata.Add(ChunkMetadata.FactRefsKey, String.concat "," refs)
+                          })
 
                 let fullMarkdown = NarrativeMarkdown.render request.Document
                 let sizeBytes = int64 (Encoding.UTF8.GetByteCount fullMarkdown)
