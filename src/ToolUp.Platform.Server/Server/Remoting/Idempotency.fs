@@ -81,16 +81,41 @@ type InMemoryIdempotencyStore(?maxEntries: int, ?logger: ToolUp.Platform.ILogger
     /// re-added keys leaving a stale FIFO marker). Keeps `order.Count`
     /// close to `entries.Count` so subsequent eviction work doesn't
     /// scan through ghost entries.
+    ///
+    /// `TryPeek` and `TryDequeue` are each atomic but NOT atomic *together*:
+    /// a naive `peek head; if stale then dequeue head` races a concurrent
+    /// inserter/evictor that advances the head between the two calls, so the
+    /// `TryDequeue` would discard a *live* key's marker (the new head) that was
+    /// never inspected. That live entry then has no FIFO marker at all — an
+    /// orphan — so `order` drifts below `entries`, and once the queue runs out
+    /// of markers for the genuinely-old keys, eviction starts dropping the
+    /// *newest* keys instead of the oldest (a freshly-stored idempotency key
+    /// evicted ⇒ replay miss ⇒ handler re-execution — the very failure this
+    /// store guards against). So decide staleness against the value we
+    /// *actually* dequeued, and if it turns out to be live (the head raced
+    /// forward), re-enqueue it rather than orphan it. Re-queuing to the tail
+    /// perturbs FIFO order slightly, which the approximate-ordering contract on
+    /// `order` already permits.
     let compactStaleHeads () =
-        let mutable peeked = Unchecked.defaultof<string>
         let mutable keepCompacting = true
 
-        while keepCompacting && order.TryPeek(&peeked) do
-            if entries.ContainsKey peeked then
-                keepCompacting <- false
+        while keepCompacting do
+            let mutable peeked = Unchecked.defaultof<string>
+
+            if order.TryPeek(&peeked) && not (entries.ContainsKey peeked) then
+                let mutable dequeued = Unchecked.defaultof<string>
+
+                if order.TryDequeue(&dequeued) then
+                    if entries.ContainsKey dequeued then
+                        // The head advanced between peek and dequeue: we pulled
+                        // a live marker. Put it back — never orphan a live entry.
+                        order.Enqueue dequeued
+                        keepCompacting <- false
+                // else: genuinely stale head dropped; keep compacting.
+                else
+                    keepCompacting <- false
             else
-                let mutable _ignored = Unchecked.defaultof<string>
-                order.TryDequeue(&_ignored) |> ignore
+                keepCompacting <- false
 
     /// Phase 328 — the over-cap recovery signal. Increments the cumulative
     /// counter and emits an operator-visible `Warn`. This fires only on the
