@@ -442,7 +442,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 /// Create the built-in service-status-board admin module. The shell's
 /// `prepareModules` injects this in any non-Anonymous mode unless
 /// `ServiceStatusBoard = NoServiceStatusBoard`. Grouped under
-/// "Platform Admin" so the role-gated sidebar filter (commit 4f.2)
+/// "Platform Management" so the role-gated sidebar filter (commit 4f.2)
 /// hides the entry from non-admin callers.
 let create (config: ServiceStatusBoardConfig option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Service Status"

@@ -632,10 +632,10 @@ type PermissionsAdminMode =
 
 /// Branding for the Platform Admin module (Phase 4b). Auto-injected
 /// in any non-Anonymous mode unless `NoPlatformAdmin`. Client-side
-/// sidebar filter (added in commit 4f.2) hides the "Platform Admin"
-/// group from non-admin callers regardless of this setting — the
-/// branding here only controls the module's display when the user
-/// has the role.
+/// sidebar filter (added in commit 4f.2) hides the module's
+/// "Platform Management" group from non-admin callers regardless of
+/// this setting — the branding here only controls the module's
+/// display when the user has the role.
 type PlatformAdminConfig = { Name: string; Icon: ReactElement }
 
 /// Controls the built-in Platform Admin module (Phase 4b). The module
@@ -655,9 +655,10 @@ type PlatformAdminMode =
     /// SDK built-in with custom name/icon.
     | ConfiguredPlatformAdmin of PlatformAdminConfig
     /// Deployment-provided custom module in place of the SDK default.
-    /// The custom module must declare `withGroup "Platform Admin"` for
-    /// the shell's sidebar gate (4f.2) to hide it from non-admin
-    /// callers.
+    /// The custom module must declare `withGroup "Platform Admin"` (or
+    /// `withGroup "Platform Management"`) for the shell's sidebar gate
+    /// (4f.2, `ClientConfig.isPlatformAdminSidebarGroup`) to hide it
+    /// from non-admin callers.
     | ExternalPlatformAdmin of ErasedModule
 
 /// Branding for the health-monitor admin module (Phase 9p). Auto-
@@ -1160,8 +1161,8 @@ type ClientConfig = {
     WebhookAdmin: WebhookAdminMode
     /// Controls the Platform Admin module (Phase 4b). Active in every
     /// non-Anonymous mode unless set to `NoPlatformAdmin`. The shell
-    /// sidebar filter hides the "Platform Admin" group from callers
-    /// without `PlatformRole.PlatformAdmin` regardless of this setting
+    /// sidebar filter hides the module's "Platform Management" group
+    /// from callers without `PlatformRole.PlatformAdmin` regardless of this setting
     /// — the mode controls module *registration*, the role gates
     /// *visibility*. Default: SDK built-in. Server-side
     /// `PlatformAdminApi` is auto-injected by `compose` independently;
@@ -1594,23 +1595,48 @@ module ClientConfig =
             | SurfaceProfile.Team _ -> true
             | _ -> false)
 
-    /// Admin / management sidebar groups — the set kept visible for a
-    /// `PlatformRole.PlatformAdmin` caller under the
-    /// `NoActiveTeamLandingModuleId` no-team gate, so a team-less admin
-    /// still reaches the team-assignment tools (Team Manager lives in
-    /// "Team Management"). Mirrors the SDK built-ins' `withGroup` labels
-    /// (PlatformAdminUI / HealthMonitorUI / ServiceStatusBoardUI /
-    /// DataSubjectRequestAdminUI → "Platform Management"; TeamManagerUI /
-    /// PermissionsAdminUI / DataIngestionUI → "Team Management") plus the
-    /// consumer-convention "Platform Admin" group that the Phase 4b
-    /// role-gate already recognises. A module with no group is never in
-    /// the admin set.
+    /// Platform-scoped admin sidebar groups — visible ONLY to callers
+    /// holding `PlatformRole.PlatformAdmin`. Mirrors the SDK built-ins'
+    /// `withGroup` labels (PlatformAdminUI / HealthMonitorUI /
+    /// ServiceStatusBoardUI / DataSubjectRequestAdminUI /
+    /// TenantLifecycleAdminUI / PlatformUsersUI → "Platform Management")
+    /// plus the consumer-convention "Platform Admin" group that the
+    /// Phase 4b role-gate has recognised since commit 4f.2.
+    let private platformAdminSidebarGroups: Set<string> =
+        Set.ofList [ "Platform Admin"; "Platform Management" ]
+
+    /// Team-scoped admin sidebar group(s) — the management surfaces a
+    /// team Owner/Admin legitimately uses (TeamManagerUI /
+    /// PermissionsAdminUI / DataIngestionUI / TeamConfigUI /
+    /// WebhookAdminUI / UsageDashboard → "Team Management"). NOT gated
+    /// on `PlatformRole` — hiding these from non-platform-admins would
+    /// strip team Owners of their own management tools.
+    let private teamAdminSidebarGroups: Set<string> = Set.ofList [ "Team Management" ]
+
+    /// Union of the platform-scoped and team-scoped admin groups — the
+    /// set kept visible for a `PlatformRole.PlatformAdmin` caller under
+    /// the `NoActiveTeamLandingModuleId` no-team gate, so a team-less
+    /// admin still reaches the team-assignment tools (Team Manager lives
+    /// in "Team Management"). A module with no group is never in the
+    /// admin set.
     let private adminSidebarGroups: Set<string> =
-        Set.ofList [ "Platform Admin"; "Platform Management"; "Team Management" ]
+        Set.union platformAdminSidebarGroups teamAdminSidebarGroups
+
+    /// True iff the (optional) sidebar group is platform-scoped — i.e.
+    /// its entries should render only for `PlatformRole.PlatformAdmin`
+    /// callers. This is the predicate behind the shell's sidebar
+    /// role filter (Phase 4b, commit 4f.2). Team-scoped groups
+    /// ("Team Management") return `false`: their visibility is a
+    /// team-role concern, not a platform-role one.
+    let isPlatformAdminSidebarGroup (group: string option) : bool =
+        match group with
+        | Some g -> platformAdminSidebarGroups.Contains g
+        | None -> false
 
     /// True iff the (optional) sidebar group is an admin / management
-    /// group kept visible to a team-less platform admin under the no-team
-    /// gate. See `adminSidebarGroups` and `NoActiveTeamLandingModuleId`.
+    /// group (platform- OR team-scoped) kept visible to a team-less
+    /// platform admin under the no-team gate. See `adminSidebarGroups`
+    /// and `NoActiveTeamLandingModuleId`.
     let isAdminSidebarGroup (group: string option) : bool =
         match group with
         | Some g -> adminSidebarGroups.Contains g

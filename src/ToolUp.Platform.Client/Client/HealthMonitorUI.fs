@@ -663,9 +663,9 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 /// handler now gates on `AccessContext.canModifyPlatformConfig`
 /// (Platform Admin role) rather than per-team Owner/Admin — probes
 /// are deployment-wide data, so the gate is too. The sidebar group is
-/// "Platform Admin" (not the previous "Admin") so the shell's role-
-/// gated sidebar filter (commit 4f.2) hides the entry from non-admin
-/// callers. Existing Team Admins relying on HealthMonitor lose access
+/// "Platform Management" (not the previous "Admin") so the shell's
+/// role-gated sidebar filter (commit 4f.2) hides the entry from
+/// non-admin callers. Existing Team Admins relying on HealthMonitor lose access
 /// until they're also assigned `PlatformRole.PlatformAdmin`.
 let create (config: HealthMonitorConfig option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Health Monitor"

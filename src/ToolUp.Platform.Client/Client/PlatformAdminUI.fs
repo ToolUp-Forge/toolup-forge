@@ -14,7 +14,8 @@ open ToolUp.Platform
 // management endpoints: list current Platform Admins, assign new
 // admins, revoke existing ones. Auto-injected by the shell whenever
 // the caller's `Model.PlatformRole = Some PlatformAdmin` (the sidebar
-// gate added in commit 4f.2 hides the "Platform Admin" group otherwise).
+// gate added in commit 4f.2 hides the module's "Platform Management"
+// group otherwise).
 //
 // **Two tabs:**
 //   - "Admins" — the current admin list with assign / revoke controls.
@@ -31,8 +32,8 @@ open ToolUp.Platform
 //
 // Sibling KB content admin (`PlatformKnowledgeAdminUI`) ships from the
 // KnowledgeBase companion in commit 4f.4. Both modules sit under the
-// "Platform Admin" sidebar group alongside the re-grouped HealthMonitor
-// (4f.1).
+// "Platform Management" sidebar group alongside the re-grouped
+// HealthMonitor (4f.1).
 
 // ─── Model ───────────────────────────────────────────────────────────
 

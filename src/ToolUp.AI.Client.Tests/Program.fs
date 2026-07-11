@@ -25,6 +25,9 @@ let allTests =
         // Phase 54e — tenant-lifecycle diagnostics admin MVU
         // (TenantLifecycleAdminUI in Platform.Client tier).
         TenantLifecycleAdminUITests.tests
+        // Sidebar admin-group role gate — platform-scoped vs team-scoped
+        // group split behind the 4f.2 filter (Platform.Client tier).
+        SidebarAdminGroupGateTests.tests
     ]
 
 [<EntryPoint>]

@@ -148,7 +148,7 @@ module Client =
         /// Phase 4b — caller's resolved `PlatformRole`. `None` until
         /// the boot-time `IsPlatformAdmin` fetch resolves, OR after a
         /// fetch that returned false. `Some PlatformAdmin` unlocks the
-        /// "Platform Admin" sidebar group. Survives team switches —
+        /// platform-scoped admin sidebar groups. Survives team switches —
         /// the role is user-bound, not team-bound. Anonymous-mode
         /// deployments leave this `None` (the fetch returns false).
         PlatformRole: PlatformRole option
@@ -300,9 +300,10 @@ module Client =
         | MyTeamsLoaded of TeamInfo list
         /// Phase 4b — boot-time `IsPlatformAdmin` fetch resolved.
         /// `true` lifts `PlatformRole = Some PlatformAdmin` and reveals
-        /// the "Platform Admin" sidebar group; `false` (the default
-        /// for non-admins, Anonymous mode, and any error path) leaves
-        /// it `None` so the group stays hidden.
+        /// the platform-scoped admin sidebar groups ("Platform Admin" /
+        /// "Platform Management"); `false` (the default for non-admins,
+        /// Anonymous mode, and any error path) leaves it `None` so the
+        /// groups stay hidden.
         | PlatformRoleLoaded of bool
         /// 0.5.5 — `UserSession.localStorage.toolup-auth-token`
         /// transitioned `None → Some`. Re-runs the boot-time API
@@ -373,7 +374,7 @@ module Client =
 
     /// Phase 4b — Platform Admin API proxy. Used at shell startup to
     /// resolve the caller's `PlatformRole`; the result drives the
-    /// "Platform Admin" sidebar group's visibility (admin-only).
+    /// platform-scoped admin sidebar groups' visibility (admin-only).
     /// Visible to every authenticated caller (returns false for
     /// non-admins) — no extra gating beyond the standard `/api/*`
     /// auth middleware.
@@ -507,7 +508,7 @@ module Client =
     /// Phase 4b — fetch whether the caller holds
     /// `PlatformRole.PlatformAdmin`. Failure (CSRF/auth seam, network
     /// glitch, server doesn't expose the API yet) leaves the role
-    /// `None`, which keeps the "Platform Admin" sidebar group hidden —
+    /// `None`, which keeps the platform-scoped admin sidebar groups hidden —
     /// the safe default. Phase 121 — the failure routes to
     /// `BootLoadFailed` (this loader's warn was the precedent the
     /// degradation surface generalises): a failed role check is now
@@ -2189,24 +2190,33 @@ module Client =
                         not (managed.Contains m.Definition.Id) || accessible.Contains m.Definition.Id)
                 | None -> modules
 
-            // Phase 4b — hide the "Platform Admin" sidebar group from
-            // callers without `PlatformRole.PlatformAdmin`. Group label
-            // is the contract: any module declaring `withGroup
-            // "Platform Admin"` is gated by the role. Distinct from
-            // RBAC's per-module `Managed` / `Accessible` filter — that
-            // filter targets app-domain modules; the Platform Admin
-            // gate targets SDK-built-in admin modules whose Ids start
-            // with `_sdk.` and so bypass RBAC by design. Both gates
-            // compose: the user must pass RBAC AND (if the module is
-            // in the Platform Admin group) hold the role.
+            // Phase 4b — hide the platform-scoped admin sidebar groups
+            // ("Platform Admin" / "Platform Management" — see
+            // `ClientConfig.isPlatformAdminSidebarGroup`) from callers
+            // without `PlatformRole.PlatformAdmin`. Group label is the
+            // contract: any module declaring `withGroup` with one of
+            // those labels is gated by the role. Distinct from RBAC's
+            // per-module `Managed` / `Accessible` filter — that filter
+            // targets app-domain modules; the platform-admin gate
+            // targets SDK-built-in admin modules whose Ids start with
+            // `_sdk.` and so bypass RBAC by design. Both gates compose:
+            // the user must pass RBAC AND (if the module is in a
+            // platform-scoped group) hold the role.
+            //
+            // "Team Management" is deliberately NOT gated here: its
+            // write surfaces are for team Owners/Admins, a TEAM role the
+            // shell model doesn't carry (`TeamInfo` has no role field;
+            // TeamManagerUI derives the caller's role module-internally
+            // via `GetTeamMembers`). Blanket-hiding the group on
+            // `PlatformRole` would strip team Owners of Team Manager /
+            // Permissions admin, so it stays visible to every
+            // authenticated caller and the server-side Owner/Admin
+            // guards remain the enforcement (GP 12 — UI shape only).
             let adminGroupFiltered =
                 let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
 
                 rbacFiltered
-                |> List.filter (fun m ->
-                    match m.Group with
-                    | Some "Platform Admin" -> isAdmin
-                    | _ -> true)
+                |> List.filter (fun m -> isAdmin || not (ClientConfig.isPlatformAdminSidebarGroup m.Group))
 
             // Phase 66 Stream B.3 — per-module `Visibility` gate over the
             // resolved `SubjectKind`. Structurally replaces the
@@ -2704,7 +2714,8 @@ module Client =
         // role (via TOOLUP_INITIAL_PLATFORM_ADMIN or AutoBootstrapDevAdmin)
         // and should reach the admin surface. Non-admins never see the
         // entry because the role filter hides the entire "Platform
-        // Admin" group when `PlatformRole = None`.
+        // Management" group (the module's declared group) when
+        // `PlatformRole = None`.
         let platformAdmin =
             match config.PlatformAdmin with
             | NoPlatformAdmin -> []
@@ -2728,9 +2739,10 @@ module Client =
             | _, ConfiguredPermissionsAdmin cfg -> [ PermissionsAdminUI.create (Some cfg) ]
             | _, ExternalPermissionsAdmin custom -> [ custom ]
 
-        // Health monitor admin (Phase 9p): re-grouped to "Platform Admin"
-        // in commit 4f.1 + 4f.3 alongside the role re-gate to
-        // `canModifyPlatformConfig`. Mode-agnostic post-Phase-4b — same
+        // Health monitor admin (Phase 9p): role re-gated to
+        // `canModifyPlatformConfig` in commit 4f.1 + 4f.3; today it
+        // declares the "Platform Management" group, which the sidebar
+        // role filter hides from non-admins. Mode-agnostic post-Phase-4b — same
         // reasoning as the Platform Admin module above. Bootstrapped
         // admin in any mode (including Anonymous dev) reaches the
         // panels; non-admins are hidden by the sidebar role filter.
