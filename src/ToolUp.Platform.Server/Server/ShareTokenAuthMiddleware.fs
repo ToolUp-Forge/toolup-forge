@@ -21,6 +21,16 @@ open ToolUp.Platform
 // (Stream A.5) is the layer that rejects claim-bearer subjects on
 // routes whose `SurfaceRequirement` does not admit `ClaimBearerKind`.
 //
+// **Division of responsibility (Phase 333):** the middleware enforces
+// the claim's declared `RateLimit` — when the resolved claim carries a
+// `ShareTokenRateLimit` and an `IShareTokenRateLimiter` is composed,
+// `Admit` is consulted before the pipeline continues, and a denial is
+// written as 429 + `Retry-After`. This makes the per-token rate limit
+// apply on every claim-bearer route, not only consumers that remember
+// to call `Admit` themselves. Both gates are opt-in (GP 13): a claim
+// without a `RateLimit`, or a deployment without a composed limiter,
+// skips the gate entirely — byte-for-byte the prior behaviour.
+//
 // **MarkUsed is not called here** — the handler invokes
 // `IShareTokenStore.MarkUsed` after the consuming operation succeeds.
 // Matching today's Forms semantics (`PublicFormApiHandler`): a token
@@ -85,6 +95,31 @@ let private writeUnauthorized
 
         let body =
             sprintf "{\"error\":\"%s\",\"status\":401,\"error_description\":\"%s\"}" errorCode description
+
+        do! ctx.Response.WriteAsync body
+    }
+
+/// Phase 333 — 429 response for a per-token rate-limit denial,
+/// mirroring the platform's rate-limited shape (`Retry-After` seconds
+/// header, JSON body matching `writeUnauthorized`'s). `Admit` reports
+/// no window bookkeeping back to the caller, so `Retry-After` is the
+/// claim's full `RateLimit.Window` — an honest upper bound on when the
+/// rolling window frees a slot.
+let private writeRateLimited
+    (ctx: HttpContext)
+    (rate: ShareTokenRateLimit)
+    (errorCode: string)
+    (description: string)
+    : System.Threading.Tasks.Task =
+    task {
+        ctx.Response.StatusCode <- 429
+        ctx.Response.ContentType <- "application/json"
+
+        let retryAfter = max 1 (int (ceil rate.Window.TotalSeconds))
+        ctx.Response.Headers["Retry-After"] <- StringValues(string retryAfter)
+
+        let body =
+            sprintf "{\"error\":\"%s\",\"status\":429,\"error_description\":\"%s\"}" errorCode description
 
         do! ctx.Response.WriteAsync body
     }
@@ -186,8 +221,43 @@ type ShareTokenAuthMiddleware(next: RequestDelegate) =
 
                     match result with
                     | Ok claim ->
-                        ctx.Items[ShareTokenClaimItemsKey] <- box claim
-                        do! next.Invoke(ctx)
+                        // Phase 333 — enforce the claim's declared per-token
+                        // rate limit here so the control applies on every
+                        // claim-bearer route. Only consulted when the claim
+                        // carries a `RateLimit` AND a limiter is composed
+                        // (GP 13 — zero cost otherwise).
+                        let limiterGate =
+                            match claim.RateLimit with
+                            | None -> None
+                            | Some rate ->
+                                match ctx.RequestServices.GetService(typeof<IShareTokenRateLimiter>) with
+                                | :? IShareTokenRateLimiter as limiter -> Some(limiter, rate)
+                                | _ -> None
+
+                        match limiterGate with
+                        | None ->
+                            ctx.Items[ShareTokenClaimItemsKey] <- box claim
+                            do! next.Invoke(ctx)
+                        | Some(limiter, rate) ->
+                            let! admission = limiter.Admit(claim.ScopeId, claim.TokenId, rate)
+
+                            match admission with
+                            | Ok() ->
+                                ctx.Items[ShareTokenClaimItemsKey] <- box claim
+                                do! next.Invoke(ctx)
+                            | Error ShareTokenError.RateLimited ->
+                                let code, description = classifyError ShareTokenError.RateLimited
+                                // Phase 120 — uniform denial row alongside the 429.
+                                emitShareTokenDenial ctx code description
+                                do! writeRateLimited ctx rate code description
+                            | Error err ->
+                                // A limiter failing for a non-rate reason (e.g.
+                                // `StorageFailed` in a distributed impl) is a
+                                // token-path failure — same 401 shape as a
+                                // `Validate` error.
+                                let code, description = classifyError err
+                                emitShareTokenDenial ctx code description
+                                do! writeUnauthorized ctx code description
                     | Error err ->
                         let code, description = classifyError err
                         // Phase 120 — uniform denial row alongside the 401.

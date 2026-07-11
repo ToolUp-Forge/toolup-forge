@@ -441,6 +441,7 @@
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
+        <Compile Include="InProcess\ShareTokenMiddlewareRateLimitTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigrationTests.fs" />
         <Compile Include="InProcess\StoreIdSanitisingTests.fs" />
         <Compile Include="InProcess\SecureByDefaultValidatorTests.fs" />
