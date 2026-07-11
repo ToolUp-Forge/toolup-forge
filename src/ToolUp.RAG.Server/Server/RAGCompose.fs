@@ -593,6 +593,7 @@ let private makeNullBlobStorage () : IBlobStorage =
     { new IBlobStorage with
         member _.Upload(_, _, _) = async { return Ok "" }
         member _.Download(_, _) = async { return Error "no blob storage configured" }
+        member _.DownloadRange(_, _, _, _) = async { return Error "no blob storage configured" }
         member _.Delete(_, _) = async { return Ok() }
         member _.List(_, _) = async { return [] }
         member _.Exists(_, _) = async { return false }
@@ -1218,6 +1219,26 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     | Some rc -> rc.Snapshot()
                     | None -> config.PlatformKnowledgeBase
 
+                // Phase 558 — fact-first wiring. When the deployment composed
+                // the fact tier (`FactsCompose.withFactStore` registers the
+                // `IFactResolver` + `IFactDisclosureGate` alongside the store,
+                // before this compose runs), the pipeline picks both up here so
+                // the Phase 522 fact stage + the Phase 525 retrieval egress
+                // door fire with zero extra config. Absent registrations ⇒ the
+                // constructor args are omitted and the pipeline is
+                // byte-identical to a fact-less deployment (GP 11 / GP 13).
+                // The pair is structural: the fact compose never registers one
+                // without the other, so a resolver here always arrives gated.
+                let factResolverOpt =
+                    match probe.GetService(typeof<IFactResolver>) with
+                    | :? IFactResolver as r -> Some r
+                    | _ -> None
+
+                let disclosureGateOpt =
+                    match probe.GetService(typeof<IFactDisclosureGate>) with
+                    | :? IFactDisclosureGate as g -> Some g
+                    | _ -> None
+
                 RetrievalPipeline(
                     vectorStore,
                     cachedEmbedder,
@@ -1230,7 +1251,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     telemetry = telemetry,
                     // Phase 14y — query-size cap + audit sink for the hard refusal.
                     ?maxQueryChars = app.MaxQueryChars,
-                    eventStore = eventStore
+                    eventStore = eventStore,
+                    // Phase 558 — the fact stage + its retrieval egress door,
+                    // present exactly when the fact tier is composed.
+                    ?factResolver = factResolverOpt,
+                    ?disclosureGate = disclosureGateOpt
                 )
                 :> IRetrievalPipeline
 

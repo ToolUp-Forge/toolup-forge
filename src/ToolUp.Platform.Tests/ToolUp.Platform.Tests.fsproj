@@ -715,6 +715,8 @@
         <Compile Include="InProcess\AnswerVerifierTests.fs" />
         <!-- Phase 525 — disclosure egress filtering, first choke points. -->
         <Compile Include="InProcess\DisclosureEgressTests.fs" />
+        <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
+        <Compile Include="InProcess\FactResolverComposeTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

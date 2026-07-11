@@ -472,6 +472,9 @@ let allTests =
         AnswerVerifierTests.tests
         // Phase 525 — disclosure egress filtering, first choke points.
         DisclosureEgressTests.tests
+        // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
+        // resolver, the one-knob DI registration, the composed Stage-1 loop.
+        FactResolverComposeTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests
