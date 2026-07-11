@@ -3274,6 +3274,8 @@ ToolUp.Platform.GraphStoreMode.Tag : System.Int32 { get }
 ToolUp.Platform.GraphStoreMode+Tags (class)
 ToolUp.Platform.GraphStoreMode+Tags.CustomGraphStore : System.Int32 (literal)
 ToolUp.Platform.GraphStoreMode+Tags.InMemoryGraphStore : System.Int32 (literal)
+ToolUp.Platform.Grounding.CanonicalMethod (class)
+ToolUp.Platform.Grounding.CanonicalMethod.matches(System.String, System.String) : System.Boolean
 ToolUp.Platform.Grounding.DirectionOfBetter (class)
 ToolUp.Platform.Grounding.DirectionOfBetter.HigherIsBetter : ToolUp.Platform.Grounding.DirectionOfBetter { get }
 ToolUp.Platform.Grounding.DirectionOfBetter.IsHigherIsBetter : System.Boolean { get }
@@ -3294,7 +3296,8 @@ ToolUp.Platform.Grounding.IMetricRegistry.Subjects : Microsoft.FSharp.Collection
 ToolUp.Platform.Grounding.IMetricRegistry.TryGetMetric(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.MetricDefinition]
 ToolUp.Platform.Grounding.IMetricRegistry.TryGetSubject(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition]
 ToolUp.Platform.Grounding.MetricDefinition (class)
-ToolUp.Platform.Grounding.MetricDefinition..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.Grounding.DirectionOfBetter, System.String, ToolUp.Platform.Grounding.StalenessPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Grounding.MetricDefinition..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.Grounding.DirectionOfBetter, System.String, ToolUp.Platform.Grounding.StalenessPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Grounding.MetricDefinition.CanonicalMethod : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Grounding.MetricDefinition.Dimensionality : System.String { get }
 ToolUp.Platform.Grounding.MetricDefinition.Direction : ToolUp.Platform.Grounding.DirectionOfBetter { get }
 ToolUp.Platform.Grounding.MetricDefinition.DisplayFormat : System.String { get }

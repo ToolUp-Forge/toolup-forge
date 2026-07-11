@@ -103,7 +103,40 @@ type MetricDefinition = {
     /// gap planner can map a missing fact → this operation → its input
     /// schema → the data catalog (the closed loop's "computable" branch).
     ProducingOperation: string option
+    /// Optional **canonical-method** declaration (Phase 566 — D19
+    /// closure). Several methods computing one metric is normal and the
+    /// fact store never merges the competitors; this selector names which
+    /// method's lineage a *method-less* query resolves to by default, so
+    /// retrieval and planning pick deterministically instead of returning
+    /// whichever competing head enumerates first. The selector is matched
+    /// against method-identity strings (`computed:op:ver:hash` /
+    /// `asserted:principal` / `imported:cert`) per `CanonicalMethod.matches`
+    /// — a full identity matches exactly; a shorter selector matches any
+    /// identity it prefixes at a `:` boundary (`"computed:rollup"` matches
+    /// every version/parameterisation of the `rollup` operation). `None`
+    /// (the default) preserves the undeclared behaviour exactly (GP 11):
+    /// a method-less query surfaces every competing head. Selection is
+    /// never silent — competitors stay fully queryable, and the query
+    /// surface carries a derived competing-methods indicator (GP 9).
+    CanonicalMethod: string option
 }
+
+/// Matching semantics for a `MetricDefinition.CanonicalMethod` selector
+/// (Phase 566). Pure string logic over method-identity strings, shared by
+/// the fact store's query default and any surface that needs to explain
+/// which competitor a canonical declaration picks.
+[<RequireQualifiedAccess>]
+module CanonicalMethod =
+
+    /// Whether a method identity (`computed:op:ver:hash` /
+    /// `asserted:principal` / `imported:cert`) matches a canonical-method
+    /// selector: an exact match, or a segment-prefix match at a `:`
+    /// boundary (`"computed:rollup"` matches `"computed:rollup:2:p7"` but
+    /// never `"computed:rollup-alt:1:p0"`). Ordinal throughout — identity
+    /// strings are wire tokens, never localised text.
+    let matches (selector: string) (methodIdentity: string) : bool =
+        methodIdentity = selector
+        || methodIdentity.StartsWith(selector + ":", StringComparison.Ordinal)
 
 /// A registered subject hierarchy a module computes metrics over — a
 /// *dimension* of the entity space (a product hierarchy, a geography, an

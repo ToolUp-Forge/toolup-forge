@@ -31,8 +31,12 @@ open ToolUp.Platform.BlobStorage
 // module (the `ILineageStore` pattern) — a durable, scope-isolated,
 // queryable record without a core `AuditEvent` edit.
 
-/// Blob-backed default `IFactStore`. Construct via `BlobFactStore.create`.
-type BlobFactStore(storage: IBlobStorage, events: IEventStore, clock: unit -> DateTime) =
+/// Blob-backed default `IFactStore`. Construct via `BlobFactStore.create`
+/// (or `createWithRegistry` to enable Phase 566 canonical-method
+/// selection — `registry = None` preserves the registry-less behaviour
+/// byte-for-byte, GP 11).
+type BlobFactStore
+    (storage: IBlobStorage, events: IEventStore, registry: Grounding.IMetricRegistry option, clock: unit -> DateTime) =
 
     static let jsonOptions = FableConverters.create ()
 
@@ -100,6 +104,113 @@ type BlobFactStore(storage: IBlobStorage, events: IEventStore, clock: unit -> Da
         byT
         |> List.filter (fun f -> not (byT |> List.exists (fun g -> g.Supersedes = Some f.FactId)))
 
+    // ─── Canonical-method selection (Phase 566 — D19 closure) ─────────
+
+    // The competition key: two current heads *compete* when they share
+    // (subject, metric, period) but were produced by different methods
+    // (D19). The period `Label` is cosmetic and excluded, mirroring the
+    // lineage key's canonical period.
+    let competitionKey (f: Fact) =
+        f.Subject, f.Metric, f.Period.From, f.Period.To
+
+    // Resolve a method-less query's competing heads to the metric's
+    // registry-declared canonical method, where one is declared. Per
+    // competing group: no registry / no declaration → every head (the
+    // pre-566 behaviour, GP 11); a declaration with at least one matching
+    // head → only the matching head(s); a declaration no head matches →
+    // every head (an empty canonical lineage must surface the competitors,
+    // never hide the metric entirely — GP 9, and the competition indicator
+    // still discloses the contest).
+    let selectCanonical (heads: Fact list) : Fact list =
+        match registry with
+        | None -> heads
+        | Some reg ->
+            heads
+            |> List.groupBy competitionKey
+            |> List.collect (fun (_, group) ->
+                match group with
+                | []
+                | [ _ ] -> group
+                | contested ->
+                    let canonical =
+                        reg.TryGetMetric (List.head contested).Metric.Value
+                        |> Option.bind _.CanonicalMethod
+
+                    match canonical with
+                    | None -> contested
+                    | Some selector ->
+                        match
+                            contested
+                            |> List.filter (fun f ->
+                                Grounding.CanonicalMethod.matches selector (Fact.methodIdentity f.Method))
+                        with
+                        | [] -> contested
+                        | matching -> matching)
+
+    // The shared query pipeline: clause filters → L4 visibility → (for a
+    // method-less current-heads query) canonical selection. Returns the
+    // current heads at `t` (the competition base every returned fact's
+    // indicator derives from) alongside the sorted listing.
+    let runQuery (scopeId: string) (query: FactQuery) : Async<Fact list * Fact list> = async {
+        let! all = loadAll scopeId
+        let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
+
+        // Clause filters minus `Method` first (subject / metric / period)
+        // — the *competition scope*. A fact's competitors are the other
+        // current heads sharing its (subject, metric, period) regardless
+        // of which method the caller named, so the indicator base is
+        // derived before the method clause narrows the listing.
+        let scoped =
+            all
+            |> List.filter (fun f ->
+                (query.Subject |> Option.forall (fun s -> s = f.Subject))
+                && (query.Metric |> Option.forall (fun m -> m = f.Metric))
+                && (query.PeriodOverlaps |> Option.forall (fun p -> periodsOverlap p f.Period)))
+
+        // Bitemporal visibility (law L4) — the current heads at `t`.
+        // Supersession edges never cross a lineage (a superseder shares
+        // its predecessor's method identity by construction), so applying
+        // the method clause after visibility is equivalent to before it.
+        let heads = visibleAt t scoped
+
+        let byMethod (facts: Fact list) =
+            match query.Method with
+            | None -> facts
+            | Some m ->
+                facts
+                |> List.filter (fun f -> Fact.methodIdentity m = Fact.methodIdentity f.Method)
+
+        // The listing: full history when asked; otherwise the current
+        // heads, resolved to the canonical method for a method-less query
+        // (an explicit Method clause is already the caller's selection).
+        let listing =
+            if query.IncludeSuperseded then
+                byMethod scoped |> List.filter (fun f -> f.AsOf <= t)
+            elif query.Method.IsSome then
+                byMethod heads
+            else
+                selectCanonical heads
+
+        return
+            heads,
+            listing
+            |> List.sortBy (fun f -> f.Subject.Hierarchy, f.Metric.Value, f.Period.From)
+    }
+
+    // The derived competition indicator for one returned fact: the method
+    // identities of the *other* current heads sharing its (subject,
+    // metric, period). A superseded fact in an `IncludeSuperseded`
+    // listing never lists its own lineage's head (same method identity).
+    let competingMethods (heads: Fact list) (f: Fact) : string list =
+        let key = competitionKey f
+        let ownMethod = Fact.methodIdentity f.Method
+
+        heads
+        |> List.filter (fun g -> competitionKey g = key)
+        |> List.map (fun g -> Fact.methodIdentity g.Method)
+        |> List.filter (fun identity -> identity <> ownMethod)
+        |> List.distinct
+
     // GP 6 audit — one ModuleEvent under the reserved `_facts` source
     // module per state change (assert / supersession).
     let writeEvent (scopeId: string) (occurredAt: DateTime) (eventType: string) (payload: string) : Async<unit> =
@@ -111,6 +222,10 @@ type BlobFactStore(storage: IBlobStorage, events: IEventStore, clock: unit -> Da
             EventType = eventType
             Payload = payload
         }
+
+    /// Registry-less construction — the pre-566 shape, byte-for-byte.
+    new(storage: IBlobStorage, events: IEventStore, clock: unit -> DateTime) =
+        BlobFactStore(storage, events, None, clock)
 
     interface IFactStore with
 
@@ -214,30 +329,19 @@ type BlobFactStore(storage: IBlobStorage, events: IEventStore, clock: unit -> Da
         member _.Get(scopeId: string, factId: string) : Async<Fact option> = load scopeId factId
 
         member _.Query(scopeId: string, query: FactQuery) : Async<Fact list> = async {
-            let! all = loadAll scopeId
-            let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
+            let! _, listing = runQuery scopeId query
+            return listing
+        }
 
-            // Clause filters first (subject / metric / method / period).
-            let filtered =
-                all
-                |> List.filter (fun f ->
-                    (query.Subject |> Option.forall (fun s -> s = f.Subject))
-                    && (query.Metric |> Option.forall (fun m -> m = f.Metric))
-                    && (query.Method
-                        |> Option.forall (fun m -> Fact.methodIdentity m = Fact.methodIdentity f.Method))
-                    && (query.PeriodOverlaps |> Option.forall (fun p -> periodsOverlap p f.Period)))
-
-            // Then bitemporal visibility (law L4), unless the caller asked
-            // for the full history.
-            let visible =
-                if query.IncludeSuperseded then
-                    filtered |> List.filter (fun f -> f.AsOf <= t)
-                else
-                    visibleAt t filtered
+        member _.QueryWithCompetition(scopeId: string, query: FactQuery) : Async<FactWithCompetition list> = async {
+            let! heads, listing = runQuery scopeId query
 
             return
-                visible
-                |> List.sortBy (fun f -> f.Subject.Hierarchy, f.Metric.Value, f.Period.From)
+                listing
+                |> List.map (fun f -> {
+                    Fact = f
+                    CompetingMethods = competingMethods heads f
+                })
         }
 
         member _.QuerySupersessionChain(scopeId: string, factId: string) : Async<Fact list> = async {
@@ -258,10 +362,34 @@ module BlobFactStore =
     /// Create a `BlobFactStore` over the given blob backend, emitting
     /// audit events into `events` (the `IEventStore` under the reserved
     /// `_facts` source module). Transaction time is `DateTime.UtcNow`.
+    /// Registry-less: method-less queries surface every competing head
+    /// (use `createWithRegistry` for Phase 566 canonical-method selection).
     let create (storage: IBlobStorage) (events: IEventStore) : IFactStore =
-        BlobFactStore(storage, events, (fun () -> DateTime.UtcNow)) :> IFactStore
+        BlobFactStore(storage, events, None, (fun () -> DateTime.UtcNow)) :> IFactStore
 
     /// `create` with an explicit clock (test seam / deterministic
     /// transaction time for `AsOf` reconstruction).
     let createWithClock (storage: IBlobStorage) (events: IEventStore) (clock: unit -> DateTime) : IFactStore =
-        BlobFactStore(storage, events, clock) :> IFactStore
+        BlobFactStore(storage, events, None, clock) :> IFactStore
+
+    /// `create` with the metric registry (Phase 566): a metric whose
+    /// registration declares a `CanonicalMethod` resolves method-less
+    /// queries to the canonical lineage's head among the competitors.
+    /// `registry = None` — and any metric with no declaration — preserves
+    /// the pre-566 behaviour byte-for-byte (GP 11).
+    let createWithRegistry
+        (storage: IBlobStorage)
+        (events: IEventStore)
+        (registry: Grounding.IMetricRegistry option)
+        : IFactStore =
+        BlobFactStore(storage, events, registry, (fun () -> DateTime.UtcNow)) :> IFactStore
+
+    /// `createWithRegistry` with an explicit clock (test seam /
+    /// deterministic transaction time for `AsOf` reconstruction).
+    let createWithRegistryAndClock
+        (storage: IBlobStorage)
+        (events: IEventStore)
+        (registry: Grounding.IMetricRegistry option)
+        (clock: unit -> DateTime)
+        : IFactStore =
+        BlobFactStore(storage, events, registry, clock) :> IFactStore

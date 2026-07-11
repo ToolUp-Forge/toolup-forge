@@ -48,6 +48,10 @@ let allTests =
         // audit emission + freshness derivation.
         FactStoreTests.tests
         FactStoreTests.auditAndFreshnessTests
+        // Phase 566 — canonical-method selection for competing facts: selector
+        // matching, canonical query default, explicit override, undeclared
+        // parity, competition indicator.
+        CanonicalMethodTests.tests
         // Phase 524 — provenance chain traversal: seeded ingest→run→fact→
         // message chain walks both directions; disclosure carried; scope isolation.
         ProvenanceGraphTests.tests

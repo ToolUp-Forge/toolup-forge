@@ -37,6 +37,7 @@ let private shareMetric: MetricDefinition = {
     DisplayFormat = "P1"
     Staleness = UntilSuperseded
     ProducingOperation = None
+    CanonicalMethod = None
 }
 
 let private registry: IMetricRegistry =

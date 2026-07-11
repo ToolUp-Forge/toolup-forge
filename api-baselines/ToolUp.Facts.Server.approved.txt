@@ -3,9 +3,12 @@
 # accept a deliberate breaking removal (regenerate with TOOLUP_APPROVE_API=1).
 ToolUp.Facts.BlobFactStore (class)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStoreModule (class)
 ToolUp.Facts.BlobFactStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
+ToolUp.Facts.BlobFactStoreModule.createWithRegistry(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : ToolUp.Facts.IFactStore
+ToolUp.Facts.BlobFactStoreModule.createWithRegistryAndClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
 ToolUp.Facts.FactAssertedEvent (class)
 ToolUp.Facts.FactAssertedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Facts.FactAssertedEvent.AsOf : System.DateTime { get }
@@ -61,6 +64,10 @@ ToolUp.Facts.FactSupersededEvent.Metric : System.String { get }
 ToolUp.Facts.FactSupersededEvent.NewFactId : System.String { get }
 ToolUp.Facts.FactSupersededEvent.Subject : System.String { get }
 ToolUp.Facts.FactSupersededEvent.SupersededFactId : System.String { get }
+ToolUp.Facts.FactWithCompetition (class)
+ToolUp.Facts.FactWithCompetition..ctor(ToolUp.Facts.Fact, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.FactWithCompetition.CompetingMethods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactWithCompetition.Fact : ToolUp.Facts.Fact { get }
 ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.IFactStore (interface)
@@ -68,3 +75,4 @@ ToolUp.Facts.IFactStore.Assert(System.String, ToolUp.Facts.FactDraft) : Microsof
 ToolUp.Facts.IFactStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.Query(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.QuerySupersessionChain(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
+ToolUp.Facts.IFactStore.QueryWithCompetition(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
