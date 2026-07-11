@@ -233,7 +233,7 @@ module Packer =
                 let cachePath =
                     cacheDir
                     |> Option.map (fun d ->
-                        Path.Combine(d, sprintf "%s.vec" (sha256Hex (embedder.ModelId + " " + text))))
+                        Path.Combine(d, sprintf "%s.vec" (sha256Hex (embedder.ModelId + "\u0000" + text))))
 
                 match cachePath |> Option.bind readVecCache with
                 | Some v -> return v
