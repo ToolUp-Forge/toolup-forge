@@ -49,6 +49,11 @@ ToolUp.Facts.FactStoreEvidenceSource (class)
 ToolUp.Facts.FactStoreEvidenceSource..ctor(ToolUp.Facts.IFactStore)
 ToolUp.Facts.FactStoreEvidenceSourceModule (class)
 ToolUp.Facts.FactStoreEvidenceSourceModule.create(ToolUp.Facts.IFactStore) : ToolUp.Platform.IFactEvidenceSource
+ToolUp.Facts.FactStoreFactResolver (class)
+ToolUp.Facts.FactStoreFactResolver..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Facts.FactStoreFactResolverModule (class)
+ToolUp.Facts.FactStoreFactResolverModule.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
+ToolUp.Facts.FactStoreFactResolverModule.createWithClock(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
 ToolUp.Facts.FactSupersededEvent (class)
 ToolUp.Facts.FactSupersededEvent..ctor(System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Facts.FactSupersededEvent.AsOf : System.DateTime { get }

@@ -13,9 +13,12 @@ open ToolUp.Platform.VectorKnowledgeTypes
 //
 // Turns the introspectable `ServerConfig.FactStore` knob into real
 // composition: when `EnabledFactStore`, folds an `IFactStore`
-// (BlobFactStore over the composed `IBlobStorage` + `IEventStore`) and its
-// `IFactEvidenceSource` adapter into DI, so the fact tier is available to
-// request handlers and to the provenance graph. `NoFactStore` (the
+// (BlobFactStore over the composed `IBlobStorage` + `IEventStore`), its
+// `IFactEvidenceSource` adapter, the `IFactDisclosureGate` egress gate,
+// and the `IFactResolver` retrieval adapter into DI, so the fact tier is
+// available to request handlers, the provenance graph, and fact-first
+// retrieval (Phase 558 — `RAGCompose` picks the resolver + gate up into
+// the `RetrievalPipeline` with zero extra config). `NoFactStore` (the
 // default) folds nothing — the composition is byte-for-byte unchanged
 // (GP 11 + GP 13).
 //
@@ -47,12 +50,28 @@ module FactsCompose =
                         (sp.GetRequiredService<IFactStore>())
                         (sp.GetRequiredService<IEventStore>()))
             )
+            // Phase 558 — the concrete fact resolver closes the Phase 522
+            // seam, registered with the store + gate so the fact tier is
+            // one compose knob, never three. The metric registry (Phase
+            // 519) is optional: a deployment with no grounding declarations
+            // derives freshness under the `UntilSuperseded` default and
+            // renders values verbatim.
+            .AddSingleton<IFactResolver>(
+                Func<IServiceProvider, IFactResolver>(fun sp ->
+                    let registry =
+                        match sp.GetService(typeof<Grounding.IMetricRegistry>) with
+                        | :? Grounding.IMetricRegistry as r -> Some r
+                        | _ -> None
+
+                    FactStoreFactResolver.create (sp.GetRequiredService<IFactStore>()) registry)
+            )
 
     /// Compose the grounding fact store per `ServerConfig.FactStore`.
     /// `EnabledFactStore` registers `IFactStore` (`BlobFactStore`) +
-    /// `IFactEvidenceSource` into DI; `NoFactStore` returns the app
-    /// unchanged. Insert once in the compose pipeline before
-    /// `ServerApp.run`:
+    /// `IFactEvidenceSource` + `IFactDisclosureGate` + `IFactResolver`
+    /// into DI; `NoFactStore` returns the app unchanged. Insert once in
+    /// the compose pipeline before `ServerApp.run` (and before a RAG
+    /// compose, so the retrieval pipeline's DI pickup sees the fact tier):
     ///
     /// ```fsharp
     /// ServerApp.empty
