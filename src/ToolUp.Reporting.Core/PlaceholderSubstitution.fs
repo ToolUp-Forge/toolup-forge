@@ -36,6 +36,10 @@ let validate (schema: PlaceholderSchema list) (values: Map<string, PlaceholderVa
         | DateValue _ -> "Date"
         | ImageValue _ -> "Image"
         | TableValue _ -> "Table"
+        // Narrative values are resolved (disclosure-filtered + projected
+        // to text) by the report API handler before any renderer runs;
+        // one reaching validation directly is a kind mismatch by design.
+        | NarrativeValue _ -> "Narrative"
 
     let kindsAgree (kind: PlaceholderKind) (value: PlaceholderValue) =
         match kind, value with

@@ -1,5 +1,7 @@
 module ToolUp.Reporting.ReportApiHandler
 
+open ToolUp.Platform.Narrative
+open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
@@ -16,6 +18,9 @@ open ToolUp.Reporting.RendererRegistry
 //   - Resolve template by id → if missing, TemplateNotFound
 //   - Resolve renderer by template format → if missing,
 //     Renderer (NoRendererForFormat ...)
+//   - Resolve `NarrativeValue` placeholders through the disclosure
+//     export door (below), projecting each document to format-
+//     appropriate text
 //   - Run renderer → on success, decide inline-vs-blob by byte budget
 //   - Inline: return RenderedInline (bytes, mime)
 //   - Blob: write to IDataObjectStore (caller-supplied), return key
@@ -26,6 +31,22 @@ open ToolUp.Reporting.RendererRegistry
 //     inline/blob marker. Audit emission is the deployment's
 //     responsibility — this handler accepts an `auditOnRender`
 //     callback so the audit-sink wiring stays caller-side.
+//
+// ─── Disclosure export door (Phase 564.B) ────────────────────────────
+//
+// A rendered report is a fact egress surface: narrative content whose
+// `Metric` spans carry fact refs (Phase 521) can ride a render request
+// as a `NarrativeValue` placeholder. When the fact companion's
+// disclosure gate is supplied (`createWithDisclosureGate`), every fact
+// ref in every narrative value is checked at the `FactExport` surface
+// *before* rendering — the one `IFactDisclosureGate` is consulted,
+// never a per-surface re-implementation. A denied fact's value is
+// redacted to the policy-naming marker (the Phase 525 redaction walk,
+// `NarrativeFacts.redactDeniedFacts`, reused verbatim) and the report
+// gains a "Withheld values" section noting each withheld ref (fact id
+// + policy — never the value). Every deny is audited by the gate
+// itself (GP 6). No gate (`create`) ⇒ pass-through (GP 11/13): a
+// deployment without classified facts renders byte-identically.
 
 /// Per-render audit payload. The handler hands this to the
 /// caller-supplied audit callback after a successful render — the
@@ -47,9 +68,118 @@ type AuditOnRender = ReportRenderedAudit -> Async<unit>
 /// on success.
 type StoreBlob = string -> byte[] -> string -> Async<Result<string * int, string>>
 
-/// Build a per-scope `IReportApi` from the supplied registry,
-/// template store, blob writer, audit callback, and config.
-let create
+/// Project a (disclosure-resolved) narrative document to the text a
+/// template of the given format embeds. `Html` templates receive an
+/// HTML fragment (substitute via `{{key_raw}}` to bypass the
+/// renderer's escaping); every other format receives markdown.
+let private projectNarrative (format: TemplateFormat) (document: NarrativeDocument) : string =
+    match format with
+    | Html -> NarrativeHtml.render document
+    | Markdown
+    | Pdf
+    | Docx
+    | Xlsx
+    | Pptx -> NarrativeMarkdown.render document
+
+/// The "Withheld values" section appended to a redacted document —
+/// the report output notes each withheld ref (fact id + policy, with
+/// the canonical refusal wording) without ever carrying the value.
+let private withheldNoteSection (withheld: (string * string) list) : NarrativeSection = {
+    Id = "withheld-values"
+    Heading = "Withheld values"
+    Subheading = None
+    Elements =
+        withheld
+        |> List.map (fun (factId, policyRef) ->
+            Callout(
+                Notice,
+                [
+                    InlineSpan.Text(sprintf "Fact %s — %s." factId (FactDisclosureVerdict.refusalText policyRef))
+                ]
+            ))
+}
+
+/// The export door itself: check every fact ref in `document` at the
+/// `FactExport` surface, redact denied values to the policy-naming
+/// marker (the Phase 525 walk reused), and append the withheld-values
+/// note. A document citing no facts never consults the gate; a
+/// document whose facts are all disclosable returns unchanged.
+let private applyExportDisclosure
+    (gate: IFactDisclosureGate)
+    (principal: string)
+    (scopeId: string)
+    (document: NarrativeDocument)
+    : Async<NarrativeDocument> =
+    async {
+        match NarrativeFacts.factRefs document |> Set.toList with
+        | [] -> return document
+        | refs ->
+            let! verdicts = gate.Check(scopeId, principal, FactExport, refs)
+
+            let denied =
+                verdicts
+                |> Map.toList
+                |> List.choose (fun (factId, verdict) ->
+                    match verdict with
+                    | FactNotDisclosable policyRef -> Some(factId, policyRef)
+                    | FactDisclosable -> None)
+
+            match denied with
+            | [] -> return document
+            | denied ->
+                let redacted = NarrativeFacts.redactDeniedFacts (Map.ofList denied) document
+
+                return {
+                    redacted with
+                        Sections = redacted.Sections @ [ withheldNoteSection denied ]
+                }
+    }
+
+/// Resolve every top-level `NarrativeValue` in the supplied values —
+/// through the export door when a gate is present, pass-through
+/// projection otherwise — into the `TextValue` the renderer consumes.
+/// A values map with no narrative content is returned as-is, so the
+/// pre-existing render path is untouched (GP 11).
+let private resolveNarrativeValues
+    (disclosure: (IFactDisclosureGate * string) option)
+    (scopeId: string)
+    (format: TemplateFormat)
+    (values: Map<string, PlaceholderValue>)
+    : Async<Map<string, PlaceholderValue>> =
+    async {
+        let hasNarrative =
+            values
+            |> Map.exists (fun _ value ->
+                match value with
+                | NarrativeValue _ -> true
+                | _ -> false)
+
+        if not hasNarrative then
+            return values
+        else
+            let! resolved =
+                values
+                |> Map.toList
+                |> List.map (fun (key, value) -> async {
+                    match value with
+                    | NarrativeValue document ->
+                        let! disclosed =
+                            match disclosure with
+                            | Some(gate, principal) -> applyExportDisclosure gate principal scopeId document
+                            | None -> async.Return document
+
+                        return key, TextValue(projectNarrative format disclosed)
+                    | other -> return key, other
+                })
+                |> Async.Sequential
+
+            return Map.ofArray resolved
+    }
+
+/// Shared handler body — `disclosure` carries the fact-disclosure gate
+/// + the calling principal when the deployment composes the fact tier.
+let private createCore
+    (disclosure: (IFactDisclosureGate * string) option)
     (templateStore: IReportTemplateStore)
     (registry: RendererRegistry)
     (storeBlob: StoreBlob)
@@ -82,6 +212,11 @@ let create
                     match registry.TryResolve template.Format with
                     | None -> return Result.Error(Renderer(NoRendererForFormat template.Format))
                     | Some renderer ->
+                        // Phase 564.B — the disclosure export door runs
+                        // before rendering; a values map with no
+                        // narrative content passes through untouched.
+                        let! values = resolveNarrativeValues disclosure scopeId template.Format values
+
                         let! renderResult = renderer.Render(template, values)
 
                         match renderResult with
@@ -109,3 +244,39 @@ let create
                                 | Result.Error e -> return Result.Error(Renderer(RendererFailure(renderer.Name, e)))
             }
     }
+
+/// Build a per-scope `IReportApi` from the supplied registry,
+/// template store, blob writer, audit callback, and config. No
+/// disclosure gate: `NarrativeValue` placeholders are projected to
+/// text unchecked (a deployment without the fact tier pays nothing —
+/// GP 13).
+let create
+    (templateStore: IReportTemplateStore)
+    (registry: RendererRegistry)
+    (storeBlob: StoreBlob)
+    (auditOnRender: AuditOnRender)
+    (config: ReportApiConfig)
+    (scopeId: string)
+    : IReportApi =
+    createCore None templateStore registry storeBlob auditOnRender config scopeId
+
+/// `create` with the fact-disclosure export door engaged (Phase
+/// 564.B): every fact ref carried by a `NarrativeValue` placeholder is
+/// checked through the supplied gate at the `FactExport` surface
+/// before rendering. `principal` is the resolved caller the gate
+/// audits denies against — resolve it upstream alongside `scopeId`
+/// (both are per-caller). Deployments composing the fact tier wire
+/// this variant; the gate arrives from DI wherever the fact store is
+/// composed (`FactsCompose` registers `IFactDisclosureGate`
+/// inseparably from the store).
+let createWithDisclosureGate
+    (gate: IFactDisclosureGate)
+    (principal: string)
+    (templateStore: IReportTemplateStore)
+    (registry: RendererRegistry)
+    (storeBlob: StoreBlob)
+    (auditOnRender: AuditOnRender)
+    (config: ReportApiConfig)
+    (scopeId: string)
+    : IReportApi =
+    createCore (Some(gate, principal)) templateStore registry storeBlob auditOnRender config scopeId

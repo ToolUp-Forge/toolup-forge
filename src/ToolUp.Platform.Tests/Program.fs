@@ -481,6 +481,8 @@ let allTests =
         AnswerVerifierTests.tests
         // Phase 525 — disclosure egress filtering, first choke points.
         DisclosureEgressTests.tests
+        // Phase 564 — disclosure egress: export door + webhook contract.
+        DisclosureExportWebhookTests.tests
         // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
         // resolver, the one-knob DI registration, the composed Stage-1 loop.
         FactResolverComposeTests.tests
