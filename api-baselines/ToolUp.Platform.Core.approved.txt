@@ -755,6 +755,8 @@ ToolUp.Platform.AuditEvent.IsModelArtifactTransitioned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitGateFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModelFitStarted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelScoreRefused : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsModelScored : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationDeliveryFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSent : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSilentlySkipped : System.Boolean { get }
@@ -941,6 +943,10 @@ ToolUp.Platform.AuditEvent+ModelFitGateFailed (class)
 ToolUp.Platform.AuditEvent+ModelFitGateFailed.Item : ToolUp.Platform.ModelFitGateFailedPayload { get }
 ToolUp.Platform.AuditEvent+ModelFitStarted (class)
 ToolUp.Platform.AuditEvent+ModelFitStarted.Item : ToolUp.Platform.ModelFitStartedPayload { get }
+ToolUp.Platform.AuditEvent+ModelScoreRefused (class)
+ToolUp.Platform.AuditEvent+ModelScoreRefused.Item : ToolUp.Platform.ModelScoreRefusedPayload { get }
+ToolUp.Platform.AuditEvent+ModelScored (class)
+ToolUp.Platform.AuditEvent+ModelScored.Item : ToolUp.Platform.ModelScoredPayload { get }
 ToolUp.Platform.AuditEvent+NotificationDeliveryFailed (class)
 ToolUp.Platform.AuditEvent+NotificationDeliveryFailed.Item : ToolUp.Platform.NotificationDeliveryFailedPayload { get }
 ToolUp.Platform.AuditEvent+NotificationSent (class)
@@ -1070,6 +1076,8 @@ ToolUp.Platform.AuditEvent+Tags.ModelArtifactTransitioned : System.Int32 (litera
 ToolUp.Platform.AuditEvent+Tags.ModelFitCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitGateFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModelFitStarted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelScoreRefused : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ModelScored : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationDeliveryFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSent : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSilentlySkipped : System.Int32 (literal)
@@ -4442,6 +4450,22 @@ ToolUp.Platform.ModelFittingMode.Tag : System.Int32 { get }
 ToolUp.Platform.ModelFittingMode+Tags (class)
 ToolUp.Platform.ModelFittingMode+Tags.EnabledModelFitting : System.Int32 (literal)
 ToolUp.Platform.ModelFittingMode+Tags.NoModelFitting : System.Int32 (literal)
+ToolUp.Platform.ModelScoreRefusedPayload (class)
+ToolUp.Platform.ModelScoreRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ModelScoreRefusedPayload.CompositeKeyHash : System.String { get }
+ToolUp.Platform.ModelScoreRefusedPayload.InputVersion : System.String { get }
+ToolUp.Platform.ModelScoreRefusedPayload.ProviderId : System.String { get }
+ToolUp.Platform.ModelScoreRefusedPayload.Reason : System.String { get }
+ToolUp.Platform.ModelScoreRefusedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModelScoredPayload (class)
+ToolUp.Platform.ModelScoredPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.Int64, System.String)
+ToolUp.Platform.ModelScoredPayload.CompositeKeyHash : System.String { get }
+ToolUp.Platform.ModelScoredPayload.InputVersion : System.String { get }
+ToolUp.Platform.ModelScoredPayload.OutputVersion : System.String { get }
+ToolUp.Platform.ModelScoredPayload.ProviderId : System.String { get }
+ToolUp.Platform.ModelScoredPayload.ProviderVersion : System.String { get }
+ToolUp.Platform.ModelScoredPayload.RowCount : System.Int64 { get }
+ToolUp.Platform.ModelScoredPayload.ScopeId : System.String { get }
 ToolUp.Platform.ModuleBindingAnchorRef (class)
 ToolUp.Platform.ModuleBindingAnchorRef.IsAsymmetricAnchorRef : System.Boolean { get }
 ToolUp.Platform.ModuleBindingAnchorRef.IsSymmetricAnchorRef : System.Boolean { get }
@@ -4631,6 +4655,7 @@ ToolUp.Platform.Narrative.InlineSpan+Link (class)
 ToolUp.Platform.Narrative.InlineSpan+Link.href : System.String { get }
 ToolUp.Platform.Narrative.InlineSpan+Link.spans : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan] { get }
 ToolUp.Platform.Narrative.InlineSpan+Metric (class)
+ToolUp.Platform.Narrative.InlineSpan+Metric.factRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Narrative.InlineSpan+Metric.label : System.String { get }
 ToolUp.Platform.Narrative.InlineSpan+Metric.value : System.String { get }
 ToolUp.Platform.Narrative.InlineSpan+Strong (class)
@@ -4688,6 +4713,7 @@ ToolUp.Platform.Narrative.Narrative.linkText(System.String, System.String) : Too
 ToolUp.Platform.Narrative.Narrative.mediaSource(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.Narrative.MediaSource
 ToolUp.Platform.Narrative.Narrative.mediaTrack(System.String, System.String, System.String) : ToolUp.Platform.Narrative.MediaTrack
 ToolUp.Platform.Narrative.Narrative.metric(System.String, System.String) : ToolUp.Platform.Narrative.InlineSpan
+ToolUp.Platform.Narrative.Narrative.metricRef(System.String, System.String, System.String) : ToolUp.Platform.Narrative.InlineSpan
 ToolUp.Platform.Narrative.Narrative.ordered(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.Platform.Narrative.Narrative.paragraph(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.Platform.Narrative.Narrative.section(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], ToolUp.Platform.Narrative.NarrativeDocument) : ToolUp.Platform.Narrative.NarrativeDocument
@@ -4794,6 +4820,17 @@ ToolUp.Platform.Narrative.NarrativeElement+Tags.Tabs : System.Int32 (literal)
 ToolUp.Platform.Narrative.NarrativeElement+Tags.Video : System.Int32 (literal)
 ToolUp.Platform.Narrative.NarrativeElement+Video (class)
 ToolUp.Platform.Narrative.NarrativeElement+Video.Item : ToolUp.Platform.Narrative.VideoSpec { get }
+ToolUp.Platform.Narrative.NarrativeFacts (class)
+ToolUp.Platform.Narrative.NarrativeFacts.cites(System.String, ToolUp.Platform.Narrative.NarrativeDocument) : System.Boolean
+ToolUp.Platform.Narrative.NarrativeFacts.factRefs(ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Platform.Narrative.NarrativeFacts.factRefsInElement(ToolUp.Platform.Narrative.NarrativeElement) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Narrative.NarrativeFacts.factRefsInSection(ToolUp.Platform.Narrative.NarrativeSection) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Platform.Narrative.NarrativeFacts.factRefsInSpan(ToolUp.Platform.Narrative.InlineSpan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Narrative.NarrativeFacts.staleFlags(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag]
+ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag (class)
+ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag.SupersededByFactId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag.SupersededFactId : System.String { get }
 ToolUp.Platform.Narrative.NarrativeHtml (class)
 ToolUp.Platform.Narrative.NarrativeHtml.render(ToolUp.Platform.Narrative.NarrativeDocument) : System.String
 ToolUp.Platform.Narrative.NarrativeHtml.renderWith(ToolUp.Platform.Narrative.NarrativeHtml+RenderOptions, ToolUp.Platform.Narrative.NarrativeDocument) : System.String
@@ -7113,6 +7150,12 @@ ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint.MinK : System.Int32 { get }
 ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint.ScoreFloor : System.Double { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata (class)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.DeletedAtKey : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.FactFreshnessKey : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.FactIdKey : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.FactMetricKey : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.FactRefsKey : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.FactRenderingKey : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.FactSupersededByKey : System.String (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.IsSummaryKey : System.String (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.LocationHintKey : System.String (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.OriginKey : System.String (literal)
@@ -7122,9 +7165,11 @@ ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin (class)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.AIContext : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.Conversation : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.Document : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin { get }
+ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.Fact : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.IsAIContext : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.IsConversation : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.IsDocument : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.IsFact : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.IsNarrative : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.IsNote : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin.IsOther : System.Boolean { get }
@@ -7137,12 +7182,33 @@ ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags (class)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags.AIContext : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags.Conversation : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags.Document : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags.Fact : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags.Narrative : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags.Note : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin+Tags.Other : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOriginModule (class)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOriginModule.fromMetadataValue(System.String) : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin
 ToolUp.Platform.VectorKnowledgeTypes+ChunkOriginModule.toMetadataValue(ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin) : System.String
+ToolUp.Platform.VectorKnowledgeTypes+FactClause (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactClause..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.VectorKnowledgeTypes+FactClause.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClause.Metric : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClause.PeriodFrom : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClause.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClause.SubjectHierarchy : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactClause.SubjectPath : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo.FactFresh : ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo.IsFactFresh : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo.IsFactStale : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo.Tag : System.Int32 { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+FactStale (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+FactStale.sinceIso : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactFresh : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactStale : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+IFactResolver (interface)
+ToolUp.Platform.VectorKnowledgeTypes+IFactResolver.Resolve(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactClause) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact]]
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy (class)
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy.Interleaved : ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy { get }
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy.IsInterleaved : System.Boolean { get }
@@ -7159,6 +7225,13 @@ ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.FileName : System.Strin
 ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.FileType : System.String { get }
 ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.Location : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceLocator] { get }
 ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef.SizeBytes : System.Int64 { get }
+ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact (class)
+ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact..ctor(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact.FactId : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact.Freshness : ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo { get }
+ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact.Metric : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact.Rendering : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact.SupersededBy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults (class)
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double], ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin]])
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults.Merge : ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy { get }
@@ -7170,9 +7243,10 @@ ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaultsModule (class)
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaultsModule.clamp(ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults) : ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaultsModule.defaults : ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest (class)
-ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.Int32, ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin]], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.Int32, ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+FactClause])
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.AdaptiveK : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint] { get }
+ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.FactClause : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+FactClause] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.Filters : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.History : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.Merge : ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy { get }
@@ -7183,10 +7257,14 @@ ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest.TopK : System.Int32 { get 
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequestModule (class)
 ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequestModule.create(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.Int32, ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy) : ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource (class)
-ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource..ctor(System.String, System.String, System.String, System.Double, ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource..ctor(System.String, System.String, System.String, System.Double, ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.ChunkId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.DocumentId : System.String { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.DocumentName : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.FactFreshness : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo] { get }
+ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.FactId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.FactRendering : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.FactSupersededBy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.LocationHint : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.Origin : ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin { get }
 ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource.OriginalRef : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef] { get }
