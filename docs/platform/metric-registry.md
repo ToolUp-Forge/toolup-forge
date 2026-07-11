@@ -29,6 +29,7 @@ A `Grounding.MetricDefinition` describes one quantity:
 | `DisplayFormat` | Canonical rendering format — a .NET numeric format string (`"N2"`, `"P1"`, `"C0"`) or `""` for verbatim. The numeric-fidelity gate canonicalises a quoted number through this before comparing it to a fact. |
 | `Staleness` | `FreshFor of TimeSpan` / `UntilSuperseded` / `UntilUpstreamChange` — how a fact's freshness is *derived* (no mutable flag is ever stored). |
 | `ProducingOperation` | Optional catalog-operation id that produces this metric. When present, a planner can map a missing fact → this operation → its input schema → the data catalog. |
+| `CanonicalMethod` | Optional canonical-method selector (Phase 566). When several methods compute this metric over one (subject, period), a *method-less* fact query resolves to this method's lineage by default — matched against method-identity strings (`computed:op:ver:hash` / `asserted:principal` / `imported:cert`), exactly or as a `:`-boundary prefix (`"computed:rollup"` matches every version of `rollup`). `None` = no default; every competing head surfaces. Competitors stay queryable either way, and the query surface discloses them (GP 9). |
 
 A `Grounding.SubjectDefinition` declares a hierarchy — a *dimension* of
 the entity space:
@@ -59,7 +60,8 @@ let serverModule =
           Direction = HigherIsBetter
           DisplayFormat = "C0"
           Staleness = FreshFor (System.TimeSpan.FromDays 1.0)
-          ProducingOperation = Some "sales.rollup" }
+          ProducingOperation = Some "sales.rollup"
+          CanonicalMethod = None }
       ]
     |> ServerModule.declareSubjects [
         { Id = "product_hierarchy"

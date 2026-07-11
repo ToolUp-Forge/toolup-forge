@@ -104,11 +104,13 @@ type FactQuery = {
     Metric: MetricRef option
     /// Restrict to facts whose `Period` overlaps this extent.
     PeriodOverlaps: TemporalExtent option
-    /// Restrict to one method's lineage — the mechanism for picking one
-    /// among *competing* facts (plan D19: several methods computing one
-    /// metric is normal; the store never merges them). Registry-declared
-    /// *canonical*-method selection is a later phase; until then a caller
-    /// disambiguates by naming the method here.
+    /// Restrict to one method's lineage — the explicit mechanism for
+    /// picking one among *competing* facts (plan D19: several methods
+    /// computing one metric is normal; the store never merges them).
+    /// `None` defaults to the metric's registry-declared canonical method
+    /// when one exists (Phase 566 — `MetricDefinition.CanonicalMethod`);
+    /// naming a method here always overrides that default, and a metric
+    /// with no declaration surfaces every competing head as before.
     Method: MethodRef option
     /// Law L4 visibility instant — the fact base *as of* this transaction
     /// time. `None` = now (the current head of each lineage). `Some t`
@@ -142,6 +144,21 @@ module FactQuery =
     /// Reconstruct the fact base as of a transaction time (law L4).
     let asOf (t: DateTime) (q: FactQuery) : FactQuery = { q with AsOf = Some t }
 
+/// A queried fact annotated with its derived competition indicator
+/// (Phase 566 / GP 9 — selection is visible, never silent). Derived per
+/// query from the current heads, never stored on any fact.
+type FactWithCompetition = {
+    Fact: Fact
+    /// Method identities (`Fact.methodIdentity` strings) of the *other*
+    /// current heads for this fact's (subject, metric, period) — the
+    /// competing methods that also computed this quantity. Empty when the
+    /// fact is uncontested; non-empty tells an answer surface to disclose
+    /// that alternatives were computed (D19: competition is surfaced,
+    /// never hidden — canonical selection picks a default, it does not
+    /// erase the competitors).
+    CompetingMethods: string list
+}
+
 /// The bitemporal, append-only, content-addressed fact base. Team-scoped
 /// throughout (GP 4): `scopeId` is a resolved storage scope, and a fact
 /// asserted in one scope is structurally unreachable from another.
@@ -162,7 +179,21 @@ type IFactStore =
 
     /// Query the fact base under `query` (see `FactQuery`). Honours L4
     /// `AsOf` visibility and the competing-fact / supersession rules.
+    /// A method-less query against a metric with a registry-declared
+    /// canonical method (Phase 566) returns the canonical lineage's head
+    /// among the competitors; an explicit `Method` clause overrides, an
+    /// `IncludeSuperseded` listing is untouched, and a metric with no
+    /// declaration behaves exactly as before (GP 11).
     abstract Query: scopeId: string * query: FactQuery -> Async<Fact list>
+
+    /// `Query` with a derived competition annotation per returned fact:
+    /// the method identities of the *other* current heads for the same
+    /// (subject, metric, period), so an answer surface can disclose that
+    /// alternatives were computed (Phase 566 / GP 9 — selection is
+    /// visible, never silent). Selection semantics are identical to
+    /// `Query` (canonical default, explicit-`Method` override,
+    /// `IncludeSuperseded` listing untouched).
+    abstract QueryWithCompetition: scopeId: string * query: FactQuery -> Async<FactWithCompetition list>
 
     /// The supersession chain a fact belongs to — every fact in its
     /// lineage from the earliest to the latest, ordered by `AsOf`

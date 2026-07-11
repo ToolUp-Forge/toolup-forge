@@ -23,6 +23,7 @@ let private metric id (op: string option) : MetricDefinition = {
     DisplayFormat = "N0"
     Staleness = UntilSuperseded
     ProducingOperation = op
+    CanonicalMethod = None
 }
 
 let private subject id (levels: string list) : SubjectDefinition = {

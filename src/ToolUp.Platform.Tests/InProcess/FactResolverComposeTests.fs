@@ -86,6 +86,7 @@ let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : 
                 DisplayFormat = displayFormat
                 Staleness = staleness
                 ProducingOperation = None
+                CanonicalMethod = None
             }
         }
     ] []

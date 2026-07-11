@@ -212,4 +212,67 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! fromB = store.Query(scopeB, FactQuery.all)
             Expect.isEmpty fromB "scopeB sees none of scopeA's facts"
         }
+
+        // ─── Competition indicator (Phase 566 / GP 9) ─────────────────
+
+        testCaseAsync "QueryWithCompetition annotates competing heads with each other's method identity"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let dA = draft "uk" "revenue" "hashA" 100m
+
+            let dB = {
+                draft "uk" "revenue" "hashB" 105m with
+                    Method = Computed("estimator", "1", "p0")
+            }
+
+            let! fA = assertOk "A" store scopeA dA
+            let! fB = assertOk "B" store scopeA dB
+
+            let! annotated = store.QueryWithCompetition(scopeA, FactQuery.forSubjectMetric dA.Subject dA.Metric)
+
+            let indicatorOf factId =
+                annotated
+                |> List.tryFind (fun a -> a.Fact.FactId = factId)
+                |> Option.map _.CompetingMethods
+
+            Expect.equal
+                (indicatorOf fA.FactId)
+                (Some [ Fact.methodIdentity dB.Method ])
+                "A discloses B's method as competing"
+
+            Expect.equal
+                (indicatorOf fB.FactId)
+                (Some [ Fact.methodIdentity dA.Method ])
+                "B discloses A's method as competing"
+        }
+
+        testCaseAsync "QueryWithCompetition returns an empty indicator when a single method computed the metric"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let d = draft "uk" "revenue" "hashA" 100m
+            let! _ = assertOk "assert" store scopeA d
+
+            let! annotated = store.QueryWithCompetition(scopeA, FactQuery.forSubjectMetric d.Subject d.Metric)
+            Expect.equal annotated.Length 1 "one head"
+            Expect.isEmpty (List.head annotated).CompetingMethods "uncontested → empty indicator"
+        }
+
+        testCaseAsync "QueryWithCompetition selects the same facts as Query"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = assertOk "v1" store scopeA (draft "uk" "revenue" "hashA" 100m)
+            let! _ = assertOk "v2" store scopeA (draft "uk" "revenue" "hashB" 110m)
+
+            let q =
+                FactQuery.forSubjectMetric (draft "uk" "revenue" "hashA" 100m).Subject (MetricRef "revenue")
+
+            let! plain = store.Query(scopeA, q)
+            let! annotated = store.QueryWithCompetition(scopeA, q)
+
+            Expect.equal
+                (annotated |> List.map _.Fact.FactId)
+                (plain |> List.map _.FactId)
+                "identical selection + ordering"
+        }
     ]
