@@ -130,6 +130,47 @@ let private formatMatch (index: int) (m: VectorMatch) =
 
     $"{header}\n{m.Content}"
 
+// ─── Fact-first framing (Phase 522) ───────────────────────────────
+
+/// Whether a match is a resolved fact (the pre-vector stage stamped
+/// `_origin = "Fact"`) rather than a similarity chunk.
+let private isFactMatch (m: VectorMatch) =
+    match m.Metadata.TryFind ChunkMetadata.OriginKey with
+    | Some v -> ChunkOrigin.fromMetadataValue v = Fact
+    | None -> false
+
+/// Format one resolved fact for the facts block: a `[F<n>]` marker, the
+/// metric id, the value rendering (quoted verbatim), and a freshness note
+/// carrying the supersession pointer when stale.
+let private formatFact (index: int) (m: VectorMatch) =
+    let metric =
+        m.Metadata.TryFind ChunkMetadata.FactMetricKey |> Option.defaultValue "fact"
+
+    let freshness =
+        match m.Metadata.TryFind ChunkMetadata.FactFreshnessKey with
+        | Some v when v.StartsWith "Stale:" ->
+            let since = v.Substring 6
+
+            match m.Metadata.TryFind ChunkMetadata.FactSupersededByKey with
+            | Some s -> sprintf " (STALE as of %s — superseded by fact %s)" since s
+            | None -> sprintf " (STALE as of %s)" since
+        | _ -> " (current)"
+
+    sprintf "[F%d] %s: %s%s" (index + 1) metric m.Content freshness
+
+/// The facts block prepended ahead of any narrative-chunk context. Carries
+/// the instruction contract — numbers are quoted from facts verbatim (the
+/// Phase 523 numeric-fidelity gate enforces it). Empty when no facts
+/// resolved, so a clause-less turn's prompt is unchanged (GP 11).
+let private factsBlock (facts: VectorMatch list) =
+    if List.isEmpty facts then
+        ""
+    else
+        let body = facts |> List.mapi formatFact |> String.concat "\n"
+
+        "Verified facts (authoritative — quote these numbers verbatim; do NOT paraphrase, round, or recompute them, and prefer them over any figure appearing in the context passages below):\n\n"
+        + body
+
 // ─── Source-record projection ────────────────────────────────────
 
 let private snippet (charLimit: int) (content: string) =
@@ -162,6 +203,23 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
         m.Metadata.TryFind ChunkMetadata.OriginalRefKey
         |> Option.bind tryDeserialise<OriginalDocumentRef>
 
+    // Phase 522.C — fact-origin matches carry their id / rendering /
+    // freshness / supersession pointer in metadata (stamped by the
+    // pre-vector fact-resolution stage). Project them onto the fact
+    // fields; a non-fact source leaves every fact field `None`.
+    let factId = m.Metadata.TryFind ChunkMetadata.FactIdKey
+    let factRendering = m.Metadata.TryFind ChunkMetadata.FactRenderingKey
+
+    let factFreshness =
+        m.Metadata.TryFind ChunkMetadata.FactFreshnessKey
+        |> Option.map (fun v ->
+            if v.StartsWith "Stale:" then
+                FactStale(v.Substring 6)
+            else
+                FactFresh)
+
+    let factSupersededBy = m.Metadata.TryFind ChunkMetadata.FactSupersededByKey
+
     {
         DocumentId = src |> Option.map _.DocumentId |> Option.defaultValue ""
         DocumentName =
@@ -185,6 +243,10 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
         // for pre-widening persisted conversation payloads.
         Scope = Some m.Scope
         ChunkId = Some m.ChunkId
+        FactId = factId
+        FactRendering = factRendering
+        FactFreshness = factFreshness
+        FactSupersededBy = factSupersededBy
     }
 
 // ─── Retrieval builder ────────────────────────────────────────────
@@ -266,16 +328,24 @@ let withRetrievalToolAware
 
             let! rawMatches = pipeline.Retrieve request ctx.Access
 
-            // Apply MinScore filter: a deployment that wants to refuse weak
-            // matches drops them here so neither the prompt nor the Sources
-            // panel surfaces them — keeps the model and the user aligned.
-            let matches =
+            // Phase 522 — split resolved facts from similarity chunks. Facts
+            // lead the result set (the pipeline merged them ahead); they are
+            // exact hits, so the MinScore gate and the KB miss/telemetry
+            // classification below apply to CHUNKS only — a fact must never
+            // be score-gated, and facts must not inflate KB-quality signals.
+            let rawFacts, rawChunks = rawMatches |> List.partition isFactMatch
+
+            // Apply MinScore filter to chunks: a deployment that wants to
+            // refuse weak matches drops them here so neither the prompt nor
+            // the Sources panel surfaces them — keeps the model and the user
+            // aligned.
+            let chunks =
                 match defaults.MinScore with
-                | None -> rawMatches
-                | Some threshold -> rawMatches |> List.filter (fun m -> m.Score > threshold)
+                | None -> rawChunks
+                | Some threshold -> rawChunks |> List.filter (fun m -> m.Score > threshold)
 
             let rawTop =
-                match rawMatches with
+                match rawChunks with
                 | top :: _ -> top.Score
                 | [] -> 0.0
 
@@ -289,13 +359,14 @@ let withRetrievalToolAware
             // the consumer how many actually reached the model.
             match telemetry with
             | None -> ()
-            | Some t -> t.RecordRetrieval(rawTop, matches.Length, threshold)
+            | Some t -> t.RecordRetrieval(rawTop, chunks.Length, threshold)
 
-            // Miss diagnostic: fewer than `MissThreshold` matches surviving
+            // Miss diagnostic: fewer than `MissThreshold` chunks surviving
             // the gate is the signal the team's KB is too thin / off-topic
             // for the queries it's getting. Emitted via the existing
-            // tracer so admin UIs can scan one event source.
-            if matches.Length < MissThreshold then
+            // tracer so admin UIs can scan one event source. Facts are not
+            // KB chunks, so they don't count towards this signal.
+            if chunks.Length < MissThreshold then
                 match tracer with
                 | None -> ()
                 | Some t ->
@@ -303,45 +374,62 @@ let withRetrievalToolAware
                         QueryHash = ToolUp.RAG.RetrievalTracers.hashQuery query
                         QueryLength = if isNull query then 0 else query.Length
                         Scopes = scopes
-                        MatchesAboveMinScore = matches.Length
+                        MatchesAboveMinScore = chunks.Length
                         MinScoreThreshold = threshold
                         TopScore = rawTop
                     }
 
                     do! t.Miss miss ctx.Access
 
-            ctx.RetrievedSources.Value <- matches |> List.map (toRetrievedSource defaults.SnippetCharLimit)
+            // Sources panel: facts first (they lead the answer), then the
+            // surviving chunks — the same order the prompt presents them.
+            ctx.RetrievedSources.Value <- (rawFacts @ chunks) |> List.map (toRetrievedSource defaults.SnippetCharLimit)
 
-            if matches.IsEmpty then
+            if List.isEmpty rawFacts && List.isEmpty chunks then
                 return emptyRetrievalMessage toolFraming
             else
-                let formattedChunks = matches |> List.mapi formatMatch |> String.concat "\n\n"
+                let facts = factsBlock rawFacts
 
-                let hasPlatform =
-                    matches
-                    |> List.exists (fun m ->
-                        match m.Scope with
-                        | Platform -> true
-                        | _ -> false)
+                let chunkContext =
+                    if List.isEmpty chunks then
+                        ""
+                    else
+                        let formattedChunks = chunks |> List.mapi formatMatch |> String.concat "\n\n"
 
-                let hasTeam =
-                    matches
-                    |> List.exists (fun m ->
-                        match m.Scope with
-                        | Team _ -> true
-                        | _ -> false)
+                        let hasPlatform =
+                            chunks
+                            |> List.exists (fun m ->
+                                match m.Scope with
+                                | Platform -> true
+                                | _ -> false)
 
-                // "your knowledge base" covers both the team leg and the
-                // per-user leg — the non-team caller now retrieves from its
-                // own `User` scope, so "your team's" would misdescribe the
-                // Individual-mode case.
-                let preamble =
-                    match hasPlatform, hasTeam with
-                    | true, true -> "Relevant context from the Platform KB and your knowledge base"
-                    | true, false -> "Relevant context from the Platform KB"
-                    | false, _ -> "Relevant context from your knowledge base"
+                        let hasTeam =
+                            chunks
+                            |> List.exists (fun m ->
+                                match m.Scope with
+                                | Team _ -> true
+                                | _ -> false)
 
-                return $"{preamble}:\n\n{formattedChunks}"
+                        // "your knowledge base" covers both the team leg and
+                        // the per-user leg — the non-team caller now retrieves
+                        // from its own `User` scope, so "your team's" would
+                        // misdescribe the Individual-mode case.
+                        let preamble =
+                            match hasPlatform, hasTeam with
+                            | true, true -> "Relevant context from the Platform KB and your knowledge base"
+                            | true, false -> "Relevant context from the Platform KB"
+                            | false, _ -> "Relevant context from your knowledge base"
+
+                        $"{preamble}:\n\n{formattedChunks}"
+
+                // Facts lead, narrative context follows. Either block may be
+                // empty (facts-only or chunks-only); join with a blank line
+                // only when both are present.
+                return
+                    match facts, chunkContext with
+                    | "", c -> c
+                    | f, "" -> f
+                    | f, c -> $"{f}\n\n{c}"
     }
 
 /// Back-compat retrieval builder (pre-Phase-14r shape). Delegates to

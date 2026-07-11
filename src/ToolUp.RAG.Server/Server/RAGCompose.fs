@@ -1107,6 +1107,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             MmrLambda = app.MmrLambda
             ActiveModuleBoost = RetrievalPipelineOptions.defaults.ActiveModuleBoost
             SummaryBoost = RetrievalPipelineOptions.defaults.SummaryBoost
+            FactNarrativeJoinBoost = RetrievalPipelineOptions.defaults.FactNarrativeJoinBoost
         }
 
         // Build the probe provider ONCE and resolve every pre-pipeline

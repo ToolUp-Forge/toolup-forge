@@ -120,6 +120,7 @@ let build (tempDir: string) (opts: BuildOptions) : IRetrievalPipeline =
         MmrLambda = opts.MmrLambda
         ActiveModuleBoost = RetrievalPipelineOptions.defaults.ActiveModuleBoost
         SummaryBoost = RetrievalPipelineOptions.defaults.SummaryBoost
+        FactNarrativeJoinBoost = RetrievalPipelineOptions.defaults.FactNarrativeJoinBoost
     }
 
     let tracer: IRetrievalTracer = createNoOp ()

@@ -434,6 +434,7 @@ let private originLabel (origin: ChunkOrigin) =
     | Narrative -> "Narrative"
     | AIContext -> "AI context"
     | Conversation -> "Conversation"
+    | Fact -> "Fact"
     | Other label -> label
 
 /// Superscript marker glyphs that pair with `RAGPromptBuilder.formatMatch`'s

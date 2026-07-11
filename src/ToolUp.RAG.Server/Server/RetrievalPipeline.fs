@@ -317,6 +317,13 @@ type RetrievalPipelineOptions = {
     /// entry point: "what is this document about?" should land on the
     /// summary first. Set to `0.0` to disable.
     SummaryBoost: float
+    /// Score boost applied to a chunk whose `_factRefs` metadata (Phase
+    /// 521.D) cites a fact the pre-vector stage resolved for this request
+    /// (Phase 522.E) — the fact→narrative join. A fact's own narrative
+    /// context should outrank generic similarity, so the default `+0.15`
+    /// is larger than `SummaryBoost`. Set to `0.0` to disable, or when no
+    /// fact clause / resolver is present it simply never fires.
+    FactNarrativeJoinBoost: float
 }
 
 module RetrievalPipelineOptions =
@@ -326,6 +333,7 @@ module RetrievalPipelineOptions =
         MmrLambda = 0.5
         ActiveModuleBoost = 0.05
         SummaryBoost = 0.10
+        FactNarrativeJoinBoost = 0.15
     }
 
 // ─── Pipeline implementation ──────────────────────────────────────
@@ -335,6 +343,63 @@ module RetrievalPipelineOptions =
 /// downstream cross-encoder have a useful working set — a top-1 query
 /// with a single dense and single sparse hit produces no signal for either.
 let private inflateForHybridOrRerank (topK: int) = max (topK * 4) 32
+
+// ─── Fact-first stage (Phase 522) ─────────────────────────────────
+
+/// Score stamped on a resolved-fact match. Facts are exact hits, not
+/// similarity matches — they are prepended ahead of the similarity chunks
+/// after every ranking stage, so the value only needs to read as
+/// "maximally relevant" for any downstream consumer that inspects it (the
+/// Sources-panel badge). It never competes in rerank / MMR / topK.
+let private factMatchScore = 1.0
+
+/// Project a resolved fact into a `VectorMatch` carrying its id /
+/// rendering / freshness / supersession pointer in metadata under the
+/// Phase 522.C `ChunkMetadata.Fact*` keys, stamped `_origin = "Fact"`.
+/// `RAGPromptBuilder.toRetrievedSource` reads these back onto the fact
+/// fields of `RetrievedSource`.
+let private factToMatch (scope: VectorScope) (rf: ResolvedFact) : VectorMatch =
+    let freshnessMeta =
+        match rf.Freshness with
+        | FactFresh -> "Fresh"
+        | FactStale sinceIso -> sprintf "Stale:%s" sinceIso
+
+    let metadata =
+        [
+            ChunkMetadata.OriginKey, ChunkOrigin.toMetadataValue Fact
+            ChunkMetadata.FactIdKey, rf.FactId
+            ChunkMetadata.FactRenderingKey, rf.Rendering
+            ChunkMetadata.FactFreshnessKey, freshnessMeta
+            ChunkMetadata.FactMetricKey, rf.Metric
+        ]
+        @ (match rf.SupersededBy with
+           | Some s -> [ ChunkMetadata.FactSupersededByKey, s ]
+           | None -> [])
+        |> Map.ofList
+
+    {
+        // A synthetic, collision-free chunk id: facts are content-addressed
+        // and never share an id namespace with vector chunks.
+        ChunkId = "fact:" + rf.FactId
+        Content = rf.Rendering
+        Score = factMatchScore
+        Scope = scope
+        Metadata = metadata
+    }
+
+/// The scope a resolved fact rides on — the narrowest team/user scope the
+/// request is asking for (facts are team-scoped like KB content), else
+/// `Deployment` as a coherent default for the Sources-panel authority
+/// badge. Purely cosmetic — fact tenant isolation is enforced by the
+/// resolver's scope-filtered store read, not by this label.
+let private factScopeFor (scopes: VectorScope list) : VectorScope =
+    scopes
+    |> List.tryFind (fun s ->
+        match s with
+        | Team _
+        | User _ -> true
+        | _ -> false)
+    |> Option.defaultValue Deployment
 
 type RetrievalPipeline
     (
@@ -356,7 +421,14 @@ type RetrievalPipeline
         // Phase 14y — audit sink for the `KnowledgeQueryRejected` event a
         // refusal emits. `None` ⇒ the refusal still raises, just without the
         // audit row (GP 13 — zero cost when unwired, e.g. eval / benchmark).
-        ?eventStore: IEventStore
+        ?eventStore: IEventStore,
+        // Phase 522 — optional fact resolver. When supplied AND the request
+        // carries a `FactClause`, the pipeline resolves the (subject,
+        // metric, period) query against the fact store BEFORE vector search
+        // and merges the exact fact hits ahead of the similarity chunks as
+        // a distinct `ChunkOrigin.Fact` origin. `None` (or a clause-less
+        // request) ⇒ no fact stage, byte-identical retrieval (GP 11 / GP 13).
+        ?factResolver: IFactResolver
     ) =
 
     let sparse = sparseIndex
@@ -439,6 +511,34 @@ type RetrievalPipeline
 
             let permitted = authorisedScopes (readPlatformKbMode ()) ctx request.Scopes
 
+            // Phase 522.B — pre-vector fact-resolution stage. When a fact
+            // resolver is wired AND the request carries a fact clause,
+            // resolve the (subject, metric, period) query against the fact
+            // store FIRST. The resolver is scope-filtered (GP 4): it is
+            // handed the caller's own fact scope and reads only within it,
+            // so a fact from another tenant is structurally unreachable.
+            // Resolution is independent of the vector-scope authorisation
+            // below — a fact clause is answerable even for a caller with no
+            // readable KB scope. Clause-less / resolver-less ⇒ no facts,
+            // byte-identical retrieval (GP 11 / GP 13).
+            let! factMatches =
+                match factResolver, request.FactClause with
+                | Some resolver, Some clause -> async {
+                    stages.Add "FactResolve"
+                    let factScopeId = ctx.TeamId |> Option.defaultValue ctx.UserId
+                    let! resolved = resolver.Resolve(factScopeId, clause)
+                    let scope = factScopeFor request.Scopes
+                    return resolved |> List.map (factToMatch scope)
+                  }
+                | _ -> async.Return []
+
+            // The ids of the facts resolved this turn — drives the
+            // fact→narrative join boost (Phase 522.E) below.
+            let resolvedFactIds =
+                factMatches
+                |> List.choose (fun m -> m.Metadata.TryFind ChunkMetadata.FactIdKey)
+                |> Set.ofList
+
             let emitTrace (results: VectorMatch list) (poolSize: int) (sparseRan: bool) (rerankerName: string option) = async {
                 match tracer with
                 | None -> ()
@@ -470,8 +570,12 @@ type RetrievalPipeline
             }
 
             if permitted.IsEmpty then
-                do! emitTrace [] 0 false None
-                return []
+                // No readable vector scope — but any resolved facts still
+                // surface (fact resolution is independent of KB-scope
+                // authorisation). Clause-less ⇒ `factMatches` is empty and
+                // this returns `[]` exactly as before (GP 11).
+                do! emitTrace factMatches 0 false None
+                return factMatches
             else
                 // Stage 1: candidate retrieval (dense [+ sparse]).
                 let pool =
@@ -598,6 +702,37 @@ type RetrievalPipeline
                         else
                             result
 
+                // Phase 522.E — fact→narrative join. A chunk whose
+                // `_factRefs` metadata (Phase 521.D) cites a fact the
+                // pre-vector stage resolved this turn gets a boost, so the
+                // fact's own narrative context outranks generic similarity.
+                // No resolved facts (the common clause-less path) ⇒ no-op,
+                // byte-identical ordering (GP 11).
+                let initial =
+                    if Set.isEmpty resolvedFactIds || opts.FactNarrativeJoinBoost <= 0.0 then
+                        initial
+                    else
+                        let mutable joined = false
+
+                        let result =
+                            initial
+                            |> List.map (fun m ->
+                                match m.Metadata.TryFind ChunkMetadata.FactRefsKey with
+                                | Some csv when csv.Split(',') |> Array.exists resolvedFactIds.Contains ->
+                                    joined <- true
+
+                                    {
+                                        m with
+                                            Score = m.Score + opts.FactNarrativeJoinBoost
+                                    }
+                                | _ -> m)
+
+                        if joined then
+                            stages.Add "FactNarrativeJoin"
+                            result |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+                        else
+                            result
+
                 // Stage 2: optional cross-encoder rerank.
                 let! reranked =
                     match opts.Reranker with
@@ -654,7 +789,13 @@ type RetrievalPipeline
                 | None -> ()
 
                 do! emitTrace final pool sparse.IsSome rerankerName
-                return final
+
+                // Phase 522.D — resolved facts merge AHEAD of the similarity
+                // chunks. Facts are exact hits, not similarity matches, so
+                // they bypass rerank / MMR / topK (which only shaped the
+                // chunk set) and lead the result. `factMatches` is empty on
+                // the clause-less path, so this is `final` unchanged (GP 11).
+                return factMatches @ final
         }
 
         member _.Index chunkId chunk scope = async {

@@ -121,6 +121,38 @@ module ChunkMetadata =
     [<Literal>]
     let FactRefsKey = "_factRefs"
 
+    // ─── Fact-match metadata (Phase 522) ─────────────────────────────
+    // A fact resolved by the pre-vector stage rides the retrieval result
+    // set as a `VectorMatch` stamped `_origin = "Fact"` plus the keys
+    // below, so `RAGPromptBuilder.toRetrievedSource` can project the fact
+    // fields onto `RetrievedSource` without RAG depending on the fact
+    // companion's types.
+
+    /// Content-addressed id of a resolved fact (Phase 522.C). Present only
+    /// on a `ChunkOrigin.Fact` match.
+    [<Literal>]
+    let FactIdKey = "_factId"
+
+    /// Canonical value rendering of a resolved fact — the number quoted
+    /// verbatim into the answer (Phase 522.C).
+    [<Literal>]
+    let FactRenderingKey = "_factRendering"
+
+    /// Derived freshness of a resolved fact: `"Fresh"` or `"Stale:<iso>"`
+    /// (the instant it went stale). Phase 522.C.
+    [<Literal>]
+    let FactFreshnessKey = "_factFreshness"
+
+    /// When a resolved fact is stale/superseded, the id that superseded it
+    /// (the lineage's current head). Absent for a fresh fact. Phase 522.C.
+    [<Literal>]
+    let FactSupersededByKey = "_factSupersededBy"
+
+    /// Registered metric id a resolved fact is for — surfaced in the facts
+    /// prompt block. Phase 522.C.
+    [<Literal>]
+    let FactMetricKey = "_factMetric"
+
 /// Coarse classification of where a chunk came from. Stamped onto chunk
 /// metadata at ingestion time under `ChunkMetadata.OriginKey`. RAG stays
 /// agnostic to the producer's domain types — KB / narrative / AI-context
@@ -139,6 +171,13 @@ type ChunkOrigin =
     | AIContext
     /// Indexed conversation turn (scaffolding — off by default).
     | Conversation
+    /// A fact resolved by the pre-vector fact-resolution stage (Phase
+    /// 522): not a similarity match at all but an exact fact hit merged
+    /// into the result set as a distinct origin, carrying its value
+    /// rendering + freshness in metadata. Facts merge ahead of chunks and
+    /// are rendered in a distinct prompt block whose numbers are quoted
+    /// verbatim.
+    | Fact
     /// Catch-all for producers that don't fit a built-in category.
     | Other of label: string
 
@@ -151,6 +190,7 @@ module ChunkOrigin =
         | Narrative -> "Narrative"
         | AIContext -> "AIContext"
         | Conversation -> "Conversation"
+        | Fact -> "Fact"
         | Other label -> sprintf "Other:%s" label
 
     /// Parse the metadata-string form back into `ChunkOrigin`. Unknown
@@ -163,6 +203,7 @@ module ChunkOrigin =
         | "Narrative" -> Narrative
         | "AIContext" -> AIContext
         | "Conversation" -> Conversation
+        | "Fact" -> Fact
         | s when s.StartsWith "Other:" -> Other(s.Substring 6)
         | s -> Other s
 
@@ -226,6 +267,79 @@ type OriginalDocumentRef = {
     Location: SourceLocator option
 }
 
+// ─── Fact-first retrieval seam (Phase 522) ───────────────────────────
+//
+// The types that let the retrieval pipeline resolve facts *before* vector
+// search and merge them into the result set as a distinct origin. They are
+// deliberately fact-companion-free — opaque id / metric strings and a
+// generic (subject, metric, period) clause — so `ToolUp.Platform` and the
+// RAG pipeline take no dependency on the fact store's typed model (GP 1).
+// The concrete resolver (over the fact store, with registry-driven
+// freshness) is implemented in the fact companion and wired in at compose
+// time; the pipeline consumes the seam as an optional dependency, so a
+// deployment with no fact store is byte-identical (GP 13).
+
+/// Freshness of a resolved fact, projected fact-companion-free so it can
+/// ride `RetrievedSource` / `ResolvedFact` without a `ToolUp.Facts` edge.
+type FactFreshnessInfo =
+    /// The fact is current under its metric's staleness policy.
+    | FactFresh
+    /// The fact is stale/superseded; `sinceIso` is the ISO-8601 instant it
+    /// went stale (its transaction time plus the freshness window, or its
+    /// successor's arrival).
+    | FactStale of sinceIso: string
+
+/// The optional fact-clause selectors on a `RetrievalRequest` (Phase
+/// 522.A) — a generic, fact-companion-free (subject, metric, period)
+/// query. The resolver maps it onto the fact store's own typed query.
+/// Absent from a request ⇒ the pipeline resolves no facts and behaves
+/// byte-identically (GP 11 / plan D17).
+type FactClause = {
+    /// Registered subject-hierarchy id.
+    SubjectHierarchy: string
+    /// Ordered member path from the root level down (empty = the
+    /// hierarchy root, a total roll-up).
+    SubjectPath: string list
+    /// Registered metric id.
+    Metric: string
+    /// Optional valid-time window the fact's period must overlap.
+    PeriodFrom: System.DateTime option
+    PeriodTo: System.DateTime option
+    /// Transaction-time visibility instant. `None` = the current head
+    /// (latest); `Some t` reconstructs "what we knew at `t`".
+    AsOf: System.DateTime option
+}
+
+/// A fact resolved by the pre-vector stage (Phase 522.B), projected
+/// fact-companion-free so the RAG pipeline can carry it as a distinct
+/// result origin without a `ToolUp.Facts` compile-time edge.
+type ResolvedFact = {
+    /// Content-addressed fact id.
+    FactId: string
+    /// Canonical display rendering of the value (the number quoted
+    /// verbatim into the answer).
+    Rendering: string
+    /// Derived freshness status.
+    Freshness: FactFreshnessInfo
+    /// The id that superseded this fact, when it is stale/superseded.
+    SupersededBy: string option
+    /// Registered metric id the fact is for.
+    Metric: string
+}
+
+/// Scope-filtered fact-resolution seam (Phase 522.B). Implemented over the
+/// fact store in the fact companion; the RAG pipeline consumes it as an
+/// optional dependency (`None` ⇒ dormant, GP 13). `Resolve` is handed the
+/// caller's resolved storage scope, so tenant isolation is structural (GP
+/// 4): the implementation scope-filters the store query *before* reading,
+/// making a fact from one scope unreachable from another.
+///
+/// GP 12 audit: identity by value (`scopeId` string, value records); async
+/// at the boundary; no callbacks; stateless between calls; scope is the
+/// shard key with no cross-scope ordering promise; no timing primitives.
+type IFactResolver =
+    abstract Resolve: scopeId: string * clause: FactClause -> Async<ResolvedFact list>
+
 /// Wire-format record for a retrieved chunk surfaced to the AI client. A
 /// projection of `VectorMatch` that strips the embedding-pipeline internals
 /// (chunk id, full content, scope) and adds caller-friendly fields the UI
@@ -285,6 +399,21 @@ type RetrievedSource = {
     /// normalised). Always `Some` at production time; `None` only for
     /// pre-widening persisted conversation payloads (GP 11).
     ChunkId: string option
+    /// Phase 522.C — when this source is a resolved fact (`Origin =
+    /// Fact`), its content-addressed id; `None` for document / note /
+    /// narrative / AI-context sources. Additive + backward-compatible (GP
+    /// 11): pre-existing wire payloads without the field deserialise to
+    /// `None`.
+    FactId: string option
+    /// Canonical value rendering of the fact — the number the answer
+    /// quotes verbatim. `None` for non-fact sources.
+    FactRendering: string option
+    /// Derived freshness of the fact. `None` for non-fact sources.
+    FactFreshness: FactFreshnessInfo option
+    /// When the fact is stale/superseded, the id that superseded it (the
+    /// lineage's current head). `None` for a fresh fact or a non-fact
+    /// source.
+    FactSupersededBy: string option
 }
 
 /// Controls how results from multiple scopes are combined.
@@ -341,6 +470,14 @@ type RetrievalRequest = {
     /// content first when the user asks from a specific module's view.
     /// `None` (default) preserves prior behaviour.
     ActiveModule: string option
+    /// Optional fact clause (Phase 522.A). When `Some`, the pipeline
+    /// resolves the (subject, metric, period) query against the fact store
+    /// *before* vector search and merges the exact fact hits ahead of the
+    /// similarity chunks as a distinct `ChunkOrigin.Fact` origin. `None`
+    /// (default) ⇒ no fact resolution, byte-identical retrieval (GP 11 /
+    /// plan D17). The clause has no effect unless a fact resolver is wired
+    /// into the pipeline (GP 13).
+    FactClause: FactClause option
 }
 
 module RetrievalRequest =
@@ -357,6 +494,7 @@ module RetrievalRequest =
         AdaptiveK = None
         OriginFilter = None
         ActiveModule = None
+        FactClause = None
     }
 
 /// Per-deployment defaults applied by `RAGPromptBuilder.withRetrieval`. Lets

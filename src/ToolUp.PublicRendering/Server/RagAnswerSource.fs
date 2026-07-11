@@ -188,6 +188,7 @@ module RagAnswerSource =
                     AdaptiveK = None
                     OriginFilter = None
                     ActiveModule = None
+                    FactClause = None
                 }
 
                 let! matches = pipeline.Retrieve request ctx

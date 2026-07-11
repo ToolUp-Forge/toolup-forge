@@ -30,6 +30,10 @@ let private threeSources: RetrievedSource list = [
         OriginalRef = None
         Scope = None
         ChunkId = None
+        FactId = None
+        FactRendering = None
+        FactFreshness = None
+        FactSupersededBy = None
     }
     {
         DocumentId = "doc-2"
@@ -41,6 +45,10 @@ let private threeSources: RetrievedSource list = [
         OriginalRef = None
         Scope = None
         ChunkId = None
+        FactId = None
+        FactRendering = None
+        FactFreshness = None
+        FactSupersededBy = None
     }
     {
         DocumentId = "doc-3"
@@ -52,6 +60,10 @@ let private threeSources: RetrievedSource list = [
         OriginalRef = None
         Scope = None
         ChunkId = None
+        FactId = None
+        FactRendering = None
+        FactFreshness = None
+        FactSupersededBy = None
     }
 ]
 

@@ -461,6 +461,10 @@ let private lineageTests =
                     }
                 Scope = Some(Team "T")
                 ChunkId = Some "doc-1:chunk:0"
+                FactId = None
+                FactRendering = None
+                FactFreshness = None
+                FactSupersededBy = None
             }
 
             let json = JsonSerializer.Serialize(source, opts)

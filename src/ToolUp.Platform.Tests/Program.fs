@@ -464,6 +464,8 @@ let allTests =
         RAGVacuumJobHandlerTests.tests
         // Phase 14r — tool-aware RAG framing (live-interface detection + companion).
         ToolAwareRagFramingTests.tests
+        // Phase 522 — fact-first retrieval.
+        FactFirstRetrievalTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests
