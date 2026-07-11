@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
+namespace ToolUp.Platform
+
+// ─── Provenance chain traversal (Phase 524) ──────────────────────────
+//
+// Lineage records (Phase 8a), analysis-run audit events (Phase 9), fact
+// evidence refs (Phase 520), and retrieved sources exist as islands.
+// `IProvenanceGraph` stitches them into one **read-only walkable graph** —
+// ingestion → run → fact → narrative → cited answer — so "trace this
+// sentence back to the CSV row" is one call. It is a **view**: no new
+// persistence, the underlying stores stay authoritative (GP 13 —
+// composing a graph over stores a deployment already has costs nothing
+// until a caller asks).
+//
+// **Fact evidence via a seam, not a companion dependency.** The graph
+// lives in `ToolUp.Platform.Server`, which cannot depend on the
+// `ToolUp.Facts` companion (that would invert the dependency). Fact nodes
+// therefore arrive through the `IFactEvidenceSource` seam — a generic
+// interface a fact-store adapter fills (the forge pattern: interface in
+// Platform, implementation in the companion). Absent a source, the graph
+// still walks the data-object / result lineage; fact and message nodes
+// simply do not appear.
+
+/// The kind of island a `ProvenanceNode` identifies. Each maps to an
+/// existing store's identity — no new id scheme (Phase 524.A).
+type ProvenanceNodeKind =
+    /// A versioned data object (`IDataObjectStore` — an ingested / derived
+    /// payload version).
+    | DataObjectVersion
+    /// A persisted analysis result (`IResultStore`).
+    | AnalysisResult
+    /// A verified fact (`IFactStore`).
+    | FactNode
+    /// A committed narrative document (KB).
+    | NarrativeDocument
+    /// A conversation message that cited grounded sources.
+    | ConversationMessage
+
+/// One node in a provenance chain — an existing store identity, its kind,
+/// an optional disclosure class (populated for fact nodes, Phase 524.D),
+/// and a human label. Identity is by value (`Id`), reusing the underlying
+/// store's id — no new id scheme.
+type ProvenanceNode = {
+    /// The underlying store identity (data-object version id, result id,
+    /// fact id, document id, message id).
+    Id: string
+    Kind: ProvenanceNodeKind
+    /// Disclosure class for a fact node (`Surfaceable` / `Internal` /
+    /// `Restricted(policy)`), carried so a future egress-side renderer can
+    /// seal restricted node *contents* while preserving chain *shape*
+    /// (plan D16 — sealing itself lands with the export work, not here).
+    /// `None` for non-fact nodes.
+    Disclosure: string option
+    Label: string
+}
+
+/// A typed edge relating two provenance nodes. Directed child → source
+/// (the derived / downstream node is `From`, the thing it came from is
+/// `To`), so an upstream walk follows edges `From → To`.
+type ProvenanceEdgeKind =
+    /// `From` (a result / object) was derived from `To` (a source object)
+    /// — a lineage edge.
+    | DerivedFrom
+    /// `From` (a fact) is evidenced by `To` (the analysis result it was
+    /// computed from).
+    | EvidenceFor
+    /// `From` (a message / narrative) cites `To` (a fact).
+    | CitesFact
+    /// `From` (a fact) supersedes `To` (its lineage predecessor).
+    | Supersedes
+
+type ProvenanceEdge = {
+    From: string
+    To: string
+    Kind: ProvenanceEdgeKind
+}
+
+/// A materialised provenance chain rooted at one node. `Nodes` and
+/// `Edges` are deduplicated; a caller wanting order sorts itself.
+type ProvenanceChain = {
+    Root: string
+    Nodes: ProvenanceNode list
+    Edges: ProvenanceEdge list
+}
+
+/// Which way to walk from the root.
+type ProvenanceDirection =
+    /// Toward sources — "where did this come from?" (message → fact →
+    /// result → data).
+    | Upstream
+    /// Toward consumers — "what was built on this?" (data → result → fact
+    /// → message).
+    | Downstream
+
+/// A reference to a node to start a walk from — the typed root of a
+/// `GetChain`.
+type ProvenanceRef =
+    | DataObjectRef of string
+    | ResultRef of string
+    | FactRef of string
+    | MessageRef of string
+
+/// The fact-evidence a fact node contributes to the chain — the seam the
+/// graph reads instead of depending on `IFactStore`. A fact-store adapter
+/// (in the `ToolUp.Facts` companion, or any consumer) implements it.
+type FactEvidence = {
+    FactId: string
+    /// Readable subject reference.
+    Subject: string
+    Metric: string
+    /// Disclosure class string (`Surfaceable` / `Internal` /
+    /// `Restricted(policy)`).
+    Disclosure: string
+    /// The analysis-result id this fact was computed from (`EvidenceFor`
+    /// edge), when any.
+    ResultRef: string option
+    /// Content hashes of the input data-object versions (`DerivedFrom`
+    /// edges), so a fact's chain includes the data it read.
+    InputHashes: string list
+    /// The fact id this one superseded (`Supersedes` edge), when any.
+    Supersedes: string option
+}
+
+/// Read-only seam over a fact store, scope-bounded (GP 4). A fact-store
+/// adapter fills it; the provenance graph composes over it without a
+/// companion dependency. Absent (not composed), the graph omits fact
+/// nodes.
+type IFactEvidenceSource =
+    /// The evidence for one fact, or `None`.
+    abstract GetFact: scopeId: string * factId: string -> Async<FactEvidence option>
+    /// Every fact whose evidence is the given result (the downstream
+    /// "what facts were computed from this result" step). Empty when none.
+    abstract FactsForResult: scopeId: string * resultId: string -> Async<FactEvidence list>
+
+/// Read-only provenance chain traversal — a view over `ILineageStore` +
+/// (optionally) `IFactEvidenceSource`. Scope-bounded throughout (GP 4): a
+/// chain never crosses a team scope.
+type IProvenanceGraph =
+    /// Walk the provenance chain from `root` in `direction`, bounded to
+    /// `depth` hops. Every node is one of the typed `ProvenanceNodeKind`s
+    /// and every edge one of the typed `ProvenanceEdgeKind`s.
+    abstract GetChain:
+        scopeId: string * root: ProvenanceRef * direction: ProvenanceDirection * depth: int -> Async<ProvenanceChain>
+
+    /// The answer-side hook (Phase 524.C): from a conversation message and
+    /// the fact ids it cited, resolve the upstream chain in one call — the
+    /// "show the working" API a client surface or export renders. The
+    /// message is the root; each cited fact is a `CitesFact` edge whose
+    /// upstream is then walked.
+    abstract GetChainForMessage:
+        scopeId: string * messageId: string * citedFactIds: string list * depth: int -> Async<ProvenanceChain>

@@ -213,6 +213,9 @@
         <Compile Include="Server\ILineageStore.fs" />
         <Compile Include="Server\ResultStore.fs" />
         <Compile Include="Server\LineageStore.fs" />
+        <!-- Phase 524 — read-only provenance chain traversal (grounding ledger v0). -->
+        <Compile Include="Server\IProvenanceGraph.fs" />
+        <Compile Include="Server\ProvenanceGraph.fs" />
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
         <Compile Include="Server\IJobScheduler.fs" />

@@ -44,6 +44,9 @@ let allTests =
         // audit emission + freshness derivation.
         FactStoreTests.tests
         FactStoreTests.auditAndFreshnessTests
+        // Phase 524 — provenance chain traversal: seeded ingest→run→fact→
+        // message chain walks both directions; disclosure carried; scope isolation.
+        ProvenanceGraphTests.tests
         JobStoreTests.tests
         CronExpressionTests.tests
         JobSchedulerTests.tests
