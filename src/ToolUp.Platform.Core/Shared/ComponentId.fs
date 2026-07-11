@@ -61,6 +61,15 @@ module ComponentId =
     [<Literal>]
     let private ToolSlot = "tool"
 
+    // Phase 526 — grounding registry slots. A metric / subject id is
+    // `ComponentId`-class and namespaced under its own slot so a metric
+    // named `revenue` can never collide with a datatype or module `revenue`.
+    [<Literal>]
+    let private MetricSlot = "metric"
+
+    [<Literal>]
+    let private SubjectSlot = "subject"
+
     let private normalise (raw: string) : string =
         if System.String.IsNullOrWhiteSpace raw then
             ""
@@ -129,6 +138,14 @@ module ComponentId =
 
     /// Derive a tool's id from its declared `AIToolDefinition.Name`.
     let forTool (toolName: string) : ComponentId = scoped ToolSlot toolName
+
+    /// Derive a grounding metric's id from its declared registry id (Phase
+    /// 519 `Grounding.MetricDefinition.Id`). Rename-stable, slot-namespaced.
+    let forMetric (metricId: string) : ComponentId = scoped MetricSlot metricId
+
+    /// Derive a grounding subject-hierarchy's id from its declared registry
+    /// id (`Grounding.SubjectDefinition.Id`).
+    let forSubject (subjectId: string) : ComponentId = scoped SubjectSlot subjectId
 
     /// The ids that appear more than once in `ids`, each reported once in
     /// first-seen order. Empty when every id is unique.

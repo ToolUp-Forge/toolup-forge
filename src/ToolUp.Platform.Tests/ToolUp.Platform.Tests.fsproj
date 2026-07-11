@@ -334,6 +334,8 @@
              ServerConfig registry (reflection); the slot set = the reflected
              companion-interface set (derived, not hand-listed). -->
         <Compile Include="InProcess\ComposableSurfaceTests.fs" />
+        <!-- Phase 526 — composition introspection covers grounding declarations. -->
+        <Compile Include="InProcess\CompositionGroundingTests.fs" />
         <!-- Phase 288 — component provenance: a first-party companion reports
              the platform assembly + version; the provenance key id-joins the
              manifest companion slot; resolution is total (null → unknown). -->

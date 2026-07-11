@@ -55,6 +55,8 @@
       "Impl": null
     }
   ],
+  "Metrics": [],
+  "Subjects": [],
   "ConfigKnobs": [
     {
       "Name": "ProcessProfile",
@@ -95,6 +97,10 @@
     {
       "Name": "PeerSubstrate",
       "Value": "NoPeerSubstrate"
+    },
+    {
+      "Name": "FactStore",
+      "Value": "NoFactStore"
     }
   ]
 }

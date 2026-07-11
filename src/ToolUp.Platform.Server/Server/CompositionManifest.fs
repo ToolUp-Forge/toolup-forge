@@ -36,6 +36,10 @@ type ComponentKind =
     | CompanionComponent
     | DataTypeComponent
     | ToolComponent
+    /// Phase 526 — a registered grounding metric (Phase 519).
+    | MetricComponent
+    /// Phase 526 — a registered grounding subject hierarchy (Phase 519).
+    | SubjectComponent
 
 /// One composed unit enumerated in a `CompositionManifest`: its stable
 /// `ComponentId`, what kind of unit it is, a human-readable label, and —
@@ -72,6 +76,12 @@ type CompositionManifest = {
     CompanionSlots: ComponentEntry list
     DataTypes: ComponentEntry list
     Tools: ComponentEntry list
+    /// Phase 526 — registered grounding metrics, keyed by
+    /// `ComponentId.forMetric`; empty when no module declared any (a
+    /// grounding-free composition, byte-identical to pre-526).
+    Metrics: ComponentEntry list
+    /// Phase 526 — registered grounding subject hierarchies.
+    Subjects: ComponentEntry list
     ConfigKnobs: ConfigKnob list
 }
 
@@ -127,6 +137,22 @@ module CompositionManifest =
         Impl = Some implSubId
     }
 
+    /// A registered grounding metric, keyed by its declared registry id.
+    let metricEntry (metricId: string) : ComponentEntry = {
+        Id = ComponentId.forMetric metricId
+        Kind = MetricComponent
+        Label = metricId
+        Impl = None
+    }
+
+    /// A registered grounding subject hierarchy, keyed by its registry id.
+    let subjectEntry (subjectId: string) : ComponentEntry = {
+        Id = ComponentId.forSubject subjectId
+        Kind = SubjectComponent
+        Label = subjectId
+        Impl = None
+    }
+
     let knob (name: string) (value: string) : ConfigKnob = { Name = name; Value = value }
 
     /// Assemble a manifest from the enumerated entries. Pure projection —
@@ -144,15 +170,33 @@ module CompositionManifest =
             CompanionSlots = companionSlots
             DataTypes = dataTypes
             Tools = tools
+            Metrics = []
+            Subjects = []
             ConfigKnobs = configKnobs
+        }
+
+    /// Phase 526 — attach registered grounding metric / subject entries to
+    /// a built manifest. Kept separate from `build` so every existing
+    /// `build` call stays source-stable; a grounding-free composition never
+    /// calls this and its manifest carries empty `Metrics` / `Subjects`
+    /// (byte-identical to pre-526).
+    let withGrounding
+        (metrics: ComponentEntry list)
+        (subjects: ComponentEntry list)
+        (m: CompositionManifest)
+        : CompositionManifest =
+        {
+            m with
+                Metrics = metrics
+                Subjects = subjects
         }
 
     /// The empty manifest — what a pipeline that composed nothing (or was
     /// never introspected) projects to.
     let empty: CompositionManifest = build [] [] [] [] []
 
-    /// Every component entry across all four kinds, in one flat list —
+    /// Every component entry across all kinds, in one flat list —
     /// convenient for a uniqueness sweep or a flat dump. (`ConfigKnob`s
     /// are not `ComponentEntry`s and are excluded.)
     let allComponents (m: CompositionManifest) : ComponentEntry list =
-        m.Modules @ m.CompanionSlots @ m.DataTypes @ m.Tools
+        m.Modules @ m.CompanionSlots @ m.DataTypes @ m.Tools @ m.Metrics @ m.Subjects

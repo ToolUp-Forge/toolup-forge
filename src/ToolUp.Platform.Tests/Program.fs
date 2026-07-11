@@ -173,6 +173,11 @@ let allTests =
         // Phase 293 — composable-surface descriptor: companion slots / config
         // knob schemas / module contract derived from the live registry.
         ComposableSurfaceTests.tests
+        // Phase 526 — composition introspection covers grounding: manifest
+        // reports registered metric/subject ids + fact-store kind; the
+        // composable-surface descriptor enumerates the grounding surface;
+        // grounding-free composition unchanged; rename-stable ids.
+        CompositionGroundingTests.tests
         // Phase 288 — component provenance: package/version/assembly per
         // composed companion, id-joined to the manifest; total resolution.
         ComponentProvenanceTests.tests

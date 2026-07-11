@@ -1779,9 +1779,25 @@ module ServerApp =
             CompositionManifest.knob "SmokeTest" (string app.Config.SmokeTest)
             CompositionManifest.knob "DataSubjectRequests" (string app.Config.DataSubjectRequests)
             CompositionManifest.knob "PeerSubstrate" (string app.Config.PeerSubstrate)
+            // Phase 526 — the resolved grounding fact-store kind.
+            CompositionManifest.knob "FactStore" (string app.Config.FactStore)
         ]
 
+        // Phase 526 — registered grounding metrics / subjects, keyed by
+        // `ComponentId.forMetric` / `forSubject`, deduplicated. Empty when no
+        // module declared any (grounding-free composition unchanged).
+        let metricEntries =
+            app.RegisteredMetrics
+            |> List.map (fun r -> CompositionManifest.metricEntry r.Definition.Id)
+            |> List.distinct
+
+        let subjectEntries =
+            app.RegisteredSubjects
+            |> List.map (fun r -> CompositionManifest.subjectEntry r.Definition.Id)
+            |> List.distinct
+
         CompositionManifest.build modules companionSlots dataTypes tools configKnobs
+        |> CompositionManifest.withGrounding metricEntries subjectEntries
 
     /// Phase 283 — resolve a composed module's stable Phase 279 `ComponentId`
     /// from its display name (the label its audit events carry as

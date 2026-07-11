@@ -86,14 +86,46 @@ type ModuleContractShape = {
     ToolSlotPrefix: string
 }
 
+/// Phase 526 — the grounding-plane composition vocabulary, as data: the
+/// fact-store companion slot (+ its default), the module-level
+/// metric/subject registration points, and the birth-classification
+/// disclosure defaults (plan D14). Distinct from the reflected `Slots`
+/// because the fact store is a companion (`ToolUp.Facts`) that wraps the
+/// composition rather than an interface field on `ServerApp`, so it does
+/// not surface through the `ServerApp`-field reflection — it is described
+/// explicitly here. *What is composable* in the grounding plane.
+type GroundingSurface = {
+    /// The stable slot id of the fact-store companion (`ComponentId
+    /// .forCompanionSlot "IFactStore"`).
+    FactStoreSlot: ComponentId
+    /// The fact-store companion interface name.
+    FactStoreInterface: string
+    /// The `ServerConfig.FactStore` values (the config knob that selects
+    /// the fact-store kind) — the first is the default.
+    FactStoreModes: string list
+    /// The `ComponentId` slot prefix a registered metric is namespaced
+    /// under (`metric`).
+    MetricSlotPrefix: string
+    /// The slot prefix a registered subject hierarchy is namespaced under
+    /// (`subject`).
+    SubjectSlotPrefix: string
+    /// The birth-classification disclosure defaults (plan D14): what a
+    /// fact's disclosure class defaults to per origin, before any
+    /// composition policy narrows it. Pairs of (origin, default class).
+    DisclosureDefaults: (string * string) list
+}
+
 /// forge's available composition vocabulary: the companion slots it can
-/// compose, the composition-shaping config-knob schemas, and the module
-/// contract. Derived from the live `ServerApp` / `ServerConfig` registry,
-/// so it stays forge-version-synced by construction.
+/// compose, the composition-shaping config-knob schemas, the module
+/// contract, and the grounding-plane surface. Derived from the live
+/// `ServerApp` / `ServerConfig` registry, so it stays forge-version-synced
+/// by construction.
 type ComposableSurface = {
     Slots: ComposableSlot list
     ConfigKnobs: ConfigKnobSchema list
     ModuleContract: ModuleContractShape
+    /// Phase 526 — the grounding-plane composable surface.
+    Grounding: GroundingSurface
 }
 
 module ComposableSurface =
@@ -188,10 +220,32 @@ module ComposableSurface =
         ToolSlotPrefix = "tool"
     }
 
+    /// The grounding-plane composable surface (Phase 526). The fact-store
+    /// modes are read from the derived `FactStore` config-knob schema so
+    /// they stay synced with `ServerConfig.FactStore`; the rest is stable
+    /// descriptor data (the slot id, the registration-point prefixes, and
+    /// the plan-D14 disclosure defaults).
+    let grounding () : GroundingSurface =
+        let factStoreModes =
+            configKnobs ()
+            |> List.tryFind (fun k -> k.Name = "FactStore")
+            |> Option.map _.Values
+            |> Option.defaultValue []
+
+        {
+            FactStoreSlot = ComponentId.forCompanionSlot "IFactStore"
+            FactStoreInterface = "IFactStore"
+            FactStoreModes = factStoreModes
+            MetricSlotPrefix = "metric"
+            SubjectSlotPrefix = "subject"
+            DisclosureDefaults = [ "declared-metric", "Surfaceable"; "intermediate", "Internal" ]
+        }
+
     /// Assemble forge's full composable-surface descriptor. Pure + on
     /// demand — nothing is built until a caller asks for it (GP 13).
     let describe () : ComposableSurface = {
         Slots = slots ()
         ConfigKnobs = configKnobs ()
         ModuleContract = moduleContract
+        Grounding = grounding ()
     }
