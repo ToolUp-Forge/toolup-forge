@@ -129,6 +129,7 @@ let private debugAck (conversationId: Guid) (enabled: bool) : ConversationMessag
         RetrievedSources = []
         Parts = []
         CreatedBy = ""
+        Verification = None
     }
 
 let private debugNote (conversationId: Guid) (body: string) : ConversationMessage = {
@@ -141,6 +142,7 @@ let private debugNote (conversationId: Guid) (body: string) : ConversationMessag
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    Verification = None
 }
 
 let private truncateForDebug (limit: int) (s: string) =
@@ -175,6 +177,7 @@ let private watchdogNote (conversationId: Guid) : ConversationMessage = {
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    Verification = None
 }
 
 let init () =
@@ -283,6 +286,7 @@ let update msg model =
             RetrievedSources = []
             Parts = []
             CreatedBy = ""
+            Verification = None
         }
 
         // Debug-mode toggles are intercepted client-side and never reach
@@ -463,6 +467,7 @@ let update msg model =
                     RetrievedSources = []
                     Parts = []
                     CreatedBy = ""
+                    Verification = None
                 }
 
                 // Clear the watchdog — the response arrived within the
@@ -572,6 +577,12 @@ let update msg model =
         // dispatch. Match arm exists only to satisfy exhaustiveness.
         | ClientToolInvoke(_, _, _, _, _, _) -> model, Cmd.none
 
+        // Phase 523 — numeric-fidelity verdict. The full-page module does
+        // not yet render verification badges; ignored for now (a later
+        // client phase surfaces it). The verdict is already persisted on the
+        // `ConversationMessage` and re-read on history load.
+        | AnswerVerified(_, _) -> model, Cmd.none
+
         // Phase 6h: user clicked Cancel and the server has confirmed
         // the agent loop is bailing. Commit whatever was streaming
         // (so the user keeps the partial response) and clear the
@@ -591,6 +602,7 @@ let update msg model =
                             RetrievedSources = []
                             Parts = []
                             CreatedBy = ""
+                            Verification = None
                         }
 
                         model.Messages @ [ assistantMsg ]

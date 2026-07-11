@@ -223,6 +223,7 @@ let private toConversationMessage
     (retrievedSources: RetrievedSource list)
     (parts: AIContentPart list)
     (createdBy: string)
+    (verification: AnswerVerification option)
     : ConversationMessage =
     {
         Id = Guid.NewGuid()
@@ -238,6 +239,9 @@ let private toConversationMessage
         // ownership check inside `bgWork`. Empty for assistant turns
         // (only the first message's `CreatedBy` is authoritative).
         CreatedBy = createdBy
+        // Phase 523 — numeric-fidelity verdict; `None` for user turns and
+        // for assistant turns produced with the gate `Off` (the default).
+        Verification = verification
     }
 
 // ─── Background context ──────────────────────────────────────────
@@ -943,7 +947,9 @@ let aiAssistantApi
                         // the chat history, though they remain inspectable
                         // via the history blob for audit or future UI).
                         let! existingUiMessages = loadConversation logger storage scope.Container conversationId
-                        let userConvMsg = toConversationMessage conversationId User content [] [] [] userId
+
+                        let userConvMsg =
+                            toConversationMessage conversationId User content [] [] [] userId None
 
                         let modelEmittedContent =
                             finalMessages
@@ -1037,15 +1043,64 @@ let aiAssistantApi
                                   }
                             | _ -> async.Return modelEmittedContent
 
+                        // Phase 523 — numeric-fidelity answer gate. Resolves
+                        // the opt-in `AnswerGate` + metric registry + metrics
+                        // sink from the background DI scope; when the gate is
+                        // absent (the default) `runVerificationStage`
+                        // short-circuits to `finalContent` verbatim with no
+                        // verdict, no SSE event, no audit, no metric — the
+                        // pre-523 path byte-for-byte (GP 11 / GP 13). In
+                        // `Annotate` / `Strict` mode it verifies every numeric
+                        // token against the turn's retrieved facts, appends a
+                        // footnote (or withholds unverified sentences behind an
+                        // inline flag), and returns the verdict to ride the
+                        // persisted `ConversationMessage` and the SSE stream.
+                        let answerGateOpt =
+                            match bgCtx.RequestServices.GetService(typeof<AnswerVerifier.AnswerGate>) with
+                            | :? AnswerVerifier.AnswerGate as g -> Some g
+                            | _ -> None
+
+                        let metricRegistryOpt =
+                            match bgCtx.RequestServices.GetService(typeof<Grounding.IMetricRegistry>) with
+                            | :? Grounding.IMetricRegistry as r -> Some r
+                            | _ -> None
+
+                        let answerMetricsSinkOpt =
+                            match bgCtx.RequestServices.GetService(typeof<Metrics.IMetricsSink>) with
+                            | :? Metrics.IMetricsSink as s -> Some s
+                            | _ -> None
+
+                        let! (verifiedContent, verificationOpt) =
+                            AnswerVerifier.runVerificationStage
+                                answerGateOpt
+                                metricRegistryOpt
+                                retrievedSourcesCell.Value
+                                finalContent
+                                answerMetricsSinkOpt
+                                citationEventStore
+                                scope.ScopeId
+                                taskId
+                                conversationId
+                                providerName
+                                providerModel
+                                logger
+
+                        // Surface the per-message verdict on the SSE stream
+                        // (`Annotate` / `Strict` only; `Off` returns `None`).
+                        match verificationOpt with
+                        | Some verification -> emit (AnswerVerified(conversationId, verification))
+                        | None -> ()
+
                         let assistantConvMsg =
                             toConversationMessage
                                 conversationId
                                 AIAssistant
-                                finalContent
+                                verifiedContent
                                 []
                                 retrievedSourcesCell.Value
                                 []
                                 ""
+                                verificationOpt
 
                         let updatedConversation = existingUiMessages @ [ userConvMsg; assistantConvMsg ]
 
@@ -1062,7 +1117,7 @@ let aiAssistantApi
                                 "assistant"
                                 {
                                     Role = "assistant"
-                                    Content = finalContent
+                                    Content = verifiedContent
                                     ToolCalls =
                                         finalMessages
                                         |> List.tryFindBack (fun m -> m.Role = "assistant")

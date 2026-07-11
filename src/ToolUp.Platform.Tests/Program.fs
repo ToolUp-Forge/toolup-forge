@@ -468,6 +468,8 @@ let allTests =
         ToolAwareRagFramingTests.tests
         // Phase 522 — fact-first retrieval.
         FactFirstRetrievalTests.tests
+        // Phase 523 — numeric-fidelity answer gate.
+        AnswerVerifierTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests

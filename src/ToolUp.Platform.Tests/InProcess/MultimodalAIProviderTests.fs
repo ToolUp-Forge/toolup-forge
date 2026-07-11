@@ -179,6 +179,7 @@ let private persistenceTests =
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                Verification = None
             }
 
             let replayed = roundTrip msg
@@ -205,6 +206,7 @@ let private persistenceTests =
                 RetrievedSources = []
                 Parts = parts
                 CreatedBy = ""
+                Verification = None
             }
 
             let replayed = roundTrip msg

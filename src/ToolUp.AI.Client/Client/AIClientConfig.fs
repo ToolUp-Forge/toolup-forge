@@ -174,6 +174,7 @@ let private watchdogNote (conversationId: Guid) : ConversationMessage = {
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    Verification = None
 }
 
 // ─── Debug-mode helpers ──────────────────────────────────────────
@@ -210,6 +211,7 @@ let private debugAck (conversationId: Guid) (enabled: bool) : ConversationMessag
         RetrievedSources = []
         Parts = []
         CreatedBy = ""
+        Verification = None
     }
 
 let private debugNote (conversationId: Guid) (body: string) : ConversationMessage = {
@@ -222,6 +224,7 @@ let private debugNote (conversationId: Guid) (body: string) : ConversationMessag
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    Verification = None
 }
 
 // Inline error renderer for the side panel. The full-page module
@@ -241,6 +244,7 @@ let private errorNote (conversationId: Guid) (body: string) : ConversationMessag
     RetrievedSources = []
     Parts = []
     CreatedBy = ""
+    Verification = None
 }
 
 let private truncateForDebug (limit: int) (s: string) =
@@ -272,6 +276,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                Verification = None
             }
 
             // Clear the watchdog token — response arrived before the
@@ -306,6 +311,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                         RetrievedSources = []
                         Parts = []
                         CreatedBy = ""
+                        Verification = None
                     }
 
                     model.Messages @ [ msg ]
@@ -385,6 +391,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                Verification = None
             }
 
             let ack = debugAck model.ConversationId enabled
@@ -406,6 +413,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 RetrievedSources = []
                 Parts = []
                 CreatedBy = ""
+                Verification = None
             }
 
             // Phase 6j.A: client-side fast-path resolver. Trivial UI

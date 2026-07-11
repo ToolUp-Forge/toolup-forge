@@ -1,0 +1,620 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
+module ToolUp.AI.AnswerVerifier
+
+open System
+open System.Globalization
+open System.Text
+open System.Text.Json
+open System.Text.RegularExpressions
+open System.Threading.Tasks
+open ToolUp.Platform
+open ToolUp.Platform.Metrics
+open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.AI
+
+// ─── Numeric-fidelity answer gate (Phase 523) ────────────────────────
+//
+// A post-response stage that makes "no unverified numbers" mechanical. It
+// extracts every numeric token from an assistant answer, canonicalises it
+// under the metric registry's display rules (rounding / format / percent /
+// unit-scaling aware — values are compared, never surface strings), and
+// checks each against the facts in the turn's retrieved set (the
+// `ChunkOrigin.Fact` sources). This is the regex-grade check with the
+// audit-grade consequence: mismatches flag inline via an SSE verification
+// event, ride the persisted `ConversationMessage`, emit one audit record
+// per unmatched token (GP 6), and feed verified/unmatched metric counters
+// the eval harness consumes.
+//
+// The seam (`IAnswerVerifier`) is what the future LLM-judge qualitative
+// tier implements — same shape, a smarter body. This default is the
+// deterministic numeric tier.
+//
+// **Opt-in; `Off` is byte-identical (GP 11 / GP 13).** The gate runs only
+// when a deployment composes `AIServerApp.withNumericFidelityGate` in a
+// non-`Off` mode; absent, `runVerificationStage` short-circuits to the
+// answer verbatim with no verdict, no SSE event, no audit, no metric.
+
+// ─── Gate mode ───────────────────────────────────────────────────────
+
+/// Escalation level of the answer gate (Phase 523.C). Server-only config
+/// carried through DI from `withNumericFidelityGate`.
+///
+///  * `AnswerGateOff` — the default. No verification; the answer path is
+///    byte-for-byte the pre-523 path (GP 13).
+///  * `AnswerGateAnnotate` — verify + surface the verdict (SSE event +
+///    `ConversationMessage.Verification` + audit + metrics) and append a
+///    non-destructive footnote listing any unverified figures. The answer
+///    body is otherwise untouched.
+///  * `AnswerGateStrict` — as `Annotate`, and additionally *withhold* each
+///    sentence carrying an unverified number behind an explicit inline flag
+///    (never a silent rewrite — the flag names why the figure was removed).
+type AnswerGateMode =
+    | AnswerGateOff
+    | AnswerGateAnnotate
+    | AnswerGateStrict
+
+module AnswerGateMode =
+    let toString (mode: AnswerGateMode) : string =
+        match mode with
+        | AnswerGateOff -> "Off"
+        | AnswerGateAnnotate -> "Annotate"
+        | AnswerGateStrict -> "Strict"
+
+    /// Parse a config string (`"Annotate"` / `"Strict"`, case-insensitive);
+    /// anything unrecognised — including `null` / `""` — resolves to the
+    /// safe `Off` default (GP 13).
+    let parse (raw: string) : AnswerGateMode =
+        match (raw |> Option.ofObj |> Option.defaultValue "").Trim().ToLowerInvariant() with
+        | "annotate" -> AnswerGateAnnotate
+        | "strict" -> AnswerGateStrict
+        | _ -> AnswerGateOff
+
+// ─── Metric registrations (Phase 523.E) ──────────────────────────────
+
+/// Counter of numeric tokens that matched a fact in the retrieved set.
+[<Literal>]
+let VerifiedTotal = "toolup.ai.answer.verified"
+
+/// Counter of numeric tokens that matched NO fact in the retrieved set
+/// while facts WERE in scope — the anti-hallucination signal the eval
+/// harness (Phase 14j) charts.
+[<Literal>]
+let UnmatchedTotal = "toolup.ai.answer.unmatched"
+
+/// SDK-owned answer-gate registrations. Wired by
+/// `AIServerApp.withNumericFidelityGate` into `ServerApp.MetricRegistrations`
+/// so `PrometheusMetricsSink` / `OtelMetricsSink` pre-allocate the series
+/// at compose time and emissions flow rather than silently drop. Same
+/// pattern as `AILatencyMetrics.registrations`.
+let registrations: MetricRegistration list = [
+    {
+        Module = None
+        Definition = {
+            Name = VerifiedTotal
+            Kind = Counter
+            Description = "Numeric answer tokens verified against a retrieved fact (tags: provider + model + mode)"
+            Unit = "1"
+            Tags = [ "provider"; "model"; "mode" ]
+        }
+    }
+    {
+        Module = None
+        Definition = {
+            Name = UnmatchedTotal
+            Kind = Counter
+            Description =
+                "Numeric answer tokens with no matching retrieved fact while facts were in scope "
+                + "(tags: provider + model + mode)"
+            Unit = "1"
+            Tags = [ "provider"; "model"; "mode" ]
+        }
+    }
+]
+
+// ─── Audit (Phase 523.D) ─────────────────────────────────────────────
+
+/// Reserved `IEventStore` source-module for the numeric-fidelity audit
+/// trail. Filter `IEventStore.ReadBySource scope AnswerVerifier.AuditSourceModule`
+/// for unverified-number events in isolation (GP 6).
+[<Literal>]
+let AuditSourceModule = "_platform.ai.answer_verification"
+
+[<Literal>]
+let AuditEventType = "UnverifiedNumber"
+
+/// Payload of an `UnverifiedNumber` audit event (JSON into
+/// `ModuleEvent.Payload`). PII-free — the numeric token + its canonical
+/// value + the turn identifiers only.
+type UnverifiedNumberAudit = {
+    TaskId: Guid
+    ConversationId: Guid
+    /// The numeric token exactly as it appeared in the answer.
+    Token: string
+    /// The canonical decimal value it normalised to (invariant string).
+    Canonical: string
+    Mode: string
+    /// How many facts were in scope this turn (0 ⇒ nothing to check against,
+    /// but such tokens are `NoFactsInScope`, never audited as unmatched).
+    FactsInScope: int
+    ProviderName: string
+    ProviderModel: string
+}
+
+// ─── Canonicalisation (Phase 523.A) ──────────────────────────────────
+//
+// Registry display format → canonical comparison value. The rules:
+//  * Unicode minus / en-dash / figure-dash are folded to ASCII `-`, so
+//    `−1.3` and `-1.3` are the same number.
+//  * Currency glyphs (`£ $ €`), thousands separators, and surrounding
+//    whitespace are stripped, so `£21,800` and `21800` are the same.
+//  * A parenthesised value `(1,234)` is a negative (accountancy form).
+//  * A trailing `%` folds the value to its fraction (`-134%` → `-1.34`),
+//    so a fraction quote and a percent quote of the same quantity agree.
+//  * The token's *apparent precision* (decimal places, +2 for a percent)
+//    is what the match rounds to — a number quoted to fewer decimals is a
+//    faithful rounding, a genuinely different number is not.
+
+module Canonical =
+
+    /// Fold the several Unicode minus / dash code points to ASCII `-`.
+    let private normaliseSign (s: string) =
+        s.Replace('−', '-').Replace('–', '-').Replace('—', '-').Replace('‒', '-')
+
+    /// Decimal-place precision implied by a .NET numeric format string, in
+    /// *fraction* space — so a percent format `"P1"` (one decimal on the
+    /// ×100 value) is three fraction decimals. `None` for an empty / verbatim
+    /// format (`""`). Used to canonicalise a stored `FactValue`'s precision
+    /// under the metric registry's declared `DisplayFormat` (Phase 519).
+    let formatPrecision (fmt: string) : int option =
+        if String.IsNullOrWhiteSpace fmt then
+            None
+        else
+            let f = fmt.Trim()
+            let letter = Char.ToUpperInvariant f.[0]
+
+            let digits =
+                match Int32.TryParse(f.Substring 1) with
+                | true, n -> n
+                | _ -> 2 // .NET default for N/C/F/P when no digit is given
+
+            match letter with
+            | 'P' -> Some(digits + 2) // percent renders the ×100 value
+            | 'C'
+            | 'N'
+            | 'F' -> Some digits
+            | _ -> None
+
+    /// Parse a raw numeric token to `(fractionValue, apparentPrecision)`.
+    /// `apparentPrecision` is the decimal places in *fraction* space
+    /// (percent adds 2). `None` when the token carries no numeric core.
+    /// Never throws.
+    let parse (raw: string) : (decimal * int) option =
+        if String.IsNullOrWhiteSpace raw then
+            None
+        else
+            let trimmed = (normaliseSign raw).Trim()
+
+            let paren = trimmed.StartsWith "(" && trimmed.EndsWith ")"
+
+            let body =
+                if paren then
+                    trimmed.Substring(1, trimmed.Length - 2)
+                else
+                    trimmed
+
+            let isPercent = body.Contains "%"
+
+            // Keep only digits, a single leading sign, and the decimal point;
+            // this discards currency glyphs, thousands separators, and the
+            // percent sign in one pass.
+            let core =
+                body.ToCharArray()
+                |> Array.filter (fun c -> Char.IsDigit c || c = '-' || c = '.')
+                |> System.String
+
+            match Decimal.TryParse(core, NumberStyles.Number, CultureInfo.InvariantCulture) with
+            | true, v ->
+                let signed = if paren then -(abs v) else v
+                let value = if isPercent then signed / 100m else signed
+
+                // Precision from the raw numeral, not the divided decimal —
+                // so `-134%` reports 2 fraction places (0 percent decimals + 2)
+                // rather than whatever `134/100m` happens to store.
+                let numeralDecimals =
+                    match core.IndexOf '.' with
+                    | -1 -> 0
+                    | i -> core.Length - i - 1
+
+                let precision = numeralDecimals + (if isPercent then 2 else 0)
+                Some(value, precision)
+            | _ -> None
+
+    /// Round `value` to `places` (clamped to a sane decimal range), rounding
+    /// halves away from zero to match display rendering.
+    let round (places: int) (value: decimal) : decimal =
+        Math.Round(value, min 28 (max 0 places), MidpointRounding.AwayFromZero)
+
+    /// Whether an answer token matches a fact value. The comparison rounds
+    /// BOTH to the token's apparent precision — the coarser precision the
+    /// answer author chose — so `-1.3`, `-1.34`, and `-134%` all verify
+    /// against a stored `-1.34`, while a genuinely different number does not.
+    let valuesMatch (tokenPrecision: int) (tokenValue: decimal) (factValue: decimal) : bool =
+        round tokenPrecision tokenValue = round tokenPrecision factValue
+
+// ─── Token extraction (Phase 523.B) ──────────────────────────────────
+
+/// A numeric token located in an answer, with its position (for Strict-mode
+/// sentence withholding).
+type NumericToken = {
+    Text: string
+    Index: int
+    Length: int
+}
+
+// Signed (incl. Unicode minus), optionally currency-prefixed, grouped,
+// optionally-decimal, optionally-percent number. Non-overlapping,
+// left-to-right — `£21,800` matches whole rather than as `21` + `800`.
+let private numberRegex =
+    Regex(@"[-−–]?[$£€]?\d[\d,]*(?:\.\d+)?%?", RegexOptions.Compiled)
+
+/// Extract every numeric token from `answer`, in reading order. Trailing
+/// grouping punctuation captured from surrounding prose is trimmed off the
+/// reported token; a lone 1–2 digit integer wrapped in `[n]` (a citation
+/// marker) is skipped so citation digits are not mistaken for quantities.
+let extractTokens (answer: string) : NumericToken list =
+    if String.IsNullOrEmpty answer then
+        []
+    else
+        [
+            for m in numberRegex.Matches answer do
+                // Trim a trailing separator the greedy class swallowed from
+                // prose (`£21,800,` → `£21,800`).
+                let trimmed = m.Value.TrimEnd(',', '.')
+                let length = trimmed.Length
+
+                if length > 0 then
+                    let before = if m.Index > 0 then Some answer.[m.Index - 1] else None
+
+                    let after =
+                        if m.Index + length < answer.Length then
+                            Some answer.[m.Index + length]
+                        else
+                            None
+
+                    let isCitationMarker =
+                        before = Some '['
+                        && after = Some ']'
+                        && trimmed.Length <= 2
+                        && trimmed |> Seq.forall Char.IsDigit
+
+                    if not isCitationMarker then
+                        {
+                            Text = trimmed
+                            Index = m.Index
+                            Length = length
+                        }
+        ]
+
+// ─── Facts in scope ──────────────────────────────────────────────────
+
+/// A retrieved fact a turn can verify against (Phase 523.B) — projected
+/// from the `ChunkOrigin.Fact` retrieved sources so the verifier takes no
+/// dependency on the retrieval wire record beyond the fields it reads.
+type ScopedFact = {
+    FactId: string
+    /// The canonical display rendering (produced under the metric registry's
+    /// `DisplayFormat` upstream in fact-first retrieval).
+    Rendering: string
+    /// Registered metric id, when known — lets the verifier consult the
+    /// registry for the fact's declared precision. Empty when the retrieval
+    /// projection did not carry it (canonicalisation then parses the
+    /// rendering symmetrically, which already reflects the display rules).
+    Metric: string
+}
+
+/// Project the fact-origin retrieved sources onto `ScopedFact`s. Non-fact
+/// sources (documents, notes, narratives) are dropped — the numeric gate
+/// verifies against the exact fact tier, not similarity prose.
+let scopedFacts (sources: RetrievedSource list) : ScopedFact list =
+    sources
+    |> List.choose (fun s ->
+        match s.Origin, s.FactRendering with
+        | Fact, Some rendering ->
+            Some {
+                FactId = s.FactId |> Option.defaultValue ""
+                Rendering = rendering
+                Metric = ""
+            }
+        | _ -> None)
+
+// ─── The seam (Phase 523.B) ──────────────────────────────────────────
+
+/// Pluggable answer-verification seam. The default `NumericFidelityVerifier`
+/// is the deterministic numeric tier; the future LLM-judge qualitative tier
+/// implements the SAME interface (a smarter body over the same inputs).
+///
+/// **GP 12.** Stateless per call — every input arrives as a parameter and
+/// nothing is retained between calls. The interface is a pure, synchronous
+/// in-memory computation, so it carries no retry obligation of its own; an
+/// I/O-backed implementation (the qualitative judge) owns its own retry
+/// policy as data internally, exactly as `IAIProvider` does. Implementations
+/// MUST NOT throw — an unparseable token is a verdict, never an exception.
+type IAnswerVerifier =
+    abstract Verify:
+        answer: string * facts: ScopedFact list * registry: Grounding.IMetricRegistry option * mode: string ->
+            AnswerVerification
+
+module NumericFidelity =
+
+    /// Pure verification: extract, canonicalise, and match every numeric
+    /// token against the fact tier. `registry` (when present) supplies each
+    /// fact's declared display precision (Phase 519); absent, the fact's own
+    /// canonical rendering is parsed symmetrically.
+    let verify
+        (answer: string)
+        (facts: ScopedFact list)
+        (registry: Grounding.IMetricRegistry option)
+        (mode: string)
+        : AnswerVerification =
+        // Pre-parse the facts once — `(fact, value, precision)`.
+        let parsedFacts =
+            facts
+            |> List.choose (fun f ->
+                let metric = registry |> Option.bind (fun r -> r.TryGetMetric f.Metric)
+
+                match Canonical.parse f.Rendering with
+                | None -> None
+                | Some(v, p) ->
+                    let precision =
+                        match metric |> Option.bind (fun m -> Canonical.formatPrecision m.DisplayFormat) with
+                        | Some fp -> max p fp
+                        | None -> p
+
+                    Some(f, v, precision))
+
+        let hasFacts = not (List.isEmpty facts)
+
+        let numbers =
+            extractTokens answer
+            |> List.map (fun tok ->
+                match Canonical.parse tok.Text with
+                | None ->
+                    // Extraction only yields numerics, so this is defensive.
+                    // A token we cannot canonicalise cannot be verified.
+                    {
+                        Token = tok.Text
+                        Canonical = None
+                        Verdict = (if hasFacts then NumberUnmatched else NoFactsInScope)
+                        MatchedFactId = None
+                    }
+                | Some(tv, tp) ->
+                    let canonical = Some((Canonical.round tp tv).ToString(CultureInfo.InvariantCulture))
+
+                    if not hasFacts then
+                        {
+                            Token = tok.Text
+                            Canonical = canonical
+                            Verdict = NoFactsInScope
+                            MatchedFactId = None
+                        }
+                    else
+                        match parsedFacts |> List.tryFind (fun (_, fv, _) -> Canonical.valuesMatch tp tv fv) with
+                        | Some(f, _, _) -> {
+                            Token = tok.Text
+                            Canonical = canonical
+                            Verdict = NumberVerified
+                            MatchedFactId = (if f.FactId = "" then None else Some f.FactId)
+                          }
+                        | None -> {
+                            Token = tok.Text
+                            Canonical = canonical
+                            Verdict = NumberUnmatched
+                            MatchedFactId = None
+                          })
+
+        {
+            Verified = numbers |> List.filter (fun n -> n.Verdict = NumberVerified) |> List.length
+            Unmatched = numbers |> List.filter (fun n -> n.Verdict = NumberUnmatched) |> List.length
+            Unverifiable = numbers |> List.filter (fun n -> n.Verdict = NoFactsInScope) |> List.length
+            Numbers = numbers
+            Mode = mode
+        }
+
+/// The default deterministic numeric-fidelity verifier (Phase 523.B).
+type NumericFidelityVerifier() =
+    interface IAnswerVerifier with
+        member _.Verify(answer, facts, registry, mode) =
+            NumericFidelity.verify answer facts registry mode
+
+// ─── Answer rewrites (Phase 523.C) ───────────────────────────────────
+
+[<Literal>]
+let private strictFlag =
+    "[⚠ figure withheld — an unverified number could not be matched to a grounded fact]"
+
+/// `Annotate`: append a non-destructive footnote listing the unverified
+/// figures. The answer body is left intact; only a clearly-marked note is
+/// added. Returns the answer verbatim when nothing was unmatched. (`Strict`
+/// withholds the sentences instead and adds a count-only note — it never
+/// re-lists the values.)
+let private appendUnverifiedFootnote (answer: string) (verification: AnswerVerification) : string =
+    let unmatched =
+        verification.Numbers
+        |> List.filter (fun n -> n.Verdict = NumberUnmatched)
+        |> List.map _.Token
+
+    match unmatched with
+    | [] -> answer
+    | tokens ->
+        let list = String.Join(", ", tokens)
+
+        answer
+        + "\n\n> ⚠️ **Unverified figures:** "
+        + list
+        + " — these numbers were not found in the retrieved facts and may be inaccurate."
+
+/// `Strict` withholding: replace every sentence carrying an unmatched number
+/// with an explicit inline flag (never a silent rewrite), then append the
+/// footnote. Sentences are delimited by `. ! ? \n`; replacements are applied
+/// right-to-left so earlier offsets stay valid. Verified / unverifiable
+/// sentences are untouched.
+let private withholdUnverifiedSentences (answer: string) (verification: AnswerVerification) : string =
+    let tokens = extractTokens answer
+
+    // `verify` maps tokens 1:1 to `Numbers` in order, so the lengths match;
+    // guard defensively and skip the rewrite if they ever diverge.
+    if tokens.Length <> verification.Numbers.Length then
+        appendUnverifiedFootnote answer verification
+    else
+        let terminators = [| '.'; '!'; '?'; '\n' |]
+
+        let sentenceBounds (index: int) : int * int =
+            let mutable start = index - 1
+
+            while start >= 0 && not (Array.contains answer.[start] terminators) do
+                start <- start - 1
+
+            let mutable stop = index
+
+            while stop < answer.Length && not (Array.contains answer.[stop] terminators) do
+                stop <- stop + 1
+
+            // include the terminator so it is removed with the sentence
+            (start + 1), (if stop < answer.Length then stop + 1 else stop)
+
+        // Distinct sentence spans containing at least one unmatched token.
+        let spans =
+            List.zip tokens verification.Numbers
+            |> List.choose (fun (tok, verdict) ->
+                if verdict.Verdict = NumberUnmatched then
+                    Some(sentenceBounds tok.Index)
+                else
+                    None)
+            |> List.distinct
+            |> List.sortByDescending fst
+
+        let withheld =
+            spans
+            |> List.fold
+                (fun (text: string) (start, stop) -> text.Substring(0, start) + strictFlag + text.Substring stop)
+                answer
+
+        // A COUNT-ONLY note — never the raw values. They were just withheld;
+        // re-listing them in a footnote (as `Annotate` does) would defeat the
+        // withholding.
+        match verification.Unmatched with
+        | 0 -> withheld
+        | n ->
+            let plural = if n = 1 then "figure" else "figures"
+            withheld + $"\n\n> ⚠️ {n} unverified {plural} withheld pending grounding."
+
+// ─── The post-response stage (Phase 523.C / D / E) ───────────────────
+
+/// The composed gate config resolved from DI (`withNumericFidelityGate`).
+/// Absent from DI ⇒ the gate is `Off` and `runVerificationStage`
+/// short-circuits (GP 13).
+type AnswerGate = {
+    Mode: AnswerGateMode
+    Verifier: IAnswerVerifier
+}
+
+let private auditJsonOptions = FableConverters.create ()
+
+/// The post-response numeric-fidelity stage. Verifies the answer against the
+/// turn's retrieved facts, emits the SSE verification event, audits every
+/// unmatched token (GP 6), records verified/unmatched counters (Phase 523.E),
+/// and returns the (possibly `Strict`-withheld / `Annotate`-footnoted) answer
+/// plus the verdict to persist on the `ConversationMessage`.
+///
+/// `Off` mode (or an absent `gate`) returns `(answer, None)` with zero side
+/// effects — byte-for-byte the pre-523 path (GP 11 / GP 13).
+let runVerificationStage
+    (gate: AnswerGate option)
+    (registry: Grounding.IMetricRegistry option)
+    (sources: RetrievedSource list)
+    (answer: string)
+    (metricsSink: IMetricsSink option)
+    (eventStore: IEventStore option)
+    (scopeId: string)
+    (taskId: Guid)
+    (conversationId: Guid)
+    (providerName: string)
+    (providerModel: string)
+    (logger: ILogger)
+    : Async<string * AnswerVerification option> =
+    async {
+        match gate with
+        | None
+        | Some { Mode = AnswerGateOff } -> return (answer, None)
+        | Some g ->
+            let modeStr = AnswerGateMode.toString g.Mode
+            let facts = scopedFacts sources
+            let verification = g.Verifier.Verify(answer, facts, registry, modeStr)
+
+            // Metrics — one increment per token outcome (Phase 523.E).
+            match metricsSink with
+            | Some sink ->
+                let tags =
+                    Map.ofList [ "provider", providerName; "model", providerModel; "mode", modeStr ]
+
+                for n in verification.Numbers do
+                    match n.Verdict with
+                    | NumberVerified -> sink.Increment(VerifiedTotal, tags)
+                    | NumberUnmatched -> sink.Increment(UnmatchedTotal, tags)
+                    | NoFactsInScope -> ()
+            | None -> ()
+
+            // Audit — one durable record per unmatched token (GP 6). Bounded
+            // + best-effort: a wedged event store must never crash or block
+            // the conversation. Mirrors the citation-audit shape.
+            match eventStore with
+            | Some store ->
+                for n in verification.Numbers do
+                    if n.Verdict = NumberUnmatched then
+                        let payload: UnverifiedNumberAudit = {
+                            TaskId = taskId
+                            ConversationId = conversationId
+                            Token = n.Token
+                            Canonical = n.Canonical |> Option.defaultValue ""
+                            Mode = modeStr
+                            FactsInScope = List.length facts
+                            ProviderName = providerName
+                            ProviderModel = providerModel
+                        }
+
+                        let evt: ModuleEvent = {
+                            Id = Guid.NewGuid()
+                            OccurredAt = DateTime.UtcNow
+                            ScopeId = scopeId
+                            SourceModule = AuditSourceModule
+                            EventType = AuditEventType
+                            Payload = JsonSerializer.Serialize(payload, auditJsonOptions)
+                        }
+
+                        try
+                            let writeTask = store.Write evt |> Async.StartAsTask
+                            let timeoutTask = Task.Delay 5_000
+                            let! winner = Task.WhenAny(writeTask :> Task, timeoutTask) |> Async.AwaitTask
+
+                            if winner = (writeTask :> Task) then
+                                do! writeTask |> Async.AwaitTask
+                            else
+                                logger.Warn
+                                    $"AI answer-verification audit write timed out (taskId={taskId}, token={n.Token}); record dropped, conversation unaffected."
+                        with ex ->
+                            logger.Warn
+                                $"AI answer-verification audit write failed (taskId={taskId}, token={n.Token}): {ex.Message}. Record dropped; conversation unaffected."
+            | None -> ()
+
+            // Text rewrite by mode (Phase 523.C).
+            let finalAnswer =
+                match g.Mode with
+                | AnswerGateOff -> answer
+                | AnswerGateAnnotate -> appendUnverifiedFootnote answer verification
+                | AnswerGateStrict -> withholdUnverifiedSentences answer verification
+
+            return (finalAnswer, Some verification)
+    }

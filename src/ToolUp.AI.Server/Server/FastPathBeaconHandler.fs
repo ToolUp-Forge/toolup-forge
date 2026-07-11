@@ -368,6 +368,9 @@ let private buildUserMessage (callerUserId: string) (beacon: FastPathBeacon) : C
     // treats those degenerate first-writes as legacy/unowned rather
     // than locking the conversation to nobody.
     CreatedBy = callerUserId
+    // Phase 523 — fast-path turns bypass the LLM answer path entirely, so
+    // no numeric-fidelity verdict applies.
+    Verification = None
 }
 
 let private buildAssistantMessage (beacon: FastPathBeacon) : ConversationMessage =
@@ -418,6 +421,8 @@ let private buildAssistantMessage (beacon: FastPathBeacon) : ConversationMessage
         // CreatedBy is authoritative for the ownership gate. Set to the
         // same caller id so the audit / replay shape is consistent.
         CreatedBy = ""
+        // Phase 523 — fast-path synthetic replies quote no facts.
+        Verification = None
     }
 
 let private buildProviderUser (beacon: FastPathBeacon) : AIProviderMessage = {

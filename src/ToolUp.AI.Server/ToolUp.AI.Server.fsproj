@@ -46,6 +46,11 @@
         <Compile Include="Server\ClientToolDispatch.fs" />
         <Compile Include="Server\AICancellationRegistry.fs" />
         <Compile Include="Server\AILatencyMetrics.fs" />
+        <!-- Phase 523 — numeric-fidelity answer gate: canonicalisation +
+             IAnswerVerifier seam + post-response stage. Depends only on
+             AITypes (Core) + the metric registry / retrieval types (Platform)
+             + the metrics seam; placed before the handler that wires it. -->
+        <Compile Include="Server\AnswerVerifier.fs" />
         <Compile Include="Server\AIAgentEngine.fs" />
         <Compile Include="Server\ICitationNormaliser.fs" />
         <Compile Include="Server\AIAssistantHandler.fs" />

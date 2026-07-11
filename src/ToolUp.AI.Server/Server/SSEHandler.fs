@@ -51,6 +51,7 @@ let sendEvent (manager: SSEConnectionManager) (scopeId: string) (event: AIStream
         | ToolCallStarted _ -> "ToolCallStarted"
         | ToolCallCompleted _ -> "ToolCallCompleted"
         | ClientToolInvoke _ -> "ClientToolInvoke"
+        | AnswerVerified _ -> "AnswerVerified"
 
     let json = serializeEvent event
     manager.BroadcastWithKind(scopeId, SSE.dataFrame json, kind)

@@ -31,6 +31,7 @@ let private msg (createdBy: string) : ConversationMessage = {
     RetrievedSources = []
     Parts = []
     CreatedBy = createdBy
+    Verification = None
 }
 
 let private gateTests =

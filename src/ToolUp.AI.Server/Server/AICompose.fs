@@ -592,6 +592,55 @@ module AIServerApp =
             ModuleAIContexts = contexts
     }
 
+    /// Phase 523 — opt into the numeric-fidelity answer gate with a custom
+    /// verifier (the seat for the future LLM-judge qualitative tier, which
+    /// implements the same `IAnswerVerifier` seam). Registers the composed
+    /// `AnswerVerifier.AnswerGate` as a DI singleton (resolved by the chat
+    /// handler's post-response stage) and appends the verified/unmatched
+    /// counter registrations so the metrics sink pre-allocates their series.
+    ///
+    /// `AnswerGateOff` (or not calling this at all) leaves the answer path
+    /// byte-for-byte pre-523 — no DI registration, no metric series, no
+    /// per-turn verification (GP 11 / GP 13). Threads the singleton through
+    /// the shared `ComposeExtensions.ServiceConfig` exactly like
+    /// `ServerApp.withCspContributor`, so `RAGServerApp` inherits it.
+    let withAnswerVerifier
+        (mode: AnswerVerifier.AnswerGateMode)
+        (verifier: AnswerVerifier.IAnswerVerifier)
+        (app: AIServerApp)
+        : AIServerApp =
+        match mode with
+        | AnswerVerifier.AnswerGateOff -> app
+        | _ ->
+            let gate: AnswerVerifier.AnswerGate = { Mode = mode; Verifier = verifier }
+
+            let register (s: IServiceCollection) =
+                s.AddSingleton<AnswerVerifier.AnswerGate>(gate)
+
+            let baseWithMetrics =
+                app.Base |> ServerApp.withMetricRegistrations AnswerVerifier.registrations
+
+            {
+                app with
+                    Base = {
+                        baseWithMetrics with
+                            Extensions = {
+                                baseWithMetrics.Extensions with
+                                    ServiceConfig =
+                                        match baseWithMetrics.Extensions.ServiceConfig with
+                                        | None -> Some register
+                                        | Some baseFn -> Some(fun s -> register (baseFn s))
+                            }
+                    }
+            }
+
+    /// Phase 523 — opt into the numeric-fidelity answer gate with the
+    /// default deterministic verifier (`NumericFidelityVerifier`). See
+    /// `withAnswerVerifier` for the gate semantics; `AnswerGateOff` is the
+    /// byte-identical no-op default (GP 13).
+    let withNumericFidelityGate (mode: AnswerVerifier.AnswerGateMode) (app: AIServerApp) : AIServerApp =
+        withAnswerVerifier mode (AnswerVerifier.NumericFidelityVerifier() :> AnswerVerifier.IAnswerVerifier) app
+
     /// Phase 43.A — swap the canonical BYOK provider-profile store
     /// after `create`. Mirrors `ServerApp.withProviderProfile` (the
     /// deferred 42.B seam) onto the AI superset: rebinds both the

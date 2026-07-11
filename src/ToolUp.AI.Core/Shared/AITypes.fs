@@ -39,6 +39,63 @@ type ToolCallRecord = {
     Status: ToolCallStatus
 }
 
+// ─── Numeric-fidelity verification (Phase 523) ───────────────────
+//
+// The numeric-fidelity answer gate extracts every numeric token from an
+// assistant answer, canonicalises it under the metric registry's display
+// rules, and verifies it matches a fact in the turn's retrieved set. The
+// verdict rides three surfaces: the SSE stream (per-message summary), the
+// persisted `ConversationMessage` (history reload), and an audit event per
+// unmatched token. Fable-shared because the client renders the verdict as
+// inline badges on both the live reply and history reload.
+
+/// Per-token numeric-fidelity verdict (Phase 523.B).
+type NumericVerdict =
+    /// The token's canonical value matches a fact in the turn's retrieved
+    /// set (any registry-legal rendering of that fact).
+    | NumberVerified
+    /// Facts WERE in scope this turn, but no retrieved fact's canonical
+    /// value matches this token — the anti-hallucination flag.
+    | NumberUnmatched
+    /// No facts were retrieved this turn, so the token cannot be checked
+    /// against the fact tier. Not a violation — an honest "unverifiable".
+    | NoFactsInScope
+
+/// One numeric token extracted from an assistant answer together with its
+/// verification verdict (Phase 523).
+type VerifiedNumber = {
+    /// The numeric token exactly as it appeared in the answer text
+    /// (e.g. `"£21,800"`, `"-134%"`, `"−1.3"`).
+    Token: string
+    /// The canonical decimal value the token normalised to, rendered as an
+    /// invariant-culture string (percent folded to its fraction, currency /
+    /// grouping / unicode-minus stripped). `None` when the token could not
+    /// be parsed to a number (defensive — extraction only yields numerics).
+    Canonical: string option
+    Verdict: NumericVerdict
+    /// The content-addressed id of the retrieved fact this token matched,
+    /// when `NumberVerified`; `None` otherwise.
+    MatchedFactId: string option
+}
+
+/// Per-message numeric-fidelity verdict summary (Phase 523.D). Rides the
+/// SSE stream and the persisted `ConversationMessage`. `Off`-mode turns
+/// never produce one (the field stays `None`).
+type AnswerVerification = {
+    /// Count of tokens with a `NumberVerified` verdict.
+    Verified: int
+    /// Count of tokens with a `NumberUnmatched` verdict (the flagged set).
+    Unmatched: int
+    /// Count of tokens that could not be checked because no facts were in
+    /// scope this turn (`NoFactsInScope`).
+    Unverifiable: int
+    /// Every extracted numeric token with its verdict, in answer order.
+    Numbers: VerifiedNumber list
+    /// The gate mode that produced this verdict (`"Annotate"` / `"Strict"`).
+    /// `"Off"` never emits an `AnswerVerification` at all.
+    Mode: string
+}
+
 /// A single message in a conversation
 type ConversationMessage = {
     Id: Guid
@@ -73,6 +130,15 @@ type ConversationMessage = {
     /// echo) sets this to `""` — it is authoritative only when the
     /// server writes it.
     CreatedBy: string
+    /// Phase 523 — numeric-fidelity verdict for this assistant message.
+    /// `None` for user / system turns, for assistant turns produced with
+    /// the gate `Off` (the default), and for conversation history
+    /// persisted before this field existed — pre-523 wire payloads without
+    /// the field deserialise to `None` (additive + backward-compatible, GP
+    /// 11). Populated only when the answer gate ran in `Annotate` / `Strict`
+    /// mode; the client renders it as inline verification badges on both the
+    /// live reply and on history reload.
+    Verification: AnswerVerification option
 }
 
 /// Conversation metadata
@@ -147,6 +213,13 @@ type AIStreamEvent =
         argsJson: string *
         activeModule: string option *
         activePage: string option
+    /// Phase 523: per-message numeric-fidelity verdict. Emitted once, after
+    /// the final assistant text is settled, when the answer gate ran
+    /// (`Annotate` / `Strict`). The client renders the verdict as inline
+    /// verification badges under the reply. Absent entirely when the gate
+    /// is `Off` (the default) — a deployment that never opts in sees the
+    /// pre-523 event stream byte-for-byte (GP 11 / GP 13).
+    | AnswerVerified of conversationId: Guid * verification: AnswerVerification
 
 // ─── Client-resident tool result ─────────────────────────────────
 

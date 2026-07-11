@@ -90,6 +90,7 @@ ToolUp.AI.AISettingsApi.SetPlatformModelOverride : Microsoft.FSharp.Core.FSharpF
 ToolUp.AI.AISettingsApi.SetPlatformProviderOverride : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.AI.AISettingsApi.TestConnection : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.AI.AIStreamEvent (class)
+ToolUp.AI.AIStreamEvent.IsAnswerVerified : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsClientToolInvoke : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsMessageComplete : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsMessageDelta : System.Boolean { get }
@@ -99,6 +100,9 @@ ToolUp.AI.AIStreamEvent.IsTaskStatusChanged : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsToolCallCompleted : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsToolCallStarted : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.Tag : System.Int32 { get }
+ToolUp.AI.AIStreamEvent+AnswerVerified (class)
+ToolUp.AI.AIStreamEvent+AnswerVerified.conversationId : System.Guid { get }
+ToolUp.AI.AIStreamEvent+AnswerVerified.verification : ToolUp.AI.AnswerVerification { get }
 ToolUp.AI.AIStreamEvent+ClientToolInvoke (class)
 ToolUp.AI.AIStreamEvent+ClientToolInvoke.activeModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.AIStreamEvent+ClientToolInvoke.activePage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -117,6 +121,7 @@ ToolUp.AI.AIStreamEvent+StreamCancelled.conversationId : System.Guid { get }
 ToolUp.AI.AIStreamEvent+StreamError (class)
 ToolUp.AI.AIStreamEvent+StreamError.message : System.String { get }
 ToolUp.AI.AIStreamEvent+Tags (class)
+ToolUp.AI.AIStreamEvent+Tags.AnswerVerified : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.ClientToolInvoke : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.MessageComplete : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.MessageDelta : System.Int32 (literal)
@@ -177,6 +182,13 @@ ToolUp.AI.AIUserConfigView.PlatformModelOverride : Microsoft.FSharp.Core.FSharpO
 ToolUp.AI.AIUserConfigView.PlatformProviderOverride : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.AIUserConfigViewModule (class)
 ToolUp.AI.AIUserConfigViewModule.empty : ToolUp.AI.AIUserConfigView { get }
+ToolUp.AI.AnswerVerification (class)
+ToolUp.AI.AnswerVerification..ctor(System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.VerifiedNumber], System.String)
+ToolUp.AI.AnswerVerification.Mode : System.String { get }
+ToolUp.AI.AnswerVerification.Numbers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.VerifiedNumber] { get }
+ToolUp.AI.AnswerVerification.Unmatched : System.Int32 { get }
+ToolUp.AI.AnswerVerification.Unverifiable : System.Int32 { get }
+ToolUp.AI.AnswerVerification.Verified : System.Int32 { get }
 ToolUp.AI.ClientToolAuthDecision (class)
 ToolUp.AI.ClientToolAuthDecision.Allow : ToolUp.AI.ClientToolAuthDecision { get }
 ToolUp.AI.ClientToolAuthDecision.IsAllow : System.Boolean { get }
@@ -201,7 +213,7 @@ ToolUp.AI.Conversation.OverrideProviderLabel : Microsoft.FSharp.Core.FSharpOptio
 ToolUp.AI.Conversation.Title : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Conversation.UpdatedAt : System.DateTime { get }
 ToolUp.AI.ConversationMessage (class)
-ToolUp.AI.ConversationMessage..ctor(System.Guid, System.Guid, ToolUp.AI.ParticipantType, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart], System.String)
+ToolUp.AI.ConversationMessage..ctor(System.Guid, System.Guid, ToolUp.AI.ParticipantType, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification])
 ToolUp.AI.ConversationMessage.Content : System.String { get }
 ToolUp.AI.ConversationMessage.ConversationId : System.Guid { get }
 ToolUp.AI.ConversationMessage.CreatedBy : System.String { get }
@@ -211,6 +223,7 @@ ToolUp.AI.ConversationMessage.Parts : Microsoft.FSharp.Collections.FSharpList`1[
 ToolUp.AI.ConversationMessage.RetrievedSources : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource] { get }
 ToolUp.AI.ConversationMessage.Timestamp : System.DateTime { get }
 ToolUp.AI.ConversationMessage.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord] { get }
+ToolUp.AI.ConversationMessage.Verification : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification] { get }
 ToolUp.AI.IAIProviderFactory (interface)
 ToolUp.AI.IAIProviderFactory.Available : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderDescriptor] { get }
 ToolUp.AI.IAIProviderFactory.BuildPlatform(System.String, System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.IAIProvider]
@@ -233,6 +246,18 @@ ToolUp.AI.ModuleAIContext (class)
 ToolUp.AI.ModuleAIContext..ctor(System.String, System.String)
 ToolUp.AI.ModuleAIContext.ModuleName : System.String { get }
 ToolUp.AI.ModuleAIContext.SystemPrompt : System.String { get }
+ToolUp.AI.NumericVerdict (class)
+ToolUp.AI.NumericVerdict.IsNoFactsInScope : System.Boolean { get }
+ToolUp.AI.NumericVerdict.IsNumberUnmatched : System.Boolean { get }
+ToolUp.AI.NumericVerdict.IsNumberVerified : System.Boolean { get }
+ToolUp.AI.NumericVerdict.NoFactsInScope : ToolUp.AI.NumericVerdict { get }
+ToolUp.AI.NumericVerdict.NumberUnmatched : ToolUp.AI.NumericVerdict { get }
+ToolUp.AI.NumericVerdict.NumberVerified : ToolUp.AI.NumericVerdict { get }
+ToolUp.AI.NumericVerdict.Tag : System.Int32 { get }
+ToolUp.AI.NumericVerdict+Tags (class)
+ToolUp.AI.NumericVerdict+Tags.NoFactsInScope : System.Int32 (literal)
+ToolUp.AI.NumericVerdict+Tags.NumberUnmatched : System.Int32 (literal)
+ToolUp.AI.NumericVerdict+Tags.NumberVerified : System.Int32 (literal)
 ToolUp.AI.ParticipantType (class)
 ToolUp.AI.ParticipantType.AIAssistant : ToolUp.AI.ParticipantType { get }
 ToolUp.AI.ParticipantType.IsAIAssistant : System.Boolean { get }
@@ -334,3 +359,9 @@ ToolUp.AI.ToolExecutionLocation.Tag : System.Int32 { get }
 ToolUp.AI.ToolExecutionLocation+Tags (class)
 ToolUp.AI.ToolExecutionLocation+Tags.ClientSide : System.Int32 (literal)
 ToolUp.AI.ToolExecutionLocation+Tags.ServerSide : System.Int32 (literal)
+ToolUp.AI.VerifiedNumber (class)
+ToolUp.AI.VerifiedNumber..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.NumericVerdict, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AI.VerifiedNumber.Canonical : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.VerifiedNumber.MatchedFactId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.VerifiedNumber.Token : System.String { get }
+ToolUp.AI.VerifiedNumber.Verdict : ToolUp.AI.NumericVerdict { get }
