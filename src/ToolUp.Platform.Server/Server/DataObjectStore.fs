@@ -291,6 +291,27 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
         return toDelete.Length
     }
 
+    // Phase 448.D follow-on — bounded ranged reads over the content-
+    // addressed dedup pool, delegating to the backing storage's native
+    // range support (Phase 455 `DownloadRange`). Over the encryption
+    // decorator the delegate refuses (whole-blob AES-GCM ciphertext has
+    // no readable mid-blob range) and the error propagates — capability
+    // consumers treat it as the signal to fall back to `GetContent`.
+    interface IContentRangeReader with
+        member _.GetContentSize(scopeId, contentHash) = async {
+            let container = containerFor scopeId
+            let! result = blobStorage.GetMetadata(container, contentBlobName contentHash)
+            return result |> liftStorage |> Result.map _.Size
+        }
+
+        member _.ReadContentRange(scopeId, contentHash, offset, length) = async {
+            let container = containerFor scopeId
+
+            let! result = blobStorage.DownloadRange(container, contentBlobName contentHash, offset, length)
+
+            return liftStorage result
+        }
+
     interface IDataObjectStore with
         member _.Save(scopeId, objectId, content, dataType, createdBy, metadata, policy) = async {
             if objectId = reservedContentObjectId then

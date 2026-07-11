@@ -69,6 +69,37 @@ type IDatasetCodec =
     /// — for content it recognises as its own format but cannot parse.
     abstract Decode: content: byte[] -> Result<DatasetSchema * DatasetRow list, string>
 
+/// Optional streaming capability a codec MAY additionally implement (the
+/// Phase 448.D verdict-#3 follow-on, unblocked by Phase 455 ranged reads):
+/// decode rows **incrementally** from bounded ranged reads, so a paged read
+/// over a multi-GB vintage never materialises the whole content blob.
+/// Detected by type test at the read site — the BCL `JsonFrameDatasetCodec`
+/// does not implement it (a JSON frame is not range-decodable), so the
+/// default composition takes the whole-blob path unchanged; a Parquet
+/// companion codec implements it over row groups.
+type IStreamingDatasetCodec =
+    inherit IDatasetCodec
+
+    /// Decode the next bounded chunk of rows. `readRange offset length`
+    /// reads a byte window of the content (semantics of
+    /// `IBlobStorage.DownloadRange`: past-EOF → `Ok [||]`, short reads at
+    /// the end). The accessor is a per-call data-access capability scoped to
+    /// this invocation — not a supervision callback (GP 12 rule 3 is about
+    /// retry/failure policy, which stays with the store); the codec itself
+    /// stays stateless (rule 4): anything it needs across calls rides the
+    /// `cursor`, an opaque codec-defined resume token. `size` is the total
+    /// content length in bytes. `cursor = None` starts a decode; a returned
+    /// `Some token` resumes it on the next call; a returned `None` marks the
+    /// chunk as the last. Every chunk echoes the (identical) schema so any
+    /// chunk is self-describing. Chunk row-count is codec-chosen and MUST be
+    /// bounded — it is the streaming read path's memory high-water mark.
+    /// `Error reason` on malformed content or a failed / refused range read;
+    /// the store treats any chunk error as "streaming unavailable" and falls
+    /// back to the whole-blob path, which is always correct.
+    abstract DecodeChunk:
+        readRange: (int64 -> int -> Async<Result<byte[], string>>) * size: int64 * cursor: string option ->
+            Async<Result<DatasetSchema * DatasetRow list * string option, string>>
+
 /// A value-typed reference to a dataset version's content blob, for handing a
 /// vintage to an external compute worker (the plan's `GetParquetRef`, made
 /// **format-honest**: `Format` names the actual encoding rather than

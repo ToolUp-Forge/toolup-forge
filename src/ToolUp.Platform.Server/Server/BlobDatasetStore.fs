@@ -66,8 +66,10 @@ type BlobDatasetStore(dataObjects: IDataObjectStore, codec: IDatasetCodec) =
     [<Literal>]
     static let FormatKey = "dataset.format"
 
-    /// Cap on rows returned in a single page — a large-dataset guard until
-    /// ranged reads land (see the 448.D design-review note in the phase body).
+    /// Cap on rows returned in a single page. On the whole-blob path it is
+    /// the large-dataset guard; on the streamed path (ranged reads +
+    /// streaming codec) it bounds the page's memory alongside the codec's
+    /// chunk size.
     [<Literal>]
     static let MaxPageLimit = 10000
 
@@ -225,6 +227,133 @@ type BlobDatasetStore(dataObjects: IDataObjectStore, codec: IDatasetCodec) =
             | Error e -> return Error(mapDataObjectError e)
         }
 
+    /// v1 whole-blob page: download the version's content blob (one
+    /// content-addressed read), decode it through the composed codec, then
+    /// filter + page in memory. Correct for every codec; capped by
+    /// `MaxPageLimit`. The streaming path below falls back here whenever
+    /// ranged reads are unavailable or refused.
+    let readPageWholeBlob
+        (scopeId: string)
+        (dobj: DataObject)
+        (query: DatasetPageQuery)
+        : Async<Result<DatasetPage, DatasetError>> =
+        async {
+            match! dataObjects.GetContent(scopeId, dobj.ContentHash) with
+            | Error e -> return Error(mapDataObjectError e)
+            | Ok bytes ->
+                match codec.Decode bytes with
+                | Error reason -> return Error(DatasetError.StorageFailure reason)
+                | Ok(schema, rows) ->
+                    match applyFilters schema query.Filters rows with
+                    | Error reason -> return Error(DatasetError.SchemaMismatch reason)
+                    | Ok filtered ->
+                        let total = int64 (List.length filtered)
+                        let count = List.length filtered
+
+                        let skipN =
+                            if query.Offset >= int64 count then
+                                count
+                            else
+                                int query.Offset
+
+                        let pageRows =
+                            filtered |> List.skip skipN |> List.truncate (min query.Limit MaxPageLimit)
+
+                        return
+                            Ok {
+                                Schema = schema
+                                Rows = pageRows
+                                Offset = query.Offset
+                                TotalRows = total
+                            }
+        }
+
+    /// Streamed page over bounded ranged reads (448.D verdict #3, unblocked
+    /// by Phase 455): pull codec-sized chunks, filter + collect the
+    /// requested window, and never hold more than one chunk plus one page
+    /// in memory. Filtered queries still scan every chunk (`TotalRows` is
+    /// the exact filtered count, matching the whole-blob path) — bounded
+    /// memory, full-scan I/O; unfiltered queries stop as soon as the page
+    /// fills, taking `TotalRows` from the version's row-count sidecar.
+    /// Returns `None` when the ranged-read infrastructure is unavailable at
+    /// runtime — the size probe or a chunk decode failed (e.g. the
+    /// encryption decorator's honest refusal of mid-blob ciphertext
+    /// ranges) — signalling the caller to fall back to the whole-blob path.
+    /// Store-level semantic errors (a filter that does not fit the schema)
+    /// surface directly: they carry no I/O dependence and would reproduce
+    /// identically whole-blob.
+    let readPageStreamed
+        (ranged: IContentRangeReader)
+        (streaming: IStreamingDatasetCodec)
+        (scopeId: string)
+        (dobj: DataObject)
+        (query: DatasetPageQuery)
+        : Async<Result<DatasetPage, DatasetError> option> =
+        async {
+            let effLimit = min query.Limit MaxPageLimit
+            let noFilters = List.isEmpty query.Filters
+
+            // The sidecar row count enables the unfiltered early exit; when
+            // it is unreadable (a foreign writer), stream to EOF instead —
+            // exact, just not early.
+            let sidecarRowCount =
+                Map.tryFind RowCountKey dobj.Metadata
+                |> Option.bind (fun s ->
+                    match Int64.TryParse s with
+                    | true, n -> Some n
+                    | _ -> None)
+
+            match! ranged.GetContentSize(scopeId, dobj.ContentHash) with
+            | Error _ -> return None // no ranged infrastructure — whole-blob fallback
+            | Ok size ->
+                let readRange (offset: int64) (length: int) = async {
+                    let! result = ranged.ReadContentRange(scopeId, dobj.ContentHash, offset, length)
+
+                    return
+                        result
+                        |> Result.mapError (fun e ->
+                            match e with
+                            | DataObjectError.StorageFailure m -> m
+                            | other -> $"%A{other}")
+                }
+
+                let rec loop (cursor: string option) (matched: int64) (collected: int) (pageRev: DatasetRow list) = async {
+                    match! streaming.DecodeChunk(readRange, size, cursor) with
+                    | Error _ -> return None // refused / malformed — whole-blob fallback
+                    | Ok(schema, rows, next) ->
+                        match applyFilters schema query.Filters rows with
+                        | Error reason -> return Some(Error(DatasetError.SchemaMismatch reason))
+                        | Ok passing ->
+                            let mutable m = matched
+                            let mutable c = collected
+                            let mutable acc = pageRev
+
+                            for r in passing do
+                                if m >= query.Offset && c < effLimit then
+                                    acc <- r :: acc
+                                    c <- c + 1
+
+                                m <- m + 1L
+
+                            let page (totalRows: int64) = {
+                                Schema = schema
+                                Rows = List.rev acc
+                                Offset = query.Offset
+                                TotalRows = totalRows
+                            }
+
+                            match next with
+                            | None -> return Some(Ok(page m)) // EOF — m is the exact matched total
+                            | Some _ when noFilters && c >= effLimit && Option.isSome sidecarRowCount ->
+                                // Unfiltered page full: every row matches, so
+                                // the sidecar count is the total — stop reading.
+                                return Some(Ok(page sidecarRowCount.Value))
+                            | Some _ -> return! loop next m c acc
+                }
+
+                return! loop None 0L 0 []
+        }
+
     interface IDatasetStore with
         member _.Create(scopeId, datasetId, schema, rows, createdBy, metadata, policy) = async {
             // Schema-mismatch rejection (448.E): every row must fit the schema.
@@ -290,34 +419,19 @@ type BlobDatasetStore(dataObjects: IDataObjectStore, codec: IDatasetCodec) =
                     if storedFormat <> codec.Format then
                         return Error(DatasetError.UnreadableFormat storedFormat)
                     else
-                        match! dataObjects.GetContent(scopeId, dobj.ContentHash) with
-                        | Error e -> return Error(mapDataObjectError e)
-                        | Ok bytes ->
-                            match codec.Decode bytes with
-                            | Error reason -> return Error(DatasetError.StorageFailure reason)
-                            | Ok(schema, rows) ->
-                                match applyFilters schema query.Filters rows with
-                                | Error reason -> return Error(DatasetError.SchemaMismatch reason)
-                                | Ok filtered ->
-                                    let total = int64 (List.length filtered)
-                                    let count = List.length filtered
-
-                                    let skipN =
-                                        if query.Offset >= int64 count then
-                                            count
-                                        else
-                                            int query.Offset
-
-                                    let pageRows =
-                                        filtered |> List.skip skipN |> List.truncate (min query.Limit MaxPageLimit)
-
-                                    return
-                                        Ok {
-                                            Schema = schema
-                                            Rows = pageRows
-                                            Offset = query.Offset
-                                            TotalRows = total
-                                        }
+                        // Streaming fast path (448.D verdict #3): taken only
+                        // when BOTH the data-object store serves bounded
+                        // content ranges AND the composed codec decodes
+                        // incrementally. Absent either — the default
+                        // JSON-frame composition, or a backing storage that
+                        // refuses ranges (the encryption decorator) — the
+                        // whole-blob v1 path runs unchanged.
+                        match box dataObjects, box codec with
+                        | (:? IContentRangeReader as ranged), (:? IStreamingDatasetCodec as streaming) ->
+                            match! readPageStreamed ranged streaming scopeId dobj query with
+                            | Some result -> return result
+                            | None -> return! readPageWholeBlob scopeId dobj query
+                        | _ -> return! readPageWholeBlob scopeId dobj query
         }
 
         member _.GetContentRef(scopeId, datasetId, version) = async {

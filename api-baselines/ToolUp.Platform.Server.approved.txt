@@ -1687,6 +1687,9 @@ ToolUp.Platform.IContainerScheduler.ListContainers(Microsoft.FSharp.Core.FSharpO
 ToolUp.Platform.IContainerScheduler.RestartContainer(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ContainerSchedulerError]]
 ToolUp.Platform.IContainerScheduler.StopContainer(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ContainerSchedulerError]]
 ToolUp.Platform.IContainerScheduler.StreamLogs(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]) : System.Collections.Generic.IAsyncEnumerable`1[ToolUp.Platform.LogEntry]
+ToolUp.Platform.IContentRangeReader (interface)
+ToolUp.Platform.IContentRangeReader.GetContentSize(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Platform.DataObjectError]]
+ToolUp.Platform.IContentRangeReader.ReadContentRange(System.String, System.String, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.IConversationEraser (interface)
 ToolUp.Platform.IConversationEraser.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.IConversationReader (interface)
@@ -2173,6 +2176,8 @@ ToolUp.Platform.ISparseIndex+ISparseIndex.DeleteChunk(ToolUp.Platform.VectorKnow
 ToolUp.Platform.ISparseIndex+ISparseIndex.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.ISparseIndex+ISparseIndex.Search(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]]
 ToolUp.Platform.ISparseIndex+ISparseIndex.Upsert(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IStreamingDatasetCodec (interface)
+ToolUp.Platform.IStreamingDatasetCodec.DecodeChunk(Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]]], System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], Microsoft.FSharp.Core.FSharpOption`1[System.String]], System.String]]
 ToolUp.Platform.ITableExtractor (class)
 ToolUp.Platform.ITableExtractor+ExtractedTable (class)
 ToolUp.Platform.ITableExtractor+ExtractedTable..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.String[], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String[]]])
@@ -2562,6 +2567,62 @@ ToolUp.Platform.MembershipCacheLifecycle (class)
 ToolUp.Platform.MembershipCacheLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.MembershipCacheLifecycle+MembershipCacheLifecycle (class)
 ToolUp.Platform.MembershipCacheLifecycle+MembershipCacheLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.MembershipDoctor (class)
+ToolUp.Platform.MembershipDoctor.diagnose(ToolUp.Platform.MembershipDoctor+MembershipReads) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MembershipDoctor+MembershipDiagnosis]]
+ToolUp.Platform.MembershipDoctor.repair(ToolUp.Platform.MembershipDoctor+MembershipReads, ToolUp.Platform.MembershipDoctor+MembershipWrites) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.MembershipDoctor+MembershipRepairOutcome]
+ToolUp.Platform.MembershipDoctor+MembershipDiagnosis (class)
+ToolUp.Platform.MembershipDoctor+MembershipDiagnosis..ctor(ToolUp.Platform.MembershipDoctor+MembershipFindingKind, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.MembershipDoctor+MembershipRepair)
+ToolUp.Platform.MembershipDoctor+MembershipDiagnosis.Evidence : System.String { get }
+ToolUp.Platform.MembershipDoctor+MembershipDiagnosis.Kind : ToolUp.Platform.MembershipDoctor+MembershipFindingKind { get }
+ToolUp.Platform.MembershipDoctor+MembershipDiagnosis.ProposedRepair : ToolUp.Platform.MembershipDoctor+MembershipRepair { get }
+ToolUp.Platform.MembershipDoctor+MembershipDiagnosis.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.MembershipDoctor+MembershipDiagnosis.UserId : System.String { get }
+ToolUp.Platform.MembershipDoctor+MembershipDoctorStorage (class)
+ToolUp.Platform.MembershipDoctor+MembershipDoctorStorage.reads(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.MembershipDoctor+MembershipReads
+ToolUp.Platform.MembershipDoctor+MembershipDoctorStorage.writes(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], System.String) : ToolUp.Platform.MembershipDoctor+MembershipWrites
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind (class)
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.DanglingActiveTeam : ToolUp.Platform.MembershipDoctor+MembershipFindingKind { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.EmailKeyedRow : ToolUp.Platform.MembershipDoctor+MembershipFindingKind { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.IsDanglingActiveTeam : System.Boolean { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.IsEmailKeyedRow : System.Boolean { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.IsOrphanTeamRow : System.Boolean { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.IsUnresolvableRow : System.Boolean { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.OrphanTeamRow : ToolUp.Platform.MembershipDoctor+MembershipFindingKind { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.Tag : System.Int32 { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind.UnresolvableRow : ToolUp.Platform.MembershipDoctor+MembershipFindingKind { get }
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind+Tags (class)
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind+Tags.DanglingActiveTeam : System.Int32 (literal)
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind+Tags.EmailKeyedRow : System.Int32 (literal)
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind+Tags.OrphanTeamRow : System.Int32 (literal)
+ToolUp.Platform.MembershipDoctor+MembershipFindingKind+Tags.UnresolvableRow : System.Int32 (literal)
+ToolUp.Platform.MembershipDoctor+MembershipReads (class)
+ToolUp.Platform.MembershipDoctor+MembershipReads..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamManagement+StoredMembership]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]])
+ToolUp.Platform.MembershipDoctor+MembershipReads.GetActiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]] { get }
+ToolUp.Platform.MembershipDoctor+MembershipReads.ListActiveTeamUserIds : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
+ToolUp.Platform.MembershipDoctor+MembershipReads.ListMembershipUserIds : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
+ToolUp.Platform.MembershipDoctor+MembershipReads.ListTeamIds : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]]] { get }
+ToolUp.Platform.MembershipDoctor+MembershipReads.LoadMemberships : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamManagement+StoredMembership]]] { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair (class)
+ToolUp.Platform.MembershipDoctor+MembershipRepair.ClearActiveTeamPointer : ToolUp.Platform.MembershipDoctor+MembershipRepair { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair.DeleteMembershipRow : ToolUp.Platform.MembershipDoctor+MembershipRepair { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair.IsClearActiveTeamPointer : System.Boolean { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair.IsDeleteMembershipRow : System.Boolean { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair.IsReAddUnderResolvedId : System.Boolean { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair.ReAddUnderResolvedId : ToolUp.Platform.MembershipDoctor+MembershipRepair { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair.Tag : System.Int32 { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepair+Tags (class)
+ToolUp.Platform.MembershipDoctor+MembershipRepair+Tags.ClearActiveTeamPointer : System.Int32 (literal)
+ToolUp.Platform.MembershipDoctor+MembershipRepair+Tags.DeleteMembershipRow : System.Int32 (literal)
+ToolUp.Platform.MembershipDoctor+MembershipRepair+Tags.ReAddUnderResolvedId : System.Int32 (literal)
+ToolUp.Platform.MembershipDoctor+MembershipRepairOutcome (class)
+ToolUp.Platform.MembershipDoctor+MembershipRepairOutcome..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MembershipDoctor+MembershipDiagnosis], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MembershipDoctor+MembershipDiagnosis])
+ToolUp.Platform.MembershipDoctor+MembershipRepairOutcome.Repaired : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MembershipDoctor+MembershipDiagnosis] { get }
+ToolUp.Platform.MembershipDoctor+MembershipRepairOutcome.ReportOnly : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MembershipDoctor+MembershipDiagnosis] { get }
+ToolUp.Platform.MembershipDoctor+MembershipWrites (class)
+ToolUp.Platform.MembershipDoctor+MembershipWrites..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamManagement+StoredMembership], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]])
+ToolUp.Platform.MembershipDoctor+MembershipWrites.ClearActiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]] { get }
+ToolUp.Platform.MembershipDoctor+MembershipWrites.EmitMemberRemoved : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]] { get }
+ToolUp.Platform.MembershipDoctor+MembershipWrites.SaveMemberships : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamManagement+StoredMembership], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]] { get }
 ToolUp.Platform.Metrics.ComponentCorrelation (class)
 ToolUp.Platform.Metrics.ComponentCorrelation.ComponentIdTag : System.String (literal)
 ToolUp.Platform.Metrics.ComponentCorrelation.auditSourceLabel(ToolUp.Platform.ComponentId) : System.String

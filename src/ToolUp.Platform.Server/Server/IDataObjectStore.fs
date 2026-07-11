@@ -215,3 +215,49 @@ type IObjectCounter =
     /// in `scopeId`. Scope-isolated by the same structural derivation
     /// as `IDataObjectStore.ListObjects` (GP 4).
     abstract CountObjects: scopeId: string * dataType: string -> Async<int>
+
+// ─── IContentRangeReader (Phase 448.D follow-on) ─────────────────
+//
+// Optional capability a data-object store MAY implement to read a
+// bounded byte range of a content blob **without materialising the
+// whole blob** (a native blob range request / a file seek — the
+// Phase 455 `IBlobStorage.DownloadRange` primitive). The blob-backed
+// dataset store uses it — together with a streaming-capable codec —
+// to page large dataset vintages without downloading the full
+// content; callers whose store lacks it, or whose backing storage
+// refuses ranged reads (the whole-blob-AES-GCM encryption decorator),
+// fall back to `GetContent` — correct-by-default, efficient-where-
+// possible, the same shape as `IObjectCounter` above.
+//
+// Kept as a *separate optional* interface rather than new abstract
+// members on `IDataObjectStore` for the same reason as
+// `IObjectCounter`: F# interfaces cannot carry a default body, so
+// widening `IDataObjectStore` would break every existing
+// implementation (including external ones) for reads that
+// `GetContent` already serves correctly (GP 11).
+
+/// Optional bounded ranged-read capability over the content-addressed
+/// dedup pool. A store implements this when its backing storage
+/// serves byte ranges natively (`IBlobStorage.DownloadRange`).
+type IContentRangeReader =
+    /// Size in bytes of the content blob addressed by `contentHash`
+    /// in `scopeId`, without downloading it. `StorageFailure` when no
+    /// such content blob exists. Over an encrypting blob decorator
+    /// the reported size is the *ciphertext* size — callers treat the
+    /// decorator's `ReadContentRange` refusal as the signal to fall
+    /// back to `GetContent`, never this size alone.
+    abstract GetContentSize: scopeId: string * contentHash: string -> Async<Result<int64, DataObjectError>>
+
+    /// Read at most `length` bytes starting at byte `offset` from the
+    /// content blob addressed by `contentHash`. Semantics mirror
+    /// `IBlobStorage.DownloadRange` (contract-tested there):
+    /// `offset < 0` / `length <= 0` → error; past-EOF → `Ok [||]`;
+    /// the result may be shorter than `length` at the end of the
+    /// blob; concatenating consecutive ranges byte-equals
+    /// `GetContent`. Scope-isolated by the same structural container
+    /// derivation as `GetContent` (GP 4). Portability audit (GP 12):
+    /// identity by value, async at the boundary, failure as
+    /// `DataObjectError` data, stateless between calls, single-scope,
+    /// no precision surface.
+    abstract ReadContentRange:
+        scopeId: string * contentHash: string * offset: int64 * length: int -> Async<Result<byte[], DataObjectError>>
