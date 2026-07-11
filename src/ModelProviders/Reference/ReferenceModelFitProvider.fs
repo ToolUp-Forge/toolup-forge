@@ -43,6 +43,11 @@ module ReferenceModelFitProvider =
     /// any requested gate whose diagnostic is absent.
     let DeclaredGates = [ "mean"; "abs_mean" ]
 
+    /// Evaluation metric keys the reference provider always reports from
+    /// `IModelEvaluationMetrics.EvaluateMetrics` (Phase 456). A consumer
+    /// declares a comparison's primary metric against these.
+    let DeclaredMetrics = [ "mean_prediction"; "n_scored"; "n_actuals" ]
+
     /// A stable unit float in `[0, 1)` derived from a string's SHA-256. The
     /// determinism source — pure, no RNG.
     let private deterministicUnit (s: string) : float =
@@ -94,13 +99,59 @@ module ReferenceModelFitProvider =
         }
     }
 
+    /// Provider-side evaluation metrics (Phase 456): the arithmetic mean of
+    /// the predictions' target column plus the two frame cardinalities.
+    /// Trivial and fully deterministic — the point is to bind the evaluation
+    /// contract pack, not to measure anything. This arithmetic lives HERE,
+    /// in the provider companion, by design: forge never computes a metric
+    /// (plan D10).
+    let private evaluateMetrics
+        (predictionsSchema: DatasetSchema)
+        (predictions: DatasetRow list)
+        (_actualsSchema: DatasetSchema)
+        (actuals: DatasetRow list)
+        : Async<Result<Map<string, float>, string>> =
+        async {
+            let targetIdx =
+                predictionsSchema.Columns
+                |> List.tryFindIndex (fun c -> c.Role = DatasetColumnRole.Target && c.DType = DatasetDType.Float)
+
+            match targetIdx with
+            | None -> return Error "predictions frame has no Float Target column to evaluate"
+            | Some idx ->
+                let values =
+                    predictions
+                    |> List.choose (fun row ->
+                        match List.item idx row.Cells with
+                        | DatasetValue.Float v -> Some v
+                        | _ -> None)
+
+                if List.isEmpty values then
+                    return Error "predictions frame has no float prediction values to evaluate"
+                else
+                    return
+                        Ok(
+                            Map [
+                                "mean_prediction", List.average values
+                                "n_scored", float (List.length values)
+                                "n_actuals", float (List.length actuals)
+                            ]
+                        )
+        }
+
     /// The reference provider as an `IModelFitProvider`. Takes no substrate
     /// dependencies — it is deliberately trivial (a production provider
-    /// receives an `IDatasetStore` here and reads the vintage's rows).
+    /// receives an `IDatasetStore` here and reads the vintage's rows). Also
+    /// implements `IModelEvaluationMetrics` (Phase 456) on the same object,
+    /// so `IModelFitProvider.Evaluate` dispatches to it — the shape every
+    /// evaluation-capable provider follows.
     let create () : IModelFitProvider =
         { new IModelFitProvider with
             member _.Kind = Kind
             member _.ProviderVersion = Version
             member _.DeclareGates() = DeclaredGates
             member _.Fit(request) = fit request
+          interface IModelEvaluationMetrics with
+              member _.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals) =
+                  evaluateMetrics predictionsSchema predictions actualsSchema actuals
         }

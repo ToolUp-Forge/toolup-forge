@@ -2428,6 +2428,38 @@ type ModelScoreRefusedPayload = {
     ScopeId: string
 }
 
+// ─── Phase 456 — model-evaluation audit payload ────────────────────────
+//
+// A holdout-evaluation run scores an artifact (Phase 454) against a holdout
+// vintage and stores the provider-computed metric map against the artifact
+// (plan Stage 6). The run is audited under `_platform.audit` (GP 6) carrying
+// the artifact's composite-key hash + both vintage keys, so an operator can
+// reconstruct the out-of-time track record's provenance from the trail
+// alone. PII-free: identity + cardinality only; no metric values, no
+// dataset rows travel (forge stores metrics in the run record — the audit
+// row names the run, it never re-states provider numbers).
+
+/// A holdout-evaluation run stored a provider-computed metric map against a
+/// model artifact (plan Stage 6). Reserved `SourceModule = "_platform.audit"`.
+type ModelEvaluatedPayload = {
+    /// SHA-256 hex of the evaluated artifact's composite identity (plan D5).
+    CompositeKeyHash: string
+    /// Resolved provider `Kind` that computed the metrics.
+    ProviderId: string
+    /// Provider version — a component of the artifact's composite identity.
+    ProviderVersion: string
+    /// `{scopeId}/{datasetId}@v{version}` of the holdout vintage evaluated.
+    HoldoutVersion: string
+    /// `{scopeId}/{datasetId}@v{version}` of the predictions vintage the
+    /// scoring leg wrote.
+    PredictionsVersion: string
+    /// Number of metrics the provider reported. Cardinality only — the
+    /// values live in the stored `EvaluationRun`, never on the audit row.
+    MetricCount: int
+    /// Scope the evaluation ran under.
+    ScopeId: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2916,6 +2948,9 @@ type AuditEvent =
     /// mismatch / input unavailable / provider raised). A typed, audited
     /// refusal — not an exception.
     | ModelScoreRefused of ModelScoreRefusedPayload
+    /// Phase 456 — a holdout-evaluation run stored a provider-computed
+    /// metric map against a model artifact (out-of-time track record).
+    | ModelEvaluated of ModelEvaluatedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -3043,6 +3078,7 @@ module AuditEvent =
         | ModelArtifactTransitionDenied _ -> "ModelArtifactTransitionDenied"
         | ModelScored _ -> "ModelScored"
         | ModelScoreRefused _ -> "ModelScoreRefused"
+        | ModelEvaluated _ -> "ModelEvaluated"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
