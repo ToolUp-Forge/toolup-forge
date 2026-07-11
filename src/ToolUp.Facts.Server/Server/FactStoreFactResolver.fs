@@ -4,7 +4,6 @@
 namespace ToolUp.Facts
 
 open System
-open System.Globalization
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -68,31 +67,11 @@ type FactStoreFactResolver(store: IFactStore, registry: Grounding.IMetricRegistr
         IncludeSuperseded = false
     }
 
-    // Canonical display rendering under the metric's `DisplayFormat` (a
-    // .NET numeric format string, or "" for verbatim). Invariant culture
-    // throughout — the rendering is a wire/prompt value, never localised.
-    let renderValue (format: string) (value: FactValue) : string =
-        let fmt (d: decimal) =
-            if String.IsNullOrWhiteSpace format then
-                d.ToString CultureInfo.InvariantCulture
-            else
-                d.ToString(format, CultureInfo.InvariantCulture)
-
-        match value with
-        | Scalar d -> fmt d
-        | Interval(lo, hi) -> sprintf "%s to %s" (fmt lo) (fmt hi)
-        // A series fact references a data-object vintage, never inlines
-        // points (the scale rule) — render the reference.
-        | Series version -> sprintf "series %s" version
-        | Distribution buckets ->
-            buckets
-            |> Map.toList
-            |> List.map (fun (k, d) -> sprintf "%s: %s" k (fmt d))
-            |> String.concat "; "
-        | Categorical c -> c
-        // An `Absent` fact is a queryable data gap — surfaced honestly
-        // (GP 9: never fabricated into a number).
-        | Absent reason -> sprintf "absent (%s)" reason
+    // Canonical display rendering under the metric's `DisplayFormat` —
+    // the one shared implementation (`FactRendering.render`, Facts.Core),
+    // also consumed by the `query_facts` tool (Phase 559) so a value never
+    // renders two ways at two doors.
+    let renderValue (format: string) (value: FactValue) : string = FactRendering.render format value
 
     interface IFactResolver with
 

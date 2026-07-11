@@ -94,4 +94,13 @@ module FactsCompose =
                         app.Extensions with
                             ServiceConfig = serviceConfig
                     }
+                    // Phase 559 — declare the `query_facts` AI tool with
+                    // the store (one compose knob, never two). The
+                    // declaration rides `ServerApp.AITools`, which only
+                    // the AI companion's compose reads into the live AI
+                    // tool registry — so the tool arms exactly when both
+                    // the fact store AND the AI companion are composed
+                    // (GP 13): no fact store ⇒ never declared; no AI ⇒
+                    // never registered, no route, no runtime cost.
+                    AITools = app.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
             }

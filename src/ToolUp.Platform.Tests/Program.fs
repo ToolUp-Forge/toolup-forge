@@ -480,6 +480,10 @@ let allTests =
         // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
         // resolver, the one-knob DI registration, the composed Stage-1 loop.
         FactResolverComposeTests.tests
+        // Phase 559 — the query_facts AI tool: declaration + one-knob
+        // registration, disclosure-gated results (allow / deny / unknown-id
+        // markers), deny audit, scope isolation, parameter validation.
+        FactQueryToolTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests
