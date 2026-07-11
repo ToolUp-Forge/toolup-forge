@@ -107,6 +107,7 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 - Built-in `Data Manager` module (file upload + per-data-type management) — auto-injected when modules declare data types
 - Built-in `Team Manager` module — auto-injected when `ClientConfig.Surfaces` includes a `Team` profile
 - Built-in `Platform Admin` sidebar group with role-management, health monitoring, and Platform KB administration modules (gated by `PlatformRole`)
+- Built-in `Users` admin module — **opt-in** (default off). Set `ClientConfig.PlatformUsers = DefaultPlatformUsers` to add it to the Platform-Admin sidebar group. It lists every principal the substrate has evidence for (`IPlatformTenantApi.ListPrincipals` — a derived, read-only projection over memberships, `user-*` scopes, and sign-in audit), flags team-less accounts via a filter toggle, and drives the tenant-lifecycle offboard flow (preview → confirm → summary, honouring the offboard-confirmation-token mode) per user against the `user-<id>` scope. The default `NoPlatformUsers` omits it entirely, so an existing deployment is byte-for-byte unchanged; pair with `ServerConfig.TenantLifecycle = EnabledTenantLifecycle` server-side for the per-row offboard actions (the list still renders without it — the actions degrade to an error banner).
 - Built-in `ToastCentre` — fixed-position toast renderer subscribing to `NotificationClient`
 - Built-in `AI Settings` module — auto-injected when `ClientConfig.Surfaces` includes any non-Anonymous profile
 - Notification client over SSE
