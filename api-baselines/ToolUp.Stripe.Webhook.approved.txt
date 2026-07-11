@@ -63,10 +63,12 @@ ToolUp.Stripe.Webhook.VerifiedEvent.Timestamp : System.Int64 { get }
 ToolUp.Stripe.Webhook.WebhookError (class)
 ToolUp.Stripe.Webhook.WebhookError.IsBodyParseError : System.Boolean { get }
 ToolUp.Stripe.Webhook.WebhookError.IsMalformedHeader : System.Boolean { get }
+ToolUp.Stripe.Webhook.WebhookError.IsSecretMissing : System.Boolean { get }
 ToolUp.Stripe.Webhook.WebhookError.IsSignatureMismatch : System.Boolean { get }
 ToolUp.Stripe.Webhook.WebhookError.IsTimestampDrift : System.Boolean { get }
 ToolUp.Stripe.Webhook.WebhookError.IsUnknownEventType : System.Boolean { get }
 ToolUp.Stripe.Webhook.WebhookError.MalformedHeader : ToolUp.Stripe.Webhook.WebhookError { get }
+ToolUp.Stripe.Webhook.WebhookError.SecretMissing : ToolUp.Stripe.Webhook.WebhookError { get }
 ToolUp.Stripe.Webhook.WebhookError.SignatureMismatch : ToolUp.Stripe.Webhook.WebhookError { get }
 ToolUp.Stripe.Webhook.WebhookError.Tag : System.Int32 { get }
 ToolUp.Stripe.Webhook.WebhookError+BodyParseError (class)
@@ -74,6 +76,7 @@ ToolUp.Stripe.Webhook.WebhookError+BodyParseError.message : System.String { get 
 ToolUp.Stripe.Webhook.WebhookError+Tags (class)
 ToolUp.Stripe.Webhook.WebhookError+Tags.BodyParseError : System.Int32 (literal)
 ToolUp.Stripe.Webhook.WebhookError+Tags.MalformedHeader : System.Int32 (literal)
+ToolUp.Stripe.Webhook.WebhookError+Tags.SecretMissing : System.Int32 (literal)
 ToolUp.Stripe.Webhook.WebhookError+Tags.SignatureMismatch : System.Int32 (literal)
 ToolUp.Stripe.Webhook.WebhookError+Tags.TimestampDrift : System.Int32 (literal)
 ToolUp.Stripe.Webhook.WebhookError+Tags.UnknownEventType : System.Int32 (literal)

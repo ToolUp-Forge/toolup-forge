@@ -3,6 +3,13 @@
 # accept a deliberate breaking removal (regenerate with TOOLUP_APPROVE_API=1).
 ToolUp.ModelProviders.Reference.ReferenceModelFitProvider (class)
 ToolUp.ModelProviders.Reference.ReferenceModelFitProvider.DeclaredGates : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.ModelProviders.Reference.ReferenceModelFitProvider.DeclaredMetrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.ModelProviders.Reference.ReferenceModelFitProvider.Kind : System.String (literal)
 ToolUp.ModelProviders.Reference.ReferenceModelFitProvider.Version : System.String (literal)
 ToolUp.ModelProviders.Reference.ReferenceModelFitProvider.create() : ToolUp.Platform.IModelFitProvider
+ToolUp.ModelProviders.Reference.ReferenceModelScoreProvider (class)
+ToolUp.ModelProviders.Reference.ReferenceModelScoreProvider.Kind : System.String (literal)
+ToolUp.ModelProviders.Reference.ReferenceModelScoreProvider.PredictionColumn : System.String (literal)
+ToolUp.ModelProviders.Reference.ReferenceModelScoreProvider.Version : System.String (literal)
+ToolUp.ModelProviders.Reference.ReferenceModelScoreProvider.create() : ToolUp.Platform.IModelScoreProvider
+ToolUp.ModelProviders.Reference.ReferenceModelScoreProvider.createRequiring(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.IModelScoreProvider

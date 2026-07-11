@@ -952,6 +952,116 @@ PlatformAdminUI+Tab+Tags (class)
 PlatformAdminUI+Tab+Tags.AdminsTab : System.Int32 (literal)
 PlatformAdminUI+Tab+Tags.SettingsTab : System.Int32 (literal)
 PlatformAdminUI+Tab+Tags.TeamsTab : System.Int32 (literal)
+PlatformUsersUI (class)
+PlatformUsersUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformUsersConfig]) : ToolUp.Platform.ErasedModule
+PlatformUsersUI.init() : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformUsersUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformUsersUI.update(PlatformUsersUI+Msg, PlatformUsersUI+Model) : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformUsersUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformUsersUI+Model (class)
+PlatformUsersUI+Model..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[PlatformUsersUI+OffboardModalState])
+PlatformUsersUI+Model.Directory : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary] { get }
+PlatformUsersUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+PlatformUsersUI+Model.Loading : System.Boolean { get }
+PlatformUsersUI+Model.Offboard : Microsoft.FSharp.Core.FSharpOption`1[PlatformUsersUI+OffboardModalState] { get }
+PlatformUsersUI+Model.Principals : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]] { get }
+PlatformUsersUI+Model.TeamLessOnly : System.Boolean { get }
+PlatformUsersUI+Msg (class)
+PlatformUsersUI+Msg.CloseOffboard : PlatformUsersUI+Msg { get }
+PlatformUsersUI+Msg.DismissError : PlatformUsersUI+Msg { get }
+PlatformUsersUI+Msg.IsCloseOffboard : System.Boolean { get }
+PlatformUsersUI+Msg.IsDirectoryResolved : System.Boolean { get }
+PlatformUsersUI+Msg.IsDismissError : System.Boolean { get }
+PlatformUsersUI+Msg.IsExportOffboardDone : System.Boolean { get }
+PlatformUsersUI+Msg.IsLoadPrincipals : System.Boolean { get }
+PlatformUsersUI+Msg.IsOffboardDone : System.Boolean { get }
+PlatformUsersUI+Msg.IsOpenOffboard : System.Boolean { get }
+PlatformUsersUI+Msg.IsPreviewLoaded : System.Boolean { get }
+PlatformUsersUI+Msg.IsPrincipalsLoaded : System.Boolean { get }
+PlatformUsersUI+Msg.IsRequestPreview : System.Boolean { get }
+PlatformUsersUI+Msg.IsRequestToken : System.Boolean { get }
+PlatformUsersUI+Msg.IsSetOffboardReason : System.Boolean { get }
+PlatformUsersUI+Msg.IsSetOffboardToken : System.Boolean { get }
+PlatformUsersUI+Msg.IsSubmitOffboard : System.Boolean { get }
+PlatformUsersUI+Msg.IsToggleTeamLessOnly : System.Boolean { get }
+PlatformUsersUI+Msg.IsTokenMinted : System.Boolean { get }
+PlatformUsersUI+Msg.LoadPrincipals : PlatformUsersUI+Msg { get }
+PlatformUsersUI+Msg.RequestPreview : PlatformUsersUI+Msg { get }
+PlatformUsersUI+Msg.RequestToken : PlatformUsersUI+Msg { get }
+PlatformUsersUI+Msg.SubmitOffboard : PlatformUsersUI+Msg { get }
+PlatformUsersUI+Msg.Tag : System.Int32 { get }
+PlatformUsersUI+Msg.ToggleTeamLessOnly : PlatformUsersUI+Msg { get }
+PlatformUsersUI+Msg+DirectoryResolved (class)
+PlatformUsersUI+Msg+DirectoryResolved.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserSummary], System.String] { get }
+PlatformUsersUI+Msg+ExportOffboardDone (class)
+PlatformUsersUI+Msg+ExportOffboardDone.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportThenDeprovisionResult, System.String] { get }
+PlatformUsersUI+Msg+OffboardDone (class)
+PlatformUsersUI+Msg+OffboardDone.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleSummary, System.String] { get }
+PlatformUsersUI+Msg+OpenOffboard (class)
+PlatformUsersUI+Msg+OpenOffboard.Item2 : PlatformUsersUI+OffboardKind { get }
+PlatformUsersUI+Msg+OpenOffboard.userId : System.String { get }
+PlatformUsersUI+Msg+PreviewLoaded (class)
+PlatformUsersUI+Msg+PreviewLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecyclePreview, System.String] { get }
+PlatformUsersUI+Msg+PrincipalsLoaded (class)
+PlatformUsersUI+Msg+PrincipalsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary], System.String] { get }
+PlatformUsersUI+Msg+SetOffboardReason (class)
+PlatformUsersUI+Msg+SetOffboardReason.Item : System.String { get }
+PlatformUsersUI+Msg+SetOffboardToken (class)
+PlatformUsersUI+Msg+SetOffboardToken.Item : System.String { get }
+PlatformUsersUI+Msg+Tags (class)
+PlatformUsersUI+Msg+Tags.CloseOffboard : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.DirectoryResolved : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.DismissError : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.ExportOffboardDone : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.LoadPrincipals : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.OffboardDone : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.OpenOffboard : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.PreviewLoaded : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.PrincipalsLoaded : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.RequestPreview : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.RequestToken : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.SetOffboardReason : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.SetOffboardToken : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.SubmitOffboard : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.ToggleTeamLessOnly : System.Int32 (literal)
+PlatformUsersUI+Msg+Tags.TokenMinted : System.Int32 (literal)
+PlatformUsersUI+Msg+TokenMinted (class)
+PlatformUsersUI+Msg+TokenMinted.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, System.String] { get }
+PlatformUsersUI+OffboardKind (class)
+PlatformUsersUI+OffboardKind.ExportOffboard : PlatformUsersUI+OffboardKind { get }
+PlatformUsersUI+OffboardKind.IsExportOffboard : System.Boolean { get }
+PlatformUsersUI+OffboardKind.IsPlainOffboard : System.Boolean { get }
+PlatformUsersUI+OffboardKind.PlainOffboard : PlatformUsersUI+OffboardKind { get }
+PlatformUsersUI+OffboardKind.Tag : System.Int32 { get }
+PlatformUsersUI+OffboardKind+Tags (class)
+PlatformUsersUI+OffboardKind+Tags.ExportOffboard : System.Int32 (literal)
+PlatformUsersUI+OffboardKind+Tags.PlainOffboard : System.Int32 (literal)
+PlatformUsersUI+OffboardModalState (class)
+PlatformUsersUI+OffboardModalState..ctor(System.String, System.String, PlatformUsersUI+OffboardKind, System.String, System.String, PlatformUsersUI+OffboardStep, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+PlatformUsersUI+OffboardModalState.Busy : System.Boolean { get }
+PlatformUsersUI+OffboardModalState.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+PlatformUsersUI+OffboardModalState.Kind : PlatformUsersUI+OffboardKind { get }
+PlatformUsersUI+OffboardModalState.Reason : System.String { get }
+PlatformUsersUI+OffboardModalState.ScopeId : System.String { get }
+PlatformUsersUI+OffboardModalState.Step : PlatformUsersUI+OffboardStep { get }
+PlatformUsersUI+OffboardModalState.Token : System.String { get }
+PlatformUsersUI+OffboardModalState.UserId : System.String { get }
+PlatformUsersUI+OffboardStep (class)
+PlatformUsersUI+OffboardStep.Compose : PlatformUsersUI+OffboardStep { get }
+PlatformUsersUI+OffboardStep.Confirming : PlatformUsersUI+OffboardStep { get }
+PlatformUsersUI+OffboardStep.IsCompleted : System.Boolean { get }
+PlatformUsersUI+OffboardStep.IsCompose : System.Boolean { get }
+PlatformUsersUI+OffboardStep.IsConfirming : System.Boolean { get }
+PlatformUsersUI+OffboardStep.IsPreviewed : System.Boolean { get }
+PlatformUsersUI+OffboardStep.Tag : System.Int32 { get }
+PlatformUsersUI+OffboardStep+Completed (class)
+PlatformUsersUI+OffboardStep+Completed.Item1 : ToolUp.Platform.LifecycleSummary { get }
+PlatformUsersUI+OffboardStep+Completed.Item2 : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleExportArchive] { get }
+PlatformUsersUI+OffboardStep+Previewed (class)
+PlatformUsersUI+OffboardStep+Previewed.Item : ToolUp.Platform.LifecyclePreview { get }
+PlatformUsersUI+OffboardStep+Tags (class)
+PlatformUsersUI+OffboardStep+Tags.Completed : System.Int32 (literal)
+PlatformUsersUI+OffboardStep+Tags.Compose : System.Int32 (literal)
+PlatformUsersUI+OffboardStep+Tags.Confirming : System.Int32 (literal)
+PlatformUsersUI+OffboardStep+Tags.Previewed : System.Int32 (literal)
 ProcessedDataContext (class)
 ProcessedDataContext.Context : Feliz.ReactTypes+ReactContext`1[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]] { get }
 ProcessedDataContext+ProcessedData (class)
@@ -2264,6 +2374,7 @@ ToolUp.Platform.AuthUIMode.IsClerkAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.IsCustomAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.IsNoAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.IsOidcAuthUI : System.Boolean { get }
+ToolUp.Platform.AuthUIMode.IsPasskeyAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.IsProviderAuthUI : System.Boolean { get }
 ToolUp.Platform.AuthUIMode.NoAuthUI : ToolUp.Platform.AuthUIMode { get }
 ToolUp.Platform.AuthUIMode.Tag : System.Int32 { get }
@@ -2273,6 +2384,8 @@ ToolUp.Platform.AuthUIMode+CustomAuthUI (class)
 ToolUp.Platform.AuthUIMode+CustomAuthUI.Item : ToolUp.Platform.CustomAuthUI { get }
 ToolUp.Platform.AuthUIMode+OidcAuthUI (class)
 ToolUp.Platform.AuthUIMode+OidcAuthUI.Item : ToolUp.Platform.OidcUIConfig { get }
+ToolUp.Platform.AuthUIMode+PasskeyAuthUI (class)
+ToolUp.Platform.AuthUIMode+PasskeyAuthUI.Item : ToolUp.Platform.PasskeyUIConfig { get }
 ToolUp.Platform.AuthUIMode+ProviderAuthUI (class)
 ToolUp.Platform.AuthUIMode+ProviderAuthUI.config : System.Object { get }
 ToolUp.Platform.AuthUIMode+ProviderAuthUI.tag : System.String { get }
@@ -2281,6 +2394,7 @@ ToolUp.Platform.AuthUIMode+Tags.ClerkAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIMode+Tags.CustomAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIMode+Tags.NoAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIMode+Tags.OidcAuthUI : System.Int32 (literal)
+ToolUp.Platform.AuthUIMode+Tags.PasskeyAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIMode+Tags.ProviderAuthUI : System.Int32 (literal)
 ToolUp.Platform.AuthUIProvider (class)
 ToolUp.Platform.AuthUIProvider.gate(ToolUp.Platform.AuthUIMode, ToolUp.Platform.SubjectKind, Fable.React.ReactElement) : Fable.React.ReactElement
@@ -2542,6 +2656,7 @@ ToolUp.Platform.ClientConfig.OnError : Microsoft.FSharp.Core.FSharpOption`1[Micr
 ToolUp.Platform.ClientConfig.PermissionsAdmin : ToolUp.Platform.PermissionsAdminMode { get }
 ToolUp.Platform.ClientConfig.PlatformAdmin : ToolUp.Platform.PlatformAdminMode { get }
 ToolUp.Platform.ClientConfig.PlatformAdminProfile : ToolUp.Platform.PlatformAdminProfile { get }
+ToolUp.Platform.ClientConfig.PlatformUsers : ToolUp.Platform.PlatformUsersMode { get }
 ToolUp.Platform.ClientConfig.PremiumModel : ToolUp.Platform.PremiumModel { get }
 ToolUp.Platform.ClientConfig.PrerenderRoutes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute] { get }
 ToolUp.Platform.ClientConfig.PublicEntryDispatchers : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]] { get }
@@ -2791,6 +2906,7 @@ ToolUp.Platform.DataProp+dataProp.aiName(System.String) : Feliz.IReactProperty
 ToolUp.Platform.DataProp+dataProp.area(System.String) : Feliz.IReactProperty
 ToolUp.Platform.DataProp+dataProp.citeIdx(System.Int32) : Feliz.IReactProperty
 ToolUp.Platform.DataProp+dataProp.custom(System.String, System.String) : Feliz.IReactProperty
+ToolUp.Platform.DataProp+dataProp.fact(System.String) : Feliz.IReactProperty
 ToolUp.Platform.DataProp+dataProp.testid(System.String) : Feliz.IReactProperty
 ToolUp.Platform.DataSourceCredentialUIContext (class)
 ToolUp.Platform.DataSourceCredentialUIContext..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
@@ -3241,6 +3357,12 @@ ToolUp.Platform.PageContent+Tags.Dashboard : System.Int32 (literal)
 ToolUp.Platform.PageContent+Tags.FullWidth : System.Int32 (literal)
 ToolUp.Platform.PageContent+Tags.SplitPanel : System.Int32 (literal)
 ToolUp.Platform.PageContent+Tags.Stacked : System.Int32 (literal)
+ToolUp.Platform.PasskeyUIConfig (class)
+ToolUp.Platform.PasskeyUIConfig..ctor(System.String, System.Boolean)
+ToolUp.Platform.PasskeyUIConfig.AllowRegistration : System.Boolean { get }
+ToolUp.Platform.PasskeyUIConfig.ApiBase : System.String { get }
+ToolUp.Platform.PasskeyUIConfigModule (class)
+ToolUp.Platform.PasskeyUIConfigModule.defaults : ToolUp.Platform.PasskeyUIConfig { get }
 ToolUp.Platform.PermissionsAdminConfig (class)
 ToolUp.Platform.PermissionsAdminConfig..ctor(System.String, Fable.React.ReactElement)
 ToolUp.Platform.PermissionsAdminConfig.Icon : Fable.React.ReactElement { get }
@@ -3292,6 +3414,19 @@ ToolUp.Platform.PlatformAdminMode+Tags.ConfiguredPlatformAdmin : System.Int32 (l
 ToolUp.Platform.PlatformAdminMode+Tags.DefaultPlatformAdmin : System.Int32 (literal)
 ToolUp.Platform.PlatformAdminMode+Tags.ExternalPlatformAdmin : System.Int32 (literal)
 ToolUp.Platform.PlatformAdminMode+Tags.NoPlatformAdmin : System.Int32 (literal)
+ToolUp.Platform.PlatformUsersConfig (class)
+ToolUp.Platform.PlatformUsersConfig..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.PlatformUsersConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.PlatformUsersConfig.Name : System.String { get }
+ToolUp.Platform.PlatformUsersMode (class)
+ToolUp.Platform.PlatformUsersMode.DefaultPlatformUsers : ToolUp.Platform.PlatformUsersMode { get }
+ToolUp.Platform.PlatformUsersMode.IsDefaultPlatformUsers : System.Boolean { get }
+ToolUp.Platform.PlatformUsersMode.IsNoPlatformUsers : System.Boolean { get }
+ToolUp.Platform.PlatformUsersMode.NoPlatformUsers : ToolUp.Platform.PlatformUsersMode { get }
+ToolUp.Platform.PlatformUsersMode.Tag : System.Int32 { get }
+ToolUp.Platform.PlatformUsersMode+Tags (class)
+ToolUp.Platform.PlatformUsersMode+Tags.DefaultPlatformUsers : System.Int32 (literal)
+ToolUp.Platform.PlatformUsersMode+Tags.NoPlatformUsers : System.Int32 (literal)
 ToolUp.Platform.Premium.PremiumHook (class)
 ToolUp.Platform.Premium.PremiumHook.usePremium() : System.Tuple`2[ToolUp.Platform.PremiumStatus, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]
 ToolUp.Platform.PresenceClient (class)

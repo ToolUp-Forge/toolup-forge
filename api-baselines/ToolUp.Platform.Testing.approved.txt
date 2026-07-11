@@ -26,6 +26,49 @@ ToolUp.Platform.Testing.Fakes+TestSecretStore.Seed(System.String, System.String,
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver (class)
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(System.String)
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(ToolUp.Platform.StorageScope)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.DownloadCorrupt : ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.IsDownloadCorrupt : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.IsDownloadGarbage : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.IsDownloadTruncate : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.IsUploadDrop : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.IsUploadFail : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.IsUploadPartial : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.Tag : System.Int32 { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.UploadDrop : ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+DownloadGarbage (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+DownloadGarbage.payload : System.Byte[] { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+DownloadTruncate (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+DownloadTruncate.keepBytes : System.Int32 { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+Tags (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+Tags.DownloadCorrupt : System.Int32 (literal)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+Tags.DownloadGarbage : System.Int32 (literal)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+Tags.DownloadTruncate : System.Int32 (literal)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+Tags.UploadDrop : System.Int32 (literal)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+Tags.UploadFail : System.Int32 (literal)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+Tags.UploadPartial : System.Int32 (literal)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+UploadFail (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+UploadFail.message : System.String { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+UploadPartial (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault+UploadPartial.keepBytes : System.Int32 { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultInjectingBlobStorage (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultInjectingBlobStorage..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultInjectingBlobStorage.ClearFaults() : System.Void
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultInjectingBlobStorage.FaultBlob(System.String, System.String, ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger]) : System.Void
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultInjectingBlobStorage.FaultWhere(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]], ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger]) : System.Void
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultInjectingBlobStorage.InjectBeforeUpload(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]]) : System.Void
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultInjectingBlobStorage.WidenReadWriteGap(System.Int32) : System.Void
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger.Always : ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger.IsAlways : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger.IsOnlyCall : System.Boolean { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger.Tag : System.Int32 { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger+OnlyCall (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger+OnlyCall.n : System.Int32 { get }
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger+Tags (class)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger+Tags.Always : System.Int32 (literal)
+ToolUp.Platform.Testing.FaultInjectingBlobStorage+FaultTrigger+Tags.OnlyCall : System.Int32 (literal)
 ToolUp.Platform.Testing.HostedTreeA11y (class)
 ToolUp.Platform.Testing.HostedTreeA11y.check(System.String) : ToolUp.Platform.Testing.HostedTreeA11y+A11yResult
 ToolUp.Platform.Testing.HostedTreeA11y.conformantFixture : ToolUp.Platform.Testing.HostedTreeA11y+Fixture { get }

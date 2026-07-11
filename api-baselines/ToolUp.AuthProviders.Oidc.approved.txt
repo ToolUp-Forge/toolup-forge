@@ -3,11 +3,21 @@
 # accept a deliberate breaking removal (regenerate with TOOLUP_APPROVE_API=1).
 ToolUp.AuthProviders.OidcAuthProvider (class)
 ToolUp.AuthProviders.OidcAuthProvider.fromConfig(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
+ToolUp.AuthProviders.OidcAuthProvider.fromConfigHardened(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.AuthProviders.OidcAuthProvider+OidcHardening, ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigMetered(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigWith(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
+ToolUp.AuthProviders.OidcAuthProvider.fromConfigWithHardened(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.AuthProviders.OidcAuthProvider+OidcHardening, ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigWithMetrics(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
+ToolUp.AuthProviders.OidcAuthProvider.fromConfigWithMetricsHardened(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.AuthProviders.OidcAuthProvider+OidcHardening, ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening (class)
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int64], System.Boolean)
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening.FailClosedOnStaleJwks : System.Boolean { get }
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardening.MaxTokenAgeSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardeningModule (class)
+ToolUp.AuthProviders.OidcAuthProvider+OidcHardeningModule.defaults : ToolUp.AuthProviders.OidcAuthProvider+OidcHardening { get }
 ToolUp.AuthProviders.OidcAuthValidator (class)
 ToolUp.AuthProviders.OidcAuthValidator.create(System.String) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.AuthProviders.OidcAuthValidator.createWithAudience(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.AuthProviders.OidcAuthValidator.maxTimeoutMs : System.Int32 (literal)
 ToolUp.AuthProviders.OidcAuthValidator.timeoutEnvVar : System.String (literal)
 ToolUp.AuthProviders.OidcAuthValidator.tryFromEnv() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigValidation+IConfigValidator]

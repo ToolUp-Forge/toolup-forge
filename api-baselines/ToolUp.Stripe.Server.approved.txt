@@ -59,6 +59,8 @@ ToolUp.Stripe.Server.StripeConfig (class)
 ToolUp.Stripe.Server.StripeConfig..ctor(System.String, System.String)
 ToolUp.Stripe.Server.StripeConfig.ApiKey : System.String { get }
 ToolUp.Stripe.Server.StripeConfig.WebhookSecret : System.String { get }
+ToolUp.Stripe.Server.StripeConfigValidator (class)
+ToolUp.Stripe.Server.StripeConfigValidator..ctor(ToolUp.Stripe.Server.StripeConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Stripe.Server.StripeHttp (class)
 ToolUp.Stripe.Server.StripeHttp.ApiBase : System.String (literal)
 ToolUp.Stripe.Server.StripeHttp.getJson(System.Net.Http.HttpClient, System.String, System.String) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[System.Text.Json.JsonElement, System.String]]
