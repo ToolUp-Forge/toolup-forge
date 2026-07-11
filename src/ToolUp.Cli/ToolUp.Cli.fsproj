@@ -65,6 +65,7 @@
     <Compile Include="Cli\DockerEmitCommand.fs" />
     <Compile Include="Cli\StampCommand.fs" />
     <Compile Include="Cli\ModuleCommand.fs" />
+    <Compile Include="Cli\MembershipsDoctorCommand.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

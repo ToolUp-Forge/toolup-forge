@@ -11,6 +11,7 @@ let allTests =
         DockerEmitTests.tests
         StampRoundTripTests.tests
         ModuleAddRemoveTests.tests
+        MembershipsDoctorTests.tests
     ]
 
 [<EntryPoint>]

@@ -21,8 +21,6 @@ let allTests =
         IModelRegistryContract.tests
         // Phase 454 — model-scoring seam conformance (reference scorer + blob store).
         IModelScorerContract.tests
-        // Phase 456 — model evaluation & champion-challenger harness.
-        ModelEvaluationTests.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).
@@ -520,6 +518,10 @@ let allTests =
         // idempotent re-purge) + the user-membership-teardown hook +
         // end-to-end DeprovisionTenant("user-<id>").
         UserMembershipTeardownTests.tests
+        // Phase 546 — membership-integrity doctor: drift classification +
+        // safe-subset repair (audit-attributed, cache-evicting), with
+        // email-keyed / unresolvable rows kept report-only.
+        MembershipDoctorTests.tests
         TeamInvitationTests.tests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests

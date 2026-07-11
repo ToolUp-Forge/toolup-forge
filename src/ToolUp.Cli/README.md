@@ -1,8 +1,8 @@
 # ToolUp.Cli — the `dotnet toolup` admin CLI
 
 A thin, dependency-free (pure BCL + `FSharp.Core`) command host for ToolUp Platform SDK admin
-tasks. It is the substrate other capabilities plug subcommands into; today it ships two leaves and
-grows additively.
+tasks. It is the substrate other capabilities plug subcommands into; the command registry grows
+additively.
 
 ## Install
 
@@ -33,6 +33,7 @@ toolup docker emit --help
 | `docker emit` | Re-emits the maintained Docker host artefacts (`Dockerfile`, `.dockerignore`, `healthcheck.sh`, `compose.yml`) at a solution root, substituting the deployment's project / image / port tokens. |
 | `stamp` | Writes/refreshes a module-binding manifest (`module-bindings.json`) — the deploy-time stamper for the module-binding gate. |
 | `module add` / `module remove` | Transactionally scaffold + register a module into an app, or reverse it byte-for-byte. |
+| `memberships doctor` | Detects membership-integrity drift in a local-file deployment's blob layout; `--repair` fixes the provably-safe subset. |
 
 #### `module add` / `module remove`
 
@@ -82,6 +83,31 @@ configured trust anchors. Crypto is pure BCL (HMAC-SHA256 / ES256 over a NIST P-
 | `--mac-key-file <f>` / `--mac-key <base64>` | Base64 HMAC-SHA256 key (symmetric anchor). |
 | `--ec-key-file <pem>` | PEM P-256 EC private key (asymmetric / ES256 anchor). |
 | `--unbind` | Remove the named modules' entries instead of stamping. |
+
+#### `memberships doctor`
+
+```bash
+toolup memberships doctor --data-root /var/data/myapp          # report + CI-friendly exit code
+toolup memberships doctor --data-root /var/data/myapp --repair # also fix the safe subset
+```
+
+Walks `<data-root>/_platform/{memberships,teams,active-team}` (the local-file blob layout) and
+classifies membership drift: membership blobs keyed by an **email address** (a legacy add path),
+blobs keyed by an id the identity sanitiser refuses (e.g. a raw provider-prefixed JWT `sub` after a
+deployment switched claim resolution), rows naming a **purged team**, and **dangling active-team
+pointers**. Exits `0` on a clean store, non-zero when findings exist.
+
+`--repair` applies only the provably-safe subset — deleting rows that name a nonexistent team and
+clearing dangling pointers. Email-keyed / unresolvable blobs are never touched: the right fix
+(re-adding the member under the resolved id) needs operator knowledge, so they stay in the report.
+Offline repair edits blob files directly (no audit events, no cache-evict publications) — run it
+against a stopped deployment, or drive the in-process `MembershipDoctor` substrate for an audited
+live repair.
+
+| Option | Meaning |
+|---|---|
+| `--data-root <dir>` | The deployment's local blob-storage root (required). |
+| `--repair` | Apply the safe subset instead of reporting only. |
 
 #### `docker emit`
 

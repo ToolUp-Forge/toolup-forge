@@ -10,6 +10,10 @@
     <Compile Include="DockerEmitTests.fs" />
     <Compile Include="StampRoundTripTests.fs" />
     <Compile Include="ModuleAddRemoveTests.fs" />
+    <!-- Phase 546 — memberships-doctor ↔ MembershipDoctor parity: the CLI's
+         pure-BCL classification + sanitiser mirror pinned to the server
+         substrate over one fixture tree (the stamp-round-trip mechanism). -->
+    <Compile Include="MembershipsDoctorTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

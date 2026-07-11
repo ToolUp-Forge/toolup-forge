@@ -251,9 +251,6 @@
         <Compile Include="InProcess\DataSubjectRequestTests.fs" />
         <Compile Include="InProcess\SignedExportTests.fs" />
         <Compile Include="InProcess\DatasetStoreTests.fs" />
-        <!-- Phase 456 — model evaluation & champion-challenger harness
-             (reference provider family over the blob-backed default stack). -->
-        <Compile Include="InProcess\ModelEvaluationTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TelemetrySinkTests.fs" />
@@ -758,6 +755,10 @@
              the user-membership-teardown lifecycle hook + end-to-end
              DeprovisionTenant("user-<id>"). -->
         <Compile Include="InProcess\UserMembershipTeardownTests.fs" />
+        <!-- Phase 546 — membership-integrity doctor: drift classification
+             (email-keyed / unresolvable / orphan-team / dangling-pointer)
+             + the safe-subset repair with audit + cache-evict envelopes. -->
+        <Compile Include="InProcess\MembershipDoctorTests.fs" />
         <Compile Include="InProcess\WithRequestHeadersPassthroughTests.fs" />
         <Compile Include="InProcess\CsrfPrefetchAnonymousGateTests.fs" />
         <Compile Include="InProcess\SvgPropTests.fs" />

@@ -17,6 +17,7 @@ let main argv =
         StampCommand.command
         ModuleCommand.addCommand
         ModuleCommand.removeCommand
+        MembershipsDoctorCommand.command
     ]
 
     Dispatch.run commands argv

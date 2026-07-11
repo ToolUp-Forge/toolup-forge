@@ -9,11 +9,13 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
 // ─── Storage constants ───────────────────────────────────────────
+// `internal`, not `private` — `MembershipDoctor` (Phase 546) walks the
+// same layout and must not mirror the literals.
 
-let private platformContainer = "_platform"
-let private teamBlobName teamId = $"teams/{teamId}.json"
-let private membershipBlobName userId = $"memberships/{userId}.json"
-let private activeTeamBlobName userId = $"active-team/{userId}.txt"
+let internal platformContainer = "_platform"
+let internal teamBlobName teamId = $"teams/{teamId}.json"
+let internal membershipBlobName userId = $"memberships/{userId}.json"
+let internal activeTeamBlobName userId = $"active-team/{userId}.txt"
 
 // ─── User membership record (stored per user) ───────────────────
 
@@ -24,8 +26,10 @@ type StoredMembership = {
 }
 
 // ─── JSON serialisation helpers ──────────────────────────────────
+// `internal` — the membership wire codec is shared with
+// `MembershipDoctor` (Phase 546) so the two can never drift.
 
-module private Json =
+module internal Json =
     let private options =
         JsonSerializerOptions(PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
 

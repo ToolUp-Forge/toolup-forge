@@ -26,6 +26,25 @@ ToolUp.Cli.DockerEmitCommand+Options.ImageName : Microsoft.FSharp.Core.FSharpOpt
 ToolUp.Cli.DockerEmitCommand+Options.OutputDir : System.String { get }
 ToolUp.Cli.DockerEmitCommand+Options.ServerDll : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.DockerEmitCommand+Options.ServerProject : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.MembershipsDoctorCommand (class)
+ToolUp.Cli.MembershipsDoctorCommand.KindDanglingActiveTeam : System.String (literal)
+ToolUp.Cli.MembershipsDoctorCommand.KindEmailKeyedRow : System.String (literal)
+ToolUp.Cli.MembershipsDoctorCommand.KindOrphanTeamRow : System.String (literal)
+ToolUp.Cli.MembershipsDoctorCommand.KindUnresolvableRow : System.String (literal)
+ToolUp.Cli.MembershipsDoctorCommand.RepairClearPointer : System.String (literal)
+ToolUp.Cli.MembershipsDoctorCommand.RepairDeleteRow : System.String (literal)
+ToolUp.Cli.MembershipsDoctorCommand.RepairReportOnly : System.String (literal)
+ToolUp.Cli.MembershipsDoctorCommand.command : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.MembershipsDoctorCommand.diagnoseTree(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Cli.MembershipsDoctorCommand+Finding]
+ToolUp.Cli.MembershipsDoctorCommand.repairTree(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Cli.MembershipsDoctorCommand+Finding]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Cli.MembershipsDoctorCommand+Finding]
+ToolUp.Cli.MembershipsDoctorCommand.sanitiseScopeId(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Cli.MembershipsDoctorCommand+Finding (class)
+ToolUp.Cli.MembershipsDoctorCommand+Finding..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
+ToolUp.Cli.MembershipsDoctorCommand+Finding.Evidence : System.String { get }
+ToolUp.Cli.MembershipsDoctorCommand+Finding.Kind : System.String { get }
+ToolUp.Cli.MembershipsDoctorCommand+Finding.Repair : System.String { get }
+ToolUp.Cli.MembershipsDoctorCommand+Finding.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.MembershipsDoctorCommand+Finding.UserId : System.String { get }
 ToolUp.Cli.ModuleCommand (class)
 ToolUp.Cli.ModuleCommand.FsMarker : System.String (literal)
 ToolUp.Cli.ModuleCommand.MsBuildMarker : System.String (literal)
