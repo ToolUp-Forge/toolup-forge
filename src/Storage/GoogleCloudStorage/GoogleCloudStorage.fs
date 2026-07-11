@@ -153,6 +153,35 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             | ex -> return Error ex.Message
         }
 
+        member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
+            if offset < 0L then
+                return Error "DownloadRange: offset must be non-negative"
+            elif length <= 0 then
+                return Error "DownloadRange: length must be positive"
+            else
+                try
+                    use ms = new MemoryStream()
+                    let key = blobKey toolupContainer blobName
+                    // Native range request; RangeHeaderValue end is
+                    // inclusive. GCS clamps a range that overshoots EOF
+                    // and 416s a range starting past it.
+                    let options =
+                        DownloadObjectOptions(Range = Http.Headers.RangeHeaderValue(offset, offset + int64 length - 1L))
+
+                    let! _ =
+                        (client ()).DownloadObjectAsync(config.BucketName, key, ms, options)
+                        |> Async.AwaitTask
+
+                    return Ok(ms.ToArray())
+                with
+                | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+                    return Error $"Blob not found: {toolupContainer}/{blobName}"
+                | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.RequestedRangeNotSatisfiable ->
+                    // Past-EOF clamp per the interface contract.
+                    return Ok Array.empty
+                | ex -> return Error ex.Message
+        }
+
         member _.Delete(toolupContainer, blobName) = async {
             // GCS DeleteObject raises 404 for missing objects; we
             // swallow that to keep the idempotent contract. Any

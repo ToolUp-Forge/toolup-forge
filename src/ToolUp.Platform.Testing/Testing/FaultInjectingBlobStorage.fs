@@ -205,3 +205,10 @@ type FaultInjectingBlobStorage(inner: IBlobStorage, ?seed: int) =
         member _.List(container, prefix) = inner.List(container, prefix)
         member _.Exists(container, blobName) = inner.Exists(container, blobName)
         member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        // Ranged reads pass through fault-free: the registered fault
+        // shapes (truncate / corrupt / garbage) model whole-blob
+        // Download outcomes. Extend with range-specific faults if a
+        // test ever needs them.
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)

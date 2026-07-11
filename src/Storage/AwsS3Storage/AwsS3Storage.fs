@@ -108,6 +108,33 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             | ex -> return Error ex.Message
         }
 
+        member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
+            if offset < 0L then
+                return Error "DownloadRange: offset must be non-negative"
+            elif length <= 0 then
+                return Error "DownloadRange: length must be positive"
+            else
+                try
+                    let req = GetObjectRequest()
+                    req.BucketName <- config.BucketName
+                    req.Key <- blobKey toolupContainer blobName
+                    // Native range request; ByteRange end is inclusive. S3
+                    // clamps a range that overshoots EOF and 416s a range
+                    // starting past it.
+                    req.ByteRange <- ByteRange(offset, offset + int64 length - 1L)
+                    use! response = client.GetObjectAsync req |> Async.AwaitTask
+                    use ms = new MemoryStream()
+                    do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
+                    return Ok(ms.ToArray())
+                with
+                | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+                    return Error $"Blob not found: {toolupContainer}/{blobName}"
+                | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.RequestedRangeNotSatisfiable ->
+                    // Past-EOF clamp per the interface contract.
+                    return Ok Array.empty
+                | ex -> return Error ex.Message
+        }
+
         member _.Delete(toolupContainer, blobName) = async {
             // S3 DeleteObject is idempotent — succeeds whether the
             // key exists or not. Matches the contract's Delete

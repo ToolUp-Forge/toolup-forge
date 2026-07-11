@@ -98,6 +98,33 @@ type LocalFileStorage(baseDir: string) =
                     return Error ex.Message
         }
 
+        member _.DownloadRange(container, blobName, offset, length) = async {
+            if offset < 0L then
+                return Error "DownloadRange: offset must be non-negative"
+            elif length <= 0 then
+                return Error "DownloadRange: length must be positive"
+            else
+                match resolveBlobPath container blobName with
+                | Result.Error reason -> return Error reason
+                | Result.Ok path ->
+                    try
+                        if not (File.Exists path) then
+                            return Error $"Blob not found: {container}/{blobName}"
+                        else
+                            use stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)
+
+                            if offset >= stream.Length then
+                                return Ok Array.empty
+                            else
+                                stream.Seek(offset, SeekOrigin.Begin) |> ignore
+                                let count = min (int64 length) (stream.Length - offset) |> int
+                                let buffer = Array.zeroCreate<byte> count
+                                stream.ReadExactly(buffer, 0, count)
+                                return Ok buffer
+                    with ex ->
+                        return Error ex.Message
+        }
+
         member _.Delete(container, blobName) = async {
             match resolveBlobPath container blobName with
             | Result.Error reason -> return Error reason

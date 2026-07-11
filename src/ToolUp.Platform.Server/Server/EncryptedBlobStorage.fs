@@ -228,6 +228,22 @@ type EncryptedBlobStorage(inner: IBlobStorage, resolver: IBlobEncryptionKeyResol
                         | Error msg -> return Error msg
         }
 
+        // Phase 455 — honest refusal (the recorded 455.A verdict). The
+        // envelope is whole-blob AES-GCM: a mid-blob byte range of
+        // ciphertext is undecryptable (the AEAD tag authenticates the
+        // whole message), and offsets into the plaintext don't line up
+        // with offsets into the envelope anyway. Refusing loudly beats
+        // silently downloading + decrypting the whole blob — the caller
+        // chose a ranged read precisely to avoid whole-object
+        // materialisation. Encrypted deployments that need ranged reads
+        // adopt a chunked envelope (a separate phase); until then they
+        // use `Download`.
+        member _.DownloadRange(_, _, _, _) = async {
+            return
+                Error
+                    "EncryptedBlobStorage does not support ranged reads: content is whole-blob AES-GCM encrypted, so a mid-blob range is undecryptable. Use Download for encrypted content."
+        }
+
         member _.Delete(container, blobName) = inner.Delete(container, blobName)
         member _.List(container, prefix) = inner.List(container, prefix)
         member _.Exists(container, blobName) = inner.Exists(container, blobName)

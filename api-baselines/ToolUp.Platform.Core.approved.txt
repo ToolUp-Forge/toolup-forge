@@ -1427,6 +1427,7 @@ ToolUp.Platform.BindingRevocationList.none : ToolUp.Platform.IBindingRevocationL
 ToolUp.Platform.BindingTransparencyLog (class)
 ToolUp.Platform.BindingTransparencyLog.none : ToolUp.Platform.IBindingTransparencyLog { get }
 ToolUp.Platform.BlobStorage (class)
+ToolUp.Platform.BlobStorage.downloadRangeViaDownload(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
 ToolUp.Platform.BlobStorage.eraseByPrefix(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.BlobStorage+BlobMetadata (class)
 ToolUp.Platform.BlobStorage+BlobMetadata..ctor(System.Int64, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
@@ -1436,6 +1437,7 @@ ToolUp.Platform.BlobStorage+BlobMetadata.Size : System.Int64 { get }
 ToolUp.Platform.BlobStorage+IBlobStorage (interface)
 ToolUp.Platform.BlobStorage+IBlobStorage.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.BlobStorage+IBlobStorage.Download(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
+ToolUp.Platform.BlobStorage+IBlobStorage.DownloadRange(System.String, System.String, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
 ToolUp.Platform.BlobStorage+IBlobStorage.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.BlobStorage+IBlobStorage.Exists(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.BlobStorage+IBlobStorage.GetMetadata(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BlobStorage+BlobMetadata, System.String]]

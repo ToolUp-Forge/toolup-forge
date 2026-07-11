@@ -37,6 +37,9 @@ type ResilientBlobStorage(inner: IBlobStorage, policy: TransientFaultPolicy) =
         member _.Download(container, blobName) =
             runner.Run(fun () -> inner.Download(container, blobName))
 
+        member _.DownloadRange(container, blobName, offset, length) =
+            runner.Run(fun () -> inner.DownloadRange(container, blobName, offset, length))
+
         member _.Delete(container, blobName) =
             runner.Run(fun () -> inner.Delete(container, blobName))
 

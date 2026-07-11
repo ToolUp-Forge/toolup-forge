@@ -130,6 +130,28 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             | ex -> return Error ex.Message
         }
 
+        member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
+            if offset < 0L then
+                return Error "DownloadRange: offset must be non-negative"
+            elif length <= 0 then
+                return Error "DownloadRange: length must be positive"
+            else
+                try
+                    let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
+                    // Native range request — Azure clamps a range that
+                    // overshoots EOF and 416s a range starting past it.
+                    let options = BlobDownloadOptions(Range = HttpRange(offset, int64 length))
+                    let! response = blob.DownloadContentAsync options |> Async.AwaitTask
+                    return Ok(response.Value.Content.ToArray())
+                with
+                | :? RequestFailedException as ex when ex.Status = 404 ->
+                    return Error $"Blob not found: {toolupContainer}/{blobName}"
+                | :? RequestFailedException as ex when ex.Status = 416 ->
+                    // Past-EOF clamp per the interface contract.
+                    return Ok Array.empty
+                | ex -> return Error ex.Message
+        }
+
         member _.Delete(toolupContainer, blobName) = async {
             try
                 let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)

@@ -103,6 +103,10 @@ type private FlakyBlobStorage(inner: IBlobStorage, failFirst: int) =
         }
 
         member _.Download(container, blobName) = inner.Download(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
         member _.Delete(container, blobName) = inner.Delete(container, blobName)
         member _.List(container, prefix) = inner.List(container, prefix)
         member _.Exists(container, blobName) = inner.Exists(container, blobName)

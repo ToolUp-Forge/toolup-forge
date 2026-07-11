@@ -29,6 +29,9 @@ type InMemoryBlobStorage() =
             | false, _ -> return Error $"not found: {container}/{blobName}"
         }
 
+        member this.DownloadRange(container, blobName, offset, length) =
+            ToolUp.Platform.BlobStorage.downloadRangeViaDownload (this :> IBlobStorage) container blobName offset length
+
         member _.Delete(container, blobName) = async {
             blobs.TryRemove((container, blobName)) |> ignore
             return Ok()

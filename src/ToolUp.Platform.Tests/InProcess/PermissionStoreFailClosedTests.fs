@@ -20,6 +20,10 @@ type private FakeBlob(download: Result<byte[], string>, exists: Result<bool, exn
 
         member _.Upload(_, _, _) = async { return Ok "" }
         member _.Download(_, _) = async { return download }
+
+        member this.DownloadRange(container, blobName, offset, length) =
+            ToolUp.Platform.BlobStorage.downloadRangeViaDownload (this :> IBlobStorage) container blobName offset length
+
         member _.Delete(_, _) = async { return Ok() }
         member _.List(_, _) = async { return [] }
 

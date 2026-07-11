@@ -63,6 +63,28 @@ let tests =
             | Result.Error e -> failwithf "download failed: %s" e
         }
 
+        testCaseAsync "DownloadRange is refused (Phase 455 honest-refusal verdict)"
+        <| async {
+            // Whole-blob AES-GCM: a mid-blob ciphertext range is
+            // undecryptable, so the decorator must refuse rather than
+            // silently materialise + decrypt the whole blob.
+            let inner = newInnerStorage ()
+            let secrets = newSecretStore ()
+            let resolver = SingleKeyResolver.create secrets
+            let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
+
+            let! _ = storage.Upload(container, "doc.bin", samplePayload)
+
+            match! storage.DownloadRange(container, "doc.bin", 0L, 4) with
+            | Result.Ok _ -> failtest "Expected the encryption decorator to refuse ranged reads"
+            | Result.Error msg -> Expect.stringContains msg "ranged reads" "refusal names the unsupported operation"
+
+            // Whole-blob Download remains the supported read path.
+            match! storage.Download(container, "doc.bin") with
+            | Result.Ok bytes -> Expect.equal bytes samplePayload "Download still round-trips"
+            | Result.Error e -> failwithf "download failed: %s" e
+        }
+
         testCaseAsync "SingleKeyResolver — inner storage holds ciphertext (not plaintext)"
         <| async {
             let inner = newInnerStorage ()

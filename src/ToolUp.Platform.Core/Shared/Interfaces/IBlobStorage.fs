@@ -79,6 +79,42 @@ type IBlobStorage =
     /// `container` must be a scope-derived name (see type docs).
     abstract GetMetadata: container: string * blobName: string -> Async<Result<BlobMetadata, string>>
 
+    /// Phase 455 — bounded ranged read. Download at most `length` bytes
+    /// starting at byte `offset`, without materialising the rest of the
+    /// blob (cloud implementations issue a native HTTP range request;
+    /// the local implementation seeks). `container` must be a
+    /// scope-derived name (see type docs).
+    ///
+    /// **Semantics (contract-tested across every implementation):**
+    ///   - `offset < 0` or `length <= 0` → `Error` (invalid arguments).
+    ///   - Missing blob → `Error` (parity with `Download`).
+    ///   - `offset >= size` → `Ok [||]` (past-EOF clamp; providers'
+    ///     416 responses map here, distinguished from not-found).
+    ///   - Otherwise the bytes `[offset, min(offset + length, size))` —
+    ///     the result may be SHORTER than `length` when the range runs
+    ///     off the end; concatenating consecutive ranges byte-equals
+    ///     the full `Download`.
+    ///
+    /// **No open-ended range.** "Offset to EOF" is deliberately not
+    /// expressible — callers combine `GetMetadata` (`Size`) with a
+    /// capped-chunk loop, so no implementation is ever forced to
+    /// materialise a whole object to satisfy a range. Portability
+    /// audit (GP 12): identity by value (`byte[]`, not a stream —
+    /// also what keeps retry decorators safe: a returned buffer can
+    /// be re-fetched, a partially-consumed stream cannot), async at
+    /// boundary, failure as `Result` data, stateless.
+    ///
+    /// Custom implementations without a native range primitive can
+    /// delegate to `BlobStorage.downloadRangeViaDownload` (download-
+    /// then-slice — correct, not cheap).
+    ///
+    /// **Encryption caveat:** the `EncryptedBlobStorage` decorator
+    /// refuses ranged reads (whole-blob AES-GCM — a mid-blob
+    /// ciphertext range is undecryptable); callers reading encrypted
+    /// content use `Download`.
+    abstract DownloadRange:
+        container: string * blobName: string * offset: int64 * length: int -> Async<Result<byte[], string>>
+
     /// Phase 9h — GDPR Article 17 erasure surface. Erase (or redact)
     /// every blob in `container` whose name starts with `prefix`,
     /// per `policy`:
@@ -112,6 +148,38 @@ type IBlobStorage =
     abstract Erase:
         container: string * prefix: string * policy: ErasurePolicy * dryRun: bool ->
             Async<Result<ErasureSummary, ErasureError>>
+
+/// Phase 455 — shared download-then-slice fallback for
+/// `IBlobStorage.DownloadRange`. Correct against the contract semantics
+/// but NOT cheap: it materialises the whole blob and slices. In-tree
+/// test doubles and custom implementations without a native range
+/// primitive delegate here; production implementations override with a
+/// native seek / HTTP range request so bounded reads stay bounded.
+let downloadRangeViaDownload
+    (store: IBlobStorage)
+    (container: string)
+    (blobName: string)
+    (offset: int64)
+    (length: int)
+    : Async<Result<byte[], string>> =
+    async {
+        if offset < 0L then
+            return Error "DownloadRange: offset must be non-negative"
+        elif length <= 0 then
+            return Error "DownloadRange: length must be positive"
+        else
+            let! result = store.Download(container, blobName)
+
+            match result with
+            | Error e -> return Error e
+            | Ok bytes ->
+                if offset >= int64 bytes.Length then
+                    return Ok Array.empty
+                else
+                    let start = int offset
+                    let count = min length (bytes.Length - start)
+                    return Ok(Array.sub bytes start count)
+    }
 
 /// Shared default for `IBlobStorage.Erase`. Every concrete
 /// implementation delegates to this — the algorithm is the same

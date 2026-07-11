@@ -147,4 +147,122 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             let! entries = store.List(containerB, "")
             Expect.isEmpty entries "container B is isolated from container A"
         }
+
+        // ── Phase 455 — DownloadRange ────────────────────────────────
+        // 100 distinct byte values so any off-by-one slice mismatches.
+
+        testCaseAsync "DownloadRange reads a range at the start"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let content = Array.init 100 byte
+
+            let! _ = store.Upload(container, "r.bin", content)
+
+            match! store.DownloadRange(container, "r.bin", 0L, 10) with
+            | Error e -> failtestf "DownloadRange failed: %s" e
+            | Ok bytes -> Expect.sequenceEqual bytes (Array.sub content 0 10) "first 10 bytes"
+        }
+
+        testCaseAsync "DownloadRange reads a mid-blob range"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let content = Array.init 100 byte
+
+            let! _ = store.Upload(container, "r.bin", content)
+
+            match! store.DownloadRange(container, "r.bin", 37L, 13) with
+            | Error e -> failtestf "DownloadRange failed: %s" e
+            | Ok bytes -> Expect.sequenceEqual bytes (Array.sub content 37 13) "bytes [37, 50)"
+        }
+
+        testCaseAsync "DownloadRange clamps a range that overshoots EOF"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let content = Array.init 100 byte
+
+            let! _ = store.Upload(container, "r.bin", content)
+
+            match! store.DownloadRange(container, "r.bin", 90L, 50) with
+            | Error e -> failtestf "DownloadRange failed: %s" e
+            | Ok bytes -> Expect.sequenceEqual bytes (Array.sub content 90 10) "last 10 bytes, clamped"
+        }
+
+        testCaseAsync "DownloadRange past EOF returns Ok [||]"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            let content = Array.init 100 byte
+
+            let! _ = store.Upload(container, "r.bin", content)
+
+            match! store.DownloadRange(container, "r.bin", 100L, 10) with
+            | Error e -> failtestf "DownloadRange at size failed: %s" e
+            | Ok bytes -> Expect.isEmpty bytes "offset = size yields empty"
+
+            match! store.DownloadRange(container, "r.bin", 150L, 10) with
+            | Error e -> failtestf "DownloadRange beyond size failed: %s" e
+            | Ok bytes -> Expect.isEmpty bytes "offset > size yields empty"
+        }
+
+        testCaseAsync "DownloadRange concatenated ranges byte-equal the full download"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+            // Deliberately not a multiple of the chunk size.
+            let content = Array.init 100 byte
+
+            let! _ = store.Upload(container, "r.bin", content)
+
+            let chunk = 7
+            let mutable offset = 0L
+            let mutable finished = false
+            let assembled = ResizeArray<byte>()
+
+            while not finished do
+                match! store.DownloadRange(container, "r.bin", offset, chunk) with
+                | Error e -> failtestf "DownloadRange at %d failed: %s" offset e
+                | Ok bytes ->
+                    assembled.AddRange bytes
+                    offset <- offset + int64 bytes.Length
+
+                    if bytes.Length < chunk then
+                        finished <- true
+
+            match! store.Download(container, "r.bin") with
+            | Error e -> failtestf "Download failed: %s" e
+            | Ok full -> Expect.sequenceEqual (assembled.ToArray()) full "concatenated ranges = full download"
+        }
+
+        testCaseAsync "DownloadRange of missing blob returns Error (parity with Download)"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+
+            match! store.DownloadRange(container, "missing.bin", 0L, 10) with
+            | Ok _ -> failtest "Expected Error for missing blob"
+            | Error _ -> ()
+        }
+
+        testCaseAsync "DownloadRange rejects negative offset and non-positive length"
+        <| async {
+            let store = factory ()
+            let container = uniqueContainer ()
+
+            let! _ = store.Upload(container, "r.bin", [| 1uy; 2uy; 3uy |])
+
+            match! store.DownloadRange(container, "r.bin", -1L, 10) with
+            | Ok _ -> failtest "Expected Error for negative offset"
+            | Error _ -> ()
+
+            match! store.DownloadRange(container, "r.bin", 0L, 0) with
+            | Ok _ -> failtest "Expected Error for zero length"
+            | Error _ -> ()
+
+            match! store.DownloadRange(container, "r.bin", 0L, -5) with
+            | Ok _ -> failtest "Expected Error for negative length"
+            | Error _ -> ()
+        }
     ]
