@@ -340,6 +340,78 @@ type ResolvedFact = {
 type IFactResolver =
     abstract Resolve: scopeId: string * clause: FactClause -> Async<ResolvedFact list>
 
+// ─── Disclosure egress seam (Phase 525) ──────────────────────────────
+//
+// The fact-level `Disclosure` classification (carried on every fact from
+// birth) is *enforced* at the enumerable egress choke points — retrieval
+// into prompt context, AI tool results, narrative publication — never at
+// module render seams. Like `IFactResolver` above, the seam here is
+// deliberately fact-companion-free (opaque id / policy strings), so the
+// choke points take no compile-time edge on the fact store's typed model
+// (GP 1). The one predicate the gate applies lives beside the `Disclosure`
+// type in the fact companion (`DisclosureEgress.evaluate`) — it is never
+// re-implemented per surface; every choke point consults this seam.
+
+/// The egress surface a disclosure check is being made for — the first
+/// choke points (Phase 525). Later doors (exports, external doors,
+/// write-back, webhooks, certificates) extend this DU as their surfaces
+/// land.
+type FactEgressSurface =
+    /// Fact resolution into retrieval results / prompt context. Default-
+    /// deny at retrieval — the model never *sees* a denied fact ("see but
+    /// don't say" is not a mode).
+    | FactRetrieval
+    /// A fact-reading AI tool returning facts to the model as a tool
+    /// result.
+    | FactToolResult
+    /// Committing / publishing a narrative that references facts to a
+    /// surfaceable store (KB commit, public-page publication).
+    | FactNarrativePublication
+
+module FactEgressSurface =
+    /// Canonical string form, shared by audit events and diagnostics.
+    let toString (s: FactEgressSurface) : string =
+        match s with
+        | FactRetrieval -> "Retrieval"
+        | FactToolResult -> "ToolResult"
+        | FactNarrativePublication -> "NarrativePublication"
+
+/// Per-fact outcome of the disclosure predicate at one egress surface.
+type FactDisclosureVerdict =
+    /// The fact may cross this egress surface.
+    | FactDisclosable
+    /// The fact must not cross this surface. `policyRef` names *why* —
+    /// `"Internal"` for the internal classification, the policy ref for a
+    /// `Restricted` fact, `"unknown-fact"` for an id the scope cannot see.
+    /// Refusal wording built from this names the policy, never the value.
+    | FactNotDisclosable of policyRef: string
+
+module FactDisclosureVerdict =
+    /// The canonical refusal wording for a denied fact — names the policy,
+    /// never the value ("the control demonstrably working"). Shared by the
+    /// tool-result marker and commit-refusal diagnostics so refusal text
+    /// never drifts between doors.
+    let refusalText (policyRef: string) : string =
+        sprintf "computed, but not disclosable under policy %s" policyRef
+
+/// Scope-filtered disclosure gate over the fact base (Phase 525.A).
+/// Implemented in the fact companion over the fact store + the one
+/// `DisclosureEgress` predicate; registered in DI whenever the fact store
+/// is composed, so a deployment without facts pays nothing (GP 13) and one
+/// with facts cannot compose the store without the gate. `Check` is handed
+/// the caller's resolved scope (GP 4): a fact id from another scope is
+/// unresolvable and therefore denied, so disclosure never widens scope and
+/// scope never overrides a deny. Every deny is audited (GP 6) with the
+/// surface, fact id, policy ref, and `principal`.
+///
+/// GP 12 audit: identity by value (strings, value records); async at the
+/// boundary; no callbacks; stateless between calls; scope is the shard key
+/// with no cross-scope ordering promise; no timing primitives.
+type IFactDisclosureGate =
+    abstract Check:
+        scopeId: string * principal: string * surface: FactEgressSurface * factIds: string list ->
+            Async<Map<string, FactDisclosureVerdict>>
+
 /// Wire-format record for a retrieved chunk surfaced to the AI client. A
 /// projection of `VectorMatch` that strips the embedding-pipeline internals
 /// (chunk id, full content, scope) and adds caller-friendly fields the UI

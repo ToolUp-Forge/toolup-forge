@@ -14,6 +14,11 @@ ToolUp.Facts.FactAssertedEvent.FactId : System.String { get }
 ToolUp.Facts.FactAssertedEvent.Method : System.String { get }
 ToolUp.Facts.FactAssertedEvent.Metric : System.String { get }
 ToolUp.Facts.FactAssertedEvent.Subject : System.String { get }
+ToolUp.Facts.FactDisclosureGate (class)
+ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]])
+ToolUp.Facts.FactDisclosureGateModule (class)
+ToolUp.Facts.FactDisclosureGateModule.create(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
+ToolUp.Facts.FactDisclosureGateModule.createWithPolicyResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDraft (class)
 ToolUp.Facts.FactDraft..ctor(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.FactValue, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, ToolUp.Facts.Evidence, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence], ToolUp.Facts.Disclosure)
 ToolUp.Facts.FactDraft.Confidence : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence] { get }

@@ -99,3 +99,84 @@ let staleFlags (supersededBy: Map<string, string option>) (document: NarrativeDo
         SupersededFactId = factId
         SupersededByFactId = head
     })
+
+// ─── Disclosure redaction (Phase 525.C) ──────────────────────────────
+//
+// The tool-result egress door: a narrative returned to the AI model as a
+// tool result must not carry the *value* of a fact the disclosure gate
+// denied. The walk below replaces each denied `Metric` span's value with a
+// non-disclosive marker naming the policy — a typed refusal, not an empty
+// result, so the model can explain *that* a value exists but is restricted
+// without ever seeing it. The span keeps its label and fact ref (ids are
+// content hashes, not values), so transitive citation stays intact.
+// Fact-companion-free like the rest of this module: `denied` maps opaque
+// fact ids to the policy ref that denied them.
+
+/// The marker a denied `Metric` span's value is replaced with. Names the
+/// policy, never the value.
+let notDisclosableMarker (policyRef: string) : string =
+    sprintf "[not disclosable under policy %s]" policyRef
+
+/// Redact one inline span (recursing into `Link` content). Only a `Metric`
+/// whose `factRef` appears in `denied` changes.
+let rec redactSpan (denied: Map<string, string>) (span: InlineSpan) : InlineSpan =
+    match span with
+    | Metric(label, _, Some factRef) ->
+        match denied.TryFind factRef with
+        | Some policyRef -> Metric(label, notDisclosableMarker policyRef, Some factRef)
+        | None -> span
+    | Link(href, spans) -> Link(href, spans |> List.map (redactSpan denied))
+    | Metric(_, _, None)
+    | Text _
+    | Emphasis _
+    | Strong _
+    | Code _
+    | Image _
+    | Br -> span
+
+/// Redact one block element, recursing through every span-bearing and
+/// element-bearing case — the write twin of `factRefsInElement`, so the
+/// two walks cover the same cases and cannot drift.
+let rec redactElement (denied: Map<string, string>) (element: NarrativeElement) : NarrativeElement =
+    let spans = List.map (redactSpan denied)
+
+    match element with
+    | Paragraph s -> Paragraph(spans s)
+    | Heading(level, s) -> Heading(level, spans s)
+    | Callout(kind, s) -> Callout(kind, spans s)
+    | Blockquote(cite, s) -> Blockquote(cite, spans s)
+    | BulletList items -> BulletList(items |> List.map spans)
+    | OrderedList items -> OrderedList(items |> List.map spans)
+    | KeyValueGrid pairs -> KeyValueGrid(pairs |> List.map (fun (k, s) -> k, spans s))
+    | Table(header, rows) -> Table(header, rows |> List.map (List.map spans))
+    | Card spec ->
+        Card {
+            spec with
+                Body = spec.Body |> List.map (redactElement denied)
+        }
+    | Accordion panels -> Accordion(panels |> List.map (fun (t, body) -> t, body |> List.map (redactElement denied)))
+    | Tabs panels -> Tabs(panels |> List.map (fun (t, body) -> t, body |> List.map (redactElement denied)))
+    | CodeBlock _
+    | Divider
+    | Video _
+    | Audio _
+    | ImageGallery _
+    | Embed _
+    | Component _ -> element
+
+/// Redact every denied fact value in a document. `denied` maps each denied
+/// fact id to the policy ref that denied it; a document citing none of
+/// them returns structurally unchanged.
+let redactDeniedFacts (denied: Map<string, string>) (document: NarrativeDocument) : NarrativeDocument =
+    if Map.isEmpty denied then
+        document
+    else
+        {
+            document with
+                Sections =
+                    document.Sections
+                    |> List.map (fun section -> {
+                        section with
+                            Elements = section.Elements |> List.map (redactElement denied)
+                    })
+        }

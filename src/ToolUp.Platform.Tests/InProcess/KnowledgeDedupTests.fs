@@ -102,6 +102,7 @@ let private mkDeps
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = dedupPolicy
+        DisclosureGate = None
     }
 
 let private csvBytes = Encoding.UTF8.GetBytes "name,score\nalpha,1\nbeta,2"

@@ -13,6 +13,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\FactTypes.fs" />
+        <Compile Include="Shared\DisclosureTypes.fs" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

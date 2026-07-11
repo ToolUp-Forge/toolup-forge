@@ -73,6 +73,7 @@ let private mkDeps (storage: IBlobStorage) (policy: KnowledgeUploadPolicy) (cont
     // own pack (`KnowledgeDedupTests`), and each 119 case uploads
     // distinct bytes anyway.
     DedupPolicy = KnowledgeDedupPolicy.enabled
+    DisclosureGate = None
 }
 
 let private isRejected =

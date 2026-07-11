@@ -7,6 +7,7 @@ open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── FactsCompose (Phase 520 wiring) ─────────────────────────────────
 //
@@ -35,6 +36,16 @@ module FactsCompose =
             .AddSingleton<IFactEvidenceSource>(
                 Func<IServiceProvider, IFactEvidenceSource>(fun sp ->
                     FactStoreEvidenceSource.create (sp.GetRequiredService<IFactStore>()))
+            )
+            // Phase 525 — the disclosure egress gate is registered with the
+            // store, never separately: a deployment cannot compose the fact
+            // tier without its egress doors armed. Dormant with no
+            // classified facts (every Surfaceable fact passes — plan D17).
+            .AddSingleton<IFactDisclosureGate>(
+                Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
+                    FactDisclosureGate.create
+                        (sp.GetRequiredService<IFactStore>())
+                        (sp.GetRequiredService<IEventStore>()))
             )
 
     /// Compose the grounding fact store per `ServerConfig.FactStore`.

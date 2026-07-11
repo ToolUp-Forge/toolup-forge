@@ -428,7 +428,17 @@ type RetrievalPipeline
         // and merges the exact fact hits ahead of the similarity chunks as
         // a distinct `ChunkOrigin.Fact` origin. `None` (or a clause-less
         // request) ⇒ no fact stage, byte-identical retrieval (GP 11 / GP 13).
-        ?factResolver: IFactResolver
+        ?factResolver: IFactResolver,
+        // Phase 525.B — the retrieval egress door. When supplied, every
+        // resolved fact is checked against the disclosure gate at the
+        // `FactRetrieval` surface BEFORE merge: a denied fact is simply
+        // absent from the results and the prompt block — never annotated
+        // ("see but don't say" is not a mode). Wire this whenever a
+        // resolver is wired: the fact companion's compose registers the
+        // gate in DI alongside the store, so the pairing is structural.
+        // `None` ⇒ pass-through (GP 11; a resolver-less or fact-less
+        // deployment is byte-identical either way).
+        ?disclosureGate: IFactDisclosureGate
     ) =
 
     let sparse = sparseIndex
@@ -527,8 +537,39 @@ type RetrievalPipeline
                     stages.Add "FactResolve"
                     let factScopeId = ctx.TeamId |> Option.defaultValue ctx.UserId
                     let! resolved = resolver.Resolve(factScopeId, clause)
+
+                    // Phase 525.B — disclosure egress filter, applied to the
+                    // resolved facts BEFORE merge. Default-deny at retrieval:
+                    // a fact the gate does not affirmatively disclose (denied,
+                    // or missing from the verdict map) never enters the
+                    // result set, the `RetrievedSource`s, or the prompt block
+                    // — absent, not annotated. The gate is handed the same
+                    // caller-derived fact scope as the resolver (GP 4), so
+                    // scope never overrides a deny and disclosure never
+                    // widens scope. No gate wired ⇒ pass-through (GP 11).
+                    let! disclosed =
+                        match disclosureGate, resolved with
+                        | Some gate, _ :: _ -> async {
+                            let ids = resolved |> List.map _.FactId
+                            let! verdicts = gate.Check(factScopeId, ctx.UserId, FactRetrieval, ids)
+
+                            let permitted =
+                                resolved
+                                |> List.filter (fun rf ->
+                                    match verdicts.TryFind rf.FactId with
+                                    | Some FactDisclosable -> true
+                                    | Some(FactNotDisclosable _)
+                                    | None -> false)
+
+                            if permitted.Length < resolved.Length then
+                                stages.Add "DisclosureFilter"
+
+                            return permitted
+                          }
+                        | _ -> async.Return resolved
+
                     let scope = factScopeFor request.Scopes
-                    return resolved |> List.map (factToMatch scope)
+                    return disclosed |> List.map (factToMatch scope)
                   }
                 | _ -> async.Return []
 

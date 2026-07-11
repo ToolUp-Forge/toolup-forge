@@ -470,6 +470,8 @@ let allTests =
         FactFirstRetrievalTests.tests
         // Phase 523 — numeric-fidelity answer gate.
         AnswerVerifierTests.tests
+        // Phase 525 — disclosure egress filtering, first choke points.
+        DisclosureEgressTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests

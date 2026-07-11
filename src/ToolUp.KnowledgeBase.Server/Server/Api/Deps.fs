@@ -108,6 +108,13 @@ type KnowledgeApiDeps = {
     /// opt-out restores pre-14x behaviour byte-for-byte, GP 11).
     /// Consulted by `uploadDocument` before anything is persisted.
     DedupPolicy: KnowledgeDedupPolicy
+    /// Phase 525.D — the fact-disclosure egress gate, registered in DI by
+    /// the fact companion's compose whenever the fact store is enabled.
+    /// `ingestNarrative` refuses to commit a narrative whose Metric spans
+    /// reference facts the gate denies at the `FactNarrativePublication`
+    /// surface. `None` (no fact store composed) ⇒ the commit path is
+    /// byte-identical (GP 13).
+    DisclosureGate: IFactDisclosureGate option
 }
 
 module KnowledgeApiDeps =
@@ -284,6 +291,13 @@ module KnowledgeApiDeps =
             | :? KnowledgeDedupPolicy as p -> p
             | _ -> KnowledgeDedupPolicy.enabled
 
+        // Phase 525.D — the fact-disclosure egress gate, present exactly
+        // when the fact companion's compose registered the fact store.
+        let disclosureGate =
+            match ctx.RequestServices.GetService(typeof<IFactDisclosureGate>) with
+            | :? IFactDisclosureGate as g -> Some g
+            | _ -> None
+
         let accessContext =
             match ctx.RequestServices.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
@@ -367,6 +381,7 @@ module KnowledgeApiDeps =
             ScopeResolvedFromRequest = scopeResolvedFromRequest
             UploadPolicy = uploadPolicy
             DedupPolicy = dedupPolicy
+            DisclosureGate = disclosureGate
         }
 
     /// Fail-closed guard for destructive KB operations. Returns `Error`

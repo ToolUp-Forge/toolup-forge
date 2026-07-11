@@ -5,6 +5,7 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
@@ -25,6 +26,103 @@ let private fableJsonOptions = FableConverters.create ()
 
 let private fableSerialize (value: obj) : string =
     JsonSerializer.Serialize(value, fableJsonOptions)
+
+// ─── Disclosure egress (Phase 525.C) ─────────────────────────────
+//
+// These narrative tools are the SDK's fact-reading tool executors: a
+// narrative's `Metric` spans carry fact-referenced values (Phase 521),
+// so a `get_narrative` / `get_narrative_section` result is a fact
+// egress surface. When the fact companion's disclosure gate is
+// composed, every fact ref in a returned document is checked at the
+// `FactToolResult` surface; a denied fact's *value* is redacted to a
+// policy-naming marker and the payload carries a typed `withheldFacts`
+// list — the model can explain that a value exists but is restricted,
+// without ever seeing it. No gate in DI ⇒ pass-through (GP 13);
+// `publish_narrative` additionally refuses at the
+// `FactNarrativePublication` surface (a public page is an even wider
+// door than a tool result).
+
+/// One withheld fact in a tool-result payload — the typed
+/// not-disclosable marker (never the value).
+type private WithheldFact = {
+    FactId: string
+    PolicyRef: string
+    /// The canonical refusal wording ("computed, but not disclosable
+    /// under policy P").
+    Status: string
+}
+
+let private disclosureGateOf (ctx: HttpContext) : IFactDisclosureGate option =
+    match ctx.RequestServices.GetService(typeof<IFactDisclosureGate>) with
+    | :? IFactDisclosureGate as gate -> Some gate
+    | _ -> None
+
+/// The caller's resolved storage-scope id — the same tenant boundary
+/// `NarrativePublisher` scopes reads by, and the shard the fact store
+/// resolves fact ids within (GP 4).
+let private scopeIdOf (ctx: HttpContext) : string =
+    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+    | true, (:? StorageScope as scope) -> scope.ScopeId
+    | _ ->
+        match ctx.Items.TryGetValue "ToolUp.UserId" with
+        | true, (:? string as id) -> id
+        | _ -> "anonymous"
+
+let private userIdOf (ctx: HttpContext) : string =
+    match ctx.Items.TryGetValue "ToolUp.UserId" with
+    | true, (:? string as id) -> id
+    | _ -> "anonymous"
+
+/// Check every fact ref in `document` at `surface`; returns the denied
+/// (factId, policyRef) pairs. Empty when no gate is composed, the
+/// document cites no facts, or everything is disclosable.
+let private deniedFactsIn
+    (ctx: HttpContext)
+    (surface: FactEgressSurface)
+    (document: NarrativeDocument)
+    : Async<(string * string) list> =
+    async {
+        match disclosureGateOf ctx with
+        | None -> return []
+        | Some gate ->
+            match NarrativeFacts.factRefs document |> Set.toList with
+            | [] -> return []
+            | refs ->
+                let! verdicts = gate.Check(scopeIdOf ctx, userIdOf ctx, surface, refs)
+
+                return
+                    verdicts
+                    |> Map.toList
+                    |> List.choose (fun (factId, verdict) ->
+                        match verdict with
+                        | FactNotDisclosable policyRef -> Some(factId, policyRef)
+                        | FactDisclosable -> None)
+    }
+
+/// Redact denied fact values out of a document and project the typed
+/// withheld markers for the tool payload.
+let private applyToolResultDisclosure
+    (ctx: HttpContext)
+    (document: NarrativeDocument)
+    : Async<NarrativeDocument * WithheldFact list> =
+    async {
+        let! denied = deniedFactsIn ctx FactToolResult document
+
+        match denied with
+        | [] -> return document, []
+        | denied ->
+            let redacted = NarrativeFacts.redactDeniedFacts (Map.ofList denied) document
+
+            let withheld =
+                denied
+                |> List.map (fun (factId, policyRef) -> {
+                    FactId = factId
+                    PolicyRef = policyRef
+                    Status = FactDisclosureVerdict.refusalText policyRef
+                })
+
+            return redacted, withheld
+    }
 
 // ─── list_narratives ─────────────────────────────────────────────
 
@@ -138,19 +236,38 @@ let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = a
                         id = idText
                     |}
             | Some e ->
-                let markdown = NarrativeMarkdown.render e.Document
+                // Phase 525.C — tool-result egress door: denied fact values
+                // are redacted before rendering; the typed markers ride the
+                // payload so the model can name the restriction.
+                let! docForRender, withheld = applyToolResultDisclosure ctx e.Document
+                let markdown = NarrativeMarkdown.render docForRender
 
-                let payload = {|
-                    id = e.Id
-                    moduleId = e.ModuleId
-                    pageRoute = e.PageRoute
-                    title = e.Title
-                    subtitle = e.Subtitle
-                    publishedAt = e.PublishedAt
-                    markdown = markdown
-                |}
+                match withheld with
+                | [] ->
+                    let payload = {|
+                        id = e.Id
+                        moduleId = e.ModuleId
+                        pageRoute = e.PageRoute
+                        title = e.Title
+                        subtitle = e.Subtitle
+                        publishedAt = e.PublishedAt
+                        markdown = markdown
+                    |}
 
-                return fableSerialize payload
+                    return fableSerialize payload
+                | withheld ->
+                    let payload = {|
+                        id = e.Id
+                        moduleId = e.ModuleId
+                        pageRoute = e.PageRoute
+                        title = e.Title
+                        subtitle = e.Subtitle
+                        publishedAt = e.PublishedAt
+                        markdown = markdown
+                        withheldFacts = withheld
+                    |}
+
+                    return fableSerialize payload
 }
 
 // ─── get_narrative_section ───────────────────────────────────────
@@ -255,21 +372,40 @@ let private executeGetSection (ctx: HttpContext) (argsJson: string) : Async<stri
                         CanonicalUrl = e.Document.CanonicalUrl
                     }
 
-                    let markdown = NarrativeMarkdown.render sectionDoc
+                    // Phase 525.C — tool-result egress door (see executeGet).
+                    let! docForRender, withheld = applyToolResultDisclosure ctx sectionDoc
+                    let markdown = NarrativeMarkdown.render docForRender
 
-                    let payload = {|
-                        id = e.Id
-                        moduleId = e.ModuleId
-                        pageRoute = e.PageRoute
-                        title = e.Title
-                        subtitle = e.Subtitle
-                        publishedAt = e.PublishedAt
-                        sectionId = section.Id
-                        sectionHeading = section.Heading
-                        markdown = markdown
-                    |}
+                    match withheld with
+                    | [] ->
+                        let payload = {|
+                            id = e.Id
+                            moduleId = e.ModuleId
+                            pageRoute = e.PageRoute
+                            title = e.Title
+                            subtitle = e.Subtitle
+                            publishedAt = e.PublishedAt
+                            sectionId = section.Id
+                            sectionHeading = section.Heading
+                            markdown = markdown
+                        |}
 
-                    return fableSerialize payload
+                        return fableSerialize payload
+                    | withheld ->
+                        let payload = {|
+                            id = e.Id
+                            moduleId = e.ModuleId
+                            pageRoute = e.PageRoute
+                            title = e.Title
+                            subtitle = e.Subtitle
+                            publishedAt = e.PublishedAt
+                            sectionId = section.Id
+                            sectionHeading = section.Heading
+                            markdown = markdown
+                            withheldFacts = withheld
+                        |}
+
+                        return fableSerialize payload
 }
 
 // ─── publish_narrative ───────────────────────────────────────────
@@ -437,55 +573,91 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
                             id = idText
                         |}
                 | Some entry ->
-                    // Apply caller-supplied overrides onto the document
-                    // before handing to the publisher. Overrides win over
-                    // document fields when present.
-                    let docWithOverrides = {
-                        entry.Document with
-                            Lang = langOpt |> Option.orElse entry.Document.Lang
-                            CanonicalUrl = canonicalOpt |> Option.orElse entry.Document.CanonicalUrl
-                    }
+                    // Phase 525.D — narrative-publication egress door. A
+                    // public page is the widest surface a narrative can
+                    // reach; a document whose Metric spans reference facts
+                    // the gate denies at `FactNarrativePublication` is
+                    // refused outright (not redacted — publication is a
+                    // deliberate act; the caller should resolve the refs,
+                    // not silently ship a redacted page). The diagnostic
+                    // names the offending refs + policies, never the values.
+                    let! deniedForPublication = deniedFactsIn ctx FactNarrativePublication entry.Document
 
-                    let collisionPolicy = parseCollisionPolicy collisionOpt
+                    match deniedForPublication with
+                    | _ :: _ ->
+                        let offending =
+                            deniedForPublication
+                            |> List.map (fun (factId, policyRef) -> sprintf "%s (policy %s)" factId policyRef)
+                            |> String.concat "; "
 
-                    let publisher =
-                        match ctx.RequestServices.GetService(typeof<INarrativePagePublisher>) with
-                        | :? INarrativePagePublisher as p -> Some p
-                        | _ -> None
-
-                    match publisher with
-                    | None ->
                         return
                             fableSerialize {|
                                 error =
-                                    "No INarrativePagePublisher is registered. This deployment does not have PublicRendering wired in, or has not enabled AI publishing via withAIPublishEnabled true."
+                                    sprintf
+                                        "Publication refused: the narrative references %d fact(s) that are not disclosable — %s. Remove or replace the offending metric spans, or have the facts reclassified, then publish again."
+                                        deniedForPublication.Length
+                                        offending
+                                id = idText
+                                slug = slug
+                                withheldFacts =
+                                    deniedForPublication
+                                    |> List.map (fun (factId, policyRef) -> {
+                                        FactId = factId
+                                        PolicyRef = policyRef
+                                        Status = FactDisclosureVerdict.refusalText policyRef
+                                    })
                             |}
-                    | Some publisher ->
-                        let! outcome =
-                            publisher.PublishAsync(
-                                slug,
-                                titleOpt,
-                                descOpt,
-                                layoutOpt,
-                                collisionPolicy,
-                                docWithOverrides
-                            )
+                    | [] ->
 
-                        match outcome with
-                        | PublishSucceeded canonicalSlug ->
+                        // Apply caller-supplied overrides onto the document
+                        // before handing to the publisher. Overrides win over
+                        // document fields when present.
+                        let docWithOverrides = {
+                            entry.Document with
+                                Lang = langOpt |> Option.orElse entry.Document.Lang
+                                CanonicalUrl = canonicalOpt |> Option.orElse entry.Document.CanonicalUrl
+                        }
+
+                        let collisionPolicy = parseCollisionPolicy collisionOpt
+
+                        let publisher =
+                            match ctx.RequestServices.GetService(typeof<INarrativePagePublisher>) with
+                            | :? INarrativePagePublisher as p -> Some p
+                            | _ -> None
+
+                        match publisher with
+                        | None ->
                             return
                                 fableSerialize {|
-                                    id = idText
-                                    slug = canonicalSlug
-                                    published = true
+                                    error =
+                                        "No INarrativePagePublisher is registered. This deployment does not have PublicRendering wired in, or has not enabled AI publishing via withAIPublishEnabled true."
                                 |}
-                        | PublishFailed reason ->
-                            return
-                                fableSerialize {|
-                                    error = reason
-                                    id = idText
-                                    slug = slug
-                                |}
+                        | Some publisher ->
+                            let! outcome =
+                                publisher.PublishAsync(
+                                    slug,
+                                    titleOpt,
+                                    descOpt,
+                                    layoutOpt,
+                                    collisionPolicy,
+                                    docWithOverrides
+                                )
+
+                            match outcome with
+                            | PublishSucceeded canonicalSlug ->
+                                return
+                                    fableSerialize {|
+                                        id = idText
+                                        slug = canonicalSlug
+                                        published = true
+                                    |}
+                            | PublishFailed reason ->
+                                return
+                                    fableSerialize {|
+                                        error = reason
+                                        id = idText
+                                        slug = slug
+                                    |}
 }
 
 // ─── list_layouts ────────────────────────────────────────────────

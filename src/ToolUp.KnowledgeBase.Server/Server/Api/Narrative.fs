@@ -12,14 +12,59 @@ open KnowledgeBase.ServerExtractors
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerApiDeps
 
+/// Phase 525.D — the narrative-commit egress door. When the fact
+/// companion's disclosure gate is composed, a document whose Metric spans
+/// reference facts the gate denies at the `FactNarrativePublication`
+/// surface is refused commit to the (surfaceable) knowledge base — the
+/// chunks would otherwise carry the denied values into retrieval for the
+/// whole scope. Returns `Some diagnostic` naming the offending refs and
+/// their policies (never the values); `None` when no gate is composed,
+/// the document cites no facts, or everything is disclosable (GP 13 /
+/// plan D17 — a deployment without classified facts is byte-identical).
+/// Each deny is audited by the gate itself (GP 6).
+let private disclosureRefusalFor (deps: KnowledgeApiDeps) (document: NarrativeDocument) : Async<string option> = async {
+    match deps.DisclosureGate with
+    | None -> return None
+    | Some gate ->
+        match NarrativeFacts.factRefs document |> Set.toList with
+        | [] -> return None
+        | refs ->
+            let! verdicts = gate.Check(deps.Scope.ScopeId, deps.UserId, FactNarrativePublication, refs)
+
+            let offending =
+                verdicts
+                |> Map.toList
+                |> List.choose (fun (factId, verdict) ->
+                    match verdict with
+                    | FactNotDisclosable policyRef -> Some(sprintf "%s (policy %s)" factId policyRef)
+                    | FactDisclosable -> None)
+
+            match offending with
+            | [] -> return None
+            | offending ->
+                return
+                    Some(
+                        sprintf
+                            "Narrative commit refused: %d referenced fact(s) are not disclosable — %s. Remove or replace the offending metric spans, or have the facts reclassified, then commit again."
+                            offending.Length
+                            (String.concat "; " offending)
+                    )
+}
+
 let ingestNarrative
     (deps: KnowledgeApiDeps)
     (request: IngestNarrativeRequest)
     : Async<Result<KnowledgeDocument, IngestNarrativeError>> =
     async {
-        match request.Document.Provenance with
-        | None -> return Error MissingProvenance
-        | Some prov ->
+        // Phase 525.D — disclosure egress check before anything is
+        // persisted; the refusal diagnostic rides the existing
+        // `IngestFailed` wire case (additive — no client change).
+        let! disclosureDiagnostic = disclosureRefusalFor deps request.Document
+
+        match request.Document.Provenance, disclosureDiagnostic with
+        | None, _ -> return Error MissingProvenance
+        | _, Some diagnostic -> return Error(IngestFailed diagnostic)
+        | Some prov, None ->
             let! existing = loadIndex deps.Storage deps.Scope.Container
 
             let duplicate =

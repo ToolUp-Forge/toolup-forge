@@ -18,8 +18,15 @@ ToolUp.Facts.Disclosure+Tags (class)
 ToolUp.Facts.Disclosure+Tags.Internal : System.Int32 (literal)
 ToolUp.Facts.Disclosure+Tags.Restricted : System.Int32 (literal)
 ToolUp.Facts.Disclosure+Tags.Surfaceable : System.Int32 (literal)
+ToolUp.Facts.DisclosureEgress (class)
+ToolUp.Facts.DisclosureEgress.evaluate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
+ToolUp.Facts.DisclosureEgress.evaluateFact(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Fact) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
+ToolUp.Facts.DisclosureEvents (class)
+ToolUp.Facts.DisclosureEvents.DeniedType : System.String (literal)
 ToolUp.Facts.DisclosureModule (class)
 ToolUp.Facts.DisclosureModule.toString(ToolUp.Facts.Disclosure) : System.String
+ToolUp.Facts.DisclosurePolicyResolverModule (class)
+ToolUp.Facts.DisclosurePolicyResolverModule.denyUnknown(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
 ToolUp.Facts.Evidence (class)
 ToolUp.Facts.Evidence..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Evidence.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -38,6 +45,13 @@ ToolUp.Facts.Fact.Period : ToolUp.Facts.TemporalExtent { get }
 ToolUp.Facts.Fact.Subject : ToolUp.Facts.SubjectRef { get }
 ToolUp.Facts.Fact.Supersedes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.Fact.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.FactDisclosureDeniedEvent (class)
+ToolUp.Facts.FactDisclosureDeniedEvent..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Facts.FactDisclosureDeniedEvent.FactId : System.String { get }
+ToolUp.Facts.FactDisclosureDeniedEvent.Metric : System.String { get }
+ToolUp.Facts.FactDisclosureDeniedEvent.PolicyRef : System.String { get }
+ToolUp.Facts.FactDisclosureDeniedEvent.Principal : System.String { get }
+ToolUp.Facts.FactDisclosureDeniedEvent.Surface : System.String { get }
 ToolUp.Facts.FactFreshness (class)
 ToolUp.Facts.FactFreshness.Fresh : ToolUp.Facts.FactFreshness { get }
 ToolUp.Facts.FactFreshness.IsFresh : System.Boolean { get }

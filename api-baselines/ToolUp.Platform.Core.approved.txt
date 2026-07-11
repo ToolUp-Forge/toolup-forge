@@ -4826,6 +4826,10 @@ ToolUp.Platform.Narrative.NarrativeFacts.factRefs(ToolUp.Platform.Narrative.Narr
 ToolUp.Platform.Narrative.NarrativeFacts.factRefsInElement(ToolUp.Platform.Narrative.NarrativeElement) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Narrative.NarrativeFacts.factRefsInSection(ToolUp.Platform.Narrative.NarrativeSection) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
 ToolUp.Platform.Narrative.NarrativeFacts.factRefsInSpan(ToolUp.Platform.Narrative.InlineSpan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Narrative.NarrativeFacts.notDisclosableMarker(System.String) : System.String
+ToolUp.Platform.Narrative.NarrativeFacts.redactDeniedFacts(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.Narrative.NarrativeDocument) : ToolUp.Platform.Narrative.NarrativeDocument
+ToolUp.Platform.Narrative.NarrativeFacts.redactElement(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.Narrative.NarrativeElement) : ToolUp.Platform.Narrative.NarrativeElement
+ToolUp.Platform.Narrative.NarrativeFacts.redactSpan(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.Narrative.InlineSpan) : ToolUp.Platform.Narrative.InlineSpan
 ToolUp.Platform.Narrative.NarrativeFacts.staleFlags(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag]
 ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag (class)
 ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
@@ -7197,6 +7201,32 @@ ToolUp.Platform.VectorKnowledgeTypes+FactClause.PeriodFrom : Microsoft.FSharp.Co
 ToolUp.Platform.VectorKnowledgeTypes+FactClause.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactClause.SubjectHierarchy : System.String { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactClause.SubjectPath : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict.FactDisclosable : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict.IsFactDisclosable : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict.IsFactNotDisclosable : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict+FactNotDisclosable (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict+FactNotDisclosable.policyRef : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict+Tags (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict+Tags.FactDisclosable : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict+Tags.FactNotDisclosable : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdictModule (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdictModule.refusalText(System.String) : System.String
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactNarrativePublication : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactRetrieval : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactToolResult : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactNarrativePublication : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactRetrieval : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactToolResult : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.Tag : System.Int32 { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactNarrativePublication : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactRetrieval : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactToolResult : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurfaceModule (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurfaceModule.toString(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : System.String
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo.FactFresh : ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo.IsFactFresh : System.Boolean { get }
@@ -7207,6 +7237,8 @@ ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+FactStale.sinceIso : Syst
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactFresh : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactStale : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate (interface)
+ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate.Check(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactResolver (interface)
 ToolUp.Platform.VectorKnowledgeTypes+IFactResolver.Resolve(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactClause) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact]]
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy (class)

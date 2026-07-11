@@ -102,6 +102,7 @@ let private mkDeps
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
         DedupPolicy = KnowledgeDedupPolicy.enabled
+        DisclosureGate = None
     }
 
 let private narrativeSource: NarrativeDocSource = {
