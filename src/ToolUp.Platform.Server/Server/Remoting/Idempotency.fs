@@ -66,6 +66,22 @@ type InMemoryIdempotencyStore(?maxEntries: int, ?logger: ToolUp.Platform.ILogger
     // ordering isn't required for the LRU semantics.
     let order = ConcurrentQueue<string>()
 
+    // Phase 328 (concurrency fix) — the eviction bookkeeping spans two
+    // structures (`entries` + `order`) that MUST stay in lockstep: every live
+    // entry has to retain exactly one FIFO marker, or it becomes unevictable.
+    // The read-modify-write across both is not atomic on the lock-free
+    // primitives — most acutely, `compactStaleHeads` peeks the head, decides
+    // it is stale, then dequeues; if a concurrent evictor removes that head in
+    // the window between the peek and the dequeue, the dequeue discards the
+    // *new* head instead, throwing away a **live** key's marker. That orphans
+    // the entry (present in `entries`, absent from `order`) — unevictable, so
+    // it squats a cap slot forever and forces later inserts to evict the
+    // *newest* keys instead of the oldest. This `gate` serialises the write
+    // path so `order` has a single writer; `TryGet` stays lock-free (its
+    // lazy-expiry removal only ever leaves a stale marker, which
+    // `compactStaleHeads` reclaims safely once it is the sole `order` mutator).
+    let gate = obj ()
+
     // Phase 328 — cumulative count of over-cap recovery events (the branch
     // that formerly wiped the entire cache with `entries.Clear()`). A
     // heap-backed single-element int64 so the lock-free `Interlocked`
@@ -190,11 +206,18 @@ type InMemoryIdempotencyStore(?maxEntries: int, ?logger: ToolUp.Platform.ILogger
         }
 
         member _.Store(key, scope, response, ttl) = async {
-            evictOldestIfFull ()
             let expiry = DateTimeOffset.UtcNow + ttl
             let composite = compositeKey scope key
-            entries[composite] <- struct (expiry, response)
-            order.Enqueue composite
+
+            // Serialise eviction + insert so `entries` and `order` never
+            // desync (see the `gate` note above). The critical section is a
+            // handful of dictionary/queue ops — no I/O, no awaits — so holding
+            // the lock is cheap for an in-process store; distributed
+            // deployments wire a Redis/DynamoDB impl with its own atomicity.
+            lock gate (fun () ->
+                evictOldestIfFull ()
+                entries[composite] <- struct (expiry, response)
+                order.Enqueue composite)
         }
 
     /// Diagnostics: current entry count, for telemetry / health checks.

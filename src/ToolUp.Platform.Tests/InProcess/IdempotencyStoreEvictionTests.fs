@@ -60,16 +60,20 @@ let private emptyInternalOrderQueue (store: InMemoryIdempotencyStore) =
     (field.GetValue store :?> ConcurrentQueue<string>).Clear()
 
 // Sequenced (not run in parallel with the rest of the pack). The concurrency
-// smoke case below drives an 8-worker `Async.Parallel` insert storm; its
-// invariants are internally sound — verified in isolation (3/3) and by a
-// standalone stress of the exact `evictOldestIfFull` algorithm: over-cap never
-// exceeds a tiny transient slack (~cap+workers, far below the `cap*3` bound),
-// the store never mass-wipes, and the `OverCapRecoveryCount`/`Warn` pair is
-// always consistent at rest. The flake was cross-test contention: under the
-// FULL parallel test pack, dozens of other async tests saturate the thread pool
-// and perturb this storm's scheduling enough to disturb the transient-over-cap
-// and counter snapshots. Sequencing removes that interference without relaxing
-// a single assertion — the fix is to the test's isolation, not to the store.
+// smoke case below drives an 8-worker `Async.Parallel` insert storm.
+//
+// History: this case originally flaked (`final-k0 ... Expected Some, was None`)
+// and was wrongly attributed to thread-pool contention — `testSequenced` was
+// added as a band-aid on that theory. The real cause was a store defect: the
+// eviction bookkeeping spanned `entries` + `order` non-atomically, so under
+// contention `compactStaleHeads` (peek-head → decide-stale → dequeue) could
+// discard a *live* key's FIFO marker when a concurrent evictor removed the
+// peeked head first. That orphaned the entry (present in `entries`, absent from
+// `order`) — unevictable, so it squatted a cap slot and forced later inserts to
+// evict the *newest* keys, dropping the freshly-stored `final-k*` batch. Fixed
+// by serialising the store's write path (`InMemoryIdempotencyStore`'s `gate`).
+// Sequencing is retained only because an 8×500 insert storm is a heavy neighbour
+// for other timing-sensitive cases — it is no longer masking a real defect.
 [<Tests>]
 let tests =
     testSequenced
