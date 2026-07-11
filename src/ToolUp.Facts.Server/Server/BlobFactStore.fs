@@ -87,15 +87,10 @@ type BlobFactStore(storage: IBlobStorage, events: IEventStore, clock: unit -> Da
 
     let periodsOverlap (a: TemporalExtent) (b: TemporalExtent) : bool = a.From < b.To && b.From < a.To
 
-    // Readable projections for the audit payloads.
-    let subjectString (s: SubjectRef) : string =
-        sprintf "%s/%s" s.Hierarchy (String.concat ">" s.Path)
-
-    let disclosureString (d: Disclosure) : string =
-        match d with
-        | Disclosure.Surfaceable -> "Surfaceable"
-        | Disclosure.Internal -> "Internal"
-        | Disclosure.Restricted policyRef -> sprintf "Restricted(%s)" policyRef
+    // Readable projections for the audit payloads (shared renderers, so
+    // the audit / provenance / evidence surfaces never drift).
+    let subjectString = SubjectRef.toString
+    let disclosureString = Disclosure.toString
 
     // Law L4 visibility: facts visible at `t` are those asserted by `t`
     // that no by-`t` successor supersedes.

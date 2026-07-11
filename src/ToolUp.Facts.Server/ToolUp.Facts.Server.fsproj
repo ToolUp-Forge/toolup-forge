@@ -19,6 +19,8 @@
     <ItemGroup>
         <Compile Include="Server\IFactStore.fs" />
         <Compile Include="Server\BlobFactStore.fs" />
+        <Compile Include="Server\FactStoreEvidenceSource.fs" />
+        <Compile Include="Server\FactsCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
          FSharp.Core is implicit via the .NET SDK. -->

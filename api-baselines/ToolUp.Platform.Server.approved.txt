@@ -659,7 +659,7 @@ ToolUp.Platform.CompositionValidator+CompositionRule.Severity : ToolUp.Platform.
 ToolUp.Platform.CompositionValidator+CompositionWellFormednessValidator (class)
 ToolUp.Platform.CompositionValidator+CompositionWellFormednessValidator..ctor(ToolUp.Platform.CompositionManifest, ToolUp.Platform.CompositionReferences)
 ToolUp.Platform.ConfigDriftDetector (class)
-ToolUp.Platform.ConfigDriftDetector.run(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.ConfigDriftDetector.run(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ConfigHandler (class)
 ToolUp.Platform.ConfigHandler.configApi(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IConfigApi
 ToolUp.Platform.ConfigKeys (class)

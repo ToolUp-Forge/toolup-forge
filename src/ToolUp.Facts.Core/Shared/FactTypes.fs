@@ -172,6 +172,23 @@ type Fact = {
     Disclosure: Disclosure
 }
 
+/// Rendering for a `SubjectRef` — the canonical readable form
+/// (`hierarchy/level>level`) used by audit events, provenance nodes, and
+/// the fact-evidence seam, so those surfaces never drift.
+module SubjectRef =
+    let toString (s: SubjectRef) : string =
+        sprintf "%s/%s" s.Hierarchy (String.concat ">" s.Path)
+
+/// Rendering for a `Disclosure` — the canonical string form
+/// (`Surfaceable` / `Internal` / `Restricted(policy)`) shared by the audit
+/// trail and the provenance/evidence surfaces.
+module Disclosure =
+    let toString (d: Disclosure) : string =
+        match d with
+        | Surfaceable -> "Surfaceable"
+        | Internal -> "Internal"
+        | Restricted policyRef -> sprintf "Restricted(%s)" policyRef
+
 /// Content-addressing, lineage keys, and freshness — the decidable laws
 /// (L1–L4) the store is built on, factored out so both the store and its
 /// contract tests share one implementation.

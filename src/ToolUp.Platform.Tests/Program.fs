@@ -47,6 +47,9 @@ let allTests =
         // Phase 524 — provenance chain traversal: seeded ingest→run→fact→
         // message chain walks both directions; disclosure carried; scope isolation.
         ProvenanceGraphTests.tests
+        // Grounding-plane wiring follow-ups: FactsCompose DI registration,
+        // FactStoreEvidenceSource adapter, ConfigDriftDetector grounding parity.
+        GroundingWiringTests.tests
         JobStoreTests.tests
         CronExpressionTests.tests
         JobSchedulerTests.tests

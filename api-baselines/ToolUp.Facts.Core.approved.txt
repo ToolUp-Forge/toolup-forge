@@ -18,6 +18,8 @@ ToolUp.Facts.Disclosure+Tags (class)
 ToolUp.Facts.Disclosure+Tags.Internal : System.Int32 (literal)
 ToolUp.Facts.Disclosure+Tags.Restricted : System.Int32 (literal)
 ToolUp.Facts.Disclosure+Tags.Surfaceable : System.Int32 (literal)
+ToolUp.Facts.DisclosureModule (class)
+ToolUp.Facts.DisclosureModule.toString(ToolUp.Facts.Disclosure) : System.String
 ToolUp.Facts.Evidence (class)
 ToolUp.Facts.Evidence..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Evidence.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -109,6 +111,8 @@ ToolUp.Facts.SubjectRef (class)
 ToolUp.Facts.SubjectRef..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.SubjectRef.Hierarchy : System.String { get }
 ToolUp.Facts.SubjectRef.Path : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.SubjectRefModule (class)
+ToolUp.Facts.SubjectRefModule.toString(ToolUp.Facts.SubjectRef) : System.String
 ToolUp.Facts.TemporalExtent (class)
 ToolUp.Facts.TemporalExtent..ctor(System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.TemporalExtent.From : System.DateTime { get }

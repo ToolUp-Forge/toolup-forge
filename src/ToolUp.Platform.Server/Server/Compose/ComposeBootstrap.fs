@@ -141,6 +141,21 @@ let registerGiraffeDefaults (services: IServiceCollection) : unit =
 
     services.AddGiraffe() |> ignore
 
+/// Phase 526 — the composed grounding registrations (sorted `metric:` /
+/// `subject:` ids) for the config-drift snapshot, resolved from the
+/// DI-registered `IMetricRegistry` (Phase 519). Empty when no grounding is
+/// composed (`GetService` returns null), so a grounding-free deployment's
+/// snapshot is byte-for-byte unchanged.
+let internal groundingDriftIds (services: System.IServiceProvider) : string list =
+    match services.GetService(typeof<Grounding.IMetricRegistry>) with
+    | null -> []
+    | resolved ->
+        let reg = resolved :?> Grounding.IMetricRegistry
+
+        (reg.Metrics |> List.map (fun m -> "metric:" + m.Id))
+        @ (reg.Subjects |> List.map (fun s -> "subject:" + s.Id))
+        |> List.sort
+
 /// Phase 16a — branch the `Build()` call by `ProcessProfile`.
 /// `WebApplicationBuilder.Build()` returns `WebApplication` (Kestrel
 /// + middleware pipeline ready to mount); `HostApplicationBuilder.Build()`
@@ -192,7 +207,7 @@ let buildAndRunHost
         match config.ConfigDriftDetection with
         | NoConfigDriftDetection -> ()
         | EnabledConfigDriftDetection ->
-            ConfigDriftDetector.run resolvedBlobStorage auditLog resolvedLogger config
+            ConfigDriftDetector.run resolvedBlobStorage auditLog resolvedLogger config (groundingDriftIds app.Services)
             |> Async.RunSynchronously
 
         // ─── Middleware pipeline → configurePipeline (defined above) ────────
@@ -229,7 +244,7 @@ let buildAndRunHost
         match config.ConfigDriftDetection with
         | NoConfigDriftDetection -> ()
         | EnabledConfigDriftDetection ->
-            ConfigDriftDetector.run resolvedBlobStorage auditLog resolvedLogger config
+            ConfigDriftDetector.run resolvedBlobStorage auditLog resolvedLogger config (groundingDriftIds host.Services)
             |> Async.RunSynchronously
 
         resolvedLogger.Info(

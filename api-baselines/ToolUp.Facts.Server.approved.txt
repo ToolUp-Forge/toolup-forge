@@ -40,6 +40,10 @@ ToolUp.Facts.FactQueryModule (class)
 ToolUp.Facts.FactQueryModule.all : ToolUp.Facts.FactQuery { get }
 ToolUp.Facts.FactQueryModule.asOf(System.DateTime, ToolUp.Facts.FactQuery) : ToolUp.Facts.FactQuery
 ToolUp.Facts.FactQueryModule.forSubjectMetric(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef) : ToolUp.Facts.FactQuery
+ToolUp.Facts.FactStoreEvidenceSource (class)
+ToolUp.Facts.FactStoreEvidenceSource..ctor(ToolUp.Facts.IFactStore)
+ToolUp.Facts.FactStoreEvidenceSourceModule (class)
+ToolUp.Facts.FactStoreEvidenceSourceModule.create(ToolUp.Facts.IFactStore) : ToolUp.Platform.IFactEvidenceSource
 ToolUp.Facts.FactSupersededEvent (class)
 ToolUp.Facts.FactSupersededEvent..ctor(System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Facts.FactSupersededEvent.AsOf : System.DateTime { get }
@@ -47,6 +51,8 @@ ToolUp.Facts.FactSupersededEvent.Metric : System.String { get }
 ToolUp.Facts.FactSupersededEvent.NewFactId : System.String { get }
 ToolUp.Facts.FactSupersededEvent.Subject : System.String { get }
 ToolUp.Facts.FactSupersededEvent.SupersededFactId : System.String { get }
+ToolUp.Facts.FactsCompose (class)
+ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.IFactStore (interface)
 ToolUp.Facts.IFactStore.Assert(System.String, ToolUp.Facts.FactDraft) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, System.String]]
 ToolUp.Facts.IFactStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]]

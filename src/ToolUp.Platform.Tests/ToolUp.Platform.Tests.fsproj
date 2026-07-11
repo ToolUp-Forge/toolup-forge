@@ -203,6 +203,8 @@
         <Compile Include="InProcess\FactStoreTests.fs" />
         <!-- Phase 524 — provenance chain traversal. -->
         <Compile Include="InProcess\ProvenanceGraphTests.fs" />
+        <!-- Grounding-plane wiring follow-ups: fact-store compose root, evidence adapter, drift parity. -->
+        <Compile Include="InProcess\GroundingWiringTests.fs" />
         <Compile Include="InProcess\JobStoreTests.fs" />
         <Compile Include="InProcess\CronExpressionTests.fs" />
         <Compile Include="InProcess\JobSchedulerTests.fs" />
