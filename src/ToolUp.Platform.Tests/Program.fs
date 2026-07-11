@@ -21,6 +21,8 @@ let allTests =
         IModelRegistryContract.tests
         // Phase 454 — model-scoring seam conformance (reference scorer + blob store).
         IModelScorerContract.tests
+        // Phase 456 — model evaluation & champion-challenger harness.
+        ModelEvaluationTests.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).
