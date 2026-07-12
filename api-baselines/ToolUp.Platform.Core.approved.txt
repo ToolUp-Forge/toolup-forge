@@ -7232,17 +7232,23 @@ ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict+Tags.FactNotDisclosab
 ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdictModule (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdictModule.refusalText(System.String) : System.String
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactExport : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactNarrativePublication : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactRetrieval : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactToolResult : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactWebhook : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactExport : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactNarrativePublication : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactRetrieval : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactToolResult : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactWebhook : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.Tag : System.Int32 { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactExport : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactNarrativePublication : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactRetrieval : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactToolResult : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactWebhook : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurfaceModule (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurfaceModule.toString(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : System.String
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo (class)
@@ -7255,6 +7261,8 @@ ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+FactStale.sinceIso : Syst
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactFresh : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactStale : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactWebhookEgress (class)
+ToolUp.Platform.VectorKnowledgeTypes+FactWebhookEgress.permittedFactIds(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate (interface)
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate.Check(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactResolver (interface)

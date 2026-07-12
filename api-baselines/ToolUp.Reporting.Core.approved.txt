@@ -49,6 +49,7 @@ ToolUp.Reporting.PlaceholderSubstitution.validate(Microsoft.FSharp.Collections.F
 ToolUp.Reporting.PlaceholderValue (class)
 ToolUp.Reporting.PlaceholderValue.IsDateValue : System.Boolean { get }
 ToolUp.Reporting.PlaceholderValue.IsImageValue : System.Boolean { get }
+ToolUp.Reporting.PlaceholderValue.IsNarrativeValue : System.Boolean { get }
 ToolUp.Reporting.PlaceholderValue.IsNumberValue : System.Boolean { get }
 ToolUp.Reporting.PlaceholderValue.IsTableValue : System.Boolean { get }
 ToolUp.Reporting.PlaceholderValue.IsTextValue : System.Boolean { get }
@@ -58,6 +59,8 @@ ToolUp.Reporting.PlaceholderValue+DateValue.Item : System.DateTimeOffset { get }
 ToolUp.Reporting.PlaceholderValue+ImageValue (class)
 ToolUp.Reporting.PlaceholderValue+ImageValue.bytes : System.Byte[] { get }
 ToolUp.Reporting.PlaceholderValue+ImageValue.mimeType : System.String { get }
+ToolUp.Reporting.PlaceholderValue+NarrativeValue (class)
+ToolUp.Reporting.PlaceholderValue+NarrativeValue.document : ToolUp.Platform.Narrative.NarrativeDocument { get }
 ToolUp.Reporting.PlaceholderValue+NumberValue (class)
 ToolUp.Reporting.PlaceholderValue+NumberValue.Item : System.Double { get }
 ToolUp.Reporting.PlaceholderValue+TableValue (class)
@@ -65,6 +68,7 @@ ToolUp.Reporting.PlaceholderValue+TableValue.rows : Microsoft.FSharp.Collections
 ToolUp.Reporting.PlaceholderValue+Tags (class)
 ToolUp.Reporting.PlaceholderValue+Tags.DateValue : System.Int32 (literal)
 ToolUp.Reporting.PlaceholderValue+Tags.ImageValue : System.Int32 (literal)
+ToolUp.Reporting.PlaceholderValue+Tags.NarrativeValue : System.Int32 (literal)
 ToolUp.Reporting.PlaceholderValue+Tags.NumberValue : System.Int32 (literal)
 ToolUp.Reporting.PlaceholderValue+Tags.TableValue : System.Int32 (literal)
 ToolUp.Reporting.PlaceholderValue+Tags.TextValue : System.Int32 (literal)

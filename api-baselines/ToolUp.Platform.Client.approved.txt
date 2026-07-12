@@ -2706,6 +2706,7 @@ ToolUp.Platform.ClientConfigModule.hasMultiTeamSwitcher(ToolUp.Platform.ClientCo
 ToolUp.Platform.ClientConfigModule.hasTeamScope(ToolUp.Platform.ClientConfig) : System.Boolean
 ToolUp.Platform.ClientConfigModule.isAdminSidebarGroup(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
 ToolUp.Platform.ClientConfigModule.isClaimBearerOnly(ToolUp.Platform.ClientConfig) : System.Boolean
+ToolUp.Platform.ClientConfigModule.isPlatformAdminSidebarGroup(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
 ToolUp.Platform.ClientConfigModule.requiresAnyAuth(ToolUp.Platform.ClientConfig) : System.Boolean
 ToolUp.Platform.ClientConfigModule.resolveSubjectKind(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ClientConfig) : ToolUp.Platform.SubjectKind
 ToolUp.Platform.ClientHandlerRegistry (class)
