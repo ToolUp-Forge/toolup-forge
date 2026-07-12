@@ -145,6 +145,8 @@ let allTests =
         SignedExportTests.tests
         TimeSeriesStoreTests.tests
         TimescaleTimeSeriesStoreTests.tests
+        // Phase 531 — Postgres IEntityStore companion (env-gated).
+        PostgresEntityStoreTests.tests
         TelemetrySinkTests.tests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests

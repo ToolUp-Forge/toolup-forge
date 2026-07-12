@@ -262,6 +262,9 @@
         <Compile Include="InProcess\ModelEvaluationTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />
+        <!-- Phase 531 — Postgres IEntityStore companion (contract + query
+             pushdown; env-gated on TOOLUP_TEST_POSTGRES). -->
+        <Compile Include="InProcess\PostgresEntityStoreTests.fs" />
         <Compile Include="InProcess\TelemetrySinkTests.fs" />
         <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelTests.fs" />
@@ -1035,6 +1038,7 @@
         <ProjectReference Include="..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
         <!-- Phase 161 — Timescale time-series companion (env-gated live contract pack). -->
         <ProjectReference Include="..\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj" />
+        <ProjectReference Include="..\EntityStores\Postgres\PostgresEntityStore.fsproj" />
         <!-- Phase 449 — reference IModelFitProvider for the model-fit contract pack. -->
         <ProjectReference Include="..\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj" />
         <!-- Phase 163 — GA4 telemetry companion (env-gated live contract pack). -->
