@@ -490,6 +490,12 @@ let allTests =
         // registration, disclosure-gated results (allow / deny / unknown-id
         // markers), deny audit, scope isolation, parameter validation.
         FactQueryToolTests.tests
+        // Phase 560 — the grounded answer planner: compiler table (refusal
+        // over fabrication), per-branch resolution (UseFact / RefreshFact /
+        // ComputeFact / RequestData / Refuse), disclosure interplay, the
+        // plan-node round-trip through the provenance chain walk, compose
+        // registration.
+        AnswerPlannerTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests

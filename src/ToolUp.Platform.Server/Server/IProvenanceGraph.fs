@@ -37,6 +37,12 @@ type ProvenanceNodeKind =
     | NarrativeDocument
     /// A conversation message that cited grounded sources.
     | ConversationMessage
+    /// A recorded answer plan (Phase 560) — the typed
+    /// question-to-triples resolution artifact a grounded answer was
+    /// produced from ("EXPLAIN for answers"). Identity is the plan id;
+    /// the plan body lives in the fact companion's audit trail, this
+    /// node carries its place in the chain.
+    | AnswerPlanNode
 
 /// One node in a provenance chain — an existing store identity, its kind,
 /// an optional disclosure class (populated for fact nodes, Phase 524.D),
@@ -66,10 +72,13 @@ type ProvenanceEdgeKind =
     /// `From` (a fact) is evidenced by `To` (the analysis result it was
     /// computed from).
     | EvidenceFor
-    /// `From` (a message / narrative) cites `To` (a fact).
+    /// `From` (a message / narrative / answer plan) cites `To` (a fact).
     | CitesFact
     /// `From` (a fact) supersedes `To` (its lineage predecessor).
     | Supersedes
+    /// `From` (a conversation message — a grounded answer) was produced
+    /// from `To` (its recorded answer plan, Phase 560).
+    | PlannedBy
 
 type ProvenanceEdge = {
     From: string
