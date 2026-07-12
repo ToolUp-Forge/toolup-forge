@@ -289,6 +289,8 @@
         <Compile Include="Shared\JobApi.fs" />
         <!-- Phase 10h — OAuth token refresh substrate types (descriptor + result DU). -->
         <Compile Include="Shared\Types\OAuthRefreshTypes.fs" />
+        <!-- Phase 10g — OAuth 1.0a substrate value types (RFC 5849). -->
+        <Compile Include="Shared\OAuth1aTypes.fs" />
         <!-- Phase 26 — typed deploy-manifest schema (format-neutral; the
              operator's CLI serialises to TOML/YAML/JSON). Pure data; no
              async surface; six-rule audit applies to the four substrate

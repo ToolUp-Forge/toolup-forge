@@ -219,6 +219,8 @@
         <Compile Include="InProcess\ModuleQueryBusTests.fs" />
         <Compile Include="InProcess\InMemoryDataSourceTests.fs" />
         <Compile Include="InProcess\OAuthSubstrateTests.fs" />
+        <!-- Phase 10g — OAuth 1.0a substrate (RFC 5849 signer + state store). -->
+        <Compile Include="InProcess\OAuth1aSubstrateTests.fs" />
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
         <Compile Include="InProcess\FileSecretStoreAtomicityTests.fs" />
         <!-- Phase 238 — generic inbound-webhook receiver substrate. -->

@@ -270,6 +270,12 @@
         <Compile Include="Server\DefaultDeployPipeline.fs" />
         <Compile Include="Server\IDataSource.fs" />
         <Compile Include="Server\IOAuthCredentialFlow.fs" />
+        <!-- Phase 10g — OAuth 1.0a substrate core: RFC 5849 signer, flow
+             interface, request-token state store + in-memory default. -->
+        <Compile Include="Server\OAuth1aSigner.fs" />
+        <Compile Include="Server\IOAuth1aFlow.fs" />
+        <Compile Include="Server\IOAuth1aStateStore.fs" />
+        <Compile Include="Server\InMemoryOAuth1aStateStore.fs" />
         <!-- Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate. -->
         <Compile Include="Server\IOAuthTokenRefresher.fs" />
         <Compile Include="Server\IOAuthStateStore.fs" />

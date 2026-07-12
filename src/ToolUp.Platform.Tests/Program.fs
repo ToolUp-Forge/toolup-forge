@@ -73,6 +73,8 @@ let allTests =
         ScheduledJobDeclarationTests.tests
         ModuleQueryBusTests.tests
         InMemoryDataSourceTests.tests
+        // Phase 10g — OAuth 1.0a substrate (RFC 5849 signer + state store).
+        OAuth1aSubstrateTests.tests
         OAuthSubstrateTests.stateStoreTests
         OAuthSubstrateTests.credentialFlowTests
         OAuthSubstrateTests.pkceCredentialFlowTests
