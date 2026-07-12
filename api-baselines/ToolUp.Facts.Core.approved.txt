@@ -15,6 +15,10 @@ ToolUp.Facts.Confidence (class)
 ToolUp.Facts.Confidence..ctor(System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Confidence.Basis : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.Confidence.Value : System.Decimal { get }
+ToolUp.Facts.DeclassificationRoutine (class)
+ToolUp.Facts.DeclassificationRoutine..ctor(System.String, System.String)
+ToolUp.Facts.DeclassificationRoutine.OperationId : System.String { get }
+ToolUp.Facts.DeclassificationRoutine.Rationale : System.String { get }
 ToolUp.Facts.Disclosure (class)
 ToolUp.Facts.Disclosure.Internal : ToolUp.Facts.Disclosure { get }
 ToolUp.Facts.Disclosure.IsInternal : System.Boolean { get }
@@ -32,11 +36,37 @@ ToolUp.Facts.DisclosureEgress (class)
 ToolUp.Facts.DisclosureEgress.evaluate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
 ToolUp.Facts.DisclosureEgress.evaluateFact(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Fact) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
 ToolUp.Facts.DisclosureEvents (class)
+ToolUp.Facts.DisclosureEvents.DeclassifiedType : System.String (literal)
 ToolUp.Facts.DisclosureEvents.DeniedType : System.String (literal)
+ToolUp.Facts.DisclosureMode (class)
+ToolUp.Facts.DisclosureMode.IsPlain : System.Boolean { get }
+ToolUp.Facts.DisclosureMode.IsTaintPropagating : System.Boolean { get }
+ToolUp.Facts.DisclosureMode.Plain : ToolUp.Facts.DisclosureMode { get }
+ToolUp.Facts.DisclosureMode.Tag : System.Int32 { get }
+ToolUp.Facts.DisclosureMode.TaintPropagating : ToolUp.Facts.DisclosureMode { get }
+ToolUp.Facts.DisclosureMode+Tags (class)
+ToolUp.Facts.DisclosureMode+Tags.Plain : System.Int32 (literal)
+ToolUp.Facts.DisclosureMode+Tags.TaintPropagating : System.Int32 (literal)
 ToolUp.Facts.DisclosureModule (class)
 ToolUp.Facts.DisclosureModule.toString(ToolUp.Facts.Disclosure) : System.String
+ToolUp.Facts.DisclosurePolicy (class)
+ToolUp.Facts.DisclosurePolicy..ctor(System.String, ToolUp.Facts.DisclosureMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface])
+ToolUp.Facts.DisclosurePolicy.Mode : ToolUp.Facts.DisclosureMode { get }
+ToolUp.Facts.DisclosurePolicy.PermitSurfaces : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface] { get }
+ToolUp.Facts.DisclosurePolicy.PolicyRef : System.String { get }
 ToolUp.Facts.DisclosurePolicyResolverModule (class)
 ToolUp.Facts.DisclosurePolicyResolverModule.denyUnknown(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
+ToolUp.Facts.DisclosureTaintConfig (class)
+ToolUp.Facts.DisclosureTaintConfig..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DisclosurePolicy], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationRoutine])
+ToolUp.Facts.DisclosureTaintConfig.Declassifiers : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationRoutine] { get }
+ToolUp.Facts.DisclosureTaintConfig.Policies : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DisclosurePolicy] { get }
+ToolUp.Facts.DisclosureTaintConfigModule (class)
+ToolUp.Facts.DisclosureTaintConfigModule.declassifierFor(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationRoutine]
+ToolUp.Facts.DisclosureTaintConfigModule.empty : ToolUp.Facts.DisclosureTaintConfig { get }
+ToolUp.Facts.DisclosureTaintConfigModule.isEmpty(ToolUp.Facts.DisclosureTaintConfig) : System.Boolean
+ToolUp.Facts.DisclosureTaintConfigModule.isTaintPropagating(ToolUp.Facts.DisclosureTaintConfig, System.String) : System.Boolean
+ToolUp.Facts.DisclosureTaintConfigModule.ofLists(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosurePolicy], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationRoutine]) : ToolUp.Facts.DisclosureTaintConfig
+ToolUp.Facts.DisclosureTaintConfigModule.resolver(ToolUp.Facts.DisclosureTaintConfig, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
 ToolUp.Facts.Evidence (class)
 ToolUp.Facts.Evidence..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Evidence.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -55,6 +85,14 @@ ToolUp.Facts.Fact.Period : ToolUp.Facts.TemporalExtent { get }
 ToolUp.Facts.Fact.Subject : ToolUp.Facts.SubjectRef { get }
 ToolUp.Facts.Fact.Supersedes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.Fact.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.FactDisclosureDeclassifiedEvent (class)
+ToolUp.Facts.FactDisclosureDeclassifiedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Facts.FactDisclosureDeclassifiedEvent.DeclassifierFactId : System.String { get }
+ToolUp.Facts.FactDisclosureDeclassifiedEvent.FactId : System.String { get }
+ToolUp.Facts.FactDisclosureDeclassifiedEvent.OperationId : System.String { get }
+ToolUp.Facts.FactDisclosureDeclassifiedEvent.Principal : System.String { get }
+ToolUp.Facts.FactDisclosureDeclassifiedEvent.Rationale : System.String { get }
+ToolUp.Facts.FactDisclosureDeclassifiedEvent.Surface : System.String { get }
 ToolUp.Facts.FactDisclosureDeniedEvent (class)
 ToolUp.Facts.FactDisclosureDeniedEvent..ctor(System.String, System.String, System.String, System.String, System.String)
 ToolUp.Facts.FactDisclosureDeniedEvent.FactId : System.String { get }

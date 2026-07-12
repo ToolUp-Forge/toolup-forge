@@ -20,6 +20,7 @@
         <Compile Include="Server\IFactStore.fs" />
         <Compile Include="Server\BlobFactStore.fs" />
         <Compile Include="Server\FactStoreEvidenceSource.fs" />
+        <Compile Include="Server\DisclosureTaint.fs" />
         <Compile Include="Server\FactDisclosureGate.fs" />
         <Compile Include="Server\FactStoreFactResolver.fs" />
         <Compile Include="Server\FactQueryTool.fs" />
