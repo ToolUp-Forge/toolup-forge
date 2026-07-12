@@ -496,6 +496,12 @@ let allTests =
         // plan-node round-trip through the provenance chain walk, compose
         // registration.
         AnswerPlannerTests.tests
+        // Phase 565 — grounding certificates: sealed, selective provenance
+        // disclosure. Issue→verify round-trip (offline against the deployment
+        // public key), tamper detection on any byte change, the disclosure
+        // predicate withholding a fact's structure (value never present), and
+        // the GP-13 no-signing-substrate refusal.
+        GroundingCertificateTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         KnowledgeUploadPolicyTests.tests

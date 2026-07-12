@@ -12,6 +12,11 @@
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
+        <!-- Phase 565 — grounding certificates ride the Phase 40 artefact-
+             signing substrate (IArtefactSigner / IArtefactVerifier). The
+             edge runs Facts.Server -> ArtefactSigning -> Platform.Server;
+             ArtefactSigning has no Facts.* reference, so it is acyclic. -->
+        <ProjectReference Include="..\ToolUp.ArtefactSigning\ArtefactSigning.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <None Include="..\ToolUp.Facts\README.md" Pack="true" PackagePath="\" />
@@ -24,6 +29,7 @@
         <Compile Include="Server\FactStoreFactResolver.fs" />
         <Compile Include="Server\FactQueryTool.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
+        <Compile Include="Server\GroundingCertificate.fs" />
         <Compile Include="Server\FactsCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
