@@ -44,11 +44,18 @@ module FactsCompose =
             // store, never separately: a deployment cannot compose the fact
             // tier without its egress doors armed. Dormant with no
             // classified facts (every Surfaceable fact passes — plan D17).
+            // Phase 562 — taint propagation arms only when a deployment
+            // registers a `DisclosureTaintConfig` in DI (the optional-
+            // registry pattern below); unregistered ⇒ the plain gate,
+            // byte-identical to the pre-562 composition (GP 11 / GP 13).
             .AddSingleton<IFactDisclosureGate>(
                 Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
-                    FactDisclosureGate.create
-                        (sp.GetRequiredService<IFactStore>())
-                        (sp.GetRequiredService<IEventStore>()))
+                    let store = sp.GetRequiredService<IFactStore>()
+                    let events = sp.GetRequiredService<IEventStore>()
+
+                    match sp.GetService(typeof<DisclosureTaintConfig>) with
+                    | :? DisclosureTaintConfig as taint -> FactDisclosureGate.createWithTaint taint store events
+                    | _ -> FactDisclosureGate.create store events)
             )
             // Phase 558 — the concrete fact resolver closes the Phase 522
             // seam, registered with the store + gate so the fact tier is
