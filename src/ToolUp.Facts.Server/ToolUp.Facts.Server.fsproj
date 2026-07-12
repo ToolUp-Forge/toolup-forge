@@ -31,6 +31,8 @@
         <Compile Include="Server\FactQueryTool.fs" />
         <Compile Include="Server\AnswerPlanner.fs" />
         <Compile Include="Server\GroundingCertificate.fs" />
+        <Compile Include="Server\FactInvalidation.fs" />
+        <Compile Include="Server\RecomputeJobHandler.fs" />
         <Compile Include="Server\FactsCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.

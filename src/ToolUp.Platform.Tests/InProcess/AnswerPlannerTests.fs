@@ -77,6 +77,7 @@ let private registryWith (staleness: StalenessPolicy) (producingOp: string optio
                 Staleness = staleness
                 ProducingOperation = producingOp
                 CanonicalMethod = None
+                RecomputePolicy = None
             }
         }
     ] [

@@ -52,6 +52,12 @@ let allTests =
         // matching, canonical query default, explicit override, undeclared
         // parity, competition indicator.
         CanonicalMethodTests.tests
+        // Phase 561 — reactive fact recomputation: RecomputePolicy registry
+        // data, the lineage-driven invalidation walk (derived InputsChanged),
+        // per-policy execution (Eager schedules, OnQuery defers, Manual
+        // surfaces), UntilUpstreamChange freshness, and the recompute job
+        // handler (idempotent re-assert, no-op on unchanged / missing).
+        FactInvalidationTests.tests
         // Phase 524 — provenance chain traversal: seeded ingest→run→fact→
         // message chain walks both directions; disclosure carried; scope isolation.
         ProvenanceGraphTests.tests

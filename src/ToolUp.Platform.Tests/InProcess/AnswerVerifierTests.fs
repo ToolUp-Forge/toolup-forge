@@ -38,6 +38,7 @@ let private shareMetric: MetricDefinition = {
     Staleness = UntilSuperseded
     ProducingOperation = None
     CanonicalMethod = None
+    RecomputePolicy = None
 }
 
 let private registry: IMetricRegistry =
