@@ -382,6 +382,26 @@ type EntityStoreMode =
     /// via `ServerApp.withEntity<'T> registration`.
     | EnabledEntityStore
 
+/// Phase 447 — selects whether `compose` applies registered `ISeedPack`
+/// fixtures at end-of-compose (dev / demo seed data). Default:
+/// `NoSeedData` — no packs are applied, no `_platform/seed/` marker blobs
+/// are read or written, and a composition that registered packs pays
+/// nothing (GP 13). Demo / fixture data must never leak into a real
+/// tenant, so `EnabledSeedData` refuses startup on a Team / multi-team
+/// production shape; a deployment that deliberately wants seeded data
+/// there sets `ForcedSeedData`.
+type SeedDataMode =
+    /// No seed packs applied. Default — the SDK reads/writes no seed
+    /// marker and never resolves a registered pack.
+    | NoSeedData
+    /// Apply registered packs once per `Name@Version` (idempotent via an
+    /// applied-marker blob under `_platform/seed/`). Refused on a Team /
+    /// multi-team shape — use `ForcedSeedData` to override.
+    | EnabledSeedData
+    /// Apply registered packs even on a Team / multi-team production
+    /// shape. Deliberate override of the demo-data-in-production refusal.
+    | ForcedSeedData
+
 /// Phase 68 — selects the graph-data store backend (`IGraphStore`), the
 /// graph-shaped peer of `IEntityStore`. Default: `InMemoryGraphStore` —
 /// the zero-dependency in-memory default (GP 2, no engine-by-default) is
@@ -2044,6 +2064,12 @@ type ServerConfig = {
     /// with `EnabledEntityStore` to activate the substrate; entity
     /// types register via `ServerApp.withEntity<'T> registration`.
     EntityStore: EntityStoreMode
+    /// Phase 447 — seed / fixture-data selection. Default: `NoSeedData` —
+    /// no `ISeedPack` is applied, no `_platform/seed/` marker is touched,
+    /// zero cost. `EnabledSeedData` applies registered packs once per
+    /// `Name@Version` at end-of-compose (refused on a Team / multi-team
+    /// production shape); `ForcedSeedData` applies even there.
+    SeedData: SeedDataMode
     /// Phase 68 — graph-data store selection (`IGraphStore`). Default:
     /// `InMemoryGraphStore` — the zero-dependency in-memory default is
     /// registered lazily (GP 13: never instantiated until a graph API is
@@ -3043,6 +3069,7 @@ module ServerConfig =
         MappingDryRun = WarnOnValidationFailure
         OAuthRefresher = NoOAuthRefresher
         EntityStore = NoEntityStore
+        SeedData = NoSeedData
         // Phase 68 — the in-memory graph store is the default (registered
         // lazily; zero cost until a graph API is resolved — GP 13).
         GraphStore = InMemoryGraphStore

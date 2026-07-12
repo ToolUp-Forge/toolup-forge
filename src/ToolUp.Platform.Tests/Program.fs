@@ -13,6 +13,8 @@ let allTests =
         InMemoryEventStoreTests.tests
         PersistentEventStoreTests.tests
         DataObjectStoreTests.tests
+        // Phase 447 — seed / fixture-pack loader.
+        SeedDataLoaderTests.tests
         // Phase 448 — IDatasetStore conformance (blob-backed default).
         DatasetStoreTests.tests
         // Phase 449 — model-fit envelope conformance (reference provider).

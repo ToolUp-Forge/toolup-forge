@@ -516,6 +516,16 @@ type ServerApp = {
     /// types declared; only meaningful when
     /// `ServerConfig.EntityStore = EnabledEntityStore`.
     EntityRegistrations: (EntityStore.EntityRegistry -> unit) list
+    /// Phase 447 — module-contributed seed / fixture packs. Apps (or
+    /// modules) register a deterministic `ISeedPack` via
+    /// `ServerApp.withSeedPack`; `run` folds each into DI as an
+    /// `ISeedPack` singleton, and `SeedDataLoader` applies them once per
+    /// `Name@Version` at end-of-compose when `ServerConfig.SeedData` is
+    /// enabled. Empty list (the default) registers nothing — a
+    /// composition with no packs pays zero runtime cost (GP 13). Only
+    /// meaningful when `SeedData = EnabledSeedData | ForcedSeedData`;
+    /// `NoSeedData` never resolves the list.
+    SeedPacks: ISeedPack list
     /// Phase 9d — optional override for the per-team compute quota
     /// policy. When `None` (default), `compose` registers the SDK
     /// default — `BlobBackedTeamQuotaPolicy` reading from the reserved
@@ -806,6 +816,7 @@ module ServerApp =
         ConfigValidators = []
         EncryptionKeyResolver = None
         EntityRegistrations = []
+        SeedPacks = []
         MetricsSinks = []
         QuotaPolicy = None
         ProviderProfile = None
@@ -882,6 +893,28 @@ module ServerApp =
                 app.Config with
                     ConsentStateStore = mode
             }
+    }
+
+    /// Phase 447 — register a deterministic seed / fixture pack. Modules
+    /// contribute their own demo/fixture data (GP 9); `run` folds each
+    /// pack into DI and `SeedDataLoader` applies them once per
+    /// `Name@Version` at end-of-compose, gated on `ServerConfig.SeedData`.
+    /// Registering a pack is inert until the mode is enabled — a pack on
+    /// a `NoSeedData` composition is never resolved (GP 13). Append-only,
+    /// so several modules each add their own.
+    let withSeedPack (pack: ISeedPack) (app: ServerApp) : ServerApp = {
+        app with
+            SeedPacks = app.SeedPacks @ [ pack ]
+    }
+
+    /// Phase 447 — set the seed-data mode (`NoSeedData` default /
+    /// `EnabledSeedData` / `ForcedSeedData`). Sugar over
+    /// `{ Config with SeedData = mode }`. `EnabledSeedData` refuses
+    /// startup on a Team / multi-team shape; `ForcedSeedData` overrides
+    /// that refusal deliberately.
+    let withSeedData (mode: SeedDataMode) (app: ServerApp) : ServerApp = {
+        app with
+            Config = { app.Config with SeedData = mode }
     }
 
     /// Phase 165 — opt into the module-binding gate. Once a verifier is
@@ -1972,6 +2005,17 @@ module ServerApp =
 
                     appendRegistration withUserDirectory (fun s -> s.AddSingleton<Grounding.IMetricRegistry>(registry))
 
+            // Phase 447 — fold each registered seed pack into DI as an
+            // `ISeedPack` singleton so `SeedDataLoader` (invoked from
+            // `ComposeBootstrap.buildAndRunHost` after the container is built)
+            // resolves `seq<ISeedPack>` and applies them. Empty list appends
+            // nothing — byte-for-byte the pre-447 graph (GP 13).
+            let withSeedPacks =
+                app.SeedPacks
+                |> List.fold
+                    (fun acc pack -> appendRegistration acc (fun s -> s.AddSingleton<ISeedPack>(pack)))
+                    withMetricRegistry
+
             // Phase 281 — fold the composition well-formedness validator into
             // the Phase 9m preflight set. Built here (not in `compose`) because
             // the manifest projector + the AITools accumulator live on this
@@ -1989,7 +2033,7 @@ module ServerApp =
             }
 
             appendRegistration
-                withMetricRegistry
+                withSeedPacks
                 (CompositionValidator.serviceRegistration (compositionManifest app) compositionReferences)
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default

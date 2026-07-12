@@ -210,6 +210,11 @@
              so it can reference IAuditLog as the audit sink. -->
         <Compile Include="Server\SchemaOnlyGuard.fs" />
         <Compile Include="Server\IResultStore.fs" />
+        <!-- Phase 447 — declarative seed / fixture-data pack contract
+             (ISeedPack + SeedContext + SeedReport). Sits after the store
+             interfaces it hands to a pack (IEntityStore / IDataObjectStore /
+             IBlobStorage) and before ServerApp.fs (which accumulates packs). -->
+        <Compile Include="Server\ISeedPack.fs" />
         <Compile Include="Server\ILineageStore.fs" />
         <Compile Include="Server\ResultStore.fs" />
         <Compile Include="Server\LineageStore.fs" />
@@ -708,6 +713,10 @@
         <Compile Include="Server\Compose\ComposeScopeResolver.fs" />
         <!-- Phase 16 — host abstraction returned by `compose`. -->
         <Compile Include="Server\IServerHost.fs" />
+        <!-- Phase 447 — idempotent, mode-gated seed-pack application.
+             Invoked from ComposeBootstrap.buildAndRunHost (below) after the
+             DI container is built, so it compiles before ComposeBootstrap.fs. -->
+        <Compile Include="Server\SeedDataLoader.fs" />
         <!-- Phase 15e tail — bootstrap finalisation (preflight + CSP
              aggregate) + Build branch returning `IServerHost`. Sits
              after `IServerHost.fs` because `buildAndRunHost` returns

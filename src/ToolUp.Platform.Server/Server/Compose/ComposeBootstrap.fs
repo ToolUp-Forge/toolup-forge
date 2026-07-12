@@ -210,6 +210,15 @@ let buildAndRunHost
             ConfigDriftDetector.run resolvedBlobStorage auditLog resolvedLogger config (groundingDriftIds app.Services)
             |> Async.RunSynchronously
 
+        // Phase 447 — apply registered seed / fixture packs once, after the
+        // container is built (stores resolvable) and before any request
+        // traffic. `NoSeedData` (the default) short-circuits to nothing;
+        // `EnabledSeedData` on a Team / multi-team shape raises here to abort
+        // startup (demo data must not leak into a real tenant). Seeding runs
+        // on the web / all-in-one branch only — a WorkerOnly silo is a
+        // production split where seeding is refused anyway.
+        SeedDataLoader.runIfEnabled app.Services config resolvedBlobStorage resolvedLogger
+
         // ─── Middleware pipeline → configurePipeline (defined above) ────────
         //
         // Phase 16 — `configurePipeline` no longer calls `app.Run()`.

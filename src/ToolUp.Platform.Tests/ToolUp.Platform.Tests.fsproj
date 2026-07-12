@@ -433,6 +433,9 @@
         <Compile Include="InProcess\PrincipalRegistryTests.fs" />
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
+        <!-- Phase 447 — seed / fixture-pack loader (idempotency, version
+             bump, mode gating, scope isolation). -->
+        <Compile Include="InProcess\SeedDataLoaderTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />
         <Compile Include="InProcess\UsageLogTests.fs" />
         <Compile Include="InProcess\PrometheusMetricsSinkTests.fs" />
