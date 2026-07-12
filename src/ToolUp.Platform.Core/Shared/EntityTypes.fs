@@ -169,6 +169,70 @@ type EntityIndex<'T> = {
     IsCompound: bool
 }
 
+// ─── Phase 19c — declarative relationships ──────────────────────────
+//
+// A relationship declares a link from one entity type to another as
+// first-class registration metadata rather than an ad-hoc foreign-key
+// field the consumer traverses by hand. Declared once, it drives (a)
+// relationship-aware queries (`EntityQuery.relatedTo`, which compiles to
+// an indexed `Eq`/`In` over the foreign-key field) and (b) an
+// enumerable edge set for a graph projection. It is additive and opt-in
+// — an entity with no declared relationships behaves exactly as before
+// (GP 11 / GP 13). Relationship metadata is identity-by-value (entity
+// *ids* as strings, no live handles — GP 12).
+
+/// Multiplicity of a declared relationship.
+[<RequireQualifiedAccess>]
+type Cardinality =
+    | OneToOne
+    | OneToMany
+    | ManyToOne
+    | ManyToMany
+
+/// Direction the relationship points relative to the declaring entity.
+/// `Outgoing` — this entity references the target (the common case, the
+/// declaring entity carries the foreign key). `Incoming` — the target
+/// references this entity (the inverse view).
+[<RequireQualifiedAccess>]
+type RelationshipDirection =
+    | Outgoing
+    | Incoming
+
+/// The association ("join") entity that resolves a `ManyToMany`
+/// relationship. The source side of the link uses the relationship's
+/// `ForeignKeyField` (the join entity's field referencing the declaring
+/// entity); this record names the join entity type and the field
+/// carrying the *target* entity's id. Resolution is two indexed lookups:
+/// query the join entity by the source key, then load the targets by the
+/// extracted `TargetKeyField` values. Both fields should be indexed on
+/// the join entity's own registration.
+type JoinEntitySpec = {
+    /// The join / association entity type name.
+    EntityType: string
+    /// The field on the join entity carrying the target entity's id.
+    TargetKeyField: string
+}
+
+/// A declared relationship between entity types. Attach with
+/// `EntityRegistration.withRelationship`. `ForeignKeyField` carries the
+/// related id: for `OneToOne` / `OneToMany` / `ManyToOne` it is a field
+/// on THIS entity; for `ManyToMany` it is the field on the join entity
+/// (`JoinEntity.EntityType`) referencing this entity. `Name` is unique
+/// within the declaring entity type.
+type Relationship = {
+    Name: string
+    /// The target entity type this relationship points at.
+    Target: string
+    Cardinality: Cardinality
+    /// The field carrying the related id (see the type doc for which
+    /// entity it lives on per cardinality).
+    ForeignKeyField: string
+    Direction: RelationshipDirection
+    /// Required for `ManyToMany` (the association entity + its
+    /// target-key field); `None` for the other cardinalities.
+    JoinEntity: JoinEntitySpec option
+}
+
 /// Registration of an entity type with the store. Built via
 /// `EntityRegistration.create<'T> typeName |> withIndex ...`. The
 /// resulting record is passed to `ServerApp.withEntities` at compose
@@ -176,6 +240,10 @@ type EntityIndex<'T> = {
 type EntityRegistration<'T> = {
     EntityType: string
     Indexes: EntityIndex<'T> list
+    /// Phase 19c — declared relationships to other entity types.
+    /// Empty (the default) — an entity with no declared relationships is
+    /// byte-identical to a pre-19c registration (GP 11).
+    Relationships: Relationship list
 }
 
 module EntityRegistration =
@@ -186,6 +254,7 @@ module EntityRegistration =
     let create<'T> (entityType: string) : EntityRegistration<'T> = {
         EntityType = entityType
         Indexes = []
+        Relationships = []
     }
 
     /// Declare a single-field index. The extractor is invoked on
@@ -233,3 +302,117 @@ module EntityRegistration =
     /// declared.
     let tryFindIndex (name: string) (reg: EntityRegistration<'T>) : EntityIndex<'T> option =
         reg.Indexes |> List.tryFind (fun i -> i.Name = name)
+
+    /// Phase 19c — declare a relationship on the entity type. Validates
+    /// at registration time (fail-fast at compose) and — for the
+    /// foreign-key cardinalities — auto-registers a `BlobIndex` on the
+    /// `ForeignKeyField` so relationship-aware queries are indexed
+    /// lookups, not scans.
+    ///
+    /// Validation:
+    ///  - a duplicate relationship `Name` is rejected;
+    ///  - `ManyToMany` requires a `JoinEntity` (else rejected with a
+    ///    message pointing at the join-entity pattern);
+    ///  - every other cardinality requires `ForeignKeyField` to be a
+    ///    real field on the entity record `'T` (reflection check, the
+    ///    same shape-by-reflection approach as `tryGetEntityFields`) —
+    ///    and `JoinEntity` must be `None`.
+    ///
+    /// Auto-index: for a foreign-key cardinality, appends an
+    /// `EntityIndex` over `ForeignKeyField` unless one with that `Name`
+    /// is already declared (idempotent with an explicit `withIndex` on
+    /// the same field). For `ManyToMany` the key lives on the join
+    /// entity, so no index is added here — index the two keys on the
+    /// join entity's own registration.
+    ///
+    /// `inline` so `typeof<'T>` resolves at the call site under Fable
+    /// (the same reason `tryGetEntityFields` is inline).
+    let inline withRelationship (relationship: Relationship) (reg: EntityRegistration<'T>) : EntityRegistration<'T> =
+        if reg.Relationships |> List.exists (fun r -> r.Name = relationship.Name) then
+            failwithf "Duplicate relationship name '%s' on entity type '%s'." relationship.Name reg.EntityType
+
+        match relationship.Cardinality with
+        | Cardinality.ManyToMany ->
+            match relationship.JoinEntity with
+            | Some _ -> ()
+            | None ->
+                failwithf
+                    "ManyToMany relationship '%s' on '%s' requires a JoinEntity (the association entity + its target-key field). Declare it via JoinEntitySpec, or model the link as a direct foreign key with a ManyToOne/OneToMany cardinality."
+                    relationship.Name
+                    reg.EntityType
+        | _ ->
+            match relationship.JoinEntity with
+            | Some _ ->
+                failwithf
+                    "Relationship '%s' on '%s' declares a JoinEntity but is not ManyToMany — a join entity only resolves a ManyToMany link. Drop the JoinEntity or set Cardinality = ManyToMany."
+                    relationship.Name
+                    reg.EntityType
+            | None -> ()
+
+            let recordFields =
+                let t = typeof<'T>
+
+                if FSharpType.IsRecord t then
+                    FSharpType.GetRecordFields t |> Array.map (fun f -> f.Name)
+                else
+                    [||]
+
+            if not (Array.contains relationship.ForeignKeyField recordFields) then
+                failwithf
+                    "Relationship '%s' on '%s' declares ForeignKeyField '%s', which is not a field on the entity record. Available fields: %s."
+                    relationship.Name
+                    reg.EntityType
+                    relationship.ForeignKeyField
+                    (String.concat ", " recordFields)
+
+        // Auto-index the foreign-key field (foreign-key cardinalities
+        // only; idempotent with an explicit withIndex on the same field).
+        let withAutoIndex (r: EntityRegistration<'T>) : EntityRegistration<'T> =
+            match relationship.Cardinality with
+            | Cardinality.ManyToMany -> r
+            | _ ->
+                if r.Indexes |> List.exists (fun i -> i.Name = relationship.ForeignKeyField) then
+                    r
+                else
+                    let fkField = relationship.ForeignKeyField
+
+                    let fieldIndex =
+                        FSharpType.GetRecordFields(typeof<'T>)
+                        |> Array.findIndex (fun f -> f.Name = fkField)
+
+                    let extract (entity: 'T) : string =
+                        let value = (FSharpValue.GetRecordFields(box entity))[fieldIndex]
+                        if isNull value then "" else string value
+
+                    {
+                        r with
+                            Indexes =
+                                r.Indexes
+                                @ [
+                                    {
+                                        Name = fkField
+                                        Extract = extract
+                                        IsCompound = false
+                                    }
+                                ]
+                    }
+
+        withAutoIndex {
+            reg with
+                Relationships = reg.Relationships @ [ relationship ]
+        }
+
+    /// Declare several relationships in one call (fold of
+    /// `withRelationship`, so the same validation + auto-index applies to
+    /// each). `inline` for the same Fable reason as `withRelationship`.
+    let inline withRelationships
+        (relationships: Relationship list)
+        (reg: EntityRegistration<'T>)
+        : EntityRegistration<'T> =
+        relationships |> List.fold (fun acc rel -> withRelationship rel acc) reg
+
+    /// Phase 19c — read accessor for the declared relationships. The
+    /// seam a graph-projection bridge reads to emit an entity's edges;
+    /// a pure read of registration metadata (no coupling to any graph
+    /// package).
+    let relationships (reg: EntityRegistration<'T>) : Relationship list = reg.Relationships

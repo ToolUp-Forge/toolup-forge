@@ -2782,6 +2782,8 @@ ToolUp.Platform.EntityQuery.andWhere`1(ToolUp.Platform.EntityQueryTypes+Predicat
 ToolUp.Platform.EntityQuery.forType`1(System.String) : ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]
 ToolUp.Platform.EntityQuery.orWhere`1(ToolUp.Platform.EntityQueryTypes+Predicate, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]
 ToolUp.Platform.EntityQuery.orderBy`1(System.String, ToolUp.Platform.EntityQueryTypes+SortDirection, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]
+ToolUp.Platform.EntityQuery.relatedTo(ToolUp.Platform.EntityTypes+Relationship, System.String) : ToolUp.Platform.EntityQueryTypes+Predicate
+ToolUp.Platform.EntityQuery.relatedToAny(ToolUp.Platform.EntityTypes+Relationship, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.EntityQueryTypes+Predicate
 ToolUp.Platform.EntityQuery.skip`1(System.Int32, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]
 ToolUp.Platform.EntityQuery.take`1(System.Int32, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]
 ToolUp.Platform.EntityQuery.validate`1(ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T], ToolUp.Platform.EntityQueryTypes+IndexValidationError]
@@ -2881,6 +2883,21 @@ ToolUp.Platform.EntityStoreMode+Tags.EnabledEntityStore : System.Int32 (literal)
 ToolUp.Platform.EntityStoreMode+Tags.NoEntityStore : System.Int32 (literal)
 ToolUp.Platform.EntityTypes (class)
 ToolUp.Platform.EntityTypes.tryGetEntityFields`1(T) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityTypes+EntityFieldsCore, System.String]
+ToolUp.Platform.EntityTypes+Cardinality (class)
+ToolUp.Platform.EntityTypes+Cardinality.IsManyToMany : System.Boolean { get }
+ToolUp.Platform.EntityTypes+Cardinality.IsManyToOne : System.Boolean { get }
+ToolUp.Platform.EntityTypes+Cardinality.IsOneToMany : System.Boolean { get }
+ToolUp.Platform.EntityTypes+Cardinality.IsOneToOne : System.Boolean { get }
+ToolUp.Platform.EntityTypes+Cardinality.ManyToMany : ToolUp.Platform.EntityTypes+Cardinality { get }
+ToolUp.Platform.EntityTypes+Cardinality.ManyToOne : ToolUp.Platform.EntityTypes+Cardinality { get }
+ToolUp.Platform.EntityTypes+Cardinality.OneToMany : ToolUp.Platform.EntityTypes+Cardinality { get }
+ToolUp.Platform.EntityTypes+Cardinality.OneToOne : ToolUp.Platform.EntityTypes+Cardinality { get }
+ToolUp.Platform.EntityTypes+Cardinality.Tag : System.Int32 { get }
+ToolUp.Platform.EntityTypes+Cardinality+Tags (class)
+ToolUp.Platform.EntityTypes+Cardinality+Tags.ManyToMany : System.Int32 (literal)
+ToolUp.Platform.EntityTypes+Cardinality+Tags.ManyToOne : System.Int32 (literal)
+ToolUp.Platform.EntityTypes+Cardinality+Tags.OneToMany : System.Int32 (literal)
+ToolUp.Platform.EntityTypes+Cardinality+Tags.OneToOne : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+EntityError (class)
 ToolUp.Platform.EntityTypes+EntityError.IsInvalidEntityShape : System.Boolean { get }
 ToolUp.Platform.EntityTypes+EntityError.IsInvalidIndex : System.Boolean { get }
@@ -2931,13 +2948,38 @@ ToolUp.Platform.EntityTypes+EntityRef`1.Type : System.String { get }
 ToolUp.Platform.EntityTypes+EntityRef`1.Version : System.Int32 { get }
 ToolUp.Platform.EntityTypes+EntityRegistration (class)
 ToolUp.Platform.EntityTypes+EntityRegistration.create`1(System.String) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
+ToolUp.Platform.EntityTypes+EntityRegistration.relationships`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship]
 ToolUp.Platform.EntityTypes+EntityRegistration.tryFindIndex`1(System.String, ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]]
 ToolUp.Platform.EntityTypes+EntityRegistration.withCompoundIndex`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
 ToolUp.Platform.EntityTypes+EntityRegistration.withIndex`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, System.String], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
+ToolUp.Platform.EntityTypes+EntityRegistration.withRelationship`1(ToolUp.Platform.EntityTypes+Relationship, ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
+ToolUp.Platform.EntityTypes+EntityRegistration.withRelationships`1(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
 ToolUp.Platform.EntityTypes+EntityRegistration`1 (class)
-ToolUp.Platform.EntityTypes+EntityRegistration`1..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]])
+ToolUp.Platform.EntityTypes+EntityRegistration`1..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship])
 ToolUp.Platform.EntityTypes+EntityRegistration`1.EntityType : System.String { get }
 ToolUp.Platform.EntityTypes+EntityRegistration`1.Indexes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]] { get }
+ToolUp.Platform.EntityTypes+EntityRegistration`1.Relationships : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship] { get }
+ToolUp.Platform.EntityTypes+JoinEntitySpec (class)
+ToolUp.Platform.EntityTypes+JoinEntitySpec..ctor(System.String, System.String)
+ToolUp.Platform.EntityTypes+JoinEntitySpec.EntityType : System.String { get }
+ToolUp.Platform.EntityTypes+JoinEntitySpec.TargetKeyField : System.String { get }
+ToolUp.Platform.EntityTypes+Relationship (class)
+ToolUp.Platform.EntityTypes+Relationship..ctor(System.String, System.String, ToolUp.Platform.EntityTypes+Cardinality, System.String, ToolUp.Platform.EntityTypes+RelationshipDirection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+JoinEntitySpec])
+ToolUp.Platform.EntityTypes+Relationship.Cardinality : ToolUp.Platform.EntityTypes+Cardinality { get }
+ToolUp.Platform.EntityTypes+Relationship.Direction : ToolUp.Platform.EntityTypes+RelationshipDirection { get }
+ToolUp.Platform.EntityTypes+Relationship.ForeignKeyField : System.String { get }
+ToolUp.Platform.EntityTypes+Relationship.JoinEntity : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+JoinEntitySpec] { get }
+ToolUp.Platform.EntityTypes+Relationship.Name : System.String { get }
+ToolUp.Platform.EntityTypes+Relationship.Target : System.String { get }
+ToolUp.Platform.EntityTypes+RelationshipDirection (class)
+ToolUp.Platform.EntityTypes+RelationshipDirection.Incoming : ToolUp.Platform.EntityTypes+RelationshipDirection { get }
+ToolUp.Platform.EntityTypes+RelationshipDirection.IsIncoming : System.Boolean { get }
+ToolUp.Platform.EntityTypes+RelationshipDirection.IsOutgoing : System.Boolean { get }
+ToolUp.Platform.EntityTypes+RelationshipDirection.Outgoing : ToolUp.Platform.EntityTypes+RelationshipDirection { get }
+ToolUp.Platform.EntityTypes+RelationshipDirection.Tag : System.Int32 { get }
+ToolUp.Platform.EntityTypes+RelationshipDirection+Tags (class)
+ToolUp.Platform.EntityTypes+RelationshipDirection+Tags.Incoming : System.Int32 (literal)
+ToolUp.Platform.EntityTypes+RelationshipDirection+Tags.Outgoing : System.Int32 (literal)
 ToolUp.Platform.Erasure (class)
 ToolUp.Platform.Erasure.TombstoneMarker : System.String (literal)
 ToolUp.Platform.Erasure.isBlankSubject(System.String) : System.Boolean
@@ -3716,6 +3758,7 @@ ToolUp.Platform.ITelemetrySink.Name : System.String { get }
 ToolUp.Platform.ITelemetrySink.Track(System.String, ToolUp.Platform.TelemetryEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ITimeSeriesStore (interface)
 ToolUp.Platform.ITimeSeriesStore.Append(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TimeSeriesPoint]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.TimeSeriesError]]
+ToolUp.Platform.ITimeSeriesStore.DeleteSeries(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.TimeSeriesError]]
 ToolUp.Platform.ITimeSeriesStore.ListSeries(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.ITimeSeriesStore.QueryRange(System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TimeSeriesDownsample]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TimeSeriesPoint], ToolUp.Platform.TimeSeriesError]]
 ToolUp.Platform.ITraceLogger (interface)

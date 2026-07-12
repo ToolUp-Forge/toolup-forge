@@ -60,6 +60,37 @@ let skip (n: int) (q: EntityQuery<'T>) : EntityQuery<'T> = { q with Skip = n }
 /// Take at most N results.
 let take (n: int) (q: EntityQuery<'T>) : EntityQuery<'T> = { q with Take = n }
 
+// ─── Phase 19c — relationship-aware predicates ──────────────────────
+//
+// A declared `Relationship` (see `EntityTypes`) compiles to an ordinary
+// indexed predicate over its foreign-key field, so relationship-aware
+// queries execute through the existing `EntityQueryExecutor` with no new
+// execution machinery — and validate, because `withRelationship`
+// auto-indexes the foreign-key field.
+//
+// For a foreign-key cardinality (OneToOne / OneToMany / ManyToOne), run
+// the predicate against the declaring entity type: "all Orders for
+// Customer X" = `forType<Order> "Order" |> where (relatedTo rel X)`.
+//
+// For ManyToMany, the predicate targets the JOIN entity (its
+// `ForeignKeyField` is the source key), so resolution is two indexed
+// lookups: (1) query the join entity with `relatedTo rel sourceId`,
+// (2) read `rel.JoinEntity.Value.TargetKeyField` off each join row and
+// load those targets by id. The predicate here is step (1).
+
+/// Predicate selecting the rows related to `relatedId` through
+/// `relationship` — an `Eq` over the relationship's foreign-key field.
+/// Indexed (19c auto-registers the index), so it executes through the
+/// existing executor unchanged.
+let relatedTo (relationship: Relationship) (relatedId: EntityId) : Predicate =
+    Eq(relationship.ForeignKeyField, relatedId)
+
+/// As `relatedTo`, for several related ids at once — an `In` over the
+/// foreign-key field (union of indexed lookups). Useful for the second
+/// leg of a ManyToMany resolution, or a batched parent lookup.
+let relatedToAny (relationship: Relationship) (relatedIds: EntityId list) : Predicate =
+    In(relationship.ForeignKeyField, relatedIds)
+
 /// Walk the predicate tree, collecting every leaf field name.
 let rec private collectLeafFields (p: Predicate) : string list =
     match p with

@@ -437,6 +437,9 @@
              bump, mode gating, scope isolation). -->
         <Compile Include="InProcess\SeedDataLoaderTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />
+        <!-- Phase 19c — declarative relationship edges (builder / validation /
+             auto-index / relationship-aware queries / backward-compat). -->
+        <Compile Include="InProcess\RelationshipTests.fs" />
         <Compile Include="InProcess\UsageLogTests.fs" />
         <Compile Include="InProcess\PrometheusMetricsSinkTests.fs" />
         <Compile Include="InProcess\OtelActivitySinkTests.fs" />

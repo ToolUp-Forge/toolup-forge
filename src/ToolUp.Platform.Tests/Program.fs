@@ -262,6 +262,8 @@ let allTests =
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
         EntityQueryTests.tests
+        // Phase 19c — declarative relationship edges.
+        RelationshipTests.tests
         // Phase 68 — IGraphStore conformance pack bound to InMemoryGraphStore
         // (six-rule GP12 audit + tenant isolation + subset-floor corpus +
         // cycle-safe termination + out-of-subset-throws).
