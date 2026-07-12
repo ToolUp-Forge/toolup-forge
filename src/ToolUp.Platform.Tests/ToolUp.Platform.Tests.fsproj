@@ -33,6 +33,8 @@
         <Compile Include="Contracts\IDataSourceContract.fs" />
         <Compile Include="Contracts\IOAuthStateStoreContract.fs" />
         <Compile Include="Contracts\IOAuthCredentialFlowContract.fs" />
+        <!-- Phase 10g — OAuth 1.0a flow conformance pack. -->
+        <Compile Include="Contracts\IOAuth1aFlowContract.fs" />
         <Compile Include="Contracts\ISecretStoreContract.fs" />
         <Compile Include="Contracts\IPermissionStoreContract.fs" />
         <Compile Include="Contracts\IFeatureFlagStoreContract.fs" />

@@ -57,9 +57,38 @@ module StandardMetrics =
     [<Literal>]
     let StorageBytesWritten = "toolup.storage.bytes_written"
 
+    /// Phase 10g — OAuth 1.0a per-call request-signing counters. Emitted
+    /// by a connector's `IOAuth1aFlow.Sign` implementation, tagged by
+    /// `provider` (the flow `Name`).
+    [<Literal>]
+    let OAuth1aSigningCallsTotal = "toolup.oauth1a.signing_calls_total"
+
+    [<Literal>]
+    let OAuth1aSigningFailuresTotal = "toolup.oauth1a.signing_failures_total"
+
     /// SDK standard registrations — registered unconditionally by
     /// `compose` when `MetricsEndpoint = EnabledMetricsEndpoint`.
     let registrations: MetricRegistration list = [
+        {
+            Module = None
+            Definition = {
+                Name = OAuth1aSigningCallsTotal
+                Kind = Counter
+                Description = "Total OAuth 1.0a request-signing calls"
+                Unit = "1"
+                Tags = [ "provider" ]
+            }
+        }
+        {
+            Module = None
+            Definition = {
+                Name = OAuth1aSigningFailuresTotal
+                Kind = Counter
+                Description = "Total OAuth 1.0a request-signing failures"
+                Unit = "1"
+                Tags = [ "provider" ]
+            }
+        }
         {
             Module = None
             Definition = {

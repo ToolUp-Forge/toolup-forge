@@ -268,6 +268,13 @@ let buildRouteHandlers
         | NoDataIngestion -> []
         | EnabledDataIngestion -> OAuthFlowHandler.routes
 
+    // Phase 10g — OAuth 1.0a three-legged flow routes, gated on its own
+    // opt-in mode (independent of the OAuth 2.0 / DataIngestion substrate).
+    let oauth1aFlowRoutes: HttpHandler list =
+        match config.OAuth1a with
+        | NoOAuth1a -> []
+        | EnabledOAuth1a -> OAuth1aFlowHandler.routes
+
     // HealthMonitor admin API. Always auto-injected; request-scoped
     // Owner/Admin gate inside the handler short-circuits Anonymous and
     // Member-role callers, so unconditional registration is zero-cost
@@ -622,6 +629,7 @@ let buildRouteHandlers
             @ maintenanceApiHandler
             @ dataIngestionApiHandler
             @ oauthFlowRoutes
+            @ oauth1aFlowRoutes
             @ healthMonitorApiHandler
             @ serviceStatusBoardApiHandler
             @ deploymentReadinessApiHandler

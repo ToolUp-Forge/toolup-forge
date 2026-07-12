@@ -1,8 +1,53 @@
 module ToolUp.Platform.Tests.InProcess.OAuth1aSubstrateTests
 
 open System
+open System.Net.Http
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Tests.Contracts
+
+// A minimal fake `IOAuth1aFlow` (canned request/access tokens, the real
+// signer for `Sign`) that binds the shared conformance pack.
+type private FakeOAuth1aFlow() =
+    interface IOAuth1aFlow with
+        member _.Name = "fake1a"
+
+        member _.Descriptor = {
+            DisplayName = "Fake 1.0a Provider"
+            HelpUrl = None
+        }
+
+        member _.BuildRequestTokenUrl(_ctx, _callbackUri) = async {
+            return
+                Ok {
+                    AuthorizeUrl = "https://provider.example.com/authorize?oauth_token=req-token-abc"
+                    RequestToken = "req-token-abc"
+                    RequestTokenSecret = "req-secret-abc"
+                }
+        }
+
+        member _.ExchangeRequestTokenForAccess(_ctx, _requestToken, _requestTokenSecret, verifier) = async {
+            if verifier = "" then
+                return Error(AccessTokenRejected "missing verifier")
+            else
+                return
+                    Ok {
+                        Token = "access-token-xyz"
+                        TokenSecret = "access-secret-xyz"
+                    }
+        }
+
+        member _.Sign(request, tokenPair) =
+            OAuth1aSigner.signRequest
+                {
+                    ConsumerKey = "fake-consumer"
+                    ConsumerSecret = "fake-consumer-secret"
+                }
+                tokenPair
+                request
+
+let flowTests =
+    IOAuth1aFlowContract.tests "FakeOAuth1aFlow" (fun () -> FakeOAuth1aFlow() :> IOAuth1aFlow)
 
 // ─── Phase 10g — OAuth 1.0a substrate ───────────────────────────────────
 //
@@ -132,6 +177,9 @@ let tests =
 
             let state = {
                 ScopeId = "team-a"
+                Container = "team-team-a"
+                ResourceId = "res-1"
+                UserId = "u-1"
                 FlowName = "garmin"
                 RequestTokenSecret = "rt-secret"
                 CreatedAt = DateTime.UtcNow
@@ -162,6 +210,9 @@ let tests =
 
             let stale = {
                 ScopeId = "team-a"
+                Container = "team-team-a"
+                ResourceId = "res-1"
+                UserId = "u-1"
                 FlowName = "garmin"
                 RequestTokenSecret = "rt-secret"
                 CreatedAt = DateTime.UtcNow.AddMinutes -20.0

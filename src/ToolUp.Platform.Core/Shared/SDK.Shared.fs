@@ -365,6 +365,20 @@ type OAuthRefresherMode =
     /// dispatches.
     | EnabledOAuthRefresher
 
+/// Phase 10g — selects whether `compose` mounts the OAuth 1.0a
+/// three-legged flow routes (`/api/oauth1a/{flow}/*`). Default:
+/// `NoOAuth1a` — no routes mounted, no 1.0a code path active; a
+/// deployment with no 1.0a connectors pays nothing (GP 13). Enable with
+/// `EnabledOAuth1a` and register per-provider flows via
+/// `ServerApp.withOAuth1aFlow`. Independent of the OAuth 2.0
+/// (`DataIngestion`) substrate — a deployment can run either, both, or
+/// neither.
+type OAuth1aMode =
+    /// No OAuth 1.0a routes mounted. Default.
+    | NoOAuth1a
+    /// Mount the `/api/oauth1a/{flow}/*` three-legged flow routes.
+    | EnabledOAuth1a
+
 /// Selects whether `compose` registers the entity-store substrate.
 /// Default: `NoEntityStore` — no `IEntityStore` in DI, no
 /// `EntityRegistry`, no per-entity-type index space allocated. Apps
@@ -2059,6 +2073,11 @@ type ServerConfig = {
     /// `OAuthRefresherDepsValidator` startup check warns when the
     /// pair is misconfigured.
     OAuthRefresher: OAuthRefresherMode
+    /// Phase 10g — OAuth 1.0a substrate selection. Default: `NoOAuth1a` —
+    /// the three-legged flow routes are not mounted. `EnabledOAuth1a`
+    /// mounts `/api/oauth1a/{flow}/*`; register flows via
+    /// `ServerApp.withOAuth1aFlow`.
+    OAuth1a: OAuth1aMode
     /// Entity-store selection. Default: `NoEntityStore` —
     /// no `IEntityStore` is registered, no `EntityRegistry`. Enable
     /// with `EnabledEntityStore` to activate the substrate; entity
@@ -3068,6 +3087,7 @@ module ServerConfig =
         ColumnMapping = NoColumnMapping
         MappingDryRun = WarnOnValidationFailure
         OAuthRefresher = NoOAuthRefresher
+        OAuth1a = NoOAuth1a
         EntityStore = NoEntityStore
         SeedData = NoSeedData
         // Phase 68 — the in-memory graph store is the default (registered

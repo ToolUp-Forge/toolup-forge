@@ -761,6 +761,9 @@ ToolUp.Platform.AuditEvent.IsModelScored : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationDeliveryFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSent : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSilentlySkipped : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsOAuth1aConnected : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsOAuth1aDisconnected : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsOAuth1aSigningFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuthConnected : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuthDisconnected : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuthRefreshDeadLettered : System.Boolean { get }
@@ -956,6 +959,12 @@ ToolUp.Platform.AuditEvent+NotificationSent (class)
 ToolUp.Platform.AuditEvent+NotificationSent.Item : ToolUp.Platform.NotificationSentPayload { get }
 ToolUp.Platform.AuditEvent+NotificationSilentlySkipped (class)
 ToolUp.Platform.AuditEvent+NotificationSilentlySkipped.Item : ToolUp.Platform.NotificationSilentlySkippedPayload { get }
+ToolUp.Platform.AuditEvent+OAuth1aConnected (class)
+ToolUp.Platform.AuditEvent+OAuth1aConnected.Item : ToolUp.Platform.OAuth1aConnectedPayload { get }
+ToolUp.Platform.AuditEvent+OAuth1aDisconnected (class)
+ToolUp.Platform.AuditEvent+OAuth1aDisconnected.Item : ToolUp.Platform.OAuth1aDisconnectedPayload { get }
+ToolUp.Platform.AuditEvent+OAuth1aSigningFailed (class)
+ToolUp.Platform.AuditEvent+OAuth1aSigningFailed.Item : ToolUp.Platform.OAuth1aSigningFailedPayload { get }
 ToolUp.Platform.AuditEvent+OAuthConnected (class)
 ToolUp.Platform.AuditEvent+OAuthConnected.Item : ToolUp.Platform.OAuthConnectedPayload { get }
 ToolUp.Platform.AuditEvent+OAuthDisconnected (class)
@@ -1085,6 +1094,9 @@ ToolUp.Platform.AuditEvent+Tags.ModelScored : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationDeliveryFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSent : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSilentlySkipped : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.OAuth1aConnected : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.OAuth1aDisconnected : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.OAuth1aSigningFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuthConnected : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuthDisconnected : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuthRefreshDeadLettered : System.Int32 (literal)
@@ -5187,6 +5199,91 @@ ToolUp.Platform.NotificationSilentlySkippedPayload.NotificationKind : System.Str
 ToolUp.Platform.NotificationSilentlySkippedPayload.Reason : System.String { get }
 ToolUp.Platform.NotificationSilentlySkippedPayload.RecipientHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NotificationSilentlySkippedPayload.ScopeId : System.String { get }
+ToolUp.Platform.OAuth1aConnectedPayload (class)
+ToolUp.Platform.OAuth1aConnectedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTime)
+ToolUp.Platform.OAuth1aConnectedPayload.ConnectedAt : System.DateTime { get }
+ToolUp.Platform.OAuth1aConnectedPayload.FlowName : System.String { get }
+ToolUp.Platform.OAuth1aConnectedPayload.ResourceId : System.String { get }
+ToolUp.Platform.OAuth1aConnectedPayload.ScopeId : System.String { get }
+ToolUp.Platform.OAuth1aConnectedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuth1aConsumerCredentials (class)
+ToolUp.Platform.OAuth1aConsumerCredentials..ctor(System.String, System.String)
+ToolUp.Platform.OAuth1aConsumerCredentials.ConsumerKey : System.String { get }
+ToolUp.Platform.OAuth1aConsumerCredentials.ConsumerSecret : System.String { get }
+ToolUp.Platform.OAuth1aDisconnectedPayload (class)
+ToolUp.Platform.OAuth1aDisconnectedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.OAuth1aDisconnectedPayload.FlowName : System.String { get }
+ToolUp.Platform.OAuth1aDisconnectedPayload.ResourceId : System.String { get }
+ToolUp.Platform.OAuth1aDisconnectedPayload.ScopeId : System.String { get }
+ToolUp.Platform.OAuth1aDisconnectedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuth1aError (class)
+ToolUp.Platform.OAuth1aError.IsAccessTokenRejected : System.Boolean { get }
+ToolUp.Platform.OAuth1aError.IsConsumerCredentialMissing : System.Boolean { get }
+ToolUp.Platform.OAuth1aError.IsNetworkFailure : System.Boolean { get }
+ToolUp.Platform.OAuth1aError.IsOAuth1aFlowFailed : System.Boolean { get }
+ToolUp.Platform.OAuth1aError.IsRequestTokenRejected : System.Boolean { get }
+ToolUp.Platform.OAuth1aError.IsSigningFailed : System.Boolean { get }
+ToolUp.Platform.OAuth1aError.IsStateTokenMismatch : System.Boolean { get }
+ToolUp.Platform.OAuth1aError.Tag : System.Int32 { get }
+ToolUp.Platform.OAuth1aError+AccessTokenRejected (class)
+ToolUp.Platform.OAuth1aError+AccessTokenRejected.message : System.String { get }
+ToolUp.Platform.OAuth1aError+ConsumerCredentialMissing (class)
+ToolUp.Platform.OAuth1aError+ConsumerCredentialMissing.key : System.String { get }
+ToolUp.Platform.OAuth1aError+NetworkFailure (class)
+ToolUp.Platform.OAuth1aError+NetworkFailure.message : System.String { get }
+ToolUp.Platform.OAuth1aError+OAuth1aFlowFailed (class)
+ToolUp.Platform.OAuth1aError+OAuth1aFlowFailed.message : System.String { get }
+ToolUp.Platform.OAuth1aError+RequestTokenRejected (class)
+ToolUp.Platform.OAuth1aError+RequestTokenRejected.message : System.String { get }
+ToolUp.Platform.OAuth1aError+SigningFailed (class)
+ToolUp.Platform.OAuth1aError+SigningFailed.message : System.String { get }
+ToolUp.Platform.OAuth1aError+StateTokenMismatch (class)
+ToolUp.Platform.OAuth1aError+StateTokenMismatch.message : System.String { get }
+ToolUp.Platform.OAuth1aError+Tags (class)
+ToolUp.Platform.OAuth1aError+Tags.AccessTokenRejected : System.Int32 (literal)
+ToolUp.Platform.OAuth1aError+Tags.ConsumerCredentialMissing : System.Int32 (literal)
+ToolUp.Platform.OAuth1aError+Tags.NetworkFailure : System.Int32 (literal)
+ToolUp.Platform.OAuth1aError+Tags.OAuth1aFlowFailed : System.Int32 (literal)
+ToolUp.Platform.OAuth1aError+Tags.RequestTokenRejected : System.Int32 (literal)
+ToolUp.Platform.OAuth1aError+Tags.SigningFailed : System.Int32 (literal)
+ToolUp.Platform.OAuth1aError+Tags.StateTokenMismatch : System.Int32 (literal)
+ToolUp.Platform.OAuth1aErrorModule (class)
+ToolUp.Platform.OAuth1aErrorModule.toMessage(ToolUp.Platform.OAuth1aError) : System.String
+ToolUp.Platform.OAuth1aMode (class)
+ToolUp.Platform.OAuth1aMode.EnabledOAuth1a : ToolUp.Platform.OAuth1aMode { get }
+ToolUp.Platform.OAuth1aMode.IsEnabledOAuth1a : System.Boolean { get }
+ToolUp.Platform.OAuth1aMode.IsNoOAuth1a : System.Boolean { get }
+ToolUp.Platform.OAuth1aMode.NoOAuth1a : ToolUp.Platform.OAuth1aMode { get }
+ToolUp.Platform.OAuth1aMode.Tag : System.Int32 { get }
+ToolUp.Platform.OAuth1aMode+Tags (class)
+ToolUp.Platform.OAuth1aMode+Tags.EnabledOAuth1a : System.Int32 (literal)
+ToolUp.Platform.OAuth1aMode+Tags.NoOAuth1a : System.Int32 (literal)
+ToolUp.Platform.OAuth1aRequestState (class)
+ToolUp.Platform.OAuth1aRequestState..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTime)
+ToolUp.Platform.OAuth1aRequestState.Container : System.String { get }
+ToolUp.Platform.OAuth1aRequestState.CreatedAt : System.DateTime { get }
+ToolUp.Platform.OAuth1aRequestState.FlowName : System.String { get }
+ToolUp.Platform.OAuth1aRequestState.RequestTokenSecret : System.String { get }
+ToolUp.Platform.OAuth1aRequestState.ResourceId : System.String { get }
+ToolUp.Platform.OAuth1aRequestState.ScopeId : System.String { get }
+ToolUp.Platform.OAuth1aRequestState.UserId : System.String { get }
+ToolUp.Platform.OAuth1aSignatureMethod (class)
+ToolUp.Platform.OAuth1aSignatureMethod.HmacSha1 : ToolUp.Platform.OAuth1aSignatureMethod { get }
+ToolUp.Platform.OAuth1aSignatureMethod.Tag : System.Int32 { get }
+ToolUp.Platform.OAuth1aSignatureMethodModule (class)
+ToolUp.Platform.OAuth1aSignatureMethodModule.wireName(ToolUp.Platform.OAuth1aSignatureMethod) : System.String
+ToolUp.Platform.OAuth1aSigningFailedPayload (class)
+ToolUp.Platform.OAuth1aSigningFailedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.OAuth1aSigningFailedPayload.FlowName : System.String { get }
+ToolUp.Platform.OAuth1aSigningFailedPayload.Reason : System.String { get }
+ToolUp.Platform.OAuth1aSigningFailedPayload.ResourceId : System.String { get }
+ToolUp.Platform.OAuth1aSigningFailedPayload.ScopeId : System.String { get }
+ToolUp.Platform.OAuth1aSourceModule (class)
+ToolUp.Platform.OAuth1aSourceModule.value : System.String (literal)
+ToolUp.Platform.OAuth1aTokenPair (class)
+ToolUp.Platform.OAuth1aTokenPair..ctor(System.String, System.String)
+ToolUp.Platform.OAuth1aTokenPair.Token : System.String { get }
+ToolUp.Platform.OAuth1aTokenPair.TokenSecret : System.String { get }
 ToolUp.Platform.OAuthConnectedPayload (class)
 ToolUp.Platform.OAuthConnectedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Platform.OAuthConnectedPayload.ConnectedAt : System.DateTime { get }
@@ -6126,7 +6223,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode)
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode)
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptHeaderAuthWhenAuthRequired : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptInMemoryOAuthStateInMultiInstance : System.Boolean { get }
@@ -6191,6 +6288,7 @@ ToolUp.Platform.ServerConfig.ModuleFilter : Microsoft.FSharp.Core.FSharpOption`1
 ToolUp.Platform.ServerConfig.ModuleNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ServerConfig.NarrativeRetention : ToolUp.Platform.Narrative.NarrativeRetentionPolicy { get }
 ToolUp.Platform.ServerConfig.Notifications : ToolUp.Platform.NotificationMode { get }
+ToolUp.Platform.ServerConfig.OAuth1a : ToolUp.Platform.OAuth1aMode { get }
 ToolUp.Platform.ServerConfig.OAuthRefresher : ToolUp.Platform.OAuthRefresherMode { get }
 ToolUp.Platform.ServerConfig.PeerRoutePrefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ServerConfig.PeerSubstrate : ToolUp.Platform.PeerSubstrateMode { get }

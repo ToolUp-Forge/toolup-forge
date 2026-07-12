@@ -3322,6 +3322,19 @@ ToolUp.Platform.NotificationClient.reset() : System.Void
 ToolUp.Platform.NotificationClient.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.NotificationEnvelope, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.NotificationClient+EventSource (interface)
 ToolUp.Platform.NotificationClient+EventSource.close() : System.Void
+ToolUp.Platform.OAuth1aCredentialUIHelpers (class)
+ToolUp.Platform.OAuth1aCredentialUIHelpers.credentialForm(ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps) : Fable.React.ReactElement
+ToolUp.Platform.OAuth1aCredentialUIHelpers.startUrl(System.String, System.String) : System.String
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps (class)
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], System.Boolean)
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.Connected : System.Boolean { get }
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.ConsumerKey : System.String { get }
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.ConsumerSecret : System.String { get }
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.FlowName : System.String { get }
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.OnConsumerKeyChange : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.OnConsumerSecretChange : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.OnSave : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.OAuth1aCredentialUIHelpers+OAuth1aCredentialFormProps.ResourceId : System.String { get }
 ToolUp.Platform.OidcUIConfig (class)
 ToolUp.Platform.OidcUIConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean])
 ToolUp.Platform.OidcUIConfig.ClientId : System.String { get }

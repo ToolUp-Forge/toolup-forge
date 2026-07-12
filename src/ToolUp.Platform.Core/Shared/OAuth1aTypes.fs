@@ -87,8 +87,19 @@ module OAuth1aError =
 /// so one tenant's in-flight authorisation can never be resumed by
 /// another (GP 4).
 type OAuth1aRequestState = {
-    /// The scope the authorisation was initiated under.
+    /// The scope the authorisation was initiated under (audit trail).
     ScopeId: string
+    /// The storage container the access-token pair is persisted under
+    /// (the `ISecretStore` scope + the value the flow reads consumer
+    /// credentials under). Recovered on the callback so leg 3 persists to
+    /// the same place leg 1 was initiated from.
+    Container: string
+    /// The connection / resource id — the `ISecretStore` key suffix for
+    /// the persisted access-token pair. The provider's callback carries
+    /// only `oauth_token` + `oauth_verifier`, so this is recovered here.
+    ResourceId: string
+    /// The actor who initiated the authorisation (audit trail).
+    UserId: string
     /// The flow name (provider) the request token belongs to.
     FlowName: string
     /// The request-token secret, needed to sign the access-token exchange.

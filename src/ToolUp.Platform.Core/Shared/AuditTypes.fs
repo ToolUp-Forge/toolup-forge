@@ -725,6 +725,48 @@ type OAuthRefreshFailedPayload = {
     Reason: string
 }
 
+// ─── Phase 10g — OAuth 1.0a substrate audit payloads ────────────────────
+//
+// Emitted by the OAuth 1.0a callback / disconnect paths + the per-call
+// signer. Reserved source-module label `_platform.oauth1a`. Like the
+// OAuth 2.0 payloads, they carry the connection identity + actor but never
+// the token pair (which stays behind `ISecretStore`).
+
+module OAuth1aSourceModule =
+    /// Reserved `SourceModule` for OAuth 1.0a substrate audit events.
+    /// Filter `IEventStore.ReadBySource` on this constant for the trail.
+    [<Literal>]
+    let value = "_platform.oauth1a"
+
+/// OAuth 1.0a access-token connection established — leg 3 succeeded and the
+/// access token pair was persisted via `ISecretStore`.
+type OAuth1aConnectedPayload = {
+    UserId: string
+    ScopeId: string
+    FlowName: string
+    ResourceId: string
+    ConnectedAt: DateTime
+}
+
+/// User-initiated OAuth 1.0a disconnect — the local token pair was deleted.
+type OAuth1aDisconnectedPayload = {
+    UserId: string
+    ScopeId: string
+    FlowName: string
+    ResourceId: string
+}
+
+/// OAuth 1.0a request signing failed — a persisted token pair was malformed
+/// / unreadable, so the per-call HMAC-SHA1 signature could not be minted.
+/// The connector surfaces `CredentialMissing`; this records the diagnostic.
+/// Value-free (no secret material).
+type OAuth1aSigningFailedPayload = {
+    ScopeId: string
+    FlowName: string
+    ResourceId: string
+    Reason: string
+}
+
 // ─── Phase 10h — OAuth token refresh substrate audit payloads ───────────
 //
 // Emitted by `IOAuthTokenRefresher` / `OAuthRefreshJobHandler` for the
@@ -2552,6 +2594,12 @@ type AuditEvent =
     /// because the upstream provider rejected the refresh token.
     /// `CredentialStatus` transitions to `NeedsReauthorization`.
     | OAuthRefreshFailed of OAuthRefreshFailedPayload
+    /// Phase 10g — OAuth 1.0a access-token connection established.
+    | OAuth1aConnected of OAuth1aConnectedPayload
+    /// Phase 10g — OAuth 1.0a connection disconnected.
+    | OAuth1aDisconnected of OAuth1aDisconnectedPayload
+    /// Phase 10g — OAuth 1.0a per-call request signing failed.
+    | OAuth1aSigningFailed of OAuth1aSigningFailedPayload
     /// Phase 10h — background refresh succeeded. Reserved
     /// `SourceModule = "_platform.oauth.refresh"`. Emitted by
     /// `OAuthRefreshJobHandler` after the substrate persists the
@@ -2990,6 +3038,9 @@ module AuditEvent =
         | OAuthConnected _ -> "OAuthConnected"
         | OAuthDisconnected _ -> "OAuthDisconnected"
         | OAuthRefreshFailed _ -> "OAuthRefreshFailed"
+        | OAuth1aConnected _ -> "OAuth1aConnected"
+        | OAuth1aDisconnected _ -> "OAuth1aDisconnected"
+        | OAuth1aSigningFailed _ -> "OAuth1aSigningFailed"
         | OAuthTokenRefreshed _ -> "OAuthTokenRefreshed"
         | OAuthTokenRefreshFailed _ -> "OAuthTokenRefreshFailed"
         | OAuthRefreshTokenInvalidated _ -> "OAuthRefreshTokenInvalidated"

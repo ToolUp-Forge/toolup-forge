@@ -501,6 +501,10 @@
         <Compile Include="Server\JobApiHandler.fs" />
         <Compile Include="Server\MaintenanceApiHandler.fs" />
         <Compile Include="Server\OAuthFlowHandler.fs" />
+        <!-- Phase 10g — OAuth 1.0a three-legged flow routes. Placed here
+             (not with the other OAuth1a substrate files) because it depends
+             on the later Giraffe / TeamManagement / AccessContext surface. -->
+        <Compile Include="Server\OAuth1aFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
         <Compile Include="Server\Scope\StoreIdSanitising.fs" />

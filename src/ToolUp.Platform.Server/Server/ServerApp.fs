@@ -667,6 +667,12 @@ type ServerApp = {
     /// enables data-ingestion without registering a flow has wiring
     /// drift, not a substrate bug (mirrors the DataExporters gating note).
     OAuthCredentialFlows: IOAuthCredentialFlow list
+    /// Phase 10g — registered OAuth 1.0a flows (one per 1.0a provider).
+    /// `run` folds each into DI as an `IOAuth1aFlow` singleton so the
+    /// `/api/oauth1a/{flowName}/*` handlers resolve it by `Name`. Empty
+    /// (the default) registers nothing (GP 13); only meaningful when
+    /// `ServerConfig.OAuth1a = EnabledOAuth1a`.
+    OAuth1aFlows: IOAuth1aFlow list
     /// Phase 5h — optional override for the email-keyed pending-invitation
     /// store (`IPendingInviteStore`). When `None` (default), `compose`
     /// registers `InMemoryPendingInviteStore` over the resolved
@@ -831,6 +837,7 @@ module ServerApp =
         DataExporters = []
         ErasureHandlers = []
         OAuthCredentialFlows = []
+        OAuth1aFlows = []
         PendingInviteStore = None
         SubjectMigrator = None
         ShareTokenStoreDecorators = []
@@ -1228,6 +1235,15 @@ module ServerApp =
     let withOAuthFlow (flow: IOAuthCredentialFlow) (app: ServerApp) : ServerApp = {
         app with
             OAuthCredentialFlows = app.OAuthCredentialFlows @ [ flow ]
+    }
+
+    /// Phase 10g — register an OAuth 1.0a flow (one per 1.0a provider).
+    /// `run` folds it into DI; the `/api/oauth1a/{name}/*` routes (mounted
+    /// when `ServerConfig.OAuth1a = EnabledOAuth1a`) resolve it by `Name`.
+    /// Append-only, so several providers each add their own.
+    let withOAuth1aFlow (flow: IOAuth1aFlow) (app: ServerApp) : ServerApp = {
+        app with
+            OAuth1aFlows = app.OAuth1aFlows @ [ flow ]
     }
 
     /// Phase 9m — register a companion-contributed startup config
@@ -1976,6 +1992,16 @@ module ServerApp =
                     (fun acc flow -> appendRegistration acc (fun s -> s.AddSingleton<IOAuthCredentialFlow>(flow)))
                     withErasureHandlers
 
+            // Phase 10g — fold each registered OAuth 1.0a flow into DI so the
+            // `/api/oauth1a/{flowName}/*` handlers resolve it per-request by
+            // `Name`. Empty list appends nothing — byte-for-byte the pre-10g
+            // graph (GP 13).
+            let withOAuth1aFlows =
+                app.OAuth1aFlows
+                |> List.fold
+                    (fun acc flow -> appendRegistration acc (fun s -> s.AddSingleton<IOAuth1aFlow>(flow)))
+                    withOAuthFlows
+
             // 0.5.7 — fold the optional `IUserDirectory` companion into
             // the DI graph. When `None`, no registration is appended —
             // `UserDirectoryApiHandler.resolveDirectory` reads `None`
@@ -1984,9 +2010,9 @@ module ServerApp =
             // singleton; the handler resolves it lazily per request.
             let withUserDirectory =
                 match app.UserDirectory with
-                | None -> withOAuthFlows
+                | None -> withOAuth1aFlows
                 | Some directory ->
-                    appendRegistration withOAuthFlows (fun s -> s.AddSingleton<IUserDirectory>(directory))
+                    appendRegistration withOAuth1aFlows (fun s -> s.AddSingleton<IUserDirectory>(directory))
 
             // Phase 519 — build the grounding metric & subject registry
             // from the accumulated module declarations and fold

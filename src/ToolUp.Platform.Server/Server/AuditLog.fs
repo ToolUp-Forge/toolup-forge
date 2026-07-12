@@ -368,6 +368,30 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> OAuthRefreshFailed(fromAuditJson<OAuthRefreshFailedPayload> j)
     }
     {
+        EventType = "OAuth1aConnected"
+        TryEncode =
+            (function
+            | OAuth1aConnected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuth1aConnected(fromAuditJson<OAuth1aConnectedPayload> j)
+    }
+    {
+        EventType = "OAuth1aDisconnected"
+        TryEncode =
+            (function
+            | OAuth1aDisconnected p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuth1aDisconnected(fromAuditJson<OAuth1aDisconnectedPayload> j)
+    }
+    {
+        EventType = "OAuth1aSigningFailed"
+        TryEncode =
+            (function
+            | OAuth1aSigningFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> OAuth1aSigningFailed(fromAuditJson<OAuth1aSigningFailedPayload> j)
+    }
+    {
         EventType = "OAuthTokenRefreshed"
         TryEncode =
             (function
