@@ -177,3 +177,150 @@ module FactsCompose =
                     // never registered, no route, no runtime cost.
                     AITools = app.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
             }
+
+    // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
+    //
+    // A separate, explicit opt-in on top of the fact store: the standing
+    // self-audit is NOT folded into `withFactStore`, so a deployment that
+    // only wants the store is byte-for-byte unchanged (GP 11 / GP 13). The
+    // registrations ride `Extensions.ServiceConfig`:
+    //
+    //   * an `IHostedService` that, once the container is built, resolves
+    //     the composed substrate + the scheduler and schedules the
+    //     coherence job on the opt-in `cadence` (mirrors the model-fit /
+    //     DSR startup-registration pattern — the scheduler and the metric
+    //     registry are only resolvable post-`Build`);
+    //   * an `IHealthCheck` that re-scans the configured scope on each
+    //     probe and reports `Degraded` when any finding stands.
+
+    let private tryRegistry (sp: IServiceProvider) : Grounding.IMetricRegistry option =
+        match sp.GetService(typeof<Grounding.IMetricRegistry>) with
+        | :? Grounding.IMetricRegistry as r -> Some r
+        | _ -> None
+
+    let private registerCoherenceChecks
+        (config: CoherenceConfig)
+        (cadence: Trigger)
+        (scopes: string list)
+        (services: IServiceCollection)
+        : IServiceCollection =
+        services
+            // The health probe surfaces current findings for
+            // `config.HealthScope` — a fresh re-scan per call (GP 12 rule 4).
+            .AddSingleton<HealthChecks.IHealthCheck>(
+                Func<IServiceProvider, HealthChecks.IHealthCheck>(fun sp ->
+                    CoherenceHealthCheck.create (sp.GetRequiredService<IFactStore>()) (tryRegistry sp) config)
+            )
+            // Schedule the standing check on the opt-in cadence. The
+            // scheduler + metric registry are only resolvable from the built
+            // container, so registration happens in a startup hosted service.
+            .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                    { new Microsoft.Extensions.Hosting.IHostedService with
+                        member _.StartAsync(_ct) =
+                            let logger = sp.GetRequiredService<ILogger>()
+
+                            match sp.GetService(typeof<IJobScheduler>) with
+                            | :? IJobScheduler as scheduler ->
+                                let handler =
+                                    CoherenceJobHandler.create
+                                        (sp.GetRequiredService<IFactStore>())
+                                        (tryRegistry sp)
+                                        (sp.GetRequiredService<INotificationChannel>())
+                                        (sp.GetRequiredService<IEventStore>())
+                                        config
+                                        (fun () -> DateTime.UtcNow)
+                                        logger
+
+                                scheduler.RegisterHandler(CoherenceJobHandler.HandlerName, handler)
+
+                                let effectiveScopes = if List.isEmpty scopes then [ "_platform" ] else scopes
+
+                                for scopeId in effectiveScopes do
+                                    let registration: JobRegistration = {
+                                        ScopeId = scopeId
+                                        Handler = CoherenceJobHandler.HandlerName
+                                        Payload = ""
+                                        Trigger = cadence
+                                        Idempotency =
+                                            Some {
+                                                Key = sprintf "coherence-%s" scopeId
+                                                TtlSeconds = 60 * 60 * 24 * 365
+                                            }
+                                        RetryPolicy = JobRetryPolicy.defaults
+                                        ShardKey = None
+                                        Precision = JobPrecision.Minute
+                                        CreatedBy = "_facts.coherence"
+                                        Tags = Map.ofList [ "origin", "fact-coherence" ]
+                                    }
+
+                                    match scheduler.Schedule registration |> Async.RunSynchronously with
+                                    | Ok _ -> ()
+                                    | Error err ->
+                                        logger.Warn(
+                                            sprintf
+                                                "[Phase 563] Failed to schedule the coherence check in scope %s: %A"
+                                                scopeId
+                                                err
+                                        )
+                            | _ ->
+                                logger.Warn(
+                                    "[Phase 563] Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
+                                )
+
+                            System.Threading.Tasks.Task.CompletedTask
+
+                        member _.StopAsync(_ct) =
+                            System.Threading.Tasks.Task.CompletedTask
+                    })
+            )
+        |> ignore
+
+        services
+
+    /// Compose the standing fact-base coherence check with an explicit
+    /// `config` + `cadence` (a cron `Trigger`) + the `scopes` to sweep
+    /// (empty ⇒ `["_platform"]`). Registers the coherence `IHealthCheck` +
+    /// the scheduled sweep on top of an already-enabled fact store. A
+    /// `NoFactStore` deployment (or one that never calls this) is
+    /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
+    /// `withFactStore`:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withCoherenceChecksConfig cfg cadence [ "_platform" ]
+    /// |> ServerApp.run
+    /// ```
+    let withCoherenceChecksConfig
+        (config: CoherenceConfig)
+        (cadence: Trigger)
+        (scopes: string list)
+        (app: ServerApp)
+        : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register = registerCoherenceChecks config cadence scopes
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+
+    /// `withCoherenceChecksConfig` with `CoherenceConfig.defaults` and the
+    /// default `_platform` sweep scope — the one-liner opt-in. `cadence` is
+    /// the recurring `Trigger` the standing check runs on (e.g. a daily
+    /// `CronTrigger`); the check is also fireable on demand and re-scanned
+    /// by the `/ready` health probe.
+    let withCoherenceChecks (cadence: Trigger) (app: ServerApp) : ServerApp =
+        withCoherenceChecksConfig CoherenceConfig.defaults cadence [] app

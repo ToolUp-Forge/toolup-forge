@@ -26,10 +26,6 @@ ToolUp.Facts.BlobFactStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage
 ToolUp.Facts.BlobFactStoreModule.createWithClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithRegistry(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithRegistryAndClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
-ToolUp.Facts.DisclosureTaint (class)
-ToolUp.Facts.DisclosureTaint.analyze(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.FactDerivationGraph, System.String) : ToolUp.Facts.TaintOutcome
-ToolUp.Facts.DisclosureTaint.buildGraph(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.FactDerivationGraph
-ToolUp.Facts.DisclosureTaint.declassifierOf(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.Fact) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationRoutine]
 ToolUp.Facts.CertificateEdge (class)
 ToolUp.Facts.CertificateEdge..ctor(System.String, System.String, System.String)
 ToolUp.Facts.CertificateEdge.From : System.String { get }
@@ -71,6 +67,73 @@ ToolUp.Facts.CertificateSubject+FactCertificate.factId : System.String { get }
 ToolUp.Facts.CertificateSubject+Tags (class)
 ToolUp.Facts.CertificateSubject+Tags.AnswerCertificate : System.Int32 (literal)
 ToolUp.Facts.CertificateSubject+Tags.FactCertificate : System.Int32 (literal)
+ToolUp.Facts.CoherenceCauseClass (class)
+ToolUp.Facts.CoherenceCauseClass.IsMixedVintage : System.Boolean { get }
+ToolUp.Facts.CoherenceCauseClass.IsPartialLoad : System.Boolean { get }
+ToolUp.Facts.CoherenceCauseClass.IsUnclassified : System.Boolean { get }
+ToolUp.Facts.CoherenceCauseClass.IsUnitSlip : System.Boolean { get }
+ToolUp.Facts.CoherenceCauseClass.MixedVintage : ToolUp.Facts.CoherenceCauseClass { get }
+ToolUp.Facts.CoherenceCauseClass.PartialLoad : ToolUp.Facts.CoherenceCauseClass { get }
+ToolUp.Facts.CoherenceCauseClass.Tag : System.Int32 { get }
+ToolUp.Facts.CoherenceCauseClass.Unclassified : ToolUp.Facts.CoherenceCauseClass { get }
+ToolUp.Facts.CoherenceCauseClass.UnitSlip : ToolUp.Facts.CoherenceCauseClass { get }
+ToolUp.Facts.CoherenceCauseClass+Tags (class)
+ToolUp.Facts.CoherenceCauseClass+Tags.MixedVintage : System.Int32 (literal)
+ToolUp.Facts.CoherenceCauseClass+Tags.PartialLoad : System.Int32 (literal)
+ToolUp.Facts.CoherenceCauseClass+Tags.Unclassified : System.Int32 (literal)
+ToolUp.Facts.CoherenceCauseClass+Tags.UnitSlip : System.Int32 (literal)
+ToolUp.Facts.CoherenceCauseClassModule (class)
+ToolUp.Facts.CoherenceCauseClassModule.toString(ToolUp.Facts.CoherenceCauseClass) : System.String
+ToolUp.Facts.CoherenceCheck (class)
+ToolUp.Facts.CoherenceCheck.check(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.CoherenceConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoherenceFinding]
+ToolUp.Facts.CoherenceCheck.run(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Facts.CoherenceConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoherenceFinding]]
+ToolUp.Facts.CoherenceCheck.summarise(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoherenceFinding]) : System.String
+ToolUp.Facts.CoherenceConfig (class)
+ToolUp.Facts.CoherenceConfig..ctor(System.TimeSpan, System.Decimal, System.String)
+ToolUp.Facts.CoherenceConfig.HealthScope : System.String { get }
+ToolUp.Facts.CoherenceConfig.UnitSlipRelativeTolerance : System.Decimal { get }
+ToolUp.Facts.CoherenceConfig.VintageWindow : System.TimeSpan { get }
+ToolUp.Facts.CoherenceConfigModule (class)
+ToolUp.Facts.CoherenceConfigModule.defaults : ToolUp.Facts.CoherenceConfig { get }
+ToolUp.Facts.CoherenceEvents (class)
+ToolUp.Facts.CoherenceEvents.FindingType : System.String (literal)
+ToolUp.Facts.CoherenceFinding (class)
+ToolUp.Facts.CoherenceFinding..ctor(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.TemporalExtent, System.Decimal, System.Decimal, System.Decimal, System.Decimal, ToolUp.Facts.CoherenceCauseClass, System.Int32)
+ToolUp.Facts.CoherenceFinding.Cause : ToolUp.Facts.CoherenceCauseClass { get }
+ToolUp.Facts.CoherenceFinding.ChildCount : System.Int32 { get }
+ToolUp.Facts.CoherenceFinding.Discrepancy : System.Decimal { get }
+ToolUp.Facts.CoherenceFinding.Expected : System.Decimal { get }
+ToolUp.Facts.CoherenceFinding.Found : System.Decimal { get }
+ToolUp.Facts.CoherenceFinding.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.CoherenceFinding.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.CoherenceFinding.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.CoherenceFinding.Tolerance : System.Decimal { get }
+ToolUp.Facts.CoherenceFindingEvent (class)
+ToolUp.Facts.CoherenceFindingEvent..ctor(System.String, System.String, System.DateTime, System.DateTime, System.Decimal, System.Decimal, System.Decimal, System.Decimal, System.String, System.Int32, System.DateTime)
+ToolUp.Facts.CoherenceFindingEvent.Cause : System.String { get }
+ToolUp.Facts.CoherenceFindingEvent.ChildCount : System.Int32 { get }
+ToolUp.Facts.CoherenceFindingEvent.DetectedAt : System.DateTime { get }
+ToolUp.Facts.CoherenceFindingEvent.Discrepancy : System.Decimal { get }
+ToolUp.Facts.CoherenceFindingEvent.Expected : System.Decimal { get }
+ToolUp.Facts.CoherenceFindingEvent.Found : System.Decimal { get }
+ToolUp.Facts.CoherenceFindingEvent.Metric : System.String { get }
+ToolUp.Facts.CoherenceFindingEvent.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.CoherenceFindingEvent.PeriodTo : System.DateTime { get }
+ToolUp.Facts.CoherenceFindingEvent.Subject : System.String { get }
+ToolUp.Facts.CoherenceFindingEvent.Tolerance : System.Decimal { get }
+ToolUp.Facts.CoherenceHealthCheck (class)
+ToolUp.Facts.CoherenceHealthCheck..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.CoherenceConfig)
+ToolUp.Facts.CoherenceHealthCheckModule (class)
+ToolUp.Facts.CoherenceHealthCheckModule.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.CoherenceConfig) : ToolUp.Platform.HealthChecks+IHealthCheck
+ToolUp.Facts.CoherenceJobHandler (class)
+ToolUp.Facts.CoherenceJobHandler..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.INotificationChannel, ToolUp.Platform.IEventStore, ToolUp.Facts.CoherenceConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ILogger)
+ToolUp.Facts.CoherenceJobHandlerModule (class)
+ToolUp.Facts.CoherenceJobHandlerModule.HandlerName : System.String (literal)
+ToolUp.Facts.CoherenceJobHandlerModule.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.INotificationChannel, ToolUp.Platform.IEventStore, ToolUp.Facts.CoherenceConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Facts.DisclosureTaint (class)
+ToolUp.Facts.DisclosureTaint.analyze(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.FactDerivationGraph, System.String) : ToolUp.Facts.TaintOutcome
+ToolUp.Facts.DisclosureTaint.buildGraph(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.FactDerivationGraph
+ToolUp.Facts.DisclosureTaint.declassifierOf(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.Fact) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationRoutine]
 ToolUp.Facts.FactAssertedEvent (class)
 ToolUp.Facts.FactAssertedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Facts.FactAssertedEvent.AsOf : System.DateTime { get }
@@ -147,6 +210,8 @@ ToolUp.Facts.FactWithCompetition..ctor(ToolUp.Facts.Fact, Microsoft.FSharp.Colle
 ToolUp.Facts.FactWithCompetition.CompetingMethods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactWithCompetition.Fact : ToolUp.Facts.Fact { get }
 ToolUp.Facts.FactsCompose (class)
+ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.GroundingCertificate (class)
 ToolUp.Facts.GroundingCertificate..ctor(ToolUp.Facts.GroundingCertificateBody, ToolUp.ArtefactSigning.ArtefactSignature)
@@ -181,17 +246,6 @@ ToolUp.Facts.IFactStore.QuerySupersessionChain(System.String, System.String) : M
 ToolUp.Facts.IFactStore.QueryWithCompetition(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
 ToolUp.Facts.IGroundingCertificateIssuer (interface)
 ToolUp.Facts.IGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Facts.CertificateError]]
-ToolUp.Facts.PlanEvents (class)
-ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
-ToolUp.Facts.TaintCrossing (class)
-ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String)
-ToolUp.Facts.TaintCrossing.DeclassifierFactId : System.String { get }
-ToolUp.Facts.TaintCrossing.OperationId : System.String { get }
-ToolUp.Facts.TaintCrossing.Rationale : System.String { get }
-ToolUp.Facts.TaintOutcome (class)
-ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])
-ToolUp.Facts.TaintOutcome.Crossings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing] { get }
-ToolUp.Facts.TaintOutcome.InheritedPolicyRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.InvalidationOutcome (class)
 ToolUp.Facts.InvalidationOutcome.IsDeferredToQuery : System.Boolean { get }
 ToolUp.Facts.InvalidationOutcome.IsEnqueued : System.Boolean { get }
@@ -229,3 +283,12 @@ ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecompute(ToolUp.Platform.IJobSch
 ToolUp.Facts.RecomputeJobPayload (class)
 ToolUp.Facts.RecomputeJobPayload..ctor(System.String)
 ToolUp.Facts.RecomputeJobPayload.factId : System.String { get }
+ToolUp.Facts.TaintCrossing (class)
+ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String)
+ToolUp.Facts.TaintCrossing.DeclassifierFactId : System.String { get }
+ToolUp.Facts.TaintCrossing.OperationId : System.String { get }
+ToolUp.Facts.TaintCrossing.Rationale : System.String { get }
+ToolUp.Facts.TaintOutcome (class)
+ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])
+ToolUp.Facts.TaintOutcome.Crossings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing] { get }
+ToolUp.Facts.TaintOutcome.InheritedPolicyRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

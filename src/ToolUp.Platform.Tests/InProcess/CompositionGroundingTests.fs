@@ -25,6 +25,7 @@ let private metric id : MetricDefinition = {
     ProducingOperation = None
     CanonicalMethod = None
     RecomputePolicy = None
+    RollUp = None
 }
 
 let private subject id : SubjectDefinition = {

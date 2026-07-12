@@ -33,6 +33,7 @@
         <Compile Include="Server\GroundingCertificate.fs" />
         <Compile Include="Server\FactInvalidation.fs" />
         <Compile Include="Server\RecomputeJobHandler.fs" />
+        <Compile Include="Server\CoherenceCheck.fs" />
         <Compile Include="Server\FactsCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
