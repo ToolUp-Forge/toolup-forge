@@ -53,6 +53,13 @@ ToolUp.Facts.FactEvents (class)
 ToolUp.Facts.FactEvents.AssertedType : System.String (literal)
 ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
 ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
+ToolUp.Facts.FactInvalidation (class)
+ToolUp.Facts.FactInvalidation.deriveFreshness(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
+ToolUp.Facts.FactInvalidation.invalidatedHeads(ToolUp.Facts.IFactStore, System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
+ToolUp.Facts.FactInvalidation.invalidationSet(ToolUp.Platform.ILineageStore, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]]
+ToolUp.Facts.FactInvalidation.isInvalidated(Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Facts.Fact) : System.Boolean
+ToolUp.Facts.FactInvalidation.policyFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.Fact) : ToolUp.Platform.Grounding.RecomputePolicy
+ToolUp.Facts.FactInvalidation.recomputeNow(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact], System.String]]
 ToolUp.Facts.FactQuery (class)
 ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)
 ToolUp.Facts.FactQuery.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
@@ -94,11 +101,48 @@ ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Plat
 ToolUp.Facts.IAnswerPlanner (interface)
 ToolUp.Facts.IAnswerPlanner.Plan(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AnswerPlan]
 ToolUp.Facts.IAnswerPlanner.Record(System.String, System.String, ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Facts.IFactRecomputer (interface)
+ToolUp.Facts.IFactRecomputer.Recompute(System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactDraft], System.String]]
 ToolUp.Facts.IFactStore (interface)
 ToolUp.Facts.IFactStore.Assert(System.String, ToolUp.Facts.FactDraft) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, System.String]]
 ToolUp.Facts.IFactStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.Query(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.QuerySupersessionChain(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.QueryWithCompetition(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
+ToolUp.Facts.InvalidationOutcome (class)
+ToolUp.Facts.InvalidationOutcome.IsDeferredToQuery : System.Boolean { get }
+ToolUp.Facts.InvalidationOutcome.IsEnqueued : System.Boolean { get }
+ToolUp.Facts.InvalidationOutcome.IsScheduleFailed : System.Boolean { get }
+ToolUp.Facts.InvalidationOutcome.IsSurfacedOnly : System.Boolean { get }
+ToolUp.Facts.InvalidationOutcome.Tag : System.Int32 { get }
+ToolUp.Facts.InvalidationOutcome+DeferredToQuery (class)
+ToolUp.Facts.InvalidationOutcome+DeferredToQuery.factId : System.String { get }
+ToolUp.Facts.InvalidationOutcome+Enqueued (class)
+ToolUp.Facts.InvalidationOutcome+Enqueued.factId : System.String { get }
+ToolUp.Facts.InvalidationOutcome+Enqueued.jobId : System.Guid { get }
+ToolUp.Facts.InvalidationOutcome+ScheduleFailed (class)
+ToolUp.Facts.InvalidationOutcome+ScheduleFailed.error : System.String { get }
+ToolUp.Facts.InvalidationOutcome+ScheduleFailed.factId : System.String { get }
+ToolUp.Facts.InvalidationOutcome+SurfacedOnly (class)
+ToolUp.Facts.InvalidationOutcome+SurfacedOnly.factId : System.String { get }
+ToolUp.Facts.InvalidationOutcome+Tags (class)
+ToolUp.Facts.InvalidationOutcome+Tags.DeferredToQuery : System.Int32 (literal)
+ToolUp.Facts.InvalidationOutcome+Tags.Enqueued : System.Int32 (literal)
+ToolUp.Facts.InvalidationOutcome+Tags.ScheduleFailed : System.Int32 (literal)
+ToolUp.Facts.InvalidationOutcome+Tags.SurfacedOnly : System.Int32 (literal)
+ToolUp.Facts.NoFactRecomputer (class)
+ToolUp.Facts.NoFactRecomputer..ctor()
 ToolUp.Facts.PlanEvents (class)
 ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
+ToolUp.Facts.RecomputeJobHandler (class)
+ToolUp.Facts.RecomputeJobHandler..ctor(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, ToolUp.Platform.ILogger)
+ToolUp.Facts.RecomputeJobHandlerModule (class)
+ToolUp.Facts.RecomputeJobHandlerModule.HandlerName : System.String (literal)
+ToolUp.Facts.RecomputeJobHandlerModule.create(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Facts.RecomputeJobHandlerModule.declaration(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, ToolUp.Platform.ILogger) : ToolUp.Platform.ScheduledJobDeclaration
+ToolUp.Facts.RecomputeJobHandlerModule.payloadFor(System.String) : System.String
+ToolUp.Facts.RecomputeJobHandlerModule.reactToDataChange(ToolUp.Platform.ILineageStore, ToolUp.Facts.IFactStore, ToolUp.Platform.IJobScheduler, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.InvalidationOutcome]]
+ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecompute(ToolUp.Platform.IJobScheduler, System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
+ToolUp.Facts.RecomputeJobPayload (class)
+ToolUp.Facts.RecomputeJobPayload..ctor(System.String)
+ToolUp.Facts.RecomputeJobPayload.factId : System.String { get }

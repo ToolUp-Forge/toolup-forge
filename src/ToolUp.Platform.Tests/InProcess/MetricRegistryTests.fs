@@ -24,6 +24,7 @@ let private metric id (op: string option) : MetricDefinition = {
     Staleness = UntilSuperseded
     ProducingOperation = op
     CanonicalMethod = None
+    RecomputePolicy = None
 }
 
 let private subject id (levels: string list) : SubjectDefinition = {

@@ -3296,7 +3296,7 @@ ToolUp.Platform.Grounding.IMetricRegistry.Subjects : Microsoft.FSharp.Collection
 ToolUp.Platform.Grounding.IMetricRegistry.TryGetMetric(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.MetricDefinition]
 ToolUp.Platform.Grounding.IMetricRegistry.TryGetSubject(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition]
 ToolUp.Platform.Grounding.MetricDefinition (class)
-ToolUp.Platform.Grounding.MetricDefinition..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.Grounding.DirectionOfBetter, System.String, ToolUp.Platform.Grounding.StalenessPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Grounding.MetricDefinition..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.Grounding.DirectionOfBetter, System.String, ToolUp.Platform.Grounding.StalenessPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RecomputePolicy])
 ToolUp.Platform.Grounding.MetricDefinition.CanonicalMethod : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Grounding.MetricDefinition.Dimensionality : System.String { get }
 ToolUp.Platform.Grounding.MetricDefinition.Direction : ToolUp.Platform.Grounding.DirectionOfBetter { get }
@@ -3304,6 +3304,7 @@ ToolUp.Platform.Grounding.MetricDefinition.DisplayFormat : System.String { get }
 ToolUp.Platform.Grounding.MetricDefinition.Id : System.String { get }
 ToolUp.Platform.Grounding.MetricDefinition.Name : System.String { get }
 ToolUp.Platform.Grounding.MetricDefinition.ProducingOperation : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Grounding.MetricDefinition.RecomputePolicy : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RecomputePolicy] { get }
 ToolUp.Platform.Grounding.MetricDefinition.Staleness : ToolUp.Platform.Grounding.StalenessPolicy { get }
 ToolUp.Platform.Grounding.MetricDefinition.Unit : System.String { get }
 ToolUp.Platform.Grounding.MetricRegistration (class)
@@ -3314,6 +3315,20 @@ ToolUp.Platform.Grounding.MetricRegistry (class)
 ToolUp.Platform.Grounding.MetricRegistry.build(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration]) : ToolUp.Platform.Grounding.IMetricRegistry
 ToolUp.Platform.Grounding.MetricRegistry.empty : ToolUp.Platform.Grounding.IMetricRegistry { get }
 ToolUp.Platform.Grounding.MetricRegistry.tryBuild(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.IMetricRegistry, System.String]
+ToolUp.Platform.Grounding.RecomputePolicy (class)
+ToolUp.Platform.Grounding.RecomputePolicy.Eager : ToolUp.Platform.Grounding.RecomputePolicy { get }
+ToolUp.Platform.Grounding.RecomputePolicy.IsEager : System.Boolean { get }
+ToolUp.Platform.Grounding.RecomputePolicy.IsManual : System.Boolean { get }
+ToolUp.Platform.Grounding.RecomputePolicy.IsOnQuery : System.Boolean { get }
+ToolUp.Platform.Grounding.RecomputePolicy.Manual : ToolUp.Platform.Grounding.RecomputePolicy { get }
+ToolUp.Platform.Grounding.RecomputePolicy.OnQuery : ToolUp.Platform.Grounding.RecomputePolicy { get }
+ToolUp.Platform.Grounding.RecomputePolicy.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.RecomputePolicy+Tags (class)
+ToolUp.Platform.Grounding.RecomputePolicy+Tags.Eager : System.Int32 (literal)
+ToolUp.Platform.Grounding.RecomputePolicy+Tags.Manual : System.Int32 (literal)
+ToolUp.Platform.Grounding.RecomputePolicy+Tags.OnQuery : System.Int32 (literal)
+ToolUp.Platform.Grounding.RecomputePolicyModule (class)
+ToolUp.Platform.Grounding.RecomputePolicyModule.resolve(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RecomputePolicy]) : ToolUp.Platform.Grounding.RecomputePolicy
 ToolUp.Platform.Grounding.StalenessPolicy (class)
 ToolUp.Platform.Grounding.StalenessPolicy.IsFreshFor : System.Boolean { get }
 ToolUp.Platform.Grounding.StalenessPolicy.IsUntilSuperseded : System.Boolean { get }

@@ -24,6 +24,7 @@ let private metric id : MetricDefinition = {
     Staleness = UntilSuperseded
     ProducingOperation = None
     CanonicalMethod = None
+    RecomputePolicy = None
 }
 
 let private subject id : SubjectDefinition = {

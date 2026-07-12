@@ -205,6 +205,8 @@
         <Compile Include="InProcess\FactStoreTests.fs" />
         <!-- Phase 566 — canonical-method selection for competing facts (D19 closure). -->
         <Compile Include="InProcess\CanonicalMethodTests.fs" />
+        <!-- Phase 561 — reactive fact recomputation: invalidation walk + per-policy execution. -->
+        <Compile Include="InProcess\FactInvalidationTests.fs" />
         <!-- Phase 524 — provenance chain traversal. -->
         <Compile Include="InProcess\ProvenanceGraphTests.fs" />
         <!-- Grounding-plane wiring follow-ups: fact-store compose root, evidence adapter, drift parity. -->

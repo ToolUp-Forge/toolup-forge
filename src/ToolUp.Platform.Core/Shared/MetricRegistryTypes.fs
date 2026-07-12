@@ -67,6 +67,41 @@ type StalenessPolicy =
     /// changes (lineage-driven; the reactive-recomputation policy).
     | UntilUpstreamChange
 
+/// What a fact carrying this metric does when the lineage walk (Phase 8a)
+/// marks it `InputsChanged` — an upstream data-object version it was
+/// computed from has been superseded (Phase 561, continuous-intelligence
+/// ladder rung 2). The invalidation state is *derived* (never a stored
+/// mutable flag — law L1); this policy only governs what *executes* in
+/// response. An **undeclared** metric (`MetricDefinition.RecomputePolicy =
+/// None`) behaves as `Manual`: nothing recomputes unbidden on upgrade
+/// (GP 11), so a deployment that declares no policy is byte-for-byte
+/// unchanged (GP 13).
+type RecomputePolicy =
+    /// On invalidation, enqueue a recompute job through `IJobScheduler`
+    /// (GP 12 job-scheduler rules). The job re-asserts through the ordinary
+    /// `IFactStore.Assert` path, so supersession edges stay derived and the
+    /// audit trail is the same one assert always writes. The eager posture
+    /// — the fact base chases its inputs the moment they move.
+    | Eager
+    /// On invalidation, do nothing until the next store read of the
+    /// affected lineage drives the recompute inline. Amortises cost against
+    /// demand — a fact nobody reads never recomputes.
+    | OnQuery
+    /// On invalidation, surface the changed state only — freshness derives
+    /// stale under `UntilUpstreamChange`, and a human or an explicit
+    /// trigger drives any recompute. The default (an undeclared metric).
+    | Manual
+
+/// Resolution for an optional `MetricDefinition.RecomputePolicy`
+/// declaration — the undeclared metric (`None`) is `Manual` (GP 11:
+/// nothing recomputes unbidden).
+[<RequireQualifiedAccess>]
+module RecomputePolicy =
+
+    /// The effective policy for an optional declaration — `None` ⇒
+    /// `Manual`.
+    let resolve (declared: RecomputePolicy option) : RecomputePolicy = declared |> Option.defaultValue Manual
+
 /// A registered business quantity a module computes. Identity is the
 /// stable `Id` string (a `ComponentId`-class token, never the display
 /// `Name`) — two modules declaring the same `Id` is a compose-time
@@ -119,6 +154,15 @@ type MetricDefinition = {
     /// never silent — competitors stay fully queryable, and the query
     /// surface carries a derived competing-methods indicator (GP 9).
     CanonicalMethod: string option
+    /// Optional **recompute policy** (Phase 561 — reactive fact
+    /// recomputation). Governs what executes when the lineage walk marks a
+    /// fact carrying this metric `InputsChanged`: `Eager` enqueues a
+    /// recompute job, `OnQuery` recomputes lazily at the next read, `Manual`
+    /// surfaces the changed state only. `None` (the default) resolves to
+    /// `Manual` via `RecomputePolicy.resolve` — an undeclared metric
+    /// recomputes nothing unbidden, so the composition is byte-for-byte
+    /// unchanged (GP 11 / GP 13).
+    RecomputePolicy: RecomputePolicy option
 }
 
 /// Matching semantics for a `MetricDefinition.CanonicalMethod` selector

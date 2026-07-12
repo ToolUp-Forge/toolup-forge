@@ -30,6 +30,7 @@ A `Grounding.MetricDefinition` describes one quantity:
 | `Staleness` | `FreshFor of TimeSpan` / `UntilSuperseded` / `UntilUpstreamChange` — how a fact's freshness is *derived* (no mutable flag is ever stored). |
 | `ProducingOperation` | Optional catalog-operation id that produces this metric. When present, a planner can map a missing fact → this operation → its input schema → the data catalog. |
 | `CanonicalMethod` | Optional canonical-method selector (Phase 566). When several methods compute this metric over one (subject, period), a *method-less* fact query resolves to this method's lineage by default — matched against method-identity strings (`computed:op:ver:hash` / `asserted:principal` / `imported:cert`), exactly or as a `:`-boundary prefix (`"computed:rollup"` matches every version of `rollup`). `None` = no default; every competing head surfaces. Competitors stay queryable either way, and the query surface discloses them (GP 9). |
+| `RecomputePolicy` | Optional reactive-recomputation policy (Phase 561). When an upstream data-object version a fact was computed from is superseded, the lineage walk marks the fact `InputsChanged` (derived, never a stored flag); this policy governs what executes — `Eager` enqueues a recompute job (through `IJobScheduler`) that re-asserts on the ordinary `Assert` path, `OnQuery` recomputes lazily at the next read, `Manual` surfaces the changed state only. `None` = `Manual` (nothing recomputes unbidden; the composition is byte-for-byte unchanged). |
 
 A `Grounding.SubjectDefinition` declares a hierarchy — a *dimension* of
 the entity space:
@@ -61,7 +62,8 @@ let serverModule =
           DisplayFormat = "C0"
           Staleness = FreshFor (System.TimeSpan.FromDays 1.0)
           ProducingOperation = Some "sales.rollup"
-          CanonicalMethod = None }
+          CanonicalMethod = None
+          RecomputePolicy = None }
       ]
     |> ServerModule.declareSubjects [
         { Id = "product_hierarchy"
