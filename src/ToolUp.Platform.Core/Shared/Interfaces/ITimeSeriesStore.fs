@@ -161,3 +161,12 @@ type ITimeSeriesStore =
 
     /// The series names that have at least one point under `scopeId`.
     abstract ListSeries: scopeId: string -> Async<string list>
+
+    /// Phase 439 — delete every point of (`scopeId`, `series`). Idempotent:
+    /// deleting an absent series is `Ok ()`, not an error. Scope-isolated
+    /// (GP 4) — a delete in scope A can never remove scope B's identically-
+    /// named series. After a successful delete a `QueryRange` for the series
+    /// returns `[]` and `ListSeries` no longer lists it. Whole-series only —
+    /// range/partial deletion is intentionally out of scope (a retention
+    /// sweep re-appends what it wants to keep; the series key is the shard).
+    abstract DeleteSeries: scopeId: string * series: string -> Async<Result<unit, TimeSeriesError>>

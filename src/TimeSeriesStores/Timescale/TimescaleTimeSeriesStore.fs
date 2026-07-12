@@ -148,6 +148,22 @@ type TimescaleTimeSeriesStore(dataSource: NpgsqlDataSource, ?table: string) =
                         return Error(TimeSeriesError.StorageFailure ex.Message)
         }
 
+        member _.DeleteSeries(scopeId: string, series: string) = async {
+            // Idempotent by construction — a DELETE that matches no rows
+            // affects 0 rows and still returns Ok. Scope-isolated by the
+            // `scope = @s` predicate (GP 4).
+            try
+                use cmd =
+                    dataSource.CreateCommand($"DELETE FROM {table} WHERE scope = @s AND series = @series")
+
+                cmd.Parameters.AddWithValue("s", scopeId) |> ignore
+                cmd.Parameters.AddWithValue("series", series) |> ignore
+                let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+                return Ok()
+            with ex ->
+                return Error(TimeSeriesError.StorageFailure ex.Message)
+        }
+
         member _.ListSeries(scopeId: string) = async {
             try
                 use cmd =

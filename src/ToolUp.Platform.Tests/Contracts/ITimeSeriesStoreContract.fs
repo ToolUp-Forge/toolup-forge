@@ -163,6 +163,50 @@ let tests (name: string) (factory: unit -> ITimeSeriesStore) =
             Expect.isFalse (series |> List.contains "disk") "scope-b's series is not listed under scope-a"
         }
 
+        testCaseAsync "DeleteSeries removes the series; QueryRange then empty and ListSeries drops it"
+        <| async {
+            let store = factory ()
+            let! _ = store.Append("scope-a", "cpu", [ at 0.0 1.0; at 10.0 2.0 ])
+            let! _ = store.Append("scope-a", "mem", [ at 0.0 3.0 ])
+
+            let! deleted = store.DeleteSeries("scope-a", "cpu")
+            Expect.isOk deleted "delete succeeds"
+
+            let! cpu = store.QueryRange("scope-a", "cpu", t0, t0.AddSeconds 60.0, None)
+            Expect.isEmpty (ok cpu) "deleted series has no points"
+
+            let! series = store.ListSeries "scope-a"
+            Expect.isFalse (series |> List.contains "cpu") "deleted series is not listed"
+            Expect.contains series "mem" "sibling series under the same scope survives"
+        }
+
+        testCaseAsync "DeleteSeries is idempotent — deleting an absent series is Ok"
+        <| async {
+            let store = factory ()
+            let! first = store.DeleteSeries("scope-a", "ghost")
+            Expect.isOk first "deleting a never-written series is Ok"
+
+            let! _ = store.Append("scope-a", "s", [ at 0.0 1.0 ])
+            let! once = store.DeleteSeries("scope-a", "s")
+            Expect.isOk once "first delete Ok"
+            let! twice = store.DeleteSeries("scope-a", "s")
+            Expect.isOk twice "re-delete of an already-deleted series Ok"
+        }
+
+        testCaseAsync "DeleteSeries is scope-isolated — deleting scope A's series leaves scope B's (GP 4)"
+        <| async {
+            let store = factory ()
+            let! _ = store.Append("scope-a", "s", [ at 0.0 1.0 ])
+            let! _ = store.Append("scope-b", "s", [ at 0.0 999.0 ])
+
+            let! _ = store.DeleteSeries("scope-a", "s")
+
+            let! a = store.QueryRange("scope-a", "s", t0, t0.AddSeconds 10.0, None)
+            Expect.isEmpty (ok a) "scope A's series is gone"
+            let! b = store.QueryRange("scope-b", "s", t0, t0.AddSeconds 10.0, None)
+            Expect.equal (ok b |> List.map _.Value) [ 999.0 ] "scope B's identically-named series is untouched"
+        }
+
         testCaseAsync "Empty append is a no-op Ok"
         <| async {
             let store = factory ()

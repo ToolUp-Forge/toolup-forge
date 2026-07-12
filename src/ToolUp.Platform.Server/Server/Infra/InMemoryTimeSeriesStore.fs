@@ -78,6 +78,18 @@ type InMemoryTimeSeriesStore() =
             | _ -> return []
         }
 
+        member _.DeleteSeries(scopeId: string, series: string) = async {
+            // Idempotent — dropping the per-series slot; an absent scope or
+            // series is a no-op Ok. Scope isolation is structural (the outer
+            // dictionary is keyed by scopeId), so this can never reach
+            // another scope's identically-named series.
+            match data.TryGetValue scopeId with
+            | true, sm -> sm.TryRemove series |> ignore
+            | _ -> ()
+
+            return Ok()
+        }
+
 module InMemoryTimeSeriesStore =
     /// Construct the dev/test in-memory `ITimeSeriesStore`.
     let create () : ITimeSeriesStore =
