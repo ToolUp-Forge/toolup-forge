@@ -65,6 +65,36 @@ module FactsCompose =
 
                     FactStoreFactResolver.create (sp.GetRequiredService<IFactStore>()) registry)
             )
+            // Phase 560 — the grounded answer planner rides the same
+            // knob: question → (subject, metric, period) triples →
+            // typed PlanStep resolution, recorded into the answer's
+            // provenance chain. The registry supplies the vocabulary
+            // (none composed ⇒ every triple refuses honestly as
+            // unrecognised); the 67b structured-output compiler arms
+            // only when a deployment registers an `IAIProvider` in DI —
+            // otherwise questions refuse with the typed
+            // missing-compiler reason (GP 9 / GP 13, no cost and no
+            // guessing without the substrate).
+            .AddSingleton<IAnswerPlanner>(
+                Func<IServiceProvider, IAnswerPlanner>(fun sp ->
+                    let registry =
+                        match sp.GetService(typeof<Grounding.IMetricRegistry>) with
+                        | :? Grounding.IMetricRegistry as r -> Some r
+                        | _ -> None
+
+                    let compiler =
+                        match sp.GetService(typeof<ToolUp.Platform.AI.IAIProvider>) with
+                        | :? ToolUp.Platform.AI.IAIProvider as provider ->
+                            AnswerPlanner.structuredCompiler provider registry
+                        | _ -> AnswerPlanner.noCompiler
+
+                    AnswerPlanner.create
+                        (sp.GetRequiredService<IFactStore>())
+                        (sp.GetRequiredService<IFactDisclosureGate>())
+                        registry
+                        (sp.GetRequiredService<IEventStore>())
+                        compiler)
+            )
 
     /// Compose the grounding fact store per `ServerConfig.FactStore`.
     /// `EnabledFactStore` registers `IFactStore` (`BlobFactStore`) +

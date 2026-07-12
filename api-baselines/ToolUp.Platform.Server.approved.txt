@@ -3469,13 +3469,16 @@ ToolUp.Platform.ProvenanceEdgeKind.EvidenceFor : ToolUp.Platform.ProvenanceEdgeK
 ToolUp.Platform.ProvenanceEdgeKind.IsCitesFact : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsDerivedFrom : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsEvidenceFor : System.Boolean { get }
+ToolUp.Platform.ProvenanceEdgeKind.IsPlannedBy : System.Boolean { get }
 ToolUp.Platform.ProvenanceEdgeKind.IsSupersedes : System.Boolean { get }
+ToolUp.Platform.ProvenanceEdgeKind.PlannedBy : ToolUp.Platform.ProvenanceEdgeKind { get }
 ToolUp.Platform.ProvenanceEdgeKind.Supersedes : ToolUp.Platform.ProvenanceEdgeKind { get }
 ToolUp.Platform.ProvenanceEdgeKind.Tag : System.Int32 { get }
 ToolUp.Platform.ProvenanceEdgeKind+Tags (class)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.CitesFact : System.Int32 (literal)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.DerivedFrom : System.Int32 (literal)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.EvidenceFor : System.Int32 (literal)
+ToolUp.Platform.ProvenanceEdgeKind+Tags.PlannedBy : System.Int32 (literal)
 ToolUp.Platform.ProvenanceEdgeKind+Tags.Supersedes : System.Int32 (literal)
 ToolUp.Platform.ProvenanceGraph (class)
 ToolUp.Platform.ProvenanceGraph.create(ToolUp.Platform.ILineageStore) : ToolUp.Platform.IProvenanceGraph
@@ -3488,10 +3491,12 @@ ToolUp.Platform.ProvenanceNode.Kind : ToolUp.Platform.ProvenanceNodeKind { get }
 ToolUp.Platform.ProvenanceNode.Label : System.String { get }
 ToolUp.Platform.ProvenanceNodeKind (class)
 ToolUp.Platform.ProvenanceNodeKind.AnalysisResult : ToolUp.Platform.ProvenanceNodeKind { get }
+ToolUp.Platform.ProvenanceNodeKind.AnswerPlanNode : ToolUp.Platform.ProvenanceNodeKind { get }
 ToolUp.Platform.ProvenanceNodeKind.ConversationMessage : ToolUp.Platform.ProvenanceNodeKind { get }
 ToolUp.Platform.ProvenanceNodeKind.DataObjectVersion : ToolUp.Platform.ProvenanceNodeKind { get }
 ToolUp.Platform.ProvenanceNodeKind.FactNode : ToolUp.Platform.ProvenanceNodeKind { get }
 ToolUp.Platform.ProvenanceNodeKind.IsAnalysisResult : System.Boolean { get }
+ToolUp.Platform.ProvenanceNodeKind.IsAnswerPlanNode : System.Boolean { get }
 ToolUp.Platform.ProvenanceNodeKind.IsConversationMessage : System.Boolean { get }
 ToolUp.Platform.ProvenanceNodeKind.IsDataObjectVersion : System.Boolean { get }
 ToolUp.Platform.ProvenanceNodeKind.IsFactNode : System.Boolean { get }
@@ -3500,6 +3505,7 @@ ToolUp.Platform.ProvenanceNodeKind.NarrativeDocument : ToolUp.Platform.Provenanc
 ToolUp.Platform.ProvenanceNodeKind.Tag : System.Int32 { get }
 ToolUp.Platform.ProvenanceNodeKind+Tags (class)
 ToolUp.Platform.ProvenanceNodeKind+Tags.AnalysisResult : System.Int32 (literal)
+ToolUp.Platform.ProvenanceNodeKind+Tags.AnswerPlanNode : System.Int32 (literal)
 ToolUp.Platform.ProvenanceNodeKind+Tags.ConversationMessage : System.Int32 (literal)
 ToolUp.Platform.ProvenanceNodeKind+Tags.DataObjectVersion : System.Int32 (literal)
 ToolUp.Platform.ProvenanceNodeKind+Tags.FactNode : System.Int32 (literal)
