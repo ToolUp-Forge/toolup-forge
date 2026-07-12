@@ -58,6 +58,7 @@ let allTests =
         // surfaces), UntilUpstreamChange freshness, and the recompute job
         // handler (idempotent re-assert, no-op on unchanged / missing).
         FactInvalidationTests.tests
+        CoherenceCheckTests.tests
         // Phase 524 — provenance chain traversal: seeded ingest→run→fact→
         // message chain walks both directions; disclosure carried; scope isolation.
         ProvenanceGraphTests.tests

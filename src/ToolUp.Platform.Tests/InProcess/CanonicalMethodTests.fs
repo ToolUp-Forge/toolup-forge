@@ -37,6 +37,7 @@ let private metricWithCanonical (id: string) (canonical: string option) : Metric
     ProducingOperation = None
     CanonicalMethod = canonical
     RecomputePolicy = None
+    RollUp = None
 }
 
 /// A registry declaring `revenue` canonical to the `rollup` operation

@@ -207,6 +207,8 @@
         <Compile Include="InProcess\CanonicalMethodTests.fs" />
         <!-- Phase 561 — reactive fact recomputation: invalidation walk + per-policy execution. -->
         <Compile Include="InProcess\FactInvalidationTests.fs" />
+        <!-- Phase 563 — fact-base coherence checking: comparability, cause classes, standing execution. -->
+        <Compile Include="InProcess\CoherenceCheckTests.fs" />
         <!-- Phase 524 — provenance chain traversal. -->
         <Compile Include="InProcess\ProvenanceGraphTests.fs" />
         <!-- Grounding-plane wiring follow-ups: fact-store compose root, evidence adapter, drift parity. -->

@@ -102,6 +102,45 @@ module RecomputePolicy =
     /// `Manual`.
     let resolve (declared: RecomputePolicy option) : RecomputePolicy = declared |> Option.defaultValue Manual
 
+/// How a metric's value at a parent subject relates to its values at the
+/// child subjects one level down — the declared **roll-up semantics** the
+/// fact-base coherence check (Phase 563) reads to decide whether a parent
+/// fact and its direct children are mechanically comparable. Roll-up
+/// semantics are declared once, on the metric, and applied over every
+/// registered subject hierarchy — comparability is *derived* from this
+/// declaration, never configured per fact.
+type RollUp =
+    /// The value aggregates by **summation** across the hierarchy: a
+    /// parent's value equals the sum of its direct children's values for
+    /// the same metric and period, within `tolerance` (absolute, in the
+    /// metric's unit). Currency and count metrics are the canonical
+    /// additive case. `tolerance` absorbs rounding / display-format drift
+    /// without flagging a real inconsistency — it is registry data, carried
+    /// here, never attached to an individual fact.
+    | Additive of tolerance: decimal
+    /// The value does **not** aggregate by summation (a ratio, an average,
+    /// a share, an index): a parent is not the sum of its children, so
+    /// there is no decidable cross-level relationship to test. The coherence
+    /// check excludes the metric (GP 9 — it never guesses a relationship the
+    /// declaration does not assert).
+    | NonAdditive
+
+/// Resolution for an optional `MetricDefinition.RollUp` declaration.
+[<RequireQualifiedAccess>]
+module RollUp =
+
+    /// The additive summation tolerance a metric's roll-up declaration
+    /// carries, or `None` when the metric is `NonAdditive` or undeclared —
+    /// the single signal the coherence check gates comparability on. An
+    /// undeclared metric (`None`) is treated as non-additive: it is excluded
+    /// from coherence checking, so a deployment that declares nothing is
+    /// byte-for-byte unchanged (GP 11 / GP 13).
+    let additiveTolerance (declared: RollUp option) : decimal option =
+        match declared with
+        | Some(Additive tolerance) -> Some tolerance
+        | Some NonAdditive
+        | None -> None
+
 /// A registered business quantity a module computes. Identity is the
 /// stable `Id` string (a `ComponentId`-class token, never the display
 /// `Name`) — two modules declaring the same `Id` is a compose-time
@@ -163,6 +202,17 @@ type MetricDefinition = {
     /// recomputes nothing unbidden, so the composition is byte-for-byte
     /// unchanged (GP 11 / GP 13).
     RecomputePolicy: RecomputePolicy option
+    /// Optional **roll-up semantics** (Phase 563 — fact-base coherence
+    /// checking). Declares how the metric aggregates across a subject
+    /// hierarchy: `Additive tolerance` makes a parent's value comparable to
+    /// the sum of its direct children's (within `tolerance`), so the standing
+    /// coherence check can flag a cross-level inconsistency (mixed-vintage
+    /// aggregate, partial load, unit slip); `NonAdditive` excludes it. `None`
+    /// (the default) is treated as non-additive — a metric with no
+    /// declaration is never coherence-checked, so the composition is
+    /// byte-for-byte unchanged (GP 11 / GP 13). Comparability is derived
+    /// wholly from this registry declaration, never configured per fact.
+    RollUp: RollUp option
 }
 
 /// Matching semantics for a `MetricDefinition.CanonicalMethod` selector
