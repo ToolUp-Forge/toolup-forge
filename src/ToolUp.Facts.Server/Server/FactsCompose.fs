@@ -95,6 +95,42 @@ module FactsCompose =
                         (sp.GetRequiredService<IEventStore>())
                         compiler)
             )
+            // Phase 565 — the grounding-certificate issuer rides the same
+            // knob. It seals an answer's provenance chain (Phase 524) with
+            // the composed `IArtefactSigner` (Phase 40): a signed,
+            // third-party-checkable "this number came from these facts,
+            // under these disclosure policies", verifiable offline against
+            // the deployment public key. The signer is optional (GP 13): no
+            // signing substrate composed ⇒ issuance refuses with
+            // `SigningUnavailable`, never throws. The provenance graph is
+            // built over the composed `ILineageStore` when present, else an
+            // `IEventStore`-backed lineage view over the same store — always
+            // buildable so a certificate can be issued the moment a signer
+            // is present.
+            .AddSingleton<IGroundingCertificateIssuer>(
+                Func<IServiceProvider, IGroundingCertificateIssuer>(fun sp ->
+                    let events = sp.GetRequiredService<IEventStore>()
+
+                    let lineage =
+                        match sp.GetService(typeof<ILineageStore>) with
+                        | :? ILineageStore as l -> l
+                        | _ -> LineageStore.EventStoreLineageStore(events) :> ILineageStore
+
+                    let graph =
+                        ProvenanceGraph.createWithFacts lineage (sp.GetRequiredService<IFactEvidenceSource>())
+
+                    let signer =
+                        match sp.GetService(typeof<ToolUp.ArtefactSigning.IArtefactSigner>) with
+                        | :? ToolUp.ArtefactSigning.IArtefactSigner as s -> Some s
+                        | _ -> None
+
+                    GroundingCertificate.createIssuer
+                        graph
+                        (sp.GetRequiredService<IFactStore>())
+                        (sp.GetRequiredService<IFactDisclosureGate>())
+                        events
+                        signer)
+            )
 
     /// Compose the grounding fact store per `ServerConfig.FactStore`.
     /// `EnabledFactStore` registers `IFactStore` (`BlobFactStore`) +
