@@ -240,6 +240,10 @@ module Client =
         /// group name; `orderedIds` is the new full ordering for that
         /// section. Persisted to localStorage on every drop.
         | SidebarModuleReordered of groupKey: string * orderedIds: string list
+        /// User expanded or collapsed a multi-page module's page subtree.
+        /// The key is the bare module Id. Toggles
+        /// `UserSidebarPreferences.ExpandedModules` and re-saves.
+        | SidebarModuleExpandToggled of moduleId: string
         /// Server-driven `Notification.ModuleAction` targeting a module
         /// registered in this deployment. The shell looks up the module
         /// by Id, gates on `AccessibleModules`, calls the module's
@@ -1627,6 +1631,11 @@ module Client =
                 SidebarPreferences.save prefs
                 { model with SidebarPrefs = prefs }, Cmd.none
 
+            | SidebarModuleExpandToggled moduleId ->
+                let prefs = SidebarPreferences.toggleModuleExpanded moduleId model.SidebarPrefs
+                SidebarPreferences.save prefs
+                { model with SidebarPrefs = prefs }, Cmd.none
+
             | ModuleActionReceived(moduleId, actionKey, payloadJson) ->
                 // Gate 1: module registered in this deployment? If not,
                 // silently drop — the server-side tool ran and produced
@@ -2283,48 +2292,58 @@ module Client =
                         || (isAdmin && ClientConfig.isAdminSidebarGroup m.Group))
                 | _ -> kindVisibleModules
 
-            // One sidebar entry per module for legacy single-page modules
-            // (sidebar Id = module Id); one entry per `PageConfig` for
-            // multi-page modules (`PageViews = Some ...`), with composite
-            // Id `"{moduleId}{pageRoute}"`. Route strings conventionally
-            // start with `/`, so direct concatenation keeps the form
-            // readable (e.g. `"SalesAnalysis/sku-analysis"`). The
-            // composite Id round-trips through `parseSidebarId` back to
-            // `(moduleId, pageRoute)` on click, and is compared against
-            // `selectedSidebarId` below for the active-border highlight.
+            // One sidebar *view* per module. A single-page (or legacy)
+            // module carries no `Pages` and renders as a leaf whose
+            // sidebar Id is the bare module Id. A multi-page module
+            // (`PageViews = Some ...` with >1 page) carries one
+            // `SidebarPageView` per `PageConfig`, each with the composite
+            // Id `"{moduleId}{pageRoute}"`, and renders as one collapsible
+            // parent entry that expands to those pages. Route strings
+            // conventionally start with `/`, so direct concatenation keeps
+            // the form readable (e.g. `"SalesAnalysis/sku-analysis"`). The
+            // composite page Id round-trips through `parseSidebarId` back
+            // to `(moduleId, pageRoute)` on click, and is compared against
+            // `selectedSidebarId` below for the active-border highlight —
+            // routing and deep-linking are unchanged by the nesting; only
+            // the presentation groups the pages under their module.
             let views: Toolup.Sidebar.SidebarModuleView list =
                 visibleModules
-                |> List.collect (fun moduleImpl ->
+                |> List.map (fun moduleImpl ->
                     let hasData =
                         moduleImpl.NeedsData
                         |> Option.map (fun check -> check hasDataForType)
                         |> Option.defaultValue true
 
-                    match moduleImpl.PageViews, moduleImpl.Definition.Pages with
-                    | None, _
-                    | Some _, ([] | [ _ ]) ->
-                        // Single-page modules: use Pages[0].Icon when set,
-                        // else auto-derive from Definition.Icon.
-                        let icon = singlePageIcon moduleImpl.Definition
+                    let pages: Toolup.Sidebar.SidebarPageView list =
+                        match moduleImpl.PageViews, moduleImpl.Definition.Pages with
+                        | None, _
+                        | Some _, ([] | [ _ ]) -> []
+                        | Some _, modulePages ->
+                            modulePages
+                            |> List.map (fun page -> {
+                                Id = $"{moduleImpl.Definition.Id}{page.Route}"
+                                Name = page.Title
+                                Icon = page.Icon
+                            })
 
-                        [
-                            {
-                                Id = moduleImpl.Definition.Id
-                                Name = moduleImpl.Definition.Name
-                                Icon = icon
-                                HasData = hasData
-                                Group = moduleImpl.Group
-                            }
-                        ]
-                    | Some _, pages ->
-                        pages
-                        |> List.map (fun page -> {
-                            Id = $"{moduleImpl.Definition.Id}{page.Route}"
-                            Name = page.Title
-                            Icon = page.Icon
-                            HasData = hasData
-                            Group = moduleImpl.Group
-                        }))
+                    // Leaf modules keep the historical icon derivation
+                    // (Pages[0].Icon when set, else Definition.Icon); a
+                    // multi-page parent uses the module-level Definition.Icon
+                    // to represent the whole module rather than any one page.
+                    let icon =
+                        if List.isEmpty pages then
+                            singlePageIcon moduleImpl.Definition
+                        else
+                            moduleImpl.Definition.Icon
+
+                    {
+                        Id = moduleImpl.Definition.Id
+                        Name = moduleImpl.Definition.Name
+                        Icon = icon
+                        HasData = hasData
+                        Group = moduleImpl.Group
+                        Pages = pages
+                    })
 
             Toolup.Sidebar.buildSections views model.SidebarPrefs
 
@@ -2461,6 +2480,7 @@ module Client =
                 (ModuleSelected >> dispatch)
                 (SidebarGroupToggled >> dispatch)
                 (SidebarModulePinToggled >> dispatch)
+                (SidebarModuleExpandToggled >> dispatch)
                 (fun groupKey orderedIds -> dispatch (SidebarModuleReordered(groupKey, orderedIds)))
                 content
                 chrome.SidePanel

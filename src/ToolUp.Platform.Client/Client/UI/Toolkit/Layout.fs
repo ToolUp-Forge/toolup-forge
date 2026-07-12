@@ -241,6 +241,7 @@ module Layout =
         onModuleSelected
         (onGroupToggled: string -> unit)
         (onPinToggled: string -> unit)
+        (onModuleToggled: string -> unit)
         (onReorder: string -> string list -> unit)
         (content: PageContent)
         (sidePanel: ReactElement option)
@@ -288,6 +289,7 @@ module Layout =
                                 onModuleSelected
                                 onGroupToggled
                                 onPinToggled
+                                onModuleToggled
                                 onReorder
 
                             // Main content area - header + content with left padding for sidebar

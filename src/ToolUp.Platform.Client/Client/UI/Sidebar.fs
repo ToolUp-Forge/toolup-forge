@@ -10,28 +10,64 @@ open SidebarPreferences
 
 // ─── Types ────────────────────────────────────────────────────────
 
+/// Inbound description of a single page of a multi-page module. `Id` is
+/// the composite sidebar id (`"{moduleId}{pageRoute}"`) the shell emits —
+/// the same id that round-trips through `parseSidebarId` on click, so
+/// routing and deep-linking are unchanged by the nested presentation.
+type SidebarPageView = {
+    Id: string
+    Name: string
+    Icon: ReactElement
+}
+
 /// Inbound description of a module the sidebar should render. The
 /// caller (shell) resolves `HasData` against its own processed-data
 /// store and `Group` from the module declaration; the sidebar never
 /// touches `ErasedModule` directly so it stays UI-focused.
+///
+/// `Pages` is empty for single-page (and legacy) modules — they render
+/// as one leaf entry. A multi-page module carries one `SidebarPageView`
+/// per page and renders as a single collapsible parent entry that
+/// expands to its pages, rather than one flat rail entry per page.
 type SidebarModuleView = {
     Id: string
     Name: string
     Icon: ReactElement
     HasData: bool
     Group: string option
+    Pages: SidebarPageView list
+}
+
+/// A page of a multi-page module as rendered inside its parent's
+/// subtree. `IsPinned` mirrors the user's pinned overlay for this
+/// specific page's composite id.
+type SidebarPage = {
+    Id: string
+    Name: string
+    Icon: ReactElement
+    IsPinned: bool
 }
 
 /// A module as rendered inside a section. `IsPinned` mirrors the
 /// user's pinned overlay — true for any module whose id appears in
 /// `UserSidebarPreferences.PinnedModuleIds`, whether it's rendered
 /// inside the pinned section or its home group.
+///
+/// `Pages` is empty for a leaf (single-page / legacy) module; non-empty
+/// for a multi-page parent, whose page children render nested under it.
+/// `IsExpanded` is the resolved per-module expand state (from
+/// `UserSidebarPreferences.ExpandedModules`); it is meaningful only when
+/// `Pages` is non-empty. Pinned pages are lifted into the pinned section
+/// and suppressed from `Pages`, mirroring how a pinned module is lifted
+/// out of its group.
 type SidebarModule = {
     Id: string
     Name: string
     Icon: ReactElement
     HasData: bool
     IsPinned: bool
+    Pages: SidebarPage list
+    IsExpanded: bool
 }
 
 /// A section of the sidebar. `Key` is the stable identifier used
@@ -79,13 +115,37 @@ let HomeId = "_sdk.home"
 let private toolupForgeLogoUrl: string =
     importDefault "../icons/toolup-forge-dark.png"
 
-let private toSidebarModule (pinned: Set<string>) (m: SidebarModuleView) : SidebarModule = {
-    Id = m.Id
-    Name = m.Name
-    Icon = m.Icon
-    HasData = m.HasData
-    IsPinned = pinned.Contains m.Id
+/// Map an inbound page view to a rendered page, resolving its pinned
+/// overlay by the page's composite id.
+let private toSidebarPage (pinned: Set<string>) (p: SidebarPageView) : SidebarPage = {
+    Id = p.Id
+    Name = p.Name
+    Icon = p.Icon
+    IsPinned = pinned.Contains p.Id
 }
+
+/// Map an inbound module view to a rendered module. Individually-pinned
+/// pages are filtered out of the parent's subtree — they surface in the
+/// pinned section instead, mirroring how a pinned module is lifted out
+/// of its home group. `IsExpanded` is resolved from the user's per-module
+/// expand overlay.
+let private toSidebarModule
+    (pinned: Set<string>)
+    (expandedModules: Set<string>)
+    (m: SidebarModuleView)
+    : SidebarModule =
+    {
+        Id = m.Id
+        Name = m.Name
+        Icon = m.Icon
+        HasData = m.HasData
+        IsPinned = pinned.Contains m.Id
+        Pages =
+            m.Pages
+            |> List.filter (fun p -> not (pinned.Contains p.Id))
+            |> List.map (toSidebarPage pinned)
+        IsExpanded = expandedModules.Contains m.Id
+    }
 
 /// Reorder a group's modules by the user's saved order. Modules
 /// listed in `order` come first in that order; any remaining modules
@@ -101,12 +161,20 @@ let private applyOrder (order: string list) (modules: SidebarModule list) : Side
 /// and their personal overlay (pinned / collapsed / ordering).
 ///
 /// Section order:
-/// 1. Pinned (only when non-empty) — modules in the user's pinned
-///    order, suppressed from their home groups to avoid duplicates.
+/// 1. Pinned (only when non-empty) — modules / pages in the user's
+///    pinned order, suppressed from their home groups to avoid
+///    duplicates.
 /// 2. Declared groups — in first-occurrence order across `modules`.
 /// 3. `_other` — ungrouped modules, always last.
+///
+/// A multi-page module renders as one collapsible parent entry (its
+/// pages nest under it); single-page modules render as a leaf. Pinning
+/// resolves against both bare module ids and composite page ids, so an
+/// individually-pinned page (a composite `PinnedModuleIds` entry) still
+/// surfaces as its own leaf in the pinned section.
 let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferences) : SidebarSection list =
     let pinnedSet = Set.ofList prefs.PinnedModuleIds
+    let expandedModules = prefs.ExpandedModules
 
     // Home is special — always-visible, never grouped, pinned, or
     // collapsed. Lift it into a dedicated leading section before any
@@ -120,18 +188,49 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
             Title = None
             IsCollapsed = false
             IsPinnedSection = false
-            Modules = [ toSidebarModule pinnedSet home ]
+            Modules = [ toSidebarModule pinnedSet expandedModules home ]
         })
         |> Option.toList
 
     let groupable = modules |> List.filter (fun m -> m.Id <> HomeId)
     let byId = groupable |> List.map (fun m -> m.Id, m) |> Map.ofList
 
+    // Composite-page index — maps each multi-page module's page id to
+    // its (parent, page) pair, so a pinned individual page (a composite
+    // id, not a bare module id) resolves to a synthesized leaf below.
+    let pageIndex =
+        groupable
+        |> List.collect (fun m -> m.Pages |> List.map (fun p -> p.Id, (m, p)))
+        |> Map.ofList
+
+    // Resolve one pinned id to a leaf `SidebarModule`. A bare module id
+    // resolves to the module rendered flat (no nested expansion inside
+    // the pinned section — a multi-page pin navigates to its first
+    // page); a composite page id resolves to a synthesized page leaf.
+    let resolvePinned (id: string) : SidebarModule option =
+        match Map.tryFind id byId with
+        | Some m ->
+            Some {
+                toSidebarModule pinnedSet expandedModules m with
+                    Pages = []
+                    IsExpanded = false
+            }
+        | None ->
+            match Map.tryFind id pageIndex with
+            | Some(parent, page) ->
+                Some {
+                    Id = page.Id
+                    Name = page.Name
+                    Icon = page.Icon
+                    HasData = parent.HasData
+                    IsPinned = true
+                    Pages = []
+                    IsExpanded = false
+                }
+            | None -> None
+
     let pinnedSection =
-        let pinnedModules =
-            prefs.PinnedModuleIds
-            |> List.choose (fun id -> byId |> Map.tryFind id)
-            |> List.map (toSidebarModule pinnedSet)
+        let pinnedModules = prefs.PinnedModuleIds |> List.choose resolvePinned
 
         if List.isEmpty pinnedModules then
             []
@@ -168,7 +267,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
             let groupModules =
                 nonPinned
                 |> List.filter (fun m -> m.Group = Some groupName)
-                |> List.map (toSidebarModule pinnedSet)
+                |> List.map (toSidebarModule pinnedSet expandedModules)
 
             let ordered =
                 prefs.ModuleOrder
@@ -188,7 +287,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
         let others =
             nonPinned
             |> List.filter (fun m -> m.Group = None)
-            |> List.map (toSidebarModule pinnedSet)
+            |> List.map (toSidebarModule pinnedSet expandedModules)
 
         if List.isEmpty others then
             []
@@ -220,10 +319,29 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
 
     homeSection @ pinnedSection @ declaredSections @ otherSection
 
-/// Flatten a section list to the ordered module id sequence — used
-/// by consumers that need to resolve the currently-selected id
-/// (e.g. the shell looking up the selected module's name/icon).
-let flatten (sections: SidebarSection list) : SidebarModule list = sections |> List.collect _.Modules
+/// Flatten a section list to the ordered entry sequence — used by
+/// consumers that need to resolve the currently-selected id (e.g. the
+/// shell looking up the selected surface's name/icon for the header).
+/// Each multi-page parent contributes itself followed by one synthesized
+/// leaf per page, so a composite page id resolves to that page's
+/// name/icon (the header shows the active *page*, not just its module).
+let flatten (sections: SidebarSection list) : SidebarModule list =
+    sections
+    |> List.collect _.Modules
+    |> List.collect (fun m ->
+        let pageLeaves =
+            m.Pages
+            |> List.map (fun p -> {
+                Id = p.Id
+                Name = p.Name
+                Icon = p.Icon
+                HasData = m.HasData
+                IsPinned = p.IsPinned
+                Pages = []
+                IsExpanded = false
+            })
+
+        m :: pageLeaves)
 
 // ─── dnd-kit bindings ─────────────────────────────────────────────
 
@@ -325,20 +443,28 @@ let private pinIcon (isPinned: bool) =
         ]
     ]
 
-/// Render a single module button. Shared between the pinned section
-/// and declared groups. The pin affordance renders in every section,
-/// the pinned one included: a pinned module renders *only* in the
-/// pinned section (declared groups filter the pinned set out), so the
-/// affordance there is the sole unpin control. In that section the
-/// button shows the filled glyph + "Unpin" title and is always visible;
-/// clicking it fires before the unpin re-render, so the row dropping
-/// back to its home group is the expected result, not a lost click.
-let private renderModuleButton
+/// One clickable sidebar row — the shared button + hover-revealed pin
+/// affordance used by leaf modules, multi-page parents, and page
+/// children alike. `leading` is an optional glyph rendered before the
+/// icon (the expand chevron on a multi-page parent, shown only when the
+/// sidebar is hover-expanded); `indent` insets a page child under its
+/// parent; `pinnable = false` suppresses the pin control (Home). The pin
+/// affordance is the sole unpin control in the pinned section: it shows
+/// the filled glyph + "Unpin" and stays visible, and clicking it fires
+/// before the unpin re-render, so the row dropping back to its home
+/// group is the expected result, not a lost click.
+let private renderRow
     (isExpanded: bool)
-    (selectedModule: string)
-    (onModuleSelected: string -> unit)
-    (onPinToggled: string -> unit)
-    (m: SidebarModule)
+    (isSelected: bool)
+    (hasData: bool)
+    (pinnable: bool)
+    (isPinned: bool)
+    (indent: bool)
+    (leading: ReactElement option)
+    (icon: ReactElement)
+    (name: string)
+    (onActivate: unit -> unit)
+    (onPinToggled: unit -> unit)
     =
     Html.div [
         prop.className "relative group"
@@ -355,14 +481,22 @@ let private renderModuleButton
                     // remove it.
                     "w-full flex items-center py-3 text-white transition-colors rounded-[var(--radius)] bg-transparent"
                     "hover:bg-white/5"
-                    if isExpanded then "px-3" else "justify-center"
-                    if m.Id = selectedModule then
+                    if isExpanded then
+                        (if indent then "pl-8 pr-3" else "px-3")
+                    else
+                        "justify-center"
+                    if isSelected then
                         "border-2 border-brand"
                     else
                         "border-2 border-transparent"
                 ]
-                prop.onClick (fun _ -> onModuleSelected m.Id)
+                prop.onClick (fun _ -> onActivate ())
                 prop.children [
+                    // Expand chevron (multi-page parent) — only in the
+                    // hover-expanded rail; the narrow rail has no room.
+                    match leading with
+                    | Some glyph when isExpanded -> glyph
+                    | _ -> Html.none
                     Html.div [
                         // Icons are vite-plugin-svgr-imported React components.
                         // Their stroke uses `currentColor`, so the parent's
@@ -375,14 +509,14 @@ let private renderModuleButton
                         prop.className [
                             "w-8 flex items-center justify-center flex-shrink-0"
                             "[&>svg]:w-8 [&>svg]:h-8"
-                            if m.HasData then "text-brand" else "text-white"
+                            if hasData then "text-brand" else "text-white"
                         ]
-                        prop.children [ m.Icon ]
+                        prop.children [ icon ]
                     ]
                     if isExpanded then
                         Html.span [
                             prop.className "ml-3 text-base font-medium leading-tight flex-1 text-left"
-                            prop.text m.Name
+                            prop.text name
                         ]
                 ]
             ]
@@ -391,30 +525,114 @@ let private renderModuleButton
             // Absolute-positioned so it overlays the button without
             // shifting layout; pointer-events-auto inside a pointer-
             // events-none parent would also work but this is simpler.
-            // Pin affordance — suppressed for Home, which lives in its
-            // own always-visible leading section and is never pinnable.
-            if isExpanded && m.Id <> HomeId then
+            if isExpanded && pinnable then
                 Html.button [
                     prop.className [
                         // `bg-transparent` — same consumer-global-button
-                        // defence as the module row above.
+                        // defence as the row above.
                         "absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded bg-transparent"
                         "text-white/40 hover:text-white hover:bg-white/10"
                         // Always visible once pinned; hover-only otherwise
                         // so the sidebar stays visually uncluttered.
-                        if m.IsPinned then
+                        if isPinned then
                             "opacity-100"
                         else
                             "opacity-0 group-hover:opacity-100 transition-opacity"
                     ]
-                    prop.title (if m.IsPinned then "Unpin" else "Pin")
+                    prop.title (if isPinned then "Unpin" else "Pin")
                     prop.onClick (fun e ->
                         e.stopPropagation ()
-                        onPinToggled m.Id)
-                    prop.children [ pinIcon m.IsPinned ]
+                        onPinToggled ())
+                    prop.children [ pinIcon isPinned ]
                 ]
         ]
     ]
+
+/// Render a module entry. A leaf (single-page / legacy) module is one
+/// clickable row. A multi-page module is a parent row that, in the
+/// hover-expanded rail, toggles its page subtree open/closed and reveals
+/// one child row per page; in the narrow (w-20) rail — where there is no
+/// room for a subtree — clicking the parent navigates to its first page
+/// (the composite id round-trips through the shell's `parseSidebarId`,
+/// so routing is unchanged). The module owning the active page is
+/// force-expanded so a deep-linked page is always visible; while
+/// expanded the active child carries the selection border, so the parent
+/// only takes the border in the narrow rail (where children are hidden).
+let private renderModuleButton
+    (isExpanded: bool)
+    (selectedModule: string)
+    (onModuleSelected: string -> unit)
+    (onPinToggled: string -> unit)
+    (onModuleToggled: string -> unit)
+    (m: SidebarModule)
+    =
+    let pinnable = m.Id <> HomeId
+
+    if List.isEmpty m.Pages then
+        renderRow
+            isExpanded
+            (m.Id = selectedModule)
+            m.HasData
+            pinnable
+            m.IsPinned
+            false
+            None
+            m.Icon
+            m.Name
+            (fun () -> onModuleSelected m.Id)
+            (fun () -> onPinToggled m.Id)
+    else
+        let containsSelected = m.Pages |> List.exists (fun p -> p.Id = selectedModule)
+        // Auto-expand the module that owns the active page so it's always
+        // reachable, regardless of the persisted collapse state.
+        let effectiveExpanded = m.IsExpanded || containsSelected
+        // In the wide rail the active child shows the border; only the
+        // narrow rail (children hidden) highlights the parent for a
+        // contained selection.
+        let parentSelected = (m.Id = selectedModule) || (containsSelected && not isExpanded)
+
+        let parentActivate () =
+            if isExpanded then
+                onModuleToggled m.Id
+            else
+                onModuleSelected m.Id
+
+        Html.div [
+            prop.children [
+                renderRow
+                    isExpanded
+                    parentSelected
+                    m.HasData
+                    pinnable
+                    m.IsPinned
+                    false
+                    (Some(chevron (not effectiveExpanded)))
+                    m.Icon
+                    m.Name
+                    parentActivate
+                    (fun () -> onPinToggled m.Id)
+
+                if isExpanded && effectiveExpanded then
+                    for p in m.Pages do
+                        Html.div [
+                            prop.key p.Id
+                            prop.children [
+                                renderRow
+                                    isExpanded
+                                    (p.Id = selectedModule)
+                                    m.HasData
+                                    true
+                                    p.IsPinned
+                                    true
+                                    None
+                                    p.Icon
+                                    p.Name
+                                    (fun () -> onModuleSelected p.Id)
+                                    (fun () -> onPinToggled p.Id)
+                            ]
+                        ]
+            ]
+        ]
 
 /// Sortable wrapper for a single module row. Calls `useSortable` to
 /// register the element with the enclosing `SortableContext`, then
@@ -481,11 +699,18 @@ let private renderSectionHeader (onGroupToggled: string -> unit) (section: Sideb
 /// click-to-expand) instead of its full icon set, while Home and the
 /// pinned overlay always stay fully visible.
 ///
-/// Drag-to-reorder is scoped per-section: each section wraps its
-/// modules in a `SortableContext`, and dropping across sections is
-/// ignored (the `onDragEnd` handler looks up both ids in the same
-/// section or no-ops). The full sidebar sits inside a single
-/// `DndContext` so there's one set of sensors for the whole surface.
+/// Drag-to-reorder is scoped per-section and operates on top-level
+/// modules only: each section wraps its module rows in a
+/// `SortableContext` keyed by bare module id, and dropping across
+/// sections is ignored (the `onDragEnd` handler looks up both ids in the
+/// same section or no-ops). A multi-page module's page children are not
+/// sortable items — page order is fixed. The full sidebar sits inside a
+/// single `DndContext` so there's one set of sensors for the whole
+/// surface.
+///
+/// Multi-page modules render as one collapsible parent entry whose pages
+/// nest beneath it (`onModuleToggled` persists the per-module expand
+/// state); single-page modules render as a leaf.
 [<ReactComponent>]
 let Sidebar
     (appName: string)
@@ -495,6 +720,7 @@ let Sidebar
     (onModuleSelected: string -> unit)
     (onGroupToggled: string -> unit)
     (onPinToggled: string -> unit)
+    (onModuleToggled: string -> unit)
     (onReorder: string -> string list -> unit)
     =
     let isExpanded, setIsExpanded = React.useState false
@@ -555,7 +781,7 @@ let Sidebar
             section.Modules
             |> List.map (fun m ->
                 let button =
-                    renderModuleButton isExpanded selectedModule onModuleSelected onPinToggled m
+                    renderModuleButton isExpanded selectedModule onModuleSelected onPinToggled onModuleToggled m
 
                 React.KeyedFragment(m.Id, [ SortableItem m.Id button ]))
 

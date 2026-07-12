@@ -3,6 +3,8 @@
 
 module SidebarPreferences
 
+open Fable.Core
+open Fable.Core.JsInterop
 open Fable.SimpleJson
 open ToolUp.Platform
 
@@ -30,6 +32,22 @@ type UserSidebarPreferences = {
     /// collapsed-by-default keeps a fresh sidebar visually quiet,
     /// nudging users toward Pinned for the entries they actually use.
     ExpandedGroups: Set<string>
+    /// Multi-page modules the user has explicitly expanded, keyed by the
+    /// bare module id (never a composite `{moduleId}{pageRoute}` id — a
+    /// module owns its whole page subtree). A multi-page module absent
+    /// from this set renders collapsed to its single parent entry;
+    /// present, it reveals its page children. Single-page modules ignore
+    /// it entirely. The shell force-expands whichever module owns the
+    /// active page regardless of this set, so a deep-linked page is
+    /// always visible.
+    ///
+    /// Additive field (post-nested-sidebar). `Json.parseAs` requires every
+    /// record field and throws on a missing one, so a preferences blob
+    /// written before this field existed is upgraded in place by `load` —
+    /// `backfillMissingFields` seeds the absent property with its empty
+    /// JSON default (a `Set` serialises as `[]`) before typed parsing, so
+    /// a legacy blob keeps the user's pins / order rather than resetting.
+    ExpandedModules: Set<string>
 }
 
 module UserSidebarPreferences =
@@ -37,6 +55,7 @@ module UserSidebarPreferences =
         PinnedModuleIds = []
         ModuleOrder = Map.empty
         ExpandedGroups = Set.empty
+        ExpandedModules = Set.empty
     }
 
 /// Key used for both localStorage and (eventually) server-side blob
@@ -44,16 +63,39 @@ module UserSidebarPreferences =
 /// app's own localStorage usage.
 let private storageKey = "toolup-sidebar-prefs"
 
+/// Backfill any record field absent from a stored blob with its empty
+/// JSON default. `Json.parseAs` requires every field of the target record
+/// and THROWS on a missing one (`Could not find the required key …`), so
+/// a blob written by an older app version — before a field existed —
+/// would otherwise trip the parse-failure reset and wipe the user's whole
+/// overlay (pins / order / expanded groups), not just default the new
+/// field. Backfilling first lets a legacy blob upgrade in place.
+///
+/// Field JSON shapes (from `save`'s `Json.serialize`): `string list` and
+/// `Set<string>` serialise as a JSON array; `Map<string,_>` as a JSON
+/// object. Fable-only (raw JS-object munging); `load` never runs on .NET.
+[<Emit("""(() => {
+    const o = JSON.parse($0);
+    if (o.PinnedModuleIds === undefined) o.PinnedModuleIds = [];
+    if (o.ModuleOrder === undefined) o.ModuleOrder = {};
+    if (o.ExpandedGroups === undefined) o.ExpandedGroups = [];
+    if (o.ExpandedModules === undefined) o.ExpandedModules = [];
+    return JSON.stringify(o);
+})()""")>]
+let private backfillMissingFields (json: string) : string = jsNative
+
 /// Load preferences from localStorage. Returns `empty` if no entry
 /// exists or if parsing fails — on parse failure we log a warning and
-/// start fresh rather than trapping the user with corrupted state.
+/// start fresh rather than trapping the user with corrupted state. A blob
+/// missing a newer field (older app version) is upgraded in place via
+/// `backfillMissingFields` rather than reset.
 let load () : UserSidebarPreferences =
     match Browser.Dom.window.localStorage.getItem storageKey with
     | null
     | "" -> UserSidebarPreferences.empty
     | json ->
         try
-            Json.parseAs<UserSidebarPreferences> json
+            Json.parseAs<UserSidebarPreferences> (backfillMissingFields json)
         with ex ->
             log.Warn $"Failed to parse sidebar preferences: {ex.Message}. Resetting."
             Browser.Dom.window.localStorage.removeItem storageKey
@@ -93,6 +135,22 @@ let toggleExpanded (groupKey: string) (prefs: UserSidebarPreferences) : UserSide
         {
             prefs with
                 ExpandedGroups = prefs.ExpandedGroups.Add groupKey
+        }
+
+/// Toggle a multi-page module's expanded (page-subtree) state. Keyed by
+/// the bare module id. Independent of `toggleExpanded` (which toggles a
+/// section/group): a module lives inside a group, so the two collapse
+/// levels compose.
+let toggleModuleExpanded (moduleId: string) (prefs: UserSidebarPreferences) : UserSidebarPreferences =
+    if prefs.ExpandedModules.Contains moduleId then
+        {
+            prefs with
+                ExpandedModules = prefs.ExpandedModules.Remove moduleId
+        }
+    else
+        {
+            prefs with
+                ExpandedModules = prefs.ExpandedModules.Add moduleId
         }
 
 /// Replace the ordering for a single group. The caller supplies the
