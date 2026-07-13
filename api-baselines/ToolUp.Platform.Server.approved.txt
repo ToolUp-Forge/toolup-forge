@@ -133,6 +133,123 @@ ToolUp.Platform.ArtifactRef..ctor(System.String, System.String, System.Int64)
 ToolUp.Platform.ArtifactRef.ArtifactId : System.String { get }
 ToolUp.Platform.ArtifactRef.ByteLength : System.Int64 { get }
 ToolUp.Platform.ArtifactRef.ContentHash : System.String { get }
+ToolUp.Platform.AssemblyAggregation (class)
+ToolUp.Platform.AssemblyAggregation..ctor(System.String, ToolUp.Platform.TimeSeriesAggregation, System.String)
+ToolUp.Platform.AssemblyAggregation.Aggregation : ToolUp.Platform.TimeSeriesAggregation { get }
+ToolUp.Platform.AssemblyAggregation.As : System.String { get }
+ToolUp.Platform.AssemblyAggregation.Column : System.String { get }
+ToolUp.Platform.AssemblyError (class)
+ToolUp.Platform.AssemblyError.IsResolverMissing : System.Boolean { get }
+ToolUp.Platform.AssemblyError.IsSchemaConflict : System.Boolean { get }
+ToolUp.Platform.AssemblyError.IsSourceUnavailable : System.Boolean { get }
+ToolUp.Platform.AssemblyError.IsStorageFailure : System.Boolean { get }
+ToolUp.Platform.AssemblyError.IsTypeMismatch : System.Boolean { get }
+ToolUp.Platform.AssemblyError.IsUnknownColumn : System.Boolean { get }
+ToolUp.Platform.AssemblyError.Tag : System.Int32 { get }
+ToolUp.Platform.AssemblyError+ResolverMissing (class)
+ToolUp.Platform.AssemblyError+ResolverMissing.kind : System.String { get }
+ToolUp.Platform.AssemblyError+SchemaConflict (class)
+ToolUp.Platform.AssemblyError+SchemaConflict.reason : System.String { get }
+ToolUp.Platform.AssemblyError+SourceUnavailable (class)
+ToolUp.Platform.AssemblyError+SourceUnavailable.reason : System.String { get }
+ToolUp.Platform.AssemblyError+StorageFailure (class)
+ToolUp.Platform.AssemblyError+StorageFailure.reason : System.String { get }
+ToolUp.Platform.AssemblyError+Tags (class)
+ToolUp.Platform.AssemblyError+Tags.ResolverMissing : System.Int32 (literal)
+ToolUp.Platform.AssemblyError+Tags.SchemaConflict : System.Int32 (literal)
+ToolUp.Platform.AssemblyError+Tags.SourceUnavailable : System.Int32 (literal)
+ToolUp.Platform.AssemblyError+Tags.StorageFailure : System.Int32 (literal)
+ToolUp.Platform.AssemblyError+Tags.TypeMismatch : System.Int32 (literal)
+ToolUp.Platform.AssemblyError+Tags.UnknownColumn : System.Int32 (literal)
+ToolUp.Platform.AssemblyError+TypeMismatch (class)
+ToolUp.Platform.AssemblyError+TypeMismatch.reason : System.String { get }
+ToolUp.Platform.AssemblyError+UnknownColumn (class)
+ToolUp.Platform.AssemblyError+UnknownColumn.reason : System.String { get }
+ToolUp.Platform.AssemblyErrorModule (class)
+ToolUp.Platform.AssemblyErrorModule.describe(ToolUp.Platform.AssemblyError) : System.String
+ToolUp.Platform.AssemblyJoinKind (class)
+ToolUp.Platform.AssemblyJoinKind.Inner : ToolUp.Platform.AssemblyJoinKind { get }
+ToolUp.Platform.AssemblyJoinKind.IsInner : System.Boolean { get }
+ToolUp.Platform.AssemblyJoinKind.IsLeftOuter : System.Boolean { get }
+ToolUp.Platform.AssemblyJoinKind.LeftOuter : ToolUp.Platform.AssemblyJoinKind { get }
+ToolUp.Platform.AssemblyJoinKind.Tag : System.Int32 { get }
+ToolUp.Platform.AssemblyJoinKind+Tags (class)
+ToolUp.Platform.AssemblyJoinKind+Tags.Inner : System.Int32 (literal)
+ToolUp.Platform.AssemblyJoinKind+Tags.LeftOuter : System.Int32 (literal)
+ToolUp.Platform.AssemblyProvenance (class)
+ToolUp.Platform.AssemblyProvenance.SourcesKey : System.String (literal)
+ToolUp.Platform.AssemblyProvenance.SpecHashKey : System.String (literal)
+ToolUp.Platform.AssemblyProvenance.SubsetKey : System.String (literal)
+ToolUp.Platform.AssemblyProvenance.sourceIdentity(ToolUp.Platform.AssemblySource) : System.String
+ToolUp.Platform.AssemblyProvenance.specHash(ToolUp.Platform.DatasetAssemblySpec) : System.String
+ToolUp.Platform.AssemblySource (class)
+ToolUp.Platform.AssemblySource.IsDatasetVersion : System.Boolean { get }
+ToolUp.Platform.AssemblySource.IsExternalTable : System.Boolean { get }
+ToolUp.Platform.AssemblySource.IsTimeSeriesRange : System.Boolean { get }
+ToolUp.Platform.AssemblySource.Tag : System.Int32 { get }
+ToolUp.Platform.AssemblySource+DatasetVersion (class)
+ToolUp.Platform.AssemblySource+DatasetVersion.Item : ToolUp.Platform.DatasetVersionRef { get }
+ToolUp.Platform.AssemblySource+ExternalTable (class)
+ToolUp.Platform.AssemblySource+ExternalTable.Item : ToolUp.Platform.ExternalTableBinding { get }
+ToolUp.Platform.AssemblySource+Tags (class)
+ToolUp.Platform.AssemblySource+Tags.DatasetVersion : System.Int32 (literal)
+ToolUp.Platform.AssemblySource+Tags.ExternalTable : System.Int32 (literal)
+ToolUp.Platform.AssemblySource+Tags.TimeSeriesRange : System.Int32 (literal)
+ToolUp.Platform.AssemblySource+TimeSeriesRange (class)
+ToolUp.Platform.AssemblySource+TimeSeriesRange.Item : ToolUp.Platform.TimeSeriesSourceBinding { get }
+ToolUp.Platform.AssemblySplit (class)
+ToolUp.Platform.AssemblySplit.IsByPeriodCutoff : System.Boolean { get }
+ToolUp.Platform.AssemblySplit.IsByUnitHash : System.Boolean { get }
+ToolUp.Platform.AssemblySplit.Tag : System.Int32 { get }
+ToolUp.Platform.AssemblySplit+ByPeriodCutoff (class)
+ToolUp.Platform.AssemblySplit+ByPeriodCutoff.afterName : System.String { get }
+ToolUp.Platform.AssemblySplit+ByPeriodCutoff.beforeName : System.String { get }
+ToolUp.Platform.AssemblySplit+ByPeriodCutoff.cutoff : System.DateTimeOffset { get }
+ToolUp.Platform.AssemblySplit+ByPeriodCutoff.periodColumn : System.String { get }
+ToolUp.Platform.AssemblySplit+ByUnitHash (class)
+ToolUp.Platform.AssemblySplit+ByUnitHash.buckets : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
+ToolUp.Platform.AssemblySplit+ByUnitHash.unitColumn : System.String { get }
+ToolUp.Platform.AssemblySplit+Tags (class)
+ToolUp.Platform.AssemblySplit+Tags.ByPeriodCutoff : System.Int32 (literal)
+ToolUp.Platform.AssemblySplit+Tags.ByUnitHash : System.Int32 (literal)
+ToolUp.Platform.AssemblyTransform (class)
+ToolUp.Platform.AssemblyTransform.IsFilter : System.Boolean { get }
+ToolUp.Platform.AssemblyTransform.IsJoin : System.Boolean { get }
+ToolUp.Platform.AssemblyTransform.IsLag : System.Boolean { get }
+ToolUp.Platform.AssemblyTransform.IsResample : System.Boolean { get }
+ToolUp.Platform.AssemblyTransform.IsWindow : System.Boolean { get }
+ToolUp.Platform.AssemblyTransform.Tag : System.Int32 { get }
+ToolUp.Platform.AssemblyTransform+Filter (class)
+ToolUp.Platform.AssemblyTransform+Filter.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetFilter] { get }
+ToolUp.Platform.AssemblyTransform+Join (class)
+ToolUp.Platform.AssemblyTransform+Join.how : ToolUp.Platform.AssemblyJoinKind { get }
+ToolUp.Platform.AssemblyTransform+Join.leftKeys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AssemblyTransform+Join.right : ToolUp.Platform.AssemblySource { get }
+ToolUp.Platform.AssemblyTransform+Join.rightKeys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AssemblyTransform+Lag (class)
+ToolUp.Platform.AssemblyTransform+Lag.as' : System.String { get }
+ToolUp.Platform.AssemblyTransform+Lag.by : System.Int32 { get }
+ToolUp.Platform.AssemblyTransform+Lag.column : System.String { get }
+ToolUp.Platform.AssemblyTransform+Lag.partitionBy : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AssemblyTransform+Lag.periodColumn : System.String { get }
+ToolUp.Platform.AssemblyTransform+Resample (class)
+ToolUp.Platform.AssemblyTransform+Resample.aggregations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AssemblyAggregation] { get }
+ToolUp.Platform.AssemblyTransform+Resample.bucket : System.TimeSpan { get }
+ToolUp.Platform.AssemblyTransform+Resample.partitionKeys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AssemblyTransform+Resample.periodColumn : System.String { get }
+ToolUp.Platform.AssemblyTransform+Tags (class)
+ToolUp.Platform.AssemblyTransform+Tags.Filter : System.Int32 (literal)
+ToolUp.Platform.AssemblyTransform+Tags.Join : System.Int32 (literal)
+ToolUp.Platform.AssemblyTransform+Tags.Lag : System.Int32 (literal)
+ToolUp.Platform.AssemblyTransform+Tags.Resample : System.Int32 (literal)
+ToolUp.Platform.AssemblyTransform+Tags.Window : System.Int32 (literal)
+ToolUp.Platform.AssemblyTransform+Window (class)
+ToolUp.Platform.AssemblyTransform+Window.aggregation : ToolUp.Platform.TimeSeriesAggregation { get }
+ToolUp.Platform.AssemblyTransform+Window.as' : System.String { get }
+ToolUp.Platform.AssemblyTransform+Window.column : System.String { get }
+ToolUp.Platform.AssemblyTransform+Window.partitionBy : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AssemblyTransform+Window.periodColumn : System.String { get }
+ToolUp.Platform.AssemblyTransform+Window.size : System.Int32 { get }
 ToolUp.Platform.AuditLog (class)
 ToolUp.Platform.AuditLog+AuditMetrics (class)
 ToolUp.Platform.AuditLog+AuditMetrics.WriteFailuresTotal : System.String (literal)
@@ -1028,6 +1145,23 @@ ToolUp.Platform.DataObjectStoreErasureHandler+DataObjectStoreExporter..ctor(Tool
 ToolUp.Platform.DataProtectionBackendValidator (class)
 ToolUp.Platform.DataProtectionBackendValidator+DataProtectionBackendValidator (class)
 ToolUp.Platform.DataProtectionBackendValidator+DataProtectionBackendValidator..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.DataProvenanceLabels (class)
+ToolUp.Platform.DataProvenanceLabels.MetadataKey : System.String (literal)
+ToolUp.Platform.DataProvenanceLabels.decode(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]
+ToolUp.Platform.DataProvenanceLabels.encode(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]) : System.String
+ToolUp.Platform.DataProvenanceLabels.readFrom(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]
+ToolUp.Platform.DataProvenanceLabels.writeInto(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
+ToolUp.Platform.DataProvenancePolicy (class)
+ToolUp.Platform.DataProvenancePolicy..ctor(System.Boolean, System.Boolean)
+ToolUp.Platform.DataProvenancePolicy.RefuseRawExportOfLabelled : System.Boolean { get }
+ToolUp.Platform.DataProvenancePolicy.RequireIsolatedForLabelled : System.Boolean { get }
+ToolUp.Platform.DataProvenancePolicyModule (class)
+ToolUp.Platform.DataProvenancePolicyModule.checkDispatch(ToolUp.Platform.DataProvenancePolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel], System.Boolean) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.DataProvenancePolicyModule.checkDispatchAudited(ToolUp.Platform.IAuditLog, ToolUp.Platform.DatasetVersion, ToolUp.Platform.DataProvenancePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.DataProvenancePolicyModule.checkExport(ToolUp.Platform.DataProvenancePolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.DataProvenancePolicyModule.checkExportAudited(ToolUp.Platform.IAuditLog, ToolUp.Platform.DatasetVersion, ToolUp.Platform.DataProvenancePolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.DataProvenancePolicyModule.enforced : ToolUp.Platform.DataProvenancePolicy { get }
+ToolUp.Platform.DataProvenancePolicyModule.permissive : ToolUp.Platform.DataProvenancePolicy { get }
 ToolUp.Platform.DataSourceCallContext (class)
 ToolUp.Platform.DataSourceCallContext..ctor(System.String, ToolUp.Platform.DataSourceConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.DataSourceCallContext.Config : ToolUp.Platform.DataSourceConfig { get }
@@ -1089,6 +1223,20 @@ ToolUp.Platform.DataSubjectRequestLifecycle.create(System.IServiceProvider) : To
 ToolUp.Platform.DataSubjectRequestLifecycle.exportArchive(System.IServiceProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleExportArchive, System.String]]
 ToolUp.Platform.DataSubjectRequestLifecycle+DataSubjectRequestLifecycle (class)
 ToolUp.Platform.DataSubjectRequestLifecycle+DataSubjectRequestLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.DatasetAssemblyExecutor (class)
+ToolUp.Platform.DatasetAssemblyExecutor..ctor(ToolUp.Platform.IDatasetStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITimeSeriesStore], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ExternalTableBinding, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], System.String]]]])
+ToolUp.Platform.DatasetAssemblyExecutorModule (class)
+ToolUp.Platform.DatasetAssemblyExecutorModule.create(ToolUp.Platform.IDatasetStore) : ToolUp.Platform.IDatasetAssemblyExecutor
+ToolUp.Platform.DatasetAssemblyExecutorModule.createWithTimeSeries(ToolUp.Platform.IDatasetStore, ToolUp.Platform.ITimeSeriesStore) : ToolUp.Platform.IDatasetAssemblyExecutor
+ToolUp.Platform.DatasetAssemblySpec (class)
+ToolUp.Platform.DatasetAssemblySpec..ctor(System.String, ToolUp.Platform.AssemblySource, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AssemblyTransform], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AssemblySplit], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.DatasetColumnRole]], ToolUp.Platform.VersioningPolicy)
+ToolUp.Platform.DatasetAssemblySpec.Base : ToolUp.Platform.AssemblySource { get }
+ToolUp.Platform.DatasetAssemblySpec.OutputDatasetId : System.String { get }
+ToolUp.Platform.DatasetAssemblySpec.OutputRoles : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.DatasetColumnRole]] { get }
+ToolUp.Platform.DatasetAssemblySpec.Policy : ToolUp.Platform.VersioningPolicy { get }
+ToolUp.Platform.DatasetAssemblySpec.Scope : System.String { get }
+ToolUp.Platform.DatasetAssemblySpec.Split : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AssemblySplit] { get }
+ToolUp.Platform.DatasetAssemblySpec.Transforms : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AssemblyTransform] { get }
 ToolUp.Platform.DatasetContentRef (class)
 ToolUp.Platform.DatasetContentRef..ctor(System.String, System.String, System.Int32, System.String, System.String, System.Int64)
 ToolUp.Platform.DatasetContentRef.ContentHash : System.String { get }
@@ -1097,6 +1245,8 @@ ToolUp.Platform.DatasetContentRef.Format : System.String { get }
 ToolUp.Platform.DatasetContentRef.RowCount : System.Int64 { get }
 ToolUp.Platform.DatasetContentRef.ScopeId : System.String { get }
 ToolUp.Platform.DatasetContentRef.Version : System.Int32 { get }
+ToolUp.Platform.DatasetProvenance (class)
+ToolUp.Platform.DatasetProvenance.declassify(ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, System.String, System.String, System.Int32, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.DatasetVersionRef (class)
 ToolUp.Platform.DatasetVersionRef..ctor(System.String, System.String, System.Int32)
 ToolUp.Platform.DatasetVersionRef.DatasetId : System.String { get }
@@ -1463,6 +1613,11 @@ ToolUp.Platform.EvidencePackGenerator.register(Microsoft.Extensions.DependencyIn
 ToolUp.Platform.EvidencePackHandler (class)
 ToolUp.Platform.EvidencePackHandler.Route : System.String (literal)
 ToolUp.Platform.EvidencePackHandler.routes : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.Platform.ExternalTableBinding (class)
+ToolUp.Platform.ExternalTableBinding..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ExternalTableBinding.Kind : System.String { get }
+ToolUp.Platform.ExternalTableBinding.Query : System.String { get }
+ToolUp.Platform.ExternalTableBinding.Ref : System.String { get }
 ToolUp.Platform.FactEvidence (class)
 ToolUp.Platform.FactEvidence..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.FactEvidence.Disclosure : System.String { get }
@@ -1870,6 +2025,8 @@ ToolUp.Platform.IDataSourceConfigStore.Delete(System.String, System.String) : Mi
 ToolUp.Platform.IDataSourceConfigStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig]]
 ToolUp.Platform.IDataSourceConfigStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig]]
 ToolUp.Platform.IDataSourceConfigStore.Save(System.String, ToolUp.Platform.DataSourceConfig) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IDatasetAssemblyExecutor (interface)
+ToolUp.Platform.IDatasetAssemblyExecutor.Assemble(ToolUp.Platform.DatasetAssemblySpec, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.DatasetVersionRef], ToolUp.Platform.AssemblyError]]
 ToolUp.Platform.IDatasetCodec (interface)
 ToolUp.Platform.IDatasetCodec.Decode(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], System.String]
 ToolUp.Platform.IDatasetCodec.Encode(ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : System.Byte[]
@@ -4419,6 +4576,17 @@ ToolUp.Platform.TenantResolutionError+TenantCompositionInvalid.error : ToolUp.Pl
 ToolUp.Platform.TenantResolutionError+TenantCompositionInvalid.tenantId : System.String { get }
 ToolUp.Platform.TenantResolutionError+TenantNotRegistered (class)
 ToolUp.Platform.TenantResolutionError+TenantNotRegistered.tenantId : System.String { get }
+ToolUp.Platform.TimeSeriesSourceBinding (class)
+ToolUp.Platform.TimeSeriesSourceBinding..ctor(System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TimeSeriesDownsample], System.String, System.String, System.String, System.String)
+ToolUp.Platform.TimeSeriesSourceBinding.Downsample : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TimeSeriesDownsample] { get }
+ToolUp.Platform.TimeSeriesSourceBinding.From : System.DateTimeOffset { get }
+ToolUp.Platform.TimeSeriesSourceBinding.PeriodColumn : System.String { get }
+ToolUp.Platform.TimeSeriesSourceBinding.ScopeId : System.String { get }
+ToolUp.Platform.TimeSeriesSourceBinding.Series : System.String { get }
+ToolUp.Platform.TimeSeriesSourceBinding.UnitColumn : System.String { get }
+ToolUp.Platform.TimeSeriesSourceBinding.UnitLabel : System.String { get }
+ToolUp.Platform.TimeSeriesSourceBinding.Until : System.DateTimeOffset { get }
+ToolUp.Platform.TimeSeriesSourceBinding.ValueColumn : System.String { get }
 ToolUp.Platform.Tracing.ActivityContextHelpers (class)
 ToolUp.Platform.Tracing.ActivityContextHelpers.currentTraceparent() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Tracing.ActivityContextHelpers.tryParseTraceparent(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Diagnostics.ActivityContext]
@@ -4589,6 +4757,15 @@ ToolUp.Platform.VintageReevaluationJobHandler..ctor(ToolUp.Platform.IModelEvalua
 ToolUp.Platform.VintageReevaluationJobHandlerModule (class)
 ToolUp.Platform.VintageReevaluationJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Platform.VintageReevaluationJobHandlerModule.create(ToolUp.Platform.IModelEvaluationRunner, ToolUp.Platform.IDatasetStore, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.VirtualDatasetReader (class)
+ToolUp.Platform.VirtualDatasetReader..ctor(ToolUp.Platform.IDataSource, ToolUp.Platform.IDatasetCodec, ToolUp.Platform.DatasetSchema, ToolUp.Platform.DataSourceConfig)
+ToolUp.Platform.VirtualDatasetReader.Bind(System.String, ToolUp.Platform.VirtualBinding) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.VirtualDatasetReader.DeleteSpill(System.String, System.String, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.VirtualDatasetReader.MaterialiseForHandoff(System.String, ToolUp.Platform.VirtualBinding, ToolUp.Platform.IDataObjectStore, System.String, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel], ToolUp.Platform.IAuditLog, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetContentRef, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.VirtualDatasetReader.ReadPage(System.String, ToolUp.Platform.VirtualBinding, ToolUp.Platform.DatasetPageQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetPage, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.VirtualDatasetReader.Schema : ToolUp.Platform.DatasetSchema { get }
+ToolUp.Platform.VirtualDatasetReaderModule (class)
+ToolUp.Platform.VirtualDatasetReaderModule.create(ToolUp.Platform.IDataSource, ToolUp.Platform.IDatasetCodec, ToolUp.Platform.DatasetSchema, ToolUp.Platform.DataSourceConfig) : ToolUp.Platform.VirtualDatasetReader
 ToolUp.Platform.WebhookApiHandler (class)
 ToolUp.Platform.WebhookApiHandler.webhookApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IWebhookApi
 ToolUp.Platform.WebhookDispatcher (class)

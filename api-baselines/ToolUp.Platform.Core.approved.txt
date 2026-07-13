@@ -725,6 +725,10 @@ ToolUp.Platform.AuditEvent.IsConversationStarted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationTurnAppended : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDataStoreReset : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDataSubjectRequest : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsDatasetDeclassified : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsDatasetPolicyDenied : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsDatasetSpillCreated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsDatasetSpillDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDiagnosticBundleAccessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEgressBlocked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyCreated : System.Boolean { get }
@@ -887,6 +891,14 @@ ToolUp.Platform.AuditEvent+DataStoreReset (class)
 ToolUp.Platform.AuditEvent+DataStoreReset.Item : ToolUp.Platform.DataStoreResetPayload { get }
 ToolUp.Platform.AuditEvent+DataSubjectRequest (class)
 ToolUp.Platform.AuditEvent+DataSubjectRequest.Item : ToolUp.Platform.DataSubjectRequestAuditPayload { get }
+ToolUp.Platform.AuditEvent+DatasetDeclassified (class)
+ToolUp.Platform.AuditEvent+DatasetDeclassified.Item : ToolUp.Platform.DatasetDeclassifiedPayload { get }
+ToolUp.Platform.AuditEvent+DatasetPolicyDenied (class)
+ToolUp.Platform.AuditEvent+DatasetPolicyDenied.Item : ToolUp.Platform.DatasetPolicyDeniedPayload { get }
+ToolUp.Platform.AuditEvent+DatasetSpillCreated (class)
+ToolUp.Platform.AuditEvent+DatasetSpillCreated.Item : ToolUp.Platform.DatasetSpillCreatedPayload { get }
+ToolUp.Platform.AuditEvent+DatasetSpillDeleted (class)
+ToolUp.Platform.AuditEvent+DatasetSpillDeleted.Item : ToolUp.Platform.DatasetSpillDeletedPayload { get }
 ToolUp.Platform.AuditEvent+DiagnosticBundleAccessed (class)
 ToolUp.Platform.AuditEvent+DiagnosticBundleAccessed.Item : ToolUp.Platform.DiagnosticBundleAccessedPayload { get }
 ToolUp.Platform.AuditEvent+EgressBlocked (class)
@@ -1058,6 +1070,10 @@ ToolUp.Platform.AuditEvent+Tags.ConversationStarted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationTurnAppended : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DataStoreReset : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DataSubjectRequest : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.DatasetDeclassified : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.DatasetPolicyDenied : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.DatasetSpillCreated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.DatasetSpillDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DiagnosticBundleAccessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EgressBlocked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyCreated : System.Int32 (literal)
@@ -2165,6 +2181,21 @@ ToolUp.Platform.DataObjectError+Tags.StorageFailure : System.Int32 (literal)
 ToolUp.Platform.DataObjectError+Tags.VersionNotFound : System.Int32 (literal)
 ToolUp.Platform.DataObjectError+VersionNotFound (class)
 ToolUp.Platform.DataObjectError+VersionNotFound.Item : System.Int32 { get }
+ToolUp.Platform.DataProvenanceLabel (class)
+ToolUp.Platform.DataProvenanceLabel.IsClassified : System.Boolean { get }
+ToolUp.Platform.DataProvenanceLabel.IsCleanRoomDerived : System.Boolean { get }
+ToolUp.Platform.DataProvenanceLabel.Tag : System.Int32 { get }
+ToolUp.Platform.DataProvenanceLabel+Classified (class)
+ToolUp.Platform.DataProvenanceLabel+Classified.tag : System.String { get }
+ToolUp.Platform.DataProvenanceLabel+CleanRoomDerived (class)
+ToolUp.Platform.DataProvenanceLabel+CleanRoomDerived.epsilonSpent : System.Double { get }
+ToolUp.Platform.DataProvenanceLabel+CleanRoomDerived.gateRef : System.String { get }
+ToolUp.Platform.DataProvenanceLabel+Tags (class)
+ToolUp.Platform.DataProvenanceLabel+Tags.Classified : System.Int32 (literal)
+ToolUp.Platform.DataProvenanceLabel+Tags.CleanRoomDerived : System.Int32 (literal)
+ToolUp.Platform.DataProvenanceLabelModule (class)
+ToolUp.Platform.DataProvenanceLabelModule.key(ToolUp.Platform.DataProvenanceLabel) : System.String
+ToolUp.Platform.DataProvenanceLabelModule.union(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]
 ToolUp.Platform.DataSourceConfig (class)
 ToolUp.Platform.DataSourceConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.DataSourceConfig.ConnectionScope : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
@@ -2325,6 +2356,15 @@ ToolUp.Platform.DatasetDType+Tags.Timestamp : System.Int32 (literal)
 ToolUp.Platform.DatasetDTypeModule (class)
 ToolUp.Platform.DatasetDTypeModule.name(ToolUp.Platform.DatasetDType) : System.String
 ToolUp.Platform.DatasetDTypeModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetDType]
+ToolUp.Platform.DatasetDeclassifiedPayload (class)
+ToolUp.Platform.DatasetDeclassifiedPayload..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.Int32, System.String)
+ToolUp.Platform.DatasetDeclassifiedPayload.Actor : System.String { get }
+ToolUp.Platform.DatasetDeclassifiedPayload.DatasetId : System.String { get }
+ToolUp.Platform.DatasetDeclassifiedPayload.FromVersion : System.Int32 { get }
+ToolUp.Platform.DatasetDeclassifiedPayload.LabelCount : System.Int32 { get }
+ToolUp.Platform.DatasetDeclassifiedPayload.Reason : System.String { get }
+ToolUp.Platform.DatasetDeclassifiedPayload.ScopeId : System.String { get }
+ToolUp.Platform.DatasetDeclassifiedPayload.ToVersion : System.Int32 { get }
 ToolUp.Platform.DatasetError (class)
 ToolUp.Platform.DatasetError.DeleteForbidden : ToolUp.Platform.DatasetError { get }
 ToolUp.Platform.DatasetError.IsDeleteForbidden : System.Boolean { get }
@@ -2382,6 +2422,16 @@ ToolUp.Platform.DatasetFilterOp+Tags.Gte : System.Int32 (literal)
 ToolUp.Platform.DatasetFilterOp+Tags.Lt : System.Int32 (literal)
 ToolUp.Platform.DatasetFilterOp+Tags.Lte : System.Int32 (literal)
 ToolUp.Platform.DatasetFilterOp+Tags.Ne : System.Int32 (literal)
+ToolUp.Platform.DatasetMateriality (class)
+ToolUp.Platform.DatasetMateriality.IsMaterialised : System.Boolean { get }
+ToolUp.Platform.DatasetMateriality.IsVirtual : System.Boolean { get }
+ToolUp.Platform.DatasetMateriality.Materialised : ToolUp.Platform.DatasetMateriality { get }
+ToolUp.Platform.DatasetMateriality.Tag : System.Int32 { get }
+ToolUp.Platform.DatasetMateriality+Tags (class)
+ToolUp.Platform.DatasetMateriality+Tags.Materialised : System.Int32 (literal)
+ToolUp.Platform.DatasetMateriality+Tags.Virtual : System.Int32 (literal)
+ToolUp.Platform.DatasetMateriality+Virtual (class)
+ToolUp.Platform.DatasetMateriality+Virtual.Item : ToolUp.Platform.VirtualBinding { get }
 ToolUp.Platform.DatasetPage (class)
 ToolUp.Platform.DatasetPage..ctor(ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow], System.Int64, System.Int64)
 ToolUp.Platform.DatasetPage.Offset : System.Int64 { get }
@@ -2395,6 +2445,13 @@ ToolUp.Platform.DatasetPageQuery.Limit : System.Int32 { get }
 ToolUp.Platform.DatasetPageQuery.Offset : System.Int64 { get }
 ToolUp.Platform.DatasetPageQueryModule (class)
 ToolUp.Platform.DatasetPageQueryModule.firstPage(System.Int32) : ToolUp.Platform.DatasetPageQuery
+ToolUp.Platform.DatasetPolicyDeniedPayload (class)
+ToolUp.Platform.DatasetPolicyDeniedPayload..ctor(System.String, System.String, System.Int32, System.String, System.String)
+ToolUp.Platform.DatasetPolicyDeniedPayload.DatasetId : System.String { get }
+ToolUp.Platform.DatasetPolicyDeniedPayload.Policy : System.String { get }
+ToolUp.Platform.DatasetPolicyDeniedPayload.Reason : System.String { get }
+ToolUp.Platform.DatasetPolicyDeniedPayload.ScopeId : System.String { get }
+ToolUp.Platform.DatasetPolicyDeniedPayload.Version : System.Int32 { get }
 ToolUp.Platform.DatasetRow (class)
 ToolUp.Platform.DatasetRow..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetValue])
 ToolUp.Platform.DatasetRow.Cells : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetValue] { get }
@@ -2408,6 +2465,20 @@ ToolUp.Platform.DatasetSchemaModule.panelPeriod(ToolUp.Platform.DatasetSchema) :
 ToolUp.Platform.DatasetSchemaModule.panelUnit(ToolUp.Platform.DatasetSchema) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetColumn]
 ToolUp.Platform.DatasetSchemaModule.targets(ToolUp.Platform.DatasetSchema) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetColumn]
 ToolUp.Platform.DatasetSchemaModule.validateRow(ToolUp.Platform.DatasetSchema, ToolUp.Platform.DatasetRow) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.DatasetSpillCreatedPayload (class)
+ToolUp.Platform.DatasetSpillCreatedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTime, System.Int64)
+ToolUp.Platform.DatasetSpillCreatedPayload.Actor : System.String { get }
+ToolUp.Platform.DatasetSpillCreatedPayload.ExpiresAt : System.DateTime { get }
+ToolUp.Platform.DatasetSpillCreatedPayload.RowCount : System.Int64 { get }
+ToolUp.Platform.DatasetSpillCreatedPayload.ScopeId : System.String { get }
+ToolUp.Platform.DatasetSpillCreatedPayload.SpillDatasetId : System.String { get }
+ToolUp.Platform.DatasetSpillCreatedPayload.Watermark : System.String { get }
+ToolUp.Platform.DatasetSpillDeletedPayload (class)
+ToolUp.Platform.DatasetSpillDeletedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.DatasetSpillDeletedPayload.Actor : System.String { get }
+ToolUp.Platform.DatasetSpillDeletedPayload.Reason : System.String { get }
+ToolUp.Platform.DatasetSpillDeletedPayload.ScopeId : System.String { get }
+ToolUp.Platform.DatasetSpillDeletedPayload.SpillDatasetId : System.String { get }
 ToolUp.Platform.DatasetStoreMode (class)
 ToolUp.Platform.DatasetStoreMode.BlobDatasets : ToolUp.Platform.DatasetStoreMode { get }
 ToolUp.Platform.DatasetStoreMode.CustomDatasetStore : ToolUp.Platform.DatasetStoreMode { get }
@@ -2455,12 +2526,13 @@ ToolUp.Platform.DatasetValueModule.compare(ToolUp.Platform.DatasetValue, ToolUp.
 ToolUp.Platform.DatasetValueModule.dtypeOf(ToolUp.Platform.DatasetValue) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetDType]
 ToolUp.Platform.DatasetValueModule.fits(ToolUp.Platform.DatasetDType, System.Boolean, ToolUp.Platform.DatasetValue) : System.Boolean
 ToolUp.Platform.DatasetVersion (class)
-ToolUp.Platform.DatasetVersion..ctor(System.String, System.Int32, System.String, ToolUp.Platform.DatasetSchema, System.Int64, System.String, System.String, System.DateTimeOffset, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.DatasetVersion..ctor(System.String, System.Int32, System.String, ToolUp.Platform.DatasetSchema, System.Int64, System.String, System.String, System.DateTimeOffset, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel])
 ToolUp.Platform.DatasetVersion.ContentHash : System.String { get }
 ToolUp.Platform.DatasetVersion.CreatedAt : System.DateTimeOffset { get }
 ToolUp.Platform.DatasetVersion.CreatedBy : System.String { get }
 ToolUp.Platform.DatasetVersion.DatasetId : System.String { get }
 ToolUp.Platform.DatasetVersion.Format : System.String { get }
+ToolUp.Platform.DatasetVersion.Labels : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel] { get }
 ToolUp.Platform.DatasetVersion.Metadata : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.DatasetVersion.RowCount : System.Int64 { get }
 ToolUp.Platform.DatasetVersion.Schema : ToolUp.Platform.DatasetSchema { get }
@@ -6524,6 +6596,15 @@ ToolUp.Platform.SmsEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[Syst
 ToolUp.Platform.SmsEnvelope.Body : System.String { get }
 ToolUp.Platform.SmsEnvelope.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SmsEnvelope.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.SnapshotFidelity (class)
+ToolUp.Platform.SnapshotFidelity.Approximate : ToolUp.Platform.SnapshotFidelity { get }
+ToolUp.Platform.SnapshotFidelity.Exact : ToolUp.Platform.SnapshotFidelity { get }
+ToolUp.Platform.SnapshotFidelity.IsApproximate : System.Boolean { get }
+ToolUp.Platform.SnapshotFidelity.IsExact : System.Boolean { get }
+ToolUp.Platform.SnapshotFidelity.Tag : System.Int32 { get }
+ToolUp.Platform.SnapshotFidelity+Tags (class)
+ToolUp.Platform.SnapshotFidelity+Tags.Approximate : System.Int32 (literal)
+ToolUp.Platform.SnapshotFidelity+Tags.Exact : System.Int32 (literal)
 ToolUp.Platform.SourceStatus (class)
 ToolUp.Platform.SourceStatus.Clean : ToolUp.Platform.SourceStatus { get }
 ToolUp.Platform.SourceStatus.Failed : ToolUp.Platform.SourceStatus { get }
@@ -7581,6 +7662,12 @@ ToolUp.Platform.VersioningPolicy+Tags (class)
 ToolUp.Platform.VersioningPolicy+Tags.StrictlyVersioned : System.Int32 (literal)
 ToolUp.Platform.VersioningPolicy+Tags.Unversioned : System.Int32 (literal)
 ToolUp.Platform.VersioningPolicy+Tags.Versioned : System.Int32 (literal)
+ToolUp.Platform.VirtualBinding (class)
+ToolUp.Platform.VirtualBinding..ctor(System.String, System.String, System.String, ToolUp.Platform.SnapshotFidelity)
+ToolUp.Platform.VirtualBinding.Fidelity : ToolUp.Platform.SnapshotFidelity { get }
+ToolUp.Platform.VirtualBinding.QuerySpec : System.String { get }
+ToolUp.Platform.VirtualBinding.SourceRef : System.String { get }
+ToolUp.Platform.VirtualBinding.Watermark : System.String { get }
 ToolUp.Platform.Visualisation (class)
 ToolUp.Platform.Visualisation+ChartDataPointCategorical (class)
 ToolUp.Platform.Visualisation+ChartDataPointCategorical..ctor(System.String, System.Double)

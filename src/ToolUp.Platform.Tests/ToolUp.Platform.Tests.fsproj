@@ -261,6 +261,9 @@
         <Compile Include="InProcess\DataSubjectRequestTests.fs" />
         <Compile Include="InProcess\SignedExportTests.fs" />
         <Compile Include="InProcess\DatasetStoreTests.fs" />
+        <Compile Include="InProcess\DatasetAssemblyTests.fs" />
+        <Compile Include="InProcess\VirtualDatasetTests.fs" />
+        <Compile Include="InProcess\ProvenanceLabelTests.fs" />
         <!-- Phase 456 — model evaluation & champion-challenger harness
              (reference provider family over the blob-backed default stack). -->
         <Compile Include="InProcess\ModelEvaluationTests.fs" />

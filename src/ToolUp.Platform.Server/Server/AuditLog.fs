@@ -1147,6 +1147,39 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelArtifactTransitionDenied(fromAuditJson<ModelArtifactTransitionDeniedPayload> j)
     }
+    // Phase 482 / 487 — dataset provenance & virtual-spill audit rows (append-only registration).
+    {
+        EventType = "DatasetSpillCreated"
+        TryEncode =
+            (function
+            | DatasetSpillCreated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DatasetSpillCreated(fromAuditJson<DatasetSpillCreatedPayload> j)
+    }
+    {
+        EventType = "DatasetSpillDeleted"
+        TryEncode =
+            (function
+            | DatasetSpillDeleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DatasetSpillDeleted(fromAuditJson<DatasetSpillDeletedPayload> j)
+    }
+    {
+        EventType = "DatasetDeclassified"
+        TryEncode =
+            (function
+            | DatasetDeclassified p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DatasetDeclassified(fromAuditJson<DatasetDeclassifiedPayload> j)
+    }
+    {
+        EventType = "DatasetPolicyDenied"
+        TryEncode =
+            (function
+            | DatasetPolicyDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DatasetPolicyDenied(fromAuditJson<DatasetPolicyDeniedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

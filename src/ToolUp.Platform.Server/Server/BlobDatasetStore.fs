@@ -83,11 +83,22 @@ type BlobDatasetStore(dataObjects: IDataObjectStore, codec: IDatasetCodec) =
     let buildMetadata (userMeta: Map<string, string>) (schema: DatasetSchema) (rowCount: int64) (format: string) =
         let schemaJson = JsonSerializer.Serialize(schema, jsonOptions)
 
+        // Phase 482 — the privacy-provenance label sidecar shares the
+        // `dataset.` reserved prefix, so the reserved-key filter would strip
+        // it. Preserve it explicitly: a producing executor propagates labels
+        // by stamping this key into the metadata it hands `Create`, and the
+        // store must carry it through rather than treat it as user noise.
+        let carriedLabels = Map.tryFind DataProvenanceLabels.MetadataKey userMeta
+
         userMeta
         |> Map.filter (fun k _ -> not (isReservedKey k))
         |> Map.add SchemaKey schemaJson
         |> Map.add RowCountKey (string rowCount)
         |> Map.add FormatKey format
+        |> fun m ->
+            match carriedLabels with
+            | Some json -> Map.add DataProvenanceLabels.MetadataKey json m
+            | None -> m
 
     let mapDataObjectError (e: DataObjectError) : DatasetError =
         match e with
@@ -129,6 +140,10 @@ type BlobDatasetStore(dataObjects: IDataObjectStore, codec: IDatasetCodec) =
                     CreatedAt = DateTimeOffset(DateTime.SpecifyKind(dobj.CreatedAt, DateTimeKind.Utc))
                     CreatedBy = dobj.CreatedBy
                     Metadata = userMeta
+                    // Phase 482 — surface the carried privacy-provenance labels
+                    // (read from the full stored metadata, which still holds the
+                    // reserved sidecar; `[]` for an unlabelled version).
+                    Labels = DataProvenanceLabels.readFrom dobj.Metadata
                 }
             with ex ->
                 Error(DatasetError.StorageFailure $"dataset schema sidecar is unreadable: {ex.Message}")

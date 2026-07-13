@@ -255,6 +255,90 @@ type DatasetPage = {
     TotalRows: int64
 }
 
+/// Phase 482 — a privacy-provenance label carried by a dataset version.
+/// Labels **travel with the data** so a downstream reader can tell gated
+/// data from ordinary data long after it leaves the gate. The DU shape is
+/// forge's; the tag vocabulary in `Classified` is the caller's.
+/// `[<RequireQualifiedAccess>]` — `CleanRoomDerived` / `Classified` are
+/// generic enough to want qualification in the widely-opened namespace.
+[<RequireQualifiedAccess>]
+type DataProvenanceLabel =
+    /// The version is derived from a clean-room-gated computation (Phase
+    /// 18b). `gateRef` names the gate decision that seeded it; `epsilonSpent`
+    /// is the differential-privacy budget consumed (0.0 when the gate does
+    /// not meter ε). Immutable once set — labels are provenance, not opinion.
+    | CleanRoomDerived of gateRef: string * epsilonSpent: float
+    /// A free classification tag from the caller's own vocabulary (e.g.
+    /// `"pii"`, `"restricted"`). Forge round-trips it and enforces policy on
+    /// it, but never interprets the tag string (GP 1).
+    | Classified of tag: string
+
+module DataProvenanceLabel =
+    /// A stable identity string for a label — the value set-union dedupes on,
+    /// so two `CleanRoomDerived` labels naming the same gate + ε collapse to
+    /// one, and equal `Classified` tags collapse to one.
+    let key =
+        function
+        | DataProvenanceLabel.CleanRoomDerived(gate, eps) -> sprintf "cleanroom:%s:%f" gate eps
+        | DataProvenanceLabel.Classified tag -> "classified:" + tag
+
+    /// The union of two label sets, deduped by `key`, preserving the order of
+    /// first appearance (left labels first). The propagation primitive: a
+    /// derived version inherits the union of its inputs' labels.
+    let union (a: DataProvenanceLabel list) (b: DataProvenanceLabel list) : DataProvenanceLabel list =
+        (a @ b)
+        |> List.fold
+            (fun (seen: Set<string>, acc) label ->
+                let k = key label
+
+                if Set.contains k seen then
+                    seen, acc
+                else
+                    Set.add k seen, label :: acc)
+            (Set.empty, [])
+        |> snd
+        |> List.rev
+
+/// Phase 487 — how faithfully a virtual source reproduces a past read at a
+/// pinned watermark. `Exact` — the source has snapshot semantics (a snapshot
+/// id / MVCC read) so the same watermark re-reads byte-identical rows;
+/// `Approximate` — the watermark is a best-effort high-water mark (a
+/// timestamp / query hash) and a re-read may drift if the source mutated
+/// history. Recorded honestly so a consumer knows a virtual vintage's
+/// reproducibility contract.
+[<RequireQualifiedAccess>]
+type SnapshotFidelity =
+    | Exact
+    | Approximate
+
+/// Phase 487 — a virtual dataset version's binding: the data stays in the
+/// deployment's own store and is read through at page time, so the "vintage"
+/// is a **source watermark**, not copied bytes. Immutable *as a definition*
+/// (GP 5): re-binding at a new watermark is a new version; the same watermark
+/// re-read is reproducible to the source's `Fidelity`.
+type VirtualBinding = {
+    /// `IDataSource.Kind` of the connector the version reads through.
+    SourceRef: string
+    /// Connector-interpreted query (the `IDataSource.Query` `sql`). Forge
+    /// never parses it.
+    QuerySpec: string
+    /// The vintage identity — a snapshot id / high-water timestamp / query
+    /// hash. Re-binding at a new watermark is a new version.
+    Watermark: string
+    /// The source's snapshot-reproducibility contract for this watermark.
+    Fidelity: SnapshotFidelity
+}
+
+/// Phase 487 — the materiality of a dataset version. `Materialised` — the
+/// default: rows live as encoded content in `IBlobStorage` (Phase 448).
+/// `Virtual` — the rows stay in the deployment's own store and are read
+/// through a `VirtualBinding` at page time (no durable copy). A deployment
+/// that never binds a virtual version is byte-for-byte unchanged (GP 13).
+[<RequireQualifiedAccess>]
+type DatasetMateriality =
+    | Materialised
+    | Virtual of VirtualBinding
+
 /// Immutable metadata for one dataset version ("vintage"). The store writes
 /// one per `Create`; `Version` numbers are linear per `(ScopeId, DatasetId)`
 /// starting at 1 (inherited from `IDataObjectStore` versioning). The row
@@ -272,6 +356,12 @@ type DatasetVersion = {
     CreatedAt: DateTimeOffset
     CreatedBy: string
     Metadata: Map<string, string>
+    /// Phase 482 — privacy-provenance labels carried by this version. Empty
+    /// for ordinary (unlabelled) data — the default, so a deployment that
+    /// never labels is byte-for-byte unchanged (GP 13). Populated by the
+    /// store from the reserved label sidecar; propagated automatically by the
+    /// producing executors (assembly, scoring).
+    Labels: DataProvenanceLabel list
 }
 
 /// Typed errors from `IDatasetStore`. `[<RequireQualifiedAccess>]` —

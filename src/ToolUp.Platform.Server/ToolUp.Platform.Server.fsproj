@@ -163,6 +163,10 @@
         <Compile Include="Server\Infra\PersistentEventStore.fs" />
         <Compile Include="Server\IDataObjectStore.fs" />
         <Compile Include="Server\DataObjectStore.fs" />
+        <!-- Phase 482 — privacy-provenance label persistence (JSON sidecar +
+             metadata carriage). Compiled before BlobDatasetStore, which reads
+             and preserves the label sidecar. -->
+        <Compile Include="Server\DataProvenanceLabels.fs" />
         <Compile Include="Server\IDatasetStore.fs" />
         <Compile Include="Server\BlobDatasetStore.fs" />
         <Compile Include="Server\IColumnMappingStore.fs" />
@@ -228,6 +232,11 @@
              registry, then the fit-run job handler (needs IJobHandler above +
              IAuditLog from Core). Composed by ComposeJobs.registerModelFitting. -->
         <Compile Include="Server\ModelFitTypes.fs" />
+        <!-- Phase 482 — dataset declassification (needs DatasetVersionRef from
+             ModelFitTypes + IDatasetStore + IAuditLog). The only label-removal
+             path: an explicit, audited admin act producing a new unlabelled
+             version. -->
+        <Compile Include="Server\DatasetProvenanceOps.fs" />
         <Compile Include="Server\IModelFitProvider.fs" />
         <Compile Include="Server\ModelFitJobHandler.fs" />
         <!-- Phase 453 — model registry: governed-artifact types, the seam,
@@ -242,6 +251,13 @@
              then the batch IJobHandler over IModelRegistry + IJobScheduler. -->
         <Compile Include="Server\IModelScorer.fs" />
         <Compile Include="Server\ModelScoringJobHandler.fs" />
+        <!-- Phase 452 — dataset assembly (transforms-as-data): the spec +
+             closed transform DU, then the executor (rides IDatasetStore for
+             output + ITimeSeriesStore for range sources; propagates Phase 482
+             labels). Algorithm-free plumbing; forge never computes a derived
+             value outside the closed aggregate list. -->
+        <Compile Include="Server\DatasetAssemblyTypes.fs" />
+        <Compile Include="Server\DatasetAssemblyExecutor.fs" />
         <!-- Phase 456 — model evaluation & champion-challenger harness: the
              evaluation types + provider-seam Evaluate extension member, then
              the runner (rides Phase 449/453/454 + IDataObjectStore), the
@@ -269,6 +285,10 @@
              _platform scope; reconstruction is scan + take latest. -->
         <Compile Include="Server\DefaultDeployPipeline.fs" />
         <Compile Include="Server\IDataSource.fs" />
+        <!-- Phase 487 — virtual (zero-copy) dataset bindings: read a dataset
+             version through an IDataSource with no durable copy; ephemeral
+             TTL-bounded audited spill for compute handoff. -->
+        <Compile Include="Server\VirtualDatasetBinding.fs" />
         <Compile Include="Server\IOAuthCredentialFlow.fs" />
         <!-- Phase 10g — OAuth 1.0a substrate core: RFC 5849 signer, flow
              interface, request-token state store + in-memory default. -->

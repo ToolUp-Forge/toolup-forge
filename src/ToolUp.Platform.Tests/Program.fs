@@ -17,6 +17,12 @@ let allTests =
         SeedDataLoaderTests.tests
         // Phase 448 — IDatasetStore conformance (blob-backed default).
         DatasetStoreTests.tests
+        // Phase 452 — dataset assembly (transforms-as-data) executor.
+        DatasetAssemblyTests.tests
+        // Phase 487 — virtual (zero-copy) dataset bindings.
+        VirtualDatasetTests.tests
+        // Phase 482 — privacy-provenance labels + propagation + policy.
+        ProvenanceLabelTests.tests
         // Phase 449 — model-fit envelope conformance (reference provider).
         IModelFitProviderContract.tests
         // Phase 453 — model registry conformance (blob-backed default).

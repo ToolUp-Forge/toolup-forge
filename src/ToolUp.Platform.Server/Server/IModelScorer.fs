@@ -351,7 +351,16 @@ type ModelScorer
                                     // dataset version — an ordinary vintage,
                                     // queryable/joinable with zero new
                                     // machinery — carrying provenance metadata.
-                                    let metadata = ScoreProvenance.forOutput request.Artifact request.Input
+                                    // Phase 482 — the predictions inherit the
+                                    // input vintage's privacy-provenance labels
+                                    // automatically (propagation enforced here
+                                    // in the producing executor, not left to
+                                    // callers), so a clean-room-derived input
+                                    // carries its guarantee into the scored
+                                    // output.
+                                    let metadata =
+                                        ScoreProvenance.forOutput request.Artifact request.Input
+                                        |> DataProvenanceLabels.writeInto inputVersion.Labels
 
                                     match!
                                         datasets.Create(

@@ -2502,6 +2502,76 @@ type ModelEvaluatedPayload = {
     ScopeId: string
 }
 
+// --- Phase 482 / 487 — dataset provenance & virtual-spill audit payloads --
+//
+// Emitted under `_platform.audit`. Identity + cardinality only — no dataset
+// rows, no label content values beyond the closed DU shape travel.
+
+/// Phase 487 — an ephemeral materialisation ("spill") of a **virtual**
+/// dataset version was written to a retention-bounded scratch blob for
+/// compute handoff. Virtual versions read through to the deployment's own
+/// stores with no durable copy; a spill is the declared, observable
+/// exception to zero-copy — always audited so the copy is never silent.
+type DatasetSpillCreatedPayload = {
+    /// Actor that requested the handoff materialisation.
+    Actor: string
+    ScopeId: string
+    /// Scratch dataset id the spill landed under.
+    SpillDatasetId: string
+    /// The virtual version's watermark — its vintage identity.
+    Watermark: string
+    /// UTC instant after which the spill is eligible for deletion.
+    ExpiresAt: DateTime
+    /// Rows spilled. Cardinality only.
+    RowCount: int64
+}
+
+/// Phase 487 — a spill blob was deleted (TTL reached, or explicit cleanup).
+/// Closes the spill lifecycle in the trail so a leaked scratch copy is
+/// visible by its absence of a matching delete row.
+type DatasetSpillDeletedPayload = {
+    Actor: string
+    ScopeId: string
+    SpillDatasetId: string
+    /// Why deleted — `"ttl-expired"` / `"explicit"`.
+    Reason: string
+}
+
+/// Phase 482 — privacy-provenance labels were removed from a dataset version
+/// by an explicit admin act (the **only** removal path; labels are otherwise
+/// immutable provenance). Declassification writes a new, unlabelled version;
+/// this row records the actor, both version numbers, and the justification so
+/// the removal is accountable (GP 4 / GP 6).
+type DatasetDeclassifiedPayload = {
+    /// Owner / Admin who declassified.
+    Actor: string
+    ScopeId: string
+    DatasetId: string
+    /// The labelled version whose labels were cleared.
+    FromVersion: int
+    /// The new, unlabelled version created by the declassify.
+    ToVersion: int
+    /// Count of labels removed. Cardinality only.
+    LabelCount: int
+    /// Operator-supplied justification.
+    Reason: string
+}
+
+/// Phase 482 — a label-carrying dataset version was refused a dispatch or a
+/// raw export by an enabled data-provenance policy (GP 4 / GP 6). A typed,
+/// audited denial — repeated denials are a governance-gate signal, like
+/// `ModelArtifactTransitionDenied`.
+type DatasetPolicyDeniedPayload = {
+    ScopeId: string
+    DatasetId: string
+    Version: int
+    /// Which policy fired — `"dispatch"` (labelled data needs Isolated
+    /// compute) or `"export"` (raw export of label-carrying content).
+    Policy: string
+    /// Human-readable refusal reason.
+    Reason: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -2999,6 +3069,17 @@ type AuditEvent =
     /// Phase 456 — a holdout-evaluation run stored a provider-computed
     /// metric map against a model artifact (out-of-time track record).
     | ModelEvaluated of ModelEvaluatedPayload
+    /// Phase 487 — a virtual dataset version was materialised to a
+    /// retention-bounded scratch blob for compute handoff.
+    | DatasetSpillCreated of DatasetSpillCreatedPayload
+    /// Phase 487 — a spill blob was deleted (TTL reached / explicit cleanup).
+    | DatasetSpillDeleted of DatasetSpillDeletedPayload
+    /// Phase 482 — a dataset version's privacy-provenance labels were removed
+    /// by an explicit admin act (the only removal path).
+    | DatasetDeclassified of DatasetDeclassifiedPayload
+    /// Phase 482 — a label-carrying dataset version was refused a dispatch /
+    /// raw export by policy. A typed, audited denial.
+    | DatasetPolicyDenied of DatasetPolicyDeniedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -3130,6 +3211,10 @@ module AuditEvent =
         | ModelScored _ -> "ModelScored"
         | ModelScoreRefused _ -> "ModelScoreRefused"
         | ModelEvaluated _ -> "ModelEvaluated"
+        | DatasetSpillCreated _ -> "DatasetSpillCreated"
+        | DatasetSpillDeleted _ -> "DatasetSpillDeleted"
+        | DatasetDeclassified _ -> "DatasetDeclassified"
+        | DatasetPolicyDenied _ -> "DatasetPolicyDenied"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
