@@ -152,6 +152,11 @@ module Client =
         /// the role is user-bound, not team-bound. Anonymous-mode
         /// deployments leave this `None` (the fetch returns false).
         PlatformRole: PlatformRole option
+        /// Phase 567 — which navigation area the sidebar is currently
+        /// showing under `ClientConfig.AdminSurface = SeparateArea`. Ignored
+        /// under the default `InlineGroups`. Flipped by the area switcher
+        /// (reserved sidebar ids) and by deep-linking to an admin-area route.
+        CurrentArea: ModuleArea
         /// Phase 245 — platform-admin "show all modules" escape. With
         /// per-team module exposure, a platform admin's sidebar is
         /// exposure-filtered like a member's (admins respect a team's
@@ -1090,6 +1095,7 @@ module Client =
             ActiveTeamId = None
             ActiveTeamLoadCompleted = false
             PlatformRole = None
+            CurrentArea = ModuleArea.Product
             ConfigsPrefetch = Prefetch.none
             FlagsPrefetch = Prefetch.none
             ResetCounters = Map.empty
@@ -1236,6 +1242,24 @@ module Client =
                 },
                 Cmd.none
 
+            // Phase 567 — the two-surface area switcher fires through the
+            // same onSelect as modules; its reserved ids flip the rendered
+            // navigation area rather than navigating. Inert under the default
+            // AdminSurface = InlineGroups (no switcher is ever rendered).
+            | ModuleSelected sidebarId when sidebarId = Toolup.Sidebar.AdminAreaId ->
+                {
+                    model with
+                        CurrentArea = ModuleArea.Administration
+                },
+                Cmd.none
+
+            | ModuleSelected sidebarId when sidebarId = Toolup.Sidebar.ProductAreaId ->
+                {
+                    model with
+                        CurrentArea = ModuleArea.Product
+                },
+                Cmd.none
+
             | ModuleSelected sidebarId ->
                 // Sidebar Ids for multi-page modules are composite
                 // (`"{moduleId}{pageRoute}"`); single-page modules stay
@@ -1246,6 +1270,13 @@ module Client =
 
                 match tryFind modules moduleId with
                 | Some moduleImpl ->
+                    // Phase 567.D — deep-link coherence: navigating to a
+                    // module flips the rendered area to that module's
+                    // effective area (a route owned by an admin-area module
+                    // auto-shows the admin rail, and vice versa). Inert under
+                    // InlineGroups, where CurrentArea is ignored.
+                    let targetArea = ClientConfig.effectiveArea moduleImpl.Area moduleImpl.Group
+
                     let pageRoute =
                         match pageRouteOpt with
                         | Some r -> Some r
@@ -1264,12 +1295,14 @@ module Client =
                             model with
                                 ActiveModuleId = moduleId
                                 ActivePageRoute = pageRoute
+                                CurrentArea = targetArea
                         },
                         Cmd.none
                     elif model.ActiveModuleId = moduleId then
                         {
                             model with
                                 ActivePageRoute = pageRoute
+                                CurrentArea = targetArea
                         },
                         Cmd.none
                     else
@@ -1285,6 +1318,7 @@ module Client =
                             model with
                                 ActiveModuleId = moduleId
                                 ActivePageRoute = pageRoute
+                                CurrentArea = targetArea
                                 ModuleStates = model.ModuleStates |> Map.add moduleId state
                         },
                         cmd
@@ -2306,8 +2340,70 @@ module Client =
             // `selectedSidebarId` below for the active-border highlight —
             // routing and deep-linking are unchanged by the nesting; only
             // the presentation groups the pages under their module.
+            // Phase 567 — under AdminSurface = SeparateArea, render one
+            // navigation area at a time plus a role-gated switcher entry; the
+            // default InlineGroups leaves visibleModules and the switcher list
+            // untouched (byte-identical to pre-567).
+            //
+            // 567.E compose-order: the area split runs LAST, over
+            // `visibleModules` — i.e. AFTER RBAC (`rbacFiltered`), the
+            // platform-admin role gate (`adminGroupFiltered`), the per-subject
+            // `Visibility` gate (`kindVisibleModules`), and the no-active-team
+            // landing collapse (`visibleModules`). So the admin partition only
+            // ever contains modules the caller may already see: a non-admin has
+            // had the platform-scoped groups stripped upstream (empty admin
+            // partition ⇒ no switcher), and Phase 245 per-team exposure /
+            // `ShowAllModules` have already applied. No double-hiding: the split
+            // re-buckets an already-authorised set, it does not re-filter.
+            let areaFilteredModules, switcherViews =
+                match config.AdminSurface with
+                | InlineGroups -> visibleModules, []
+                | SeparateArea ->
+                    let adminModules, productModules =
+                        visibleModules
+                        |> List.partition (fun m ->
+                            ClientConfig.effectiveArea m.Area m.Group = ModuleArea.Administration)
+
+                    match model.CurrentArea with
+                    | ModuleArea.Administration ->
+                        adminModules,
+                        [
+                            ({
+                                Id = Toolup.Sidebar.ProductAreaId
+                                Name = "Back to app"
+                                Icon = Html.none
+                                HasData = true
+                                Group = None
+                                Pages = []
+                            }
+                            : Toolup.Sidebar.SidebarModuleView)
+                        ]
+                    | ModuleArea.Product ->
+                        // The switcher appears only when there is an admin area
+                        // to switch to. `adminGroupFiltered` already stripped
+                        // platform-admin groups from non-admins, so a plain
+                        // user with no admin-area modules sees no switcher
+                        // (GP 12 — server enforcement is authoritative).
+                        let switcher =
+                            if List.isEmpty adminModules then
+                                []
+                            else
+                                [
+                                    ({
+                                        Id = Toolup.Sidebar.AdminAreaId
+                                        Name = "Administration"
+                                        Icon = Html.none
+                                        HasData = true
+                                        Group = None
+                                        Pages = []
+                                    }
+                                    : Toolup.Sidebar.SidebarModuleView)
+                                ]
+
+                        productModules, switcher
+
             let views: Toolup.Sidebar.SidebarModuleView list =
-                visibleModules
+                areaFilteredModules
                 |> List.map (fun moduleImpl ->
                     let hasData =
                         moduleImpl.NeedsData
@@ -2345,7 +2441,7 @@ module Client =
                         Pages = pages
                     })
 
-            Toolup.Sidebar.buildSections views model.SidebarPrefs
+            Toolup.Sidebar.buildSections (views @ switcherViews) model.SidebarPrefs
 
         // Header team switcher — only rendered when the deployment
         // declares a `Team` surface with `Switching = HeaderSwitcher`

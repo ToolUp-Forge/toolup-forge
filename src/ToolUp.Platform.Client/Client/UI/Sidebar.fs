@@ -102,6 +102,15 @@ let HomeKey = "_home"
 [<Literal>]
 let HomeId = "_sdk.home"
 
+/// Phase 567 — reserved sidebar ids for the two-surface area switcher.
+/// These flow through the normal `onSelect` (`ModuleSelected`) path; the
+/// shell intercepts them to flip `Model.CurrentArea` rather than navigate.
+[<Literal>]
+let AdminAreaId = "_area.admin"
+
+[<Literal>]
+let ProductAreaId = "_area.product"
+
 // Vite's default-export of a non-`?react` asset import is the file's
 // built URL — usable directly as an `<img src>`. The shell sidebar
 // is permanently dark (slate-900-ish background), so we ship the

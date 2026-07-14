@@ -28,6 +28,7 @@ let allTests =
         // Sidebar admin-group role gate — platform-scoped vs team-scoped
         // group split behind the 4f.2 filter (Platform.Client tier).
         SidebarAdminGroupGateTests.tests
+        SidebarAreaTests.tests
         // Nested multi-page module sidebar entries — buildSections/flatten
         // nesting + module-expand persistence + legacy blob (Platform.Client).
         SidebarNestingTests.tests
