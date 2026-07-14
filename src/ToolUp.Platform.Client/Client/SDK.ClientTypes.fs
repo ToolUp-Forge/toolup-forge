@@ -130,6 +130,21 @@ type ModuleDefinition = {
     Pages: PageConfig list
 }
 
+// ─── Navigation area (Phase 567) ──────────────────────────────────
+
+/// The sidebar navigation area a module belongs to. Under
+/// `ClientConfig.AdminSurface = SeparateArea` the sidebar renders one
+/// area at a time (product modules vs admin modules) with a switcher;
+/// under the default `InlineGroups` it is ignored (today's inline
+/// groups). A module's *effective* area is `Administration` if it
+/// either declares `Area = Administration` (via `ClientModule.withArea`)
+/// OR sits in an admin sidebar group (`ClientConfig.isAdminSidebarGroup`
+/// — how SDK admin built-ins derive it without changing registration,
+/// GP 9); otherwise `Product`. See `ClientConfig.effectiveArea`.
+type ModuleArea =
+    | Product
+    | Administration
+
 // ─── Type erasure ─────────────────────────────────────────────────
 
 /// Type-erased module wrapper for heterogeneous list composition.
@@ -190,6 +205,12 @@ type ErasedModule = {
     /// ordering / pinning is a separate overlay (see
     /// `UserSidebarPreferences`).
     Group: string option
+    /// Phase 567 — declared navigation area. Default `Product`; set to
+    /// `Administration` via `ClientModule.withArea` to place a consumer
+    /// module in the admin area under `AdminSurface = SeparateArea`. SDK
+    /// admin built-ins leave this `Product` and are derived into the admin
+    /// area from their group (`ClientConfig.effectiveArea`).
+    Area: ModuleArea
     /// Client-side `ModuleQueryBus` handlers this module publishes.
     /// Collected by `SDK.Client.run` into the per-module registry of the
     /// `ClientModuleQueryBus`, which prefers local dispatch before
@@ -322,6 +343,9 @@ type ClientModule<'Model, 'Msg> = {
     Availability: ModuleAvailability
     /// Optional taxonomy group for sidebar grouping. See `ErasedModule.Group`.
     Group: string option
+    /// Phase 567 — declared navigation area. See `ErasedModule.Area`;
+    /// set via `ClientModule.withArea`.
+    Area: ModuleArea
     /// Client-side query handlers. See `ErasedModule.ClientQueryHandlers`.
     /// Construct via `withQueryHandlers`.
     ClientQueryHandlers: ModuleQueryHandler list
@@ -1135,6 +1159,17 @@ type LoadingIndicatorMode =
     | SpinnerLoader
     | CustomLoader of (unit -> ReactElement)
 
+/// Phase 567 — how the sidebar presents the SDK's admin built-ins.
+type AdminSurfaceMode =
+    /// The default — admin modules render as inline sidebar groups
+    /// ("Platform Management" / "Team Management") alongside product
+    /// modules, exactly as before Phase 567. Byte-identical to pre-567.
+    | InlineGroups
+    /// Split the sidebar into a Product area and an Administration area,
+    /// rendering one at a time with a role-gated switcher. Admin modules
+    /// (derived via `ClientConfig.effectiveArea`) move to the admin area.
+    | SeparateArea
+
 type ClientConfig = {
     AppName: string
     AppLogo: string
@@ -1217,6 +1252,12 @@ type ClientConfig = {
     /// the sidebar and becomes the default landing surface unless
     /// `ActiveModule` names a specific module.
     HomeModule: HomeModuleMode
+    /// Phase 567 — how the admin built-ins are presented in the sidebar.
+    /// **Default `InlineGroups`** (byte-identical to pre-567: admin modules
+    /// render as inline "Platform/Team Management" groups). `SeparateArea`
+    /// splits the sidebar into Product and Administration areas with a
+    /// role-gated switcher.
+    AdminSurface: AdminSurfaceMode
     /// Phase 217 — opt in to the built-in "Pinned / Recent" widget on the
     /// Home surface (a small per-user store of recently-visited + pinned
     /// tools, persisted through the per-user config store). **Default:
@@ -1528,6 +1569,9 @@ module ClientConfig =
         // Phase 171 — off by default (GP 13); existing deployments
         // keep their first-registered module as the landing surface.
         HomeModule = NoHomeModule
+        // Phase 567 — inline admin groups by default (byte-identical to
+        // pre-567); SeparateArea is the opt-in two-area sidebar.
+        AdminSurface = InlineGroups
         // Phase 217 — recents/pinning off by default (GP 13).
         HomeRecents = false
         // Opt-in; off by default so the no-team gate never changes an
@@ -1642,6 +1686,20 @@ module ClientConfig =
         | Some g -> adminSidebarGroups.Contains g
         | None -> false
 
+    /// Phase 567 — a module's *effective* navigation area. A module is in
+    /// the `Administration` area if it declares it (`ClientModule.withArea
+    /// Administration`) OR sits in an admin sidebar group (so SDK admin
+    /// built-ins land in the admin area with no registration change, GP 9);
+    /// otherwise `Product`. Consulted only under `AdminSurface = SeparateArea`.
+    let effectiveArea (area: ModuleArea) (group: string option) : ModuleArea =
+        match area with
+        | Administration -> Administration
+        | Product ->
+            if isAdminSidebarGroup group then
+                Administration
+            else
+                Product
+
     /// The effective module id the no-active-team gate targets, unifying
     /// the two opt-in paths: an explicit consumer-supplied
     /// `NoActiveTeamLandingModuleId` (a full custom module) takes
@@ -1755,6 +1813,7 @@ module ClientModule =
             FeatureFlags = m.FeatureFlags
             Availability = m.Availability
             Group = m.Group
+            Area = m.Area
             ClientQueryHandlers = m.ClientQueryHandlers
             ActionDecoder =
                 m.ActionDecoder
@@ -1814,6 +1873,7 @@ module ClientModule =
         FeatureFlags = []
         Availability = Always
         Group = None
+        Area = Product
         ClientQueryHandlers = []
         ActionDecoder = None
         Visibility = Visibility.visibleToAll
@@ -1991,6 +2051,17 @@ module ClientModule =
     let withGroup (group: string) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
         m with
             Group = Some group
+    }
+
+    /// Phase 567 — place this module in the given navigation `area`. Only
+    /// consulted under `ClientConfig.AdminSurface = SeparateArea`; the
+    /// default `Product` (and the default `InlineGroups` surface) leaves
+    /// behaviour unchanged. SDK admin built-ins do NOT call this — they are
+    /// derived into `Administration` from their sidebar group
+    /// (`ClientConfig.effectiveArea`), so no built-in registration changes.
+    let withArea (area: ModuleArea) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
+        m with
+            Area = area
     }
 
     /// Phase 66 Stream B.3 — declare a per-module sidebar visibility
