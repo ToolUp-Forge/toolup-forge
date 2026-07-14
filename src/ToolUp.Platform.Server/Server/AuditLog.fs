@@ -1147,6 +1147,32 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelArtifactTransitionDenied(fromAuditJson<ModelArtifactTransitionDeniedPayload> j)
     }
+    // Phase 454 — model-scoring lifecycle audit rows (append-only registration).
+    {
+        EventType = "ModelScored"
+        TryEncode =
+            (function
+            | ModelScored p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelScored(fromAuditJson<ModelScoredPayload> j)
+    }
+    {
+        EventType = "ModelScoreRefused"
+        TryEncode =
+            (function
+            | ModelScoreRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelScoreRefused(fromAuditJson<ModelScoreRefusedPayload> j)
+    }
+    // Phase 456 — model-evaluation audit row (append-only registration).
+    {
+        EventType = "ModelEvaluated"
+        TryEncode =
+            (function
+            | ModelEvaluated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelEvaluated(fromAuditJson<ModelEvaluatedPayload> j)
+    }
     // Phase 482 / 487 — dataset provenance & virtual-spill audit rows (append-only registration).
     {
         EventType = "DatasetSpillCreated"
