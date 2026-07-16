@@ -165,3 +165,25 @@ type ContractCapability = {
 /// exposes. Exchanged on first contact; the resolved version per
 /// contract is the highest mutual.
 type CapabilityList = ContractCapability list
+
+/// Phase 590 — a compose-time declaration that this deployment *calls* a
+/// peer contract hosted elsewhere. The initiating side of the wire face:
+/// where `PeerServerApp.withContract` registers what a deployment
+/// *serves*, `withConsumedContract` registers what it *consumes*, so the
+/// `PeerSurface` descriptor derives both sides from the composition
+/// record rather than a hand-maintained list. Purely descriptive — the
+/// declaration takes no part in dispatch (a proxy is still built with
+/// `JsonRpcPeerClient.create`); it exists so the deployment's
+/// cross-instance face is introspectable and exportable as data.
+type ConsumedContract = {
+    /// The contract id this deployment calls on a counterpart
+    /// (`JsonRpcPeerClient` proxies against `/peer/v1/{contractId}`).
+    ContractId: string
+    /// The wire versions this deployment can speak for the contract —
+    /// the caller's half of the handshake's highest-mutual resolution.
+    Versions: ContractVersion list
+    /// The kind of counterpart expected to serve the contract (e.g.
+    /// "hub", "registry", "any-member") — a label for federation
+    /// tooling and counterparty validation, not a routing input.
+    CounterpartRole: string
+}

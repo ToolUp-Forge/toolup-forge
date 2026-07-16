@@ -43,6 +43,9 @@
     <Compile Include="Server\PeerCascade.fs" />
     <Compile Include="Server\CleanRoomBroker.fs" />
     <Compile Include="Server\PeerCompose.fs" />
+    <!-- Phase 590 — the deployment's cross-instance face as data,
+         derived from the composed PeerServerApp (compiles after it). -->
+    <Compile Include="Server\PeerSurface.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

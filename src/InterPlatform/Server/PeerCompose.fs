@@ -72,6 +72,14 @@ type PeerServerApp = {
     /// profile is still advertised (versions only, no per-method
     /// lifecycle). Build entries with `PeerCapabilityNegotiation.profileFor`.
     ContractProfiles: ContractProfile list
+    /// Phase 590 — the peer contracts this deployment *consumes* (calls
+    /// on counterpart instances), declared at compose time so the
+    /// `PeerSurface` descriptor derives the initiating half of the wire
+    /// face from the composition record. Purely descriptive: dispatch
+    /// still goes through `JsonRpcPeerClient.create`; `run` reads nothing
+    /// from this list. Declare entries with `PeerSurface.consumes<'TApi>`
+    /// (typed) or a literal `ConsumedContract`.
+    ConsumedContracts: ConsumedContract list
 }
 
 module PeerServerApp =
@@ -82,6 +90,7 @@ module PeerServerApp =
         Contracts = []
         AuditTransparency = false
         ContractProfiles = []
+        ConsumedContracts = []
     }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
@@ -201,6 +210,17 @@ module PeerServerApp =
     let withContractProfile (profile: ContractProfile) (app: PeerServerApp) : PeerServerApp = {
         app with
             ContractProfiles = app.ContractProfiles @ [ profile ]
+    }
+
+    /// Phase 590 — declare a peer contract this deployment *consumes*
+    /// (calls on a counterpart instance). Purely descriptive: the
+    /// declaration drives the `PeerSurface` descriptor's `Consumes` half
+    /// — it registers no dispatch machinery and `run` ignores it. Build
+    /// the declaration with `PeerSurface.consumes<'TApi>` so it stays
+    /// tied to a real contract type. Multiple calls accumulate.
+    let withConsumedContract (consumed: ConsumedContract) (app: PeerServerApp) : PeerServerApp = {
+        app with
+            ConsumedContracts = app.ConsumedContracts @ [ consumed ]
     }
 
     /// Drive the final composition. When `ServerConfig.PeerSubstrate` is

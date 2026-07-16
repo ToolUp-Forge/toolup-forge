@@ -968,6 +968,10 @@
              privacy-gate broker. Pure orchestration; no TestServer. -->
         <Compile Include="InProcess\PeerFederationTests.fs" />
         <Compile Include="InProcess\CleanRoomBrokerTests.fs" />
+        <!-- Phase 590 — PeerSurface descriptor: derivation guard vs the
+             composed peer registrations + deterministic hash-stamped
+             export. Pure describe; no TestServer. -->
+        <Compile Include="InProcess\PeerSurfaceTests.fs" />
         <!-- Giraffe stock-helper DI defaults — RequestErrors.* / negotiate /
              json resolve INegotiationConfig + Json.ISerializer from DI;
              ComposeBootstrap.registerGiraffeDefaults registers them

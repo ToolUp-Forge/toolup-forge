@@ -692,6 +692,10 @@ let allTests =
         // Phase 18b — clean-room privacy-gate broker: surface enforcement,
         // gate composition (tighten-only), per-cell suppression, k-floor.
         CleanRoomBrokerTests.tests
+        // Phase 590 — PeerSurface descriptor: the deployment's
+        // cross-instance face derived from the composed peer
+        // registrations, with a deterministic hash-stamped export.
+        PeerSurfaceTests.tests
         // Giraffe stock-helper DI defaults — the SDK composition registers
         // INegotiationConfig + Json.ISerializer (FableConverters-backed) +
         // Xml.ISerializer so consumer handlers can use RequestErrors.* /

@@ -37,6 +37,7 @@ The wire format is **JSON-RPC 2.0 over HTTP** — a deliberately open, language-
 | Typed initiator proxy | [`Server/JsonRpcPeerClient.fs`](Server/JsonRpcPeerClient.fs) | `PeerProxyConfig`, module `JsonRpcPeerClient` |
 | JSON-RPC host | [`Server/JsonRpcPeerHost.fs`](Server/JsonRpcPeerHost.fs) | module `JsonRpcPeerHost` (`contract`, `routes`) |
 | Compose pipeline | [`Server/PeerCompose.fs`](Server/PeerCompose.fs) | `PeerServerApp` record + `run` |
+| Cross-instance face descriptor (Phase 590) | [`Server/PeerSurface.fs`](Server/PeerSurface.fs) | `ConsumedContract` (in `Shared/PeerTypes.fs`), `ServedContract`, `PeerServes`, `PeerTrustPosture`, `PeerBudgetShape`, `PeerSurface`, `PeerSurfaceExport`, module `PeerSurface` (`describe`, `consumes`, `export`, `exportJson`) |
 
 The audit payload (`PeerCallCompletedPayload`) and the `PeerCallCompleted` `AuditEvent` case live in the core platform's audit types ([`../ToolUp.Platform.Core/Shared/AuditTypes.fs`](../ToolUp.Platform.Core/Shared/AuditTypes.fs)), serialised by [`../ToolUp.Platform.Server/Server/AuditLog.fs`](../ToolUp.Platform.Server/Server/AuditLog.fs) — the substrate is a *producer* of that event, not its owner.
 
@@ -212,6 +213,30 @@ match! handshake.NegotiateMethod(target, "directory", "GetCapabilities") with
 ```
 
 A peer that predates 18d (no `/capabilities/profile` route) degrades cleanly: its bare `CapabilityList` is read as an all-`Active` profile, so a 18d-aware caller still negotiates. The new endpoint is purely additive — `GET /peer/v1/capabilities` is byte-for-byte unchanged, and a deployment that never calls `withContractProfile` advertises versions-only profiles (no per-method lifecycle).
+
+## Peer surface descriptor (Phase 590)
+
+`PeerSurface.describe` emits a deployment's **cross-instance face as data** — the instance's *label*: what a counterparty may rely on without seeing inside. It is **derived from the composed peer registrations by construction, never hand-listed** — a new `withContract` / `withConsumedContract` registration surfaces with zero descriptor edits:
+
+- **Serves** — every hosted contract (id + wire versions, from the same builders `PeerServerApp.run` composes, including the audit-transparency contract when opted in), the long-running **routines** it fuses onto the job substrate (advertised only when a job scheduler is actually composed, under their canonical `_platform.peer.{contractId}.{method}` handler names), and the `/peer/v1` endpoint templates.
+- **Consumes** — the contracts this instance *calls* on counterparts, declared at compose time with `withConsumedContract` (build declarations with `PeerSurface.consumes<'TApi>` so each stays tied to a real contract type) plus the expected counterpart role. Purely descriptive — dispatch still goes through `JsonRpcPeerClient.create`.
+- **TrustPosture** — what the composition wires by construction: fail-closed HS256 bearer JWTs with per-call key reads, whether inbound audiences are bound to the local peer id (exactly when `withLocalPeer` is declared), trust-anchor delegation verification, the freshness-window replay stance, and the deployment-managed transport stance.
+- **Budgets** — the cascade guard shape (per-call hop budget + route loop detection) and whether long-running dispatch is available.
+
+```fsharp
+let app =
+    PeerServerApp.create ()
+    |> PeerServerApp.withConfig config
+    |> PeerServerApp.withLocalPeer localIdentity
+    |> PeerServerApp.withContract directoryHost
+    |> PeerServerApp.withConsumedContract
+        (PeerSurface.consumes<UpstreamRegistryContract> "registry" [ v1 ] "hub")
+
+let surface = PeerSurface.describe app      // pure, on demand
+let pinned  = PeerSurface.exportJson surface // canonical JSON + SHA-256 stamp
+```
+
+The export is **deterministic and hash-stamped**: every list is sorted before serialisation, so the same composition always yields the same bytes and the same `SurfaceHash` regardless of registration order — and any registration change produces a new hash. A counterparty (or an external federation-composition tool) pins the export of an instance it can never introspect live and detects staleness by re-hashing; the live handshake endpoints answer "what do you serve *right now*", the export answers "what did the instance I validated against look like". A deployment on `NoPeerSubstrate` yields the empty surface without running a single contract builder — zero cost when unused.
 
 ## Routes
 
