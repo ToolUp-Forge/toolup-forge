@@ -33,6 +33,7 @@ let private erasedModule (id: string) (name: string) (group: string option) : Er
     FeatureFlags = []
     Availability = Always
     Group = group
+    Area = ModuleArea.Product
     ClientQueryHandlers = []
     ActionDecoder = None
     Visibility = Visibility.visibleToAll
