@@ -555,6 +555,13 @@ module AIServerApp =
             Base = ServerApp.withBackfillMissedTicks enabled app.Base
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Delegates to `ServerApp.withEventTriggerCatchUp`.
+    let withEventTriggerCatchUp (enabled: bool) (app: AIServerApp) : AIServerApp = {
+        app with
+            Base = ServerApp.withEventTriggerCatchUp enabled app.Base
+    }
+
     let withExtensions (e: ComposeExtensions) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withExtensions e app.Base

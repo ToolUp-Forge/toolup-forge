@@ -147,6 +147,13 @@ module SchedulingServerApp =
             Base = ServerApp.withBackfillMissedTicks enabled app.Base
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Delegates to `ServerApp.withEventTriggerCatchUp`.
+    let withEventTriggerCatchUp (enabled: bool) (app: SchedulingServerApp) : SchedulingServerApp = {
+        app with
+            Base = ServerApp.withEventTriggerCatchUp enabled app.Base
+    }
+
     let withPreMiddleware
         (f: IApplicationBuilder -> IApplicationBuilder)
         (app: SchedulingServerApp)

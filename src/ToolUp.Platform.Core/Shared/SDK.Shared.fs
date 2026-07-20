@@ -1960,6 +1960,25 @@ type ServerConfig = {
     /// pause would conflate three separate roll-up windows). Operators
     /// opt in when their `OnEvent` work is safely re-entrant.
     BackfillMissedTicks: bool
+    /// Phase 598 — opt-in event-trigger catch-up watermark. Default:
+    /// `false` — `OnEvent` job triggering stays at-most-once: the
+    /// in-memory notify hook is the only dispatch path, so an event
+    /// durably written immediately before a process crash never fires
+    /// its triggers. When `true` (and `JobScheduler =
+    /// InProcessJobScheduler`), the scheduler persists a per-scope
+    /// trigger cursor (`_platform/job-triggers/{scopeId}.cursor`,
+    /// advanced after each live notify) and on startup — plus a
+    /// periodic sweep — re-reads `IEventStore` past the cursor and
+    /// dispatches any `OnEvent` triggers the notify hook never
+    /// processed. Semantics become at-least-once: a crash between
+    /// dispatch and cursor flush, or the deliberate startup overlap
+    /// window, can re-fire a trigger — job handlers opting in must be
+    /// re-entrant (the same bar `BackfillMissedTicks` sets). Unlike
+    /// `BackfillMissedTicks` (which blind-re-fires every active
+    /// `OnEvent` job on detected tick drift), the catch-up scan
+    /// replays the *actual missed events*, each with its real
+    /// `eventType` + `eventId` in `TriggerSource.ScheduledByEvent`.
+    EventTriggerCatchUp: bool
     /// Share-token substrate selection. Default:
     /// `NoShareTokenStore` — no `IShareTokenStore` is registered,
     /// no `_platform/share-tokens/` blob layout is touched, no
@@ -3077,6 +3096,7 @@ module ServerConfig =
         Lineage = NoLineageStore
         JobScheduler = NoJobScheduler
         BackfillMissedTicks = false
+        EventTriggerCatchUp = false
         ShareTokenStore = NoShareTokenStore
         PeerRoutePrefixes = []
         MaxRequestBodyBytes = None

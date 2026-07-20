@@ -1567,6 +1567,27 @@ module ServerApp =
             }
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Default: off (`OnEvent` triggering stays at-most-once). When
+    /// enabled alongside `JobScheduler = InProcessJobScheduler`, the
+    /// scheduler persists a per-scope trigger cursor and replays — on
+    /// startup and on a periodic sweep — the actual events whose
+    /// `OnEvent` triggers the in-memory notify hook never dispatched
+    /// (crash window, compose-window writes). Semantics become
+    /// at-least-once: the startup overlap window and cursor-flush lag
+    /// re-fire a bounded window of already-dispatched triggers, so
+    /// handlers must be re-entrant — the same bar
+    /// `withBackfillMissedTicks` sets, but replaying real events
+    /// (each with its true `eventType` + `eventId`) rather than
+    /// blind-re-firing every `OnEvent` job.
+    let withEventTriggerCatchUp (enabled: bool) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    EventTriggerCatchUp = enabled
+            }
+    }
+
     /// Phase 177 — opt into the deployment-readiness scorecard. Flips
     /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
     /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`

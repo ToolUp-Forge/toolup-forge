@@ -388,6 +388,17 @@ let compose
     let jobSchedulerCell: IJobScheduler option ref = ref None
     let jobSchedulerLookup () = jobSchedulerCell.Value
 
+    // Phase 598 — one shared trigger watermark when the deployment
+    // opted into event-trigger catch-up: `JobNotifyEventStore`
+    // advances it after each live notify; the scheduler's startup
+    // scan / periodic sweep read + flush it. `None` (the default)
+    // keeps the at-most-once notify path byte-for-byte unchanged.
+    let jobTriggerWatermark =
+        match config.JobScheduler with
+        | InProcessJobScheduler when config.EventTriggerCatchUp ->
+            Some(JobTriggerWatermark.JobTriggerWatermark(resolvedBlobStorage, resolvedLogger))
+        | _ -> None
+
     // Public `IEventStore` registered in DI — final decorator chain
     // (extracted to `ComposeJobs.applyEventStoreDecorators`):
     //   - With webhooks + job scheduler: `JobNotify -> WebhookHooked -> Inner`
@@ -395,7 +406,12 @@ let compose
     //   - With job scheduler only:       `JobNotify -> Inner`
     //   - Lightweight default:           `Inner` (no decorators)
     let eventStore =
-        applyEventStoreDecorators config effectiveInnerEventStore webhookSubsystem jobSchedulerLookup
+        applyEventStoreDecorators
+            config
+            effectiveInnerEventStore
+            webhookSubsystem
+            jobSchedulerLookup
+            jobTriggerWatermark
 
     // Phase 114 — chicken-and-egg break for the audit-write-failure
     // metric. The `EventStoreAuditLog` is constructed inside
@@ -716,6 +732,7 @@ let compose
             resolvedActivitySink
             blobJobStoreInstance
             jobSchedulerCell
+            jobTriggerWatermark
 
     // Phase 10 — opt-in data ingestion (extracted to
     // `ComposeJobs.registerDataIngestion`). Includes the Phase 10b

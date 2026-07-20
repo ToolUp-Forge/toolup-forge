@@ -314,6 +314,13 @@ module FormsServerApp =
             Base = ServerApp.withBackfillMissedTicks enabled app.Base
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Delegates to `ServerApp.withEventTriggerCatchUp`.
+    let withEventTriggerCatchUp (enabled: bool) (app: FormsServerApp) : FormsServerApp = {
+        app with
+            Base = ServerApp.withEventTriggerCatchUp enabled app.Base
+    }
+
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: FormsServerApp) : FormsServerApp = {
         app with
             Base = ServerApp.withPreMiddleware f app.Base

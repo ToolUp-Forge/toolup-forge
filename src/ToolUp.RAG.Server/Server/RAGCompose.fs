@@ -1805,6 +1805,13 @@ module RAGServerApp =
             AI = AIServerApp.withBackfillMissedTicks enabled app.AI
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Delegates to `AIServerApp.withEventTriggerCatchUp`.
+    let withEventTriggerCatchUp (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withEventTriggerCatchUp enabled app.AI
+    }
+
     let withTransactionalSink (sink: INotificationSink) (app: RAGServerApp) : RAGServerApp = {
         app with
             AI = AIServerApp.withTransactionalSink sink app.AI

@@ -641,11 +641,11 @@ ToolUp.Platform.ComposeHealthSmoke.registerFirstPartyCspContributors(Microsoft.E
 ToolUp.Platform.ComposeHealthSmoke.registerHealthChecks(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HealthChecks+IHealthCheck]) : System.Void
 ToolUp.Platform.ComposeHealthSmoke.registerSmokeTests(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.IEventStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SmokeTests+ISmokeTest]) : System.Void
 ToolUp.Platform.ComposeJobs (class)
-ToolUp.Platform.ComposeJobs.applyEventStoreDecorators(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]]) : ToolUp.Platform.IEventStore
+ToolUp.Platform.ComposeJobs.applyEventStoreDecorators(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark]) : ToolUp.Platform.IEventStore
 ToolUp.Platform.ComposeJobs.buildWebhookSubsystem(ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]]
 ToolUp.Platform.ComposeJobs.registerDataIngestion(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerDataSubjectRequestJobs(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.IAuditLog, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger) : System.Void
-ToolUp.Platform.ComposeJobs.registerJobScheduler(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobStore+BlobJobStore]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]
+ToolUp.Platform.ComposeJobs.registerJobScheduler(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobStore+BlobJobStore]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]
 ToolUp.Platform.ComposeJobs.registerModelFitting(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerOAuthRefresher(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IRateLimiter, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerScheduledJobDeclarations(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], ToolUp.Platform.ILogger) : System.Void
@@ -2695,13 +2695,15 @@ ToolUp.Platform.JobApiHandler (class)
 ToolUp.Platform.JobApiHandler.jobApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.JobApi
 ToolUp.Platform.JobNotifyEventStore (class)
 ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore (class)
-ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore..ctor(ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]])
+ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore..ctor(ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark])
 ToolUp.Platform.JobScheduler (class)
 ToolUp.Platform.JobScheduler.JobsSourceModule : System.String (literal)
 ToolUp.Platform.JobScheduler.create(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
+ToolUp.Platform.JobScheduler.createWithCatchUp(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler+InProcessJobScheduler (class)
-ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink)
+ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark])
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunCatchUpScan(System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+JobCompletedPayload (class)
 ToolUp.Platform.JobScheduler+JobCompletedPayload..ctor(System.Guid, System.String, System.String, System.Guid, System.Int32, System.Int64)
 ToolUp.Platform.JobScheduler+JobCompletedPayload.Attempt : System.Int32 { get }
@@ -2749,6 +2751,13 @@ ToolUp.Platform.JobScheduler+JobStartedPayload.JobId : System.Guid { get }
 ToolUp.Platform.JobScheduler+JobStartedPayload.RunId : System.Guid { get }
 ToolUp.Platform.JobScheduler+JobStartedPayload.ScopeId : System.String { get }
 ToolUp.Platform.JobScheduler+JobStartedPayload.TriggerSource : ToolUp.Platform.TriggerSource { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload (class)
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload..ctor(System.Boolean, System.Int32, System.Int32, System.Int32, System.DateTime)
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.EventsReplayed : System.Int32 { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.ScanStartedAt : System.DateTime { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.ScopesScanned : System.Int32 { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.Startup : System.Boolean { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.TriggersDispatched : System.Int32 { get }
 ToolUp.Platform.JobSchedulerBuildOrchestrator (class)
 ToolUp.Platform.JobSchedulerBuildOrchestrator.BuildHandlerName : System.String (literal)
 ToolUp.Platform.JobSchedulerBuildOrchestrator.BuildScopeId : System.String (literal)
@@ -2777,6 +2786,36 @@ ToolUp.Platform.JobStore+IdempotencyEntry (class)
 ToolUp.Platform.JobStore+IdempotencyEntry..ctor(System.Guid, System.DateTime)
 ToolUp.Platform.JobStore+IdempotencyEntry.CreatedAt : System.DateTime { get }
 ToolUp.Platform.JobStore+IdempotencyEntry.JobId : System.Guid { get }
+ToolUp.Platform.JobTriggerWatermark (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor..ctor(System.DateTime, System.Guid)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor.LastDispatchedAt : System.DateTime { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor.LastDispatchedEventId : System.Guid { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.IsLoaded : System.Boolean { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.IsMissing : System.Boolean { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.Missing : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.Tag : System.Int32 { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Loaded (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Loaded.Item : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags.Loaded : System.Int32 (literal)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags.Missing : System.Int32 (literal)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Unreadable (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Unreadable.error : System.String { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule.advance(ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor, ToolUp.Platform.ModuleEvent) : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule.at(System.DateTime) : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule.isAfter(ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor, ToolUp.Platform.ModuleEvent) : System.Boolean
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.Advance(ToolUp.Platform.ModuleEvent) : System.Void
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.FlushDirty() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.LoadPersisted(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad]
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.Seed(System.String, ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor, System.Boolean) : System.Void
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.TryGet(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor]
 ToolUp.Platform.JsonConsoleLogger (class)
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger (class)
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor()
@@ -4073,6 +4112,7 @@ ToolUp.Platform.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.ServerAp
 ToolUp.Platform.ServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withErasureHandler(ToolUp.Platform.IDataExporter+IErasureHandler, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withEventTriggerCatchUp(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withExtensions(ToolUp.Platform.ComposeExtensions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withHealthCheck(ToolUp.Platform.HealthChecks+IHealthCheck, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withJobHandler(System.String, ToolUp.Platform.IJobHandler, ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

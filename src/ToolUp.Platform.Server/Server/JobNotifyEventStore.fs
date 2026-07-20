@@ -26,13 +26,31 @@ open ToolUp.Platform
 // event emitted by the scheduler can fire an `OnEvent("JobCompleted")`
 // job in the same scope. Callers who don't want this register their
 // follow-up jobs with a more specific `EventType`.
-type JobNotifyEventStore(inner: IEventStore, schedulerLookup: unit -> IJobScheduler option) =
+//
+// **Phase 598 — trigger-cursor advance.** When the deployment opts
+// into `ServerConfig.EventTriggerCatchUp`, compose hands this
+// decorator the shared `JobTriggerWatermark`; after the scheduler
+// notify returns, the wrapper advances the scope's in-memory cursor
+// past `evt` (the decorator holds the full `ModuleEvent`, so the
+// cursor records the event's own `OccurredAt` — no wall-clock skew).
+// The `None`-scheduler compose window deliberately does NOT advance:
+// those events were never notified, and leaving them past the cursor
+// is exactly what lets the scheduler's startup catch-up scan recover
+// them.
+type JobNotifyEventStore
+    (
+        inner: IEventStore,
+        schedulerLookup: unit -> IJobScheduler option,
+        ?watermark: JobTriggerWatermark.JobTriggerWatermark
+    ) =
     interface IEventStore with
         member _.Write(evt) = async {
             do! inner.Write evt
 
             match schedulerLookup () with
-            | Some scheduler -> do! scheduler.NotifyEventWritten(evt.ScopeId, evt.EventType, evt.Id)
+            | Some scheduler ->
+                do! scheduler.NotifyEventWritten(evt.ScopeId, evt.EventType, evt.Id)
+                watermark |> Option.iter _.Advance(evt)
             | None -> ()
         }
 

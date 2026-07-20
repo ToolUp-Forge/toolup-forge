@@ -267,6 +267,10 @@
         <Compile Include="Server\ModelEvaluationRunner.fs" />
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
+        <!-- Phase 598 — persisted per-scope OnEvent trigger cursor; before the
+             scheduler (startup scan / sweep / flush) and the notify decorator
+             (live advance), both of which consume it. -->
+        <Compile Include="Server\JobTriggerWatermark.fs" />
         <Compile Include="Server\JobScheduler.fs" />
         <!-- Phase 164 — opt-in TTL sweep for BlobIdempotencyStore. After the
              job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;

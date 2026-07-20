@@ -114,6 +114,7 @@ let applyEventStoreDecorators
     (webhookSubsystem:
         (IWebhookRegistry * IWebhookDeliveryLog * WebhookDispatcher.WebhookDispatcherService * IEventStore) option)
     (jobSchedulerLookup: unit -> IJobScheduler option)
+    (jobTriggerWatermark: JobTriggerWatermark.JobTriggerWatermark option)
     : IEventStore =
     let eventStoreAfterWebhooks: IEventStore =
         match webhookSubsystem with
@@ -122,7 +123,16 @@ let applyEventStoreDecorators
 
     match config.JobScheduler with
     | NoJobScheduler -> eventStoreAfterWebhooks
-    | InProcessJobScheduler -> JobNotifyEventStore.JobNotifyEventStore(eventStoreAfterWebhooks, jobSchedulerLookup) :> _
+    | InProcessJobScheduler ->
+        // Phase 598 — the same watermark instance the scheduler scans
+        // against; the notify-wrapper advances it after each live
+        // dispatch. `None` when `EventTriggerCatchUp` is off.
+        JobNotifyEventStore.JobNotifyEventStore(
+            eventStoreAfterWebhooks,
+            jobSchedulerLookup,
+            ?watermark = jobTriggerWatermark
+        )
+        :> _
 
 /// Phase 1g — webhook DI registrations are conditional on
 /// `ServerConfig.Webhooks`. `NoWebhooks` skips all four (registry,
@@ -193,6 +203,7 @@ let registerJobScheduler
     (resolvedActivitySink: IActivitySink)
     (blobJobStoreInstance: JobStore.BlobJobStore option ref)
     (jobSchedulerCell: IJobScheduler option ref)
+    (jobTriggerWatermark: JobTriggerWatermark.JobTriggerWatermark option)
     : IJobScheduler option =
     match config.JobScheduler with
     | NoJobScheduler -> None
@@ -202,13 +213,27 @@ let registerJobScheduler
         let jobStore = blobJobStore :> IJobStore
 
         let scheduler =
-            JobScheduler.create
-                jobStore
-                eventStore
-                resolvedNotificationChannel
-                config
-                resolvedLogger
-                resolvedActivitySink
+            // Phase 598 — hand the scheduler the shared trigger
+            // watermark when the deployment opted into catch-up;
+            // `JobNotifyEventStore` holds the same instance.
+            match jobTriggerWatermark with
+            | Some watermark ->
+                JobScheduler.createWithCatchUp
+                    jobStore
+                    eventStore
+                    resolvedNotificationChannel
+                    config
+                    resolvedLogger
+                    resolvedActivitySink
+                    watermark
+            | None ->
+                JobScheduler.create
+                    jobStore
+                    eventStore
+                    resolvedNotificationChannel
+                    config
+                    resolvedLogger
+                    resolvedActivitySink
 
         jobSchedulerCell.Value <- Some(scheduler :> IJobScheduler)
 
