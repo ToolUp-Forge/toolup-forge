@@ -72,6 +72,23 @@ let private buildClient (config: AwsS3StorageConfig) : AmazonS3Client =
 type AwsS3Storage(config: AwsS3StorageConfig) =
     let client = buildClient config
 
+    // Phase 600 follow-up — live-etag disclosure read for a refused
+    // conditional write. `Ok None` = the object is absent (the only
+    // case the seam may report `ETagMismatch None`); `Error` = the
+    // disclosure read itself failed, surfaced as
+    // `ConditionalWriteFailure` rather than a fabricated verdict.
+    let currentETag (key: string) : Async<Result<string option, string>> = async {
+        try
+            let req = GetObjectMetadataRequest()
+            req.BucketName <- config.BucketName
+            req.Key <- key
+            let! response = client.GetObjectMetadataAsync req |> Async.AwaitTask
+            return Ok(Some response.ETag)
+        with
+        | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound -> return Ok None
+        | ex -> return Error ex.Message
+    }
+
     interface IBlobStorage with
         member this.Erase(container, prefix, policy, dryRun) =
             ToolUp.Platform.BlobStorage.eraseByPrefix
@@ -216,6 +233,71 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | ex -> return Error ex.Message
+        }
+
+    // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
+    //
+    // S3 conditional PUT (GA since late 2024): `If-Match` /
+    // `If-None-Match: *` headers on PutObject, carried by AWSSDK.S3
+    // 4.x as `PutObjectRequest.IfMatch` / `IfNoneMatch`. The etag
+    // token is the native S3 ETag, opaque per the seam contract —
+    // callers only round-trip it, never parse it. A refused
+    // precondition surfaces as 412 PreconditionFailed; concurrent
+    // conditional writers on the same key can instead observe 409
+    // ConditionalRequestConflict — both map to `ETagMismatch`, with
+    // the live etag recovered by a follow-up HEAD. An `If-Match` PUT
+    // against an absent key 404s, which is the seam's
+    // `ETagMismatch None`.
+    //
+    // Caveat: S3-compatible stores (MinIO / R2 / B2) vary in
+    // conditional-write support — the env-gated contract arm in
+    // `ConditionalBlobStorageTests` is the conformance check per
+    // endpoint.
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(toolupContainer, blobName) = async {
+            try
+                let req = GetObjectRequest()
+                req.BucketName <- config.BucketName
+                req.Key <- blobKey toolupContainer blobName
+                use! response = client.GetObjectAsync req |> Async.AwaitTask
+                use ms = new MemoryStream()
+                do! response.ResponseStream.CopyToAsync ms |> Async.AwaitTask
+                return Ok(ms.ToArray(), response.ETag)
+            with
+            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+                return Error $"Blob not found: {toolupContainer}/{blobName}"
+            | ex -> return Error ex.Message
+        }
+
+        member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
+            let key = blobKey toolupContainer blobName
+
+            try
+                let req = PutObjectRequest()
+                req.BucketName <- config.BucketName
+                req.Key <- key
+                req.InputStream <- new MemoryStream(content)
+
+                match condition with
+                | IfMatch etag -> req.IfMatch <- etag
+                | IfAbsent -> req.IfNoneMatch <- "*"
+
+                let! response = client.PutObjectAsync req |> Async.AwaitTask
+                return Ok response.ETag
+            with
+            | :? AmazonS3Exception as ex when
+                ex.StatusCode = HttpStatusCode.PreconditionFailed
+                || ex.StatusCode = HttpStatusCode.Conflict
+                ->
+                match! currentETag key with
+                | Ok current -> return Error(ETagMismatch current)
+                | Error msg ->
+                    return Error(ConditionalWriteFailure $"precondition refused; etag disclosure read failed: {msg}")
+            | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
+                // `If-Match` against an absent key — the blob the caller
+                // expected is gone.
+                return Error(ETagMismatch None)
+            | ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
 // ─── Public entry points ─────────────────────────────────────────────

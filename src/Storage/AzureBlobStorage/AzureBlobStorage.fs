@@ -100,6 +100,21 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
     // malformed connection string / unreachable account at startup.
     do container () |> ignore
 
+    // Phase 600 follow-up — live-etag disclosure read for a refused
+    // conditional write. `Ok None` = the blob is absent (the only case
+    // the seam may report `ETagMismatch None`); `Error` = the
+    // disclosure read itself failed, surfaced as
+    // `ConditionalWriteFailure` rather than a fabricated verdict.
+    let currentETag (key: string) : Async<Result<string option, string>> = async {
+        try
+            let blob = (container ()).GetBlobClient key
+            let! response = blob.GetPropertiesAsync() |> Async.AwaitTask
+            return Ok(Some(response.Value.ETag.ToString()))
+        with
+        | :? RequestFailedException as ex when ex.Status = 404 -> return Ok None
+        | ex -> return Error ex.Message
+    }
+
     interface IBlobStorage with
         member this.Erase(container, prefix, policy, dryRun) =
             ToolUp.Platform.BlobStorage.eraseByPrefix
@@ -225,6 +240,54 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             | :? RequestFailedException as ex when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | ex -> return Error ex.Message
+        }
+
+    // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
+    //
+    // Azure-native ETag preconditions: `BlobRequestConditions.IfMatch`
+    // for the read-modify-write guard, `IfNoneMatch = ETag.All` (the
+    // wire's `If-None-Match: *`) for create-only. The etag token is the
+    // native Azure ETag, opaque per the seam contract. A refused
+    // `If-Match` surfaces as 412 ConditionNotMet (including against an
+    // absent blob); a losing `If-None-Match: *` create surfaces as 409
+    // BlobAlreadyExists — both map to `ETagMismatch`, with the live
+    // etag recovered by a follow-up properties read (`None` only when
+    // the blob is absent).
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(toolupContainer, blobName) = async {
+            try
+                let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
+                let! response = blob.DownloadContentAsync() |> Async.AwaitTask
+                let result = response.Value
+                return Ok(result.Content.ToArray(), result.Details.ETag.ToString())
+            with
+            | :? RequestFailedException as ex when ex.Status = 404 ->
+                return Error $"Blob not found: {toolupContainer}/{blobName}"
+            | ex -> return Error ex.Message
+        }
+
+        member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
+            let key = blobKey toolupContainer blobName
+
+            try
+                let blob = (container ()).GetBlobClient key
+                let conditions = BlobRequestConditions()
+
+                match condition with
+                | IfMatch etag -> conditions.IfMatch <- Nullable(ETag etag)
+                | IfAbsent -> conditions.IfNoneMatch <- Nullable ETag.All
+
+                let options = BlobUploadOptions(Conditions = conditions)
+                use ms = new MemoryStream(content)
+                let! response = blob.UploadAsync(ms, options) |> Async.AwaitTask
+                return Ok(response.Value.ETag.ToString())
+            with
+            | :? RequestFailedException as ex when ex.Status = 412 || ex.Status = 409 ->
+                match! currentETag key with
+                | Ok current -> return Error(ETagMismatch current)
+                | Error msg ->
+                    return Error(ConditionalWriteFailure $"precondition refused; etag disclosure read failed: {msg}")
+            | ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
 // ─── Public entry points ─────────────────────────────────────────────

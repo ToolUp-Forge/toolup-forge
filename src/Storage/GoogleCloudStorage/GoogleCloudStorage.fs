@@ -116,6 +116,23 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
     // malformed service-account JSON / credential-chain failure at startup.
     do client () |> ignore
 
+    // Phase 600 follow-up — live-generation disclosure read for a
+    // refused conditional write. `Ok None` = the object is absent (the
+    // only case the seam may report `ETagMismatch None`); `Error` = the
+    // disclosure read itself failed, surfaced as
+    // `ConditionalWriteFailure` rather than a fabricated verdict.
+    let currentGeneration (key: string) : Async<Result<string option, string>> = async {
+        try
+            let! obj = (client ()).GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
+
+            match Option.ofNullable obj.Generation with
+            | Some g -> return Ok(Some(string g))
+            | None -> return Error "GCS returned an object without a generation"
+        with
+        | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok None
+        | ex -> return Error ex.Message
+    }
+
     interface IBlobStorage with
         member this.Erase(container, prefix, policy, dryRun) =
             ToolUp.Platform.BlobStorage.eraseByPrefix
@@ -260,6 +277,87 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | ex -> return Error ex.Message
+        }
+
+    // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
+    //
+    // GCS optimistic concurrency rides object GENERATIONS, not HTTP
+    // ETags (a GCS ETag is not a stable comparison token across
+    // transcoding). The seam's etag token is therefore the decimal
+    // generation number, surfaced as an opaque string — legal because
+    // the contract makes tokens opaque per-provider: callers only
+    // round-trip them, never parse them. `IfAbsent` maps to
+    // `ifGenerationMatch=0`, the documented create-only precondition;
+    // a refused precondition surfaces as HTTP 412, with the live
+    // generation recovered by a follow-up metadata read (`None` only
+    // when the object is absent). A token this backend never minted
+    // (non-numeric) can match no generation and is refused without a
+    // write round-trip.
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(toolupContainer, blobName) = async {
+            try
+                let key = blobKey toolupContainer blobName
+                // Two calls made coherent by generation pinning: read
+                // the live generation, then download exactly that
+                // generation — a concurrent overwrite between the two
+                // calls cannot tear the (content, token) pair.
+                let! obj = (client ()).GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
+
+                match Option.ofNullable obj.Generation with
+                | None -> return Error $"GCS returned no generation for {toolupContainer}/{blobName}"
+                | Some gen ->
+                    use ms = new MemoryStream()
+                    let options = DownloadObjectOptions(Generation = Nullable gen)
+
+                    let! _ =
+                        (client ()).DownloadObjectAsync(config.BucketName, key, ms, options)
+                        |> Async.AwaitTask
+
+                    return Ok(ms.ToArray(), string gen)
+            with
+            | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+                return Error $"Blob not found: {toolupContainer}/{blobName}"
+            | ex -> return Error ex.Message
+        }
+
+        member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
+            let key = blobKey toolupContainer blobName
+
+            let requiredGeneration =
+                match condition with
+                | IfAbsent -> Some 0L
+                | IfMatch token ->
+                    match Int64.TryParse token with
+                    | true, gen -> Some gen
+                    | false, _ -> None
+
+            match requiredGeneration with
+            | None ->
+                // A foreign token — refused as a mismatch, with the live
+                // generation disclosed.
+                match! currentGeneration key with
+                | Ok current -> return Error(ETagMismatch current)
+                | Error msg ->
+                    return Error(ConditionalWriteFailure $"precondition refused; generation read failed: {msg}")
+            | Some gen ->
+                try
+                    use ms = new MemoryStream(content)
+                    let options = UploadObjectOptions(IfGenerationMatch = Nullable gen)
+
+                    let! obj =
+                        (client ()).UploadObjectAsync(config.BucketName, key, null, ms, options)
+                        |> Async.AwaitTask
+
+                    match Option.ofNullable obj.Generation with
+                    | Some g -> return Ok(string g)
+                    | None -> return Error(ConditionalWriteFailure "upload succeeded but GCS returned no generation")
+                with
+                | :? GoogleApiException as ex when ex.HttpStatusCode = HttpStatusCode.PreconditionFailed ->
+                    match! currentGeneration key with
+                    | Ok current -> return Error(ETagMismatch current)
+                    | Error msg ->
+                        return Error(ConditionalWriteFailure $"precondition refused; generation read failed: {msg}")
+                | ex -> return Error(ConditionalWriteFailure ex.Message)
         }
 
 // ─── Public entry points ─────────────────────────────────────────────

@@ -12,9 +12,10 @@ open ToolUp.Platform.Tests.Contracts
 // Parametrised conformance pack for the ETag seam: any backend claiming
 // `IConditionalBlobStorage` binds the same cases. Bound here to
 // `LocalFileStorage` (content-hash etags, per-path CAS locks),
-// `InMemoryBlobStorage` (the shared test double), and a
+// `InMemoryBlobStorage` (the shared test double), a
 // `ResilientBlobStorage(LocalFileStorage)` stack to prove decorator
-// forwarding end-to-end.
+// forwarding end-to-end, and — env-gated — the three cloud companions
+// (`AwsS3Storage` / `AzureBlobStorage` / `GoogleCloudStorage`).
 
 let private bytes (s: string) = Encoding.UTF8.GetBytes s
 
@@ -145,12 +146,51 @@ let private resilientOverLocalFactory () =
     :> obj
     :?> IConditionalBlobStorage
 
+// ─── Env-gated cloud arms (Phase 600 follow-up) ──────────────────────
+//
+// The same contract pack bound to the real cloud backends — S3
+// conditional PUT (If-Match / If-None-Match), Azure ETag preconditions,
+// GCS generation-match. Mirrors the AIProviders / cloud-storage
+// env-gated live-test pattern: each arm activates only when its
+// credential env var is set, and emits a single `pending` case
+// otherwise so a missing credential shows as "skipped", never as a
+// silent green. Env vars match the companions' `fromEnv` readers
+// (see AwsS3StorageTests / AzureBlobStorageTests /
+// GoogleCloudStorageTests).
+
+let private envGatedCloudArm (name: string) (envVar: string) (mkStore: unit -> IBlobStorage option) =
+    match Environment.GetEnvironmentVariable envVar with
+    | null
+    | "" -> testList $"{name} (live)" [ ptestCase $"skipped — {envVar} not set" <| fun _ -> () ]
+    | _ ->
+        let factory () =
+            match mkStore () with
+            | Some store -> store :> obj :?> IConditionalBlobStorage
+            | None -> failwith $"{name} store factory returned None despite {envVar} being set"
+
+        contractTests $"{name} (live)" factory
+
+let private awsCloudArm =
+    envGatedCloudArm "AwsS3Storage" "TOOLUP_AWS_S3_BUCKET" ToolUp.Storage.AwsS3Storage.fromEnv
+
+let private azureCloudArm =
+    envGatedCloudArm "AzureBlobStorage" "TOOLUP_AZURE_STORAGE_CONNECTION_STRING" (fun () ->
+        ToolUp.Storage.AzureBlobStorage.fromEnv (Some "cas-contract-tests"))
+
+let private gcsCloudArm =
+    envGatedCloudArm "GoogleCloudStorage" "TOOLUP_GCS_BUCKET" ToolUp.Storage.GoogleCloudStorage.fromEnv
+
 [<Tests>]
 let tests =
     testList "Phase 600 — blob conditional writes (ETag seam)" [
         contractTests "LocalFileStorage" localFactory
         contractTests "InMemoryBlobStorage" inMemoryFactory
         contractTests "ResilientBlobStorage(LocalFileStorage)" resilientOverLocalFactory
+
+        // Env-gated live cloud arms — skip clean without credentials.
+        awsCloudArm
+        azureCloudArm
+        gcsCloudArm
 
         test "a non-conditional backend is honestly probeable" {
             // The seam's consumer pattern: type-test, fall back when absent.
