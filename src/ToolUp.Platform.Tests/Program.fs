@@ -248,14 +248,17 @@ let allTests =
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests
         RedisNotificationChannelHealthTests.tests
-        // Phase 9m.A — AI provider/model env validators + probe validator.
-        // All three packs carried `[<Tests>]` but were never in `allTests` —
-        // wired in by the 2026-07-20 orphaned-pack audit. Always-on: the env
-        // packs snapshot-then-clear their env vars; the probe pack feeds
-        // canned outcomes through `ProviderProbeSpec.Fetch` (no network).
-        AIProviderEnvValidatorTests.providerTests
-        AIProviderEnvValidatorTests.modelTests
-        AIProviderProbeValidatorTests.tests
+        // NOTE — Phase 9m.A AIProviderEnvValidator / AIModelEnvValidator /
+        // AIProviderProbeValidator packs are deliberately NOT wired here. They
+        // are orphaned (carry `[<Tests>]` but were never in `allTests`), but
+        // they mutate PROCESS-GLOBAL env vars (`TOOLUP_AI_PROVIDER` /
+        // `TOOLUP_AI_MODEL` / `ANTHROPIC_API_KEY` …) with snapshot/restore.
+        // Under Expecto's default parallel runner they race each other (a
+        // sibling's set/clear leaks across the `withEnv` window), producing
+        // "expected Warning, got Ok" and wrong-value message assertions.
+        // Wiring them needs a `testSequenced`/`testSequencedGroup` wrap over
+        // the whole env-mutating family — Phase 9m.A follow-up, not a blind
+        // add. See the 2026-07-20 orphaned-pack audit report.
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
         MinimumViableShapeTests.tests
@@ -357,10 +360,14 @@ let allTests =
         RateLimitConfigHelpersTests.tests
         SseAuthModeValidatorTests.tests
         OidcAudienceBindingValidatorTests.tests
-        // Phase 248 — OIDC preflight-timeout env knob (TOOLUP_OIDC_PREFLIGHT_
-        // TIMEOUT_MS). Carried `[<Tests>]` but was never in `allTests` — wired
-        // in by the 2026-07-20 orphaned-pack audit.
-        OidcAuthValidatorTimeoutTests.tests
+        // NOTE — Phase 248 OidcAuthValidatorTimeoutTests is deliberately NOT
+        // wired here. Orphaned (carries `[<Tests>]`, never in `allTests`), but
+        // its 8 tests mutate the process-global `TOOLUP_OIDC_ISSUER` /
+        // `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` env vars with snapshot/restore and
+        // race each other under Expecto's parallel runner (the exact-Timeout
+        // assertions flake when a sibling clears the var mid-call). Same class
+        // as the Phase 9m.A AI validators above — needs a `testSequenced` wrap.
+        // See the 2026-07-20 orphaned-pack audit report.
         // Phase 247 — invite-by-email capability validator (warns when the
         // invite surface mounts with no IUserDirectory). Same audit.
         InviteEmailCapabilityValidatorTests.tests
@@ -639,10 +646,16 @@ let allTests =
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
         BuiltInModuleSurfaceTests.tests
-        // Built-in module visibility pack — sibling `[<Tests>]` binding in
-        // BuiltInModuleSurfaceTests.fs that was never in `allTests`; wired in
-        // by the 2026-07-20 orphaned-pack audit.
-        BuiltInModuleSurfaceTests.visibilityTests
+        // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
+        // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
+        // but constructs the SDK's built-in *client-side* UI modules
+        // (`FileManagerUI.create`, `DataSubjectRequestAdminUI.create`,
+        // `HealthMonitorUI.create`, …), whose bodies touch `Icons` — Fable
+        // `importDefault` dummy-code that throws under .NET ("You've hit dummy
+        // code used for Fable bindings"). It is a Fable-tier pack, same class
+        // as the HomeOverviewTests client-tier landing test that lives in the
+        // ToolUp.AI.Client.Tests Fable harness. See the 2026-07-20
+        // orphaned-pack audit report.
         // Phase 171 — Home/Overview verification (separate `[<Tests>]`
         // bindings that `runTestsWithCLIArgs` would otherwise leave
         // dormant): the server-side CountObjects affordance + the
