@@ -154,6 +154,13 @@ module SchedulingServerApp =
             Base = ServerApp.withEventTriggerCatchUp enabled app.Base
     }
 
+    /// Phase 9t — audit-write failure policy. Delegates to
+    /// `ServerApp.withAuditFailurePolicy`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: SchedulingServerApp) : SchedulingServerApp = {
+        app with
+            Base = ServerApp.withAuditFailurePolicy policy app.Base
+    }
+
     let withPreMiddleware
         (f: IApplicationBuilder -> IApplicationBuilder)
         (app: SchedulingServerApp)

@@ -507,6 +507,9 @@
         <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />
         <Compile Include="InProcess\AuditWriteFailureMetricTests.fs" />
+        <!-- Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction /
+             DegradeToFile + fallback spill capacity + poison quarantine). -->
+        <Compile Include="InProcess\AuditFailurePolicyTests.fs" />
         <Compile Include="InProcess\DegradedCapabilityRegistryTests.fs" />
         <Compile Include="InProcess\AuthAuditHookTests.fs" />
         <!-- Phase 272 — hosted-tree action audit emission (GP 6): every

@@ -321,6 +321,13 @@ module FormsServerApp =
             Base = ServerApp.withEventTriggerCatchUp enabled app.Base
     }
 
+    /// Phase 9t — audit-write failure policy. Delegates to
+    /// `ServerApp.withAuditFailurePolicy`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: FormsServerApp) : FormsServerApp = {
+        app with
+            Base = ServerApp.withAuditFailurePolicy policy app.Base
+    }
+
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: FormsServerApp) : FormsServerApp = {
         app with
             Base = ServerApp.withPreMiddleware f app.Base

@@ -334,7 +334,12 @@
         <Compile Include="Server\IBlobEncryptionKeyResolver.fs" />
         <Compile Include="Server\EncryptedBlobStorage.fs" />
         <Compile Include="Server\SingleKeyResolver.fs" />
+        <!-- Phase 9t — bounded local spill for DegradeToFile audit-write
+             failure policy; before AuditLog.fs (the log spills into it) and
+             the replay service (which drains it back into IEventStore). -->
+        <Compile Include="Server\AuditFallbackStore.fs" />
         <Compile Include="Server\AuditLog.fs" />
+        <Compile Include="Server\AuditFallbackReplayService.fs" />
         <!-- Phase 120 — default IAuthAuditHook (writes AuthorizationDenied
              via IAuditLog + per-(route,subject) flood guard). After
              AuditLog.fs (uses the audit registry); before the emission

@@ -1588,6 +1588,35 @@ module ServerApp =
             }
     }
 
+    /// Phase 9t — select what an audit-write failure does beyond the
+    /// Phase 114 counter. Default `LogAndContinue` (prior behaviour —
+    /// the action completes, the record is lost, the loss is counted
+    /// + logged). Compliance-grade deployments opt into
+    /// `RefuseAction` (the action fails with "audit unavailable"
+    /// rather than committing un-audited) or `DegradeToFile` (the
+    /// record spills to a bounded local directory —
+    /// `withAuditFallbackDirectory`, default `audit-fallback/` under
+    /// the working directory — and the replay service re-ingests it
+    /// once the store recovers). Only consulted when
+    /// `AuditLog = EnabledAuditLog`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    AuditFailurePolicy = policy
+            }
+    }
+
+    /// Phase 9t — override the `DegradeToFile` spill root (default:
+    /// `audit-fallback/` under the process working directory).
+    let withAuditFallbackDirectory (directory: string) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    AuditFallbackDirectory = Some directory
+            }
+    }
+
     /// Phase 177 — opt into the deployment-readiness scorecard. Flips
     /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
     /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`

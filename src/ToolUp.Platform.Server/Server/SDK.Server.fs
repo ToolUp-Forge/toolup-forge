@@ -694,6 +694,11 @@ let compose
     // dispatcher singleton + sink registrations for sibling silos.
     registerTransactionalDispatcher services config transactionalDispatcher transactionalSinks
 
+    // Phase 9t — DegradeToFile audit-spill replay drain (extracted to
+    // `ComposeNotifications.registerAuditFallbackReplay`). No-op unless
+    // `AuditFailurePolicy = DegradeToFile` with audit enabled.
+    registerAuditFallbackReplay services config eventStore resolvedLogger
+
     // Phase 9g — audit replicator hosted service (extracted to
     // `ComposeAudit.registerAuditReplicatorHosting`).
     // Phase 16 — pass `config` so `ServerlessHost = ServerlessHost`

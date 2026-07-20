@@ -250,11 +250,26 @@ ToolUp.Platform.AssemblyTransform+Window.column : System.String { get }
 ToolUp.Platform.AssemblyTransform+Window.partitionBy : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.AssemblyTransform+Window.periodColumn : System.String { get }
 ToolUp.Platform.AssemblyTransform+Window.size : System.Int32 { get }
+ToolUp.Platform.AuditFallbackReplayService (class)
+ToolUp.Platform.AuditFallbackReplayService+AuditFallbackReplayService (class)
+ToolUp.Platform.AuditFallbackReplayService+AuditFallbackReplayService..ctor(ToolUp.Platform.AuditFallbackStore+AuditFallbackStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger)
+ToolUp.Platform.AuditFallbackReplayService+AuditFallbackReplayService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.AuditFallbackStore (class)
+ToolUp.Platform.AuditFallbackStore.DefaultMaxBytes : System.Int64 (literal)
+ToolUp.Platform.AuditFallbackStore.defaultDirectory() : System.String
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore (class)
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore..ctor(System.String, System.Int64, ToolUp.Platform.ILogger)
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.Append(ToolUp.Platform.ModuleEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.PendingCount() : System.Int32
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.ReplayOnce(ToolUp.Platform.IEventStore, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.Root : System.String { get }
 ToolUp.Platform.AuditLog (class)
 ToolUp.Platform.AuditLog+AuditMetrics (class)
 ToolUp.Platform.AuditLog+AuditMetrics.WriteFailuresTotal : System.String (literal)
+ToolUp.Platform.AuditLog+AuditWriteRefusedException (class)
+ToolUp.Platform.AuditLog+AuditWriteRefusedException..ctor(System.String, System.String, System.Exception)
 ToolUp.Platform.AuditLog+EventStoreAuditLog (class)
-ToolUp.Platform.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]])
+ToolUp.Platform.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFailurePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFallbackStore+AuditFallbackStore])
 ToolUp.Platform.AuditLog+NoOpAuditLog (class)
 ToolUp.Platform.AuditLog+NoOpAuditLog..ctor()
 ToolUp.Platform.AuditLogHealthCheck (class)
@@ -324,9 +339,11 @@ ToolUp.Platform.AutoBootstrapDevAdminModeValidator+AutoBootstrapDevAdminModeVali
 ToolUp.Platform.AutoBootstrapDevAdminModeValidator+AutoBootstrapDevAdminModeValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.BackgroundSubsystem (class)
 ToolUp.Platform.BackgroundSubsystem.AlertRuleEngineSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
+ToolUp.Platform.BackgroundSubsystem.AuditFallbackReplaySubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem.AuditReplicatorSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem.HealthStateTrackerSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem.IsAlertRuleEngineSubsystem : System.Boolean { get }
+ToolUp.Platform.BackgroundSubsystem.IsAuditFallbackReplaySubsystem : System.Boolean { get }
 ToolUp.Platform.BackgroundSubsystem.IsAuditReplicatorSubsystem : System.Boolean { get }
 ToolUp.Platform.BackgroundSubsystem.IsHealthStateTrackerSubsystem : System.Boolean { get }
 ToolUp.Platform.BackgroundSubsystem.IsJobSchedulerSubsystem : System.Boolean { get }
@@ -344,6 +361,7 @@ ToolUp.Platform.BackgroundSubsystem.UsageBatchFlusherSubsystem : ToolUp.Platform
 ToolUp.Platform.BackgroundSubsystem.WebhookDispatcherSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem+Tags (class)
 ToolUp.Platform.BackgroundSubsystem+Tags.AlertRuleEngineSubsystem : System.Int32 (literal)
+ToolUp.Platform.BackgroundSubsystem+Tags.AuditFallbackReplaySubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.AuditReplicatorSubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.HealthStateTrackerSubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.JobSchedulerSubsystem : System.Int32 (literal)
@@ -652,6 +670,7 @@ ToolUp.Platform.ComposeJobs.registerScheduledJobDeclarations(Microsoft.FSharp.Co
 ToolUp.Platform.ComposeJobs.registerWebhookSubsystem(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]]) : System.Void
 ToolUp.Platform.ComposeNotifications (class)
 ToolUp.Platform.ComposeNotifications.buildNotificationStack(ToolUp.Platform.ServerConfig, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]) : ToolUp.Platform.ComposeNotifications+NotificationStack
+ToolUp.Platform.ComposeNotifications.registerAuditFallbackReplay(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeNotifications.registerPresenceSubstrate(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerShareTokenStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerTransactionalDispatcher(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink]) : System.Void
@@ -4097,6 +4116,8 @@ ToolUp.Platform.ServerAppModule.run(ToolUp.Platform.ServerApp) : System.Int32
 ToolUp.Platform.ServerAppModule.withActivitySink(ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAlertRule(ToolUp.Platform.AlertRule, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAlertRules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withAuditFailurePolicy(ToolUp.Platform.AuditFailurePolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withAuditFallbackDirectory(System.String, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAuditReplicatorOptions(ToolUp.Platform.AuditReplicatorOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAuditSink(ToolUp.Platform.IAuditSink, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

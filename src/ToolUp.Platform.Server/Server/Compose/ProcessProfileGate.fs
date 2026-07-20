@@ -46,6 +46,11 @@ type BackgroundSubsystem =
     | TransactionalDispatcherSubsystem
     /// Audit replicator — fans event-store writes out to `IAuditSink`s.
     | AuditReplicatorSubsystem
+    /// Phase 9t — periodic drain of the `DegradeToFile` audit spill
+    /// back into the live `IEventStore`. Runs on `AllInOne` /
+    /// `WorkerOnly` via the wildcard arms; skipped on `WebOnly` /
+    /// `DispatcherOnly` (not an outbound dispatcher) / `ServerlessHost`.
+    | AuditFallbackReplaySubsystem
     /// Usage-metering batch flusher.
     | UsageBatchFlusherSubsystem
     /// Periodic IHealthCheck poll + state-change audit emission.

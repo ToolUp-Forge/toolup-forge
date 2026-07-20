@@ -562,6 +562,13 @@ module AIServerApp =
             Base = ServerApp.withEventTriggerCatchUp enabled app.Base
     }
 
+    /// Phase 9t — audit-write failure policy. Delegates to
+    /// `ServerApp.withAuditFailurePolicy`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: AIServerApp) : AIServerApp = {
+        app with
+            Base = ServerApp.withAuditFailurePolicy policy app.Base
+    }
+
     let withExtensions (e: ComposeExtensions) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withExtensions e app.Base

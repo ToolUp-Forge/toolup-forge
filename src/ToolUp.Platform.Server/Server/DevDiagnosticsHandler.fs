@@ -580,6 +580,7 @@ let private buildProcessProfile (config: ServerConfig) : ProcessProfileSummary =
             WebhookDispatcherSubsystem, "Webhook dispatcher"
             TransactionalDispatcherSubsystem, "Transactional dispatcher"
             AuditReplicatorSubsystem, "Audit replicator"
+            AuditFallbackReplaySubsystem, "Audit fallback replay"
             UsageBatchFlusherSubsystem, "Usage batch flusher"
             HealthStateTrackerSubsystem, "Health-state tracker"
             AlertRuleEngineSubsystem, "Alert-rule engine"

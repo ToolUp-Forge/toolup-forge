@@ -1256,6 +1256,19 @@ let internal decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
     | Ok audit -> Some audit
     | Error _ -> None
 
+/// Phase 9t — raised out of `EventStoreAuditLog.Record` when
+/// `AuditFailurePolicy = RefuseAction` and the audit write fails: the
+/// user's action must NOT complete un-audited, so the failure
+/// propagates through the action handler and surfaces as a 500 with a
+/// clear "audit unavailable" message rather than a silent compliance
+/// gap.
+type AuditWriteRefusedException(scopeId: string, eventType: string, inner: exn) =
+    inherit
+        Exception(
+            $"audit unavailable — refusing the action rather than completing it un-audited (scope={scopeId}, eventType={eventType}): {inner.Message}",
+            inner
+        )
+
 /// SDK-default `IAuditLog`. Wraps the DI-registered `IEventStore`
 /// so audit events flow through the same retention policy, blob
 /// layout, and webhook hooks as every other platform event.
@@ -1267,38 +1280,85 @@ let internal decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
 /// which point `compose` has populated the cell with the real sink.
 /// Omitted by test call sites and the replicator's self-audit log, where
 /// it defaults to a no-op sink.
-type EventStoreAuditLog(eventStore: IEventStore, logger: ILogger, ?metricsLookup: unit -> Metrics.IMetricsSink) =
+///
+/// Phase 9t — `failurePolicy` selects what a write failure does beyond
+/// the Phase 114 counter: `LogAndContinue` (default — prior behaviour
+/// byte-for-byte), `RefuseAction` (raise `AuditWriteRefusedException`),
+/// or `DegradeToFile` (spill to `fallbackStore`; the replay service
+/// drains it back once the store recovers). A serialisation failure
+/// under `DegradeToFile` cannot spill (there is no envelope to write) —
+/// it degrades to the `LogAndContinue` shape for that record.
+type EventStoreAuditLog
+    (
+        eventStore: IEventStore,
+        logger: ILogger,
+        ?metricsLookup: unit -> Metrics.IMetricsSink,
+        ?failurePolicy: AuditFailurePolicy,
+        ?fallbackStore: AuditFallbackStore.AuditFallbackStore
+    ) =
 
     let resolveMetrics =
         defaultArg metricsLookup (fun () -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink)
 
+    let policy = defaultArg failurePolicy LogAndContinue
+
+    /// Phase 114 counter + the standing Warn — the common prefix of
+    /// every failure branch.
+    let countAndWarn (scopeId: string) (eventTypeName: string) (ex: exn) =
+        (resolveMetrics ()).Increment(AuditMetrics.WriteFailuresTotal, Map [ "event_type", eventTypeName ])
+
+        logger.Warn(sprintf "[AuditLog] write failed scope=%s eventType=%s: %s" scopeId eventTypeName ex.Message)
+
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {
-            try
-                let evt =
-                    Events.create
-                        scopeId
-                        AuditSourceModule.value
-                        (AuditEvent.eventTypeName audit)
-                        (serialiseAuditEvent audit)
+            let eventTypeName = AuditEvent.eventTypeName audit
 
-                do! eventStore.Write evt
-            with ex ->
-                // Phase 114 — promote the loss signal from Warn-only to an
-                // alertable counter so dropped audit rows are dashboard-
-                // visible. `event_type` tags the case so operators see
-                // WHICH events are being lost (a concentrated spike on one
-                // type points at a store/serialise regression for it).
-                (resolveMetrics ())
-                    .Increment(AuditMetrics.WriteFailuresTotal, Map [ "event_type", AuditEvent.eventTypeName audit ])
+            // Serialisation is separated from the store write so the
+            // DegradeToFile branch has an envelope to spill — a record
+            // that fails to SERIALISE has nothing spillable and takes
+            // the count+log shape under every policy except Refuse.
+            let envelope =
+                try
+                    Ok(Events.create scopeId AuditSourceModule.value eventTypeName (serialiseAuditEvent audit))
+                with ex ->
+                    Error ex
 
-                logger.Warn(
-                    sprintf
-                        "[AuditLog] write failed scope=%s eventType=%s: %s"
-                        scopeId
-                        (AuditEvent.eventTypeName audit)
-                        ex.Message
-                )
+            match envelope with
+            | Error ex ->
+                countAndWarn scopeId eventTypeName ex
+
+                if policy = RefuseAction then
+                    raise (AuditWriteRefusedException(scopeId, eventTypeName, ex))
+            | Ok evt ->
+                match! Async.Catch(eventStore.Write evt) with
+                | Choice1Of2() -> ()
+                | Choice2Of2 ex ->
+                    // Phase 114 — promote the loss signal from Warn-only to
+                    // an alertable counter so dropped audit rows are
+                    // dashboard-visible. `event_type` tags the case so
+                    // operators see WHICH events are being lost.
+                    countAndWarn scopeId eventTypeName ex
+
+                    match policy with
+                    | LogAndContinue -> ()
+                    | RefuseAction -> raise (AuditWriteRefusedException(scopeId, eventTypeName, ex))
+                    | DegradeToFile ->
+                        match fallbackStore with
+                        | Some fb ->
+                            match! fb.Append evt with
+                            | Ok() ->
+                                logger.Info
+                                    $"[AuditLog] event=spilled_to_fallback scope=%s{scopeId} eventType={eventTypeName} — replay service re-ingests on recovery"
+                            | Error msg ->
+                                logger.Error(
+                                    $"[AuditLog] event=fallback_spill_failed scope=%s{scopeId} eventType={eventTypeName}: {msg} — audit record LOST",
+                                    None
+                                )
+                        | None ->
+                            logger.Error(
+                                $"[AuditLog] event=fallback_missing scope=%s{scopeId} eventType={eventTypeName} — DegradeToFile with no fallback store wired; audit record LOST",
+                                None
+                            )
         }
 
         member _.GetAuditTrail(scopeId, dateRange, eventType) = async {

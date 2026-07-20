@@ -21,7 +21,17 @@ type IAuditLog =
             Async<AuditEvent list>
 ```
 
-`Record` is best-effort: `EventStoreAuditLog` catches and logs `Warn` on failure rather than rolling back the primary operation — same semantics as `MembershipChanged` publication in `TeamStore`. Production deployments that need the audit log to be the system of record (regulated sectors) should layer the deferred `IAuditSink` companion.
+`Record` is best-effort **by default**: `EventStoreAuditLog` catches, counts (`toolup.audit.write_failures_total`, Phase 114), and logs `Warn` on failure rather than rolling back the primary operation — same semantics as `MembershipChanged` publication in `TeamStore`. Production deployments that need the audit log to be the system of record (regulated sectors) should layer the deferred `IAuditSink` companion — and select a stricter failure policy (below).
+
+### Audit-write failure policy (Phase 9t)
+
+`ServerConfig.AuditFailurePolicy` (fluent: `ServerApp.withAuditFailurePolicy`, mirrored on every superset; env: `TOOLUP_AUDIT_FAILURE_POLICY=log|refuse|degrade`) selects what a failed audit write does beyond the Phase 114 counter:
+
+- **`LogAndContinue`** (default) — the pre-9t behaviour byte-for-byte: the action completes, the record is lost, the loss is counted + logged.
+- **`RefuseAction`** — compliance-grade: `Record` raises `AuditWriteRefusedException` ("audit unavailable"), which propagates through the emission site so the user's action fails visibly rather than committing un-audited. SOC 2 / HIPAA / GDPR Art. 30 / SOX continuous-audit postures want this.
+- **`DegradeToFile`** — availability-grade: the failed record (the full `ModuleEvent` envelope) spills to a bounded local directory (`audit-fallback/` under the working directory; `withAuditFallbackDirectory` to override; 64 MB cap, at-capacity drops are loud `Error` logs). Deliberately local disk, not `IBlobStorage` — when the blob-backed event store is down, blob storage generally is too. `AuditFallbackReplayService` (a `BackgroundService`, gated as `AuditFallbackReplaySubsystem` on the process-profile matrix) drains the spill back into the live `IEventStore` every 60 seconds once writes recover, oldest first, deleting each file only after its write succeeds; a corrupt spill file is quarantined as `*.json.poison` so it can never wedge the drain. Replayed events flow through the decorated store, so webhook fan-out and `OnEvent` job triggers fire for recovered records — late, but not lost.
+
+The `AuditLogHealthCheck` probe (sentinel write + read) surfaces store degradation on the health endpoint and in `HealthMonitorUI` regardless of policy.
 
 **Emission sites** (handler-layer, where the actor's `userId` is available via `ctx.Items["ToolUp.UserId"]`):
 

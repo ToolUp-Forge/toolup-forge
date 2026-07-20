@@ -313,6 +313,9 @@ let allTests =
         HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests
         AuditLogHealthCheckTests.tests
+        // Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction
+        // / DegradeToFile + fallback spill capacity + poison quarantine).
+        AuditFailurePolicyTests.tests
         DegradedCapabilityRegistryTests.tests
         AuthAuditHookTests.tests
         // Phase 272 — hosted-tree action audit emission (GP 6): authorized/

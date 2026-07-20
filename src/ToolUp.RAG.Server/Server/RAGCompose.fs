@@ -1812,6 +1812,13 @@ module RAGServerApp =
             AI = AIServerApp.withEventTriggerCatchUp enabled app.AI
     }
 
+    /// Phase 9t — audit-write failure policy. Delegates to
+    /// `AIServerApp.withAuditFailurePolicy`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withAuditFailurePolicy policy app.AI
+    }
+
     let withTransactionalSink (sink: INotificationSink) (app: RAGServerApp) : RAGServerApp = {
         app with
             AI = AIServerApp.withTransactionalSink sink app.AI

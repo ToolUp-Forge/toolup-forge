@@ -133,10 +133,32 @@ let buildNotificationStack
     //
     // Constructed here (above the transactional dispatcher) so Phase 6f's
     // audit emission has its `IAuditLog` instance to inject.
+    // Phase 9t — the `DegradeToFile` spill store, constructed only when
+    // the policy selects it (GP 13). The replay service (registered
+    // later, where `services` is in scope) constructs its own instance
+    // over the same root — the store is stateless over the directory.
+    let auditFallbackStore =
+        match config.AuditLog, config.AuditFailurePolicy with
+        | EnabledAuditLog, DegradeToFile ->
+            let root =
+                config.AuditFallbackDirectory
+                |> Option.defaultValue (AuditFallbackStore.defaultDirectory ())
+
+            Some(AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, resolvedLogger))
+        | _ -> None
+
     let auditLog: IAuditLog =
         match config.AuditLog with
         | NoAuditLog -> AuditLog.NoOpAuditLog() :> _
-        | EnabledAuditLog -> AuditLog.EventStoreAuditLog(eventStore, resolvedLogger, metricsSinkLookup) :> _
+        | EnabledAuditLog ->
+            AuditLog.EventStoreAuditLog(
+                eventStore,
+                resolvedLogger,
+                metricsSinkLookup,
+                config.AuditFailurePolicy,
+                ?fallbackStore = auditFallbackStore
+            )
+            :> _
 
     // Phase 21b — opt-in share-token substrate. `NoShareTokenStore`
     // (default) leaves `shareTokenStoreInstance = None`, no DI
@@ -348,3 +370,35 @@ let registerTransactionalDispatcher
 
         for sink in transactionalSinks do
             services.AddSingleton<INotificationSink>(sink) |> ignore
+
+/// Phase 9t — the `DegradeToFile` audit-spill replay drain. Registered
+/// only when the deployment opted into the policy (and audit is on) —
+/// every other policy pays nothing (GP 13). Gated by
+/// `AuditFallbackReplaySubsystem` on the centralised process-profile
+/// matrix: AllInOne / WorkerOnly run it; WebOnly / DispatcherOnly /
+/// ServerlessHost skip (a sibling worker drains the shared spill only
+/// when the fallback directory is shared — the default working-dir
+/// root is per-silo, matching the per-silo spill writer).
+let registerAuditFallbackReplay
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (eventStore: IEventStore)
+    (resolvedLogger: ILogger)
+    : unit =
+    match config.AuditLog, config.AuditFailurePolicy with
+    | EnabledAuditLog, DegradeToFile when
+        ProcessProfileGate.shouldRegisterBackgroundService config AuditFallbackReplaySubsystem
+        ->
+        let root =
+            config.AuditFallbackDirectory
+            |> Option.defaultValue (AuditFallbackStore.defaultDirectory ())
+
+        let drainStore =
+            AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, resolvedLogger)
+
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+            AuditFallbackReplayService.AuditFallbackReplayService(drainStore, eventStore, resolvedLogger)
+            :> Microsoft.Extensions.Hosting.IHostedService
+        )
+        |> ignore
+    | _ -> ()

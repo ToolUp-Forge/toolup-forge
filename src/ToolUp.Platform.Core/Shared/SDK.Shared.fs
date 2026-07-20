@@ -741,6 +741,29 @@ type AuditLogMode =
     /// `EventStore = PersistentBlobBacked _` for a durable trail.
     | EnabledAuditLog
 
+/// Phase 9t — what `EventStoreAuditLog.Record` does when the
+/// underlying `IEventStore.Write` (or the payload serialisation)
+/// fails. Today's behaviour — catch, count
+/// (`audit_write_failures_total`, Phase 114), log at `Warn`, and let
+/// the user's action complete — leaves a silent hole in the audit
+/// trail: fine for deployments that treat audit as advisory, not
+/// acceptable under SOC 2 / HIPAA / GDPR Art. 30 / SOX continuous-
+/// audit obligations. The policy makes the trade explicit. Env:
+/// `TOOLUP_AUDIT_FAILURE_POLICY=log|refuse|degrade`.
+type AuditFailurePolicy =
+    /// Default — the pre-9t behaviour byte-for-byte: count + `Warn`,
+    /// action completes, audit record lost.
+    | LogAndContinue
+    /// Compliance-grade: the failure propagates as
+    /// `AuditWriteRefusedException`, so the action surfaces a 500
+    /// ("audit unavailable") rather than committing un-audited work.
+    | RefuseAction
+    /// Availability-grade: the failed record spills to a bounded
+    /// local fallback directory; `AuditFallbackReplayService`
+    /// re-ingests it into the live `IEventStore` once writes recover.
+    /// The action completes; the trail heals after the outage.
+    | DegradeToFile
+
 /// Selects how `compose` registers `INotificationChannel` and the
 /// `/api/notifications` SSE route. Default:
 /// `NotificationsAuto` — `compose` flips to `InMemoryNotifications`
@@ -2185,6 +2208,19 @@ type ServerConfig = {
     /// Central, not per-sink (design D17): the decision is taken once
     /// per event in the replicator and applies to every registered sink.
     AuditSamplingPolicy: AuditSamplingPolicy
+    /// Phase 9t — behaviour when an audit write fails. Default:
+    /// `LogAndContinue` (pre-9t behaviour byte-for-byte — GP 11).
+    /// Production deployments with continuous-audit obligations opt
+    /// into `RefuseAction` (fail the action) or `DegradeToFile`
+    /// (spill locally + replay on recovery). Only consulted when
+    /// `AuditLog = EnabledAuditLog`. Env:
+    /// `TOOLUP_AUDIT_FAILURE_POLICY=log|refuse|degrade`.
+    AuditFailurePolicy: AuditFailurePolicy
+    /// Phase 9t — root directory for the `DegradeToFile` fallback
+    /// spill. `None` (default) resolves to `audit-fallback/` under
+    /// the process working directory. Only consulted when
+    /// `AuditFailurePolicy = DegradeToFile`.
+    AuditFallbackDirectory: string option
     /// Notification-channel selection. Default:
     /// `NotificationsAuto` — `compose` infers `InMemoryNotifications`
     /// when any feature that publishes notifications is active and
@@ -3123,6 +3159,8 @@ module ServerConfig =
         Webhooks = NoWebhooks
         AuditLog = NoAuditLog
         AuditSamplingPolicy = AuditSamplingPolicy.none
+        AuditFailurePolicy = LogAndContinue
+        AuditFallbackDirectory = None
         Notifications = NotificationsAuto
         SecurityHeaders = Map.empty
         SecurityHardening = NoSecurityHardening
@@ -3833,6 +3871,9 @@ module ServerConfig =
                 // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
                 // preserves GP 11: unset → the prior `defaults.X` value.
                 BackfillMissedTicks = envFlag "TOOLUP_BACKFILL_MISSED_TICKS"
+                // Phase 598 tail — env lift for the event-trigger catch-up
+                // opt-in, 71.A.6 parity with TOOLUP_BACKFILL_MISSED_TICKS.
+                EventTriggerCatchUp = envFlag "TOOLUP_EVENT_TRIGGER_CATCHUP"
                 MigrateWebhookSecretsAtRest = envFlag "TOOLUP_MIGRATE_WEBHOOK_SECRETS"
                 SkipPreflight = envFlag "TOOLUP_SKIP_PREFLIGHT"
                 HealthStateTracking = envFlag "TOOLUP_HEALTH_STATE_TRACKING"
@@ -3845,6 +3886,20 @@ module ServerConfig =
                 PeerRoutePrefixes = parseStringList "TOOLUP_PEER_ROUTE_PREFIXES"
                 // Phase 71.A.7 (batch 1) — flat-case DU lifts (no override
                 // member, no payload). Additive: unset → `defaults.X`.
+                AuditFailurePolicy =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_AUDIT_FAILURE_POLICY"
+                        [
+                            "log", LogAndContinue
+                            "logandcontinue", LogAndContinue
+                            "refuse", RefuseAction
+                            "refuseaction", RefuseAction
+                            "degrade", DegradeToFile
+                            "degradetofile", DegradeToFile
+                        ]
+                        None
+                        defaults.AuditFailurePolicy
                 ResultStore =
                     parseFlatDuCase
                         logger
