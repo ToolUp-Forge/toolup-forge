@@ -446,6 +446,9 @@
         <!-- Phase 599 — entity-write outbox (write-ahead intent + version
              witness: happy path, deferred publish, ghost prevention). -->
         <Compile Include="InProcess\EntityOutboxTests.fs" />
+        <!-- Phase 600 — IConditionalBlobStorage contract (ETag CAS seam)
+             bound to Local / InMemory / Resilient-decorated backends. -->
+        <Compile Include="InProcess\ConditionalBlobStorageTests.fs" />
         <!-- Phase 447 — seed / fixture-pack loader (idempotency, version
              bump, mode gating, scope isolation). -->
         <Compile Include="InProcess\SeedDataLoaderTests.fs" />

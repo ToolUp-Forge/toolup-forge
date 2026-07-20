@@ -268,3 +268,57 @@ let eraseByPrefix
                             )
                         )
     }
+// ─── Phase 600 — conditional writes (the ETag seam) ──────────────────
+//
+// Optional capability interface for backends that support optimistic
+// concurrency on blob writes. Deliberately NOT members on
+// `IBlobStorage`: thirteen in-tree implementers (plus consumer-side
+// custom stores) implement that interface, so new abstract members
+// would be a breaking consumer-facing sweep. Backends that support
+// conditional writes implement THIS interface alongside
+// `IBlobStorage`; consumers probe with a type-test —
+//
+//     match blobStorage with
+//     | :? IConditionalBlobStorage as cas -> // ETag-guarded path
+//     | _ -> // fallback: per-key serialisation (the standing interim guard)
+//
+// ETags are OPAQUE per-provider tokens — a content hash locally, the
+// native ETag / generation on cloud backends. Callers never parse
+// them; the only valid operations are "carry the token from a
+// `DownloadWithETag`" and "hand it back via `IfMatch`".
+
+/// Precondition for a conditional upload.
+type ETagCondition =
+    /// Write only if the blob's current etag equals this token —
+    /// the read-modify-write guard.
+    | IfMatch of etag: string
+    /// Write only if the blob does not exist — create-only semantics
+    /// (lease/lock acquisition, first-writer-wins).
+    | IfAbsent
+
+/// Why a conditional upload was refused.
+type ConditionalWriteError =
+    /// The precondition failed. `currentETag = Some t` — the blob
+    /// exists at `t` (stale `IfMatch`, or `IfAbsent` losing the
+    /// create race); `None` — the blob is absent but `IfMatch`
+    /// expected it.
+    | ETagMismatch of currentETag: string option
+    /// Infrastructure failure unrelated to the precondition.
+    | ConditionalWriteFailure of message: string
+
+/// Optimistic-concurrency capability over blob storage. Implementations
+/// MUST make `UploadWithETag` atomic with respect to concurrent
+/// conditional uploads on the same `(container, blobName)` — that
+/// atomicity is the entire point of the seam. Scope discipline and
+/// path rules match `IBlobStorage`.
+type IConditionalBlobStorage =
+    /// Download content together with the etag token to hand back via
+    /// `IfMatch`. `Error` on absent blob or storage failure.
+    abstract DownloadWithETag: container: string * blobName: string -> Async<Result<byte[] * string, string>>
+
+    /// Conditionally upload. Returns the NEW etag on success, a typed
+    /// `ConditionalWriteError` otherwise. A refused precondition
+    /// (`ETagMismatch`) leaves the stored blob untouched.
+    abstract UploadWithETag:
+        container: string * blobName: string * content: byte[] * condition: ETagCondition ->
+            Async<Result<string, ConditionalWriteError>>

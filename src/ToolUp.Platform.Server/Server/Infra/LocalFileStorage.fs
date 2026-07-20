@@ -1,7 +1,9 @@
 module LocalFileStorage
 
 open System
+open System.Collections.Concurrent
 open System.IO
+open System.Security.Cryptography
 open ToolUp.Platform.BlobStorage
 
 /// Local filesystem implementation of IBlobStorage.
@@ -63,6 +65,66 @@ type LocalFileStorage(baseDir: string) =
                 Result.Error "container path resolves outside base directory"
         with _ ->
             Result.Error "invalid container path"
+
+    // ─── Phase 600 — conditional writes ──────────────────────────
+    //
+    // ETag = SHA-256 of content (hex). Compare-and-swap runs under
+    // per-path lock striping, which serialises conditional writers
+    // WITHIN this process — matching the impl's DevOnly
+    // single-process posture (the same boundary the in-process job
+    // scheduler declares). Cross-process CAS needs a cloud backend.
+    let casLocks = ConcurrentDictionary<string, obj>()
+
+    let casLockFor (path: string) =
+        casLocks.GetOrAdd(path, fun _ -> obj ())
+
+    let etagOf (content: byte[]) =
+        Convert.ToHexString(SHA256.HashData content).ToLowerInvariant()
+
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(container, blobName) = async {
+            match resolveBlobPath container blobName with
+            | Result.Error reason -> return Error reason
+            | Result.Ok path ->
+                try
+                    if File.Exists path then
+                        let bytes = File.ReadAllBytes path
+                        return Ok(bytes, etagOf bytes)
+                    else
+                        return Error $"Blob not found: {container}/{blobName}"
+                with ex ->
+                    return Error ex.Message
+        }
+
+        member _.UploadWithETag(container, blobName, content, condition) = async {
+            match resolveBlobPath container blobName with
+            | Result.Error reason -> return Error(ConditionalWriteFailure reason)
+            | Result.Ok path ->
+                return
+                    lock (casLockFor path) (fun () ->
+                        try
+                            let current =
+                                if File.Exists path then
+                                    Some(etagOf (File.ReadAllBytes path))
+                                else
+                                    None
+
+                            let permitted =
+                                match condition, current with
+                                | IfAbsent, None -> true
+                                | IfMatch expected, Some actual -> expected = actual
+                                | IfAbsent, Some _
+                                | IfMatch _, None -> false
+
+                            if permitted then
+                                ensureDir path
+                                File.WriteAllBytes(path, content)
+                                Ok(etagOf content)
+                            else
+                                Error(ETagMismatch current)
+                        with ex ->
+                            Error(ConditionalWriteFailure ex.Message))
+        }
 
     interface IBlobStorage with
         member this.Erase(container, prefix, policy, dryRun) =

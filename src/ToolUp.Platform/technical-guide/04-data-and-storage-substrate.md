@@ -331,6 +331,18 @@ return analysisResult
 
 The `null` branch is the cost of opt-in. Modules that want guaranteed availability can require it via DI throw rather than null-check; that's a per-module decision.
 
+## Blob conditional writes — the ETag seam (Phase 600)
+
+`IConditionalBlobStorage` (in `ToolUp.Platform.Core`, beside `IBlobStorage`) is the opt-in optimistic-concurrency capability for blob backends: `DownloadWithETag` returns content plus an **opaque** etag token; `UploadWithETag` writes under `IfMatch etag` (read-modify-write guard) or `IfAbsent` (create-only / first-writer-wins), refusing with a typed `ETagMismatch currentETag` that leaves the stored blob untouched. It is deliberately a *separate capability interface*, not new `IBlobStorage` members — thirteen in-tree implementers (plus consumer-side custom stores) would otherwise face a breaking sweep. Consumers probe:
+
+```fsharp
+match blobStorage with
+| :? IConditionalBlobStorage as cas -> // ETag-guarded CAS path
+| _ -> // fallback: per-key serialisation (the standing interim guard)
+```
+
+In-tree support: `LocalFileStorage` (content-hash etags; CAS under per-path lock striping — single-process, matching its DevOnly posture), the shared `InMemoryBlobStorage` test double, and both decorators (`EncryptedBlobStorage` forwards with envelope encryption — etags are over ciphertext, still opaque; `ResilientBlobStorage` forwards but deliberately does **not** retry conditional uploads, since a retry after an ambiguous failure can observe its own write and false-conflict). Cloud companions (S3 conditional PUT, Azure ETag preconditions, GCS generation-match) adopt in a follow-up. The `IConditionalBlobStorageContract` pack is the conformance bar for any external implementation.
+
 ## Entity-write outbox (Phase 599)
 
 An entity save and the `IEventStore` events it implies are two writes with no transaction between them — a crash in the gap leaves state and event log divergent (and, for `OnEvent`-triggered jobs, a lost trigger). `ServerConfig.EntityOutbox = EnabledEntityOutbox` (fluent: `ServerApp.withEntityOutbox true`; env: `TOOLUP_ENTITY_OUTBOX`; requires `EntityStore = EnabledEntityStore`) registers `EntityOutbox.OutboxEntityStore` in DI for mutations whose events must not be lost:
