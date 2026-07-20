@@ -396,6 +396,21 @@ type EntityStoreMode =
     /// via `ServerApp.withEntity<'T> registration`.
     | EnabledEntityStore
 
+/// Phase 599 — the entity-write outbox: durable coupling between an
+/// entity save and the `IEventStore` events it implies. Default off —
+/// an entity save and its event emission stay two independent writes
+/// (a crash between them loses the events). When enabled (requires
+/// `EntityStore = EnabledEntityStore`), `OutboxEntityStore.SaveWithEvents`
+/// stages a write-ahead intent (single-blob atomic) before the save,
+/// and the relay service publishes the staged events once the save is
+/// version-witnessed as committed — at-least-once, with never-committed
+/// saves discarded unpublished. Env: `TOOLUP_ENTITY_OUTBOX`.
+type EntityOutboxMode =
+    /// No outbox surface, no relay service. Default.
+    | NoEntityOutbox
+    /// `OutboxEntityStore` registered in DI + the relay drain running.
+    | EnabledEntityOutbox
+
 /// Phase 447 — selects whether `compose` applies registered `ISeedPack`
 /// fixtures at end-of-compose (dev / demo seed data). Default:
 /// `NoSeedData` — no packs are applied, no `_platform/seed/` marker blobs
@@ -2125,6 +2140,13 @@ type ServerConfig = {
     /// with `EnabledEntityStore` to activate the substrate; entity
     /// types register via `ServerApp.withEntity<'T> registration`.
     EntityStore: EntityStoreMode
+    /// Phase 599 — entity-write outbox selection. Default:
+    /// `NoEntityOutbox` — no outbox surface, no relay service.
+    /// Enable with `EnabledEntityOutbox` (requires
+    /// `EntityStore = EnabledEntityStore`) to register
+    /// `OutboxEntityStore.SaveWithEvents` + the relay drain. Env:
+    /// `TOOLUP_ENTITY_OUTBOX`.
+    EntityOutbox: EntityOutboxMode
     /// Phase 447 — seed / fixture-data selection. Default: `NoSeedData` —
     /// no `ISeedPack` is applied, no `_platform/seed/` marker is touched,
     /// zero cost. `EnabledSeedData` applies registered packs once per
@@ -3145,6 +3167,7 @@ module ServerConfig =
         OAuthRefresher = NoOAuthRefresher
         OAuth1a = NoOAuth1a
         EntityStore = NoEntityStore
+        EntityOutbox = NoEntityOutbox
         SeedData = NoSeedData
         // Phase 68 — the in-memory graph store is the default (registered
         // lazily; zero cost until a graph API is resolved — GP 13).
@@ -3949,6 +3972,13 @@ module ServerConfig =
                         NoEntityStore
                         EnabledEntityStore
                         defaults.EntityStore
+                EntityOutbox =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_ENTITY_OUTBOX"
+                        NoEntityOutbox
+                        EnabledEntityOutbox
+                        defaults.EntityOutbox
                 UsageMetering =
                     parseEnabledDisabled
                         logger

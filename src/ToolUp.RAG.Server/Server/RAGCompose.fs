@@ -1819,6 +1819,13 @@ module RAGServerApp =
             AI = AIServerApp.withAuditFailurePolicy policy app.AI
     }
 
+    /// Phase 599 — opt into the entity-write outbox. Delegates to
+    /// `AIServerApp.withEntityOutbox`.
+    let withEntityOutbox (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withEntityOutbox enabled app.AI
+    }
+
     let withTransactionalSink (sink: INotificationSink) (app: RAGServerApp) : RAGServerApp = {
         app with
             AI = AIServerApp.withTransactionalSink sink app.AI

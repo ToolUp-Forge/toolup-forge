@@ -51,6 +51,10 @@ type BackgroundSubsystem =
     /// `WorkerOnly` via the wildcard arms; skipped on `WebOnly` /
     /// `DispatcherOnly` (not an outbound dispatcher) / `ServerlessHost`.
     | AuditFallbackReplaySubsystem
+    /// Phase 599 — entity-outbox relay: publishes the staged events of
+    /// version-witnessed entity saves and discards never-committed
+    /// intents. Same wildcard-arm profile as the audit fallback replay.
+    | EntityOutboxRelaySubsystem
     /// Usage-metering batch flusher.
     | UsageBatchFlusherSubsystem
     /// Periodic IHealthCheck poll + state-change audit emission.

@@ -328,6 +328,13 @@ module FormsServerApp =
             Base = ServerApp.withAuditFailurePolicy policy app.Base
     }
 
+    /// Phase 599 — opt into the entity-write outbox. Delegates to
+    /// `ServerApp.withEntityOutbox`.
+    let withEntityOutbox (enabled: bool) (app: FormsServerApp) : FormsServerApp = {
+        app with
+            Base = ServerApp.withEntityOutbox enabled app.Base
+    }
+
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: FormsServerApp) : FormsServerApp = {
         app with
             Base = ServerApp.withPreMiddleware f app.Base

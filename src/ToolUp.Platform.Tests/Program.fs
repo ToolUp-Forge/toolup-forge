@@ -100,6 +100,10 @@ let allTests =
         WebhookSubstrateTests.tests
         // Phase 235 — outbound webhook signing-secret rotation.
         WebhookSecretRotationTests.tests
+        // Phase 6d.A — webhook secret-at-rest migration + preflight validator.
+        // Carried `[<Tests>]` but was never in `allTests` — wired in by the
+        // 2026-07-20 orphaned-pack audit.
+        WebhookSecretMigrationTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
         // Phase 442 — presence tracker + advisory soft-lock conformance.
@@ -244,6 +248,14 @@ let allTests =
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests
         RedisNotificationChannelHealthTests.tests
+        // Phase 9m.A — AI provider/model env validators + probe validator.
+        // All three packs carried `[<Tests>]` but were never in `allTests` —
+        // wired in by the 2026-07-20 orphaned-pack audit. Always-on: the env
+        // packs snapshot-then-clear their env vars; the probe pack feeds
+        // canned outcomes through `ProviderProbeSpec.Fetch` (no network).
+        AIProviderEnvValidatorTests.providerTests
+        AIProviderEnvValidatorTests.modelTests
+        AIProviderProbeValidatorTests.tests
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
         MinimumViableShapeTests.tests
@@ -273,6 +285,9 @@ let allTests =
         ILifecycleLockContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
+        // Phase 599 — entity-write outbox (write-ahead intent + version
+        // witness: happy path, deferred publish, ghost prevention).
+        EntityOutboxTests.tests
         EntityQueryTests.tests
         // Phase 19c — declarative relationship edges.
         RelationshipTests.tests
@@ -313,6 +328,13 @@ let allTests =
         HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests
         AuditLogHealthCheckTests.tests
+        // Phase 114 — audit-write failure metric + audit-event registry
+        // exhaustiveness gate. Both packs carried `[<Tests>]` (assuming
+        // auto-discovery) but `runTestsWithCLIArgs` only runs the supplied
+        // `allTests` list — wired in by the 2026-07-20 orphaned-pack audit
+        // (same class as the SvgPropTests note further down).
+        AuditWriteFailureMetricTests.tests
+        AuditEventRegistryTests.tests
         // Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction
         // / DegradeToFile + fallback spill capacity + poison quarantine).
         AuditFailurePolicyTests.tests
@@ -335,8 +357,25 @@ let allTests =
         RateLimitConfigHelpersTests.tests
         SseAuthModeValidatorTests.tests
         OidcAudienceBindingValidatorTests.tests
+        // Phase 248 — OIDC preflight-timeout env knob (TOOLUP_OIDC_PREFLIGHT_
+        // TIMEOUT_MS). Carried `[<Tests>]` but was never in `allTests` — wired
+        // in by the 2026-07-20 orphaned-pack audit.
+        OidcAuthValidatorTimeoutTests.tests
+        // Phase 247 — invite-by-email capability validator (warns when the
+        // invite surface mounts with no IUserDirectory). Same audit.
+        InviteEmailCapabilityValidatorTests.tests
         SecurityHeadersValidatorTests.tests
+        // CSP-nonce cache validator + security-headers baseline floor —
+        // sibling `[<Tests>]` bindings in the same file that were never in
+        // `allTests`; wired in by the 2026-07-20 orphaned-pack audit.
+        SecurityHeadersValidatorTests.cspNonceCacheValidatorTests
+        SecurityHeadersValidatorTests.baselineFloorTests
         SecurityHardeningTests.tests
+        // CSP middleware pack — sibling `[<Tests>]` binding, same audit.
+        SecurityHardeningTests.cspMiddlewareTests
+        // Phase 209 — internet-readiness secure-default scorecard (pure
+        // projection over aggregated preflight outcomes). Same audit.
+        InternetReadinessScorecardTests.tests
         ForwardedHeadersTrustValidatorTests.tests
         // Phase 325 — trusted-proxy CIDR allowlist + auth-mode escalation.
         ForwardedHeadersTrustTests.tests
@@ -575,6 +614,11 @@ let allTests =
         // email-keyed / unresolvable rows kept report-only.
         MembershipDoctorTests.tests
         TeamInvitationTests.tests
+        // Pending-invite expiry audit + active-team invitation policy —
+        // sibling `[<Tests>]` bindings in TeamInvitationTests.fs that were
+        // never in `allTests`; wired in by the 2026-07-20 orphaned-pack audit.
+        TeamInvitationTests.pendingInviteExpiryAuditTests
+        TeamInvitationTests.activeTeamPolicyTests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
@@ -595,6 +639,10 @@ let allTests =
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
         BuiltInModuleSurfaceTests.tests
+        // Built-in module visibility pack — sibling `[<Tests>]` binding in
+        // BuiltInModuleSurfaceTests.fs that was never in `allTests`; wired in
+        // by the 2026-07-20 orphaned-pack audit.
+        BuiltInModuleSurfaceTests.visibilityTests
         // Phase 171 — Home/Overview verification (separate `[<Tests>]`
         // bindings that `runTestsWithCLIArgs` would otherwise leave
         // dormant): the server-side CountObjects affordance + the
@@ -620,6 +668,11 @@ let allTests =
         RevokeOnIssuerRemovedTests.tests
         AnonymousSessionMigratorTests.tests
         DefaultSubjectResolverTests.tests
+        // Phase 246 — subject-downgrade observability (resolver downgrade
+        // signal + fail-closed undeclared-kind scope derivation). Carried
+        // `[<Tests>]` but was never in `allTests` — wired in by the
+        // 2026-07-20 orphaned-pack audit.
+        SubjectDowngradeObservabilityTests.tests
         CsrfCarveOutDerivationTests.tests
         SurfaceEnforcementMiddlewareTests.tests
         AnonymousSessionMigrationMiddlewareTests.tests
@@ -760,6 +813,10 @@ let allTests =
         // Phase 169 — module-load startup observability (the addModule
         // outcome accumulator emitted through the startup logger).
         ModuleLoadOutcomeTests.tests
+        // Phase 57 follow-up — prerender determinism + hydration-mismatch
+        // contract. Carried `[<Tests>]` but was never in `allTests` — wired
+        // in by the 2026-07-20 orphaned-pack audit.
+        PrerenderDeterminismTests.tests
         // Phase 203 — hydration-parity conformance harness: SSR fragment vs
         // CSR mount structural normalisation + node-naming diff (gates the
         // silent hydration-mismatch class at build time, not the console).

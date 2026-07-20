@@ -443,6 +443,9 @@
         <Compile Include="InProcess\PrincipalRegistryTests.fs" />
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
+        <!-- Phase 599 — entity-write outbox (write-ahead intent + version
+             witness: happy path, deferred publish, ghost prevention). -->
+        <Compile Include="InProcess\EntityOutboxTests.fs" />
         <!-- Phase 447 — seed / fixture-pack loader (idempotency, version
              bump, mode gating, scope isolation). -->
         <Compile Include="InProcess\SeedDataLoaderTests.fs" />

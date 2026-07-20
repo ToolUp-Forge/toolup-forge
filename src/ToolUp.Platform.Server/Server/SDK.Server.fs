@@ -558,6 +558,11 @@ let compose
     // registration is prepended automatically.
     registerEntityStore services config entityRegistrations
 
+    // Phase 599 — entity-write outbox surface + relay drain (extracted
+    // to `ComposeStores.registerEntityOutbox`). No-op unless
+    // `EntityOutbox = EnabledEntityOutbox` with the entity store on.
+    registerEntityOutbox services config resolvedLogger
+
     // Phase 161 — time-series substrate. Conditional on
     // `ServerConfig.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips
     // registration entirely; `CustomTimeSeriesStore` leaves the consumer's

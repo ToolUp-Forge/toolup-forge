@@ -569,6 +569,13 @@ module AIServerApp =
             Base = ServerApp.withAuditFailurePolicy policy app.Base
     }
 
+    /// Phase 599 — opt into the entity-write outbox. Delegates to
+    /// `ServerApp.withEntityOutbox`.
+    let withEntityOutbox (enabled: bool) (app: AIServerApp) : AIServerApp = {
+        app with
+            Base = ServerApp.withEntityOutbox enabled app.Base
+    }
+
     let withExtensions (e: ComposeExtensions) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withExtensions e app.Base

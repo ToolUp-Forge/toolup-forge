@@ -181,6 +181,12 @@
         <Compile Include="Server\IMappingDryRunValidator.fs" />
         <Compile Include="Server\MappingDryRunValidator.fs" />
         <Compile Include="Server\IEntityStore.fs" />
+        <!-- Phase 599 — write-ahead-intent outbox coupling entity saves to
+             event publication; after the store surface it wraps, before the
+             relay service that drains it. -->
+        <Compile Include="Server\EntityOutbox.fs" />
+        <Compile Include="Server\EntityOutboxRelayService.fs" />
+
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
         <!-- Phase 26 — Tenant entity registration. Sits behind IEntityStore;

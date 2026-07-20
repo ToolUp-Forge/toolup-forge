@@ -161,6 +161,13 @@ module SchedulingServerApp =
             Base = ServerApp.withAuditFailurePolicy policy app.Base
     }
 
+    /// Phase 599 — opt into the entity-write outbox. Delegates to
+    /// `ServerApp.withEntityOutbox`.
+    let withEntityOutbox (enabled: bool) (app: SchedulingServerApp) : SchedulingServerApp = {
+        app with
+            Base = ServerApp.withEntityOutbox enabled app.Base
+    }
+
     let withPreMiddleware
         (f: IApplicationBuilder -> IApplicationBuilder)
         (app: SchedulingServerApp)

@@ -1617,6 +1617,24 @@ module ServerApp =
             }
     }
 
+    /// Phase 599 — opt into the entity-write outbox. Default: off.
+    /// When enabled (requires `withEntityStore` /
+    /// `EntityStore = EnabledEntityStore`),
+    /// `OutboxEntityStore.SaveWithEvents` durably couples an entity
+    /// save to the `IEventStore` events it implies: a write-ahead
+    /// intent stages the events atomically before the save, and the
+    /// relay drain publishes them once the save is version-witnessed
+    /// as committed (at-least-once; never-committed saves are
+    /// discarded unpublished). Resolve `OutboxEntityStore` from DI
+    /// for mutations whose events must not be lost.
+    let withEntityOutbox (enabled: bool) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    EntityOutbox = if enabled then EnabledEntityOutbox else NoEntityOutbox
+            }
+    }
+
     /// Phase 177 — opt into the deployment-readiness scorecard. Flips
     /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
     /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`
