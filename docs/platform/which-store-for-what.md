@@ -92,6 +92,23 @@ everything else can stay on the dependency-free default. The declared
 file's custom metadata, and the codec verifies it against the physical schema
 on every decode.
 
+## `SpecHash` is submitter-minted and opaque
+
+The fit composite key `(specHash, datasetVersion, seed, providerId,
+providerVersion)` starts from a hash **the submitter mints under its own
+canonicalisation rule**. Forge stores, keys, and compares `SpecHash` as an
+opaque string and **never re-derives, normalises, or validates it against
+the spec payload** — the payload is equally opaque (GP 1). This is what
+keeps artifact identities stable across every consumer that minted hashes
+under the spec's rule: a server-side re-hash or payload canonicalisation
+would silently fork identities and corrupt the cross-record join between
+submissions, outcomes, and registry queries. The posture is executable —
+the model-fit contract pack fits requests whose declared hash deliberately
+matches no canonical hash of their payload and proves they are keyed and
+retrievable by exactly the declared value. (In-process helpers like
+`ModelSpecRef.ofPayload` are conveniences for callers that *choose* forge's
+hashing rule; nothing server-side applies them to submitted specs.)
+
 ## Provenance ties them together
 
 Model-artifact registration emits a **lineage edge** (`ILineageStore`, Phase 8a)

@@ -30,6 +30,8 @@ let allTests =
         ProvenanceLabelTests.tests
         // Phase 449 — model-fit envelope conformance (reference provider).
         IModelFitProviderContract.tests
+        // Phase 603 — SpecHash opacity contract (submitter-minted, never re-derived).
+        IModelFitProviderContract.opacityTests
         // Phase 453 — model registry conformance (blob-backed default).
         IModelRegistryContract.tests
         // Phase 454 — model-scoring seam conformance (reference scorer + blob store).

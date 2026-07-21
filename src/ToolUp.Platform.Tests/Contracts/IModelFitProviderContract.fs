@@ -6,6 +6,8 @@ module ToolUp.Platform.Tests.Contracts.IModelFitProviderContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.DataObjectStore
 open ToolUp.ModelProviders.Reference
 
 // ─── Phase 449 — model-fit envelope conformance pack ────────────────────
@@ -379,5 +381,114 @@ let tests =
             match result with
             | PermanentFailure _ -> ()
             | other -> failtestf "an unknown kind is terminal; expected PermanentFailure, got %A" other
+        }
+    ]
+
+/// Phase 603 — SpecHash opacity contract. The composite key assumes
+/// `SpecHash` is **submitter-minted and opaque**: forge stores, keys, and
+/// compares exactly the hash it was handed — never re-derives, normalises,
+/// or validates it against the payload. These cases make that restraint
+/// executable: a future "helpful" server-side re-hash (or payload
+/// canonicalisation) fails them by construction, because every case pins a
+/// declared hash that deliberately does NOT match any canonical hash of
+/// its payload.
+let opacityTests =
+    let freshRegistry () =
+        let root =
+            IO.Path.Combine(IO.Path.GetTempPath(), "toolup-opacity-tests-" + Guid.NewGuid().ToString("N"))
+
+        IO.Directory.CreateDirectory root |> ignore
+
+        let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+        let dataObjects = DataObjectStore(blob) :> IDataObjectStore
+
+        BlobModelRegistry.create dataObjects (RecordingAuditLog() :> IAuditLog)
+
+    /// A request whose declared spec hash is the caller's own token — by
+    /// construction NOT the SHA-256 of the payload.
+    let opaqueRequest (scope: string) (payload: string) (declaredHash: string) (seed: int64) : FitRequest = {
+        ScopeId = scope
+        DatasetVersion = {
+            ScopeId = scope
+            DatasetId = "sales-panel"
+            Version = 3
+        }
+        SpecRef = {
+            Payload = payload
+            SpecHash = declaredHash
+        }
+        ProviderKind = ReferenceModelFitProvider.Kind
+        Seed = seed
+        Gates = []
+    }
+
+    testList "ModelFit — SpecHash opacity (Phase 603)" [
+        testCaseAsync "a declared hash that matches no canonical hash of the payload is stored and keyed verbatim"
+        <| async {
+            let payload = """{"opaque":"spec"}"""
+            let declared = "my-own-canonicalisation-rule-hash-1"
+
+            Expect.notEqual
+                declared
+                (ModelSpecRef.hashOf payload)
+                "the case is only meaningful when the declared hash differs from forge's own hashing rule"
+
+            let! result =
+                ModelFitEnvelope.runFit registry (RecordingAuditLog()) (opaqueRequest "team-1" payload declared 7L)
+
+            match result with
+            | Error e -> failtestf "fit refused: %s" (ModelFitError.describe e)
+            | Ok outcome ->
+                Expect.equal
+                    outcome.CompositeKey.SpecHash
+                    declared
+                    "the composite key carries the declared hash verbatim"
+
+                // Registered + retrievable by exactly that hash.
+                let modelRegistry = freshRegistry ()
+
+                let! registered = modelRegistry.Register("team-1", outcome, "u1", Map.empty, "")
+
+                match registered with
+                | Error e -> failtestf "register failed: %s" (ModelRegistryError.describe e)
+                | Ok artifact ->
+                    Expect.equal artifact.CompositeKey.SpecHash declared "the registry keys the declared hash"
+
+                let! byDeclared = modelRegistry.QueryBySpecHash("team-1", declared)
+                Expect.equal (List.length byDeclared) 1 "queryable by exactly the declared hash"
+
+                // A re-hashing decorator would surface here: the canonical
+                // hash of the payload must match NOTHING.
+                let! byCanonical = modelRegistry.QueryBySpecHash("team-1", ModelSpecRef.hashOf payload)
+                Expect.isEmpty byCanonical "forge never re-derives the hash from the payload"
+        }
+
+        testCaseAsync
+            "identical payloads under distinct declared hashes are distinct artifacts — the hash is the identity"
+        <| async {
+            let payload = """{"opaque":"same-payload"}"""
+            let modelRegistry = freshRegistry ()
+
+            let fitAndRegister (declared: string) = async {
+                let! result =
+                    ModelFitEnvelope.runFit registry (RecordingAuditLog()) (opaqueRequest "team-1" payload declared 7L)
+
+                match result with
+                | Error e -> return failtestf "fit refused: %s" (ModelFitError.describe e)
+                | Ok outcome ->
+                    match! modelRegistry.Register("team-1", outcome, "u1", Map.empty, "") with
+                    | Error e -> return failtestf "register failed: %s" (ModelRegistryError.describe e)
+                    | Ok artifact -> return artifact
+            }
+
+            let! a = fitAndRegister "declared-hash-A"
+            let! b = fitAndRegister "declared-hash-B"
+
+            Expect.notEqual a.CompositeKey.Hash b.CompositeKey.Hash "distinct declared hashes → distinct composite keys"
+
+            let! byA = modelRegistry.QueryBySpecHash("team-1", "declared-hash-A")
+            let! byB = modelRegistry.QueryBySpecHash("team-1", "declared-hash-B")
+            Expect.equal (byA |> List.map ModelArtifact.id) [ ModelArtifact.id a ] "query by A returns exactly A"
+            Expect.equal (byB |> List.map ModelArtifact.id) [ ModelArtifact.id b ] "query by B returns exactly B"
         }
     ]
