@@ -484,6 +484,24 @@ type ModelFittingMode =
     /// at least one `IModelFitProvider` companion registered.
     | EnabledModelFitting
 
+/// Phase 600 — selects the out-of-process model-execution submitter API
+/// (`ModelExecutionApi` remoting surface: submit fits single + batch,
+/// bulk outcome retrieval, dataset-version resolution, scoring, registry
+/// query — every denial a typed, enumerable refusal on the wire).
+/// Default: `NoModelExecutionApi` — the route is not mounted, zero cost
+/// (GP 13).
+type ModelExecutionApiMode =
+    /// No submitter API mounted (default). Clients calling the proxy on
+    /// such a deployment receive a 404 (the JobApi absence precedent).
+    | NoModelExecutionApi
+    /// Mount the `ModelExecutionApi` remoting surface. Useful only
+    /// alongside `ModelFitting = EnabledModelFitting` + a composed
+    /// `JobScheduler` (submission), `IModelRegistry` (outcomes),
+    /// `IDatasetStore` (resolution), and `IModelScorer` (scoring) — each
+    /// method reports a typed `SubstrateDisabled` refusal for whichever
+    /// substrate is absent rather than failing at compose time.
+    | EnabledModelExecutionApi
+
 /// Phase 163 — selects the end-user product-telemetry sink (`ITelemetrySink`).
 /// Default: `NoTelemetrySink` — the `NoOpTelemetrySink` (a true no-op) is
 /// registered, so `Track` emission sites are free at runtime (GP 13).
@@ -2113,6 +2131,9 @@ type ServerConfig = {
     /// handler (requires a composed `JobScheduler`). Modelling math stays in
     /// the provider companion; forge only stores + compares (plan D10).
     ModelFitting: ModelFittingMode
+    /// Phase 600 — out-of-process model-execution submitter API. Default:
+    /// `NoModelExecutionApi` — route not mounted, zero cost (GP 13).
+    ModelExecution: ModelExecutionApiMode
     /// Phase 163 — end-user product-telemetry sink selection. Default:
     /// `NoTelemetrySink` — the `NoOpTelemetrySink` is registered (a true
     /// no-op). `CustomTelemetrySink` leaves a companion-registered sink
@@ -3096,6 +3117,7 @@ module ServerConfig =
         TimeSeriesStore = NoTimeSeriesStore
         Datasets = NoDatasets
         ModelFitting = NoModelFitting
+        ModelExecution = NoModelExecutionApi
         TelemetrySink = NoTelemetrySink
         UsageMetering = NoUsageMetering
         MetricsEndpoint = NoMetricsEndpoint

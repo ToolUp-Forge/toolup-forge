@@ -523,6 +523,13 @@
         <Compile Include="Server\TeamCreationPolicyValidator.fs" />
         <Compile Include="Server\BootstrapTeamValidator.fs" />
         <Compile Include="Server\JobApiHandler.fs" />
+        <!-- Phase 600 — the out-of-process model-execution submitter API
+             handler (fit submission via the 599 batch envelope, bulk
+             outcome retrieval, dataset resolution, scoring; typed refusals
+             throughout). Mounted by BuildRouteHandlers on the opt-in
+             ServerConfig.ModelExecution mode. Placed with the API handlers
+             (needs TeamManagement's role gate). -->
+        <Compile Include="Server\ModelExecutionApi.fs" />
         <Compile Include="Server\MaintenanceApiHandler.fs" />
         <Compile Include="Server\OAuthFlowHandler.fs" />
         <!-- Phase 10g — OAuth 1.0a three-legged flow routes. Placed here

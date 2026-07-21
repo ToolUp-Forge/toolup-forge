@@ -248,6 +248,15 @@ let buildRouteHandlers
         )
     ]
 
+    // Phase 600 — model-execution submitter API, mounted only when the
+    // deployment opts in (GP 13). Mirrors the JobApi route's opt-in
+    // shape — disabled deployments return 404 to the proxy surface;
+    // per-substrate absence is a typed refusal inside the handler.
+    let modelExecutionApiHandler: HttpHandler list =
+        match config.ModelExecution with
+        | NoModelExecutionApi -> []
+        | EnabledModelExecutionApi -> [ makeApi ModelExecutionApiHandler.modelExecutionApi ]
+
     // Data ingestion API auto-injected when the substrate is enabled.
     // Mirrors the JobApi route's opt-in shape — disabled deployments
     // return 404 to the proxy surface.
@@ -627,6 +636,7 @@ let buildRouteHandlers
             @ columnMappingHandler
             @ jobApiHandler
             @ maintenanceApiHandler
+            @ modelExecutionApiHandler
             @ dataIngestionApiHandler
             @ oauthFlowRoutes
             @ oauth1aFlowRoutes

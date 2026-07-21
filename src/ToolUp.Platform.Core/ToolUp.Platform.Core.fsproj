@@ -287,6 +287,10 @@
         <Compile Include="Shared\LineageTypes.fs" />
         <Compile Include="Shared\JobTypes.fs" />
         <Compile Include="Shared\JobApi.fs" />
+        <!-- Phase 600 — model-execution submitter wire surface (Fable-safe
+             records + closed typed-refusal DU + the ModelExecutionApi
+             remoting record). -->
+        <Compile Include="Shared\ModelExecutionWire.fs" />
         <!-- Phase 10h — OAuth token refresh substrate types (descriptor + result DU). -->
         <Compile Include="Shared\Types\OAuthRefreshTypes.fs" />
         <!-- Phase 10g — OAuth 1.0a substrate value types (RFC 5849). -->
