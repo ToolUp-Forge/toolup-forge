@@ -34,6 +34,8 @@ let allTests =
         IModelScorerContract.tests
         // Phase 456 — model evaluation & champion-challenger harness.
         ModelEvaluationTests.tests
+        // Phase 599 — batch fit submission + bulk outcome/registry retrieval.
+        ModelFitBatchTests.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).

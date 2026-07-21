@@ -164,3 +164,137 @@ module ModelFitJobHandler =
     /// Construct the fit-run job handler.
     let create (registry: ModelFitProviderRegistry) (audit: IAuditLog) (logger: ILogger) : IJobHandler =
         ModelFitJobHandler(registry, audit, logger) :> IJobHandler
+
+// ─── Phase 599 — batch fit submission ───────────────────────────────────
+//
+// A `FitRequestBatch` fans out to one `_platform.modelfit.batchitem` job
+// per request under a single `ModelFitBatchSubmitted` audit row. Item
+// execution is the unchanged Phase 449 envelope plus registry
+// registration carrying the batch annotations (the item handler lives in
+// `ModelFitBatchItemJobHandler.fs` — it needs `IModelRegistry`, which
+// compiles later); a per-item failure fails only that item's job. The
+// per-item idempotency key `{batch id}/{index}` makes a re-issued
+// submission after a transient failure a no-op for the already-enqueued
+// items rather than duplicate work.
+
+/// Persisted payload of one batch item job: the batch correlation id, the
+/// item's 0-based index, and its fit request.
+type FitBatchItemPayload = {
+    BatchId: string
+    Index: int
+    Request: FitRequest
+}
+
+/// The typed result of a batch submission: which items were enqueued (with
+/// their `JobId`s, for per-item status polling) and which failed to
+/// enqueue (reported as data — a schedule failure of one item never aborts
+/// its siblings).
+type FitBatchSubmission = {
+    BatchId: string
+    ScopeId: string
+    ItemCount: int
+    /// `(index, jobId)` per successfully enqueued item, in batch order.
+    ScheduledJobs: (int * JobId) list
+    /// `(index, reason)` per item whose enqueue failed, in batch order.
+    ScheduleFailures: (int * string) list
+}
+
+module ModelFitBatch =
+    /// Reserved scheduler handler name for one batch item's fit run.
+    [<Literal>]
+    let ItemHandlerName = "_platform.modelfit.batchitem"
+
+    let private jsonOptions = FableConverters.create ()
+
+    /// Serialise a batch item payload to the persisted job-payload string.
+    let serialiseItem (item: FitBatchItemPayload) : string =
+        JsonSerializer.Serialize(item, jsonOptions)
+
+    /// Parse a persisted batch item payload. `Error` detail is diagnostic;
+    /// the item handler treats a parse failure as a `PermanentFailure`.
+    let tryParseItem (payload: string) : Result<FitBatchItemPayload, string> =
+        try
+            Ok(JsonSerializer.Deserialize<FitBatchItemPayload>(payload, jsonOptions))
+        with ex ->
+            Error ex.Message
+
+    let private describeScheduleError (e: ScheduleError) : string =
+        match e with
+        | InvalidCron(expr, reason) -> $"invalid cron '{expr}': {reason}"
+        | HandlerNotRegistered name -> $"handler '{name}' is not registered"
+        | PrecisionUnsupported(supplied, _) -> $"precision {supplied} unsupported"
+        | ScheduleError.StorageFailure m -> $"schedule storage failure: {m}"
+
+    /// Submit a batch: validate (typed, before any work), audit the batch
+    /// as a unit, then enqueue + trigger one item job per request. Per-item
+    /// enqueue failures are collected as data, never thrown, and never
+    /// abort sibling items. Requires `ItemHandlerName` to be registered
+    /// with the scheduler — consumer-wired, like the Phase 454 scoring
+    /// handler: `scheduler.RegisterHandler(ModelFitBatch.ItemHandlerName,
+    /// ModelFitBatchItemJobHandler.create providers modelRegistry audit
+    /// logger)`.
+    let submit
+        (scheduler: IJobScheduler)
+        (audit: IAuditLog)
+        (submittedBy: string)
+        (batch: FitRequestBatch)
+        : Async<Result<FitBatchSubmission, FitBatchError>> =
+        async {
+            match FitRequestBatch.validate batch with
+            | Error e -> return Error e
+            | Ok() ->
+                do!
+                    audit.Record(
+                        batch.ScopeId,
+                        ModelFitBatchSubmitted {
+                            BatchId = batch.BatchId
+                            ItemCount = List.length batch.Requests
+                            SubmittedBy = submittedBy
+                            ScopeId = batch.ScopeId
+                        }
+                    )
+
+                let scheduled = ResizeArray<int * JobId>()
+                let failures = ResizeArray<int * string>()
+
+                for index, request in List.indexed batch.Requests do
+                    let payload =
+                        serialiseItem {
+                            BatchId = batch.BatchId
+                            Index = index
+                            Request = request
+                        }
+
+                    let registration = {
+                        ScopeId = batch.ScopeId
+                        Handler = ItemHandlerName
+                        Payload = payload
+                        Trigger = Manual
+                        Idempotency =
+                            Some {
+                                Key = $"modelfit.batch/{batch.BatchId}/{index}"
+                                TtlSeconds = 3600
+                            }
+                        RetryPolicy = JobRetryPolicy.defaults
+                        ShardKey = None
+                        Precision = JobPrecision.Minute
+                        CreatedBy = submittedBy
+                        Tags = Map [ "batch.id", batch.BatchId ]
+                    }
+
+                    match! scheduler.Schedule registration with
+                    | Error e -> failures.Add(index, describeScheduleError e)
+                    | Ok jobId ->
+                        match! scheduler.TriggerOnce(batch.ScopeId, jobId, submittedBy) with
+                        | Ok() -> scheduled.Add(index, jobId)
+                        | Error reason -> failures.Add(index, $"trigger failed: {reason}")
+
+                return
+                    Ok {
+                        BatchId = batch.BatchId
+                        ScopeId = batch.ScopeId
+                        ItemCount = List.length batch.Requests
+                        ScheduledJobs = List.ofSeq scheduled
+                        ScheduleFailures = List.ofSeq failures
+                    }
+        }

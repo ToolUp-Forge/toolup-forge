@@ -2355,6 +2355,21 @@ type ModelFitGateFailedPayload = {
     ScopeId: string
 }
 
+/// Phase 599 — a fit batch was submitted: N per-item fit jobs enqueued under
+/// one correlation id. The single batch-level audit row; each item's run
+/// then emits its own Phase 449 fit rows carrying the same batch id in its
+/// registration annotations. Reserved `SourceModule = "_platform.audit"`.
+type ModelFitBatchSubmittedPayload = {
+    /// Caller-supplied batch correlation id — the value per-item outcomes
+    /// carry in their `batch.id` registration annotation.
+    BatchId: string
+    /// Number of fit requests in the batch.
+    ItemCount: int
+    /// Actor who submitted the batch.
+    SubmittedBy: string
+    ScopeId: string
+}
+
 // ─── Phase 453 — model-registry audit payloads ─────────────────────────
 //
 // Every registry lifecycle event is audited under `_platform.audit` (GP 6)
@@ -3053,6 +3068,9 @@ type AuditEvent =
     /// Phase 449 — one or more diagnostic gates failed on a completed fit.
     /// A typed, audited verdict — not an exception.
     | ModelFitGateFailed of ModelFitGateFailedPayload
+    /// Phase 599 — a fit batch was submitted (N per-item jobs under one
+    /// correlation id).
+    | ModelFitBatchSubmitted of ModelFitBatchSubmittedPayload
     /// Phase 453 — a model artifact was registered from a completed fit.
     | ModelArtifactRegistered of ModelArtifactRegisteredPayload
     /// Phase 453 — a model artifact's lifecycle status transitioned.
@@ -3205,6 +3223,7 @@ module AuditEvent =
         | ModelFitStarted _ -> "ModelFitStarted"
         | ModelFitCompleted _ -> "ModelFitCompleted"
         | ModelFitGateFailed _ -> "ModelFitGateFailed"
+        | ModelFitBatchSubmitted _ -> "ModelFitBatchSubmitted"
         | ModelArtifactRegistered _ -> "ModelArtifactRegistered"
         | ModelArtifactTransitioned _ -> "ModelArtifactTransitioned"
         | ModelArtifactTransitionDenied _ -> "ModelArtifactTransitionDenied"

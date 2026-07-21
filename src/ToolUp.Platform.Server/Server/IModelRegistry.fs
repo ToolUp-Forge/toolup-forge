@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── Phase 453 — IModelRegistry seam ────────────────────────────────────
+// ─── Phase 453 — IModelRegistry seam (+ Phase 599 bulk reads) ───────────
 //
 // The read/write surface over governed model artifacts (plan Stage 4). An
 // evidence-base consumer builds on the query methods — forge provides the
@@ -28,6 +28,88 @@ namespace ToolUp.Platform
 //    versions are linear within its `(scopeId, keyHash)` shard.
 // 6. *Precision at the lower bound* — timestamps are `DateTimeOffset`;
 //    identity is the exact composite key (no approximate matching).
+
+/// Phase 599 — a multi-key registry filter, expressed as data (GP 12 rule
+/// 3). Every field is conjunctive; an empty list / `None` means "any". The
+/// evidence-base sync read: "all artifacts for this `specHash` set", "all
+/// artifacts on this vintage set", "everything from batch X" are each one
+/// query value.
+type ModelRegistryQuery = {
+    /// Match artifacts whose `SpecHash` is in this set (empty = any).
+    SpecHashes: string list
+    /// Match artifacts whose `DatasetVersion` key is in this set (empty =
+    /// any).
+    DatasetVersions: string list
+    /// Match artifacts currently in one of these statuses (empty = any).
+    Statuses: ModelArtifactStatus list
+    /// Match artifacts whose registration annotations carry
+    /// `FitRequestBatch.BatchIdAnnotationKey = value` — the bulk-outcome
+    /// read for one submitted batch. `None` = any.
+    BatchId: string option
+}
+
+module ModelRegistryQuery =
+    /// The match-anything query (page through a whole scope's artifacts).
+    let any: ModelRegistryQuery = {
+        SpecHashes = []
+        DatasetVersions = []
+        Statuses = []
+        BatchId = None
+    }
+
+    /// Whether one artifact satisfies the query (pure — shared by the
+    /// default registry and any companion so paging semantics cannot
+    /// drift between implementations).
+    let matches (query: ModelRegistryQuery) (artifact: ModelArtifact) : bool =
+        (List.isEmpty query.SpecHashes
+         || List.contains artifact.CompositeKey.SpecHash query.SpecHashes)
+        && (List.isEmpty query.DatasetVersions
+            || List.contains artifact.CompositeKey.DatasetVersion query.DatasetVersions)
+        && (List.isEmpty query.Statuses || List.contains artifact.Status query.Statuses)
+        && (match query.BatchId with
+            | None -> true
+            | Some batchId -> Map.tryFind FitRequestBatch.BatchIdAnnotationKey artifact.Annotations = Some batchId)
+
+/// Phase 599 — one page of a cursor-paginated registry read.
+type ModelArtifactPage = {
+    /// The page's artifacts, ordered by composite-key hash (ordinal
+    /// ascending) — a stable, value-derived order, so the same cursor walk
+    /// always yields the same sequence.
+    Artifacts: ModelArtifact list
+    /// Opaque resume token (the last artifact's composite-key hash).
+    /// `None` when this page is the last.
+    NextCursor: string option
+}
+
+module ModelArtifactPage =
+    /// The deterministic paging function over a materialised match set —
+    /// pure and shared (like `ModelRegistryQuery.matches`) so every
+    /// implementation pages identically: ordinal-ascending by composite-key
+    /// hash, resuming strictly after `cursor`.
+    let page (cursor: string option) (limit: int) (matched: ModelArtifact list) : ModelArtifactPage =
+        let ordered =
+            matched
+            |> List.sortWith (fun a b -> System.String.CompareOrdinal(a.CompositeKey.Hash, b.CompositeKey.Hash))
+
+        let resumed =
+            match cursor with
+            | None -> ordered
+            | Some c ->
+                ordered
+                |> List.filter (fun a -> System.String.CompareOrdinal(a.CompositeKey.Hash, c) > 0)
+
+        let pageItems = resumed |> List.truncate limit
+
+        let nextCursor =
+            if List.length resumed > limit then
+                pageItems |> List.tryLast |> Option.map (fun a -> a.CompositeKey.Hash)
+            else
+                None
+
+        {
+            Artifacts = pageItems
+            NextCursor = nextCursor
+        }
 
 /// The governed model-artifact registry (plan Stage 4). Every method is
 /// team-scoped by `scopeId` (GP 4 — a structural partition inherited from
@@ -66,6 +148,17 @@ type IModelRegistry =
     /// Every artifact in the scope currently in `status`. Empty list when
     /// none match.
     abstract QueryByStatus: scopeId: string * status: ModelArtifactStatus -> Async<ModelArtifact list>
+
+    /// Phase 599 — cursor-paginated multi-key read (the evidence-base sync
+    /// path + bulk outcome retrieval). Filters are `ModelRegistryQuery`
+    /// data; ordering is deterministic (composite-key hash, ordinal
+    /// ascending — `ModelArtifactPage.page`), so the same cursor walk
+    /// always yields the same sequence. `limit` must be positive
+    /// (`InvalidQuery` otherwise); a `cursor` from a previous page resumes
+    /// strictly after it.
+    abstract QueryPage:
+        scopeId: string * query: ModelRegistryQuery * cursor: string option * limit: int ->
+            Async<Result<ModelArtifactPage, ModelRegistryError>>
 
     /// Transition an artifact to `target`. Gated (GP 4): a transition into
     /// `Approved` requires `callerRole` to satisfy

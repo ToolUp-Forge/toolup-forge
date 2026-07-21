@@ -172,6 +172,9 @@ type ModelRegistryError =
     /// Underlying storage failure. Message is the raw error; not stable, only
     /// useful for diagnostics.
     | StorageFailure of string
+    /// Phase 599 — a `QueryPage` call was malformed (non-positive limit).
+    /// Carries the human-readable reason.
+    | InvalidQuery of reason: string
 
 module ModelRegistryError =
     /// Human-readable one-line description for logs + error surfaces.
@@ -182,3 +185,4 @@ module ModelRegistryError =
         | ModelRegistryError.IllegalTransition(from, target) ->
             $"illegal model artifact transition: {ModelArtifactStatus.name from} → {ModelArtifactStatus.name target}"
         | ModelRegistryError.StorageFailure r -> $"model registry storage failure: {r}"
+        | ModelRegistryError.InvalidQuery r -> $"invalid model registry query: {r}"

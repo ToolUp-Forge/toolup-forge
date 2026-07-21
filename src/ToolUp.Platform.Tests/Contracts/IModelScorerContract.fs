@@ -72,6 +72,8 @@ type private StubModelRegistry(artifacts: (string * ModelArtifact) list) =
         member _.QueryByDatasetVersion(_, _) = async { return [] }
         member _.QueryByStatus(_, _) = async { return [] }
 
+        member _.QueryPage(_, _, _, _) = async { return Ok { Artifacts = []; NextCursor = None } }
+
         member _.TransitionStatus(_, _, _, _, _) = async { return Error(ModelRegistryError.StorageFailure "not used") }
 
 /// A fresh blob-backed dataset store (the full default stack), one temp dir

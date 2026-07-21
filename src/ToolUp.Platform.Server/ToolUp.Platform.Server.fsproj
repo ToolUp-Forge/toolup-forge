@@ -245,6 +245,10 @@
         <Compile Include="Server\ModelRegistryTypes.fs" />
         <Compile Include="Server\IModelRegistry.fs" />
         <Compile Include="Server\BlobModelRegistry.fs" />
+        <!-- Phase 599 — batch item execution: the `_platform.modelfit.batchitem`
+             IJobHandler (fit envelope + batch-annotated registry registration).
+             Consumer-wired like the Phase 454 scoring handler. -->
+        <Compile Include="Server\ModelFitBatchItemJobHandler.fs" />
         <!-- Phase 454 — model scoring: the IModelScorer seam + default
              envelope (rides IDatasetStore for the output vintage, the Phase 449
              ArtifactRef / DatasetVersionRef, and the Phase 453 ModelArtifact),

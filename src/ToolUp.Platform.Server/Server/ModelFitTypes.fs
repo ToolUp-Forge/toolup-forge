@@ -289,3 +289,79 @@ module ModelFitError =
         function
         | ModelFitError.ProviderNotFound k -> sprintf "no IModelFitProvider registered for kind '%s'" k
         | ModelFitError.ProviderFailed(k, m) -> sprintf "provider '%s' failed: %s" k m
+
+// ─── Phase 599 — batch fit submission types ─────────────────────────────
+//
+// Fleet-shaped consumers submit hundreds of fits per wave; the batch shape
+// makes single-item the degenerate case without changing any envelope
+// semantics — per-item seed, gates, composite key, and audit are exactly
+// the Phase 449 single-item machinery, fanned out. A batch is **audited as
+// a unit** (`ModelFitBatchSubmitted`, one row) and then each item runs
+// independently: a per-item failure never aborts sibling items (partial
+// completion is the normal case, reported as data).
+
+/// An ordered batch of fit requests under one caller-supplied correlation
+/// id. Every item must share the batch's scope (GP 4 — a batch is audited
+/// under one scope; a cross-scope batch is refused as data, not fanned
+/// out).
+type FitRequestBatch = {
+    /// Caller-supplied correlation id. Per-item outcomes carry it in their
+    /// registration annotations (`FitRequestBatch.BatchIdAnnotationKey`),
+    /// which is what makes a whole wave retrievable in one query.
+    BatchId: string
+    /// Scope the batch is audited under. Every item's `ScopeId` must match.
+    ScopeId: string
+    /// Ordered fit requests. Item index (0-based) is the batch-local
+    /// identity a partial-failure report names.
+    Requests: FitRequest list
+}
+
+/// Typed refusal of a batch *submission* — checked before any item is
+/// enqueued (deny early, deny typed; the shape Phase 451's budget refusals
+/// will align with). Item-level fit failures are NOT here — they are
+/// per-item data reported after execution.
+[<RequireQualifiedAccess>]
+type FitBatchError =
+    /// The batch carries no requests.
+    | EmptyBatch
+    /// The batch id is null/empty — outcomes would be uncorrelatable.
+    | MissingBatchId
+    /// Item `index` declares a scope other than the batch's (GP 4).
+    | ScopeMismatch of index: int * itemScope: string
+
+module FitBatchError =
+    let describe =
+        function
+        | FitBatchError.EmptyBatch -> "fit batch contains no requests"
+        | FitBatchError.MissingBatchId -> "fit batch has no batch id"
+        | FitBatchError.ScopeMismatch(i, s) -> sprintf "fit batch item %d declares scope '%s', not the batch scope" i s
+
+module FitRequestBatch =
+    /// Registration-annotation key carrying the batch correlation id on
+    /// every per-item outcome registered into `IModelRegistry`.
+    [<Literal>]
+    let BatchIdAnnotationKey = "batch.id"
+
+    /// Registration-annotation key carrying the item's 0-based index
+    /// within its batch.
+    [<Literal>]
+    let BatchIndexAnnotationKey = "batch.index"
+
+    /// Validate a batch for submission: non-empty, correlatable, and
+    /// scope-uniform. The first violation is returned (typed, data).
+    let validate (batch: FitRequestBatch) : Result<unit, FitBatchError> =
+        if String.IsNullOrWhiteSpace batch.BatchId then
+            Error FitBatchError.MissingBatchId
+        elif List.isEmpty batch.Requests then
+            Error FitBatchError.EmptyBatch
+        else
+            batch.Requests
+            |> List.indexed
+            |> List.tryPick (fun (i, r) ->
+                if r.ScopeId <> batch.ScopeId then
+                    Some(FitBatchError.ScopeMismatch(i, r.ScopeId))
+                else
+                    None)
+            |> function
+                | Some e -> Error e
+                | None -> Ok()

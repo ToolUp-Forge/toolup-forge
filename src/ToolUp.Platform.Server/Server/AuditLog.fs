@@ -1122,6 +1122,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ModelFitGateFailed(fromAuditJson<ModelFitGateFailedPayload> j)
     }
+    // Phase 599 — batch fit submission audit row (append-only registration).
+    {
+        EventType = "ModelFitBatchSubmitted"
+        TryEncode =
+            (function
+            | ModelFitBatchSubmitted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ModelFitBatchSubmitted(fromAuditJson<ModelFitBatchSubmittedPayload> j)
+    }
     // Phase 453 — model-registry lifecycle audit rows (append-only registration).
     {
         EventType = "ModelArtifactRegistered"

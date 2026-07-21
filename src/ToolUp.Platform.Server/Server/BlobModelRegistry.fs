@@ -266,6 +266,37 @@ type BlobModelRegistry(dataObjects: IDataObjectStore, audit: IAuditLog, lineage:
             let target = ModelArtifactStatus.name status
             queryBy scopeId (fun m -> Map.tryFind StatusKey m = Some target)
 
+        member _.QueryPage(scopeId, query, cursor, limit) = async {
+            // Phase 599 — sidecar pre-filter on the indexed coordinates
+            // (spec hash / dataset version / status), then the
+            // annotation-level batch filter + deterministic paging over the
+            // materialised matches via the shared pure helpers (so paging
+            // semantics cannot drift from a companion implementation). The
+            // in-process default materialises the match set per call — the
+            // same cost class as the existing query methods; a distributed
+            // companion pushes the filters down instead.
+            if limit <= 0 then
+                return Error(ModelRegistryError.InvalidQuery "limit must be positive")
+            else
+                let sidecarMatches (m: Map<string, string>) =
+                    (List.isEmpty query.SpecHashes
+                     || (match Map.tryFind SpecHashKey m with
+                         | Some v -> List.contains v query.SpecHashes
+                         | None -> false))
+                    && (List.isEmpty query.DatasetVersions
+                        || (match Map.tryFind DatasetVersionKey m with
+                            | Some v -> List.contains v query.DatasetVersions
+                            | None -> false))
+                    && (List.isEmpty query.Statuses
+                        || (match Map.tryFind StatusKey m |> Option.bind ModelArtifactStatus.parse with
+                            | Some s -> List.contains s query.Statuses
+                            | None -> false))
+
+                let! candidates = queryBy scopeId sidecarMatches
+                let matched = candidates |> List.filter (ModelRegistryQuery.matches query)
+                return Ok(ModelArtifactPage.page cursor limit matched)
+        }
+
         member _.TransitionStatus(scopeId, keyHash, target, callerRole, actorUserId) = async {
             match! dataObjects.Get(scopeId, keyHash) with
             | Error DataObjectError.NotFound -> return Error ModelRegistryError.NotFound
