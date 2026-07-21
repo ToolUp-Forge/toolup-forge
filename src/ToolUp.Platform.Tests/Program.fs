@@ -17,6 +17,9 @@ let allTests =
         SeedDataLoaderTests.tests
         // Phase 448 — IDatasetStore conformance (blob-backed default).
         DatasetStoreTests.tests
+        // Phase 598 — Parquet companion codec: contract re-bind + codec pack.
+        ParquetDatasetCodecTests.contractTests
+        ParquetDatasetCodecTests.codecTests
         // Phase 452 — dataset assembly (transforms-as-data) executor.
         DatasetAssemblyTests.tests
         // Phase 487 — virtual (zero-copy) dataset bindings.

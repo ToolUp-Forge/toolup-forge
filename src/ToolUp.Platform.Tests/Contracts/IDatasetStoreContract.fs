@@ -68,7 +68,13 @@ let private okv =
     | Ok v -> v
     | Error e -> failtestf "expected Ok; got %s" (DatasetError.describe e)
 
-let tests (name: string) (factory: unit -> IDatasetStore) =
+/// The contract pack, re-bindable to any store + codec pairing (Phase 598):
+/// `codecFactory` must produce the same codec the store composes, so the
+/// format-tag assertions and the `CreateFromContent` re-ingestion case run
+/// against the composition under test.
+let testsWithCodec (name: string) (codecFactory: unit -> IDatasetCodec) (factory: unit -> IDatasetStore) =
+    let expectedFormat = codecFactory().Format
+
     testList $"{name} — IDatasetStore contract" [
         testCaseAsync "Create + ReadPage round-trips rows (typed)"
         <| async {
@@ -80,7 +86,7 @@ let tests (name: string) (factory: unit -> IDatasetStore) =
             let v = okv created
             Expect.equal v.Version 1 "first version is 1"
             Expect.equal v.RowCount 4L "row count recorded"
-            Expect.equal v.Format "toolup-frame-v1" "default codec format tagged"
+            Expect.equal v.Format expectedFormat "composed codec format tagged"
 
             let! page = store.ReadPage("scope-a", "sales-ds", 1, DatasetPageQuery.firstPage 100)
             let p = okv page
@@ -319,8 +325,8 @@ let tests (name: string) (factory: unit -> IDatasetStore) =
         testCaseAsync "CreateFromContent round-trips pre-encoded bytes; GetContentRef hands off the vintage"
         <| async {
             let store = factory ()
-            // Encode via the same default codec, then re-ingest as content.
-            let codec = JsonFrameDatasetCodec() :> IDatasetCodec
+            // Encode via the composed codec, then re-ingest as content.
+            let codec = codecFactory ()
             let content = codec.Encode(panelSchema, sampleRows)
 
             let! created =
@@ -379,3 +385,7 @@ let tests (name: string) (factory: unit -> IDatasetStore) =
             | other -> failtestf "expected InvalidPage; got %A" other
         }
     ]
+
+/// The contract pack bound to the default JSON-frame codec composition.
+let tests (name: string) (factory: unit -> IDatasetStore) =
+    testsWithCodec name (fun () -> JsonFrameDatasetCodec() :> IDatasetCodec) factory

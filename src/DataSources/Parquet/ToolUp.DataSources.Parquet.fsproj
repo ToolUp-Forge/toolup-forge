@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.Parquet</PackageId>
+    <AssemblyName>ToolUp.DataSources.Parquet</AssemblyName>
+    <Description>Parquet dataset codec (IDatasetCodec) for ToolUp.Platform: encodes typed dataset vintages as native Parquet for external compute handoff (Python/R workers read the blob directly), and decodes with schema verification against the declared DatasetSchema. Compose via BlobDatasetStore.createWithCodec; the BCL JSON-frame codec remains the default.</Description>
+    <PackageTags>fsharp;sdk;parquet;dataset;codec;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ParquetDatasetCodec.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Parquet.Net" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

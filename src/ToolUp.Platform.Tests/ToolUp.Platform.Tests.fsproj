@@ -261,6 +261,7 @@
         <Compile Include="InProcess\DataSubjectRequestTests.fs" />
         <Compile Include="InProcess\SignedExportTests.fs" />
         <Compile Include="InProcess\DatasetStoreTests.fs" />
+        <Compile Include="InProcess\ParquetDatasetCodecTests.fs" />
         <Compile Include="InProcess\DatasetAssemblyTests.fs" />
         <Compile Include="InProcess\VirtualDatasetTests.fs" />
         <Compile Include="InProcess\ProvenanceLabelTests.fs" />
@@ -1089,6 +1090,9 @@
         <!-- GitHub App OAuth credential-flow companion — IOAuthCredentialFlow
              contract binding + rotation/revoke tests via stub GitHub. -->
         <ProjectReference Include="..\DataSources\GitHub\GitHubApp.fsproj" />
+        <!-- Phase 598 — Parquet dataset codec companion (contract re-bind +
+             codec-specific pack). -->
+        <ProjectReference Include="..\DataSources\Parquet\ToolUp.DataSources.Parquet.fsproj" />
         <!-- LDAP / Active Directory auth companion — bind-based identity,
              group→role mapping, health probe, and security-class config
              validator, all exercised via an in-memory fake directory (no

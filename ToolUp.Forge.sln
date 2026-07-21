@@ -401,6 +401,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ModelProviders", "ModelProv
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.ModelProviders.Reference", "src\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj", "{07B3BFE7-0164-4AF0-B548-2199486A8232}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DataSources", "DataSources", "{28B211A0-6137-D8C7-2BE9-C9B1BE4302AB}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.DataSources.Parquet", "src\DataSources\Parquet\ToolUp.DataSources.Parquet.fsproj", "{49929B91-0B63-4DB2-B474-5AA854B4492D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2175,6 +2179,18 @@ Global
 		{07B3BFE7-0164-4AF0-B548-2199486A8232}.Release|x64.Build.0 = Release|Any CPU
 		{07B3BFE7-0164-4AF0-B548-2199486A8232}.Release|x86.ActiveCfg = Release|Any CPU
 		{07B3BFE7-0164-4AF0-B548-2199486A8232}.Release|x86.Build.0 = Release|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Debug|x64.Build.0 = Debug|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Debug|x86.Build.0 = Debug|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Release|x64.ActiveCfg = Release|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Release|x64.Build.0 = Release|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Release|x86.ActiveCfg = Release|Any CPU
+		{49929B91-0B63-4DB2-B474-5AA854B4492D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -2364,5 +2380,6 @@ Global
 		{5C6EF067-2F0E-437E-896B-A76351396BF7} = {B4000C04-759F-89DD-19D7-DFB19239BD3C}
 		{3A7B9BED-5B9C-449D-ACFB-9709AA46B2FA} = {E113DBCE-65B5-4091-B851-068D1E926DEF}
 		{07B3BFE7-0164-4AF0-B548-2199486A8232} = {0E7C1EFD-678B-D7C8-B718-CDBB946A5AA4}
+		{49929B91-0B63-4DB2-B474-5AA854B4492D} = {28B211A0-6137-D8C7-2BE9-C9B1BE4302AB}
 	EndGlobalSection
 EndGlobal

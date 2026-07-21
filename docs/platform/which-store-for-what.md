@@ -72,6 +72,26 @@ Content-addressable dedup means identical bytes across any of these share one
 `_content/{hash}.data` blob within a scope — you never pay twice for the same
 payload, regardless of which surface referenced it.
 
+## Dataset wire formats — the codec seam
+
+A dataset vintage's content bytes are encoded through the pluggable
+`IDatasetCodec` seam, and the composition chooses the wire format an external
+compute worker will find behind a `DatasetContentRef`:
+
+| Composition | Codec | `Format` tag | Worker expectation |
+|---|---|---|---|
+| `BlobDatasetStore.create` (default) | `JsonFrameDatasetCodec` (BCL-only) | `"toolup-frame-v1"` | A self-describing JSON frame; not Parquet |
+| `BlobDatasetStore.createWithCodec … (ParquetDatasetCodec())` | `ToolUp.DataSources.Parquet` companion | `"parquet"` | Native Parquet — readable by any Python / R Parquet reader with no ToolUp code |
+
+The format tag on `DatasetContentRef` is **honest by construction**: a worker
+inspects `Format` before parsing, so a non-Parquet default composition can
+never silently hand Parquet-expecting workers the wrong bytes. Deployments
+that fit through external compute workers should compose the Parquet codec;
+everything else can stay on the dependency-free default. The declared
+`DatasetSchema` (dtypes, nullability, panel roles) travels inside the Parquet
+file's custom metadata, and the codec verifies it against the physical schema
+on every decode.
+
 ## Provenance ties them together
 
 Model-artifact registration emits a **lineage edge** (`ILineageStore`, Phase 8a)
