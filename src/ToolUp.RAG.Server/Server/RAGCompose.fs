@@ -1805,6 +1805,27 @@ module RAGServerApp =
             AI = AIServerApp.withBackfillMissedTicks enabled app.AI
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Delegates to `AIServerApp.withEventTriggerCatchUp`.
+    let withEventTriggerCatchUp (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withEventTriggerCatchUp enabled app.AI
+    }
+
+    /// Phase 9t — audit-write failure policy. Delegates to
+    /// `AIServerApp.withAuditFailurePolicy`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withAuditFailurePolicy policy app.AI
+    }
+
+    /// Phase 599 — opt into the entity-write outbox. Delegates to
+    /// `AIServerApp.withEntityOutbox`.
+    let withEntityOutbox (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            AI = AIServerApp.withEntityOutbox enabled app.AI
+    }
+
     let withTransactionalSink (sink: INotificationSink) (app: RAGServerApp) : RAGServerApp = {
         app with
             AI = AIServerApp.withTransactionalSink sink app.AI

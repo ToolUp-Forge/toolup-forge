@@ -30,6 +30,25 @@ open ToolUp.Platform.TransientFault
 type ResilientBlobStorage(inner: IBlobStorage, policy: TransientFaultPolicy) =
     let runner = TransientFaultRunner policy
 
+    // Phase 600 — conditional-write forwarding. Reads route through the
+    // runner like every other method. Conditional UPLOADS deliberately
+    // do NOT retry: after an ambiguous failure (timeout with the write
+    // actually applied), a retry would observe its own write and report
+    // a false `ETagMismatch` — the caller's read-retry loop is the
+    // correct recovery, not a transport-level replay.
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(container, blobName) =
+            match inner with
+            | :? IConditionalBlobStorage as cas -> runner.Run(fun () -> cas.DownloadWithETag(container, blobName))
+            | _ -> async { return Error "underlying blob storage does not support conditional writes" }
+
+        member _.UploadWithETag(container, blobName, content, condition) =
+            match inner with
+            | :? IConditionalBlobStorage as cas -> cas.UploadWithETag(container, blobName, content, condition)
+            | _ -> async {
+                return Error(ConditionalWriteFailure "underlying blob storage does not support conditional writes")
+              }
+
     interface IBlobStorage with
         member _.Upload(container, blobName, content) =
             runner.Run(fun () -> inner.Upload(container, blobName, content))

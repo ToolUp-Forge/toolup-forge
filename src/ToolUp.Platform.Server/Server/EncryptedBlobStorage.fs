@@ -201,6 +201,46 @@ let private decrypt (key: EncryptionKey) (nonce: byte[]) (tag: byte[]) (cipherte
 /// they don't touch ciphertext bytes and remain semantically identical
 /// to the inner storage.
 type EncryptedBlobStorage(inner: IBlobStorage, resolver: IBlobEncryptionKeyResolver) =
+    // Phase 600 — conditional-write forwarding. The etag tokens are
+    // computed by the inner store over the CIPHERTEXT envelope — opaque
+    // to callers either way, and stable between a `DownloadWithETag`
+    // and the matching `IfMatch` upload because the stored bytes don't
+    // change between the two. (Each re-encryption mints a fresh nonce,
+    // so every conditional upload produces a new etag — exactly the
+    // version-token semantics CAS needs.)
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(container, blobName) = async {
+            match inner with
+            | :? IConditionalBlobStorage as cas ->
+                let! result = cas.DownloadWithETag(container, blobName)
+
+                match result with
+                | Error e -> return Error e
+                | Ok(envelope, etag) ->
+                    match parseEnvelope envelope with
+                    | Error msg -> return Error(sprintf "Invalid encryption envelope: %s" msg)
+                    | Ok parsed ->
+                        let! keyResult = resolver.ResolveKeyById parsed.KeyId
+
+                        match keyResult with
+                        | Error err -> return Error(KeyResolutionError.message err)
+                        | Ok key ->
+                            match decrypt key parsed.Nonce parsed.Tag parsed.Ciphertext with
+                            | Ok plaintext -> return Ok(plaintext, etag)
+                            | Error msg -> return Error msg
+            | _ -> return Error "underlying blob storage does not support conditional writes"
+        }
+
+        member _.UploadWithETag(container, blobName, content, condition) = async {
+            match inner with
+            | :? IConditionalBlobStorage as cas ->
+                let scope = scopeFromContainer container
+                let! key = resolver.ResolveKey scope
+                let envelope = encrypt key content
+                return! cas.UploadWithETag(container, blobName, envelope, condition)
+            | _ -> return Error(ConditionalWriteFailure "underlying blob storage does not support conditional writes")
+        }
+
     interface IBlobStorage with
         member _.Upload(container, blobName, content) = async {
             let scope = scopeFromContainer container

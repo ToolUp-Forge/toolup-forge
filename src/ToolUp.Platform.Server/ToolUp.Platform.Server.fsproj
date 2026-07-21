@@ -181,6 +181,12 @@
         <Compile Include="Server\IMappingDryRunValidator.fs" />
         <Compile Include="Server\MappingDryRunValidator.fs" />
         <Compile Include="Server\IEntityStore.fs" />
+        <!-- Phase 599 — write-ahead-intent outbox coupling entity saves to
+             event publication; after the store surface it wraps, before the
+             relay service that drains it. -->
+        <Compile Include="Server\EntityOutbox.fs" />
+        <Compile Include="Server\EntityOutboxRelayService.fs" />
+
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
         <!-- Phase 26 — Tenant entity registration. Sits behind IEntityStore;
@@ -271,6 +277,10 @@
         <Compile Include="Server\ModelEvaluationRunner.fs" />
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
+        <!-- Phase 598 — persisted per-scope OnEvent trigger cursor; before the
+             scheduler (startup scan / sweep / flush) and the notify decorator
+             (live advance), both of which consume it. -->
+        <Compile Include="Server\JobTriggerWatermark.fs" />
         <Compile Include="Server\JobScheduler.fs" />
         <!-- Phase 164 — opt-in TTL sweep for BlobIdempotencyStore. After the
              job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;
@@ -334,7 +344,12 @@
         <Compile Include="Server\IBlobEncryptionKeyResolver.fs" />
         <Compile Include="Server\EncryptedBlobStorage.fs" />
         <Compile Include="Server\SingleKeyResolver.fs" />
+        <!-- Phase 9t — bounded local spill for DegradeToFile audit-write
+             failure policy; before AuditLog.fs (the log spills into it) and
+             the replay service (which drains it back into IEventStore). -->
+        <Compile Include="Server\AuditFallbackStore.fs" />
         <Compile Include="Server\AuditLog.fs" />
+        <Compile Include="Server\AuditFallbackReplayService.fs" />
         <!-- Phase 120 — default IAuthAuditHook (writes AuthorizationDenied
              via IAuditLog + per-(route,subject) flood guard). After
              AuditLog.fs (uses the audit registry); before the emission

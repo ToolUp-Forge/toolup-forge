@@ -14,6 +14,42 @@ open ToolUp.Platform.BlobStorage
 type InMemoryBlobStorage() =
     let blobs = ConcurrentDictionary<string * string, byte[]>()
 
+    // Phase 600 — conditional writes: etag = SHA-256 of content; CAS
+    // serialised by a single lock (a test double doesn't need striping).
+    let casLock = obj ()
+
+    let etagOf (content: byte[]) =
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData content).ToLowerInvariant()
+
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(container, blobName) = async {
+            match blobs.TryGetValue((container, blobName)) with
+            | true, bytes -> return Ok(bytes, etagOf bytes)
+            | false, _ -> return Error $"not found: {container}/{blobName}"
+        }
+
+        member _.UploadWithETag(container, blobName, content, condition) = async {
+            return
+                lock casLock (fun () ->
+                    let current =
+                        match blobs.TryGetValue((container, blobName)) with
+                        | true, bytes -> Some(etagOf bytes)
+                        | false, _ -> None
+
+                    let permitted =
+                        match condition, current with
+                        | IfAbsent, None -> true
+                        | IfMatch expected, Some actual -> expected = actual
+                        | IfAbsent, Some _
+                        | IfMatch _, None -> false
+
+                    if permitted then
+                        blobs[(container, blobName)] <- content
+                        Ok(etagOf content)
+                    else
+                        Error(ETagMismatch current))
+        }
+
     interface IBlobStorage with
         member this.Erase(container, prefix, policy, dryRun) =
             ToolUp.Platform.BlobStorage.eraseByPrefix (this :> IBlobStorage) container prefix policy dryRun

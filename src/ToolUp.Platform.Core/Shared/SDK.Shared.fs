@@ -396,6 +396,21 @@ type EntityStoreMode =
     /// via `ServerApp.withEntity<'T> registration`.
     | EnabledEntityStore
 
+/// Phase 599 — the entity-write outbox: durable coupling between an
+/// entity save and the `IEventStore` events it implies. Default off —
+/// an entity save and its event emission stay two independent writes
+/// (a crash between them loses the events). When enabled (requires
+/// `EntityStore = EnabledEntityStore`), `OutboxEntityStore.SaveWithEvents`
+/// stages a write-ahead intent (single-blob atomic) before the save,
+/// and the relay service publishes the staged events once the save is
+/// version-witnessed as committed — at-least-once, with never-committed
+/// saves discarded unpublished. Env: `TOOLUP_ENTITY_OUTBOX`.
+type EntityOutboxMode =
+    /// No outbox surface, no relay service. Default.
+    | NoEntityOutbox
+    /// `OutboxEntityStore` registered in DI + the relay drain running.
+    | EnabledEntityOutbox
+
 /// Phase 447 — selects whether `compose` applies registered `ISeedPack`
 /// fixtures at end-of-compose (dev / demo seed data). Default:
 /// `NoSeedData` — no packs are applied, no `_platform/seed/` marker blobs
@@ -758,6 +773,29 @@ type AuditLogMode =
     /// with reserved `SourceModule = "_platform.audit"`. Combine with
     /// `EventStore = PersistentBlobBacked _` for a durable trail.
     | EnabledAuditLog
+
+/// Phase 9t — what `EventStoreAuditLog.Record` does when the
+/// underlying `IEventStore.Write` (or the payload serialisation)
+/// fails. Today's behaviour — catch, count
+/// (`audit_write_failures_total`, Phase 114), log at `Warn`, and let
+/// the user's action complete — leaves a silent hole in the audit
+/// trail: fine for deployments that treat audit as advisory, not
+/// acceptable under SOC 2 / HIPAA / GDPR Art. 30 / SOX continuous-
+/// audit obligations. The policy makes the trade explicit. Env:
+/// `TOOLUP_AUDIT_FAILURE_POLICY=log|refuse|degrade`.
+type AuditFailurePolicy =
+    /// Default — the pre-9t behaviour byte-for-byte: count + `Warn`,
+    /// action completes, audit record lost.
+    | LogAndContinue
+    /// Compliance-grade: the failure propagates as
+    /// `AuditWriteRefusedException`, so the action surfaces a 500
+    /// ("audit unavailable") rather than committing un-audited work.
+    | RefuseAction
+    /// Availability-grade: the failed record spills to a bounded
+    /// local fallback directory; `AuditFallbackReplayService`
+    /// re-ingests it into the live `IEventStore` once writes recover.
+    /// The action completes; the trail heals after the outage.
+    | DegradeToFile
 
 /// Selects how `compose` registers `INotificationChannel` and the
 /// `/api/notifications` SSE route. Default:
@@ -1978,6 +2016,25 @@ type ServerConfig = {
     /// pause would conflate three separate roll-up windows). Operators
     /// opt in when their `OnEvent` work is safely re-entrant.
     BackfillMissedTicks: bool
+    /// Phase 598 — opt-in event-trigger catch-up watermark. Default:
+    /// `false` — `OnEvent` job triggering stays at-most-once: the
+    /// in-memory notify hook is the only dispatch path, so an event
+    /// durably written immediately before a process crash never fires
+    /// its triggers. When `true` (and `JobScheduler =
+    /// InProcessJobScheduler`), the scheduler persists a per-scope
+    /// trigger cursor (`_platform/job-triggers/{scopeId}.cursor`,
+    /// advanced after each live notify) and on startup — plus a
+    /// periodic sweep — re-reads `IEventStore` past the cursor and
+    /// dispatches any `OnEvent` triggers the notify hook never
+    /// processed. Semantics become at-least-once: a crash between
+    /// dispatch and cursor flush, or the deliberate startup overlap
+    /// window, can re-fire a trigger — job handlers opting in must be
+    /// re-entrant (the same bar `BackfillMissedTicks` sets). Unlike
+    /// `BackfillMissedTicks` (which blind-re-fires every active
+    /// `OnEvent` job on detected tick drift), the catch-up scan
+    /// replays the *actual missed events*, each with its real
+    /// `eventType` + `eventId` in `TriggerSource.ScheduledByEvent`.
+    EventTriggerCatchUp: bool
     /// Share-token substrate selection. Default:
     /// `NoShareTokenStore` — no `IShareTokenStore` is registered,
     /// no `_platform/share-tokens/` blob layout is touched, no
@@ -2101,6 +2158,13 @@ type ServerConfig = {
     /// with `EnabledEntityStore` to activate the substrate; entity
     /// types register via `ServerApp.withEntity<'T> registration`.
     EntityStore: EntityStoreMode
+    /// Phase 599 — entity-write outbox selection. Default:
+    /// `NoEntityOutbox` — no outbox surface, no relay service.
+    /// Enable with `EnabledEntityOutbox` (requires
+    /// `EntityStore = EnabledEntityStore`) to register
+    /// `OutboxEntityStore.SaveWithEvents` + the relay drain. Env:
+    /// `TOOLUP_ENTITY_OUTBOX`.
+    EntityOutbox: EntityOutboxMode
     /// Phase 447 — seed / fixture-data selection. Default: `NoSeedData` —
     /// no `ISeedPack` is applied, no `_platform/seed/` marker is touched,
     /// zero cost. `EnabledSeedData` applies registered packs once per
@@ -2187,6 +2251,19 @@ type ServerConfig = {
     /// Central, not per-sink (design D17): the decision is taken once
     /// per event in the replicator and applies to every registered sink.
     AuditSamplingPolicy: AuditSamplingPolicy
+    /// Phase 9t — behaviour when an audit write fails. Default:
+    /// `LogAndContinue` (pre-9t behaviour byte-for-byte — GP 11).
+    /// Production deployments with continuous-audit obligations opt
+    /// into `RefuseAction` (fail the action) or `DegradeToFile`
+    /// (spill locally + replay on recovery). Only consulted when
+    /// `AuditLog = EnabledAuditLog`. Env:
+    /// `TOOLUP_AUDIT_FAILURE_POLICY=log|refuse|degrade`.
+    AuditFailurePolicy: AuditFailurePolicy
+    /// Phase 9t — root directory for the `DegradeToFile` fallback
+    /// spill. `None` (default) resolves to `audit-fallback/` under
+    /// the process working directory. Only consulted when
+    /// `AuditFailurePolicy = DegradeToFile`.
+    AuditFallbackDirectory: string option
     /// Notification-channel selection. Default:
     /// `NotificationsAuto` — `compose` infers `InMemoryNotifications`
     /// when any feature that publishes notifications is active and
@@ -3098,6 +3175,7 @@ module ServerConfig =
         Lineage = NoLineageStore
         JobScheduler = NoJobScheduler
         BackfillMissedTicks = false
+        EventTriggerCatchUp = false
         ShareTokenStore = NoShareTokenStore
         PeerRoutePrefixes = []
         MaxRequestBodyBytes = None
@@ -3110,6 +3188,7 @@ module ServerConfig =
         OAuthRefresher = NoOAuthRefresher
         OAuth1a = NoOAuth1a
         EntityStore = NoEntityStore
+        EntityOutbox = NoEntityOutbox
         SeedData = NoSeedData
         // Phase 68 — the in-memory graph store is the default (registered
         // lazily; zero cost until a graph API is resolved — GP 13).
@@ -3125,6 +3204,8 @@ module ServerConfig =
         Webhooks = NoWebhooks
         AuditLog = NoAuditLog
         AuditSamplingPolicy = AuditSamplingPolicy.none
+        AuditFailurePolicy = LogAndContinue
+        AuditFallbackDirectory = None
         Notifications = NotificationsAuto
         SecurityHeaders = Map.empty
         SecurityHardening = NoSecurityHardening
@@ -3835,6 +3916,9 @@ module ServerConfig =
                 // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
                 // preserves GP 11: unset → the prior `defaults.X` value.
                 BackfillMissedTicks = envFlag "TOOLUP_BACKFILL_MISSED_TICKS"
+                // Phase 598 tail — env lift for the event-trigger catch-up
+                // opt-in, 71.A.6 parity with TOOLUP_BACKFILL_MISSED_TICKS.
+                EventTriggerCatchUp = envFlag "TOOLUP_EVENT_TRIGGER_CATCHUP"
                 MigrateWebhookSecretsAtRest = envFlag "TOOLUP_MIGRATE_WEBHOOK_SECRETS"
                 SkipPreflight = envFlag "TOOLUP_SKIP_PREFLIGHT"
                 HealthStateTracking = envFlag "TOOLUP_HEALTH_STATE_TRACKING"
@@ -3847,6 +3931,20 @@ module ServerConfig =
                 PeerRoutePrefixes = parseStringList "TOOLUP_PEER_ROUTE_PREFIXES"
                 // Phase 71.A.7 (batch 1) — flat-case DU lifts (no override
                 // member, no payload). Additive: unset → `defaults.X`.
+                AuditFailurePolicy =
+                    parseFlatDuCase
+                        logger
+                        "TOOLUP_AUDIT_FAILURE_POLICY"
+                        [
+                            "log", LogAndContinue
+                            "logandcontinue", LogAndContinue
+                            "refuse", RefuseAction
+                            "refuseaction", RefuseAction
+                            "degrade", DegradeToFile
+                            "degradetofile", DegradeToFile
+                        ]
+                        None
+                        defaults.AuditFailurePolicy
                 ResultStore =
                     parseFlatDuCase
                         logger
@@ -3896,6 +3994,13 @@ module ServerConfig =
                         NoEntityStore
                         EnabledEntityStore
                         defaults.EntityStore
+                EntityOutbox =
+                    parseEnabledDisabled
+                        logger
+                        "TOOLUP_ENTITY_OUTBOX"
+                        NoEntityOutbox
+                        EnabledEntityOutbox
+                        defaults.EntityOutbox
                 UsageMetering =
                     parseEnabledDisabled
                         logger

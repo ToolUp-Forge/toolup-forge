@@ -22,6 +22,27 @@ let private SystemUserId = "_system"
 
 let private maxRunsPerJob = 50
 
+// ─── Phase 598 — catch-up scan tuning ────────────────────────────
+//
+// `catchUpStartupOverlap`: the startup scan re-reads from the
+// persisted cursor MINUS this margin. The persisted cursor lags the
+// in-memory one by up to a tick (flush cadence), and a concurrent
+// write with a slightly-older `OccurredAt` can still be un-notified
+// when a newer write advances the cursor — the overlap absorbs both,
+// at the price of re-dispatching a bounded window of already-fired
+// triggers on every restart (at-least-once by design).
+//
+// `catchUpSettleWindow`: the periodic sweep ignores events younger
+// than this. A write can be visible in `ReadAll` while its notify
+// hook is still in flight; sweeping it would double-fire. Events the
+// live hook genuinely dropped are picked up one sweep later.
+let private catchUpStartupOverlap = TimeSpan.FromSeconds 30.0
+let private catchUpSettleWindow = TimeSpan.FromSeconds 30.0
+
+/// Sweep cadence in scheduler ticks (1 tick = 1 minute) — mirrors
+/// `AuditReplicatorOptions.CatchUpSweepInterval`'s 5-minute default.
+let private catchUpSweepEveryTicks = 5L
+
 // ─── Lifecycle event payloads ────────────────────────────────────
 //
 // Persisted to `IEventStore` under `SourceModule = "_platform.jobs"`.
@@ -106,6 +127,22 @@ type JobSchedulerTickMissedPayload = {
     JobsSkipped: JobId list
 }
 
+/// Phase 598 — payload for the `JobTriggerCatchUp` operational event,
+/// emitted under `_platform` after a catch-up pass (startup scan or
+/// periodic sweep) that dispatched at least one missed trigger.
+/// `EventsReplayed` counts events found past the persisted/settled
+/// cursor; `TriggersDispatched` counts the job dispatches they
+/// produced (one event can match several `OnEvent` jobs, or none).
+type JobTriggerCatchUpPayload = {
+    /// `true` for the startup recovery scan, `false` for the
+    /// periodic sweep.
+    Startup: bool
+    ScopesScanned: int
+    EventsReplayed: int
+    TriggersDispatched: int
+    ScanStartedAt: DateTime
+}
+
 // ─── JSON helper ─────────────────────────────────────────────────
 
 module private Json =
@@ -152,9 +189,16 @@ type InProcessJobScheduler
         notificationChannel: INotificationChannel,
         config: ServerConfig,
         logger: ILogger,
-        activitySink: IActivitySink
+        activitySink: IActivitySink,
+        ?triggerWatermark: JobTriggerWatermark.JobTriggerWatermark
     ) =
     inherit BackgroundService()
+
+    /// Phase 598 — catch-up is live only when the deployment opted in
+    /// AND compose supplied the shared watermark (the two arrive
+    /// together via `ComposeJobs.registerJobScheduler`; the guard
+    /// keeps a hand-constructed scheduler honest).
+    let catchUpEnabled = config.EventTriggerCatchUp && triggerWatermark.IsSome
 
     let handlers = ConcurrentDictionary<string, IJobHandler>()
 
@@ -731,10 +775,172 @@ type InProcessJobScheduler
             logger.Error($"[JobScheduler] event=drift_handler_error driftMs={int64 drift.TotalMilliseconds}", Some ex)
     }
 
+    // ─── Phase 598 — event-trigger catch-up (startup scan + sweep) ──
+    //
+    // Recovers `OnEvent` triggers the in-memory notify hook never
+    // processed. The startup scan reads each scope's PERSISTED cursor
+    // (minus `catchUpStartupOverlap`) and replays everything past it —
+    // the crash-recovery path. The periodic sweep compares against the
+    // IN-MEMORY cursor (advanced synchronously after every live
+    // notify), so anything it finds past the cursor and older than
+    // `catchUpSettleWindow` was genuinely dropped (compose-window
+    // `None`-scheduler write, notify-path throw). Both paths replay
+    // the actual events — real `eventType` + `eventId` in
+    // `TriggerSource.ScheduledByEvent` — never a blind re-fire.
+    //
+    // At-least-once: the overlap window and the flush lag both
+    // re-dispatch triggers that already fired; a crash between
+    // `Async.Start` and the run's first `RecordRun` can still lose a
+    // dispatch (residual, milliseconds-wide). Handlers opting in must
+    // be re-entrant — the same bar `BackfillMissedTicks` sets.
+    //
+    // Cost note: each pass is `ReadAll` per scope (the `IEventStore`
+    // surface has no read-since); bounded by the store's retention
+    // policy. Startup + every 5th tick only, and only when opted in.
+    let runCatchUpScan (startup: bool) = async {
+        match triggerWatermark with
+        | Some watermark when catchUpEnabled ->
+            let scanStartedAt = DateTime.UtcNow
+            let mutable scopesScanned = 0
+            let mutable eventsReplayed = 0
+            let mutable triggersDispatched = 0
+
+            try
+                let! scopes = eventStore.ListScopes()
+
+                for scope in scopes do
+                    // Scan base: persisted cursor minus overlap on
+                    // startup; live in-memory cursor on sweep. `None`
+                    // skips the scope (first enable, unreadable
+                    // cursor, or a scope no write has touched yet).
+                    let! scanBase = async {
+                        if startup then
+                            match! watermark.LoadPersisted scope with
+                            | JobTriggerWatermark.Loaded cursor ->
+                                watermark.Seed(scope, cursor, false)
+
+                                let floor =
+                                    if cursor.LastDispatchedAt > DateTime.MinValue + catchUpStartupOverlap then
+                                        cursor.LastDispatchedAt - catchUpStartupOverlap
+                                    else
+                                        cursor.LastDispatchedAt
+
+                                return Some { cursor with LastDispatchedAt = floor }
+                            | JobTriggerWatermark.Missing ->
+                                // First enable — seed to "now" (persisted
+                                // at the next flush) and skip: history
+                                // predating the feature already fired live
+                                // (or deliberately never will); replaying
+                                // it would storm every OnEvent handler.
+                                watermark.Seed(scope, JobTriggerWatermark.JobTriggerCursor.at scanStartedAt, true)
+                                return None
+                            | JobTriggerWatermark.Unreadable err ->
+                                // Storage failure ≠ first enable: do NOT
+                                // seed (seeding would overwrite the real
+                                // cursor at the next flush) — skip and
+                                // surface loudly; the next restart retries.
+                                logger.Error(
+                                    $"[JobScheduler] event=catchup_cursor_unreadable scope=%s{scope}: {err} — scope skipped this pass; missed triggers stay unrecovered until the cursor reads cleanly",
+                                    None
+                                )
+
+                                return None
+                        else
+                            return watermark.TryGet scope
+                    }
+
+                    match scanBase with
+                    | None -> ()
+                    | Some baseCursor ->
+                        scopesScanned <- scopesScanned + 1
+                        let! events = eventStore.ReadAll scope
+                        let settleFloor = DateTime.UtcNow - catchUpSettleWindow
+
+                        let pending =
+                            events
+                            |> List.filter (JobTriggerWatermark.JobTriggerCursor.isAfter baseCursor)
+                            |> List.filter (fun e -> startup || e.OccurredAt <= settleFloor)
+                            |> List.sortBy (fun e -> e.OccurredAt, e.Id)
+
+                        if not pending.IsEmpty then
+                            let! jobs = store.ListJobs scope
+
+                            let onEventJobs =
+                                jobs
+                                |> List.choose (fun j ->
+                                    match j.Status, j.Trigger with
+                                    | Active, OnEvent et -> Some(et, j)
+                                    | _ -> None)
+                                |> List.groupBy fst
+                                |> List.map (fun (et, pairs) -> et, pairs |> List.map snd)
+                                |> Map.ofList
+
+                            for evt in pending do
+                                eventsReplayed <- eventsReplayed + 1
+
+                                match Map.tryFind evt.EventType onEventJobs with
+                                | Some matched ->
+                                    for job in matched do
+                                        triggersDispatched <- triggersDispatched + 1
+
+                                        Async.Start(
+                                            dispatchOne job (ScheduledByEvent(evt.EventType, evt.Id)) evt.OccurredAt
+                                        )
+                                | None -> ()
+
+                                // Advance whether or not anything matched —
+                                // non-trigger events must not rescan forever.
+                                watermark.Advance evt
+
+                if triggersDispatched > 0 then
+                    do!
+                        emitEvent "_platform" "JobTriggerCatchUp" {
+                            Startup = startup
+                            ScopesScanned = scopesScanned
+                            EventsReplayed = eventsReplayed
+                            TriggersDispatched = triggersDispatched
+                            ScanStartedAt = scanStartedAt
+                        }
+
+                if startup || triggersDispatched > 0 then
+                    logger.Info(
+                        sprintf
+                            "[JobScheduler] event=catchup_scan startup=%b scopes=%d eventsReplayed=%d triggersDispatched=%d"
+                            startup
+                            scopesScanned
+                            eventsReplayed
+                            triggersDispatched
+                    )
+
+                do! watermark.FlushDirty()
+            with ex ->
+                logger.Error($"[JobScheduler] event=catchup_scan_error startup=%b{startup}", Some ex)
+        | _ -> ()
+    }
+
+    /// Flush dirty trigger cursors — per-tick and on shutdown. No-op
+    /// unless catch-up is live.
+    let flushTriggerCursors () = async {
+        match triggerWatermark with
+        | Some watermark when catchUpEnabled -> do! watermark.FlushDirty()
+        | _ -> ()
+    }
+
     // ─── BackgroundService.ExecuteAsync ──────────────────────────
 
     override _.ExecuteAsync(stoppingToken: CancellationToken) =
         task {
+            // Phase 598 — startup recovery scan BEFORE the first tick:
+            // replay `OnEvent` triggers for events written past the
+            // persisted cursor (crash window, compose-window drops).
+            // Runs after compose has populated the scheduler cell, so
+            // live traffic arriving mid-scan advances the in-memory
+            // cursor monotonically alongside the replay.
+            if catchUpEnabled then
+                do! runCatchUpScan true |> Async.StartAsTask :> Task
+
+            let mutable tickCount = 0L
+
             // Align ticks to the wall clock — sleep until the start
             // of the next minute, then loop with `TimeSpan.FromMinutes 1.0`.
             // Without alignment, a 12:00:00.7 startup would tick at
@@ -770,11 +976,41 @@ type InProcessJobScheduler
                         do! handleDetectedDrift nextTick observedTick drift |> Async.StartAsTask :> Task
 
                     do! runTick observedTick |> Async.StartAsTask :> Task
+
+                    // Phase 598 — flush dirty trigger cursors once per
+                    // tick (the persistence cadence the startup overlap
+                    // is sized against) and run the catch-up sweep every
+                    // `catchUpSweepEveryTicks` ticks.
+                    if catchUpEnabled then
+                        do! flushTriggerCursors () |> Async.StartAsTask :> Task
+                        tickCount <- tickCount + 1L
+
+                        if tickCount % catchUpSweepEveryTicks = 0L then
+                            do! runCatchUpScan false |> Async.StartAsTask :> Task
                 with
                 | :? OperationCanceledException -> ()
                 | ex -> logger.Error($"[JobScheduler] event=tick_wrapper_error nextTick={nextTick:o}", Some ex)
+
+            // Phase 598 — best-effort final flush on graceful shutdown
+            // so the persisted cursor is as fresh as possible (smaller
+            // replay window on the next start). Failures only widen the
+            // at-least-once window — never lose a trigger.
+            if catchUpEnabled then
+                try
+                    do! flushTriggerCursors () |> Async.StartAsTask :> Task
+                with ex ->
+                    logger.Warn $"[JobScheduler] event=shutdown_cursor_flush_failed: {ex.Message}"
         }
         :> Task
+
+    /// Phase 598 — run one catch-up pass on demand (`startup = true`
+    /// applies the persisted-cursor + overlap semantics of the boot
+    /// scan; `false` the in-memory-cursor + settle-window semantics of
+    /// the periodic sweep). No-op unless the deployment opted into
+    /// `ServerConfig.EventTriggerCatchUp` and compose supplied the
+    /// watermark. Public for operational tooling and tests — the
+    /// hosted-service loop calls it on the cadence documented above.
+    member _.RunCatchUpScan(startup: bool) : Async<unit> = runCatchUpScan startup
 
     // ─── IJobScheduler ───────────────────────────────────────────
 
@@ -870,3 +1106,27 @@ let create
     (activitySink: IActivitySink)
     : InProcessJobScheduler =
     new InProcessJobScheduler(store, eventStore, notificationChannel, config, logger, activitySink)
+
+/// Phase 598 — `create` plus the shared trigger watermark. Compose
+/// uses this arity when `ServerConfig.EventTriggerCatchUp = true`;
+/// the same `JobTriggerWatermark` instance must also be handed to
+/// `JobNotifyEventStore` so live notifies advance the cursor the
+/// scheduler's scans compare against.
+let createWithCatchUp
+    (store: IJobStore)
+    (eventStore: IEventStore)
+    (notificationChannel: INotificationChannel)
+    (config: ServerConfig)
+    (logger: ILogger)
+    (activitySink: IActivitySink)
+    (triggerWatermark: JobTriggerWatermark.JobTriggerWatermark)
+    : InProcessJobScheduler =
+    new InProcessJobScheduler(
+        store,
+        eventStore,
+        notificationChannel,
+        config,
+        logger,
+        activitySink,
+        triggerWatermark = triggerWatermark
+    )

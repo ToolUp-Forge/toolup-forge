@@ -314,6 +314,27 @@ module FormsServerApp =
             Base = ServerApp.withBackfillMissedTicks enabled app.Base
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Delegates to `ServerApp.withEventTriggerCatchUp`.
+    let withEventTriggerCatchUp (enabled: bool) (app: FormsServerApp) : FormsServerApp = {
+        app with
+            Base = ServerApp.withEventTriggerCatchUp enabled app.Base
+    }
+
+    /// Phase 9t — audit-write failure policy. Delegates to
+    /// `ServerApp.withAuditFailurePolicy`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: FormsServerApp) : FormsServerApp = {
+        app with
+            Base = ServerApp.withAuditFailurePolicy policy app.Base
+    }
+
+    /// Phase 599 — opt into the entity-write outbox. Delegates to
+    /// `ServerApp.withEntityOutbox`.
+    let withEntityOutbox (enabled: bool) (app: FormsServerApp) : FormsServerApp = {
+        app with
+            Base = ServerApp.withEntityOutbox enabled app.Base
+    }
+
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: FormsServerApp) : FormsServerApp = {
         app with
             Base = ServerApp.withPreMiddleware f app.Base

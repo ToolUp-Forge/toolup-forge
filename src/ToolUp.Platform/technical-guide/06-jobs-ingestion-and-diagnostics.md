@@ -212,6 +212,24 @@ The threshold is exactly `60_000ms` (one full minute) — the loop's own tick in
 
 **Verifying drift detection manually.** Set a breakpoint inside the scheduler's `ExecuteAsync` loop (or hit `Ctrl+Break` to pause the whole process), wait ≥120 seconds, then resume. Within a few seconds: the `HealthMonitorUI` panel shows a non-zero `tick_missed_count`, and the `_platform.jobs`-scope operational-event log contains one `JobSchedulerTickMissed` entry whose `MissedTickCount` matches the number of minute boundaries inside the pause window. Without the pause, the counter stays at zero across an arbitrary uptime.
 
+### Event-trigger catch-up watermark (Phase 598)
+
+Drift back-fill (above) covers a scheduler that *paused*; it cannot cover a process that *died*. `OnEvent` triggering rides an in-memory hook — `JobNotifyEventStore` forwards each successful `IEventStore.Write` to `IJobScheduler.NotifyEventWritten` — so an event durably written immediately before a crash never fires its triggers: after restart the event sits in the store, the scheduler has no memory it was never dispatched, and the trigger is lost permanently. Writes that land during the compose window (before the scheduler cell is populated) are dropped the same way.
+
+**Opt-in:** `ServerConfig.EventTriggerCatchUp = true` (fluent: `ServerApp.withEventTriggerCatchUp true`, mirrored on every superset) alongside `JobScheduler = InProcessJobScheduler`. Default `false` — the notify path stays byte-for-byte at-most-once.
+
+**Mechanism.** When enabled, compose creates one `JobTriggerWatermark` shared by the notify decorator and the scheduler:
+
+1. **Live advance.** After each successful notify, `JobNotifyEventStore` advances the scope's in-memory cursor to the event's own `(OccurredAt, Id)` — the same deterministic per-scope total order `AuditReplicatorCursor` uses (timestamp primary, `Guid` tie-break). The compose-window `None`-scheduler path deliberately does not advance, which is what makes those drops recoverable.
+2. **Flush.** Dirty cursors persist to `_platform/job-triggers/{scopeId}.cursor` once per tick and on graceful shutdown — zero hot-path blob writes; the persisted cursor is at most one tick stale.
+3. **Startup scan.** Before the first tick, the scheduler reads each scope's persisted cursor and replays every event past it (minus a 30-second overlap that absorbs flush staleness and concurrent-write timestamp races), dispatching matched `OnEvent` jobs with the event's real `eventType` + `eventId` in `TriggerSource.ScheduledByEvent`. A scope with no cursor blob is *first enable* — it seeds to "now" and replays nothing (pre-feature history already fired live; replaying it would storm handlers). An *unreadable* cursor (storage failure, corrupt payload) is loudly logged and skipped — never treated as first-enable, so a transient blob outage cannot silently discard recovery.
+4. **Periodic sweep.** Every 5th tick, the same scan runs against the in-memory cursor for events older than a 30-second settle window — catching notify-path drops that happen while the process stays alive.
+5. **Observability.** Any pass that dispatches emits a `JobTriggerCatchUp` operational event under `_platform` (`{ Startup; ScopesScanned; EventsReplayed; TriggersDispatched; ScanStartedAt }`) plus a structured `event=catchup_scan` log line.
+
+**Semantics become at-least-once.** The startup overlap and flush lag re-fire a bounded window of already-dispatched triggers on every restart; a crash between dispatch start and the run's first `RecordRun` can still lose that dispatch (a milliseconds-wide residual). Handlers opting in must be re-entrant — the same bar `BackfillMissedTicks` sets, with the difference that catch-up replays the *actual missed events* rather than blind-re-firing every `OnEvent` job.
+
+**Cost.** Each pass is `ReadAll` per scope (the `IEventStore` surface has no read-since), bounded by the store's retention policy; it runs at startup and every 5 minutes, only when opted in. Deployments with very large per-scope event volumes should pair the opt-in with a retention policy. A `ReadSince`-style store extension is a candidate follow-up if scan cost ever bites.
+
 ### Known follow-ups
 
 - **Comprehensive `IJobScheduler` contract pack.** Phase 9b ships `IJobStore` contract coverage (10 tests) + `CronExpression` unit tests (13 tests). A scheduler-level contract pack covering Schedule validation cases, idempotency end-to-end, and dispatch-loop behaviour against a manually-driven tick is a follow-up.

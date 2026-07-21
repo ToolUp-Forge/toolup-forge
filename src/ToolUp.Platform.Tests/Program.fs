@@ -111,6 +111,10 @@ let allTests =
         WebhookSubstrateTests.tests
         // Phase 235 — outbound webhook signing-secret rotation.
         WebhookSecretRotationTests.tests
+        // Phase 6d.A — webhook secret-at-rest migration + preflight validator.
+        // Carried `[<Tests>]` but was never in `allTests` — wired in by the
+        // 2026-07-20 orphaned-pack audit.
+        WebhookSecretMigrationTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
         // Phase 442 — presence tracker + advisory soft-lock conformance.
@@ -255,6 +259,17 @@ let allTests =
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests
         RedisNotificationChannelHealthTests.tests
+        // NOTE — Phase 9m.A AIProviderEnvValidator / AIModelEnvValidator /
+        // AIProviderProbeValidator packs are deliberately NOT wired here. They
+        // are orphaned (carry `[<Tests>]` but were never in `allTests`), but
+        // they mutate PROCESS-GLOBAL env vars (`TOOLUP_AI_PROVIDER` /
+        // `TOOLUP_AI_MODEL` / `ANTHROPIC_API_KEY` …) with snapshot/restore.
+        // Under Expecto's default parallel runner they race each other (a
+        // sibling's set/clear leaks across the `withEnv` window), producing
+        // "expected Warning, got Ok" and wrong-value message assertions.
+        // Wiring them needs a `testSequenced`/`testSequencedGroup` wrap over
+        // the whole env-mutating family — Phase 9m.A follow-up, not a blind
+        // add. See the 2026-07-20 orphaned-pack audit report.
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
         MinimumViableShapeTests.tests
@@ -284,6 +299,9 @@ let allTests =
         ILifecycleLockContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
+        // Phase 599 — entity-write outbox (write-ahead intent + version
+        // witness: happy path, deferred publish, ghost prevention).
+        EntityOutboxTests.tests
         EntityQueryTests.tests
         // Phase 19c — declarative relationship edges.
         RelationshipTests.tests
@@ -324,6 +342,16 @@ let allTests =
         HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests
         AuditLogHealthCheckTests.tests
+        // Phase 114 — audit-write failure metric + audit-event registry
+        // exhaustiveness gate. Both packs carried `[<Tests>]` (assuming
+        // auto-discovery) but `runTestsWithCLIArgs` only runs the supplied
+        // `allTests` list — wired in by the 2026-07-20 orphaned-pack audit
+        // (same class as the SvgPropTests note further down).
+        AuditWriteFailureMetricTests.tests
+        AuditEventRegistryTests.tests
+        // Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction
+        // / DegradeToFile + fallback spill capacity + poison quarantine).
+        AuditFailurePolicyTests.tests
         DegradedCapabilityRegistryTests.tests
         AuthAuditHookTests.tests
         // Phase 272 — hosted-tree action audit emission (GP 6): authorized/
@@ -343,8 +371,29 @@ let allTests =
         RateLimitConfigHelpersTests.tests
         SseAuthModeValidatorTests.tests
         OidcAudienceBindingValidatorTests.tests
+        // NOTE — Phase 248 OidcAuthValidatorTimeoutTests is deliberately NOT
+        // wired here. Orphaned (carries `[<Tests>]`, never in `allTests`), but
+        // its 8 tests mutate the process-global `TOOLUP_OIDC_ISSUER` /
+        // `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` env vars with snapshot/restore and
+        // race each other under Expecto's parallel runner (the exact-Timeout
+        // assertions flake when a sibling clears the var mid-call). Same class
+        // as the Phase 9m.A AI validators above — needs a `testSequenced` wrap.
+        // See the 2026-07-20 orphaned-pack audit report.
+        // Phase 247 — invite-by-email capability validator (warns when the
+        // invite surface mounts with no IUserDirectory). Same audit.
+        InviteEmailCapabilityValidatorTests.tests
         SecurityHeadersValidatorTests.tests
+        // CSP-nonce cache validator + security-headers baseline floor —
+        // sibling `[<Tests>]` bindings in the same file that were never in
+        // `allTests`; wired in by the 2026-07-20 orphaned-pack audit.
+        SecurityHeadersValidatorTests.cspNonceCacheValidatorTests
+        SecurityHeadersValidatorTests.baselineFloorTests
         SecurityHardeningTests.tests
+        // CSP middleware pack — sibling `[<Tests>]` binding, same audit.
+        SecurityHardeningTests.cspMiddlewareTests
+        // Phase 209 — internet-readiness secure-default scorecard (pure
+        // projection over aggregated preflight outcomes). Same audit.
+        InternetReadinessScorecardTests.tests
         ForwardedHeadersTrustValidatorTests.tests
         // Phase 325 — trusted-proxy CIDR allowlist + auth-mode escalation.
         ForwardedHeadersTrustTests.tests
@@ -583,6 +632,11 @@ let allTests =
         // email-keyed / unresolvable rows kept report-only.
         MembershipDoctorTests.tests
         TeamInvitationTests.tests
+        // Pending-invite expiry audit + active-team invitation policy —
+        // sibling `[<Tests>]` bindings in TeamInvitationTests.fs that were
+        // never in `allTests`; wired in by the 2026-07-20 orphaned-pack audit.
+        TeamInvitationTests.pendingInviteExpiryAuditTests
+        TeamInvitationTests.activeTeamPolicyTests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
@@ -603,6 +657,16 @@ let allTests =
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
         BuiltInModuleSurfaceTests.tests
+        // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
+        // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
+        // but constructs the SDK's built-in *client-side* UI modules
+        // (`FileManagerUI.create`, `DataSubjectRequestAdminUI.create`,
+        // `HealthMonitorUI.create`, …), whose bodies touch `Icons` — Fable
+        // `importDefault` dummy-code that throws under .NET ("You've hit dummy
+        // code used for Fable bindings"). It is a Fable-tier pack, same class
+        // as the HomeOverviewTests client-tier landing test that lives in the
+        // ToolUp.AI.Client.Tests Fable harness. See the 2026-07-20
+        // orphaned-pack audit report.
         // Phase 171 — Home/Overview verification (separate `[<Tests>]`
         // bindings that `runTestsWithCLIArgs` would otherwise leave
         // dormant): the server-side CountObjects affordance + the
@@ -628,6 +692,11 @@ let allTests =
         RevokeOnIssuerRemovedTests.tests
         AnonymousSessionMigratorTests.tests
         DefaultSubjectResolverTests.tests
+        // Phase 246 — subject-downgrade observability (resolver downgrade
+        // signal + fail-closed undeclared-kind scope derivation). Carried
+        // `[<Tests>]` but was never in `allTests` — wired in by the
+        // 2026-07-20 orphaned-pack audit.
+        SubjectDowngradeObservabilityTests.tests
         CsrfCarveOutDerivationTests.tests
         SurfaceEnforcementMiddlewareTests.tests
         AnonymousSessionMigrationMiddlewareTests.tests
@@ -768,6 +837,10 @@ let allTests =
         // Phase 169 — module-load startup observability (the addModule
         // outcome accumulator emitted through the startup logger).
         ModuleLoadOutcomeTests.tests
+        // Phase 57 follow-up — prerender determinism + hydration-mismatch
+        // contract. Carried `[<Tests>]` but was never in `allTests` — wired
+        // in by the 2026-07-20 orphaned-pack audit.
+        PrerenderDeterminismTests.tests
         // Phase 203 — hydration-parity conformance harness: SSR fragment vs
         // CSR mount structural normalisation + node-naming diff (gates the
         // silent hydration-mismatch class at build time, not the console).

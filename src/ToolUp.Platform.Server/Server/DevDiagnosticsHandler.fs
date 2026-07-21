@@ -213,7 +213,7 @@ type DevDiagnosticsReport = {
     /// `ProcessProfile` × `ServerlessHost` matrix decisions for the
     /// running silo: whether HTTP is mounted here, and which
     /// background subsystems registered. Empty `Subsystems` is
-    /// impossible — the eight subsystem rows are constants. Appended
+    /// impossible — the nine subsystem rows are constants. Appended
     /// at the end of the report so existing JSON consumers continue
     /// to find every field they expect.
     ProcessProfile: ProcessProfileSummary
@@ -580,8 +580,11 @@ let private buildProcessProfile (config: ServerConfig) : ProcessProfileSummary =
             WebhookDispatcherSubsystem, "Webhook dispatcher"
             TransactionalDispatcherSubsystem, "Transactional dispatcher"
             AuditReplicatorSubsystem, "Audit replicator"
+            AuditFallbackReplaySubsystem, "Audit fallback replay"
+            EntityOutboxRelaySubsystem, "Entity-outbox relay"
             UsageBatchFlusherSubsystem, "Usage batch flusher"
             HealthStateTrackerSubsystem, "Health-state tracker"
+            AlertRuleEngineSubsystem, "Alert-rule engine"
             OAuthStateCleanupSubsystem, "OAuth state-store cleanup"
             OAuthRefresherRecoverSubsystem, "OAuth refresher startup-Recover"
         ]

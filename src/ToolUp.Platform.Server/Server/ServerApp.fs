@@ -1567,6 +1567,74 @@ module ServerApp =
             }
     }
 
+    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Default: off (`OnEvent` triggering stays at-most-once). When
+    /// enabled alongside `JobScheduler = InProcessJobScheduler`, the
+    /// scheduler persists a per-scope trigger cursor and replays — on
+    /// startup and on a periodic sweep — the actual events whose
+    /// `OnEvent` triggers the in-memory notify hook never dispatched
+    /// (crash window, compose-window writes). Semantics become
+    /// at-least-once: the startup overlap window and cursor-flush lag
+    /// re-fire a bounded window of already-dispatched triggers, so
+    /// handlers must be re-entrant — the same bar
+    /// `withBackfillMissedTicks` sets, but replaying real events
+    /// (each with its true `eventType` + `eventId`) rather than
+    /// blind-re-firing every `OnEvent` job.
+    let withEventTriggerCatchUp (enabled: bool) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    EventTriggerCatchUp = enabled
+            }
+    }
+
+    /// Phase 9t — select what an audit-write failure does beyond the
+    /// Phase 114 counter. Default `LogAndContinue` (prior behaviour —
+    /// the action completes, the record is lost, the loss is counted
+    /// + logged). Compliance-grade deployments opt into
+    /// `RefuseAction` (the action fails with "audit unavailable"
+    /// rather than committing un-audited) or `DegradeToFile` (the
+    /// record spills to a bounded local directory —
+    /// `withAuditFallbackDirectory`, default `audit-fallback/` under
+    /// the working directory — and the replay service re-ingests it
+    /// once the store recovers). Only consulted when
+    /// `AuditLog = EnabledAuditLog`.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    AuditFailurePolicy = policy
+            }
+    }
+
+    /// Phase 9t — override the `DegradeToFile` spill root (default:
+    /// `audit-fallback/` under the process working directory).
+    let withAuditFallbackDirectory (directory: string) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    AuditFallbackDirectory = Some directory
+            }
+    }
+
+    /// Phase 599 — opt into the entity-write outbox. Default: off.
+    /// When enabled (requires `withEntityStore` /
+    /// `EntityStore = EnabledEntityStore`),
+    /// `OutboxEntityStore.SaveWithEvents` durably couples an entity
+    /// save to the `IEventStore` events it implies: a write-ahead
+    /// intent stages the events atomically before the save, and the
+    /// relay drain publishes them once the save is version-witnessed
+    /// as committed (at-least-once; never-committed saves are
+    /// discarded unpublished). Resolve `OutboxEntityStore` from DI
+    /// for mutations whose events must not be lost.
+    let withEntityOutbox (enabled: bool) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    EntityOutbox = if enabled then EnabledEntityOutbox else NoEntityOutbox
+            }
+    }
+
     /// Phase 177 — opt into the deployment-readiness scorecard. Flips
     /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
     /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`

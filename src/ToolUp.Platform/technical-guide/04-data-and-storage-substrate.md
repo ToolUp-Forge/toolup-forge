@@ -331,6 +331,31 @@ return analysisResult
 
 The `null` branch is the cost of opt-in. Modules that want guaranteed availability can require it via DI throw rather than null-check; that's a per-module decision.
 
+## Blob conditional writes — the ETag seam (Phase 600)
+
+`IConditionalBlobStorage` (in `ToolUp.Platform.Core`, beside `IBlobStorage`) is the opt-in optimistic-concurrency capability for blob backends: `DownloadWithETag` returns content plus an **opaque** etag token; `UploadWithETag` writes under `IfMatch etag` (read-modify-write guard) or `IfAbsent` (create-only / first-writer-wins), refusing with a typed `ETagMismatch currentETag` that leaves the stored blob untouched. It is deliberately a *separate capability interface*, not new `IBlobStorage` members — thirteen in-tree implementers (plus consumer-side custom stores) would otherwise face a breaking sweep. Consumers probe:
+
+```fsharp
+match blobStorage with
+| :? IConditionalBlobStorage as cas -> // ETag-guarded CAS path
+| _ -> // fallback: per-key serialisation (the standing interim guard)
+```
+
+In-tree support: `LocalFileStorage` (content-hash etags; CAS under per-path lock striping — single-process, matching its DevOnly posture), the shared `InMemoryBlobStorage` test double, and both decorators (`EncryptedBlobStorage` forwards with envelope encryption — etags are over ciphertext, still opaque; `ResilientBlobStorage` forwards but deliberately does **not** retry conditional uploads, since a retry after an ambiguous failure can observe its own write and false-conflict). Cloud companions (S3 conditional PUT, Azure ETag preconditions, GCS generation-match) adopt in a follow-up. The `IConditionalBlobStorageContract` pack is the conformance bar for any external implementation.
+
+## Entity-write outbox (Phase 599)
+
+An entity save and the `IEventStore` events it implies are two writes with no transaction between them — a crash in the gap leaves state and event log divergent (and, for `OnEvent`-triggered jobs, a lost trigger). `ServerConfig.EntityOutbox = EnabledEntityOutbox` (fluent: `ServerApp.withEntityOutbox true`; env: `TOOLUP_ENTITY_OUTBOX`; requires `EntityStore = EnabledEntityStore`) registers `EntityOutbox.OutboxEntityStore` in DI for mutations whose events must not be lost:
+
+```fsharp
+let outbox = ctx.RequestServices.GetRequiredService<EntityOutbox.OutboxEntityStore>()
+let! result = outbox.SaveWithEvents(scopeId, "StockMovement", movementId, movement, [ movedEvent ])
+```
+
+**Mechanism — write-ahead intent + version witness.** `SaveWithEvents` (1) stages an intent blob — the events plus `MinVersionAfterSave = head + 1` observed before the save — in a single atomic blob write under `_platform/entity-outbox/{scope}/`; (2) saves the entity through the ordinary `IEntityStore` (payload byte-identical to a plain save — no envelope, no read-path stripping); (3) publishes the events and deletes the intent, best-effort. `EntityOutboxRelayService` (60-second cadence, gated as `EntityOutboxRelaySubsystem`) recovers both crash shapes: an intent whose entity head version reached the witness is published (the save committed — late, not lost); an unwitnessed intent older than a 10-minute abandon window is discarded *unpublished* — no ghost events for saves that never happened. A save that fails outright withdraws its intent immediately; a staging failure refuses the whole mutation rather than silently re-opening the dual-write gap.
+
+**Semantics.** Events are at-least-once (a crash between publish and intent delete re-publishes; consumers dedupe by `ModuleEvent.Id`). The witness discrimination assumes the application serialises writes per entity id — the store's standing pre-CAS assumption. Corrupt intents quarantine under `entity-outbox-poison/` and never wedge the drain.
+
 
 ---
 

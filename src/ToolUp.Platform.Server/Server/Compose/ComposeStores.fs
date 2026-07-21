@@ -155,6 +155,37 @@ let registerEntityStore
         |> ignore
     | NoEntityStore -> ()
 
+/// Phase 599 — register the entity-write outbox surface + its relay
+/// drain when `ServerConfig.EntityOutbox = EnabledEntityOutbox`.
+/// Requires the entity store; enabling the outbox without it is a
+/// compose-time no-op with a loud log rather than a dangling DI
+/// registration. The relay is gated as `EntityOutboxRelaySubsystem`
+/// on the process-profile matrix.
+let registerEntityOutbox (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
+    match config.EntityOutbox, config.EntityStore with
+    | NoEntityOutbox, _ -> ()
+    | EnabledEntityOutbox, NoEntityStore ->
+        resolvedLogger.Warn
+            "[EntityOutbox] EntityOutbox = EnabledEntityOutbox but EntityStore = NoEntityStore — outbox NOT registered. Pair with EntityStore = EnabledEntityStore."
+    | EnabledEntityOutbox, EnabledEntityStore ->
+        services.AddSingleton<EntityOutbox.OutboxEntityStore>(fun sp ->
+            EntityOutbox.OutboxEntityStore(
+                sp.GetRequiredService<IEntityStore.IEntityStore>(),
+                sp.GetRequiredService<IEventStore>(),
+                sp.GetRequiredService<BlobStorage.IBlobStorage>(),
+                resolvedLogger
+            ))
+        |> ignore
+
+        if ProcessProfileGate.shouldRegisterBackgroundService config EntityOutboxRelaySubsystem then
+            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                EntityOutboxRelayService.EntityOutboxRelayService(
+                    sp.GetRequiredService<EntityOutbox.OutboxEntityStore>(),
+                    resolvedLogger
+                )
+                :> Microsoft.Extensions.Hosting.IHostedService)
+            |> ignore
+
 /// Phase 161 — register the time-series store when
 /// `ServerConfig.TimeSeriesStore` selects a backend. `InMemoryTimeSeries`
 /// registers the dev/test in-memory default; `CustomTimeSeriesStore`

@@ -388,6 +388,17 @@ let compose
     let jobSchedulerCell: IJobScheduler option ref = ref None
     let jobSchedulerLookup () = jobSchedulerCell.Value
 
+    // Phase 598 — one shared trigger watermark when the deployment
+    // opted into event-trigger catch-up: `JobNotifyEventStore`
+    // advances it after each live notify; the scheduler's startup
+    // scan / periodic sweep read + flush it. `None` (the default)
+    // keeps the at-most-once notify path byte-for-byte unchanged.
+    let jobTriggerWatermark =
+        match config.JobScheduler with
+        | InProcessJobScheduler when config.EventTriggerCatchUp ->
+            Some(JobTriggerWatermark.JobTriggerWatermark(resolvedBlobStorage, resolvedLogger))
+        | _ -> None
+
     // Public `IEventStore` registered in DI — final decorator chain
     // (extracted to `ComposeJobs.applyEventStoreDecorators`):
     //   - With webhooks + job scheduler: `JobNotify -> WebhookHooked -> Inner`
@@ -395,7 +406,12 @@ let compose
     //   - With job scheduler only:       `JobNotify -> Inner`
     //   - Lightweight default:           `Inner` (no decorators)
     let eventStore =
-        applyEventStoreDecorators config effectiveInnerEventStore webhookSubsystem jobSchedulerLookup
+        applyEventStoreDecorators
+            config
+            effectiveInnerEventStore
+            webhookSubsystem
+            jobSchedulerLookup
+            jobTriggerWatermark
 
     // Phase 114 — chicken-and-egg break for the audit-write-failure
     // metric. The `EventStoreAuditLog` is constructed inside
@@ -542,6 +558,11 @@ let compose
     // registration is prepended automatically.
     registerEntityStore services config entityRegistrations
 
+    // Phase 599 — entity-write outbox surface + relay drain (extracted
+    // to `ComposeStores.registerEntityOutbox`). No-op unless
+    // `EntityOutbox = EnabledEntityOutbox` with the entity store on.
+    registerEntityOutbox services config resolvedLogger
+
     // Phase 161 — time-series substrate. Conditional on
     // `ServerConfig.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips
     // registration entirely; `CustomTimeSeriesStore` leaves the consumer's
@@ -678,6 +699,11 @@ let compose
     // dispatcher singleton + sink registrations for sibling silos.
     registerTransactionalDispatcher services config transactionalDispatcher transactionalSinks
 
+    // Phase 9t — DegradeToFile audit-spill replay drain (extracted to
+    // `ComposeNotifications.registerAuditFallbackReplay`). No-op unless
+    // `AuditFailurePolicy = DegradeToFile` with audit enabled.
+    registerAuditFallbackReplay services config eventStore resolvedLogger
+
     // Phase 9g — audit replicator hosted service (extracted to
     // `ComposeAudit.registerAuditReplicatorHosting`).
     // Phase 16 — pass `config` so `ServerlessHost = ServerlessHost`
@@ -716,6 +742,7 @@ let compose
             resolvedActivitySink
             blobJobStoreInstance
             jobSchedulerCell
+            jobTriggerWatermark
 
     // Phase 10 — opt-in data ingestion (extracted to
     // `ComposeJobs.registerDataIngestion`). Includes the Phase 10b

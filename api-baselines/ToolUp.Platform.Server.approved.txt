@@ -179,9 +179,12 @@ ToolUp.Platform.AssemblyJoinKind+Tags.LeftOuter : System.Int32 (literal)
 ToolUp.Platform.AssemblyProvenance (class)
 ToolUp.Platform.AssemblyProvenance.SourcesKey : System.String (literal)
 ToolUp.Platform.AssemblyProvenance.SpecHashKey : System.String (literal)
+ToolUp.Platform.AssemblyProvenance.SpecJsonKey : System.String (literal)
 ToolUp.Platform.AssemblyProvenance.SubsetKey : System.String (literal)
 ToolUp.Platform.AssemblyProvenance.sourceIdentity(ToolUp.Platform.AssemblySource) : System.String
 ToolUp.Platform.AssemblyProvenance.specHash(ToolUp.Platform.DatasetAssemblySpec) : System.String
+ToolUp.Platform.AssemblyProvenance.specJson(ToolUp.Platform.DatasetAssemblySpec) : System.String
+ToolUp.Platform.AssemblyProvenance.tryParseSpec(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetAssemblySpec, System.String]
 ToolUp.Platform.AssemblySource (class)
 ToolUp.Platform.AssemblySource.IsDatasetVersion : System.Boolean { get }
 ToolUp.Platform.AssemblySource.IsExternalTable : System.Boolean { get }
@@ -250,11 +253,26 @@ ToolUp.Platform.AssemblyTransform+Window.column : System.String { get }
 ToolUp.Platform.AssemblyTransform+Window.partitionBy : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.AssemblyTransform+Window.periodColumn : System.String { get }
 ToolUp.Platform.AssemblyTransform+Window.size : System.Int32 { get }
+ToolUp.Platform.AuditFallbackReplayService (class)
+ToolUp.Platform.AuditFallbackReplayService+AuditFallbackReplayService (class)
+ToolUp.Platform.AuditFallbackReplayService+AuditFallbackReplayService..ctor(ToolUp.Platform.AuditFallbackStore+AuditFallbackStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger)
+ToolUp.Platform.AuditFallbackReplayService+AuditFallbackReplayService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.AuditFallbackStore (class)
+ToolUp.Platform.AuditFallbackStore.DefaultMaxBytes : System.Int64 (literal)
+ToolUp.Platform.AuditFallbackStore.defaultDirectory() : System.String
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore (class)
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore..ctor(System.String, System.Int64, ToolUp.Platform.ILogger)
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.Append(ToolUp.Platform.ModuleEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.PendingCount() : System.Int32
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.ReplayOnce(ToolUp.Platform.IEventStore, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.Root : System.String { get }
 ToolUp.Platform.AuditLog (class)
 ToolUp.Platform.AuditLog+AuditMetrics (class)
 ToolUp.Platform.AuditLog+AuditMetrics.WriteFailuresTotal : System.String (literal)
+ToolUp.Platform.AuditLog+AuditWriteRefusedException (class)
+ToolUp.Platform.AuditLog+AuditWriteRefusedException..ctor(System.String, System.String, System.Exception)
 ToolUp.Platform.AuditLog+EventStoreAuditLog (class)
-ToolUp.Platform.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]])
+ToolUp.Platform.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFailurePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFallbackStore+AuditFallbackStore])
 ToolUp.Platform.AuditLog+NoOpAuditLog (class)
 ToolUp.Platform.AuditLog+NoOpAuditLog..ctor()
 ToolUp.Platform.AuditLogHealthCheck (class)
@@ -324,10 +342,14 @@ ToolUp.Platform.AutoBootstrapDevAdminModeValidator+AutoBootstrapDevAdminModeVali
 ToolUp.Platform.AutoBootstrapDevAdminModeValidator+AutoBootstrapDevAdminModeValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.BackgroundSubsystem (class)
 ToolUp.Platform.BackgroundSubsystem.AlertRuleEngineSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
+ToolUp.Platform.BackgroundSubsystem.AuditFallbackReplaySubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem.AuditReplicatorSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
+ToolUp.Platform.BackgroundSubsystem.EntityOutboxRelaySubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem.HealthStateTrackerSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem.IsAlertRuleEngineSubsystem : System.Boolean { get }
+ToolUp.Platform.BackgroundSubsystem.IsAuditFallbackReplaySubsystem : System.Boolean { get }
 ToolUp.Platform.BackgroundSubsystem.IsAuditReplicatorSubsystem : System.Boolean { get }
+ToolUp.Platform.BackgroundSubsystem.IsEntityOutboxRelaySubsystem : System.Boolean { get }
 ToolUp.Platform.BackgroundSubsystem.IsHealthStateTrackerSubsystem : System.Boolean { get }
 ToolUp.Platform.BackgroundSubsystem.IsJobSchedulerSubsystem : System.Boolean { get }
 ToolUp.Platform.BackgroundSubsystem.IsOAuthRefresherRecoverSubsystem : System.Boolean { get }
@@ -344,7 +366,9 @@ ToolUp.Platform.BackgroundSubsystem.UsageBatchFlusherSubsystem : ToolUp.Platform
 ToolUp.Platform.BackgroundSubsystem.WebhookDispatcherSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem+Tags (class)
 ToolUp.Platform.BackgroundSubsystem+Tags.AlertRuleEngineSubsystem : System.Int32 (literal)
+ToolUp.Platform.BackgroundSubsystem+Tags.AuditFallbackReplaySubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.AuditReplicatorSubsystem : System.Int32 (literal)
+ToolUp.Platform.BackgroundSubsystem+Tags.EntityOutboxRelaySubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.HealthStateTrackerSubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.JobSchedulerSubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.OAuthRefresherRecoverSubsystem : System.Int32 (literal)
@@ -641,17 +665,18 @@ ToolUp.Platform.ComposeHealthSmoke.registerFirstPartyCspContributors(Microsoft.E
 ToolUp.Platform.ComposeHealthSmoke.registerHealthChecks(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HealthChecks+IHealthCheck]) : System.Void
 ToolUp.Platform.ComposeHealthSmoke.registerSmokeTests(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.IEventStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SmokeTests+ISmokeTest]) : System.Void
 ToolUp.Platform.ComposeJobs (class)
-ToolUp.Platform.ComposeJobs.applyEventStoreDecorators(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]]) : ToolUp.Platform.IEventStore
+ToolUp.Platform.ComposeJobs.applyEventStoreDecorators(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark]) : ToolUp.Platform.IEventStore
 ToolUp.Platform.ComposeJobs.buildWebhookSubsystem(ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]]
 ToolUp.Platform.ComposeJobs.registerDataIngestion(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerDataSubjectRequestJobs(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.IAuditLog, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger) : System.Void
-ToolUp.Platform.ComposeJobs.registerJobScheduler(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobStore+BlobJobStore]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]
+ToolUp.Platform.ComposeJobs.registerJobScheduler(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobStore+BlobJobStore]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]
 ToolUp.Platform.ComposeJobs.registerModelFitting(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerOAuthRefresher(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IRateLimiter, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerScheduledJobDeclarations(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerWebhookSubsystem(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]]) : System.Void
 ToolUp.Platform.ComposeNotifications (class)
 ToolUp.Platform.ComposeNotifications.buildNotificationStack(ToolUp.Platform.ServerConfig, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]) : ToolUp.Platform.ComposeNotifications+NotificationStack
+ToolUp.Platform.ComposeNotifications.registerAuditFallbackReplay(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeNotifications.registerPresenceSubstrate(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerShareTokenStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerTransactionalDispatcher(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink]) : System.Void
@@ -688,6 +713,7 @@ ToolUp.Platform.ComposeStores.registerConfigQueryAndFlagStores(Microsoft.Extensi
 ToolUp.Platform.ComposeStores.registerConsentStateStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerDatasetStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerDeployPlane(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
+ToolUp.Platform.ComposeStores.registerEntityOutbox(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeStores.registerEntityStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.Unit]]) : System.Void
 ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerOptionalStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]) : System.Void
@@ -1247,6 +1273,18 @@ ToolUp.Platform.DatasetContentRef.ScopeId : System.String { get }
 ToolUp.Platform.DatasetContentRef.Version : System.Int32 { get }
 ToolUp.Platform.DatasetProvenance (class)
 ToolUp.Platform.DatasetProvenance.declassify(ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, System.String, System.String, System.Int32, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersionRef, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.DatasetRevintage (class)
+ToolUp.Platform.DatasetRevintage.revintage(ToolUp.Platform.IDatasetAssemblyExecutor, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.DatasetVersionRef, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.DatasetVersionRef], ToolUp.Platform.RevintageError]]
+ToolUp.Platform.DatasetRevintage.serialiseJobPayload(ToolUp.Platform.DatasetRevintageJobPayload) : System.String
+ToolUp.Platform.DatasetRevintage.tryParseJobPayload(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetRevintageJobPayload, System.String]
+ToolUp.Platform.DatasetRevintageJobHandler (class)
+ToolUp.Platform.DatasetRevintageJobHandler..ctor(ToolUp.Platform.IDatasetAssemblyExecutor, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)
+ToolUp.Platform.DatasetRevintageJobHandlerModule (class)
+ToolUp.Platform.DatasetRevintageJobHandlerModule.HandlerName : System.String (literal)
+ToolUp.Platform.DatasetRevintageJobHandlerModule.create(ToolUp.Platform.IDatasetAssemblyExecutor, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.DatasetRevintageJobPayload (class)
+ToolUp.Platform.DatasetRevintageJobPayload..ctor(ToolUp.Platform.DatasetVersionRef)
+ToolUp.Platform.DatasetRevintageJobPayload.SpecRef : ToolUp.Platform.DatasetVersionRef { get }
 ToolUp.Platform.DatasetVersionRef (class)
 ToolUp.Platform.DatasetVersionRef..ctor(System.String, System.String, System.Int32)
 ToolUp.Platform.DatasetVersionRef.DatasetId : System.String { get }
@@ -1500,6 +1538,27 @@ ToolUp.Platform.EncryptionKeyProvisionLifecycle (class)
 ToolUp.Platform.EncryptionKeyProvisionLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.EncryptionKeyProvisionLifecycle+EncryptionKeyProvisionLifecycle (class)
 ToolUp.Platform.EncryptionKeyProvisionLifecycle+EncryptionKeyProvisionLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.EntityOutbox (class)
+ToolUp.Platform.EntityOutbox.defaultAbandonWindow : System.TimeSpan { get }
+ToolUp.Platform.EntityOutbox.defaultSettleWindow : System.TimeSpan { get }
+ToolUp.Platform.EntityOutbox+OutboxEntityStore (class)
+ToolUp.Platform.EntityOutbox+OutboxEntityStore..ctor(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Platform.IEventStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.EntityOutbox+OutboxEntityStore.PendingCount() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.EntityOutbox+OutboxEntityStore.RelayOnce(System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.EntityOutbox+OutboxEntityStore.SaveWithEvents`1(System.String, System.String, System.String, T, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityTypes+EntityRef`1[T], ToolUp.Platform.EntityTypes+EntityError]]
+ToolUp.Platform.EntityOutbox+OutboxIntent (class)
+ToolUp.Platform.EntityOutbox+OutboxIntent..ctor(System.Guid, System.String, System.String, System.String, System.Int32, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent])
+ToolUp.Platform.EntityOutbox+OutboxIntent.CreatedAt : System.DateTime { get }
+ToolUp.Platform.EntityOutbox+OutboxIntent.EntityId : System.String { get }
+ToolUp.Platform.EntityOutbox+OutboxIntent.EntityType : System.String { get }
+ToolUp.Platform.EntityOutbox+OutboxIntent.Events : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent] { get }
+ToolUp.Platform.EntityOutbox+OutboxIntent.IntentId : System.Guid { get }
+ToolUp.Platform.EntityOutbox+OutboxIntent.MinVersionAfterSave : System.Int32 { get }
+ToolUp.Platform.EntityOutbox+OutboxIntent.ScopeId : System.String { get }
+ToolUp.Platform.EntityOutboxRelayService (class)
+ToolUp.Platform.EntityOutboxRelayService+EntityOutboxRelayService (class)
+ToolUp.Platform.EntityOutboxRelayService+EntityOutboxRelayService..ctor(ToolUp.Platform.EntityOutbox+OutboxEntityStore, ToolUp.Platform.ILogger)
+ToolUp.Platform.EntityOutboxRelayService+EntityOutboxRelayService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.EntityQueryExecutor (class)
 ToolUp.Platform.EntityQueryExecutor.execute`1(ToolUp.Platform.EntityQueryExecutor+ExecutorContext, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[T]]
 ToolUp.Platform.EntityQueryExecutor+ExecutorContext (class)
@@ -1703,6 +1762,34 @@ ToolUp.Platform.FileManagement+StoredFile.SizeBytes : System.Int64 { get }
 ToolUp.Platform.FileManagement+StoredFile.UploadedAt : System.DateTime { get }
 ToolUp.Platform.FileNameSanitiser (class)
 ToolUp.Platform.FileNameSanitiser.validate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.FitBatchError (class)
+ToolUp.Platform.FitBatchError.EmptyBatch : ToolUp.Platform.FitBatchError { get }
+ToolUp.Platform.FitBatchError.IsEmptyBatch : System.Boolean { get }
+ToolUp.Platform.FitBatchError.IsMissingBatchId : System.Boolean { get }
+ToolUp.Platform.FitBatchError.IsScopeMismatch : System.Boolean { get }
+ToolUp.Platform.FitBatchError.MissingBatchId : ToolUp.Platform.FitBatchError { get }
+ToolUp.Platform.FitBatchError.Tag : System.Int32 { get }
+ToolUp.Platform.FitBatchError+ScopeMismatch (class)
+ToolUp.Platform.FitBatchError+ScopeMismatch.index : System.Int32 { get }
+ToolUp.Platform.FitBatchError+ScopeMismatch.itemScope : System.String { get }
+ToolUp.Platform.FitBatchError+Tags (class)
+ToolUp.Platform.FitBatchError+Tags.EmptyBatch : System.Int32 (literal)
+ToolUp.Platform.FitBatchError+Tags.MissingBatchId : System.Int32 (literal)
+ToolUp.Platform.FitBatchError+Tags.ScopeMismatch : System.Int32 (literal)
+ToolUp.Platform.FitBatchErrorModule (class)
+ToolUp.Platform.FitBatchErrorModule.describe(ToolUp.Platform.FitBatchError) : System.String
+ToolUp.Platform.FitBatchItemPayload (class)
+ToolUp.Platform.FitBatchItemPayload..ctor(System.String, System.Int32, ToolUp.Platform.FitRequest)
+ToolUp.Platform.FitBatchItemPayload.BatchId : System.String { get }
+ToolUp.Platform.FitBatchItemPayload.Index : System.Int32 { get }
+ToolUp.Platform.FitBatchItemPayload.Request : ToolUp.Platform.FitRequest { get }
+ToolUp.Platform.FitBatchSubmission (class)
+ToolUp.Platform.FitBatchSubmission..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String]])
+ToolUp.Platform.FitBatchSubmission.BatchId : System.String { get }
+ToolUp.Platform.FitBatchSubmission.ItemCount : System.Int32 { get }
+ToolUp.Platform.FitBatchSubmission.ScheduleFailures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String]] { get }
+ToolUp.Platform.FitBatchSubmission.ScheduledJobs : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Guid]] { get }
+ToolUp.Platform.FitBatchSubmission.ScopeId : System.String { get }
 ToolUp.Platform.FitCompositeKey (class)
 ToolUp.Platform.FitCompositeKey..ctor(System.String, System.String, System.Int64, System.String, System.String, System.String)
 ToolUp.Platform.FitCompositeKey.DatasetVersion : System.String { get }
@@ -1733,6 +1820,15 @@ ToolUp.Platform.FitRequest.ProviderKind : System.String { get }
 ToolUp.Platform.FitRequest.ScopeId : System.String { get }
 ToolUp.Platform.FitRequest.Seed : System.Int64 { get }
 ToolUp.Platform.FitRequest.SpecRef : ToolUp.Platform.ModelSpecRef { get }
+ToolUp.Platform.FitRequestBatch (class)
+ToolUp.Platform.FitRequestBatch..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FitRequest])
+ToolUp.Platform.FitRequestBatch.BatchId : System.String { get }
+ToolUp.Platform.FitRequestBatch.Requests : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FitRequest] { get }
+ToolUp.Platform.FitRequestBatch.ScopeId : System.String { get }
+ToolUp.Platform.FitRequestBatchModule (class)
+ToolUp.Platform.FitRequestBatchModule.BatchIdAnnotationKey : System.String (literal)
+ToolUp.Platform.FitRequestBatchModule.BatchIndexAnnotationKey : System.String (literal)
+ToolUp.Platform.FitRequestBatchModule.validate(ToolUp.Platform.FitRequestBatch) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.FitBatchError]
 ToolUp.Platform.FlagEvaluator (class)
 ToolUp.Platform.FlagEvaluator.create(ToolUp.Platform.IFeatureFlagStore, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.FlagEvaluator+FlagEvaluator
 ToolUp.Platform.FlagEvaluator.createWithFlagSources(ToolUp.Platform.IFeatureFlagStore, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IFlagSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.FlagEvaluator+FlagEvaluator
@@ -2272,6 +2368,7 @@ ToolUp.Platform.IModelRegistry.Get(System.String, System.String) : Microsoft.FSh
 ToolUp.Platform.IModelRegistry.QueryByDatasetVersion(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]]
 ToolUp.Platform.IModelRegistry.QueryBySpecHash(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]]
 ToolUp.Platform.IModelRegistry.QueryByStatus(System.String, ToolUp.Platform.ModelArtifactStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]]
+ToolUp.Platform.IModelRegistry.QueryPage(System.String, ToolUp.Platform.ModelRegistryQuery, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifactPage, ToolUp.Platform.ModelRegistryError]]
 ToolUp.Platform.IModelRegistry.Register(System.String, ToolUp.Platform.FitOutcome, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
 ToolUp.Platform.IModelRegistry.TransitionStatus(System.String, System.String, ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.TeamRole, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifact, ToolUp.Platform.ModelRegistryError]]
 ToolUp.Platform.IModelScoreProvider (interface)
@@ -2695,13 +2792,15 @@ ToolUp.Platform.JobApiHandler (class)
 ToolUp.Platform.JobApiHandler.jobApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.JobApi
 ToolUp.Platform.JobNotifyEventStore (class)
 ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore (class)
-ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore..ctor(ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]])
+ToolUp.Platform.JobNotifyEventStore+JobNotifyEventStore..ctor(ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark])
 ToolUp.Platform.JobScheduler (class)
 ToolUp.Platform.JobScheduler.JobsSourceModule : System.String (literal)
 ToolUp.Platform.JobScheduler.create(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
+ToolUp.Platform.JobScheduler.createWithCatchUp(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark) : ToolUp.Platform.JobScheduler+InProcessJobScheduler
 ToolUp.Platform.JobScheduler+InProcessJobScheduler (class)
-ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink)
+ToolUp.Platform.JobScheduler+InProcessJobScheduler..ctor(ToolUp.Platform.IJobStore, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark])
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunCatchUpScan(System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+JobCompletedPayload (class)
 ToolUp.Platform.JobScheduler+JobCompletedPayload..ctor(System.Guid, System.String, System.String, System.Guid, System.Int32, System.Int64)
 ToolUp.Platform.JobScheduler+JobCompletedPayload.Attempt : System.Int32 { get }
@@ -2749,6 +2848,13 @@ ToolUp.Platform.JobScheduler+JobStartedPayload.JobId : System.Guid { get }
 ToolUp.Platform.JobScheduler+JobStartedPayload.RunId : System.Guid { get }
 ToolUp.Platform.JobScheduler+JobStartedPayload.ScopeId : System.String { get }
 ToolUp.Platform.JobScheduler+JobStartedPayload.TriggerSource : ToolUp.Platform.TriggerSource { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload (class)
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload..ctor(System.Boolean, System.Int32, System.Int32, System.Int32, System.DateTime)
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.EventsReplayed : System.Int32 { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.ScanStartedAt : System.DateTime { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.ScopesScanned : System.Int32 { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.Startup : System.Boolean { get }
+ToolUp.Platform.JobScheduler+JobTriggerCatchUpPayload.TriggersDispatched : System.Int32 { get }
 ToolUp.Platform.JobSchedulerBuildOrchestrator (class)
 ToolUp.Platform.JobSchedulerBuildOrchestrator.BuildHandlerName : System.String (literal)
 ToolUp.Platform.JobSchedulerBuildOrchestrator.BuildScopeId : System.String (literal)
@@ -2777,6 +2883,36 @@ ToolUp.Platform.JobStore+IdempotencyEntry (class)
 ToolUp.Platform.JobStore+IdempotencyEntry..ctor(System.Guid, System.DateTime)
 ToolUp.Platform.JobStore+IdempotencyEntry.CreatedAt : System.DateTime { get }
 ToolUp.Platform.JobStore+IdempotencyEntry.JobId : System.Guid { get }
+ToolUp.Platform.JobTriggerWatermark (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor..ctor(System.DateTime, System.Guid)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor.LastDispatchedAt : System.DateTime { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor.LastDispatchedEventId : System.Guid { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.IsLoaded : System.Boolean { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.IsMissing : System.Boolean { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.Missing : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad.Tag : System.Int32 { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Loaded (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Loaded.Item : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags.Loaded : System.Int32 (literal)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags.Missing : System.Int32 (literal)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Unreadable (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad+Unreadable.error : System.String { get }
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule.advance(ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor, ToolUp.Platform.ModuleEvent) : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule.at(System.DateTime) : ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor
+ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorModule.isAfter(ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor, ToolUp.Platform.ModuleEvent) : System.Boolean
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark (class)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.Advance(ToolUp.Platform.ModuleEvent) : System.Void
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.FlushDirty() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.LoadPersisted(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerCursorLoad]
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.Seed(System.String, ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor, System.Boolean) : System.Void
+ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark.TryGet(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerCursor]
 ToolUp.Platform.JsonConsoleLogger (class)
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger (class)
 ToolUp.Platform.JsonConsoleLogger+JsonConsoleLogger..ctor()
@@ -3000,6 +3136,12 @@ ToolUp.Platform.ModelArtifact.Status : ToolUp.Platform.ModelArtifactStatus { get
 ToolUp.Platform.ModelArtifact.Version : System.Int32 { get }
 ToolUp.Platform.ModelArtifactModule (class)
 ToolUp.Platform.ModelArtifactModule.id(ToolUp.Platform.ModelArtifact) : System.String
+ToolUp.Platform.ModelArtifactPage (class)
+ToolUp.Platform.ModelArtifactPage..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ModelArtifactPage.Artifacts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact] { get }
+ToolUp.Platform.ModelArtifactPage.NextCursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ModelArtifactPageModule (class)
+ToolUp.Platform.ModelArtifactPageModule.page(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact]) : ToolUp.Platform.ModelArtifactPage
 ToolUp.Platform.ModelArtifactStatus (class)
 ToolUp.Platform.ModelArtifactStatus.Approved : ToolUp.Platform.ModelArtifactStatus { get }
 ToolUp.Platform.ModelArtifactStatus.Draft : ToolUp.Platform.ModelArtifactStatus { get }
@@ -3051,6 +3193,17 @@ ToolUp.Platform.ModelEvaluationRunner (class)
 ToolUp.Platform.ModelEvaluationRunner..ctor(ToolUp.Platform.ModelFitProviderRegistry, ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelScorer, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog)
 ToolUp.Platform.ModelEvaluationRunnerModule (class)
 ToolUp.Platform.ModelEvaluationRunnerModule.create(ToolUp.Platform.ModelFitProviderRegistry, ToolUp.Platform.IModelRegistry, ToolUp.Platform.IModelScorer, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog) : ToolUp.Platform.IModelEvaluationRunner
+ToolUp.Platform.ModelExecutionApiHandler (class)
+ToolUp.Platform.ModelExecutionApiHandler.modelExecutionApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ModelExecutionApi
+ToolUp.Platform.ModelFitBatch (class)
+ToolUp.Platform.ModelFitBatch.ItemHandlerName : System.String (literal)
+ToolUp.Platform.ModelFitBatch.serialiseItem(ToolUp.Platform.FitBatchItemPayload) : System.String
+ToolUp.Platform.ModelFitBatch.submit(ToolUp.Platform.IJobScheduler, ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.FitRequestBatch) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FitBatchSubmission, ToolUp.Platform.FitBatchError]]
+ToolUp.Platform.ModelFitBatch.tryParseItem(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FitBatchItemPayload, System.String]
+ToolUp.Platform.ModelFitBatchItemJobHandler (class)
+ToolUp.Platform.ModelFitBatchItemJobHandler..ctor(ToolUp.Platform.ModelFitProviderRegistry, ToolUp.Platform.IModelRegistry, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)
+ToolUp.Platform.ModelFitBatchItemJobHandlerModule (class)
+ToolUp.Platform.ModelFitBatchItemJobHandlerModule.create(ToolUp.Platform.ModelFitProviderRegistry, ToolUp.Platform.IModelRegistry, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.ModelFitEnvelope (class)
 ToolUp.Platform.ModelFitEnvelope.runFit(ToolUp.Platform.ModelFitProviderRegistry, ToolUp.Platform.IAuditLog, ToolUp.Platform.FitRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FitOutcome, ToolUp.Platform.ModelFitError]]
 ToolUp.Platform.ModelFitEnvelope.serialiseRequest(ToolUp.Platform.FitRequest) : System.String
@@ -3084,6 +3237,7 @@ ToolUp.Platform.ModelFitProviderRegistry.TryResolve(System.String) : Microsoft.F
 ToolUp.Platform.ModelRegistryError (class)
 ToolUp.Platform.ModelRegistryError.IsForbidden : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsIllegalTransition : System.Boolean { get }
+ToolUp.Platform.ModelRegistryError.IsInvalidQuery : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsNotFound : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.IsStorageFailure : System.Boolean { get }
 ToolUp.Platform.ModelRegistryError.NotFound : ToolUp.Platform.ModelRegistryError { get }
@@ -3093,15 +3247,27 @@ ToolUp.Platform.ModelRegistryError+Forbidden.reason : System.String { get }
 ToolUp.Platform.ModelRegistryError+IllegalTransition (class)
 ToolUp.Platform.ModelRegistryError+IllegalTransition.from : ToolUp.Platform.ModelArtifactStatus { get }
 ToolUp.Platform.ModelRegistryError+IllegalTransition.target : ToolUp.Platform.ModelArtifactStatus { get }
+ToolUp.Platform.ModelRegistryError+InvalidQuery (class)
+ToolUp.Platform.ModelRegistryError+InvalidQuery.reason : System.String { get }
 ToolUp.Platform.ModelRegistryError+StorageFailure (class)
 ToolUp.Platform.ModelRegistryError+StorageFailure.Item : System.String { get }
 ToolUp.Platform.ModelRegistryError+Tags (class)
 ToolUp.Platform.ModelRegistryError+Tags.Forbidden : System.Int32 (literal)
 ToolUp.Platform.ModelRegistryError+Tags.IllegalTransition : System.Int32 (literal)
+ToolUp.Platform.ModelRegistryError+Tags.InvalidQuery : System.Int32 (literal)
 ToolUp.Platform.ModelRegistryError+Tags.NotFound : System.Int32 (literal)
 ToolUp.Platform.ModelRegistryError+Tags.StorageFailure : System.Int32 (literal)
 ToolUp.Platform.ModelRegistryErrorModule (class)
 ToolUp.Platform.ModelRegistryErrorModule.describe(ToolUp.Platform.ModelRegistryError) : System.String
+ToolUp.Platform.ModelRegistryQuery (class)
+ToolUp.Platform.ModelRegistryQuery..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifactStatus], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ModelRegistryQuery.BatchId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ModelRegistryQuery.DatasetVersions : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelRegistryQuery.SpecHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ModelRegistryQuery.Statuses : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifactStatus] { get }
+ToolUp.Platform.ModelRegistryQueryModule (class)
+ToolUp.Platform.ModelRegistryQueryModule.any : ToolUp.Platform.ModelRegistryQuery { get }
+ToolUp.Platform.ModelRegistryQueryModule.matches(ToolUp.Platform.ModelRegistryQuery, ToolUp.Platform.ModelArtifact) : System.Boolean
 ToolUp.Platform.ModelRegistrySourceModule (class)
 ToolUp.Platform.ModelRegistrySourceModule.value : System.String (literal)
 ToolUp.Platform.ModelScorePolicy (class)
@@ -3802,6 +3968,31 @@ ToolUp.Platform.ResultStore+InMemoryResultStore (class)
 ToolUp.Platform.ResultStore+InMemoryResultStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore])
 ToolUp.Platform.ResultStore+PersistentResultStore (class)
 ToolUp.Platform.ResultStore+PersistentResultStore..ctor(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore])
+ToolUp.Platform.RevintageError (class)
+ToolUp.Platform.RevintageError.IsAssemblyFailed : System.Boolean { get }
+ToolUp.Platform.RevintageError.IsNoRecordedSpec : System.Boolean { get }
+ToolUp.Platform.RevintageError.IsSourceUnresolvable : System.Boolean { get }
+ToolUp.Platform.RevintageError.IsSpecUnreadable : System.Boolean { get }
+ToolUp.Platform.RevintageError.IsVersionNotFound : System.Boolean { get }
+ToolUp.Platform.RevintageError.Tag : System.Int32 { get }
+ToolUp.Platform.RevintageError+AssemblyFailed (class)
+ToolUp.Platform.RevintageError+AssemblyFailed.Item : ToolUp.Platform.AssemblyError { get }
+ToolUp.Platform.RevintageError+NoRecordedSpec (class)
+ToolUp.Platform.RevintageError+NoRecordedSpec.versionKey : System.String { get }
+ToolUp.Platform.RevintageError+SourceUnresolvable (class)
+ToolUp.Platform.RevintageError+SourceUnresolvable.reason : System.String { get }
+ToolUp.Platform.RevintageError+SpecUnreadable (class)
+ToolUp.Platform.RevintageError+SpecUnreadable.reason : System.String { get }
+ToolUp.Platform.RevintageError+Tags (class)
+ToolUp.Platform.RevintageError+Tags.AssemblyFailed : System.Int32 (literal)
+ToolUp.Platform.RevintageError+Tags.NoRecordedSpec : System.Int32 (literal)
+ToolUp.Platform.RevintageError+Tags.SourceUnresolvable : System.Int32 (literal)
+ToolUp.Platform.RevintageError+Tags.SpecUnreadable : System.Int32 (literal)
+ToolUp.Platform.RevintageError+Tags.VersionNotFound : System.Int32 (literal)
+ToolUp.Platform.RevintageError+VersionNotFound (class)
+ToolUp.Platform.RevintageError+VersionNotFound.what : System.String { get }
+ToolUp.Platform.RevintageErrorModule (class)
+ToolUp.Platform.RevintageErrorModule.describe(ToolUp.Platform.RevintageError) : System.String
 ToolUp.Platform.RevocationSet (class)
 ToolUp.Platform.RevocationSet..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.RevocationSet.RevokedAnchors : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -4058,6 +4249,8 @@ ToolUp.Platform.ServerAppModule.run(ToolUp.Platform.ServerApp) : System.Int32
 ToolUp.Platform.ServerAppModule.withActivitySink(ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAlertRule(ToolUp.Platform.AlertRule, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAlertRules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withAuditFailurePolicy(ToolUp.Platform.AuditFailurePolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withAuditFallbackDirectory(System.String, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAuditReplicatorOptions(ToolUp.Platform.AuditReplicatorOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAuditSink(ToolUp.Platform.IAuditSink, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -4071,8 +4264,10 @@ ToolUp.Platform.ServerAppModule.withCspSourceMode(ToolUp.Platform.SecurityHarden
 ToolUp.Platform.ServerAppModule.withDataExporter(ToolUp.Platform.IDataExporter+IDataExporter, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withEntityOutbox(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withErasureHandler(ToolUp.Platform.IDataExporter+IErasureHandler, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withEventTriggerCatchUp(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withExtensions(ToolUp.Platform.ComposeExtensions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withHealthCheck(ToolUp.Platform.HealthChecks+IHealthCheck, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withJobHandler(System.String, ToolUp.Platform.IJobHandler, ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
