@@ -2587,6 +2587,24 @@ type DatasetPolicyDeniedPayload = {
     Reason: string
 }
 
+/// Phase 601 — an assembly re-vintage ran: the spec recorded on a produced
+/// version was re-executed against current sources, landing new immutable
+/// version(s). One row per replay carrying the spec ref + the produced
+/// versions (GP 6). Reserved `SourceModule = "_platform.audit"`.
+type DatasetRevintagedPayload = {
+    /// SHA-256 hex of the re-bound spec that actually ran.
+    SpecHash: string
+    /// `{scopeId}/{datasetId}@v{version}` key of the spec-carrying version
+    /// the replay was triggered from.
+    SourceVersion: string
+    /// `{scopeId}/{datasetId}@v{version}` keys of the produced version(s),
+    /// one per subset.
+    ProducedVersions: string list
+    /// Actor (or the job's system principal) that requested the replay.
+    RequestedBy: string
+    ScopeId: string
+}
+
 /// SDK-standard audit event types. The DU case name is the wire-format
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
@@ -3095,6 +3113,9 @@ type AuditEvent =
     /// Phase 482 — a dataset version's privacy-provenance labels were removed
     /// by an explicit admin act (the only removal path).
     | DatasetDeclassified of DatasetDeclassifiedPayload
+    /// Phase 601 — an assembly re-vintage produced new version(s) from a
+    /// recorded spec.
+    | DatasetRevintaged of DatasetRevintagedPayload
     /// Phase 482 — a label-carrying dataset version was refused a dispatch /
     /// raw export by policy. A typed, audited denial.
     | DatasetPolicyDenied of DatasetPolicyDeniedPayload
@@ -3233,6 +3254,7 @@ module AuditEvent =
         | DatasetSpillCreated _ -> "DatasetSpillCreated"
         | DatasetSpillDeleted _ -> "DatasetSpillDeleted"
         | DatasetDeclassified _ -> "DatasetDeclassified"
+        | DatasetRevintaged _ -> "DatasetRevintaged"
         | DatasetPolicyDenied _ -> "DatasetPolicyDenied"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope

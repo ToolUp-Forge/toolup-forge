@@ -1199,6 +1199,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> DatasetSpillDeleted(fromAuditJson<DatasetSpillDeletedPayload> j)
     }
+    // Phase 601 — assembly re-vintage audit row (append-only registration).
+    {
+        EventType = "DatasetRevintaged"
+        TryEncode =
+            (function
+            | DatasetRevintaged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> DatasetRevintaged(fromAuditJson<DatasetRevintagedPayload> j)
+    }
     {
         EventType = "DatasetDeclassified"
         TryEncode =

@@ -255,15 +255,37 @@ module AssemblyProvenance =
     [<Literal>]
     let SourcesKey = "assembly.sources"
 
+    /// Phase 601 — the full canonical spec JSON recorded on every produced
+    /// version, which is what makes "re-materialise assembly spec X against
+    /// current sources" a first-class operation: a spec-carrying version IS
+    /// the assembly-spec ref a consumer hands `DatasetRevintage.revintage`
+    /// (it never authors or edits the spec itself — the transform DU stays
+    /// closed, the 452 scope guard holds).
+    [<Literal>]
+    let SpecJsonKey = "assembly.spec"
+
     let private jsonOptions = FableConverters.create ()
+
+    /// The canonical serialised form of a spec — the bytes `specHash`
+    /// hashes and `SpecJsonKey` records.
+    let specJson (spec: DatasetAssemblySpec) : string =
+        JsonSerializer.Serialize(spec, jsonOptions)
+
+    /// Parse a recorded spec back from its `SpecJsonKey` value. `Error` for
+    /// a foreign / future writer's unreadable record.
+    let tryParseSpec (json: string) : Result<DatasetAssemblySpec, string> =
+        try
+            Ok(JsonSerializer.Deserialize<DatasetAssemblySpec>(json, jsonOptions))
+        with ex ->
+            Error ex.Message
 
     /// Lowercase SHA-256 hex of a spec's canonical JSON (the FableConverters
     /// wire is stable field-order for records / DUs, so the hash is
     /// reproducible across processes). Two specs with identical structure
     /// share a hash → replay reuses it.
     let specHash (spec: DatasetAssemblySpec) : string =
-        let json = JsonSerializer.Serialize(spec, jsonOptions)
-        SHA256.HashData(Encoding.UTF8.GetBytes json) |> Convert.ToHexStringLower
+        SHA256.HashData(Encoding.UTF8.GetBytes(specJson spec))
+        |> Convert.ToHexStringLower
 
     /// The stable identity token for one source — the value that enters the
     /// `SourcesKey` provenance record.

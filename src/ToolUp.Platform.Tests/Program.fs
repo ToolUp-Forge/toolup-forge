@@ -22,6 +22,8 @@ let allTests =
         ParquetDatasetCodecTests.codecTests
         // Phase 452 — dataset assembly (transforms-as-data) executor.
         DatasetAssemblyTests.tests
+        // Phase 601 — assembly re-vintage trigger + scheduling.
+        DatasetRevintageTests.tests
         // Phase 487 — virtual (zero-copy) dataset bindings.
         VirtualDatasetTests.tests
         // Phase 482 — privacy-provenance labels + propagation + policy.

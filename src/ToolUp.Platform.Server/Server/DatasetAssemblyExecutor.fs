@@ -709,6 +709,9 @@ type DatasetAssemblyExecutor
             AssemblyProvenance.SpecHashKey, AssemblyProvenance.specHash spec
             AssemblyProvenance.SubsetKey, subset
             AssemblyProvenance.SourcesKey, String.concat "\n" sources
+            // Phase 601 -- the full spec travels with the vintage it built,
+            // making every produced version a replayable spec ref.
+            AssemblyProvenance.SpecJsonKey, AssemblyProvenance.specJson spec
         ]
         |> DataProvenanceLabels.writeInto labels
 
@@ -811,3 +814,218 @@ module DatasetAssemblyExecutor =
     /// `TimeSeriesRange` sources feeding `Resample`).
     let createWithTimeSeries (datasets: IDatasetStore) (timeSeries: ITimeSeriesStore) : IDatasetAssemblyExecutor =
         DatasetAssemblyExecutor(datasets, timeSeries) :> IDatasetAssemblyExecutor
+
+// --- Phase 601 -- assembly re-vintage trigger + scheduling --------------
+//
+// "Re-materialise assembly spec X against current sources" as a
+// first-class operation (the substrate plan's Rung-3 "mechanical
+// re-vintage via assembly replay"; the interface plan's opaque D8
+// `requestRevintage`). A consumer names a spec-carrying produced version
+// -- every version the executor writes now records its full spec under
+// `AssemblyProvenance.SpecJsonKey` -- and receives new immutable
+// version(s). It never authors or edits the spec itself: the transform DU
+// stays closed (the 452 scope guard holds).
+
+/// Typed failures of the re-vintage operation. Distinct from
+/// `AssemblyError` because the refusal classes a *replay* adds -- no
+/// recorded spec, an unreadable recorded spec, a source binding that no
+/// longer resolves -- are not assembly failures.
+[<RequireQualifiedAccess>]
+type RevintageError =
+    /// The named spec-carrying dataset version does not exist in the scope.
+    | VersionNotFound of what: string
+    /// The version carries no recorded assembly spec (a pre-601 vintage, or
+    /// a version not produced by the assembly executor).
+    | NoRecordedSpec of versionKey: string
+    /// The recorded spec JSON failed to parse (foreign / future writer).
+    | SpecUnreadable of reason: string
+    /// A source binding no longer resolves against current stores (the
+    /// upstream dataset was deleted / has no versions) -- the typed refusal
+    /// 601.A names.
+    | SourceUnresolvable of reason: string
+    /// The re-executed assembly failed downstream of source resolution.
+    | AssemblyFailed of AssemblyError
+
+module RevintageError =
+    let describe =
+        function
+        | RevintageError.VersionNotFound w -> sprintf "revintage source version not found: %s" w
+        | RevintageError.NoRecordedSpec v -> sprintf "version %s carries no recorded assembly spec" v
+        | RevintageError.SpecUnreadable r -> sprintf "recorded assembly spec is unreadable: %s" r
+        | RevintageError.SourceUnresolvable r -> sprintf "assembly source no longer resolves: %s" r
+        | RevintageError.AssemblyFailed e -> AssemblyError.describe e
+
+/// Persisted payload of a `_platform.dataset.revintage` job: which
+/// spec-carrying produced version to replay.
+type DatasetRevintageJobPayload = { SpecRef: DatasetVersionRef }
+
+module DatasetRevintage =
+
+    let private jsonOptions =
+        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+
+    /// Serialise a re-vintage job payload.
+    let serialiseJobPayload (payload: DatasetRevintageJobPayload) : string =
+        System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions)
+
+    /// Parse a persisted re-vintage job payload. The job handler treats a
+    /// parse failure as a `PermanentFailure`.
+    let tryParseJobPayload (payload: string) : Result<DatasetRevintageJobPayload, string> =
+        try
+            Ok(System.Text.Json.JsonSerializer.Deserialize<DatasetRevintageJobPayload>(payload, jsonOptions))
+        with ex ->
+            Error ex.Message
+
+    /// Re-bind one source to current data: a `DatasetVersion` source
+    /// re-resolves to the **latest** version of the same dataset (an
+    /// upstream refresh appends versions and the replay reads the newest);
+    /// `TimeSeriesRange` / `ExternalTable` bindings are absolute
+    /// descriptors and pass through verbatim.
+    let private rebindSource
+        (datasets: IDatasetStore)
+        (source: AssemblySource)
+        : Async<Result<AssemblySource, RevintageError>> =
+        async {
+            match source with
+            | AssemblySource.DatasetVersion r ->
+                match! datasets.GetLatest(r.ScopeId, r.DatasetId) with
+                | Ok latest ->
+                    return
+                        Ok(
+                            AssemblySource.DatasetVersion {
+                                ScopeId = r.ScopeId
+                                DatasetId = r.DatasetId
+                                Version = latest.Version
+                            }
+                        )
+                | Error e ->
+                    return
+                        Error(
+                            RevintageError.SourceUnresolvable(
+                                sprintf "%s/%s: %s" r.ScopeId r.DatasetId (DatasetError.describe e)
+                            )
+                        )
+            | AssemblySource.TimeSeriesRange _
+            | AssemblySource.ExternalTable _ -> return Ok source
+        }
+
+    /// Re-bind every source in the spec (the base + each join right).
+    let private rebindSpec
+        (datasets: IDatasetStore)
+        (spec: DatasetAssemblySpec)
+        : Async<Result<DatasetAssemblySpec, RevintageError>> =
+        async {
+            match! rebindSource datasets spec.Base with
+            | Error e -> return Error e
+            | Ok base' ->
+                let rec rebindTransforms acc ts = async {
+                    match ts with
+                    | [] -> return Ok(List.rev acc)
+                    | AssemblyTransform.Join(right, lk, rk, how) :: rest ->
+                        match! rebindSource datasets right with
+                        | Error e -> return Error e
+                        | Ok right' ->
+                            return! rebindTransforms (AssemblyTransform.Join(right', lk, rk, how) :: acc) rest
+                    | t :: rest -> return! rebindTransforms (t :: acc) rest
+                }
+
+                match! rebindTransforms [] spec.Transforms with
+                | Error e -> return Error e
+                | Ok transforms ->
+                    return
+                        Ok {
+                            spec with
+                                Base = base'
+                                Transforms = transforms
+                        }
+        }
+
+    /// Re-materialise the assembly spec recorded on `specRef` against
+    /// current sources. Dataset sources re-bind to their latest versions;
+    /// an identical-content replay dedups naturally through the store's
+    /// content addressing (a no-change replay is cheap and safe). Success
+    /// is audited with the spec hash + the source + produced versions
+    /// (GP 6).
+    let revintage
+        (executor: IDatasetAssemblyExecutor)
+        (datasets: IDatasetStore)
+        (audit: IAuditLog)
+        (specRef: DatasetVersionRef)
+        (requestedBy: string)
+        : Async<Result<Map<string, DatasetVersionRef>, RevintageError>> =
+        async {
+            match! datasets.GetVersion(specRef.ScopeId, specRef.DatasetId, specRef.Version) with
+            | Error e -> return Error(RevintageError.VersionNotFound(DatasetError.describe e))
+            | Ok version ->
+                match Map.tryFind AssemblyProvenance.SpecJsonKey version.Metadata with
+                | None -> return Error(RevintageError.NoRecordedSpec(DatasetVersionRef.key specRef))
+                | Some json ->
+                    match AssemblyProvenance.tryParseSpec json with
+                    | Error reason -> return Error(RevintageError.SpecUnreadable reason)
+                    | Ok spec ->
+                        match! rebindSpec datasets spec with
+                        | Error e -> return Error e
+                        | Ok rebound ->
+                            match! executor.Assemble(rebound, requestedBy) with
+                            | Error(AssemblyError.SourceUnavailable r) ->
+                                return Error(RevintageError.SourceUnresolvable r)
+                            | Error e -> return Error(RevintageError.AssemblyFailed e)
+                            | Ok produced ->
+                                do!
+                                    audit.Record(
+                                        spec.Scope,
+                                        DatasetRevintaged {
+                                            SpecHash = AssemblyProvenance.specHash rebound
+                                            SourceVersion = DatasetVersionRef.key specRef
+                                            ProducedVersions =
+                                                produced |> Map.toList |> List.map (snd >> DatasetVersionRef.key)
+                                            RequestedBy = requestedBy
+                                            ScopeId = spec.Scope
+                                        }
+                                    )
+
+                                return Ok produced
+        }
+
+/// `IJobHandler` bound to `_platform.dataset.revintage` (Phase 601): the
+/// cron-shaped recurring re-vintage ("weekly data refresh"). A malformed
+/// payload / missing version / unrecorded or unreadable spec is a
+/// `PermanentFailure` (no retry recovers it); an unresolvable source or a
+/// downstream storage failure is a `TransientFailure` (a lagging upstream
+/// refresh may land before the retry). Consumer-wired, like the Phase 454
+/// scoring + Phase 599 batch-item handlers.
+type DatasetRevintageJobHandler
+    (executor: IDatasetAssemblyExecutor, datasets: IDatasetStore, audit: IAuditLog, logger: ILogger) =
+    interface IJobHandler with
+        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
+            match DatasetRevintage.tryParseJobPayload ctx.Payload with
+            | Error e ->
+                logger.Error(sprintf "DatasetRevintageJobHandler: malformed payload -- %s" e, None)
+                return PermanentFailure(sprintf "malformed DatasetRevintageJobPayload: %s" e)
+            | Ok payload ->
+                match! DatasetRevintage.revintage executor datasets audit payload.SpecRef ctx.AccessContext.UserId with
+                | Ok _ -> return Success
+                | Error(RevintageError.SourceUnresolvable _ as e) ->
+                    logger.Warn(sprintf "DatasetRevintageJobHandler: %s" (RevintageError.describe e))
+                    return TransientFailure(RevintageError.describe e)
+                | Error(RevintageError.AssemblyFailed(AssemblyError.StorageFailure _) as e) ->
+                    logger.Warn(sprintf "DatasetRevintageJobHandler: %s" (RevintageError.describe e))
+                    return TransientFailure(RevintageError.describe e)
+                | Error e ->
+                    logger.Warn(sprintf "DatasetRevintageJobHandler: %s" (RevintageError.describe e))
+                    return PermanentFailure(RevintageError.describe e)
+        }
+
+module DatasetRevintageJobHandler =
+    /// Reserved scheduler handler name for the re-vintage job.
+    [<Literal>]
+    let HandlerName = "_platform.dataset.revintage"
+
+    /// Construct the re-vintage job handler.
+    let create
+        (executor: IDatasetAssemblyExecutor)
+        (datasets: IDatasetStore)
+        (audit: IAuditLog)
+        (logger: ILogger)
+        : IJobHandler =
+        DatasetRevintageJobHandler(executor, datasets, audit, logger) :> IJobHandler
