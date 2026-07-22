@@ -20,5 +20,11 @@
          from ToolUp.Platform.Server. FSharp.Core is implicit via the
          .NET SDK. HNSW is unique. -->
     <PackageReference Include="HNSW" />
+    <!-- MessagePack is transitive via HNSW, which resolves it to 3.1.0 — a
+         version carrying published untrusted-payload DoS advisories (3 high,
+         6 moderate). Transitive pinning is not enabled repo-wide, so the
+         floor is lifted with an explicit reference to the CPM-pinned
+         version. Not used directly by this companion's own source. -->
+    <PackageReference Include="MessagePack" />
   </ItemGroup>
 </Project>
