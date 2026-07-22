@@ -5,7 +5,7 @@ NuGet dependency the ToolUp SDK consumes (direct and transitive) along with
 its declared licence as published on nuget.org. The curated headline list
 of major direct dependencies lives in [`NOTICE.md`](NOTICE.md).
 
-Last regenerated: 2026-06-11 22:04:29 UTC.
+Last regenerated: 2026-07-22 05:07:15 UTC.
 
 Entries showing `(licence not declared)` are upstream packages whose NuGet
 metadata omits a licence — check the package's repository or README directly.
@@ -18,7 +18,7 @@ metadata omits a licence — check the package's repository or README directly.
 | `Amazon.Lambda.ApplicationLoadBalancerEvents` | `3.0.0` | `Apache-2.0` | [link](https://github.com/aws/aws-lambda-dotnet) |
 | `Amazon.Lambda.Core` | `2.5.1` | `Apache-2.0` | [link](https://github.com/aws/aws-lambda-dotnet) |
 | `AWSSDK.Core` | `4.0.7.3` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
-| `AWSSDK.Core` | `4.0.0.29` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
+| `AWSSDK.Core` | `4.0.7.1` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
 | `AWSSDK.KeyManagementService` | `4.0.4.4` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
 | `AWSSDK.S3` | `4.0.23.4` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
 | `AWSSDK.SecretsManager` | `4.0.4.24` | `Apache-2.0` | [link](https://github.com/aws/aws-sdk-net/) |
@@ -30,12 +30,14 @@ metadata omits a licence — check the package's repository or README directly.
 | `Azure.Identity` | `1.21.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Identity_1.21.0/sdk/identity/Azure.Identity/README.md) |
 | `Azure.Monitor.OpenTelemetry.AspNetCore` | `1.2.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Monitor.OpenTelemetry.AspNetCore_1.2.0/sdk/monitor/Azure.Monitor.OpenTelemetry.AspNetCore/README.md) |
 | `Azure.Monitor.OpenTelemetry.Exporter` | `1.3.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Monitor.OpenTelemetry.Exporter_1.3.0/sdk/monitor/Azure.Monitor.OpenTelemetry.Exporter/README.md) |
+| `Azure.Security.KeyVault.Keys` | `4.10.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Security.KeyVault.Keys_4.10.0/sdk/keyvault/Azure.Security.KeyVault.Keys/README.md) |
 | `Azure.Security.KeyVault.Secrets` | `4.11.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Security.KeyVault.Secrets_4.11.0/sdk/keyvault/Azure.Security.KeyVault.Secrets/README.md) |
 | `Azure.Storage.Blobs` | `12.28.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Storage.Blobs_12.28.0/sdk/storage/Azure.Storage.Blobs/README.md) |
 | `Azure.Storage.Common` | `12.27.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Storage.Common_12.27.0/sdk/storage/Azure.Storage.Common/README.md) |
 | `BouncyCastle.Cryptography` | `2.6.2` | `MIT` | [link](https://www.bouncycastle.org/stable/nuget/csharp/website) |
 | `CloudNative.CloudEvents` | `2.8.0` | `Apache-2.0` | [link](https://cloudevents.io/) |
 | `CloudNative.CloudEvents.AspNetCore` | `2.8.0` | `Apache-2.0` | [link](https://cloudevents.io/) |
+| `CommunityToolkit.HighPerformance` | `8.4.2` | `MIT` | [link](https://github.com/CommunityToolkit/dotnet) |
 | `DocumentFormat.OpenXml` | `3.5.1` | `MIT` | [link](https://github.com/dotnet/Open-XML-SDK) |
 | `DocumentFormat.OpenXml.Framework` | `3.5.1` | `MIT` | [link](https://github.com/dotnet/Open-XML-SDK) |
 | `Expecto` | `10.2.3` | `Apache-2.0` | [link](https://github.com/haf/expecto) |
@@ -64,33 +66,56 @@ metadata omits a licence — check the package's repository or README directly.
 | `Feliz` | `3.3.3` | `MIT` | [link](https://fable-hub.github.io/Feliz/) |
 | `Feliz.CompilerPlugins` | `3.2.0` | `MIT` | [link](https://fable-hub.github.io/Feliz/) |
 | `Feliz.ViewEngine` | `1.0.3` | Embedded file: `LICENSE` | [link](https://www.nuget.org/packages/Feliz.ViewEngine/1.0.3) |
+| `Fido2` | `4.0.1` | `MIT` | [link](https://github.com/passwordless-lib/fido2-net-lib) |
+| `Fido2.Models` | `4.0.1` | `MIT` | [link](https://github.com/passwordless-lib/fido2-net-lib) |
 | `FParsec` | `1.1.1` | [link](http://www.quanttec.com/fparsec/license.html) | [link](http://www.quanttec.com/fparsec/) |
+| `FSharp.Analyzers.SDK` | `0.36.0` | `MIT` | [link](https://www.nuget.org/packages/FSharp.Analyzers.SDK/0.36.0) |
+| `FSharp.Compiler.Service` | `43.10.101` | `MIT` | [link](https://github.com/dotnet/fsharp) |
 | `FSharp.Control.Reactive` | `5.0.2` | Embedded file: `LICENSE.txt` | [link](https://github.com/fsprojects/FSharp.Control.Reactive) |
 | `FSharp.Core` | `10.1.300` | `MIT` | [link](https://github.com/dotnet/fsharp) |
 | `FSharp.Core` | `5.0.0` | `MIT` | [link](https://github.com/dotnet/fsharp) |
+| `FSharp.Core` | `10.0.101` | `MIT` | [link](https://github.com/dotnet/fsharp) |
 | `FSharp.SystemTextJson` | `1.3.13` | `MIT` | [link](https://github.com/tarmil/FSharp.SystemTextJson) |
 | `Giraffe` | `8.2.0` | Embedded file: `LICENSE` | [link](https://github.com/giraffe-fsharp/giraffe) |
 | `Giraffe.ViewEngine` | `1.4.0` | `Apache-2.0` | [link](https://github.com/giraffe-fsharp/Giraffe.ViewEngine) |
+| `Google.Api.CommonProtos` | `2.17.0` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
 | `Google.Api.Gax` | `4.12.1` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
+| `Google.Api.Gax` | `4.13.1` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
+| `Google.Api.Gax.Grpc` | `4.13.1` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
 | `Google.Api.Gax.Rest` | `4.12.1` | `BSD-3-Clause` | [link](https://github.com/googleapis/gax-dotnet) |
 | `Google.Apis` | `1.72.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
+| `Google.Apis` | `1.73.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | `Google.Apis.Auth` | `1.72.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
+| `Google.Apis.Auth` | `1.73.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | `Google.Apis.Core` | `1.72.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
+| `Google.Apis.Core` | `1.73.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | `Google.Apis.Storage.v1` | `1.71.0.3920` | `Apache-2.0` | [link](https://github.com/google/google-api-dotnet-client) |
 | `Google.Cloud.Functions.Framework` | `3.0.1` | `Apache-2.0` | [link](https://github.com/GoogleCloudPlatform/functions-framework-dotnet) |
+| `Google.Cloud.Iam.V1` | `3.5.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
+| `Google.Cloud.Kms.V1` | `3.24.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
+| `Google.Cloud.Location` | `2.4.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
 | `Google.Cloud.Storage.V1` | `4.14.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
+| `Google.LongRunning` | `3.5.0` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
 | `Google.Protobuf` | `3.30.2` | `BSD-3-Clause` | [link](https://github.com/protocolbuffers/protobuf) |
 | `Google.Protobuf` | `3.28.0` | `BSD-3-Clause` | [link](https://github.com/protocolbuffers/protobuf) |
+| `Google.Protobuf` | `3.31.1` | `BSD-3-Clause` | [link](https://github.com/protocolbuffers/protobuf) |
+| `Grpc.Auth` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Core.Api` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
+| `Grpc.Core.Api` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Net.Client` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
+| `Grpc.Net.Client` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Net.ClientFactory` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `Grpc.Net.Common` | `2.65.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
+| `Grpc.Net.Common` | `2.71.0` | `Apache-2.0` | [link](https://github.com/grpc/grpc-dotnet) |
 | `HNSW` | `26.4.177` | `MIT` | [link](https://github.com/curiosity-ai/hnsw.net) |
+| `K4os.Compression.LZ4` | `1.3.8` | [link](https://github.com/MiloszKrajewski/K4os.Compression.LZ4/blob/master/LICENSE?raw=true) | [link](https://github.com/MiloszKrajewski/K4os.Compression.LZ4) |
+| `libsodium` | `1.0.20.1` | `ISC` | [link](https://libsodium.org/) |
 | `MailKit` | `4.16.0` | `MIT` | [link](http://www.mimekit.net/) |
 | `Markdig` | `1.2.0` | `BSD-2-Clause` | [link](https://xoofx.github.io/markdig) |
-| `MessagePack` | `3.1.0` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
-| `MessagePack.Annotations` | `3.1.0` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
-| `MessagePackAnalyzer` | `3.1.0` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
+| `McMaster.NETCore.Plugins` | `2.0.0` | `Apache-2.0` | [link](https://github.com/natemcmaster/DotNetCorePlugins) |
+| `MessagePack` | `3.1.8` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
+| `MessagePack.Annotations` | `3.1.8` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
+| `MessagePackAnalyzer` | `3.1.8` | `MIT` | [link](https://github.com/MessagePack-CSharp/MessagePack-CSharp) |
 | `Microsoft.AspNetCore.TestHost` | `10.0.8` | `MIT` | [link](https://asp.net/) |
 | `Microsoft.Azure.Functions.Worker` | `2.0.0` | `MIT` | [link](https://github.com/Azure/azure-functions-dotnet-worker) |
 | `Microsoft.Azure.Functions.Worker.Core` | `2.0.0` | `MIT` | [link](https://github.com/Azure/azure-functions-dotnet-worker) |
@@ -100,6 +125,8 @@ metadata omits a licence — check the package's repository or README directly.
 | `Microsoft.Bcl.AsyncInterfaces` | `10.0.3` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Bcl.AsyncInterfaces` | `10.0.2` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Bcl.AsyncInterfaces` | `6.0.0` | `MIT` | [link](https://dot.net/) |
+| `Microsoft.Bcl.Memory` | `9.0.14` | `MIT` | [link](https://dot.net/) |
+| `Microsoft.Bcl.TimeProvider` | `8.0.1` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Configuration` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Configuration` | `10.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Configuration.Abstractions` | `10.0.2` | `MIT` | [link](https://dot.net/) |
@@ -119,6 +146,7 @@ metadata omits a licence — check the package's repository or README directly.
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `6.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `10.0.3` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `8.0.0` | `MIT` | [link](https://dot.net/) |
+| `Microsoft.Extensions.DependencyInjection.Abstractions` | `8.0.2` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | `10.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Diagnostics` | `9.0.0` | `MIT` | [link](https://dot.net/) |
@@ -141,8 +169,10 @@ metadata omits a licence — check the package's repository or README directly.
 | `Microsoft.Extensions.Logging.Abstractions` | `10.0.2` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `10.0.3` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `8.0.0` | `MIT` | [link](https://dot.net/) |
+| `Microsoft.Extensions.Logging.Abstractions` | `8.0.2` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Abstractions` | `10.0.0` | `MIT` | [link](https://dot.net/) |
+| `Microsoft.Extensions.Logging.Abstractions` | `6.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Configuration` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Configuration` | `10.0.0` | `MIT` | [link](https://dot.net/) |
 | `Microsoft.Extensions.Logging.Console` | `9.0.0` | `MIT` | [link](https://dot.net/) |
@@ -162,14 +192,22 @@ metadata omits a licence — check the package's repository or README directly.
 | `Microsoft.Identity.Client` | `4.83.1` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=844761) |
 | `Microsoft.Identity.Client.Extensions.Msal` | `4.83.1` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=844761) |
 | `Microsoft.IdentityModel.Abstractions` | `8.14.0` | `MIT` | [link](https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet) |
+| `Microsoft.IdentityModel.Abstractions` | `8.2.0` | `MIT` | [link](https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet) |
+| `Microsoft.IdentityModel.JsonWebTokens` | `8.2.0` | `MIT` | [link](https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet) |
+| `Microsoft.IdentityModel.Logging` | `8.2.0` | `MIT` | [link](https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet) |
+| `Microsoft.IdentityModel.Tokens` | `8.2.0` | `MIT` | [link](https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet) |
 | `Microsoft.IO.RecyclableMemoryStream` | `3.0.1` | `MIT` | [link](https://github.com/Microsoft/Microsoft.IO.RecyclableMemoryStream) |
 | `Microsoft.ML.OnnxRuntime` | `1.26.0` | Embedded file: `LICENSE` | [link](https://github.com/Microsoft/onnxruntime) |
 | `Microsoft.ML.OnnxRuntime.Managed` | `1.26.0` | Embedded file: `LICENSE.txt` | [link](https://github.com/Microsoft/onnxruntime) |
 | `Microsoft.ML.Tokenizers` | `2.0.0` | `MIT` | [link](https://dot.net/ml) |
 | `Microsoft.NET.StringTools` | `17.11.4` | `MIT` | [link](http://go.microsoft.com/fwlink/?LinkId=624683) |
+| `Microsoft.Playwright` | `1.49.0` | `MIT` | [link](https://github.com/microsoft/playwright-dotnet) |
 | `MimeKit` | `4.16.0` | `MIT` | [link](https://www.mimekit.net/) |
 | `Mono.Cecil` | `0.11.4` | `MIT` | [link](http://github.com/jbevain/cecil/) |
 | `Newtonsoft.Json` | `13.0.4` | `MIT` | [link](https://www.newtonsoft.com/json) |
+| `Npgsql` | `9.0.3` | `PostgreSQL` | [link](https://github.com/npgsql/npgsql) |
+| `NSec.Cryptography` | `25.4.0` | `MIT` | [link](https://nsec.rocks/) |
+| `OpenFeature` | `2.3.0` | `Apache-2.0` | [link](https://openfeature.dev/) |
 | `OpenTelemetry` | `1.15.3` | `Apache-2.0` | [link](https://opentelemetry.io/) |
 | `OpenTelemetry.Api` | `1.15.3` | `Apache-2.0` | [link](https://opentelemetry.io/) |
 | `OpenTelemetry.Api.ProviderBuilderExtensions` | `1.15.3` | `Apache-2.0` | [link](https://opentelemetry.io/) |
@@ -179,18 +217,22 @@ metadata omits a licence — check the package's repository or README directly.
 | `OpenTelemetry.Instrumentation.Http` | `1.8.1` | `Apache-2.0` | [link](https://opentelemetry.io/) |
 | `OpenTelemetry.PersistentStorage.Abstractions` | `1.0.0` | `Apache-2.0` | [link](https://opentelemetry.io/) |
 | `OpenTelemetry.PersistentStorage.FileSystem` | `1.0.0` | `Apache-2.0` | [link](https://opentelemetry.io/) |
+| `Parquet.Net` | `6.0.3` | `MIT` | [link](https://github.com/aloneguid/parquet-dotnet) |
 | `PdfPig` | `0.1.14` | `Apache-2.0` | [link](https://github.com/UglyToad/PdfPig) |
 | `Pipelines.Sockets.Unofficial` | `2.2.16` | `MIT` | [link](https://github.com/mgravell/Pipelines.Sockets.Unofficial) |
 | `Portable.BouncyCastle` | `1.9.0` | [link](https://www.bouncycastle.org/csharp/licence.html) | [link](https://www.bouncycastle.org/csharp/) |
 | `SkiaSharp` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
 | `SkiaSharp.NativeAssets.macOS` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
 | `SkiaSharp.NativeAssets.Win32` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
+| `Snappier` | `1.3.1` | `BSD-3-Clause` | [link](https://brantburnett.github.io/Snappier/) |
 | `StackExchange.Redis` | `2.13.1` | `MIT` | [link](https://stackexchange.github.io/StackExchange.Redis/) |
 | `System.ClientModel` | `1.10.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/System.ClientModel_1.10.0/sdk/core/System.ClientModel/README.md) |
 | `System.ClientModel` | `1.9.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/System.ClientModel_1.9.0/sdk/core/System.ClientModel/README.md) |
 | `System.ClientModel` | `1.1.0` | `MIT` | [link](https://github.com/Azure/azure-sdk-for-net/blob/System.ClientModel_1.1.0/sdk/core/System.ClientModel/README.md) |
 | `System.CodeDom` | `7.0.0` | `MIT` | [link](https://dot.net/) |
+| `System.ComponentModel.Annotations` | `5.0.0` | `MIT` | [link](https://github.com/dotnet/runtime) |
 | `System.Diagnostics.EventLog` | `9.0.0` | `MIT` | [link](https://dot.net/) |
+| `System.DirectoryServices.Protocols` | `10.0.7` | `MIT` | [link](https://dot.net/) |
 | `System.IO.Hashing` | `10.0.3` | `MIT` | [link](https://dot.net/) |
 | `System.IO.Hashing` | `10.0.2` | `MIT` | [link](https://dot.net/) |
 | `System.IO.Packaging` | `10.0.2` | `MIT` | [link](https://dot.net/) |
@@ -200,8 +242,10 @@ metadata omits a licence — check the package's repository or README directly.
 | `System.Memory.Data` | `6.0.0` | `MIT` | [link](https://dot.net/) |
 | `System.Numerics.Tensors` | `9.0.0` | `MIT` | [link](https://dot.net/) |
 | `System.Reactive` | `5.0.0` | `MIT` | [link](https://github.com/dotnet/reactive) |
+| `System.Reflection.MetadataLoadContext` | `10.0.7` | `MIT` | [link](https://dot.net/) |
 | `System.Security.Cryptography.Pkcs` | `10.0.0` | `MIT` | [link](https://dot.net/) |
 | `System.Security.Cryptography.ProtectedData` | `4.5.0` | [link](https://github.com/dotnet/corefx/blob/master/LICENSE.TXT) | [link](https://dot.net/) |
 | `WebPush` | `1.0.13` | [link](https://github.com/web-push-libs/web-push-csharp/blob/master/LICENSE) | [link](https://github.com/web-push-libs/web-push-csharp/) |
+| `ZstdSharp.Port` | `0.8.8` | `MIT` | [link](https://github.com/oleg-st/ZstdSharp) |
 
-Total: 189 packages.
+Total: 233 packages.
