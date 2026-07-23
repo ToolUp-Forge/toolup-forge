@@ -110,7 +110,8 @@ let tests =
                     [] [ CompositionManifest.toolEntry "orders.run" ] []
 
             let refs = {
-                ToolSources = [ "orders.run", "Ghost" ]
+                CompositionReferences.empty with
+                    ToolSources = [ "orders.run", "Ghost" ]
             }
 
             let defects = CompositionValidator.checkWith refs manifest
@@ -140,7 +141,8 @@ let tests =
                     [] [ CompositionManifest.toolEntry "orders.run" ] []
 
             let refs = {
-                ToolSources = [ "orders.run", "Orders" ]
+                CompositionReferences.empty with
+                    ToolSources = [ "orders.run", "Orders" ]
             }
 
             Expect.isFalse
@@ -154,7 +156,8 @@ let tests =
                 CompositionManifest.build [] [] [] [ CompositionManifest.toolEntry "summarise" ] []
 
             let refs = {
-                ToolSources = [ "summarise", "_platform.ai"; "narrate", "ToolUp.Platform" ]
+                CompositionReferences.empty with
+                    ToolSources = [ "summarise", "_platform.ai"; "narrate", "ToolUp.Platform" ]
             }
 
             Expect.isEmpty
@@ -201,7 +204,8 @@ let tests =
             let manifest = ServerApp.compositionManifest app
 
             let refs = {
-                ToolSources = app.AITools |> List.map (fun (def, _) -> def.Name, def.SourceModule)
+                CompositionReferences.empty with
+                    ToolSources = app.AITools |> List.map (fun (def, _) -> def.Name, def.SourceModule)
             }
 
             Expect.isEmpty (CompositionValidator.checkWith refs manifest) "a well-formed composition has no defects"
@@ -214,7 +218,7 @@ let tests =
         testCase "the composition validator is not a security-class validator"
         <| fun _ ->
             let manifest = CompositionManifest.empty
-            let refs = { ToolSources = [] }
+            let refs = CompositionReferences.empty
 
             let validator =
                 CompositionValidator.CompositionWellFormednessValidator(manifest, refs) :> IConfigValidator

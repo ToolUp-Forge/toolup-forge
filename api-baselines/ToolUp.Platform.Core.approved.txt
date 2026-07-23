@@ -2352,6 +2352,24 @@ ToolUp.Platform.DataSubjectRequestMode+Enabled.config : ToolUp.Platform.DataSubj
 ToolUp.Platform.DataSubjectRequestMode+Tags (class)
 ToolUp.Platform.DataSubjectRequestMode+Tags.Disabled : System.Int32 (literal)
 ToolUp.Platform.DataSubjectRequestMode+Tags.Enabled : System.Int32 (literal)
+ToolUp.Platform.DataVocabulary (class)
+ToolUp.Platform.DataVocabulary.canonicalJson(ToolUp.Platform.DataVocabularyPack) : System.String
+ToolUp.Platform.DataVocabulary.fieldTypeOfWire(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VocabularyFieldType]
+ToolUp.Platform.DataVocabulary.fieldTypeToWire(ToolUp.Platform.VocabularyFieldType) : System.String
+ToolUp.Platform.DataVocabulary.formatVersion : System.Int32 (literal)
+ToolUp.Platform.DataVocabulary.governs(ToolUp.Platform.DataVocabularyPack, System.String) : System.Boolean
+ToolUp.Platform.DataVocabulary.hash(ToolUp.Platform.DataVocabularyPack) : System.String
+ToolUp.Platform.DataVocabulary.load(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataVocabularyPack, System.String]
+ToolUp.Platform.DataVocabulary.pin(ToolUp.Platform.DataVocabularyPack) : ToolUp.Platform.VocabularyPackPin
+ToolUp.Platform.DataVocabulary.schemaDrift(ToolUp.Platform.VocabularyEntry, ToolUp.Platform.VocabularyEntry) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.DataVocabulary.tryEntry(ToolUp.Platform.DataVocabularyPack, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VocabularyEntry]
+ToolUp.Platform.DataVocabulary.versionString(ToolUp.Platform.VocabularyPackVersion) : System.String
+ToolUp.Platform.DataVocabularyPack (class)
+ToolUp.Platform.DataVocabularyPack..ctor(System.String, System.String, ToolUp.Platform.VocabularyPackVersion, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry])
+ToolUp.Platform.DataVocabularyPack.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry] { get }
+ToolUp.Platform.DataVocabularyPack.Id : System.String { get }
+ToolUp.Platform.DataVocabularyPack.Namespace : System.String { get }
+ToolUp.Platform.DataVocabularyPack.Version : ToolUp.Platform.VocabularyPackVersion { get }
 ToolUp.Platform.DatasetColumn (class)
 ToolUp.Platform.DatasetColumn..ctor(System.String, ToolUp.Platform.DatasetDType, System.Boolean, ToolUp.Platform.DatasetColumnRole)
 ToolUp.Platform.DatasetColumn.DType : ToolUp.Platform.DatasetDType { get }
@@ -6533,7 +6551,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode)
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry])
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptHeaderAuthWhenAuthRequired : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptInMemoryOAuthStateInMultiInstance : System.Boolean { get }
@@ -6569,6 +6587,7 @@ ToolUp.Platform.ServerConfig.Cors : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.
 ToolUp.Platform.ServerConfig.DataIngestion : ToolUp.Platform.DataIngestionMode { get }
 ToolUp.Platform.ServerConfig.DataSubjectRequests : ToolUp.Platform.DataSubjectRequestMode { get }
 ToolUp.Platform.ServerConfig.Datasets : ToolUp.Platform.DatasetStoreMode { get }
+ToolUp.Platform.ServerConfig.DeclaredDataSchemas : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry] { get }
 ToolUp.Platform.ServerConfig.DefaultTeamStorageQuotaBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.Platform.ServerConfig.DeployPlane : ToolUp.Platform.DeployPlaneMode { get }
 ToolUp.Platform.ServerConfig.DeploymentReadiness : ToolUp.Platform.DeploymentReadinessMode { get }
@@ -6607,6 +6626,7 @@ ToolUp.Platform.ServerConfig.OAuth1a : ToolUp.Platform.OAuth1aMode { get }
 ToolUp.Platform.ServerConfig.OAuthRefresher : ToolUp.Platform.OAuthRefresherMode { get }
 ToolUp.Platform.ServerConfig.PeerRoutePrefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ServerConfig.PeerSubstrate : ToolUp.Platform.PeerSubstrateMode { get }
+ToolUp.Platform.ServerConfig.PinnedVocabularyPacks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack] { get }
 ToolUp.Platform.ServerConfig.PlatformKnowledgeBase : ToolUp.Platform.PlatformKnowledgeBaseMode { get }
 ToolUp.Platform.ServerConfig.Port : System.Int32 { get }
 ToolUp.Platform.ServerConfig.Presence : ToolUp.Platform.PresenceMode { get }
@@ -7933,6 +7953,47 @@ ToolUp.Platform.Visualisation+PlatformDefaults.CurrencySymbol : System.String { 
 ToolUp.Platform.Visualisation+PlatformDefaultsModule (class)
 ToolUp.Platform.Visualisation+PlatformDefaultsModule.defaults : ToolUp.Platform.Visualisation+PlatformDefaults { get }
 ToolUp.Platform.Visualisation+PlatformDefaultsModule.fromConfig(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Platform.Visualisation+PlatformDefaults
+ToolUp.Platform.VocabularyEntry (class)
+ToolUp.Platform.VocabularyEntry..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyField], System.String)
+ToolUp.Platform.VocabularyEntry.Description : System.String { get }
+ToolUp.Platform.VocabularyEntry.Fields : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyField] { get }
+ToolUp.Platform.VocabularyEntry.TypeName : System.String { get }
+ToolUp.Platform.VocabularyField (class)
+ToolUp.Platform.VocabularyField..ctor(System.String, ToolUp.Platform.VocabularyFieldType, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Platform.VocabularyField.Description : System.String { get }
+ToolUp.Platform.VocabularyField.Name : System.String { get }
+ToolUp.Platform.VocabularyField.Type : ToolUp.Platform.VocabularyFieldType { get }
+ToolUp.Platform.VocabularyField.Unit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.VocabularyFieldType (class)
+ToolUp.Platform.VocabularyFieldType.IsVocabBoolean : System.Boolean { get }
+ToolUp.Platform.VocabularyFieldType.IsVocabId : System.Boolean { get }
+ToolUp.Platform.VocabularyFieldType.IsVocabInteger : System.Boolean { get }
+ToolUp.Platform.VocabularyFieldType.IsVocabNumber : System.Boolean { get }
+ToolUp.Platform.VocabularyFieldType.IsVocabString : System.Boolean { get }
+ToolUp.Platform.VocabularyFieldType.IsVocabTimestamp : System.Boolean { get }
+ToolUp.Platform.VocabularyFieldType.Tag : System.Int32 { get }
+ToolUp.Platform.VocabularyFieldType.VocabBoolean : ToolUp.Platform.VocabularyFieldType { get }
+ToolUp.Platform.VocabularyFieldType.VocabId : ToolUp.Platform.VocabularyFieldType { get }
+ToolUp.Platform.VocabularyFieldType.VocabInteger : ToolUp.Platform.VocabularyFieldType { get }
+ToolUp.Platform.VocabularyFieldType.VocabNumber : ToolUp.Platform.VocabularyFieldType { get }
+ToolUp.Platform.VocabularyFieldType.VocabString : ToolUp.Platform.VocabularyFieldType { get }
+ToolUp.Platform.VocabularyFieldType.VocabTimestamp : ToolUp.Platform.VocabularyFieldType { get }
+ToolUp.Platform.VocabularyFieldType+Tags (class)
+ToolUp.Platform.VocabularyFieldType+Tags.VocabBoolean : System.Int32 (literal)
+ToolUp.Platform.VocabularyFieldType+Tags.VocabId : System.Int32 (literal)
+ToolUp.Platform.VocabularyFieldType+Tags.VocabInteger : System.Int32 (literal)
+ToolUp.Platform.VocabularyFieldType+Tags.VocabNumber : System.Int32 (literal)
+ToolUp.Platform.VocabularyFieldType+Tags.VocabString : System.Int32 (literal)
+ToolUp.Platform.VocabularyFieldType+Tags.VocabTimestamp : System.Int32 (literal)
+ToolUp.Platform.VocabularyPackPin (class)
+ToolUp.Platform.VocabularyPackPin..ctor(System.String, ToolUp.Platform.VocabularyPackVersion, System.String)
+ToolUp.Platform.VocabularyPackPin.Hash : System.String { get }
+ToolUp.Platform.VocabularyPackPin.PackId : System.String { get }
+ToolUp.Platform.VocabularyPackPin.Version : ToolUp.Platform.VocabularyPackVersion { get }
+ToolUp.Platform.VocabularyPackVersion (class)
+ToolUp.Platform.VocabularyPackVersion..ctor(System.Int32, System.Int32)
+ToolUp.Platform.VocabularyPackVersion.Major : System.Int32 { get }
+ToolUp.Platform.VocabularyPackVersion.Minor : System.Int32 { get }
 ToolUp.Platform.WebhookApi (class)
 ToolUp.Platform.WebhookApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Platform.WebhookDelivery (class)

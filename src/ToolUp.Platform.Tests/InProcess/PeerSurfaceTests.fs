@@ -343,4 +343,65 @@ let tests =
                 (fun () -> PeerSurface.consumes<string> "bogus" [ v1 ] "any" |> ignore)
                 "a consumed declaration must be tied to a record contract type"
         }
+
+        // Phase 594 — pinned data-vocabulary packs surface on the
+        // cross-instance face (so the Phase 591 preflight can require
+        // compatible pins across a contract edge), hashed + sorted, and
+        // change the export hash (a counterparty detects a repin).
+        test "pinned vocabulary packs surface on the descriptor and affect the hash" {
+            let packA: DataVocabularyPack = {
+                Id = "reference-core"
+                Namespace = "reference"
+                Version = { Major = 1; Minor = 0 }
+                Entries = [
+                    {
+                        TypeName = "reference.Widget"
+                        Description = "a widget"
+                        Fields = []
+                    }
+                ]
+            }
+
+            let pinned =
+                referenceApp ()
+                |> PeerServerApp.withConfig {
+                    enabledConfig with
+                        PinnedVocabularyPacks = [ packA ]
+                }
+
+            let surface = PeerSurface.describe pinned
+
+            Expect.equal
+                (surface.PinnedVocabulary |> List.map _.PackId)
+                [ "reference-core" ]
+                "the pinned pack id surfaces on the cross-instance face"
+
+            let pinEntry = surface.PinnedVocabulary |> List.exactlyOne
+            Expect.equal pinEntry.Version packA.Version "the pinned version surfaces"
+            Expect.equal pinEntry.Hash (DataVocabulary.hash packA) "the pin carries the pack's canonical hash"
+
+            // Repinning a different version changes the surface hash — a
+            // pinned counterparty detects the drift.
+            let repinned =
+                referenceApp ()
+                |> PeerServerApp.withConfig {
+                    enabledConfig with
+                        PinnedVocabularyPacks = [
+                            {
+                                packA with
+                                    Version = { Major = 2; Minor = 0 }
+                            }
+                        ]
+                }
+
+            Expect.notEqual
+                (PeerSurface.export surface).SurfaceHash
+                (PeerSurface.export (PeerSurface.describe repinned)).SurfaceHash
+                "a changed pin must change the surface hash"
+
+            // No pins surface as [] and match a deployment that pins nothing.
+            Expect.isEmpty
+                (PeerSurface.describe (referenceApp ())).PinnedVocabulary
+                "a deployment that pins no pack surfaces no vocabulary pins"
+        }
     ]

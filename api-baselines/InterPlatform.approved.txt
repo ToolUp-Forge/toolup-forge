@@ -474,11 +474,12 @@ ToolUp.InterPlatform.PeerServes..ctor(Microsoft.FSharp.Collections.FSharpList`1[
 ToolUp.InterPlatform.PeerServes.Contracts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ServedContract] { get }
 ToolUp.InterPlatform.PeerServes.Endpoints : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.PeerSurface (class)
-ToolUp.InterPlatform.PeerSurface..ctor(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.InterPlatform.PeerServes, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerTrustPosture], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerBudgetShape])
+ToolUp.InterPlatform.PeerSurface..ctor(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.InterPlatform.PeerServes, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerTrustPosture], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerBudgetShape], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyPackPin])
 ToolUp.InterPlatform.PeerSurface.Budgets : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerBudgetShape] { get }
 ToolUp.InterPlatform.PeerSurface.Consumes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract] { get }
 ToolUp.InterPlatform.PeerSurface.Enabled : System.Boolean { get }
 ToolUp.InterPlatform.PeerSurface.LocalPeerId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.InterPlatform.PeerSurface.PinnedVocabulary : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyPackPin] { get }
 ToolUp.InterPlatform.PeerSurface.Serves : ToolUp.InterPlatform.PeerServes { get }
 ToolUp.InterPlatform.PeerSurface.TrustPosture : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerTrustPosture] { get }
 ToolUp.InterPlatform.PeerSurfaceExport (class)

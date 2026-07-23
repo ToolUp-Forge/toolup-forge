@@ -136,6 +136,14 @@ type PeerSurface = {
     Consumes: ConsumedContract list
     TrustPosture: PeerTrustPosture option
     Budgets: PeerBudgetShape option
+    /// Phase 594 — the data-vocabulary packs this instance pins
+    /// (`ServerConfig.PinnedVocabularyPacks`), each as `(PackId, Version,
+    /// Hash)`. Federated data means the same thing across a contract edge
+    /// only when both instances pin a compatible pack version — the Phase 591
+    /// federation preflight reads these to require it. A deployment that pins
+    /// no pack surfaces `[]`; sorted by pack id then version for a
+    /// registration-order-independent hash.
+    PinnedVocabulary: VocabularyPackPin list
 }
 
 /// The pinnable export envelope: the surface plus a format version and a
@@ -234,6 +242,7 @@ module PeerSurface =
         Consumes = []
         TrustPosture = None
         Budgets = None
+        PinnedVocabulary = []
     }
 
     /// Typed consumed-contract declaration for
@@ -323,6 +332,14 @@ module PeerSurface =
                         CascadeGuard = "hop-budget-decrement-with-route-loop-detection"
                         LongRunningEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
                     }
+                // Phase 594 — the pinned data-vocabulary packs, hashed +
+                // sorted so the export is order-independent. A counterparty
+                // pins these to require compatible data semantics across the
+                // contract edge; empty when the deployment pins no pack.
+                PinnedVocabulary =
+                    app.Base.Config.PinnedVocabularyPacks
+                    |> List.map DataVocabulary.pin
+                    |> List.sortBy (fun p -> p.PackId, p.Version.Major, p.Version.Minor)
             }
 
     /// Canonical JSON of a surface: the universal `FableConverters` set,

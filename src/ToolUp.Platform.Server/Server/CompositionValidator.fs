@@ -77,12 +77,28 @@ type CompositionRuleDescriptor = {
 type CompositionReferences = {
     /// Tool display `Name` × its declared `AIToolDefinition.SourceModule`.
     ToolSources: (string * string) list
+    /// Phase 594 — the data-vocabulary packs this deployment pins
+    /// (`ServerConfig.PinnedVocabularyPacks`). Empty (the base case — a
+    /// deployment that pins nothing) makes both vocabulary rules no-ops
+    /// (GP 13).
+    PinnedVocabularyPacks: DataVocabularyPack list
+    /// Phase 594 — the deployment's declared data-type schemas
+    /// (`ServerConfig.DeclaredDataSchemas`), keyed by `TypeName`. The
+    /// schema-drift rule compares each against the governing pinned pack
+    /// entry; empty makes that rule a no-op. The squatting rule needs no
+    /// declaration — it reads the registered names off the manifest.
+    DataSchemas: VocabularyEntry list
 }
 
 module CompositionReferences =
     /// The reference set of a composition that declares no tool→module
-    /// edges — the reference rules degrade to no-ops against it.
-    let empty: CompositionReferences = { ToolSources = [] }
+    /// edges and pins no vocabulary — the reference rules degrade to no-ops
+    /// against it.
+    let empty: CompositionReferences = {
+        ToolSources = []
+        PinnedVocabularyPacks = []
+        DataSchemas = []
+    }
 
 /// Composition well-formedness rule set + the `IConfigValidator` that runs
 /// it at preflight. The rules are declared data (`rules`); the runtime
@@ -207,6 +223,75 @@ module CompositionValidator =
                 source
                 alternatives)
 
+    /// Phase 594 — the distinct registered data-type names in a
+    /// composition: the manifest's `DataType` labels (its `DataType.Id`s)
+    /// unioned with any `DeclaredDataSchemas` `TypeName`. This is the
+    /// name universe the vocabulary rules govern.
+    let private registeredDataTypeNames (manifest: CompositionManifest) (refs: CompositionReferences) : string list =
+        (manifest.DataTypes |> List.map _.Label)
+        @ (refs.DataSchemas |> List.map _.TypeName)
+        |> List.distinct
+
+    /// Phase 594 — vocabulary namespace squatting: a registered data type
+    /// whose name falls under a pinned pack's governed namespace but which
+    /// the pack declares no entry for. A pinned pack governs its namespace
+    /// as a closed set, so a governed name the pack does not sanction is a
+    /// contradiction — the name means nothing agreed. Names outside every
+    /// pinned namespace are unaffected (GP 13). Empty pin set ⇒ no-op.
+    let private evalVocabularyTypeNameUnknown
+        (manifest: CompositionManifest)
+        (refs: CompositionReferences)
+        : string list =
+        let names = registeredDataTypeNames manifest refs
+
+        refs.PinnedVocabularyPacks
+        |> List.collect (fun pack ->
+            names
+            |> List.filter (fun name -> DataVocabulary.governs pack name && (DataVocabulary.tryEntry pack name).IsNone)
+            |> List.map (fun name ->
+                let entries =
+                    match pack.Entries with
+                    | [] -> "none"
+                    | es -> es |> List.map (fun e -> sprintf "'%s'" e.TypeName) |> String.concat ", "
+
+                sprintf
+                    "Data type '%s' falls under pinned vocabulary pack '%s' (namespace '%s', version %s) but the pack declares no entry for it. A pinned pack governs its namespace as a closed set — declare '%s' in a new pack version, rename the data type out of the '%s' namespace, or unpin the pack. Pack entries: %s."
+                    name
+                    pack.Id
+                    pack.Namespace
+                    (DataVocabulary.versionString pack.Version)
+                    name
+                    pack.Namespace
+                    entries))
+
+    /// Phase 594 — vocabulary schema drift: a `DeclaredDataSchemas` schema
+    /// whose `TypeName` matches a pinned pack entry but whose fields /
+    /// value-types / units diverge from it. The pinned pack is the shared
+    /// meaning of the name, so a declared schema that contradicts it fails,
+    /// naming the pack entry + the specific drift. Empty declared-schema set
+    /// or empty pin set ⇒ no-op (GP 13).
+    let private evalVocabularySchemaMismatch (_: CompositionManifest) (refs: CompositionReferences) : string list =
+        refs.PinnedVocabularyPacks
+        |> List.collect (fun pack ->
+            refs.DataSchemas
+            |> List.choose (fun declared ->
+                match DataVocabulary.tryEntry pack declared.TypeName with
+                | Some packEntry ->
+                    match DataVocabulary.schemaDrift declared packEntry with
+                    | [] -> None
+                    | drifts ->
+                        Some(
+                            sprintf
+                                "Data type '%s' contradicts pinned vocabulary pack '%s' entry '%s' (version %s): %s. The pinned pack is the shared meaning of this name — align the data type's schema to the pack entry, or pin a pack version whose '%s' entry matches."
+                                declared.TypeName
+                                pack.Id
+                                packEntry.TypeName
+                                (DataVocabulary.versionString pack.Version)
+                                (String.concat "; " drifts)
+                                declared.TypeName
+                        )
+                | None -> None))
+
     /// The declared rule set — the single source of truth the runtime check
     /// is generated from and (Phase 294) the introspectable manifest
     /// projects. Adding a rule here extends both readers in lock-step.
@@ -231,6 +316,20 @@ module CompositionValidator =
             Description =
                 "A tool's declared SourceModule must resolve to a registered module or a reserved platform source."
             Evaluate = evalOrphanedToolReference
+        }
+        {
+            Code = "vocabulary-typename-unknown"
+            Severity = DefectError
+            Description =
+                "A registered data type whose name falls under a pinned data-vocabulary pack's namespace must match a declared pack entry (a closed set); a governed name the pack does not sanction squats."
+            Evaluate = evalVocabularyTypeNameUnknown
+        }
+        {
+            Code = "vocabulary-schema-mismatch"
+            Severity = DefectError
+            Description =
+                "A declared data-type schema whose TypeName matches a pinned data-vocabulary pack entry must not drift from it in fields, value-types, or units."
+            Evaluate = evalVocabularySchemaMismatch
         }
     ]
 

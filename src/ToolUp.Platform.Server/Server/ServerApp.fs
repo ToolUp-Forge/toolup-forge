@@ -2122,8 +2122,15 @@ module ServerApp =
             // was composed (duplicate ComponentId, companion-slot legality,
             // orphaned tool references). Non-security-class — `SkipPreflight`
             // bypasses it, and a well-formed app passes silently (GP 11).
+            // Phase 594 — the pinned data-vocabulary packs + declared
+            // data-type schemas ride the same reference set, so the
+            // vocabulary rules check exactly what the deployment pinned.
+            // Both default empty (GP 11 / GP 13), so a deployment that pins
+            // no pack is byte-for-byte unchanged.
             let compositionReferences: CompositionReferences = {
                 ToolSources = app.AITools |> List.map (fun (def, _) -> def.Name, def.SourceModule)
+                PinnedVocabularyPacks = app.Config.PinnedVocabularyPacks
+                DataSchemas = app.Config.DeclaredDataSchemas
             }
 
             appendRegistration

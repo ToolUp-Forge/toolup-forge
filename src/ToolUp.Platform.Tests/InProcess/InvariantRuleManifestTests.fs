@@ -50,7 +50,75 @@ let private ruleFixtures: (string * CompositionManifest * CompositionReferences)
     CompositionManifest.build [ CompositionManifest.moduleEntry ("M", ComponentId.ofModule "M") ] [] [] [
         CompositionManifest.toolEntry "t"
     ] [],
-    { ToolSources = [ "t", "Ghost" ] }
+    {
+        CompositionReferences.empty with
+            ToolSources = [ "t", "Ghost" ]
+    }
+
+    // Phase 594 — a squatting data-type name: registered under the pinned
+    // pack's namespace with no matching entry.
+    "vocabulary-typename-unknown",
+    CompositionManifest.build [] [] [ CompositionManifest.dataTypeEntry "vocab.Unknown" ] [] [],
+    {
+        CompositionReferences.empty with
+            PinnedVocabularyPacks = [
+                {
+                    Id = "vocab-pack"
+                    Namespace = "vocab"
+                    Version = { Major = 1; Minor = 0 }
+                    Entries = [
+                        {
+                            TypeName = "vocab.Known"
+                            Description = "a governed type"
+                            Fields = []
+                        }
+                    ]
+                }
+            ]
+    }
+
+    // Phase 594 — a drifted declared schema: matches a pinned pack entry
+    // but its field value-type diverges.
+    "vocabulary-schema-mismatch",
+    CompositionManifest.build [] [] [ CompositionManifest.dataTypeEntry "vocab.Order" ] [] [],
+    {
+        CompositionReferences.empty with
+            PinnedVocabularyPacks = [
+                {
+                    Id = "vocab-pack"
+                    Namespace = "vocab"
+                    Version = { Major = 1; Minor = 0 }
+                    Entries = [
+                        {
+                            TypeName = "vocab.Order"
+                            Description = "an order"
+                            Fields = [
+                                {
+                                    Name = "total"
+                                    Type = VocabNumber
+                                    Unit = Some "USD"
+                                    Description = "order total"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+            DataSchemas = [
+                {
+                    TypeName = "vocab.Order"
+                    Description = "an order"
+                    Fields = [
+                        {
+                            Name = "total"
+                            Type = VocabString
+                            Unit = Some "USD"
+                            Description = "order total"
+                        }
+                    ]
+                }
+            ]
+    }
 ]
 
 let tests =
@@ -73,6 +141,8 @@ let tests =
                     "duplicate-component-id"
                     "companion-slot-legality"
                     "orphaned-tool-reference"
+                    "vocabulary-typename-unknown"
+                    "vocabulary-schema-mismatch"
                 ])
                 "the published rule codes are exactly the shipped invariant set"
 

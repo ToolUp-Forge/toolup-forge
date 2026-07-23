@@ -818,7 +818,9 @@ ToolUp.Platform.CompositionManifestModule.subjectEntry(System.String) : ToolUp.P
 ToolUp.Platform.CompositionManifestModule.toolEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.withGrounding(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionReferences (class)
-ToolUp.Platform.CompositionReferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Platform.CompositionReferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry])
+ToolUp.Platform.CompositionReferences.DataSchemas : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry] { get }
+ToolUp.Platform.CompositionReferences.PinnedVocabularyPacks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack] { get }
 ToolUp.Platform.CompositionReferences.ToolSources : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.CompositionReferencesModule (class)
 ToolUp.Platform.CompositionReferencesModule.empty : ToolUp.Platform.CompositionReferences { get }

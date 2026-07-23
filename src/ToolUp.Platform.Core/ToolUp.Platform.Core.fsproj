@@ -257,6 +257,13 @@
              envelope stays in I18nTypes.fs (needs RateLimitedError, defined in
              SDK.Shared.fs). -->
         <Compile Include="Shared\Types\LocaleTypes.fs" />
+        <!-- Phase 594 — pinned data-vocabulary packs: versioned, immutable
+             TypeName → schema documents + governance / drift / canonical-JSON
+             helpers (+ server-only hash / loader). Before SDK.Shared.fs so
+             ServerConfig can carry the pinned-pack + declared-schema fields.
+             Fable-safe types + pure helpers; SHA-256 hash / STJ loader guarded
+             under #if !FABLE_COMPILER (the JwtCrypto ship-with-guard pattern). -->
+        <Compile Include="Shared\DataVocabulary.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
         <Compile Include="Shared\RateLimitDescriptor.fs" />

@@ -2954,6 +2954,24 @@ type ServerConfig = {
     /// mounts `PresenceContext.provider` client-side (awareness only —
     /// not co-editing).
     Presence: PresenceMode
+    /// Phase 594 — the data-vocabulary packs this deployment pins. Default
+    /// `[]` — no pack pinned, so the composition validator's
+    /// `vocabulary-typename-unknown` / `vocabulary-schema-mismatch` rules
+    /// degrade to no-ops and the deployment is byte-for-byte unchanged
+    /// (GP 11 + GP 13). A pinned pack governs its namespace as a closed set:
+    /// a registered data type whose name falls under the namespace must
+    /// match a pack entry, and a `DeclaredDataSchemas` schema for a governed
+    /// name must not drift from it. Cross-instance agreement is by pinned
+    /// copy — the pins surface on the `PeerSurface` descriptor.
+    PinnedVocabularyPacks: DataVocabularyPack list
+    /// Phase 594 — the deployment's declared data-type schemas, checked
+    /// against `PinnedVocabularyPacks` at preflight. Default `[]` — nothing
+    /// declared, so the schema-drift rule finds nothing to compare (GP 13).
+    /// A data type carries no field schema at registration, so a deployment
+    /// that wants field/type drift caught declares the schema here, keyed by
+    /// `TypeName`; the squatting rule (`vocabulary-typename-unknown`) needs
+    /// no declaration — it reads the registered names from the manifest.
+    DeclaredDataSchemas: VocabularyEntry list
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -3265,6 +3283,8 @@ module ServerConfig =
         RegisteredLocales = [ LocaleCode.en ]
         I18nCoverageMode = NoCoverageCheck
         Presence = NoPresence
+        PinnedVocabularyPacks = []
+        DeclaredDataSchemas = []
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

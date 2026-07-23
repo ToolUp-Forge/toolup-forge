@@ -347,6 +347,11 @@
              rule appears in ruleManifest with a stable code; the runtime
              check + the manifest cannot diverge (bijection). -->
         <Compile Include="InProcess\InvariantRuleManifestTests.fs" />
+        <!-- Phase 594 — pinned data-vocabulary packs: loader / canonical-hash
+             round-trip, version-bump semantics, a conforming data type passes,
+             a squatting name + a drifted schema each fail naming the pack,
+             the no-pin path is unchanged. -->
+        <Compile Include="InProcess\DataVocabularyTests.fs" />
         <!-- Phase 283 — component-id telemetry / audit correlation: a
              module metric + audit source label carry the stable ComponentId;
              renaming the display name preserves id-keyed correlation; the id

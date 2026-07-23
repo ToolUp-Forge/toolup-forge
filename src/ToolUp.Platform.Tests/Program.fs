@@ -214,6 +214,8 @@ let allTests =
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).
         InvariantRuleManifestTests.tests
+        // Phase 594 — pinned data-vocabulary packs.
+        DataVocabularyTests.tests
         // Phase 283 — component-id telemetry / audit correlation.
         ComponentIdCorrelationTests.tests
         // Phase 289 — component-scoped configuration binding: id-scoped
