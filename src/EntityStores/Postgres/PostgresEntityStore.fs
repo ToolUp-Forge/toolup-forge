@@ -99,6 +99,22 @@ module private Sql =
                     values |> List.map (fun v -> addParam (box v)) |> String.concat ", "
 
                 sprintf "(payload ->> %s) IN (%s)" (field f) placeholders
+        // Phase 19b — full text has no BM25 index Postgres-side; translate
+        // to a case-insensitive bag-of-words `ILIKE` OR over the field
+        // (faithful to the whitespace-tokenised v1 semantics: a row matches
+        // when its field contains any query term). Each term is
+        // parameterised. Empty query ⇒ FALSE.
+        | FullText(f, q) ->
+            let terms =
+                q.Split([| ' '; '\t'; '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)
+
+            match terms with
+            | [||] -> "FALSE"
+            | _ ->
+                terms
+                |> Array.map (fun t -> sprintf "(payload ->> %s) ILIKE %s" (field f) (addParam (box ("%" + t + "%"))))
+                |> String.concat " OR "
+                |> sprintf "(%s)"
         | And(a, b) -> sprintf "(%s AND %s)" (translate addParam a) (translate addParam b)
         | Or(a, b) -> sprintf "(%s OR %s)" (translate addParam a) (translate addParam b)
         | Not p -> sprintf "(NOT %s)" (translate addParam p)

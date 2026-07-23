@@ -59,6 +59,12 @@ type ExecutorContext = {
     /// loaded entity JSON, return the value of the named field as a
     /// string. Returns `None` when the field isn't present.
     ReadFieldString: string -> string -> string option
+    /// Phase 19b — full-text search over a declared full-text field.
+    /// Given `(fieldName, query)`, returns every matching entity id
+    /// from the field's per-(entityType, field) sparse index within
+    /// the scope. The `BlobEntityStore` wires this to `ISparseIndex.Search`;
+    /// a deployment with no sparse index wired returns the empty list.
+    FullTextSearch: string -> string -> Async<EntityId list>
 }
 
 /// Resolve a predicate to the set of matching entity ids. Used as
@@ -141,6 +147,16 @@ let rec private resolveIds (ctx: ExecutorContext) (predicate: Predicate) : Async
             |> Async.Parallel
 
         return sets |> Array.fold Set.union Set.empty
+
+    | FullText(field, query) ->
+        // Phase 19b — the field's BM25 sparse index returns the ids of
+        // every entity whose full-text field matches at least one query
+        // term. Intersection/union with sibling predicates happens in the
+        // `And`/`Or` arms below; stale ids for since-deleted entities are
+        // dropped at the load step in `execute` (drift-resilient, the same
+        // soft-miss contract the index predicates rely on).
+        let! ids = ctx.FullTextSearch field query
+        return Set.ofList ids
 
     | And(a, b) ->
         let! left = resolveIds ctx a

@@ -151,7 +151,19 @@ let registerEntityStore
                 else
                     Some(auditLogObj :?> IAuditLog)
 
-            EntityStore.BlobEntityStore(dos, bs, entityRegistry, auditLog) :> IEntityStore.IEntityStore)
+            // Phase 19b — pass the BM25 sparse index through when one is
+            // registered (RAG composes it as a singleton). Resolved
+            // optionally so a deployment without RAG / full-text pays no
+            // extra DI cost (GP 13); absent ⇒ `None` ⇒ pre-19b behaviour.
+            let sparseObj = sp.GetService(typeof<ToolUp.Platform.ISparseIndex.ISparseIndex>)
+
+            let sparseIndex =
+                if isNull sparseObj then
+                    None
+                else
+                    Some(sparseObj :?> ToolUp.Platform.ISparseIndex.ISparseIndex)
+
+            EntityStore.BlobEntityStore(dos, bs, entityRegistry, auditLog, sparseIndex) :> IEntityStore.IEntityStore)
         |> ignore
     | NoEntityStore -> ()
 

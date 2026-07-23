@@ -91,7 +91,9 @@ let relatedTo (relationship: Relationship) (relatedId: EntityId) : Predicate =
 let relatedToAny (relationship: Relationship) (relatedIds: EntityId list) : Predicate =
     In(relationship.ForeignKeyField, relatedIds)
 
-/// Walk the predicate tree, collecting every leaf field name.
+/// Walk the predicate tree, collecting every **index** leaf field name
+/// (i.e. every leaf except `FullText`, which validates against the
+/// declared full-text fields instead — see `collectFullTextFields`).
 let rec private collectLeafFields (p: Predicate) : string list =
     match p with
     | Eq(f, _)
@@ -101,9 +103,27 @@ let rec private collectLeafFields (p: Predicate) : string list =
     | Lt(f, _)
     | Lte(f, _)
     | In(f, _) -> [ f ]
+    | FullText _ -> []
     | And(a, b)
     | Or(a, b) -> collectLeafFields a @ collectLeafFields b
     | Not inner -> collectLeafFields inner
+
+/// Phase 19b — walk the predicate tree, collecting every `FullText` leaf
+/// field name. These validate against the registration's declared
+/// full-text fields, not its indexes.
+let rec private collectFullTextFields (p: Predicate) : string list =
+    match p with
+    | FullText(f, _) -> [ f ]
+    | Eq _
+    | Ne _
+    | Gt _
+    | Gte _
+    | Lt _
+    | Lte _
+    | In _ -> []
+    | And(a, b)
+    | Or(a, b) -> collectFullTextFields a @ collectFullTextFields b
+    | Not inner -> collectFullTextFields inner
 
 /// Validate that every predicate leaf and the OrderBy field are
 /// declared indexes on the entity registration. Returns the query
@@ -117,15 +137,28 @@ let validate
         Error(IndexValidationError.UnknownEntityType q.EntityType)
     else
         let indexNames = registration.Indexes |> List.map _.Name
+        let fullTextNames = registration.FullTextFields |> List.map fst
 
-        // Validate Where predicate fields.
+        // Validate Where predicate fields. Index leaves check against the
+        // declared indexes; `FullText` leaves (Phase 19b) check against the
+        // declared full-text fields. Both surface as `NonIndexedField` so
+        // an undeclared full-text field returns the same shape as an
+        // undeclared index field (mapped to `InvalidIndex` by the store).
         let predicateError =
             match q.Where with
             | None -> None
             | Some p ->
-                collectLeafFields p
-                |> List.tryFind (fun f -> not (List.contains f indexNames))
-                |> Option.map NonIndexedField
+                let indexError =
+                    collectLeafFields p
+                    |> List.tryFind (fun f -> not (List.contains f indexNames))
+                    |> Option.map NonIndexedField
+
+                match indexError with
+                | Some _ -> indexError
+                | None ->
+                    collectFullTextFields p
+                    |> List.tryFind (fun f -> not (List.contains f fullTextNames))
+                    |> Option.map NonIndexedField
 
         // Validate OrderBy field.
         let sortError =

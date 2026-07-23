@@ -12,6 +12,8 @@ open ToolUp.Platform.SecondaryIndex
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.ISparseIndex
 
 // ─── Phase 19 — BlobEntityStore default implementation ─────────────
 //
@@ -76,6 +78,18 @@ let private dataTypeFor (entityType: string) : string = sprintf "_entity:%s" ent
 let private indexPrefixFor (entityType: string) (indexName: string) : string =
     sprintf "%s/%s/%s" EntityIndexPrefix entityType indexName
 
+/// Phase 19b — synthetic `VectorScope` under which a single injected
+/// `ISparseIndex` isolates every `(scopeId, entityType, fieldName)` triple.
+/// The whole triple is baked into the scope key, so team isolation is by
+/// construction: a full-text hit can never cross scopes, and one BM25
+/// instance serves every entity type + field without sharing posting
+/// lists. `Team` (not a real team) because Team/User scopes are
+/// lazy-loaded — never eagerly read at index construction. The `entity-ft:`
+/// prefix keeps these keys clear of any real RAG team scope when the same
+/// `ISparseIndex` is shared with document retrieval.
+let private fullTextScope (scopeId: string) (entityType: string) (fieldName: string) : VectorScope =
+    VectorScope.Team(sprintf "entity-ft:%s:%s:%s" scopeId entityType fieldName)
+
 /// Replace the `Version` field on a record. Reflection-based —
 /// returns a new instance because F# records are immutable.
 let private withVersion<'T> (entity: 'T) (newVersion: int) : 'T =
@@ -101,9 +115,23 @@ let private withVersion<'T> (entity: 'T) (newVersion: int) : 'T =
 /// finishes, so the dictionary doesn't need locking on the read path.
 type EntityRegistry() =
     let registrations = ConcurrentDictionary<string, obj>()
+    // Phase 19b — declared full-text field names per entity type, captured
+    // at Register time when `'T` is known. The untyped `Delete` path needs
+    // the field names (to drop the entity from each field's sparse index)
+    // but can't unbox `EntityRegistration<'T>` without `'T`, so the names
+    // are projected to plain strings here.
+    let fullTextFieldNames = ConcurrentDictionary<string, string list>()
 
     member _.Register<'T>(reg: EntityRegistration<'T>) : unit =
         registrations[reg.EntityType] <- box reg
+        fullTextFieldNames[reg.EntityType] <- reg.FullTextFields |> List.map fst
+
+    /// Declared full-text field names for an entity type (empty when the
+    /// type declares none, or isn't registered).
+    member _.FullTextFieldNames(entityType: string) : string list =
+        match fullTextFieldNames.TryGetValue entityType with
+        | true, names -> names
+        | false, _ -> []
 
     member _.TryGet<'T>(entityType: string) : EntityRegistration<'T> option =
         match registrations.TryGetValue entityType with
@@ -133,8 +161,20 @@ type private IndexHandle<'T> = {
 }
 
 type BlobEntityStore
-    (dataObjectStore: IDataObjectStore, blobStorage: IBlobStorage, registry: EntityRegistry, auditLog: IAuditLog option)
-    =
+    (
+        dataObjectStore: IDataObjectStore,
+        blobStorage: IBlobStorage,
+        registry: EntityRegistry,
+        auditLog: IAuditLog option,
+        // Phase 19b — optional BM25 sparse index backing `FullText`
+        // predicates. `None` (the default via the 4-arg constructor) leaves
+        // the store byte-identical to its pre-19b behaviour: no full-text
+        // indexing on Save/Delete and `FullText` predicates resolve to the
+        // empty set. A deployment declaring no full-text fields pays zero
+        // extra cost whether or not an index is wired (GP 13).
+        sparseIndex: ISparseIndex option
+    ) =
+
     // Per-(scopeId, entityType, indexName) BlobIndex cache. Keyed by
     // tuple-as-string for ConcurrentDictionary's IEquatable<TKey>
     // requirement.
@@ -177,6 +217,17 @@ type BlobEntityStore
             Some(objectId.Substring prefix.Length)
         else
             None
+
+    /// Source-compatible 4-arg constructor — the pre-19b shape. Delegates
+    /// to the primary constructor with no sparse index (no full-text).
+    new
+        (
+            dataObjectStore: IDataObjectStore,
+            blobStorage: IBlobStorage,
+            registry: EntityRegistry,
+            auditLog: IAuditLog option
+        ) =
+        BlobEntityStore(dataObjectStore, blobStorage, registry, auditLog, None)
 
     interface IEntityStore with
 
@@ -273,6 +324,30 @@ type BlobEntityStore
                                     let! _ = blobIndex.Add newKey core.Id None
                                     ()
                             }
+
+                            // Step 6b — maintain full-text indexes (Phase
+                            // 19b). Each declared full-text field re-indexes
+                            // the entity's current text into its
+                            // per-(entityType, field) BM25 sparse index,
+                            // keyed by entity id. Upsert is idempotent, so a
+                            // re-save replaces the prior text without an
+                            // explicit remove. Empty when no full-text fields
+                            // are declared — zero extra writes (GP 13); a
+                            // deployment with no `ISparseIndex` wired skips it
+                            // entirely.
+                            match sparseIndex with
+                            | Some idx when not reg.FullTextFields.IsEmpty ->
+                                for fieldName, extractor in reg.FullTextFields do
+                                    let content = extractor entityWithVersion
+                                    let scope = fullTextScope scopeId core.Type fieldName
+
+                                    let chunk: TextChunk = {
+                                        Content = content
+                                        Metadata = Map.empty
+                                    }
+
+                                    do! idx.Upsert scope core.Id chunk
+                            | _ -> ()
 
                             // Emit audit event. Best-effort — exceptions
                             // swallowed so audit emission never fails the
@@ -379,6 +454,20 @@ type BlobEntityStore
 
                 match deleteResult with
                 | Ok() ->
+                    // Phase 19b — drop the entity from every declared
+                    // full-text field's sparse index. Field names come from
+                    // the registry's non-generic projection (Delete carries
+                    // no `'T`). Best-effort; even were a stale entry to
+                    // survive, the query load step drops it (the same drift
+                    // contract the secondary indexes rely on). Empty list or
+                    // no sparse index ⇒ zero calls (GP 13).
+                    match sparseIndex with
+                    | Some idx ->
+                        for fieldName in registry.FullTextFieldNames entityType do
+                            let scope = fullTextScope scopeId entityType fieldName
+                            do! idx.DeleteChunk scope entityId
+                    | None -> ()
+
                     if headVersion > 0 then
                         match auditLog with
                         | Some log ->
@@ -528,12 +617,29 @@ type BlobEntityStore
                         with _ ->
                             None
 
+                    // Phase 19b — resolve a `FullText` leaf via the field's
+                    // BM25 sparse index within this scope's synthetic
+                    // full-text scope. `topK = MaxValue` returns every
+                    // matching id (BM25 only scores docs holding at least
+                    // one query term, so the pool is naturally bounded)
+                    // before intersection/union with sibling predicates. No
+                    // sparse index wired ⇒ the empty list.
+                    let fullTextSearch (fieldName: string) (queryText: string) = async {
+                        match sparseIndex with
+                        | None -> return []
+                        | Some idx ->
+                            let scope = fullTextScope scopeId query.EntityType fieldName
+                            let! matches = idx.Search [ scope ] queryText System.Int32.MaxValue
+                            return matches |> List.map _.ChunkId
+                    }
+
                     let ctx: EntityQueryExecutor.ExecutorContext = {
                         LookupByIndex = lookupByIndex
                         AllIndexKeys = allIndexKeys
                         AllEntityIds = allEntityIds
                         LoadEntity = loadEntity
                         ReadFieldString = readFieldString
+                        FullTextSearch = fullTextSearch
                     }
 
                     let! results = EntityQueryExecutor.execute<'T> ctx validated

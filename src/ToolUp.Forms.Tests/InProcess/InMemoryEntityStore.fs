@@ -66,6 +66,21 @@ let private extractField (entity: obj) (fieldName: string) : string option =
                 | _ -> Some(string v)
         | None -> None
 
+/// Phase 19b — bag-of-words full-text match for this in-memory stub: the
+/// field value contains at least one whitespace-tokenised, lowercased query
+/// term. Mirrors the BM25 candidate contract (a doc matches when it holds
+/// any query term) closely enough for the stub's linear scan.
+let private fullTextMatch (fieldValue: string) (query: string) : bool =
+    let toks (s: string) =
+        if System.String.IsNullOrWhiteSpace s then
+            Set.empty
+        else
+            s.ToLowerInvariant().Split([| ' '; '\t'; '\n'; '\r' |], System.StringSplitOptions.RemoveEmptyEntries)
+            |> Set.ofArray
+
+    let q = toks query
+    not (Set.isEmpty q) && not (Set.isEmpty (Set.intersect q (toks fieldValue)))
+
 let rec private evaluatePredicate (entity: obj) (predicate: Predicate) : bool =
     match predicate with
     | Eq(name, value) ->
@@ -95,6 +110,10 @@ let rec private evaluatePredicate (entity: obj) (predicate: Predicate) : bool =
     | In(name, values) ->
         match extractField entity name with
         | Some v -> List.contains v values
+        | None -> false
+    | FullText(name, query) ->
+        match extractField entity name with
+        | Some v -> fullTextMatch v query
         | None -> false
     | And(a, b) -> evaluatePredicate entity a && evaluatePredicate entity b
     | Or(a, b) -> evaluatePredicate entity a || evaluatePredicate entity b

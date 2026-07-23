@@ -145,6 +145,20 @@ module private PredicateEval =
         | "CreatedAt" -> Some(conv.CreatedAt.ToString("o"))
         | _ -> None
 
+    /// Phase 19b — bag-of-words full-text match for the linear scan: the
+    /// field value holds at least one whitespace-tokenised, lowercased query
+    /// term (the BM25 candidate contract, adequate for this MVP evaluator).
+    let private fullTextMatch (fieldValue: string) (query: string) : bool =
+        let toks (s: string) =
+            if System.String.IsNullOrWhiteSpace s then
+                Set.empty
+            else
+                s.ToLowerInvariant().Split([| ' '; '\t'; '\n'; '\r' |], System.StringSplitOptions.RemoveEmptyEntries)
+                |> Set.ofArray
+
+        let q = toks query
+        not (Set.isEmpty q) && not (Set.isEmpty (Set.intersect q (toks fieldValue)))
+
     let rec eval (conv: Conversation) (predicate: Predicate) : bool =
         match predicate with
         | Eq(field, value) ->
@@ -174,6 +188,10 @@ module private PredicateEval =
         | In(field, values) ->
             match fieldOf conv field with
             | Some actual -> values |> List.contains actual
+            | None -> false
+        | FullText(field, query) ->
+            match fieldOf conv field with
+            | Some actual -> fullTextMatch actual query
             | None -> false
         | And(left, right) -> eval conv left && eval conv right
         | Or(left, right) -> eval conv left || eval conv right

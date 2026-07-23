@@ -41,6 +41,15 @@ type Predicate =
     /// Set membership: `field IN [values]`. Resolves to a union of
     /// `BlobIndex.Lookup` calls.
     | In of fieldName: string * values: string list
+    /// Phase 19b — full-text match: `field` (declared as a full-text
+    /// field via `EntityRegistration.withFullTextField`) matches the
+    /// bag-of-words `query`. Resolves to a BM25 lookup against the
+    /// field's per-(entityType, field) sparse index within the scope.
+    /// `fieldName` is validated against the registration's declared
+    /// **full-text** fields (not its indexes) at query-construction
+    /// time. v1 is whitespace-tokenised, lowercase, bag-of-words — no
+    /// phrase queries, boolean operators, or stemming.
+    | FullText of fieldName: string * query: string
     /// Conjunction. Both sides must hold.
     | And of Predicate * Predicate
     /// Disjunction. Either side must hold.

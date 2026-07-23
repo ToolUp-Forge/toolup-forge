@@ -2958,6 +2958,7 @@ ToolUp.Platform.EntityQueryTypes+IndexValidationError+UnknownEntityType.entityTy
 ToolUp.Platform.EntityQueryTypes+Predicate (class)
 ToolUp.Platform.EntityQueryTypes+Predicate.IsAnd : System.Boolean { get }
 ToolUp.Platform.EntityQueryTypes+Predicate.IsEq : System.Boolean { get }
+ToolUp.Platform.EntityQueryTypes+Predicate.IsFullText : System.Boolean { get }
 ToolUp.Platform.EntityQueryTypes+Predicate.IsGt : System.Boolean { get }
 ToolUp.Platform.EntityQueryTypes+Predicate.IsGte : System.Boolean { get }
 ToolUp.Platform.EntityQueryTypes+Predicate.IsIn : System.Boolean { get }
@@ -2973,6 +2974,9 @@ ToolUp.Platform.EntityQueryTypes+Predicate+And.Item2 : ToolUp.Platform.EntityQue
 ToolUp.Platform.EntityQueryTypes+Predicate+Eq (class)
 ToolUp.Platform.EntityQueryTypes+Predicate+Eq.fieldName : System.String { get }
 ToolUp.Platform.EntityQueryTypes+Predicate+Eq.value : System.String { get }
+ToolUp.Platform.EntityQueryTypes+Predicate+FullText (class)
+ToolUp.Platform.EntityQueryTypes+Predicate+FullText.fieldName : System.String { get }
+ToolUp.Platform.EntityQueryTypes+Predicate+FullText.query : System.String { get }
 ToolUp.Platform.EntityQueryTypes+Predicate+Gt (class)
 ToolUp.Platform.EntityQueryTypes+Predicate+Gt.fieldName : System.String { get }
 ToolUp.Platform.EntityQueryTypes+Predicate+Gt.value : System.String { get }
@@ -2999,6 +3003,7 @@ ToolUp.Platform.EntityQueryTypes+Predicate+Or.Item2 : ToolUp.Platform.EntityQuer
 ToolUp.Platform.EntityQueryTypes+Predicate+Tags (class)
 ToolUp.Platform.EntityQueryTypes+Predicate+Tags.And : System.Int32 (literal)
 ToolUp.Platform.EntityQueryTypes+Predicate+Tags.Eq : System.Int32 (literal)
+ToolUp.Platform.EntityQueryTypes+Predicate+Tags.FullText : System.Int32 (literal)
 ToolUp.Platform.EntityQueryTypes+Predicate+Tags.Gt : System.Int32 (literal)
 ToolUp.Platform.EntityQueryTypes+Predicate+Tags.Gte : System.Int32 (literal)
 ToolUp.Platform.EntityQueryTypes+Predicate+Tags.In : System.Int32 (literal)
@@ -3093,14 +3098,17 @@ ToolUp.Platform.EntityTypes+EntityRef`1.Version : System.Int32 { get }
 ToolUp.Platform.EntityTypes+EntityRegistration (class)
 ToolUp.Platform.EntityTypes+EntityRegistration.create`1(System.String) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
 ToolUp.Platform.EntityTypes+EntityRegistration.relationships`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship]
+ToolUp.Platform.EntityTypes+EntityRegistration.tryFindFullTextField`1(System.String, ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[T, System.String]]
 ToolUp.Platform.EntityTypes+EntityRegistration.tryFindIndex`1(System.String, ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]]
 ToolUp.Platform.EntityTypes+EntityRegistration.withCompoundIndex`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
+ToolUp.Platform.EntityTypes+EntityRegistration.withFullTextField`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, System.String], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
 ToolUp.Platform.EntityTypes+EntityRegistration.withIndex`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, System.String], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
 ToolUp.Platform.EntityTypes+EntityRegistration.withRelationship`1(ToolUp.Platform.EntityTypes+Relationship, ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
 ToolUp.Platform.EntityTypes+EntityRegistration.withRelationships`1(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship], ToolUp.Platform.EntityTypes+EntityRegistration`1[T]) : ToolUp.Platform.EntityTypes+EntityRegistration`1[T]
 ToolUp.Platform.EntityTypes+EntityRegistration`1 (class)
-ToolUp.Platform.EntityTypes+EntityRegistration`1..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship])
+ToolUp.Platform.EntityTypes+EntityRegistration`1..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, System.String]]])
 ToolUp.Platform.EntityTypes+EntityRegistration`1.EntityType : System.String { get }
+ToolUp.Platform.EntityTypes+EntityRegistration`1.FullTextFields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, System.String]]] { get }
 ToolUp.Platform.EntityTypes+EntityRegistration`1.Indexes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]] { get }
 ToolUp.Platform.EntityTypes+EntityRegistration`1.Relationships : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship] { get }
 ToolUp.Platform.EntityTypes+JoinEntitySpec (class)

@@ -244,6 +244,14 @@ type EntityRegistration<'T> = {
     /// Empty (the default) — an entity with no declared relationships is
     /// byte-identical to a pre-19c registration (GP 11).
     Relationships: Relationship list
+    /// Phase 19b — fields declared full-text-searchable via
+    /// `withFullTextField`. Each pair is `(fieldName, extractor)`; the
+    /// extractor projects the entity to the free text the store indexes
+    /// into a per-(entityType, field) BM25 sparse index on every `Save`.
+    /// Empty (the default) — an entity with no declared full-text fields
+    /// is byte-identical to a pre-19b registration and triggers zero
+    /// extra index writes (GP 11 / GP 13).
+    FullTextFields: (string * ('T -> string)) list
 }
 
 module EntityRegistration =
@@ -255,6 +263,7 @@ module EntityRegistration =
         EntityType = entityType
         Indexes = []
         Relationships = []
+        FullTextFields = []
     }
 
     /// Declare a single-field index. The extractor is invoked on
@@ -297,6 +306,27 @@ module EntityRegistration =
                         }
                     ]
         }
+
+    /// Phase 19b — declare a field as full-text-searchable. The extractor
+    /// projects the entity to the free text indexed into a per-(entityType,
+    /// field) BM25 sparse index on every `Save`; a `Predicate.FullText`
+    /// leaf then validates against and queries this field. Additive and
+    /// opt-in — a type with no full-text field is byte-identical to a
+    /// pre-19b registration and pays zero extra index cost (GP 11 / GP 13).
+    let withFullTextField
+        (name: string)
+        (extractor: 'T -> string)
+        (reg: EntityRegistration<'T>)
+        : EntityRegistration<'T> =
+        {
+            reg with
+                FullTextFields = reg.FullTextFields @ [ name, extractor ]
+        }
+
+    /// Find a declared full-text field's extractor by name. `None` when the
+    /// field isn't declared full-text-searchable.
+    let tryFindFullTextField (name: string) (reg: EntityRegistration<'T>) : ('T -> string) option =
+        reg.FullTextFields |> List.tryFind (fun (n, _) -> n = name) |> Option.map snd
 
     /// Find an index by name. Returns `None` when the index isn't
     /// declared.
