@@ -53,6 +53,10 @@
         <!-- Phase 68b — Neo4j engine companion: always-on translation unit pack
              + env-gated (TOOLUP_TEST_NEO4J_URI) live IGraphStoreContract arm. -->
         <Compile Include="Graph\Neo4jConformance.fs" />
+        <!-- Phase 68c — AGE (Postgres-colocated) engine companion: always-on
+             cypher()-wrapping / agtype-mapping / injection-binding unit pack +
+             env-gated (TOOLUP_TEST_AGE_CONNSTRING) live IGraphStoreContract arm. -->
+        <Compile Include="Graph\AgeConformance.fs" />
         <Compile Include="Contracts\IColumnMappingStoreContract.fs" />
         <!-- Phase 442 — presence tracker + advisory soft-lock conformance. -->
         <Compile Include="Contracts\IPresenceTrackerContract.fs" />
@@ -1063,6 +1067,8 @@
         <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" />
         <!-- Phase 68b — Neo4j engine companion under test. -->
         <ProjectReference Include="..\ToolUp.Graph.Neo4j\ToolUp.Graph.Neo4j.fsproj" />
+        <!-- Phase 68c — AGE (Postgres-colocated) engine companion under test. -->
+        <ProjectReference Include="..\ToolUp.Graph.AGE\ToolUp.Graph.AGE.fsproj" />
         <!-- Phase 81 — BrandKit primitives test coverage lands in
              Platform.Tests rather than a dedicated test project (the
              primitive shape is small enough that splitting adds more

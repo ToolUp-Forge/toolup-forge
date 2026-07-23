@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Graph.AGE</PackageId>
+        <AssemblyName>ToolUp.Graph.AGE</AssemblyName>
+        <Description>ToolUp.Graph AGE companion — the Postgres-colocated openCypher IGraphStore over Apache AGE (an Apache-2.0 PostgreSQL extension), reached through the managed Npgsql driver (no native binding). Graph data lives in the same PostgreSQL instance as the consumer's relational data — same backups, same connection pool, same transaction boundary — with an opt-in shared-transaction seam that enlists graph writes in the same NpgsqlTransaction as relational writes. Graph-per-tenant isolation (AGE namespaces graphs) with a property-partition fallback; Postgres transients surfaced as the IGraphStore retryable-result contract. Binds the shared IGraphStoreContract unchanged — a query developed against the in-memory default runs unchanged here. Server-only companion.</Description>
+        <PackageTags>fsharp;sdk;graph;opencypher;apache-age;postgres;postgresql;cypher</PackageTags>
+    </PropertyGroup>
+    <!-- Phase 68c — IGraphStore engine companion. GP 1 — the Apache AGE / Npgsql
+         dependency is isolated to this companion; it never reaches
+         ToolUp.Platform.* / ToolUp.Graph.Core. GP 2 — Apache AGE is Apache-2.0
+         and Npgsql is free (no paid default). Reaches AGE over the already-pinned
+         managed Npgsql — no native P/Invoke binding, no per-RID native payload
+         (the same lane as the Postgres entity-store companion). Server-only:
+         Npgsql is a server-side dependency, so this ships a DLL (not fable/
+         source) and references ToolUp.Graph.Core only (the IGraphStore contract),
+         not Platform.Server. -->
+    <!-- README.md is auto-included for packable projects with a sibling README
+         by Directory.Build.props (Phase 11.C.2 packed-README default) — no
+         explicit <None Include> here, which would double-add it (NU5118). -->
+    <ItemGroup>
+        <Compile Include="AgeSessionPreamble.fs" />
+        <Compile Include="CypherToAgeSql.fs" />
+        <Compile Include="AgeGraphStore.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Npgsql" />
+    </ItemGroup>
+</Project>

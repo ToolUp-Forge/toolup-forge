@@ -316,6 +316,12 @@ let allTests =
         // IGraphStoreContract arm (skipped, never failed, without a server).
         Neo4jConformanceTests.pureTests
         Neo4jConformanceTests.liveTests
+        // Phase 68c — ToolUp.Graph.AGE (Postgres-colocated) engine companion:
+        // always-on cypher()-wrapping / agtype-mapping / injection-binding unit
+        // pack + env-gated (TOOLUP_TEST_AGE_CONNSTRING) live IGraphStoreContract
+        // arm (skipped, never failed, without an AGE-enabled Postgres).
+        AgeConformanceTests.pureTests
+        AgeConformanceTests.liveTests
         UsageLogTests.tests
         PrometheusMetricsSinkTests.tests
         OtelActivitySinkTests.tests
