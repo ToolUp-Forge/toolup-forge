@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Graph.Neo4j</PackageId>
+        <AssemblyName>ToolUp.Graph.Neo4j</AssemblyName>
+        <Description>ToolUp.Graph Neo4j companion — the distributed-tier IGraphStore over the Apache-2.0-licensed Neo4j .NET driver, talking to an externally-operated Neo4j server (single instance or causal cluster). Full openCypher, horizontal read scale-out, multi-database (database-per-tenant) tenant isolation with a property-partition fallback, and cluster transients surfaced as the IGraphStore retryable-result contract. Binds the shared IGraphStoreContract unchanged — a query developed against the in-memory default runs unchanged here. Server-only companion.</Description>
+        <PackageTags>fsharp;sdk;graph;opencypher;neo4j;distributed;cypher</PackageTags>
+    </PropertyGroup>
+    <!-- Phase 68b — IGraphStore engine companion. GP 1 — the Neo4j.Driver
+         dependency is isolated to this companion; it never reaches
+         ToolUp.Platform.* / ToolUp.Graph.Core. GP 2 — the Neo4j .NET driver is
+         Apache-2.0 (no paid default); the server's own licensing (Community
+         GPLv3 vs Enterprise commercial) is the consumer's deployment choice,
+         documented in README.md. Server-only: Neo4j.Driver is a server-side
+         dependency, so this ships a DLL (not fable/ source) and references
+         ToolUp.Graph.Core only (the IGraphStore contract), not Platform.Server. -->
+    <!-- README.md is auto-included for packable projects with a sibling README
+         by Directory.Build.props (Phase 11.C.2 packed-README default) — no
+         explicit <None Include> here, which would double-add it (NU5118). -->
+    <ItemGroup>
+        <Compile Include="SessionScope.fs" />
+        <Compile Include="CypherTranslation.fs" />
+        <Compile Include="Neo4jGraphStore.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Neo4j.Driver" />
+    </ItemGroup>
+</Project>

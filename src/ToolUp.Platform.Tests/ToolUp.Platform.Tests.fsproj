@@ -50,6 +50,9 @@
         <Compile Include="Graph\SubsetFloorCorpus.fs" />
         <Compile Include="Graph\GraphStoreContract.fs" />
         <Compile Include="Graph\InMemoryGraphStoreTests.fs" />
+        <!-- Phase 68b — Neo4j engine companion: always-on translation unit pack
+             + env-gated (TOOLUP_TEST_NEO4J_URI) live IGraphStoreContract arm. -->
+        <Compile Include="Graph\Neo4jConformance.fs" />
         <Compile Include="Contracts\IColumnMappingStoreContract.fs" />
         <!-- Phase 442 — presence tracker + advisory soft-lock conformance. -->
         <Compile Include="Contracts\IPresenceTrackerContract.fs" />
@@ -1058,6 +1061,8 @@
              in-memory default; Core carries the IGraphStore contract. -->
         <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" />
+        <!-- Phase 68b — Neo4j engine companion under test. -->
+        <ProjectReference Include="..\ToolUp.Graph.Neo4j\ToolUp.Graph.Neo4j.fsproj" />
         <!-- Phase 81 — BrandKit primitives test coverage lands in
              Platform.Tests rather than a dedicated test project (the
              primitive shape is small enough that splitting adds more

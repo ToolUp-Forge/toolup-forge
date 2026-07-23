@@ -311,6 +311,11 @@ let allTests =
         // (six-rule GP12 audit + tenant isolation + subset-floor corpus +
         // cycle-safe termination + out-of-subset-throws).
         InMemoryGraphStoreTests.tests
+        // Phase 68b — ToolUp.Graph.Neo4j engine companion: always-on Cypher-
+        // translation unit pack + env-gated (TOOLUP_TEST_NEO4J_URI) live
+        // IGraphStoreContract arm (skipped, never failed, without a server).
+        Neo4jConformanceTests.pureTests
+        Neo4jConformanceTests.liveTests
         UsageLogTests.tests
         PrometheusMetricsSinkTests.tests
         OtelActivitySinkTests.tests

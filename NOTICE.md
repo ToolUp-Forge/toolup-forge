@@ -90,6 +90,8 @@ operate on Community-tier components only.
   Copyright (c) Coen Stevens. https://github.com/web-push-libs/web-push-csharp
 - **HNSW** — Hierarchical Navigable Small World graph (vector store). MIT License.
   Copyright (c) Microsoft Corporation. https://github.com/microsoft/HNSW.Net
+- **Neo4j.Driver** — Official Neo4j .NET driver (distributed openCypher graph store companion). Apache License 2.0.
+  Copyright (c) Neo4j, Inc. https://github.com/neo4j/neo4j-dotnet-driver
 
 ### Document parsing
 
