@@ -449,6 +449,29 @@ type GraphStoreMode =
     /// in place.
     | CustomGraphStore
 
+/// Phase 68d — selects whether entity-store mutations are projected into
+/// the `IGraphStore` as a derived read-model. Default:
+/// `NoEntityGraphProjection` — no projection runs, no bridge is wired, and
+/// the entity store behaves exactly as today (GP 13 — zero cost when
+/// unused). `EnabledEntityGraphProjection` opts in: the
+/// `ToolUp.Graph.Projection` bridge (composed via
+/// `EntityGraphProjectionCompose.wire`) subscribes to the entity-lifecycle
+/// signal (`EntityCreated` / `EntityUpdated` / `EntityDeleted`) and keeps a
+/// graph projection of the registered entities + their Phase-19c declared
+/// relationships in sync. Requires `EntityStore = EnabledEntityStore` and
+/// an `IGraphStore` (the in-memory default suffices for dev). Like a graph
+/// *engine* companion, the concrete bridge lives in its own package and is
+/// wired by the deployment — this flag is the opt-in the wiring reads.
+type EntityGraphProjectionMode =
+    /// No entity→graph projection. Default — the entity store and graph
+    /// store stay independent; a consumer wanting only relational, or only
+    /// a hand-built graph, is untouched.
+    | NoEntityGraphProjection
+    /// Project registered entities (and their declared relationships) into
+    /// the `IGraphStore` as a derived read-model, kept in sync by the
+    /// entity-lifecycle signal + a one-shot `RebuildProjection`.
+    | EnabledEntityGraphProjection
+
 /// Phase 161 — selects the time-series storage backend (`ITimeSeriesStore`)
 /// for high-frequency numeric/analytical series. Default:
 /// `NoTimeSeriesStore` — no `ITimeSeriesStore` registered, zero cost.
@@ -2177,6 +2200,15 @@ type ServerConfig = {
     /// resolved). `CustomGraphStore` leaves an engine companion's own
     /// `IGraphStore` singleton in place.
     GraphStore: GraphStoreMode
+    /// Phase 68d — entity→graph projection selection. Default:
+    /// `NoEntityGraphProjection` — no bridge is wired, the entity store is
+    /// byte-identical (GP 13). `EnabledEntityGraphProjection` opts the
+    /// deployment into the `ToolUp.Graph.Projection` bridge (wired via
+    /// `EntityGraphProjectionCompose.wire`), which keeps a derived graph
+    /// read-model of the registered entities + their declared relationships
+    /// in sync. Requires `EntityStore = EnabledEntityStore` + an
+    /// `IGraphStore`.
+    EntityGraphProjection: EntityGraphProjectionMode
     /// Phase 161 — time-series storage selection. Default:
     /// `NoTimeSeriesStore` — no `ITimeSeriesStore` registered, zero cost.
     /// `InMemoryTimeSeries` registers the dev/test in-memory default;
@@ -3211,6 +3243,9 @@ module ServerConfig =
         // Phase 68 — the in-memory graph store is the default (registered
         // lazily; zero cost until a graph API is resolved — GP 13).
         GraphStore = InMemoryGraphStore
+        // Phase 68d — entity→graph projection is opt-in; the default wires
+        // no bridge and leaves the entity store byte-identical (GP 13).
+        EntityGraphProjection = NoEntityGraphProjection
         TimeSeriesStore = NoTimeSeriesStore
         Datasets = NoDatasets
         ModelFitting = NoModelFitting

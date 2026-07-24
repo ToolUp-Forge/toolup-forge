@@ -1434,6 +1434,25 @@ module ServerApp =
                 @ [ (fun registry -> registry.Register<'T>(registration)) ]
     }
 
+    /// Phase 68d — opt into the entity→graph projection bridge. Flips
+    /// `ServerConfig.EntityGraphProjection = EnabledEntityGraphProjection`,
+    /// the flag the `ToolUp.Graph.Projection` bridge's
+    /// `EntityGraphProjectionCompose.wire` reads to decide whether to run.
+    /// Requires `withEntityStore` + an `IGraphStore` (the in-memory default
+    /// suffices). Like a graph *engine* companion, the concrete bridge lives
+    /// in its own package and is wired by the deployment (it references
+    /// `IEntityStore`, so the SDK cannot reference it back without a cycle);
+    /// this seam is the `ServerConfig` opt-in that gates that wiring. When
+    /// not called, no projection runs and the entity store is byte-identical
+    /// (GP 13).
+    let withEntityGraphProjection (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    EntityGraphProjection = EnabledEntityGraphProjection
+            }
+    }
+
     let withExtensions (e: ComposeExtensions) (app: ServerApp) : ServerApp = { app with Extensions = e }
 
     /// Phase 1f composition seam. Accumulates an `IApplicationBuilder`

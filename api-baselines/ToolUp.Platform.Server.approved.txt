@@ -4269,6 +4269,7 @@ ToolUp.Platform.ServerAppModule.withCspSourceMode(ToolUp.Platform.SecurityHarden
 ToolUp.Platform.ServerAppModule.withDataExporter(ToolUp.Platform.IDataExporter+IDataExporter, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withEntityGraphProjection(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntityOutbox(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withErasureHandler(ToolUp.Platform.IDataExporter+IErasureHandler, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

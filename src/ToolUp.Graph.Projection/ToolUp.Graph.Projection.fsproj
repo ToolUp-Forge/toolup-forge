@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.Graph.Projection</PackageId>
+        <AssemblyName>ToolUp.Graph.Projection</AssemblyName>
+        <Description>ToolUp.Graph entity→graph projection bridge — projects IEntityStore records and their declarative relationship edges into an IGraphStore, so a consumer who models their domain as entities + relationships gets graph-traversal queries for free without maintaining two parallel data models. Opt-in: entities are the system of record, the graph is a derived read-model kept in sync by the entity-store lifecycle signal, plus a one-shot rebuild for bootstrapping / drift healing. Server-only companion.</Description>
+        <PackageTags>fsharp;sdk;graph;projection;entity-store;opencypher;read-model</PackageTags>
+    </PropertyGroup>
+    <!-- Phase 68d — Entity↔Graph projection bridge. GP 13 — opt-in; a
+         deployment that does not compose it pays nothing and the entity
+         store is byte-identical. Server-only: it bridges IEntityStore (a
+         Platform.Server type) into IGraphStore, so it references
+         ToolUp.Platform.Server (a companion → SDK reference; the SDK never
+         references back — that would be a project cycle) and ships a DLL,
+         not fable/ source. -->
+    <!-- README.md is auto-included for packable projects with a sibling
+         README by Directory.Build.props (Phase 11.C.2 packed-README
+         default) — no explicit <None Include> here (would NU5118). -->
+    <ItemGroup>
+        <Compile Include="ProjectionReport.fs" />
+        <Compile Include="IEntityGraphProjection.fs" />
+        <Compile Include="EntityGraphProjector.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    </ItemGroup>
+</Project>

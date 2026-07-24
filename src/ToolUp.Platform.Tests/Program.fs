@@ -322,6 +322,11 @@ let allTests =
         // arm (skipped, never failed, without an AGE-enabled Postgres).
         AgeConformanceTests.pureTests
         AgeConformanceTests.liveTests
+        // Phase 68d — entity↔graph projection bridge: pure projection,
+        // incremental sync through the lifecycle signal, rebuild + orphan
+        // reconciliation, tenant isolation, not-composed byte-identity,
+        // six-rule audit.
+        EntityGraphProjectionTests.tests
         UsageLogTests.tests
         PrometheusMetricsSinkTests.tests
         OtelActivitySinkTests.tests
