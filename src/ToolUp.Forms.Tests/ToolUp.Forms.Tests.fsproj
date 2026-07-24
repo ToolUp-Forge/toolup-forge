@@ -25,6 +25,7 @@
         <Compile Include="InProcess\PublishableHardeningTests.fs" />
         <Compile Include="InProcess\PublicSubmitSurfaceTests.fs" />
         <Compile Include="InProcess\ValidationBridgeTests.fs" />
+        <Compile Include="InProcess\MatrixFieldTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

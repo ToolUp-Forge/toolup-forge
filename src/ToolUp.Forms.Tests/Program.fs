@@ -15,6 +15,7 @@ let allTests =
         PublishableHardeningTests.tests
         PublicSubmitSurfaceTests.tests
         ValidationBridgeTests.tests
+        MatrixFieldTests.tests
     ]
 
 [<EntryPoint>]

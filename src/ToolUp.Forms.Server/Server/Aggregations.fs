@@ -173,3 +173,13 @@ let aggregateField (field: FieldSchema) (submissions: Submission list) : FieldAg
     | FileField _
     | EntityRefField _
     | NestedFormField _ -> OpaqueAggregation(extractedValues |> List.length)
+    // Phase 21a — matrix cells live under `{key}[row,col]` sub-keys, so
+    // the base key never appears in the values map. Matrix-level
+    // aggregation (row sums, per-column stats) is out of scope; report
+    // the number of submissions that supplied at least one cell as an
+    // opaque count.
+    | MatrixField _ ->
+        submissions
+        |> List.filter (fun s -> s.Values |> Map.exists (fun k _ -> k.StartsWith(field.Key + "[")))
+        |> List.length
+        |> OpaqueAggregation

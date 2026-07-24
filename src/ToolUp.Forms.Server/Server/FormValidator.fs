@@ -180,7 +180,28 @@ let private choiceCheck (field: FieldSchema) (value: FieldValue) : FieldError li
             ]
     | _ -> []
 
-let private validateField
+// Validate a single already-present value against a field's kind,
+// choice-integrity, and per-rule validators. Shared by flat fields and
+// per-cell matrix validation.
+let private validatePresent
+    (registry: CustomValidatorRegistry)
+    (field: FieldSchema)
+    (value: FieldValue)
+    : FieldError list =
+    match typeMismatch field.Kind value with
+    | Some msg -> [ mkError field.Key "wrong-type" msg ]
+    | None ->
+        let choiceErrors = choiceCheck field value
+
+        let ruleErrors =
+            field.Validators |> List.collect (validateRule registry field value)
+
+        choiceErrors @ ruleErrors
+
+// Validate a single flat "slot" — one entry looked up by `field.Key`
+// in the values map. Absent + Required → "required"; absent + optional
+// → clean; present → `validatePresent`.
+let private validateSlot
     (registry: CustomValidatorRegistry)
     (values: Map<string, FieldValue>)
     (field: FieldSchema)
@@ -191,16 +212,31 @@ let private validateField
             [ mkError field.Key "required" "field is required" ]
         else
             []
-    | Some value ->
-        match typeMismatch field.Kind value with
-        | Some msg -> [ mkError field.Key "wrong-type" msg ]
-        | None ->
-            let choiceErrors = choiceCheck field value
+    | Some value -> validatePresent registry field value
 
-            let ruleErrors =
-                field.Validators |> List.collect (validateRule registry field value)
+let private validateField
+    (registry: CustomValidatorRegistry)
+    (values: Map<string, FieldValue>)
+    (field: FieldSchema)
+    : FieldError list =
+    match field.Kind with
+    // Phase 21a — a matrix flattens into `{key}[{row},{col}]` sub-keys.
+    // Validate each cell as its own slot: a synthetic `FieldSchema`
+    // carrying the cell key, the cell `FieldKind`, and the outer field's
+    // `Required` + `Validators`. The emitted `FieldError.FieldKey` is the
+    // cell sub-key, so the renderer highlights the exact offending cell —
+    // the same error-emission shape as a flat field.
+    | MatrixField(rows, cols, cell, _) ->
+        Matrix.coords rows cols
+        |> List.collect (fun (r, c) ->
+            let cellField = {
+                field with
+                    Key = Matrix.cellKey field.Key r c
+                    Kind = cell
+            }
 
-            choiceErrors @ ruleErrors
+            validateSlot registry values cellField)
+    | _ -> validateSlot registry values field
 
 /// Validate every field in the schema against the supplied values
 /// map. Returns `Ok ()` only when every field passes; otherwise an

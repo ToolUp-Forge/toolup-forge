@@ -43,6 +43,15 @@ open ToolUp.Forms.FormSubmission
 //   6. Precision at lower bound — N/A (no time semantics in the
 //      interface; timestamps inside `Submission` are
 //      `DateTimeOffset`, BCL 100ns precision).
+//
+// **Phase 21a re-audit (matrix field).** `MatrixField` extends only the
+// value SHAPE: matrix cells flatten into `Submission.Values`
+// (`Map<string, FieldValue>`) under `{key}[{row},{col}]` string
+// sub-keys. No `IFormStore` method signature changes, no new live
+// handle, no new ordering promise — the six rules above hold verbatim.
+// Rule 1 in particular is preserved: the sub-keys are ordinary strings,
+// so a distributed companion persists and returns the richer map with
+// the same primitives it already used for the flat map.
 
 /// Typed form store. Schemas and submissions persist as Phase 19
 /// entities; query shapes flow through the Phase 19a `EntityQuery`

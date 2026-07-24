@@ -46,6 +46,12 @@ open ToolUp.Forms.Workflow
 //      versioning.
 //
 //   6. Precision at lower bound — N/A (no scheduling primitives).
+//
+// **Phase 21a re-audit (matrix field).** A `MatrixField` changes only
+// the shape of `Submission.Values` (flattened `{key}[row,col]`
+// sub-keys); guards/actions read that map exactly as before. No
+// `IWorkflowEngine` signature changes — the six rules above are
+// unaffected by the matrix extension.
 
 /// Phase 1h — context record passed into guard / action invocations.
 /// Bundles the submission, caller context, and the resolved
