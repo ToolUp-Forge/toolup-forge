@@ -5,6 +5,7 @@ ToolUp.Forms.FormRenderer (class)
 ToolUp.Forms.FormRenderer.FormRenderer(ToolUp.Forms.FormSchema+FormSchema, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSubmission+FieldValue], Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.Forms.FormSubmissionsList (class)
 ToolUp.Forms.FormSubmissionsList.FormSubmissionsList(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.FormSubmission+Submission]) : Fable.React.ReactElement
+ToolUp.Forms.FormSubmissionsList.MatrixSummary(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSubmission+FieldValue]) : Fable.React.ReactElement
 ToolUp.Forms.FormsClient (class)
 ToolUp.Forms.FormsClient.proxy : ToolUp.Forms.FormApi+IFormApi { get }
 ToolUp.Forms.PublicEmbed (class)

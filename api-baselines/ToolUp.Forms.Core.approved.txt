@@ -199,6 +199,7 @@ ToolUp.Forms.FormSchema+FieldKind.IsDateField : System.Boolean { get }
 ToolUp.Forms.FormSchema+FieldKind.IsDateTimeField : System.Boolean { get }
 ToolUp.Forms.FormSchema+FieldKind.IsEntityRefField : System.Boolean { get }
 ToolUp.Forms.FormSchema+FieldKind.IsFileField : System.Boolean { get }
+ToolUp.Forms.FormSchema+FieldKind.IsMatrixField : System.Boolean { get }
 ToolUp.Forms.FormSchema+FieldKind.IsMultiChoiceField : System.Boolean { get }
 ToolUp.Forms.FormSchema+FieldKind.IsNestedFormField : System.Boolean { get }
 ToolUp.Forms.FormSchema+FieldKind.IsNumberField : System.Boolean { get }
@@ -210,6 +211,11 @@ ToolUp.Forms.FormSchema+FieldKind+EntityRefField (class)
 ToolUp.Forms.FormSchema+FieldKind+EntityRefField.entityType : System.String { get }
 ToolUp.Forms.FormSchema+FieldKind+FileField (class)
 ToolUp.Forms.FormSchema+FieldKind+FileField.allowedTypes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Forms.FormSchema+FieldKind+MatrixField (class)
+ToolUp.Forms.FormSchema+FieldKind+MatrixField.cell : ToolUp.Forms.FormSchema+FieldKind { get }
+ToolUp.Forms.FormSchema+FieldKind+MatrixField.cols : System.Int32 { get }
+ToolUp.Forms.FormSchema+FieldKind+MatrixField.labels : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Forms.FormSchema+MatrixFieldLabels] { get }
+ToolUp.Forms.FormSchema+FieldKind+MatrixField.rows : System.Int32 { get }
 ToolUp.Forms.FormSchema+FieldKind+MultiChoiceField (class)
 ToolUp.Forms.FormSchema+FieldKind+MultiChoiceField.options : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Forms.FormSchema+FieldKind+NestedFormField (class)
@@ -224,6 +230,7 @@ ToolUp.Forms.FormSchema+FieldKind+Tags.DateField : System.Int32 (literal)
 ToolUp.Forms.FormSchema+FieldKind+Tags.DateTimeField : System.Int32 (literal)
 ToolUp.Forms.FormSchema+FieldKind+Tags.EntityRefField : System.Int32 (literal)
 ToolUp.Forms.FormSchema+FieldKind+Tags.FileField : System.Int32 (literal)
+ToolUp.Forms.FormSchema+FieldKind+Tags.MatrixField : System.Int32 (literal)
 ToolUp.Forms.FormSchema+FieldKind+Tags.MultiChoiceField : System.Int32 (literal)
 ToolUp.Forms.FormSchema+FieldKind+Tags.NestedFormField : System.Int32 (literal)
 ToolUp.Forms.FormSchema+FieldKind+Tags.NumberField : System.Int32 (literal)
@@ -260,6 +267,16 @@ ToolUp.Forms.FormSchema+FormVisibility.Tag : System.Int32 { get }
 ToolUp.Forms.FormSchema+FormVisibility+Tags (class)
 ToolUp.Forms.FormSchema+FormVisibility+Tags.Internal : System.Int32 (literal)
 ToolUp.Forms.FormSchema+FormVisibility+Tags.Publishable : System.Int32 (literal)
+ToolUp.Forms.FormSchema+Matrix (class)
+ToolUp.Forms.FormSchema+Matrix.cellKey(System.String, System.Int32, System.Int32) : System.String
+ToolUp.Forms.FormSchema+Matrix.colLabel(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Forms.FormSchema+MatrixFieldLabels], System.Int32) : System.String
+ToolUp.Forms.FormSchema+Matrix.coords(System.Int32, System.Int32) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.Int32]]
+ToolUp.Forms.FormSchema+Matrix.create(System.Int32, System.Int32, ToolUp.Forms.FormSchema+FieldKind, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Forms.FormSchema+MatrixFieldLabels]) : ToolUp.Forms.FormSchema+FieldKind
+ToolUp.Forms.FormSchema+Matrix.rowLabel(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Forms.FormSchema+MatrixFieldLabels], System.Int32) : System.String
+ToolUp.Forms.FormSchema+MatrixFieldLabels (class)
+ToolUp.Forms.FormSchema+MatrixFieldLabels..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Forms.FormSchema+MatrixFieldLabels.ColLabels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Forms.FormSchema+MatrixFieldLabels.RowLabels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Forms.FormSchema+ValidationRule (class)
 ToolUp.Forms.FormSchema+ValidationRule.IsCustom : System.Boolean { get }
 ToolUp.Forms.FormSchema+ValidationRule.IsLengthRange : System.Boolean { get }
@@ -479,6 +496,15 @@ ToolUp.Forms.PublicFormApi+SubmitWithTokenRequest (class)
 ToolUp.Forms.PublicFormApi+SubmitWithTokenRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSubmission+FieldValue])
 ToolUp.Forms.PublicFormApi+SubmitWithTokenRequest.Token : System.String { get }
 ToolUp.Forms.PublicFormApi+SubmitWithTokenRequest.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSubmission+FieldValue] { get }
+ToolUp.Forms.UserSchemaFormSource (class)
+ToolUp.Forms.UserSchemaFormSource.fieldKindOf(ToolUp.Platform.BIFriendlyType) : ToolUp.Forms.FormSchema+FieldKind
+ToolUp.Forms.UserSchemaFormSource.toFieldSchema(ToolUp.Platform.UserSchemaField) : ToolUp.Forms.FormSchema+FieldSchema
+ToolUp.Forms.UserSchemaFormSource.toFormSchema(ToolUp.Platform.UserAuthoredSchema) : ToolUp.Forms.FormSchema+FormSchema
+ToolUp.Forms.UserSchemaFormSource.validatorsOf(ToolUp.Platform.BIFriendlyType) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.FormSchema+ValidationRule]
+ToolUp.Forms.UserSchemaFormSource+IFormSchemaSource (interface)
+ToolUp.Forms.UserSchemaFormSource+IFormSchemaSource.ToFormSchema() : ToolUp.Forms.FormSchema+FormSchema
+ToolUp.Forms.UserSchemaFormSource+UserAuthoredSchemaSource (class)
+ToolUp.Forms.UserSchemaFormSource+UserAuthoredSchemaSource..ctor(ToolUp.Platform.UserAuthoredSchema)
 ToolUp.Forms.Workflow (class)
 ToolUp.Forms.Workflow+ActionFailurePolicy (class)
 ToolUp.Forms.Workflow+ActionFailurePolicy.DeadLetter : ToolUp.Forms.Workflow+ActionFailurePolicy { get }
