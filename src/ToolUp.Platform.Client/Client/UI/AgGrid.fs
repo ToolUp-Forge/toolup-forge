@@ -716,6 +716,40 @@ type LocaleText = {
     average: string option
 }
 
+module LocaleText =
+    /// All-None starting point; set only the keys you want to override.
+    let empty: LocaleText = {
+        contains = None
+        notContains = None
+        equals = None
+        notEqual = None
+        startsWith = None
+        endsWith = None
+        blank = None
+        notBlank = None
+        filterOoo = None
+        applyFilter = None
+        resetFilter = None
+        clearFilter = None
+        lessThan = None
+        greaterThan = None
+        inRange = None
+        loadingOoo = None
+        noRowsToShow = None
+        page = None
+        ``to`` = None
+        ``of`` = None
+        pinColumn = None
+        autosizeThisColumn = None
+        autosizeAllColumns = None
+        resetColumns = None
+        sum = None
+        min = None
+        max = None
+        count = None
+        average = None
+    }
+
 /// Raw `localeText` escape hatch for any key not on `LocaleText`.
 type LocaleTextDictionary = Map<string, string>
 
@@ -1492,7 +1526,10 @@ type AgGrid<'row> =
     static member inline localeText(v: LocaleText) = agGridProp<'row> ("localeText" ==> v)
 
     static member inline localeText(v: LocaleTextDictionary) =
-        agGridProp<'row> ("localeText" ==> (v |> Map.toList |> List.map (fun (k, s) -> k ==> s) |> createObj))
+        agGridProp<'row> (
+            "localeText"
+            ==> (v |> Map.toList |> List.map (fun (k, s) -> k ==> s) |> createObj)
+        )
 
     // ─── Misc grid options (Phase 12e) ──────────────────────────
     static member inline suppressDragLeaveHidesColumns(v: bool) =

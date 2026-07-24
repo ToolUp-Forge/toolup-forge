@@ -129,6 +129,32 @@ static member inline chart props =
 
 **Do not add a changing `prop.key` to the chart container.** A `prop.key` that changes when the selected fact/series changes forces React to unmount and remount the entire chart component, destroying the `AgCharts` instance. This eliminates all transition animations — the chart always draws from scratch. The `MemoizedChart` wrapper handles correct `chart.update()` delivery without unmounting.
 
+## AG Grid / AG Charts binding reference (Phase 12e)
+
+The Fable bindings target **ag-grid 35.3.0** / **ag-charts 13.3.0** — the versions pinned in the samples' `package.json`. Binding-version releases of the UI surface align to those pins (bump the pin, bump the binding version).
+
+### Where each feature's bindings live
+
+| Surface | File | Highlights |
+|---|---|---|
+| Community grid | `src/ToolUp.Platform.Client/Client/UI/AgGrid.fs` | events (cell/row/column/display), filter API on `IGridApi`, Theming-API `Theme` builder, `CsvExportParams`, `LocaleText`, selection completion, `ColumnDef` completion |
+| Community charts | `src/ToolUp.Platform.Client/Client/UI/AgChart.fs` | `Series` (+ histogram), `PieSeries`, `BubbleSeries`, `AgChart` tooltip/crosshair/sync/padding/legend, `Axis` completion, `LegendOptions`, `ChartThemeBuilder` |
+| Enterprise grid | `src/AgGridEnterprise/AgGridEnterpriseTypes.fs` | Set/Multi Filter, Excel export (+`ExcelStyle`), Master/Detail, Status Bar, Sidebar, charts integration, range selection, SSRM, custom agg funcs |
+| Enterprise charts | `src/AgGridEnterprise/AgChartEnterpriseTypes.fs` | Sankey, Sunburst, Treemap (`HierarchyNode`), Candlestick, Ohlc, Heatmap, Waterfall, Box-plot, Range series, `SparklineOptions` + `MemoizedSparkline` |
+
+### Rules carried forward from the Community bindings
+
+- **Type-erasure / inline-export rule.** `MemoizedChart` and `MemoizedSparkline` — and any module value referenced by an `inline` member on an `[<Erase>]` type (`ChartPalette`, the `Theme.*` imports) — must be non-`private`, or a consumer gets a runtime "does not provide an export" `SyntaxError`.
+- **JSON-memo rule.** Both `MemoizedChart` (charts) and `MemoizedSparkline` (sparklines) memoise their React props by `JSON.stringify` equality so Elmish re-renders don't kill animations.
+- **Direction-keyed `axes`**, no `prop.key` on chart wrappers, `data` through the builders — as above.
+- **Enterprise imports isolation.** Enterprise series types are erased and emit no JS imports; the sole `ag-charts-enterprise` / `ag-grid-enterprise` imports live module-top-level in `AgGridEnterprise.fs`.
+
+### Source of truth + cookbooks
+
+- `.d.ts` under `node_modules/ag-{grid,charts}-{community,enterprise}/dist/types/src/` and `node_modules/ag-charts-types/`.
+- Authoring cookbooks (canonical, single-Read for an AI agent): [`../../ToolUp.Platform.Client/Client/UI/COOKBOOK.md`](../../ToolUp.Platform.Client/Client/UI/COOKBOOK.md) (Community) and [`../../AgGridEnterprise/COOKBOOK.md`](../../AgGridEnterprise/COOKBOOK.md) (Enterprise).
+- In 13.3.0, heatmap / waterfall / box-plot / range-bar / range-area are Enterprise-only (bound in the companion, not `AgChart.fs`). Long-tail (Advanced Filter custom UI, Viewport Row Model, nightingale / radial / radar, Annotations) stay `obj` escape hatches.
+
 ## Module-level error boundaries (Phase 12c)
 
 Every module's view tree is wrapped in `Components.ModuleBoundary` at the per-module view-dispatch site in `SDK.Client.fs view`. The boundary contains runtime exceptions to the affected module's sidebar entry — other modules keep their state and remain usable. The Reload button surfaced in the error UI dispatches `ResetModule moduleId`, which re-runs the module's `Init` against the current `ClientModuleContext`.

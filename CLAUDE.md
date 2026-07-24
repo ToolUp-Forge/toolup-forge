@@ -391,6 +391,17 @@ Method-call lambdas need parens: `AgGrid.onGridReady (_.AutoSizeAllColumns())`.
 - `AgChart.chart` uses a memoised wrapper (`MemoizedChart`) to preserve animations on Elmish re-renders.
 - Don't add `prop.key` to the chart `Html.div` wrapper when underlying data changes — forces React remount, destroys the chart instance, prevents transition animations.
 
+### AG Grid / AG Charts binding reference (Phase 12e)
+
+The bindings target **ag-grid 35.3.0** / **ag-charts 13.3.0** (pinned in the samples' `package.json`; the binding-version contract follows those pins). Comprehensive typed surface — events, filters, theming, CSV/Excel export, the full series catalogue — reached at ~80% of the published public API.
+
+- **Community** bindings: [`src/ToolUp.Platform.Client/Client/UI/AgGrid.fs`](src/ToolUp.Platform.Client/Client/UI/AgGrid.fs) + [`AgChart.fs`](src/ToolUp.Platform.Client/Client/UI/AgChart.fs). Cookbook: [`src/ToolUp.Platform.Client/Client/UI/COOKBOOK.md`](src/ToolUp.Platform.Client/Client/UI/COOKBOOK.md) — the canonical authoring reference (constraints → shortest-possible → recipes → anti-patterns), single-Read for an AI agent.
+- **Enterprise** file split: [`src/AgGridEnterprise/AgGridEnterpriseTypes.fs`](src/AgGridEnterprise/AgGridEnterpriseTypes.fs) (grid: Set Filter / Multi Filter / Excel Export / Master-Detail / Status Bar / Sidebar / charts integration / SSRM / custom aggs) + [`AgChartEnterpriseTypes.fs`](src/AgGridEnterprise/AgChartEnterpriseTypes.fs) (Sankey / Sunburst / Treemap / Candlestick / Ohlc / Heatmap / Waterfall / Box-plot / Range series + Sparkline). Cookbook: [`src/AgGridEnterprise/COOKBOOK.md`](src/AgGridEnterprise/COOKBOOK.md).
+- Source of truth: the `.d.ts` under `node_modules/ag-{grid,charts}-{community,enterprise}/dist/types/src/` and `node_modules/ag-charts-types/`. In 13.3.0 heatmap / waterfall / box-plot / range-bar / range-area are **Enterprise-only** (bound in the companion, not Community).
+- `MemoizedSparkline` (Enterprise) follows the same **non-`private`** rule as `MemoizedChart` — a module value referenced by an `inline` member on an `[<Erase>]` type must export, else a consumer sees a runtime "does not provide an export" `SyntaxError`.
+- Enterprise series types are erased and emit **no** JS imports; the sole `ag-charts-enterprise` / `ag-grid-enterprise` imports stay module-top-level in `AgGridEnterprise.fs`.
+- Long-tail features (Advanced Filter custom UI, Viewport Row Model, nightingale / radial / radar series, Annotations) remain reachable via documented `obj` escape hatches.
+
 ## AI provider authoring
 
 A new provider goes in `src/AIProviders/<Name>/` with its own `.fsproj`, implementing `IAIProvider` and exposing a builder for `DefaultAIProviderFactory`.
