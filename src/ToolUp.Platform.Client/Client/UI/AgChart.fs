@@ -108,12 +108,95 @@ type SeriesKind =
     | Area
     | Scatter
     | Bar
+    // Phase 12e — Community cartesian addition. range-bar / range-area /
+    // waterfall / box-plot are ENTERPRISE-only in AG Charts 13.3.0 (verified
+    // against node_modules/ag-charts-enterprise) and live in the Enterprise
+    // charts companion; only Histogram is Community.
+    | Histogram
+
+    member this.SeriesKindText =
+        match this with
+        | Line -> "line"
+        | Area -> "area"
+        | Scatter -> "scatter"
+        | Bar -> "bar"
+        | Histogram -> "histogram"
 
 [<RequireQualifiedAccess>]
 type AxisKind =
     | Category
     | Number
     | Time
+
+// ─── Formatter / tooltip param records (Phase 12e) ───────────────
+// Shared by axis + series value/label formatters and tooltip renderers.
+// See node_modules/ag-charts-types/dist/types/src/.
+
+/// Params passed to an axis / series value or label formatter.
+type IChartFormatterParams = {
+    value: obj
+    index: int
+    fractionDigits: int
+    tickInterval: obj
+}
+
+/// Params passed to a series tooltip renderer. `datum` is the row bound to
+/// the hovered node; the returned record shapes the tooltip DOM.
+type IChartTooltipParams<'datum> = {
+    datum: 'datum
+    xKey: string
+    yKey: string
+    xValue: obj
+    yValue: obj
+    title: string
+    color: string
+}
+
+/// Typed tooltip content returned from a renderer.
+type ChartTooltipContent = {
+    title: string
+    content: string
+    backgroundColor: string
+    color: string
+}
+
+/// Typed axis-label configuration (Phase 12e). All fields optional — None
+/// erases to undefined. Replaces the ad-hoc `label(int)` / `label(obj)`
+/// overloads (both retained for back-compat).
+type AxisLabel = {
+    fontSize: int option
+    fontFamily: string option
+    fontWeight: string option
+    color: string option
+    format: string option
+    formatter: (IChartFormatterParams -> string) option
+    padding: int option
+    rotation: int option
+    autoRotate: bool option
+    autoRotateAngle: int option
+    avoidCollisions: bool option
+    fractionDigits: int option
+    minSpacing: int option
+    enabled: bool option
+}
+
+module AxisLabel =
+    let empty: AxisLabel = {
+        fontSize = None
+        fontFamily = None
+        fontWeight = None
+        color = None
+        format = None
+        formatter = None
+        padding = None
+        rotation = None
+        autoRotate = None
+        autoRotateAngle = None
+        avoidCollisions = None
+        fractionDigits = None
+        minSpacing = None
+        enabled = None
+    }
 
 [<Erase>]
 type Axis =
@@ -128,6 +211,40 @@ type Axis =
     static member inline create v = createObj v
     static member inline label(rotation: int) = "label" ==> {| rotation = rotation |}
     static member inline label(options: obj) = "label" ==> options
+
+    /// Typed axis label config (Phase 12e).
+    static member inline label(cfg: AxisLabel) = "label" ==> cfg
+
+    // ─── Axis completion (Phase 12e) ────────────────────────────
+
+    static member inline gridLine(enabled: bool) = "gridLine" ==> {| enabled = enabled |}
+
+    static member inline gridLine(enabled: bool, style: obj) =
+        "gridLine" ==> {| enabled = enabled; style = style |}
+
+    static member inline tick(enabled: bool) = "tick" ==> {| enabled = enabled |}
+
+    /// Typed tick config: size / color / count / interval / values are all
+    /// optional (pass an anonymous record with the fields you need).
+    static member inline tick(cfg: obj) = "tick" ==> cfg
+
+    /// Auto-extend the domain to "nice" round numbers.
+    static member inline nice(v: bool) = "nice" ==> v
+
+    /// Invert the axis (reverse the value direction).
+    static member inline inverted(v: bool) = "reverse" ==> v
+
+    /// Category-axis reversal (order of categories).
+    static member inline reverse(v: bool) = "reverse" ==> v
+
+    /// Multi-key stacked time / category axis.
+    static member inline keys(v: string seq) = "keys" ==> Seq.toArray v
+
+    /// Numeric / time tick interval.
+    static member inline interval(v: float) = "interval" ==> {| step = v |}
+
+    static member inline interval(cfg: obj) = "interval" ==> cfg
+
     static member inline crosshair(enabled: bool) = "crosshair" ==> {| enabled = enabled |}
     static member inline min(value: float) = "min" ==> value
     static member inline max(value: float) = "max" ==> value
@@ -259,6 +376,106 @@ type Series =
     static member inline strokeWidth(v: int) = "strokeWidth" ==> v
     static member inline fillOpacity(v: float) = "fillOpacity" ==> v
     static member inline errorBar(v: obj) = "errorBar" ==> v
+
+    // ─── Series completion (Phase 12e) ──────────────────────────
+    static member inline title(v: string) = "title" ==> v
+
+    /// Stacked bar / area within the default stack group.
+    static member inline stacked(v: bool) = "stacked" ==> v
+
+    /// Named stack group (multiple independent stacks on one chart).
+    static member inline stackGroup(v: string) = "stackGroup" ==> v
+
+    static member inline grouped(v: bool) = "grouped" ==> v
+    static member inline cornerRadius(v: int) = "cornerRadius" ==> v
+    static member inline connectMissingData(v: bool) = "connectMissingData" ==> v
+
+    // Histogram (Community): bins as explicit ranges, or a target count.
+    static member inline bins(v: (float * float) seq) =
+        "bins" ==> [| for (lo, hi) in v -> [| lo; hi |] |]
+
+    static member inline binCount(v: int) = "binCount" ==> v
+
+    /// Histogram aggregation — "count" | "sum" | "mean".
+    static member inline aggregation(v: string) = "aggregation" ==> v
+
+    static member inline areaPlot(v: bool) = "areaPlot" ==> v
+
+    /// Typed tooltip renderer (Phase 12e). Receives the hovered datum + keys,
+    /// returns the tooltip content record.
+    static member inline tooltipRenderer(f: IChartTooltipParams<'datum> -> ChartTooltipContent) =
+        "tooltip" ==> {| renderer = f |}
+
+    /// Typed data-label formatter for the series.
+    static member inline labelFormatter(f: IChartFormatterParams -> string) =
+        "label" ==> {| enabled = true; formatter = f |}
+
+    static member inline create v = createObj v
+
+// ─── Pie / Donut series (Phase 12e — Community) ──────────────────
+// Separate builder: the polar option shape (angleKey / radiusKey / callout)
+// diverges from the cartesian xKey/yKey families. `type` is "pie" | "donut".
+// See node_modules/ag-charts-types/dist/types/src/series/polar/pieOptions.d.ts.
+[<Erase>]
+type PieSeries =
+    static member inline pie = "type" ==> "pie"
+    static member inline donut = "type" ==> "donut"
+    static member inline data(v: _ seq) = "data" ==> Seq.toArray v
+    static member inline angleKey(v: string) = "angleKey" ==> v
+    static member inline angleName(v: string) = "angleName" ==> v
+    static member inline radiusKey(v: string) = "radiusKey" ==> v
+    static member inline radiusName(v: string) = "radiusName" ==> v
+    static member inline sectorLabelKey(v: string) = "sectorLabelKey" ==> v
+    static member inline calloutLabelKey(v: string) = "calloutLabelKey" ==> v
+    static member inline legendItemKey(v: string) = "legendItemKey" ==> v
+    static member inline innerRadius(v: float) = "innerRadius" ==> v
+    static member inline innerRadiusRatio(v: float) = "innerRadiusRatio" ==> v
+    static member inline rotation(v: float) = "rotation" ==> v
+    static member inline fills(v: string seq) = "fills" ==> Seq.toArray v
+    static member inline strokes(v: string seq) = "strokes" ==> Seq.toArray v
+    static member inline fillOpacity(v: float) = "fillOpacity" ==> v
+    static member inline strokeWidth(v: int) = "strokeWidth" ==> v
+    static member inline title(v: string) = "title" ==> {| text = v |}
+    static member inline showInLegend(v: bool) = "showInLegend" ==> v
+
+    static member inline calloutLabel(enabled: bool) =
+        "calloutLabel" ==> {| enabled = enabled |}
+
+    static member inline sectorLabel(enabled: bool) =
+        "sectorLabel" ==> {| enabled = enabled |}
+
+    static member inline tooltipRenderer(f: IChartTooltipParams<'datum> -> ChartTooltipContent) =
+        "tooltip" ==> {| renderer = f |}
+
+    static member inline create v = createObj v
+
+// ─── Bubble series (Phase 12e — Community) ───────────────────────
+// Cartesian series with a third (size) dimension. `sizeDomain` is the v13.3
+// key (the spec's `domain` was renamed upstream).
+[<Erase>]
+type BubbleSeries =
+    static member inline data(v: _ seq) = "data" ==> Seq.toArray v
+    static member inline xKey(v: string) = "xKey" ==> v
+    static member inline yKey(v: string) = "yKey" ==> v
+    static member inline sizeKey(v: string) = "sizeKey" ==> v
+    static member inline sizeName(v: string) = "sizeName" ==> v
+    static member inline sizeDomain(lo: float, hi: float) = "sizeDomain" ==> [| lo; hi |]
+    static member inline labelKey(v: string) = "labelKey" ==> v
+    static member inline xName(v: string) = "xName" ==> v
+    static member inline yName(v: string) = "yName" ==> v
+    static member inline title(v: string) = "title" ==> v
+    static member inline fill(v: string) = "fill" ==> v
+    static member inline stroke(v: string) = "stroke" ==> v
+    static member inline fillOpacity(v: float) = "fillOpacity" ==> v
+    static member inline marker(m: SeriesMarker) = Series.marker m
+    static member inline showInLegend(v: bool) = "showInLegend" ==> v
+
+    static member inline tooltipRenderer(f: IChartTooltipParams<'datum> -> ChartTooltipContent) =
+        "tooltip" ==> {| renderer = f |}
+
+    /// Bubble series always carries `type = "bubble"`; include this in the
+    /// builder list (or set xKey once — see below).
+    static member inline seriesType = "type" ==> "bubble"
     static member inline create v = createObj v
 
 /// Wrapper component that memoizes the React-props object for ag-charts-react
@@ -287,6 +504,67 @@ let MemoizedChart (reactProps: obj) =
 
     ReactLegacy.createElement (unbox<ReactElement> agChart, stableRef.current)
 
+// ─── Legend / theme option records (Phase 12e) ───────────────────
+
+/// Typed legend configuration, replacing the 3-positional `legend` overload
+/// (retained for back-compat). All fields optional.
+/// See node_modules/ag-charts-types/dist/types/src/chart/legendOptions.d.ts.
+type LegendOptions = {
+    enabled: bool option
+    position: ChartPosition option
+    spacing: int option
+    /// item = {| marker = {| shape; size; padding; strokeWidth |};
+    ///           label = {| fontSize; fontFamily; color; maxLength |};
+    ///           paddingX; paddingY |}
+    item: obj option
+    /// pagination = {| marker = {| size |} |}
+    pagination: obj option
+    listeners: obj option
+    reverseOrder: bool option
+    maxWidth: int option
+    maxHeight: int option
+}
+
+module LegendOptions =
+    let empty: LegendOptions = {
+        enabled = None
+        position = None
+        spacing = None
+        item = None
+        pagination = None
+        listeners = None
+        reverseOrder = None
+        maxWidth = None
+        maxHeight = None
+    }
+
+/// Typed one-chart theme override (Phase 12e). Complements the deployment-wide
+/// `ChartPalette` mutable brand defaults — this lets a single chart override
+/// base theme + palette + params + overrides.
+/// See node_modules/ag-charts-types/dist/types/src/chart/themeOptions.d.ts.
+type ChartThemeBuilder = {
+    /// "ag-default" | "ag-material" | "ag-sheets" | "ag-polychroma" | ...,
+    /// or "ag-default-dark" variants.
+    baseTheme: string option
+    /// palette = {| fills = string[]; strokes = string[] |}
+    palette: obj option
+    /// params = {| fontFamily; accentColor; backgroundColor; ... |}
+    ``params``: obj option
+    /// overrides = {| common = {| ... |}; line = {| ... |}; bar = {| ... |} |}
+    overrides: obj option
+}
+
+module ChartThemeBuilder =
+    let empty: ChartThemeBuilder = {
+        baseTheme = None
+        palette = None
+        ``params`` = None
+        overrides = None
+    }
+
+    /// Project the typed builder to the `theme` option object AG Charts reads.
+    let toTheme (b: ChartThemeBuilder) : obj = box b
+
 [<Erase>]
 type AgChart =
     static member inline title(v: string) = "title" ==> {| text = v |}
@@ -313,6 +591,113 @@ type AgChart =
                 spacing = spacing
                 position = position.ToString().ToLower()
             |}
+
+    /// Typed legend options (Phase 12e). `position` maps to its lower-case
+    /// string; other fields pass through. None-valued fields erase.
+    static member inline legend(opts: LegendOptions) =
+        let positioned: obj =
+            match opts.position with
+            | Some p -> box (p.ToString().ToLower())
+            | None -> box null
+
+        "legend"
+        ==> {|
+                enabled = opts.enabled
+                position = positioned
+                spacing = opts.spacing
+                item = opts.item
+                pagination = opts.pagination
+                listeners = opts.listeners
+                reverseOrder = opts.reverseOrder
+                maxWidth = opts.maxWidth
+                maxHeight = opts.maxHeight
+            |}
+
+    // ─── AgChart completion (Phase 12e) ─────────────────────────
+
+    /// Solid background fill.
+    static member inline background(fill: string) = "background" ==> {| fill = fill |}
+
+    /// Background image / gradient (pass the AG Charts `IBackground` object).
+    static member inline backgroundImage(image: obj) = "background" ==> {| image = image |}
+
+    /// Typed chart-level tooltip (enabled / range / delay / renderer).
+    static member inline tooltip(enabled: bool) = "tooltip" ==> {| enabled = enabled |}
+
+    static member inline tooltip(cfg: obj) = "tooltip" ==> cfg
+
+    static member inline tooltipRenderer(f: IChartTooltipParams<'datum> -> ChartTooltipContent) =
+        "tooltip" ==> {| enabled = true; renderer = f |}
+
+    /// Chart-level crosshair (applies via axis overrides).
+    static member inline crosshair(enabled: bool, snap: bool, label: bool) =
+        "crosshair"
+        ==> {|
+                enabled = enabled
+                snap = snap
+                label = {| enabled = label |}
+            |}
+
+    /// Chart-group synchronisation: charts sharing a `group` sync the named
+    /// dimensions ("x" / "y" both by default) and optionally zoom.
+    static member inline sync(group: string, axes: string, zoom: bool) =
+        "sync"
+        ==> {|
+                enabled = true
+                group = group
+                axes = axes
+                nodeInteraction = true
+                zoom = zoom
+            |}
+
+    /// Chart caption (below title). Position / spacing optional via `cfg`.
+    static member inline caption(text: string) = "caption" ==> {| text = text |}
+    static member inline caption(cfg: obj) = "caption" ==> cfg
+
+    /// Chart footnote.
+    static member inline footnote(text: string) = "footnote" ==> {| text = text |}
+    static member inline footnote(cfg: obj) = "footnote" ==> cfg
+
+    static member inline padding(top: int, right: int, bottom: int, left: int) =
+        "padding"
+        ==> {|
+                top = top
+                right = right
+                bottom = bottom
+                left = left
+            |}
+
+    static member inline padding(all: int) =
+        "padding"
+        ==> {|
+                top = all
+                right = all
+                bottom = all
+                left = all
+            |}
+
+    static member inline minWidth(v: int) = "minWidth" ==> v
+    static member inline minHeight(v: int) = "minHeight" ==> v
+
+    /// Locale object (`AgChartLocale`) for number / date formatting + a11y text.
+    static member inline locale(v: obj) = "locale" ==> v
+
+    // Typed listener wrappers (raw `listeners(obj)` remains as escape hatch).
+    static member inline onClick(f: obj -> unit) = "listeners" ==> {| click = f |}
+
+    static member inline onDoubleClick(f: obj -> unit) = "listeners" ==> {| doubleClick = f |}
+
+    static member inline onSeriesNodeClick(f: obj -> unit) =
+        "listeners" ==> {| seriesNodeClick = f |}
+
+    static member inline onLegendItemClick(f: obj -> unit) =
+        "legend"
+        ==> {|
+                listeners = {| legendItemClick = f |}
+            |}
+
+    /// Apply a typed one-chart theme override (Phase 12e).
+    static member inline chartTheme(b: ChartThemeBuilder) = "theme" ==> b
 
     static member inline data(v: _ seq) = "data" ==> Seq.toArray v
 
