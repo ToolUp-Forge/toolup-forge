@@ -72,6 +72,12 @@ do gridModuleRegistry?registerModules ([| allEnterpriseModules; integratedCharts
 do ToolUp.Platform.AgGrid.setGridModulesRegistered ()
 do ToolUp.Platform.AgChart.setChartsModulesRegistered ()
 
+// Phase 12d — enable value-provenance overlay rendering (see
+// ProvenanceOverlay.fs). Until this runs the Community substrate keeps the
+// overlay a no-op, so a Community-only deployment collects provenance
+// metadata but renders nothing.
+do AgGridEnterpriseProvenance.activate ()
+
 // ─── Variant B (recommended): AgGridProvider ─────────────────────
 // Returns an AgGridModuleConfig for use with ClientConfig.GridModules.
 // Module registration already happened above; this just captures the module

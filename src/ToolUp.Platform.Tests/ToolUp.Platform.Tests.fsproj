@@ -909,6 +909,8 @@
         <Compile Include="InProcess\ServerConfigFromEnvTests.fs" />
         <!-- Phase 71.A.10 — client brand-string lift precedence. -->
         <Compile Include="InProcess\ClientBrandLiftTests.fs" />
+        <!-- Phase 12d — AG Grid value-provenance overlay (pure surface). -->
+        <Compile Include="InProcess\CellProvenanceTests.fs" />
         <!-- Phase 66 Stream D.8 — RevokeOnIssuerRemoved integration tests.
              End-to-end exercise of the C.5 share-token decorator over a
              real BlobShareTokenStore: subscribe → react to

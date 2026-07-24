@@ -132,6 +132,8 @@ let allTests =
         StorageScopeResolverTests.tests
         ServerConfigFromEnvTests.tests
         ClientBrandLiftTests.tests
+        // Phase 12d — AG Grid value-provenance overlay.
+        CellProvenanceTests.tests
         AuthProviderTests.tests
         AzureBlobStorageTests.tests
         AwsS3StorageTests.tests

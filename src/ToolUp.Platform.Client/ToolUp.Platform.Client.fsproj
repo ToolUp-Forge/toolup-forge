@@ -125,6 +125,11 @@
              ProcessedDataContext / LoadingIndicatorContext. -->
         <Compile Include="Client\PresenceContext.fs" />
         <Compile Include="Client\NotificationClient.fs" />
+        <!-- Phase 12d — AG Grid value-provenance overlay. After
+             NotificationClient.fs (its click seam publishes a local
+             CustomNotification envelope) and after AgGrid.fs (it augments
+             the erased ColumnDef / AgGrid types). -->
+        <Compile Include="Client\UI\CellProvenance.fs" />
         <Compile Include="Client\ModuleQueryClient.fs" />
         <Compile Include="Client\ModuleStateObserver.fs" />
         <Compile Include="Client\NavigationRequest.fs" />
