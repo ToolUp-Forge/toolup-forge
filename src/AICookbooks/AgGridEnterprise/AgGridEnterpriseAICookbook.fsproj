@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AICookbooks.AgGridEnterprise</PackageId>
+    <AssemblyName>ToolUp.AICookbooks.AgGridEnterprise</AssemblyName>
+    <Description>Enterprise AG Grid + AG Chart prompt-builder companion for ToolUp.AI. Composes the Enterprise COOKBOOK.md's constraints + shortest-possible into a deployment's system prompt (Sankey/Sunburst/Treemap/OHLC/Sparkline + Set Filter/Master-Detail/Excel/Status Bar/Sidebar). Opt-in; Enterprise-only.</Description>
+    <PackageTags>fsharp;sdk;ai;prompt;ag-grid;ag-charts;enterprise;cookbook</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AgGridEnterpriseAICookbook.fs" />
+    <!-- Ship the Enterprise cookbook alongside the assembly for assembly-
+         relative resolution in packaged deployments. -->
+    <Content Include="..\..\AgGridEnterprise\COOKBOOK.md" Link="COOKBOOK.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>content\COOKBOOK.md</PackagePath>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+    <ProjectReference Include="..\AgChart\AgChartAICookbook.fsproj" />
+  </ItemGroup>
+</Project>

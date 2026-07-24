@@ -28,8 +28,7 @@ gets a runtime `SyntaxError`. Read before writing chart/grid code.
 - **`MemoizedChart` (and any module value used by an `inline` member on an
   `[<Erase>]` type) stays non-`private`.** Fable inlines the call site and
   imports the value directly; `private` yields a runtime "does not provide an
-  export" `SyntaxError`. The same rule governs `ChartPalette` and (Enterprise)
-  `MemoizedSparkline`.
+  export" `SyntaxError`. The same rule governs `ChartPalette`.
 - **`data` always goes through `AgChart.data` / `Series.data`.** These call
   `Seq.toArray`; a raw F# list on the wire is not what AG Charts expects.
 - **`ChartPalette` is the deployment brand surface.** Set its mutables once at
@@ -37,9 +36,8 @@ gets a runtime `SyntaxError`. Read before writing chart/grid code.
   per-chart overrides use `AgChart.chartTheme` / `ChartThemeBuilder`.
 - **No Enterprise imports here.** Community code never imports from
   `ag-grid-enterprise` / `ag-charts-enterprise`; module CSS imports use
-  `ag-grid-community/styles/`. Enterprise series (heatmap, waterfall, box-plot,
-  range-bar/area, sankey, sunburst, treemap, candlestick, ohlc, sparkline) live
-  in the AgGridEnterprise companion — they are Enterprise-only in 13.3.0.
+  `ag-grid-community/styles/`. Enterprise-only series and grid features live in
+  the AgGridEnterprise companion (see its cookbook) — not part of this surface.
 - **`options` wraps the series list.** `AgChart.chart [ AgChart.options [ ... ] ]`
   — the palette/theme merge happens inside `AgChart.options`.
 - **Run fantomas → build → fable → smoke** on every changed `.fs`.

@@ -34,6 +34,10 @@ let config = {
             // Phase 518 — ToolUp.Voice: Transcript model + error taxonomy
             // + the Whisper / AzureSpeech pure Wire surfaces. No env gating.
             TestPack.create "Voice" "src/ToolUp.Voice.Tests/ToolUp.Voice.Tests.fsproj"
+            // Phase 12e — AICookbooks licensing-boundary: the Community AG
+            // Chart prompt builder leaks zero Enterprise feature names + the
+            // ~600-token bound + graceful no-op on a missing cookbook.
+            TestPack.create "AICookbooks" "src/ToolUp.AICookbooks.Tests/ToolUp.AICookbooks.Tests.fsproj"
         ]
 }
 

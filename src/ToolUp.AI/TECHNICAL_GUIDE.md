@@ -323,6 +323,30 @@ The SDK has **no mechanism for users to send invisible prompts.** Everything in 
 
 This intentional limit protects the audit trail (`AnalysisCompleted` events in Phase 8, audit logs in Phase 9). Hidden user prompts would create conversations that can't be reconstructed from persisted history.
 
+### AG Grid / AG Charts authoring cookbooks (Phase 12e)
+
+Two opt-in sub-companions let the in-app AI assistant author charts and grids in F# against the typed bindings, by composing the cookbook guidance into the system prompt:
+
+- `ToolUp.AICookbooks.AgChart` — `AgChartAICookbook.systemPromptBuilder : ILogger option -> SystemPromptBuilder`. Reads the Community `COOKBOOK.md`, extracts its `## Critical constraints` + `## The shortest possible chart` sections (header-keyed parse), and prepends them under `# Authoring AG Charts and Grids in F#`.
+- `ToolUp.AICookbooks.AgGridEnterprise` — `AgGridEnterpriseAICookbook.systemPromptBuilder : ILogger option -> SystemPromptBuilder`. Same shape, reading the Enterprise `COOKBOOK.md`; adds the Enterprise series + grid features.
+
+```fsharp
+// In the deployment composition root, alongside the other prompt builders:
+let promptBuilders logger = [
+    SystemPromptBuilder.fromStatic platformPrefix
+    SystemPromptBuilder.activeModuleContext
+    AgChartAICookbook.systemPromptBuilder (Some logger)              // Community
+    AgGridEnterpriseAICookbook.systemPromptBuilder (Some logger)     // add only on Enterprise deployments
+]
+// …then composeWithAI wires `SystemPromptBuilder.compose (promptBuilders logger)`.
+```
+
+**Token-cost contract.** Each composed builder adds always-on guidance to **every** conversation turn, bounded to ~600 tokens (the extractor truncates on a line boundary past the cap). A deployment that composes neither builder pays **zero** — nothing auto-injects (GP 13): `ToolUp.AI` has no dependency on the UI bindings, and the composition root is the only place that sees both.
+
+**Licensing boundary in the prompt layer.** A Community-only deployment composes only the Community builder and never references the `AgGridEnterprise` cookbook companion, so no Enterprise feature name reaches the prompt — enforced by `ToolUp.AICookbooks.Tests` (the "community-only prompt leaks zero Enterprise feature names" assertion).
+
+**Fallback.** Cookbook resolution tries `TOOLUP_COOKBOOK_PATH` (Community) / `TOOLUP_ENTERPRISE_COOKBOOK_PATH` (Enterprise), then the assembly-relative copy shipped in the companion output, then a dev repo-relative path. If none resolves (or the file is unreadable), the builder emits a single startup `Logger.Warn` and returns an empty string — a silent no-op, never a crash.
+
 ## Built-in AI tools
 
 The SDK registers two families of platform-owned tools automatically inside `composeAI` (`AICompose.fs`) — apps do **not** declare them. Both reserve platform-prefixed names so a module tool can never collide; `composeAI` fails loudly at compose time on any duplicate `Name` across built-ins + module tools.

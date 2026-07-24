@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AICookbooks.AgChart</PackageId>
+    <AssemblyName>ToolUp.AICookbooks.AgChart</AssemblyName>
+    <Description>Community AG Chart + AG Grid prompt-builder companion for ToolUp.AI. Composes the Community COOKBOOK.md's constraints + shortest-possible-chart into a deployment's system prompt so the in-app AI assistant authors charts/grids in F#. Opt-in; ~600 tokens.</Description>
+    <PackageTags>fsharp;sdk;ai;prompt;ag-grid;ag-charts;cookbook</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AgChartAICookbook.fs" />
+    <!-- Ship the Community cookbook alongside the assembly so the builder's
+         assembly-relative resolution finds it in packaged deployments. -->
+    <Content Include="..\..\ToolUp.Platform.Client\Client\UI\COOKBOOK.md" Link="COOKBOOK.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>content\COOKBOOK.md</PackagePath>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+  </ItemGroup>
+</Project>
