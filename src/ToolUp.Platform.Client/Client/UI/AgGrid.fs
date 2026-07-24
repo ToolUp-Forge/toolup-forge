@@ -186,6 +186,69 @@ type IGridApi<'row> =
     /// before touching any other API method.
     abstract isDestroyed: unit -> bool
 
+    // ─── Filter API (Phase 12e) ─────────────────────────────────
+    /// Current filter model — an object keyed by colId whose values are
+    /// per-column filter-model entries (see `IFilterModelEntry`). Round-trips
+    /// through `setFilterModel`. Typed as `obj` because the entry shape varies
+    /// per filter type; construct entries with `IFilterModelEntry`.
+    abstract getFilterModel: unit -> obj
+    /// Apply a filter model (object keyed by colId → filter-model entry).
+    abstract setFilterModel: obj -> unit
+    /// `true` when any column filter (or the quick filter) is active.
+    abstract isAnyFilterPresent: unit -> bool
+    /// Destroy the filter instance for a column so it rebuilds on next use.
+    abstract destroyFilter: string -> unit
+
+    // ─── Selection completion (Phase 12e) ───────────────────────
+    abstract selectAll: unit -> unit
+    abstract deselectAll: unit -> unit
+    abstract selectAllFiltered: unit -> unit
+    abstract deselectAllFiltered: unit -> unit
+    abstract getSelectedRows: unit -> 'row array
+    /// Select / deselect a set of nodes. Pass a params object shaped
+    /// `{| nodes = ...; newValue = true |}` (see AG Grid `ISetNodesSelectedParams`).
+    abstract setNodesSelected: obj -> unit
+    abstract selectAllOnCurrentPage: unit -> unit
+    abstract selectAllFilteredAndCurrentPage: unit -> unit
+    /// Live cell-renderer component instances (for a params object naming
+    /// columns / rowNodes). Returns the framework component wrappers as `obj`.
+    abstract getCellRendererInstances: obj -> obj array
+    abstract getCellEditorInstances: obj -> obj array
+
+/// A single per-column entry inside the grid filter model
+/// (`api.getFilterModel()` / `setFilterModel`). Simple filters use
+/// `filterType` + `type` + `filter` / `filterTo` (numbers) or
+/// `dateFrom` / `dateTo` (dates); combined filters carry `operator` +
+/// `conditions`. All fields optional — construct only what a given
+/// filter type needs. Long-tail Set-filter / custom shapes: use the raw
+/// `obj` overload of `setFilterModel`.
+/// See node_modules/ag-grid-community/dist/types/src/interfaces/iFilter.d.ts.
+type IFilterModelEntry = {
+    filterType: string option
+    ``type``: string option
+    filter: obj option
+    filterTo: obj option
+    dateFrom: string option
+    dateTo: string option
+    operator: string option
+    conditions: obj array option
+    values: obj array option
+}
+
+module IFilterModelEntry =
+    /// All-None starting point; set only the fields the filter needs.
+    let empty: IFilterModelEntry = {
+        filterType = None
+        ``type`` = None
+        filter = None
+        filterTo = None
+        dateFrom = None
+        dateTo = None
+        operator = None
+        conditions = None
+        values = None
+    }
+
 // ─── Grid API registry (Phase 6g.C) ─────────────────────────────
 //
 // Per-tab module-level store that lets external code reach into a
@@ -358,6 +421,64 @@ module CallbackParams =
         api: IGridApi<'row>
     }
 
+/// Phase 12e — event param records for the grid-wide event surface.
+/// Each mirrors AG Grid's `Xxx Event` payload with the fields a handler
+/// commonly reaches; the raw event is always available positionally
+/// (`?rawField`) for the long tail. See
+/// node_modules/ag-grid-community/dist/types/src/events.d.ts.
+[<AutoOpen>]
+module GridEvents =
+    [<Erase>]
+    type ICellEvent<'row, 'value> = {
+        value: 'value option
+        data: 'row option
+        node: IRowNode<'row>
+        colDef: IColumnDef<'row>
+        column: IColumn
+        rowIndex: int option
+        rowPinned: string option
+        api: IGridApi<'row>
+        context: obj
+        event: obj
+    }
+
+    [<Erase>]
+    type IRowEvent<'row> = {
+        data: 'row option
+        node: IRowNode<'row>
+        rowIndex: int option
+        rowPinned: string option
+        api: IGridApi<'row>
+        context: obj
+        event: obj
+    }
+
+    [<Erase>]
+    type IColumnEvent<'row> = {
+        column: IColumn option
+        columns: IColumn array option
+        api: IGridApi<'row>
+        context: obj
+        source: string
+    }
+
+    [<Erase>]
+    type ISortChangedEvent<'row> = {
+        api: IGridApi<'row>
+        context: obj
+        source: string
+    }
+
+    /// Display / model events (`onModelUpdated`, `onFirstDataRendered`,
+    /// `onBodyScroll`, `onPaginationChanged`, `onGridSizeChanged`, …) carry
+    /// only the api + context + event; a single shared shape covers them.
+    [<Erase>]
+    type IGridDisplayEvent<'row> = {
+        api: IGridApi<'row>
+        context: obj
+        event: obj
+    }
+
 type RowSelection =
     | Single
     | Multiple
@@ -413,12 +534,190 @@ type DOMLayout =
         | AutoHeight -> "autoHeight"
         | Print -> "print"
 
+/// Legacy string theme classes. Deprecated in favour of the Theming API
+/// (`AgGrid.theme` + the `Theme` builder below), which is the AG Grid v31+
+/// recommended path. Kept for consumers still on CSS-class theming.
+[<System.Obsolete "Prefer the Theming API: AgGrid.theme (Theme.themeQuartz |> Theme.withParams ...)">]
 module ThemeClass =
     let Alpine = "ag-theme-alpine"
     let AlpineDark = "ag-theme-alpine-dark"
     let Balham = "ag-theme-balham"
     let BalhamDark = "ag-theme-balham-dark"
     let Material = "ag-theme-material"
+
+// ─── Theming API (Phase 12e — AG Grid v31+ Theming API) ──────────
+//
+// The v31+ Theming API replaces CSS-class themes (`ThemeClass` above) with
+// typed, composable Theme objects passed to the grid via `AgGrid.theme`.
+// `themeQuartz` / `themeBalham` / `themeMaterial` / `themeAlpine` are runtime
+// exports from ag-grid-community; a Theme is chained through `.withParams(...)`
+// (typed `ThemeParams` record) and `.withPart(...)` (a Part such as
+// `colorSchemeDark` or `iconSetMaterial`).
+//
+// See node_modules/ag-grid-community/dist/types/src/agStack/theming/theme.d.ts.
+
+/// Typed core theme parameters (the documented common set). Long-tail CSS
+/// variables stay reachable via `Theme.withCustomCss`. All fields optional —
+/// None values Fable-erase to `undefined` and AG Grid ignores them, so build
+/// from `ThemeParams.empty` and set only what you need.
+type ThemeParams = {
+    spacing: int option
+    accentColor: string option
+    borderRadius: int option
+    fontFamily: string option
+    fontSize: int option
+    headerHeight: int option
+    rowHeight: int option
+    backgroundColor: string option
+    foregroundColor: string option
+    headerBackgroundColor: string option
+    headerTextColor: string option
+    oddRowBackgroundColor: string option
+    borderColor: string option
+    wrapperBorderRadius: int option
+}
+
+module ThemeParams =
+    let empty: ThemeParams = {
+        spacing = None
+        accentColor = None
+        borderRadius = None
+        fontFamily = None
+        fontSize = None
+        headerHeight = None
+        rowHeight = None
+        backgroundColor = None
+        foregroundColor = None
+        headerBackgroundColor = None
+        headerTextColor = None
+        oddRowBackgroundColor = None
+        borderColor = None
+        wrapperBorderRadius = None
+    }
+
+/// The Theming-API builder. Start from a base theme, then pipe through
+/// `withParams` / `withPart`, and pass the result to `AgGrid.theme`.
+///   Theme.themeQuartz
+///   |> Theme.withParams { ThemeParams.empty with accentColor = Some "#59229D" }
+///   |> Theme.withPart Theme.colorSchemeDark
+module Theme =
+    let themeQuartz: obj = import "themeQuartz" "ag-grid-community"
+    let themeBalham: obj = import "themeBalham" "ag-grid-community"
+    let themeMaterial: obj = import "themeMaterial" "ag-grid-community"
+    let themeAlpine: obj = import "themeAlpine" "ag-grid-community"
+
+    // Parts — `.withPart(part)` swaps in a colour scheme / icon set.
+    let colorSchemeDark: obj = import "colorSchemeDark" "ag-grid-community"
+    let colorSchemeLight: obj = import "colorSchemeLight" "ag-grid-community"
+    let colorSchemeDarkBlue: obj = import "colorSchemeDarkBlue" "ag-grid-community"
+    let iconSetMaterial: obj = import "iconSetMaterial" "ag-grid-community"
+    let iconSetQuartz: obj = import "iconSetQuartz" "ag-grid-community"
+    let iconSetAlpine: obj = import "iconSetAlpine" "ag-grid-community"
+
+    /// Apply typed core params (immutable — returns a new Theme).
+    let withParams (p: ThemeParams) (theme: obj) : obj = theme?withParams (p)
+
+    /// Add a Part (colour scheme / icon set). Returns a new Theme.
+    let withPart (part: obj) (theme: obj) : obj = theme?withPart (part)
+
+    /// Remove a named part feature (e.g. "colorScheme").
+    let withoutPart (feature: string) (theme: obj) : obj = theme?withoutPart (feature)
+
+    /// Escape hatch for long-tail CSS variables not in `ThemeParams`.
+    /// Pass a raw params object; merged like `withParams`.
+    let withCustomCss (raw: obj) (theme: obj) : obj = theme?withParams (raw)
+
+/// Typed CSV export parameters (Phase 12e). Pass to `IGridApi.exportDataAsCsv`
+/// — the interface method takes `obj`, and this record boxes cleanly. All
+/// fields optional; None-valued fields Fable-erase to `undefined`.
+/// See node_modules/ag-grid-community/dist/types/src/interfaces/exportParams.d.ts.
+type CsvExportParams = {
+    fileName: string option
+    columnKeys: string array option
+    onlySelected: bool option
+    onlySelectedAllPages: bool option
+    allColumns: bool option
+    skipColumnHeaders: bool option
+    skipColumnGroupHeaders: bool option
+    skipRowGroups: bool option
+    skipPinnedTop: bool option
+    skipPinnedBottom: bool option
+    columnSeparator: string option
+    suppressQuotes: bool option
+    prependContent: string option
+    appendContent: string option
+    /// Per-cell value processor: receives the export params object
+    /// (`{| value; node; column; ... |}`), returns the string to emit.
+    processCellCallback: (obj -> string) option
+    /// Custom header text per column (`{| column; api; ... |}` → string).
+    processHeaderCallback: (obj -> string) option
+}
+
+module CsvExportParams =
+    let empty: CsvExportParams = {
+        fileName = None
+        columnKeys = None
+        onlySelected = None
+        onlySelectedAllPages = None
+        allColumns = None
+        skipColumnHeaders = None
+        skipColumnGroupHeaders = None
+        skipRowGroups = None
+        skipPinnedTop = None
+        skipPinnedBottom = None
+        columnSeparator = None
+        suppressQuotes = None
+        prependContent = None
+        appendContent = None
+        processCellCallback = None
+        processHeaderCallback = None
+    }
+
+/// Typed well-known `localeText` keys (Phase 12e) — the common subset of AG
+/// Grid's built-in translations. All optional; combine with the raw
+/// `LocaleTextDictionary` escape hatch (`Map<string,string>`) for keys not
+/// surfaced here. See
+/// node_modules/ag-grid-community/dist/types/src/locale/en-US.d.ts.
+type LocaleText = {
+    // filter panel
+    contains: string option
+    notContains: string option
+    equals: string option
+    notEqual: string option
+    startsWith: string option
+    endsWith: string option
+    blank: string option
+    notBlank: string option
+    filterOoo: string option
+    applyFilter: string option
+    resetFilter: string option
+    clearFilter: string option
+    // number filter
+    lessThan: string option
+    greaterThan: string option
+    inRange: string option
+    // generic
+    loadingOoo: string option
+    noRowsToShow: string option
+    // pagination
+    page: string option
+    ``to``: string option
+    ``of``: string option
+    // menu
+    pinColumn: string option
+    autosizeThisColumn: string option
+    autosizeAllColumns: string option
+    resetColumns: string option
+    // aggregation
+    sum: string option
+    min: string option
+    max: string option
+    count: string option
+    average: string option
+}
+
+/// Raw `localeText` escape hatch for any key not on `LocaleText`.
+type LocaleTextDictionary = Map<string, string>
 
 type ColumnType =
     | RightAligned
@@ -439,6 +738,97 @@ let CellRendererComponent<'row, 'value>
     (render: ICellRendererParams<'row, 'value> -> ReactElement, p: ICellRendererParams<'row, 'value>)
     =
     render p
+
+// ─── Typed filter params per RowFilter case (Phase 12e) ──────────
+// Bound on `ColumnDef.cellFilterParams`. All fields optional; None erases to
+// undefined. `buttons` accepts "apply" | "clear" | "reset" | "cancel".
+// See node_modules/ag-grid-community/dist/types/src/filter/provided/*/*.d.ts.
+
+type TextFilterParams = {
+    filterOptions: string array option
+    defaultOption: string option
+    maxNumConditions: int option
+    buttons: string array option
+    closeOnApply: bool option
+    debounceMs: int option
+    caseSensitive: bool option
+    trimInput: bool option
+    /// `(a, b) => number` — custom text comparator.
+    textMatcher: (obj -> bool) option
+}
+
+type NumberFilterParams = {
+    filterOptions: string array option
+    defaultOption: string option
+    maxNumConditions: int option
+    buttons: string array option
+    closeOnApply: bool option
+    debounceMs: int option
+    allowedCharPattern: string option
+    numberParser: (string -> float) option
+    inRangeInclusive: bool option
+    includeBlanksInEquals: bool option
+    includeBlanksInRange: bool option
+}
+
+type DateFilterParams = {
+    filterOptions: string array option
+    defaultOption: string option
+    maxNumConditions: int option
+    buttons: string array option
+    closeOnApply: bool option
+    debounceMs: int option
+    comparator: (obj -> obj -> int) option
+    browserDatePicker: bool option
+    minValidYear: int option
+    maxValidYear: int option
+    inRangeInclusive: bool option
+    dateFormat: string option
+}
+
+module TextFilterParams =
+    let empty: TextFilterParams = {
+        filterOptions = None
+        defaultOption = None
+        maxNumConditions = None
+        buttons = None
+        closeOnApply = None
+        debounceMs = None
+        caseSensitive = None
+        trimInput = None
+        textMatcher = None
+    }
+
+module NumberFilterParams =
+    let empty: NumberFilterParams = {
+        filterOptions = None
+        defaultOption = None
+        maxNumConditions = None
+        buttons = None
+        closeOnApply = None
+        debounceMs = None
+        allowedCharPattern = None
+        numberParser = None
+        inRangeInclusive = None
+        includeBlanksInEquals = None
+        includeBlanksInRange = None
+    }
+
+module DateFilterParams =
+    let empty: DateFilterParams = {
+        filterOptions = None
+        defaultOption = None
+        maxNumConditions = None
+        buttons = None
+        closeOnApply = None
+        debounceMs = None
+        comparator = None
+        browserDatePicker = None
+        minValidYear = None
+        maxValidYear = None
+        inRangeInclusive = None
+        dateFormat = None
+    }
 
 [<Erase>]
 type ColumnDef<'row> =
@@ -633,6 +1023,124 @@ type ColumnDef<'row> =
 
     static member inline sort(direction: SortDirection) =
         columnDefProp<'row, 'value> ("sort" ==> direction)
+
+    // ─── ColumnDef completion (Phase 12e) ───────────────────────
+
+    static member inline headerComponentParams(v: obj) =
+        columnDefProp<'row, 'value> ("headerComponentParams" ==> v)
+
+    static member inline suppressHeaderMenuButton(v: bool) =
+        columnDefProp<'row, 'value> ("suppressHeaderMenuButton" ==> v)
+
+    /// Main-column-menu items. Callback receives the params object and
+    /// returns the ordered menu-item names (Community built-ins:
+    /// "pinSubMenu", "autoSizeThis", "autoSizeAll", "resetColumns",
+    /// "sortAscending", "sortDescending", "sortUnSort").
+    static member inline mainMenuItems(callback: obj -> string array) =
+        columnDefProp<'row, 'value> ("mainMenuItems" ==> callback)
+
+    /// Static main-menu item list.
+    static member inline mainMenuItems(items: string array) =
+        columnDefProp<'row, 'value> ("mainMenuItems" ==> items)
+
+    /// Typed text-filter params (use when `filter` is `RowFilter.Text`).
+    static member inline cellFilterParams(v: TextFilterParams) =
+        columnDefProp<'row, 'value> ("filterParams" ==> v)
+
+    /// Typed number-filter params (use when `filter` is `RowFilter.Number`).
+    static member inline cellFilterParams(v: NumberFilterParams) =
+        columnDefProp<'row, 'value> ("filterParams" ==> v)
+
+    /// Typed date-filter params (use when `filter` is `RowFilter.Date`).
+    static member inline cellFilterParams(v: DateFilterParams) =
+        columnDefProp<'row, 'value> ("filterParams" ==> v)
+
+    /// Raw filter-params escape hatch (Set / Multi / custom filters).
+    static member inline cellFilterParams(v: obj) =
+        columnDefProp<'row, 'value> ("filterParams" ==> v)
+
+    static member floatingFilterComponent(render: obj -> ReactElement) =
+        columnDefProp<'row, 'value> ("floatingFilterComponent" ==> render)
+
+    static member inline floatingFilterComponentParams(v: obj) =
+        columnDefProp<'row, 'value> ("floatingFilterComponentParams" ==> v)
+
+    static member inline suppressFloatingFilterButton(v: bool) =
+        columnDefProp<'row, 'value> ("suppressFloatingFilterButton" ==> v)
+
+    static member inline singleClickEdit(v: bool) =
+        columnDefProp<'row, 'value> ("singleClickEdit" ==> v)
+
+    /// Choose a cell editor per row. Callback returns a selector object
+    /// (`{| ``component`` = "agSelectCellEditor"; ``params`` = {| ... |} |}`).
+    static member inline cellEditorSelector(callback: ICellRendererParams<'row, 'value> -> obj) =
+        columnDefProp<'row, 'value> ("cellEditorSelector" ==> callback)
+
+    /// "over" | "under" — popup editor placement relative to the cell.
+    static member inline cellEditorPopupPosition(v: string) =
+        columnDefProp<'row, 'value> ("cellEditorPopupPosition" ==> v)
+
+    static member inline cellRendererPopup(v: bool) =
+        columnDefProp<'row, 'value> ("cellRendererPopup" ==> v)
+
+    /// Choose a cell renderer per row. Callback returns a selector object.
+    static member inline cellRendererSelector(callback: ICellRendererParams<'row, 'value> -> obj) =
+        columnDefProp<'row, 'value> ("cellRendererSelector" ==> callback)
+
+    /// Typed `cellClassRules` keyed on the row (Phase 12e overload):
+    /// `Map<className, (row -> bool)>`. The existing tuple-list overload
+    /// keying on value+row stays available.
+    static member inline cellClassRules(rules: Map<string, ('row -> bool)>) =
+        columnDefProp<'row, 'value> (
+            "cellClassRules"
+            ==> (rules
+                 |> Map.toList
+                 |> List.map (fun (className, rule) -> className ==> fun p -> rule p?data)
+                 |> createObj)
+        )
+
+    static member loadingCellRenderer(render: ICellRendererParams<'row, 'value> -> ReactElement) =
+        columnDefProp<'row, 'value> ("loadingCellRenderer" ==> fun p -> CellRendererComponent(render, p))
+
+    static member inline loadingCellRendererParams(v: obj) =
+        columnDefProp<'row, 'value> ("loadingCellRendererParams" ==> v)
+
+    static member tooltipComponent(render: ITooltipParams<'row, 'value> -> ReactElement) =
+        columnDefProp<'row, 'value> ("tooltipComponent" ==> fun p -> CellRendererComponent(unbox render, unbox p))
+
+    static member inline tooltipComponentParams(v: obj) =
+        columnDefProp<'row, 'value> ("tooltipComponentParams" ==> v)
+
+    static member inline lockPosition(v: bool) =
+        columnDefProp<'row, 'value> ("lockPosition" ==> v)
+
+    /// `true` | `false` | "left" | "right" — pin lock.
+    static member inline lockPosition(v: string) =
+        columnDefProp<'row, 'value> ("lockPosition" ==> v)
+
+    static member inline lockVisible(v: bool) =
+        columnDefProp<'row, 'value> ("lockVisible" ==> v)
+
+    static member inline lockPinned(v: bool) =
+        columnDefProp<'row, 'value> ("lockPinned" ==> v)
+
+    static member inline suppressColumnsToolPanel(v: bool) =
+        columnDefProp<'row, 'value> ("suppressColumnsToolPanel" ==> v)
+
+    static member inline suppressFiltersToolPanel(v: bool) =
+        columnDefProp<'row, 'value> ("suppressFiltersToolPanel" ==> v)
+
+    static member inline useValueFormatterForExport(v: bool) =
+        columnDefProp<'row, 'value> ("useValueFormatterForExport" ==> v)
+
+    static member inline useValueParserForImport(v: bool) =
+        columnDefProp<'row, 'value> ("useValueParserForImport" ==> v)
+
+    static member inline cellFlashDuration(v: int) =
+        columnDefProp<'row, 'value> ("cellFlashDuration" ==> v)
+
+    static member inline cellFadeDuration(v: int) =
+        columnDefProp<'row, 'value> ("cellFadeDuration" ==> v)
 
 [<Erase>]
 type IColumnGroupDefProp<'row> = interface end
@@ -850,6 +1358,206 @@ type AgGrid<'row> =
 
     static member inline onFilterChanged(callback: IGridApi<'row> -> unit) =
         agGridProp<'row> ("onFilterChanged", (fun x -> callback x?api))
+
+    // ─── Cell events (Phase 12e) ────────────────────────────────
+    static member inline onCellClicked(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellClicked", callback)
+
+    static member inline onCellDoubleClicked(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellDoubleClicked", callback)
+
+    static member inline onCellContextMenu(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellContextMenu", callback)
+
+    static member inline onCellMouseOver(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellMouseOver", callback)
+
+    static member inline onCellMouseOut(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellMouseOut", callback)
+
+    static member inline onCellMouseDown(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellMouseDown", callback)
+
+    static member inline onCellKeyDown(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellKeyDown", callback)
+
+    static member inline onCellEditingStarted(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellEditingStarted", callback)
+
+    static member inline onCellEditingStopped(callback: ICellEvent<'row, 'value> -> unit) =
+        agGridProp<'row> ("onCellEditingStopped", callback)
+
+    // ─── Row events (Phase 12e) ─────────────────────────────────
+    static member inline onRowDoubleClicked(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowDoubleClicked", callback)
+
+    static member inline onRowSelected(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowSelected", callback)
+
+    static member inline onRowEditingStarted(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowEditingStarted", callback)
+
+    static member inline onRowEditingStopped(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowEditingStopped", callback)
+
+    static member inline onRowDragEnter(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowDragEnter", callback)
+
+    static member inline onRowDragMove(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowDragMove", callback)
+
+    static member inline onRowDragLeave(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowDragLeave", callback)
+
+    static member inline onRowDragEnd(callback: IRowEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowDragEnd", callback)
+
+    // ─── Column events (Phase 12e) ──────────────────────────────
+    static member inline onColumnVisible(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnVisible", callback)
+
+    static member inline onColumnPinned(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnPinned", callback)
+
+    static member inline onColumnResized(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnResized", callback)
+
+    static member inline onColumnMoved(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnMoved", callback)
+
+    static member inline onColumnPivotChanged(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnPivotChanged", callback)
+
+    static member inline onColumnRowGroupChanged(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnRowGroupChanged", callback)
+
+    static member inline onColumnValueChanged(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnValueChanged", callback)
+
+    static member inline onColumnEverythingChanged(callback: IColumnEvent<'row> -> unit) =
+        agGridProp<'row> ("onColumnEverythingChanged", callback)
+
+    static member inline onSortChanged(callback: ISortChangedEvent<'row> -> unit) =
+        agGridProp<'row> ("onSortChanged", callback)
+
+    // ─── Display / model events (Phase 12e) ─────────────────────
+    static member inline onModelUpdated(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onModelUpdated", callback)
+
+    static member inline onFirstDataRendered(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onFirstDataRendered", callback)
+
+    static member inline onViewportChanged(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onViewportChanged", callback)
+
+    static member inline onBodyScroll(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onBodyScroll", callback)
+
+    static member inline onPaginationChanged(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onPaginationChanged", callback)
+
+    static member inline onRowDataUpdated(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onRowDataUpdated", callback)
+
+    static member inline onGridSizeChanged(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onGridSizeChanged", callback)
+
+    static member inline onToolPanelVisibleChanged(callback: IGridDisplayEvent<'row> -> unit) =
+        agGridProp<'row> ("onToolPanelVisibleChanged", callback)
+
+    // ─── Accessibility / tooltip options (Phase 12e) ────────────
+    static member inline enableBrowserTooltips(v: bool) =
+        agGridProp<'row> ("enableBrowserTooltips" ==> v)
+
+    static member inline tooltipShowDelay(v: int) =
+        agGridProp<'row> ("tooltipShowDelay" ==> v)
+
+    static member inline tooltipHideDelay(v: int) =
+        agGridProp<'row> ("tooltipHideDelay" ==> v)
+
+    static member inline tooltipMouseTrack(v: bool) =
+        agGridProp<'row> ("tooltipMouseTrack" ==> v)
+
+    static member inline tooltipInteraction(v: bool) =
+        agGridProp<'row> ("tooltipInteraction" ==> v)
+
+    static member inline enableRtl(v: bool) = agGridProp<'row> ("enableRtl" ==> v)
+
+    // ─── Theming API (Phase 12e) ────────────────────────────────
+    /// Theming-API theme object (from the `Theme` builder). Supersedes the
+    /// legacy `className = ThemeClass.*` approach.
+    static member inline theme(t: obj) = agGridProp<'row> ("theme" ==> t)
+
+    // ─── localeText (Phase 12e) ─────────────────────────────────
+    static member inline localeText(v: LocaleText) = agGridProp<'row> ("localeText" ==> v)
+
+    static member inline localeText(v: LocaleTextDictionary) =
+        agGridProp<'row> ("localeText" ==> (v |> Map.toList |> List.map (fun (k, s) -> k ==> s) |> createObj))
+
+    // ─── Misc grid options (Phase 12e) ──────────────────────────
+    static member inline suppressDragLeaveHidesColumns(v: bool) =
+        agGridProp<'row> ("suppressDragLeaveHidesColumns" ==> v)
+
+    static member inline suppressMovableColumns(v: bool) =
+        agGridProp<'row> ("suppressMovableColumns" ==> v)
+
+    static member inline suppressAutoSize(v: bool) =
+        agGridProp<'row> ("suppressAutoSize" ==> v)
+
+    /// No-op without an Enterprise licence; AG Grid console-warns if the
+    /// integrated-charts modules aren't registered.
+    static member inline enableCharts(v: bool) = agGridProp<'row> ("enableCharts" ==> v)
+
+    static member inline getRowClass(callback: 'row -> string) =
+        agGridProp<'row> ("getRowClass", (fun x -> callback x?data))
+
+    static member inline getRowClass(callback: 'row -> string array) =
+        agGridProp<'row> ("getRowClass", (fun x -> callback x?data))
+
+    /// Map of className → (row -> bool) predicate.
+    static member inline rowClassRules(rules: Map<string, ('row -> bool)>) =
+        agGridProp<'row> (
+            "rowClassRules",
+            (rules
+             |> Map.toList
+             |> List.map (fun (className, rule) -> className ==> fun p -> rule p?data)
+             |> createObj)
+        )
+
+    static member inline getRowStyle(callback: 'row -> obj) =
+        agGridProp<'row> ("getRowStyle", (fun x -> callback x?data))
+
+    static member inline rowStyle(v: obj) = agGridProp<'row> ("rowStyle" ==> v)
+
+    static member inline overlayLoadingTemplate(v: string) =
+        agGridProp<'row> ("overlayLoadingTemplate" ==> v)
+
+    static member inline overlayNoRowsTemplate(v: string) =
+        agGridProp<'row> ("overlayNoRowsTemplate" ==> v)
+
+    static member loadingOverlayComponent(render: obj -> ReactElement) =
+        agGridProp<'row> ("loadingOverlayComponent" ==> render)
+
+    static member noRowsOverlayComponent(render: obj -> ReactElement) =
+        agGridProp<'row> ("noRowsOverlayComponent" ==> render)
+
+    static member inline suppressNoRowsOverlay(v: bool) =
+        agGridProp<'row> ("suppressNoRowsOverlay" ==> v)
+
+    /// "ctrl" | "shift" — modifier that adds a column to a multi-column sort.
+    static member inline multiSortKey(v: string) = agGridProp<'row> ("multiSortKey" ==> v)
+
+    static member inline suppressMultiSort(v: bool) =
+        agGridProp<'row> ("suppressMultiSort" ==> v)
+
+    static member inline cacheQuickFilter(v: bool) =
+        agGridProp<'row> ("cacheQuickFilter" ==> v)
+
+    static member inline quickFilterText(v: string) =
+        agGridProp<'row> ("quickFilterText" ==> v)
+
+    static member inline pinnedTopRowData(data: 'row array) =
+        agGridProp<'row> ("pinnedTopRowData", data)
 
     static member inline grid(props: IAgGridProp<'row> seq) =
         ensureGridModulesRegistered ()
