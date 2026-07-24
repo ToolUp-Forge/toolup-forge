@@ -1224,6 +1224,30 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> DatasetPolicyDenied(fromAuditJson<DatasetPolicyDeniedPayload> j)
     }
+    {
+        EventType = "SchemaProposed"
+        TryEncode =
+            (function
+            | SchemaProposed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SchemaProposed(fromAuditJson<SchemaProposedPayload> j)
+    }
+    {
+        EventType = "SchemaApproved"
+        TryEncode =
+            (function
+            | SchemaApproved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SchemaApproved(fromAuditJson<SchemaApprovedPayload> j)
+    }
+    {
+        EventType = "SchemaChanged"
+        TryEncode =
+            (function
+            | SchemaChanged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SchemaChanged(fromAuditJson<SchemaChangedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

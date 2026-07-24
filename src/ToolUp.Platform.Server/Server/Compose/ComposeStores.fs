@@ -167,6 +167,47 @@ let registerEntityStore
         |> ignore
     | NoEntityStore -> ()
 
+/// Phase 7b — register the user-authored schema store (`IUserSchemaStore`)
+/// + its migration `IJobHandler` when
+/// `ServerConfig.UserSchemaAuthoring = EnabledUserSchemaAuthoring`. Rides
+/// the Phase 7 versioned object store (`IDataObjectStore`); the audit log
+/// is resolved optionally (always present in practice — the SDK registers
+/// at least `NoOpAuditLog`). The migration handler is registered with the
+/// scheduler on first store resolve when one is composed, so long-running
+/// migrations dispatch through `IJobScheduler` and survive restarts. Zero
+/// cost when off (GP 11 + GP 13).
+let registerUserSchemaStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.UserSchemaAuthoring with
+    | EnabledUserSchemaAuthoring ->
+        services.AddSingleton<IUserSchemaStore>(fun (sp: System.IServiceProvider) ->
+            let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
+            let auditLogObj = sp.GetService(typeof<IAuditLog>)
+
+            let auditLog =
+                if isNull auditLogObj then
+                    None
+                else
+                    Some(auditLogObj :?> IAuditLog)
+
+            let store =
+                BlobUserSchemaStore.BlobUserSchemaStore(dos, auditLog) :> IUserSchemaStore
+
+            // Register the migration job handler with the scheduler when one
+            // is composed (idempotent) so long-running migrations dispatch
+            // through IJobScheduler; absent scheduler ⇒ the synchronous API
+            // path still works.
+            match sp.GetService(typeof<IJobScheduler>) with
+            | :? IJobScheduler as scheduler ->
+                scheduler.RegisterHandler(
+                    SchemaMigrationJobHandler.HandlerName,
+                    SchemaMigrationJobHandler.create store
+                )
+            | _ -> ()
+
+            store)
+        |> ignore
+    | NoUserSchemaAuthoring -> ()
+
 /// Phase 599 — register the entity-write outbox surface + its relay
 /// drain when `ServerConfig.EntityOutbox = EnabledEntityOutbox`.
 /// Requires the entity store; enabling the outbox without it is a

@@ -426,6 +426,9 @@ ToolUp.Platform.BlobStorageErasureHandler+BlobStorageErasureHandler..ctor(ToolUp
 ToolUp.Platform.BlobStorageSelectionValidator (class)
 ToolUp.Platform.BlobStorageSelectionValidator+BlobStorageSelectionValidator (class)
 ToolUp.Platform.BlobStorageSelectionValidator+BlobStorageSelectionValidator..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.BlobUserSchemaStore (class)
+ToolUp.Platform.BlobUserSchemaStore+BlobUserSchemaStore (class)
+ToolUp.Platform.BlobUserSchemaStore+BlobUserSchemaStore..ctor(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.Platform.BlobWorkerCspContributor (class)
 ToolUp.Platform.BlobWorkerCspContributor..ctor()
 ToolUp.Platform.BlobXmlRepository (class)
@@ -719,6 +722,7 @@ ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.Dependency
 ToolUp.Platform.ComposeStores.registerOptionalStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]) : System.Void
 ToolUp.Platform.ComposeStores.registerTelemetrySink(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerTimeSeriesStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
+ToolUp.Platform.ComposeStores.registerUserSchemaStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeTeamRuntime (class)
 ToolUp.Platform.ComposeTeamRuntime.registerPostBootstrapValidators(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], ToolUp.Platform.IPlatformAdminStore, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], System.Int32) : System.Void
 ToolUp.Platform.ComposeTeamRuntime.registerTeamPermissionStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore]
@@ -2617,6 +2621,14 @@ ToolUp.Platform.IUserClaims.GetPremiumStatus(System.String) : Microsoft.FSharp.C
 ToolUp.Platform.IUserClaims.GrantPremium(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PremiumStatus, System.String]]
 ToolUp.Platform.IUserClaims.ListPremiumUsers() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PremiumStatus]], System.String]]
 ToolUp.Platform.IUserClaims.RevokePremium(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IUserSchemaStore (interface)
+ToolUp.Platform.IUserSchemaStore.Delete(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.UserSchemaError]]
+ToolUp.Platform.IUserSchemaStore.ExecuteMigration(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationOutcome, ToolUp.Platform.UserSchemaError]]
+ToolUp.Platform.IUserSchemaStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
+ToolUp.Platform.IUserSchemaStore.GetVersion(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
+ToolUp.Platform.IUserSchemaStore.History(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserAuthoredSchema]]
+ToolUp.Platform.IUserSchemaStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserAuthoredSchema]]
+ToolUp.Platform.IUserSchemaStore.Save(System.String, ToolUp.Platform.UserAuthoredSchema, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
 ToolUp.Platform.IVectorStore (class)
 ToolUp.Platform.IVectorStore.eraseSubject(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.IVectorStore+IVectorStore (interface)
@@ -4040,6 +4052,15 @@ ToolUp.Platform.ScheduledJobDeclarationModule.withRetryPolicy(ToolUp.Platform.Jo
 ToolUp.Platform.ScheduledJobDeclarationModule.withScopes(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ScheduledJobDeclaration) : ToolUp.Platform.ScheduledJobDeclaration
 ToolUp.Platform.ScheduledJobDeclarationModule.withShardKey(System.String, ToolUp.Platform.ScheduledJobDeclaration) : ToolUp.Platform.ScheduledJobDeclaration
 ToolUp.Platform.ScheduledJobDeclarationModule.withTags(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.ScheduledJobDeclaration) : ToolUp.Platform.ScheduledJobDeclaration
+ToolUp.Platform.SchemaMigrationJobHandler (class)
+ToolUp.Platform.SchemaMigrationJobHandler.HandlerName : System.String (literal)
+ToolUp.Platform.SchemaMigrationJobHandler.create(ToolUp.Platform.IUserSchemaStore) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.SchemaMigrationJobHandler.serialisePayload(ToolUp.Platform.SchemaMigrationJobHandler+SchemaMigrationJobPayload) : System.String
+ToolUp.Platform.SchemaMigrationJobHandler+SchemaMigrationJobPayload (class)
+ToolUp.Platform.SchemaMigrationJobHandler+SchemaMigrationJobPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration], System.String)
+ToolUp.Platform.SchemaMigrationJobHandler+SchemaMigrationJobPayload.ActorUserId : System.String { get }
+ToolUp.Platform.SchemaMigrationJobHandler+SchemaMigrationJobPayload.Migrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration] { get }
+ToolUp.Platform.SchemaMigrationJobHandler+SchemaMigrationJobPayload.SchemaId : System.String { get }
 ToolUp.Platform.SchemaOnlyGuard (class)
 ToolUp.Platform.SchemaOnlyGuard.assertReadAllowed(ToolUp.Platform.AccessContext, System.String, System.String, System.String, ToolUp.Platform.IAuditLog, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.SchemaOnlyGuard.isSchemaOnlyCaller(ToolUp.Platform.AccessContext, System.String) : System.Boolean
@@ -4936,6 +4957,8 @@ ToolUp.Platform.UserMembershipTeardownLifecycle (class)
 ToolUp.Platform.UserMembershipTeardownLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.UserMembershipTeardownLifecycle+UserMembershipTeardownLifecycle (class)
 ToolUp.Platform.UserMembershipTeardownLifecycle+UserMembershipTeardownLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.UserSchemaApiHandler (class)
+ToolUp.Platform.UserSchemaApiHandler.userSchemaApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IUserSchemaApi
 ToolUp.Platform.VectorStoreErasureHandler (class)
 ToolUp.Platform.VectorStoreErasureHandler.erasureHandler(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.IEmbeddingCache+IEmbeddingCache) : ToolUp.Platform.IDataExporter+IErasureHandler
 ToolUp.Platform.VectorStoreErasureHandler.erasureHandlerHybrid(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.IEmbeddingCache+IEmbeddingCache, ToolUp.Platform.ISparseIndex+ISparseIndex) : ToolUp.Platform.IDataExporter+IErasureHandler

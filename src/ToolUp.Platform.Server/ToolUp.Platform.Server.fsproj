@@ -189,6 +189,13 @@
 
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
+        <!-- Phase 7b — user-authored schema store (substrate slice): the
+             IUserSchemaStore seam + blob-backed default over IDataObjectStore
+             (versioned schema definitions + typed migration execution).
+             After EntityStore.fs (rides the same Phase 7 versioned object
+             store); before ComposeStores.fs registers it. -->
+        <Compile Include="Server\IUserSchemaStore.fs" />
+        <Compile Include="Server\BlobUserSchemaStore.fs" />
         <!-- Phase 26 — Tenant entity registration. Sits behind IEntityStore;
              consumed by EntityStoreTenantFleet (the ITenantFleet single-node
              default) and by the Compose pipeline (registers via
@@ -234,6 +241,10 @@
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
         <Compile Include="Server\IJobScheduler.fs" />
+        <!-- Phase 7b — schema-migration IJobHandler binding: long-running
+             MigrationPlan executions run through IJobScheduler and survive
+             restarts. After IJobHandler/IJobScheduler + IUserSchemaStore. -->
+        <Compile Include="Server\SchemaMigrationJobHandler.fs" />
         <!-- Phase 449 — model-fit envelope: core types, provider seam +
              registry, then the fit-run job handler (needs IJobHandler above +
              IAuditLog from Core). Composed by ComposeJobs.registerModelFitting. -->
@@ -580,6 +591,11 @@
         <Compile Include="Server\WebhookDispatcher.fs" />
         <Compile Include="Server\HookedEventStore.fs" />
         <Compile Include="Server\WebhookApiHandler.fs" />
+        <!-- Phase 7b — IUserSchemaApi Fable.Remoting handler (Owner/Admin
+             gated writes). After WebhookApiHandler (same handler shape) +
+             TeamManagement (the role gate); before BuildRouteHandlers mounts
+             it. -->
+        <Compile Include="Server\UserSchemaApiHandler.fs" />
         <Compile Include="Server\IFeatureFlagStore.fs" />
         <!-- Phase 239 — read-only external flag-resolution seam. -->
         <Compile Include="Server\IFlagSource.fs" />

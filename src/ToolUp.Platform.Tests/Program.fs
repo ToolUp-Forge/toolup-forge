@@ -54,6 +54,10 @@ let allTests =
         // Phase 219 — derived/computed columns in CSV mapping.
         DerivedColumnEvalTests.tests
         IColumnMappingStoreContract.tests
+        // Phase 7b — user-authored schema store conformance (CRUD, version
+        // history, migration direct + via the job handler, scope isolation,
+        // audit emission).
+        IUserSchemaStoreContract.tests
         DataCatalogTests.tests
         ResultStoreTests.tests
         ConversationStoreTests.tests

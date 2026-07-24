@@ -19,6 +19,11 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\FormSchema.fs" />
+        <!-- Phase 7b — IFormSchemaSource adapter: render a Platform.Core
+             UserAuthoredSchema as a Forms FormSchema (BIFriendlyType →
+             FieldKind), validating the Layer-2 "authored once, consumed by
+             many" thesis. After FormSchema.fs (maps into its types). -->
+        <Compile Include="Shared\UserSchemaFormSource.fs" />
         <Compile Include="Shared\FormSubmission.fs" />
         <Compile Include="Shared\Workflow.fs" />
         <Compile Include="Shared\IActionLedger.fs" />

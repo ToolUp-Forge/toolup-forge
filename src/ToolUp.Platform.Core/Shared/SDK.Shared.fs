@@ -689,6 +689,27 @@ type TenantLifecycleMode =
     /// `SourceModule = "_platform.tenant"`.
     | EnabledTenantLifecycle
 
+/// Phase 7b — schema-first user-authoring substrate selection. Default
+/// `NoUserSchemaAuthoring` — no `IUserSchemaStore` in DI, the
+/// `IUserSchemaApi` route is not mounted, no `SchemaMigrationJobHandler`
+/// registered, no schema-authoring audit events emitted. An existing
+/// deployment that upgrades stays byte-for-byte identical until it opts
+/// in (GP 11 + GP 13). `EnabledUserSchemaAuthoring` registers the
+/// blob-backed `BlobUserSchemaStore` (over `IDataObjectStore`), mounts the
+/// Owner/Admin-gated `IUserSchemaApi`, and registers the migration job
+/// handler with `IJobScheduler` so long-running schema migrations survive
+/// restarts. Mirrors `PeerSubstrateMode` / `EntityStoreMode` (binary,
+/// opt-in).
+type UserSchemaAuthoringMode =
+    /// No user-schema authoring infrastructure registered. The default.
+    | NoUserSchemaAuthoring
+    /// `BlobUserSchemaStore` registered as `IUserSchemaStore`;
+    /// `IUserSchemaApi` mounted (Owner/Admin gated writes);
+    /// `SchemaMigrationJobHandler` registered with the scheduler; schema
+    /// lifecycle audit events (`SchemaProposed` / `SchemaApproved` /
+    /// `SchemaChanged`) emitted under `SourceModule = "_platform.user_schema"`.
+    | EnabledUserSchemaAuthoring
+
 /// Phase 54i — confirmation gate in front of the destructive
 /// tenant-offboard surface. Default `NoConfirmation` preserves Phase 54's
 /// one-call behaviour byte-for-byte (GP 11); the two stronger modes
@@ -2923,6 +2944,13 @@ type ServerConfig = {
     /// over JSON-RPC 2.0 with identity propagation, version handshake,
     /// and job-substrate fusion. Zero cost when not enabled (GP 13).
     PeerSubstrate: PeerSubstrateMode
+    /// Phase 7b — schema-first user-authoring substrate selection. Default
+    /// `NoUserSchemaAuthoring` — no `IUserSchemaStore` in DI, no
+    /// `IUserSchemaApi` route, no migration job handler, no schema-authoring
+    /// audit. `EnabledUserSchemaAuthoring` registers the blob-backed store +
+    /// mounts the Owner/Admin-gated authoring API + registers the migration
+    /// job handler. Zero cost when not enabled (GP 11 + GP 13).
+    UserSchemaAuthoring: UserSchemaAuthoringMode
     /// Phase 520 — grounding fact-store selection. Default `NoFactStore`
     /// — no `IFactStore` composed, the grounding fact tier inert, the
     /// deployment byte-for-byte unchanged (GP 11 + GP 13). `EnabledFactStore`
@@ -3311,6 +3339,7 @@ module ServerConfig =
         TeamCreationQuota = None
         NarrativeRetention = NarrativeRetentionPolicy.defaults
         PeerSubstrate = NoPeerSubstrate
+        UserSchemaAuthoring = NoUserSchemaAuthoring
         FactStore = NoFactStore
         TenantLifecycle = NoTenantLifecycle
         TenantOffboardConfirmation = NoConfirmation

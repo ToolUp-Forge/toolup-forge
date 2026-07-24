@@ -137,6 +137,15 @@ let buildRouteHandlers
         | NoWebhooks -> []
         | EnabledWebhooks -> [ makeApi WebhookApiHandler.webhookApi ]
 
+    // Phase 7b — user-authored schema authoring API. Mounted only when
+    // `ServerConfig.UserSchemaAuthoring = EnabledUserSchemaAuthoring`; the
+    // default `NoUserSchemaAuthoring` skips the route entirely so no
+    // `IUserSchemaStore` is resolved and the surface returns 404 (GP 13).
+    let userSchemaHandler: HttpHandler list =
+        match config.UserSchemaAuthoring with
+        | NoUserSchemaAuthoring -> []
+        | EnabledUserSchemaAuthoring -> [ makeApi UserSchemaApiHandler.userSchemaApi ]
+
     // Cross-module query bus API. Auto-injected so client-side modules
     // can reach the bus without extra wiring. The server resolves
     // `AccessContext` from DI per request and forwards to the
@@ -631,6 +640,7 @@ let buildRouteHandlers
             @ configHandler
             @ featureFlagHandler
             @ webhookHandler
+            @ userSchemaHandler
             @ moduleQueryBusHandler
             @ fileManagementHandler
             @ columnMappingHandler

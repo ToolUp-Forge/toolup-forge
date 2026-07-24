@@ -558,6 +558,11 @@ let compose
     // registration is prepended automatically.
     registerEntityStore services config entityRegistrations
 
+    // Phase 7b — user-authored schema store + migration job handler
+    // (extracted to `ComposeStores.registerUserSchemaStore`). No-op unless
+    // `UserSchemaAuthoring = EnabledUserSchemaAuthoring`.
+    registerUserSchemaStore services config
+
     // Phase 599 — entity-write outbox surface + relay drain (extracted
     // to `ComposeStores.registerEntityOutbox`). No-op unless
     // `EntityOutbox = EnabledEntityOutbox` with the entity store on.

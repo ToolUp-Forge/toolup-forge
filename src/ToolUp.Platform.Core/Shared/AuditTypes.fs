@@ -2609,6 +2609,80 @@ type DatasetRevintagedPayload = {
 /// `EventType` discriminator string; payload records are JSON-serialised
 /// into `ModuleEvent.Payload` via `FableConverters` (matches the
 /// existing `WebhookApiHandler` / `KnowledgeBase` audit emission idiom).
+// ─── Phase 7b — schema-first user-authoring audit payloads ───────────
+//
+// Emitted by the `IUserSchemaApi` handler + `BlobUserSchemaStore` on
+// schema lifecycle transitions. Reserved source-module label
+// `_platform.user_schema`. PII-free: identifiers + cardinality + version
+// provenance only — never the schema's field values or instance data.
+
+/// Reserved `SourceModule` for schema-first user-authoring audit events.
+/// Filter `IEventStore.ReadBySource` on this constant for the trail.
+module UserSchemaSourceModule =
+    [<Literal>]
+    let value = "_platform.user_schema"
+
+/// Phase 7b — the AI proposed a candidate user-authored schema for a
+/// scope, surfaced for human review. Emitted by the AI-propose flow (the
+/// Diametrical half of Phase 7b); the substrate ships the payload so an
+/// approved proposal's provenance is durable end-to-end.
+type SchemaProposedPayload = {
+    /// Actor the proposal is attributed to (the user in the conversation).
+    UserId: string
+    /// Scope the proposed schema targets.
+    ScopeId: string
+    /// Schema id of the proposal.
+    SchemaId: string
+    /// Human-facing version label of the proposal.
+    VersionLabel: string
+    /// Conversation the AI proposal originated from — the proposal→approval
+    /// trace anchor.
+    ConversationId: string
+    /// Number of fields in the proposal. Cardinality only.
+    FieldCount: int
+}
+
+/// Phase 7b — a user approved a committed schema version whose provenance
+/// was `AuthoredBy.AIWithApproval`. Emitted by the store at commit time.
+type SchemaApprovedPayload = {
+    /// Approving actor.
+    UserId: string
+    /// Scope the schema belongs to.
+    ScopeId: string
+    SchemaId: string
+    /// Store-assigned numeric version of the approved commit.
+    Version: int
+    VersionLabel: string
+    /// `AuthoredBy` projected to a string (`"Human"` /
+    /// `"AIWithApproval:{conversationId}"`).
+    ProposedBy: string
+    /// Originating conversation id when the commit was AI-proposed.
+    ConversationId: string option
+}
+
+/// Phase 7b — a user-authored schema version was created, updated,
+/// migrated, or deleted. Emitted by the store on every committed state
+/// change (GP 6). Identifiers + cardinality only.
+type SchemaChangedPayload = {
+    /// Actor who triggered the change (`"system"` for job-driven runs).
+    UserId: string
+    ScopeId: string
+    SchemaId: string
+    /// Store-assigned numeric version after the change (`0` for a delete).
+    Version: int
+    VersionLabel: string
+    /// One of `"Created"` / `"Updated"` / `"Migrated"` / `"Deleted"`.
+    ChangeKind: string
+    /// The predecessor schema id when this is an evolution; `None` for a
+    /// fresh authoring or a non-evolution edit.
+    EvolvedFrom: string option
+    /// Number of migration steps applied (0 for a plain save).
+    MigrationsApplied: int
+    /// Number of stored instances transformed by a migration (0 for a
+    /// plain save).
+    InstancesMigrated: int
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -3119,6 +3193,15 @@ type AuditEvent =
     /// Phase 482 — a label-carrying dataset version was refused a dispatch /
     /// raw export by policy. A typed, audited denial.
     | DatasetPolicyDenied of DatasetPolicyDeniedPayload
+    /// Phase 7b — the AI proposed a candidate user-authored schema for a
+    /// scope, surfaced for human review. Emitted by the AI-propose flow.
+    | SchemaProposed of SchemaProposedPayload
+    /// Phase 7b — a user approved a committed schema version whose
+    /// provenance was `AuthoredBy.AIWithApproval`.
+    | SchemaApproved of SchemaApprovedPayload
+    /// Phase 7b — a user-authored schema version was created, updated,
+    /// migrated, or deleted.
+    | SchemaChanged of SchemaChangedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -3256,6 +3339,9 @@ module AuditEvent =
         | DatasetDeclassified _ -> "DatasetDeclassified"
         | DatasetRevintaged _ -> "DatasetRevintaged"
         | DatasetPolicyDenied _ -> "DatasetPolicyDenied"
+        | SchemaProposed _ -> "SchemaProposed"
+        | SchemaApproved _ -> "SchemaApproved"
+        | SchemaChanged _ -> "SchemaChanged"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

@@ -90,6 +90,10 @@
         <Compile Include="Contracts\IOAuthTokenRefresherContract.fs" />
         <Compile Include="Contracts\IReportRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
+        <!-- Phase 7b — IUserSchemaStore conformance (CRUD, version history,
+             migration direct + via the job handler, scope isolation, audit).
+             After InMemoryBlobStorage.fs (the backing store). -->
+        <Compile Include="Contracts\IUserSchemaStoreContract.fs" />
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
         <Compile Include="Contracts\ITenantLifecycleContract.fs" />
         <Compile Include="Contracts\ILifecycleLockContract.fs" />

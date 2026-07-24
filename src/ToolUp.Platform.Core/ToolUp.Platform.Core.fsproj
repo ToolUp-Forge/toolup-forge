@@ -93,6 +93,13 @@
              pull into the .NET-only build package. -->
         <Compile Include="Shared\Types\PrerenderTypes.fs" />
         <Compile Include="Shared\Types\DataManagementTypes.fs" />
+        <!-- Phase 7b — schema-first user authoring (substrate slice):
+             UserAuthoredSchema / BIFriendlyType / SchemaMigration /
+             FieldSensitivity / AuthoredBy + the IUserSchemaApi remoting
+             contract. After DataManagementTypes.fs (extends DataTypeSchema)
+             and AuthAttributes.fs (the API record's auth markers); before
+             SDK.Shared.fs / AuditTypes.fs. Fable-safe (values + BCL only). -->
+        <Compile Include="Shared\UserSchemaTypes.fs" />
         <Compile Include="Shared\Types\ProcessedDataTypes.fs" />
         <Compile Include="Shared\Types\ColumnMappingTypes.fs" />
         <Compile Include="Shared\ColumnMapping.fs" />
