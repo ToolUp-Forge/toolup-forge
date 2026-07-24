@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AgGridEnterpriseTypes.fs" />
+    <Compile Include="AgChartEnterpriseTypes.fs" />
     <Compile Include="ProvenanceOverlay.fs" />
     <Compile Include="AgGridEnterprise.fs" />
     <Content Include="package.json" />
