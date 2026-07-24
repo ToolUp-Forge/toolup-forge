@@ -162,8 +162,14 @@ module Enterprise =
         | Avg
         | First
         | Last
+        // Phase 12e — reference a custom aggregate registered via
+        // `Enterprise.AgGrid.aggFuncs`. The string is the registration key.
+        | Custom of string
 
-        member this.AggregateText = (sprintf "%O" this).ToLower()
+        member this.AggregateText =
+            match this with
+            | Custom name -> name
+            | _ -> (sprintf "%O" this).ToLower()
 
     type MenuItemDef = {
         name: string
@@ -219,6 +225,193 @@ module Enterprise =
         | BuiltIn of BuiltInMenuItem
         | Custom of MenuItemDef
 
+    // ═══ Phase 12e — Enterprise grid feature params ══════════════════
+    // Sourced from node_modules/ag-grid-enterprise/dist/types/src/.
+    // All records use option fields (None erases to undefined) so a caller
+    // sets only what a feature needs. Long-tail fields stay as `obj`.
+
+    /// Set Filter params. Bound on `Enterprise.ColumnDef.setFilterParams`.
+    type SetFilterParams<'row, 'value> = {
+        values: 'value array option
+        /// Async value supplier: `(params) => void` calling `params.success(vals)`.
+        valuesCallback: (obj -> unit) option
+        valueFormatter: (obj -> string) option
+        cellRenderer: (obj -> ReactElement) option
+        suppressMiniFilter: bool option
+        suppressSelectAll: bool option
+        suppressRemoveEntries: bool option
+        suppressSorting: bool option
+        excelMode: string option
+        defaultToNothingSelected: bool option
+        treeList: bool option
+        treeListPathGetter: (obj -> string array) option
+        keyCreator: (obj -> string) option
+        comparator: (obj -> obj -> int) option
+        caseSensitive: bool option
+    }
+
+    /// A single entry in a Multi Filter's filter stack.
+    type MultiFilterEntry = {
+        /// "agTextColumnFilter" | "agNumberColumnFilter" | "agSetColumnFilter" | ...
+        filter: string
+        filterParams: obj option
+        /// "subMenu" | "accordion"
+        display: string option
+        title: string option
+    }
+
+    /// Multi Filter params. Bound on `Enterprise.ColumnDef.multiFilterParams`.
+    type MultiFilterParams = { filters: MultiFilterEntry array }
+
+    /// Excel cell style. `id` is referenced from a cell's `cellClass`.
+    /// Nested style groups stay `obj` — build with anonymous records
+    /// (`{| bold = true |}` etc.). See exceljs-shaped ExcelStyle upstream.
+    type ExcelStyle = {
+        id: string
+        alignment: obj option
+        borders: obj option
+        font: obj option
+        interior: obj option
+        numberFormat: obj option
+        protection: obj option
+        dataType: string option
+    }
+
+    /// Excel export params. Bound on `IGridApi.exportDataAsExcel`.
+    type ExcelExportParams = {
+        fileName: string option
+        sheetName: string option
+        author: string option
+        columnKeys: string array option
+        onlySelected: bool option
+        onlySelectedAllPages: bool option
+        allColumns: bool option
+        skipColumnHeaders: bool option
+        skipColumnGroupHeaders: bool option
+        skipRowGroups: bool option
+        skipPinnedTop: bool option
+        skipPinnedBottom: bool option
+        prependContent: obj option
+        appendContent: obj option
+        processCellCallback: (obj -> string) option
+        processGroupHeaderCallback: (obj -> string) option
+        processRowGroupCallback: (obj -> string) option
+        autoConvertFormulas: bool option
+    }
+
+    /// Master / Detail params. Bound on `Enterprise.AgGrid.masterDetailParams`.
+    type MasterDetailParams<'row, 'detail> = {
+        detailRowAutoHeight: bool option
+        detailRowHeight: int option
+        /// Typed inner-grid options (build from `AgGrid.*` / `Enterprise.AgGrid.*`).
+        detailGridOptions: obj option
+        /// `params.successCallback(detailRows)` supplies the detail rows.
+        getDetailRowData: (obj -> unit) option
+        keepDetailRows: bool option
+        keepDetailRowsCount: int option
+    }
+
+    [<RequireQualifiedAccess>]
+    type BuiltInStatusPanel =
+        | TotalRowCount
+        | FilteredRowCount
+        | SelectedRowCount
+        | TotalAndFilteredRowCount
+        | Aggregation
+
+        member this.PanelName =
+            match this with
+            | TotalRowCount -> "agTotalRowCountComponent"
+            | FilteredRowCount -> "agFilteredRowCountComponent"
+            | SelectedRowCount -> "agSelectedRowCountComponent"
+            | TotalAndFilteredRowCount -> "agTotalAndFilteredRowCountComponent"
+            | Aggregation -> "agAggregationComponent"
+
+    /// One status-bar panel. Use `statusPanelBuiltIn` / `statusPanelCustom`
+    /// to construct.
+    type StatusPanelDef = {
+        statusPanel: string
+        align: string option
+        key: string option
+        statusPanelParams: obj option
+    }
+
+    [<RequireQualifiedAccess>]
+    type BuiltInToolPanel =
+        | Columns
+        | Filters
+        | Pivot
+
+        member this.ToolPanelName =
+            match this with
+            | Columns -> "agColumnsToolPanel"
+            | Filters -> "agFiltersToolPanel"
+            | Pivot -> "agColumnsToolPanel"
+
+    type ToolPanelDef = {
+        id: string
+        labelKey: string
+        labelDefault: string
+        iconKey: string
+        toolPanel: string
+        toolPanelParams: obj option
+        minWidth: int option
+        maxWidth: int option
+        width: int option
+    }
+
+    type SideBarDef = {
+        toolPanels: ToolPanelDef array
+        defaultToolPanel: string option
+        position: string option
+        hiddenByDefault: bool option
+    }
+
+    /// Params for `IGridApi.createRangeChart` / `createPivotChart` /
+    /// `createCrossFilterChart`.
+    type IChartParams = {
+        /// "groupedColumn" | "stackedColumn" | "line" | "pie" | "scatter" |
+        /// "bubble" | "area" | "histogram" | "donut" | ...
+        chartType: string
+        /// cellRange = {| rowStartIndex; rowEndIndex; columns = string[] |}
+        cellRange: obj option
+        suppressChartRanges: bool option
+        /// A DOM element to render the chart into (unlinked mode).
+        chartContainer: obj option
+        chartThemeName: string option
+        chartThemeOverrides: obj option
+        unlinkChart: bool option
+        switchCategorySeries: bool option
+    }
+
+    /// Params for `IGridApi.addCellRange`.
+    type CellRangeParams = {
+        rowStartIndex: int option
+        rowEndIndex: int option
+        columnStart: string option
+        columnEnd: string option
+        columns: string array option
+    }
+
+    /// A custom aggregate function's params (`Enterprise.AgGrid.aggFuncs`).
+    type IAggFuncParams<'value> = {
+        values: 'value array
+        rowNode: IRowNode<obj>
+        colDef: obj
+        column: IColumn
+        api: obj
+        context: obj
+    }
+
+    /// Server-Side transaction applied via `IGridApi.applyServerSideTransaction`.
+    type ServerSideTransaction<'row> = {
+        route: obj array option
+        add: 'row array option
+        addIndex: int option
+        remove: 'row array option
+        update: 'row array option
+    }
+
     [<Erase>]
     type ColumnDef<'row> =
         static member inline filter(v: RowFilter) =
@@ -241,6 +434,13 @@ module Enterprise =
 
         static member inline cellRendererParams(v: IGroupCellRendererParams<'row, 'value>) =
             columnDefProp<'row, 'value> ("cellRendererParams" ==> v)
+
+        // ─── Phase 12e Enterprise filters ───────────────────────
+        static member inline setFilterParams(v: SetFilterParams<'row, 'value>) =
+            columnDefProp<'row, 'value> ("filterParams" ==> v)
+
+        static member inline multiFilterParams(v: MultiFilterParams) =
+            columnDefProp<'row, 'value> ("filterParams" ==> v)
 
     [<Erase>]
     type AgGrid<'row> =
@@ -280,3 +480,99 @@ module Enterprise =
             agGridProp<'row> ("serverSideOnlyRefreshFilteredGroups", v)
 
         static member inline treeData(v: bool) = agGridProp<'row> ("treeData", v)
+
+        // ─── Phase 12e Enterprise grid options ──────────────────
+
+        static member inline excelStyles(v: ExcelStyle seq) =
+            agGridProp<'row> ("excelStyles", Seq.toArray v)
+
+        static member inline masterDetail(v: bool) = agGridProp<'row> ("masterDetail", v)
+
+        static member inline detailCellRendererParams(v: MasterDetailParams<'row, 'detail>) =
+            agGridProp<'row> ("detailCellRendererParams", v)
+
+        static member inline detailRowHeight(v: int) = agGridProp<'row> ("detailRowHeight", v)
+
+        static member inline detailRowAutoHeight(v: bool) =
+            agGridProp<'row> ("detailRowAutoHeight", v)
+
+        static member inline statusBar(panels: StatusPanelDef seq) =
+            agGridProp<'row> ("statusBar", {| statusPanels = Seq.toArray panels |})
+
+        static member inline sideBar(v: SideBarDef) = agGridProp<'row> ("sideBar", v)
+
+        /// Shorthand: default Columns + Filters tool panels.
+        static member inline sideBar(v: bool) = agGridProp<'row> ("sideBar", v)
+
+        static member inline enableCharts(v: bool) = agGridProp<'row> ("enableCharts", v)
+
+        static member inline cellSelection(v: bool) = agGridProp<'row> ("cellSelection", v)
+
+        static member inline chartThemes(v: string array) = agGridProp<'row> ("chartThemes", v)
+
+        /// Register named custom aggregate functions referenced by
+        /// `AggregateFunction.Custom name`.
+        static member inline aggFuncs(v: Map<string, IAggFuncParams<'value> -> 'value>) =
+            agGridProp<'row> ("aggFuncs", v |> Map.toList |> List.map (fun (k, f) -> k ==> f) |> createObj)
+
+    // ─── Constructors for the Enterprise param records ──────────────
+
+    /// Built-in status-bar panel.
+    let statusPanelBuiltIn (panel: BuiltInStatusPanel) (align: string option) : StatusPanelDef = {
+        statusPanel = panel.PanelName
+        align = align
+        key = None
+        statusPanelParams = None
+    }
+
+    /// Built-in tool panel entry for a `SideBarDef`.
+    let toolPanelBuiltIn (panel: BuiltInToolPanel) (labelKey: string) (labelDefault: string) : ToolPanelDef = {
+        id =
+            match panel with
+            | BuiltInToolPanel.Filters -> "filters"
+            | _ -> "columns"
+        labelKey = labelKey
+        labelDefault = labelDefault
+        iconKey =
+            match panel with
+            | BuiltInToolPanel.Filters -> "filter"
+            | _ -> "columns"
+        toolPanel = panel.ToolPanelName
+        toolPanelParams = None
+        minWidth = None
+        maxWidth = None
+        width = None
+    }
+
+    // ─── IGridApi Enterprise API surface (Phase 12e) ────────────────
+    // Extension members on the erased Community IGridApi; each dispatches
+    // dynamically to the Enterprise-registered API method on the live grid.
+
+    type IGridApi<'row> with
+        /// Integrated-charts: create a range chart from a cell range.
+        member inline this.createRangeChart(p: IChartParams) : obj = this?createRangeChart (p)
+        member inline this.createPivotChart(p: IChartParams) : obj = this?createPivotChart (p)
+
+        member inline this.createCrossFilterChart(p: IChartParams) : obj = this?createCrossFilterChart (p)
+
+        /// Range (cell) selection.
+        member inline this.addCellRange(p: CellRangeParams) : unit = this?addCellRange (p)
+        member inline this.clearRangeSelection() : unit = this?clearRangeSelection ()
+
+        /// Excel export.
+        member inline this.exportDataAsExcel(p: ExcelExportParams) : unit = this?exportDataAsExcel (p)
+
+        /// Server-Side Row Model.
+        member inline this.setServerSideDatasource(ds: ServerSideDataSource<'row>) : unit =
+            this?setServerSideDatasource (ds)
+
+        member inline this.getInfiniteRowCount() : int = this?getInfiniteRowCount ()
+        member inline this.getCacheBlockState() : obj = this?getCacheBlockState ()
+
+        member inline this.forEachServerSideGroup(callback: IRowNode<'row> -> unit) : unit =
+            this?forEachServerSideGroup (callback)
+
+        member inline this.refreshServerSide(p: obj) : unit = this?refreshServerSide (p)
+
+        member inline this.applyServerSideTransaction(tx: ServerSideTransaction<'row>) : obj =
+            this?applyServerSideTransaction (tx)
