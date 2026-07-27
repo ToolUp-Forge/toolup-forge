@@ -28,13 +28,15 @@ AIServerApp.empty
 
 ## Cookbook resolution
 
-`systemPromptBuilder` probes for `COOKBOOK.md` on these paths, most-specific first:
+`systemPromptBuilder` probes for `COOKBOOK.Community.md` on these paths, most-specific first:
 
-1. `TOOLUP_COOKBOOK_PATH` — a file path, or a directory holding `COOKBOOK.md`.
-2. Assembly-relative — the copy this package ships beside the assembly (`content\COOKBOOK.md`, copied to the build output).
+1. `TOOLUP_COOKBOOK_PATH` — a file path, or a directory holding `COOKBOOK.Community.md`.
+2. Assembly-relative — the copy this package ships beside the assembly (`content\COOKBOOK.Community.md`, copied to the build output).
 3. A dev repo-relative path from the build output back to the source cookbook in `ToolUp.Platform.Client`.
 
 `buildFromFile` takes an explicit path when a deployment wants to supply its own cookbook.
+
+The copied name is deliberately not plain `COOKBOOK.md`: the Enterprise companion copies its own cookbook into the same output directory, and a shared name lets one silently overwrite the other. The repo's *source* file keeps the plain name — only the copied and packed artefact is companion-specific. It is exposed as `AgChartAICookbook.CookbookFileName`.
 
 ## Degradation
 

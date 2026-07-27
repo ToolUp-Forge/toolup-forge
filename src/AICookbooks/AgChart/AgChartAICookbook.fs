@@ -26,6 +26,19 @@ open ToolUp.AI.SystemPromptBuilder
 [<Literal>]
 let Heading = "# Authoring AG Charts and Grids in F#"
 
+/// The name this companion's cookbook is copied and packed under.
+///
+/// NOT plain `COOKBOOK.md`. Both this companion and the Enterprise one copy a
+/// cookbook to their consumer's output directory, so a consumer referencing BOTH
+/// gets a single directory holding both files — under one shared name the copies
+/// collide and MSBuild ordering silently decides which survives. When the
+/// Enterprise copy won, this Community builder served Enterprise guidance: the
+/// licensing boundary breached by a build-order coincidence, with nothing at
+/// runtime able to detect it. Each companion therefore owns a distinct name, and
+/// `LicensingBoundaryTests` asserts the two resolve to different files.
+[<Literal>]
+let CookbookFileName = "COOKBOOK.Community.md"
+
 /// The H2 sections lifted from the cookbook into the prompt.
 let extractedHeaders = [ "## Critical constraints"; "## The shortest possible chart" ]
 
@@ -107,9 +120,13 @@ let buildFromFile
     fun (_: PromptContext) -> async { return content }
 
 /// Candidate cookbook paths, most-specific first: the `TOOLUP_COOKBOOK_PATH`
-/// override (a file, or a directory holding `COOKBOOK.md`), the assembly-
+/// override (a file, or a directory holding `fileName`), the assembly-
 /// relative copy shipped in the companion output, then a dev repo-relative
 /// path from the build output back to the source cookbook.
+///
+/// Pass `CookbookFileName` — the dev-fallback below names the repo's source file,
+/// which is plain `COOKBOOK.md` and stays that way; only the COPIED name is
+/// companion-specific.
 let candidatePaths (fileName: string) : string list =
     let asmDir =
         Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
@@ -128,11 +145,12 @@ let candidatePaths (fileName: string) : string list =
 /// The composable Community builder. Resolves the cookbook path automatically;
 /// compose the result into `composeWithAI`'s prompt list.
 let systemPromptBuilder (logger: ILogger option) : SystemPromptBuilder =
-    match candidatePaths "COOKBOOK.md" |> List.tryFind File.Exists with
+    match candidatePaths CookbookFileName |> List.tryFind File.Exists with
     | Some path -> buildFromFile Heading extractedHeaders path logger
     | None ->
         logger
         |> Option.iter (fun l ->
-            l.Warn "AgChartAICookbook: COOKBOOK.md not found on any candidate path; chart-authoring guidance disabled.")
+            l.Warn
+                $"AgChartAICookbook: {CookbookFileName} not found on any candidate path; chart-authoring guidance disabled.")
 
         fun _ -> async { return "" }

@@ -9,10 +9,14 @@
   <ItemGroup>
     <Compile Include="AgChartAICookbook.fs" />
     <!-- Ship the Community cookbook alongside the assembly so the builder's
-         assembly-relative resolution finds it in packaged deployments. -->
-    <Content Include="..\..\ToolUp.Platform.Client\Client\UI\COOKBOOK.md" Link="COOKBOOK.md">
+         assembly-relative resolution finds it in packaged deployments.
+         The Link/PackagePath name MUST match AgChartAICookbook.CookbookFileName and
+         MUST differ from the Enterprise companion's: a consumer referencing both
+         copies both into one output directory, and under a shared name the copies
+         collide with MSBuild ordering picking the winner. -->
+    <Content Include="..\..\ToolUp.Platform.Client\Client\UI\COOKBOOK.md" Link="COOKBOOK.Community.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <PackagePath>content\COOKBOOK.md</PackagePath>
+      <PackagePath>content\COOKBOOK.Community.md</PackagePath>
     </Content>
   </ItemGroup>
   <ItemGroup>

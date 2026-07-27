@@ -31,10 +31,11 @@ let private enterpriseFeatureNames = [
 ]
 
 let private communityCookbook () =
-    AgChartAICookbook.candidatePaths "COOKBOOK.md" |> List.tryFind File.Exists
+    AgChartAICookbook.candidatePaths AgChartAICookbook.CookbookFileName
+    |> List.tryFind File.Exists
 
 let private enterpriseCookbook () =
-    AgGridEnterpriseAICookbook.candidatePaths "COOKBOOK.md"
+    AgGridEnterpriseAICookbook.candidatePaths AgGridEnterpriseAICookbook.CookbookFileName
     |> List.tryFind File.Exists
 
 let tests =
@@ -45,6 +46,33 @@ let tests =
 
         test "enterprise cookbook resolves on a candidate path" {
             Expect.isSome (enterpriseCookbook ()) "Enterprise COOKBOOK.md should resolve"
+        }
+
+        // Regression guard. Both companions copy a cookbook into their consumer's
+        // output directory, and this test project references BOTH — so under a shared
+        // copied name the two collided and MSBuild ordering decided which survived.
+        // The Community builder then served the Enterprise book, breaching the
+        // licensing boundary the rest of this list defends. That failure was
+        // intermittent by construction: it reproduced only on builds where the
+        // ordering went the other way, so the leak test below caught it roughly half
+        // the time and looked flaky rather than correct. These two assertions fail
+        // deterministically instead — the names are a compile-time contract with the
+        // Link/PackagePath in each .fsproj.
+        test "the two companions use distinct cookbook file names" {
+            Expect.notEqual
+                AgChartAICookbook.CookbookFileName
+                AgGridEnterpriseAICookbook.CookbookFileName
+                "Community and Enterprise cookbooks must not share a copied file name"
+        }
+
+        test "the two companions resolve to different files" {
+            let community = (communityCookbook ()).Value
+            let enterprise = (enterpriseCookbook ()).Value
+
+            Expect.notEqual
+                (Path.GetFullPath community)
+                (Path.GetFullPath enterprise)
+                "Community and Enterprise builders must not resolve the same cookbook"
         }
 
         test "community builder produces authoring guidance" {

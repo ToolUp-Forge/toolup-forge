@@ -28,6 +28,13 @@ let Heading = "# Authoring AG Charts and Grids in F# (Enterprise)"
 /// Same H2 sections as the Community builder, lifted from the Enterprise book.
 let extractedHeaders = AgChartAICookbook.extractedHeaders
 
+/// The name this companion's cookbook is copied and packed under — distinct from
+/// `AgChartAICookbook.CookbookFileName` (see the rationale there). A consumer
+/// composing both builders holds both files in one output directory, so the two
+/// names must never converge.
+[<Literal>]
+let CookbookFileName = "COOKBOOK.Enterprise.md"
+
 /// Candidate Enterprise-cookbook paths: the `TOOLUP_ENTERPRISE_COOKBOOK_PATH`
 /// override (distinct from the Community override so both can be set), the
 /// assembly-relative copy shipped in the companion output, then a dev
@@ -54,12 +61,12 @@ let buildFromFile (cookbookPath: string) (logger: ILogger option) : SystemPrompt
 /// The composable Enterprise builder. Resolves the Enterprise cookbook path
 /// automatically; compose alongside the Community builder in `composeWithAI`.
 let systemPromptBuilder (logger: ILogger option) : SystemPromptBuilder =
-    match candidatePaths "COOKBOOK.md" |> List.tryFind File.Exists with
+    match candidatePaths CookbookFileName |> List.tryFind File.Exists with
     | Some path -> buildFromFile path logger
     | None ->
         logger
         |> Option.iter (fun l ->
             l.Warn
-                "AgGridEnterpriseAICookbook: COOKBOOK.md not found on any candidate path; Enterprise chart-authoring guidance disabled.")
+                $"AgGridEnterpriseAICookbook: {CookbookFileName} not found on any candidate path; Enterprise chart-authoring guidance disabled.")
 
         fun _ -> async { return "" }

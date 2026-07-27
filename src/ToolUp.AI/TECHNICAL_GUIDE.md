@@ -347,6 +347,8 @@ let promptBuilders logger = [
 
 **Fallback.** Cookbook resolution tries `TOOLUP_COOKBOOK_PATH` (Community) / `TOOLUP_ENTERPRISE_COOKBOOK_PATH` (Enterprise), then the assembly-relative copy shipped in the companion output, then a dev repo-relative path. If none resolves (or the file is unreadable), the builder emits a single startup `Logger.Warn` and returns an empty string — a silent no-op, never a crash.
 
+**Distinct copied names.** Each companion copies and packs its cookbook under its own name — `COOKBOOK.Community.md` / `COOKBOOK.Enterprise.md`, exposed as `CookbookFileName` on each module — because a deployment composing both holds both files in one output directory. Under a shared name the copies collide and MSBuild ordering decides the winner, which made the Community builder serve the Enterprise book on some builds and breached the boundary above with nothing at runtime able to detect it. The repo's *source* files keep the plain `COOKBOOK.md` name; only the copied artefact is companion-specific.
+
 ## Built-in AI tools
 
 The SDK registers two families of platform-owned tools automatically inside `composeAI` (`AICompose.fs`) — apps do **not** declare them. Both reserve platform-prefixed names so a module tool can never collide; `composeAI` fails loudly at compose time on any duplicate `Name` across built-ins + module tools.

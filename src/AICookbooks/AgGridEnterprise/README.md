@@ -26,7 +26,9 @@ AIServerApp.empty
 
 ## Cookbook resolution
 
-`systemPromptBuilder` probes for `COOKBOOK.md` most-specific first: the `TOOLUP_COOKBOOK_PATH` override (a file, or a directory holding `COOKBOOK.md`), the assembly-relative copy this package ships (`content\COOKBOOK.md`), then a dev repo-relative path back to the Enterprise source cookbook. `buildFromFile` takes an explicit path.
+`systemPromptBuilder` probes for `COOKBOOK.Enterprise.md` most-specific first: the `TOOLUP_ENTERPRISE_COOKBOOK_PATH` override (a file, or a directory holding `COOKBOOK.Enterprise.md`), the assembly-relative copy this package ships (`content\COOKBOOK.Enterprise.md`), then a dev repo-relative path back to the Enterprise source cookbook. `buildFromFile` takes an explicit path.
+
+The copied name is companion-specific by design — a deployment composing both builders holds both files in one output directory, and a shared name would let one overwrite the other, silently feeding Enterprise guidance to the Community builder. It is exposed as `AgGridEnterpriseAICookbook.CookbookFileName`.
 
 ## Degradation
 

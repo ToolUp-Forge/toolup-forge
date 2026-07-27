@@ -9,10 +9,12 @@
   <ItemGroup>
     <Compile Include="AgGridEnterpriseAICookbook.fs" />
     <!-- Ship the Enterprise cookbook alongside the assembly for assembly-
-         relative resolution in packaged deployments. -->
-    <Content Include="..\..\AgGridEnterprise\COOKBOOK.md" Link="COOKBOOK.md">
+         relative resolution in packaged deployments. The Link/PackagePath name MUST
+         match AgGridEnterpriseAICookbook.CookbookFileName and MUST differ from the
+         Community companion's — see the note in AgChartAICookbook.fsproj. -->
+    <Content Include="..\..\AgGridEnterprise\COOKBOOK.md" Link="COOKBOOK.Enterprise.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <PackagePath>content\COOKBOOK.md</PackagePath>
+      <PackagePath>content\COOKBOOK.Enterprise.md</PackagePath>
     </Content>
   </ItemGroup>
   <ItemGroup>
