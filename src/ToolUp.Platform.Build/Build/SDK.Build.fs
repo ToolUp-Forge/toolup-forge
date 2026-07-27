@@ -294,10 +294,44 @@ let registerTargets (config: BuildConfig) =
             -- "src/ToolUp.RAG.Evaluation/**/*.fsproj"
             -- "src/ToolUp.RAG.Benchmarks/**/*.fsproj"
 
-        for proj in projects do
-            Trace.tracefn "Packing %s..." proj
+        // Pack every project, then fail at the end — the `VerifyAll`
+        // shape above, for the same reason. A packaging defect in one
+        // project (a missing packed README, a bad PackagePath) is
+        // independent of every other project, so aborting on the first
+        // one hides the rest and turns a single fix-and-rerun cycle
+        // into one round trip per defect. The target still fails, and
+        // the summary names every project that did not pack.
+        let results = ResizeArray<string * int>()
 
-            run dotnet [ "pack"; proj; "-c"; "Release"; "-o"; outputDir; "--nologo" ] ".")
+        // Per-project process WITHOUT the file-top `dotnet` shim's
+        // `ensureExitCode` decorator, so a non-zero exit is captured
+        // rather than thrown.
+        let packProject proj =
+            CreateProcess.fromRawCommand "dotnet" [ "pack"; proj; "-c"; "Release"; "-o"; outputDir; "--nologo" ]
+            |> CreateProcess.withWorkingDirectory "."
+            |> Proc.run
+
+        try
+            for proj in projects do
+                Trace.tracefn "Packing %s..." proj
+                let result = packProject proj
+                results.Add(proj, result.ExitCode)
+        finally
+            let failed = results |> Seq.filter (fun (_, c) -> c <> 0) |> Seq.toList
+
+            Trace.tracefn ""
+            Trace.tracefn "Pack summary: %d packed, %d failed." (results.Count - failed.Length) failed.Length
+
+            for proj, exitCode in failed do
+                Trace.tracefn "  FAIL (exit %d) — %s" exitCode proj
+
+        let failed = results |> Seq.filter (fun (_, c) -> c <> 0) |> Seq.toList
+
+        if not failed.IsEmpty then
+            failed
+            |> List.map (fun (p, c) -> sprintf "%s (exit %d)" p c)
+            |> String.concat "; "
+            |> failwithf "Pack: %d project(s) failed to pack — %s" failed.Length)
 
     Target.create "Publish" (fun _ ->
         // Phase 11.C.3 (2026-05-28) — publish every public-surface SDK
