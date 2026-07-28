@@ -139,6 +139,190 @@ module ModuleQueryBusApi =
     /// `IConfigApi`, `PlatformApi`, etc. — `/api/{typeName}/{methodName}`.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"
 
+/// One direction of a `ModuleQueryContract`'s payload translation — the
+/// pair of functions that turn a typed value into the envelope's
+/// `Payload` string and back. Deliberately a *value* (a record of two
+/// functions), not an interface or a reflection hook: the shared tier
+/// has no JSON stack of its own (the server serialises through
+/// System.Text.Json + `FableConverters`, the Fable client through
+/// `Fable.SimpleJson`), so the declaring module supplies whichever
+/// serialiser its tier can execute and the contract carries it by value.
+/// That keeps the type Fable-safe and keeps identity by value across the
+/// boundary (GP 12 rule 1).
+///
+/// `Decode` returns `Result` rather than raising: a payload mismatch is
+/// an expected failure mode of a wire contract, and the caller-side and
+/// handler-side wrappers both project it into a `ModuleQueryError` that
+/// names the contract (see `ModuleQueryContract.decodeFailure`).
+type ModuleQueryCodec<'T> = {
+    Encode: 'T -> string
+    Decode: string -> Result<'T, string>
+}
+
+/// A cross-module query declared **once**, in the providing module's
+/// shared tier, and referenced by both ends: the handler registration
+/// (`ServerModule.withQueryContract` / `ClientModule.withQueryContract`)
+/// and every caller (`ModuleQueryBus.askContract` /
+/// `ModuleQueryClient.askContract`).
+///
+/// ## What it replaces
+///
+/// A stringly query makes caller and handler agree on three things by
+/// hand — the target module name, the query key, and the JSON shape of
+/// the payload — and every mismatch surfaces at *request* time as
+/// `NoHandler` or a deserialisation failure. A contract collapses all
+/// three into one shared value, so a key typo or a payload-shape drift
+/// is a *compile* error at whichever end stopped matching.
+///
+/// ## What it does not change
+///
+/// Nothing below it. `withQueryContract` lowers to an ordinary
+/// `ModuleQueryHandler` on the existing registration list, and
+/// `askContract` builds an ordinary `ModuleQueryRequest`, so the wire
+/// shape, the registry, the RBAC check, the duplicate-key rejection and
+/// the tracing spans are byte-for-byte what they were (GP 11). A
+/// contract-registered handler answers a stringly ask and vice versa —
+/// the stringly path stays the interop fallback for callers that cannot
+/// reference the contract value (another deployment, a script, a
+/// non-F# peer).
+type ModuleQueryContract<'Req, 'Resp> = {
+    /// Name of the module that answers this query — the same routing key
+    /// a stringly `ModuleQueryRequest.TargetModule` carries.
+    TargetModule: string
+    /// Module-declared discriminator, identical to the `QueryKey` the
+    /// lowered `ModuleQueryHandler` registers under.
+    QueryKey: string
+    /// Request-payload translation. `Encode` runs caller-side, `Decode`
+    /// handler-side.
+    RequestCodec: ModuleQueryCodec<'Req>
+    /// Response-payload translation. `Encode` runs handler-side,
+    /// `Decode` caller-side.
+    ResponseCodec: ModuleQueryCodec<'Resp>
+}
+
+/// Construction + the shared failure vocabulary for `ModuleQueryContract`.
+/// Tier-neutral (no JSON dependency), so both buses layer their own
+/// serialiser on top: see `ModuleQueryBus.contract` (server, STJ +
+/// `FableConverters`) and `ModuleQueryClient.contract` (client,
+/// `Fable.SimpleJson`).
+[<RequireQualifiedAccess>]
+module ModuleQueryContract =
+    /// Wrap encode / decode functions into a codec. Use when the module
+    /// already owns a serialiser for the type.
+    let codec (encode: 'T -> string) (decode: string -> Result<'T, string>) : ModuleQueryCodec<'T> = {
+        Encode = encode
+        Decode = decode
+    }
+
+    /// Wrap a *throwing* deserialiser (the shape both tiers' JSON stacks
+    /// expose) into a `Result`-returning codec. The exception message
+    /// becomes the decode detail; nothing propagates.
+    let codecOfThrowing (encode: 'T -> string) (decode: string -> 'T) : ModuleQueryCodec<'T> = {
+        Encode = encode
+        Decode =
+            fun payload ->
+                try
+                    Ok(decode payload)
+                with ex ->
+                    Error ex.Message
+    }
+
+    /// Declare a contract from a target module, a query key, and the two
+    /// codecs.
+    let create
+        (targetModule: string)
+        (queryKey: string)
+        (requestCodec: ModuleQueryCodec<'Req>)
+        (responseCodec: ModuleQueryCodec<'Resp>)
+        : ModuleQueryContract<'Req, 'Resp> =
+        {
+            TargetModule = targetModule
+            QueryKey = queryKey
+            RequestCodec = requestCodec
+            ResponseCodec = responseCodec
+        }
+
+    /// `"<TargetModule>.<QueryKey>"` — the contract's identity in
+    /// diagnostics, matching the `query <module>.<key>` activity name the
+    /// bus opens.
+    let describe (contract: ModuleQueryContract<'Req, 'Resp>) : string =
+        sprintf "%s.%s" contract.TargetModule contract.QueryKey
+
+    /// The decode-failure message both ends raise/return. Always names
+    /// the contract (module + key) and which direction failed, because a
+    /// payload mismatch is otherwise indistinguishable from an ordinary
+    /// handler exception once it reaches `HandlerFailed`.
+    let decodeFailure (contract: ModuleQueryContract<'Req, 'Resp>) (direction: string) (detail: string) : string =
+        sprintf
+            "Module query contract \"%s\": the %s payload did not decode — %s. Caller and handler must reference the same ModuleQueryContract value; a stringly caller on this key must send the shape the contract declares."
+            (describe contract)
+            direction
+            detail
+
+    /// Handler-side request decode. Raises on failure so the bus's
+    /// existing catch turns it into `Some (Error (HandlerFailed …))` —
+    /// no new error case, no change to either bus implementation.
+    let decodeRequestOrRaise (contract: ModuleQueryContract<'Req, 'Resp>) (payload: string) : 'Req =
+        match contract.RequestCodec.Decode payload with
+        | Ok value -> value
+        | Error detail -> failwith (decodeFailure contract "request" detail)
+
+    /// Caller-side response decode, projected into the same
+    /// `ModuleQueryError` channel the rest of the ask returns through.
+    let decodeResponse
+        (contract: ModuleQueryContract<'Req, 'Resp>)
+        (payload: string)
+        : Result<'Resp, ModuleQueryError> =
+        match contract.ResponseCodec.Decode payload with
+        | Ok value -> Ok value
+        | Error detail -> Error(HandlerFailed(decodeFailure contract "response" detail))
+
+    /// Build the stringly envelope a contract ask sends. Exposed so the
+    /// two tiers' `askContract` share one construction site and a
+    /// stringly caller can be shown the exact envelope a contract emits.
+    let request (contract: ModuleQueryContract<'Req, 'Resp>) (value: 'Req) : ModuleQueryRequest = {
+        TargetModule = contract.TargetModule
+        QueryKey = contract.QueryKey
+        Payload = contract.RequestCodec.Encode value
+    }
+
+    /// Lower a contract + typed handler onto the ordinary
+    /// `ModuleQueryHandler` both registries already hold. The contract
+    /// path adds no registration shape of its own — a contract-registered
+    /// handler is indistinguishable, at the registry, from one built by
+    /// `ModuleQueryHandler.typed` (GP 11), so duplicate rejection
+    /// (Phase 579), the surface descriptor and the tracing spans all see
+    /// it unchanged.
+    let handler
+        (contract: ModuleQueryContract<'Req, 'Resp>)
+        (handle: ModuleQueryContext -> 'Req -> Async<'Resp>)
+        : ModuleQueryHandler =
+        {
+            QueryKey = contract.QueryKey
+            Handle =
+                fun ctx -> async {
+                    let request = decodeRequestOrRaise contract ctx.Request.Payload
+                    let! response = handle ctx request
+                    return contract.ResponseCodec.Encode response
+                }
+        }
+
+    /// Compose-time guard for the third string a contract subsumes: a
+    /// contract registered on a module whose `Name` is not the contract's
+    /// `TargetModule` would register under a routing key no caller of
+    /// that contract ever asks for, and surface as `NoHandler` at request
+    /// time. Raises with both names; returns unit when they agree.
+    let ensureTargetMatches (moduleName: string) (contract: ModuleQueryContract<'Req, 'Resp>) : unit =
+        if moduleName <> contract.TargetModule then
+            failwith (
+                sprintf
+                    "Compose-time defect: module \"%s\" registers the query contract \"%s\", whose TargetModule is \"%s\". The bus routes on the registering module's name, so callers of this contract would ask \"%s\" and see NoHandler. Register the contract on the module it names, or correct the contract's TargetModule."
+                    moduleName
+                    (describe contract)
+                    contract.TargetModule
+                    contract.TargetModule
+            )
+
 /// Tier-shared registry construction for the module query buses. Both
 /// the server (`ModuleQueryBus.buildRegistry`) and the client
 /// (`ModuleQueryClient.buildRegistry`) route `(TargetModule, QueryKey)`

@@ -54,6 +54,59 @@ module ModuleQueryHandler =
                 }
         }
 
+// ─── Typed contracts (Phase 584) ──────────────────────────────────
+
+/// Server-tier `ModuleQueryContract` construction. The shared tier owns
+/// the contract *type* (it has no JSON stack of its own); this is where
+/// the server's serialiser — System.Text.Json with the `FableConverters`
+/// set, the same one `ModuleQueryHandler.typed` and `ask` already use —
+/// is baked into a contract's codecs, so a contract declared here
+/// round-trips byte-for-byte with the stringly path it lowers onto.
+///
+/// Declare the contract once in the providing module's shared tier and
+/// reference the value from both ends:
+/// ```
+/// let latestAnalysis =
+///     ModuleQueryBus.contract<LatestAnalysisReq, LatestAnalysisResp> "SkuAnalysis" "latest"
+///
+/// // provider
+/// serverModule |> ServerModule.withQueryContract latestAnalysis handleLatest
+///
+/// // caller — the key is no longer a string it has to get right
+/// let! result = ModuleQueryBus.askContract bus access latestAnalysis { DatasetId = id }
+/// ```
+let contract<'TRequest, 'TResponse>
+    (targetModule: string)
+    (queryKey: string)
+    : ModuleQueryContract<'TRequest, 'TResponse> =
+    ModuleQueryContract.create
+        targetModule
+        queryKey
+        (ModuleQueryContract.codecOfThrowing Json.serialize<'TRequest> Json.deserialize<'TRequest>)
+        (ModuleQueryContract.codecOfThrowing Json.serialize<'TResponse> Json.deserialize<'TResponse>)
+
+/// Ask through a contract: encode with the contract's request codec,
+/// dispatch the ordinary stringly envelope, decode with its response
+/// codec. Same three-valued return as `ask`; a response that does not
+/// decode surfaces as `Some (Error (HandlerFailed …))` whose message
+/// names the contract (`ModuleQueryContract.decodeFailure`) rather than
+/// throwing at the call site.
+let askContract
+    (bus: IModuleQueryBus)
+    (ctx: AccessContext)
+    (contract: ModuleQueryContract<'TRequest, 'TResponse>)
+    (request: 'TRequest)
+    : Async<Result<'TResponse, ModuleQueryError> option> =
+    async {
+        let! result = bus.Ask(ctx, ModuleQueryContract.request contract request)
+
+        return
+            result
+            |> Option.map (fun outcome ->
+                outcome
+                |> Result.bind (fun r -> ModuleQueryContract.decodeResponse contract r.Payload))
+    }
+
 // ─── Typed caller-side helper ─────────────────────────────────────
 
 /// Serialise a typed request, call the bus, deserialise the typed

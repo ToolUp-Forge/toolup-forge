@@ -49,6 +49,51 @@ module ClientModuleQueryHandler =
                 }
         }
 
+// ─── Typed contracts (Phase 584) ──────────────────────────────────
+
+/// Client-tier `ModuleQueryContract` construction — the Fable mirror of
+/// `ModuleQueryBus.contract`. The contract *type* is tier-shared
+/// (`ToolUp.Platform.Core`); what differs per tier is only the
+/// serialiser baked into its codecs, `Fable.SimpleJson` here against
+/// System.Text.Json + `FableConverters` server-side. The two produce the
+/// same wire shape, which is exactly why a client-declared contract and
+/// a server-declared one on the same key interoperate.
+///
+/// `inline` for the same reason `ClientModuleQueryHandler.typed` is:
+/// `Fable.SimpleJson` resolves `'T`'s shape statically at the call site.
+let inline contract<'TRequest, 'TResponse>
+    (targetModule: string)
+    (queryKey: string)
+    : ModuleQueryContract<'TRequest, 'TResponse> =
+    ModuleQueryContract.create
+        targetModule
+        queryKey
+        (ModuleQueryContract.codecOfThrowing (fun (v: 'TRequest) -> Json.serialize<'TRequest> v) (fun payload ->
+            Json.deserialize<'TRequest> payload))
+        (ModuleQueryContract.codecOfThrowing (fun (v: 'TResponse) -> Json.serialize<'TResponse> v) (fun payload ->
+            Json.deserialize<'TResponse> payload))
+
+/// Ask through a contract. Mirrors `ModuleQueryBus.askContract`: encode,
+/// dispatch the ordinary stringly envelope (so the local-registry-then-
+/// HTTP fallback in `ClientModuleQueryBus` is unchanged), decode. A
+/// response that does not decode surfaces as
+/// `Some (Error (HandlerFailed …))` naming the contract.
+let inline askContract
+    (bus: IModuleQueryBus)
+    (ctx: AccessContext)
+    (contract: ModuleQueryContract<'TRequest, 'TResponse>)
+    (request: 'TRequest)
+    : Async<Result<'TResponse, ModuleQueryError> option> =
+    async {
+        let! result = bus.Ask(ctx, ModuleQueryContract.request contract request)
+
+        return
+            result
+            |> Option.map (fun outcome ->
+                outcome
+                |> Result.bind (fun r -> ModuleQueryContract.decodeResponse contract r.Payload))
+    }
+
 // ─── Typed caller-side helper ─────────────────────────────────────
 
 /// Serialise a typed request, dispatch through the bus, deserialise the

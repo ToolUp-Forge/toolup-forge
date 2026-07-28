@@ -316,6 +316,79 @@ Modules:
 
 If two modules need to coordinate, the right shape is one emits events / publishes processed data; the other subscribes / consumes. Direct cross-module imports are a red flag for the design.
 
+## Cross-module queries — declare a contract
+
+When one module needs to *ask* another something (rather than react to what it published), the
+channel is `IModuleQueryBus`. The bus routes on `(TargetModule, QueryKey)` and carries a JSON
+`Payload` string, so a hand-written call site makes the caller and the handler agree on three
+things by hand — the module name, the key, and the payload's shape. None of the three is checked
+until the request runs; a typo is a `NoHandler` and a shape drift is a deserialisation failure,
+both at request time and both on whichever deployment happens to exercise that path.
+
+**A `ModuleQueryContract<'Req,'Resp>` is one value that carries all three.** Declare it once in
+the *providing* module's shared tier — the file both the server and the Fable client compile —
+and reference that value from both ends:
+
+```fsharp
+// Reports/SharedTypes.fs — the providing module's shared tier
+module Reports.SharedTypes
+
+open ToolUp.Platform
+
+type LatestReq = { DatasetId: string; Top: int }
+type LatestResp = { Label: string; Score: decimal }
+
+let latest = ModuleQueryBus.contract<LatestReq, LatestResp> "Reports" "latest"
+```
+
+```fsharp
+// Reports/Server.fs — the provider answers it
+let serverModule =
+    ServerModule.create "Reports"
+    |> ServerModule.withQueryContract Reports.SharedTypes.latest (fun _ req -> async {
+        return { Label = req.DatasetId; Score = 1.5m }
+    })
+```
+
+```fsharp
+// any other module — the caller asks it
+let! result =
+    ModuleQueryBus.askContract bus access Reports.SharedTypes.latest { DatasetId = id; Top = 5 }
+// result : Result<LatestResp, ModuleQueryError> option
+```
+
+The caller never spells the key, and `handle`'s parameter and return types come from the contract
+— so a renamed key, a reordered field, or a changed response record breaks the **build** at
+whichever end stopped matching, which is the whole point.
+
+The client tier mirrors it exactly: `ModuleQueryClient.contract` declares one against
+`Fable.SimpleJson`, `ClientModule.withQueryContract` registers a client-side handler, and
+`ModuleQueryClient.askContract` asks. The two tiers differ only in which serialiser is baked into
+the contract's codecs; the wire shape they produce is the same, which is why a client-declared
+contract and a server-declared one on the same key interoperate.
+
+**Nothing changes underneath.** `withQueryContract` lowers the contract onto the ordinary
+`QueryHandlers` / `ClientQueryHandlers` list, and `askContract` builds the ordinary
+`ModuleQueryRequest`. The registry, the RBAC check, the compose-time duplicate-key rejection, the
+`ModuleSurface` label and the tracing spans all see exactly what the stringly path produces, and
+the bytes on the wire are unchanged (GP 11). Registering a contract on a module whose `Name` is
+not the contract's `TargetModule` is the one *new* rejection — the bus routes on the registering
+module's name, so a mismatch would answer under a key no caller of that contract ever asks for.
+That fails at compose time, naming both.
+
+**The stringly path stays — as the interop fallback.** `ModuleQueryHandler.typed` /
+`ModuleQueryBus.ask` (and their client twins) are unchanged and still correct. Reach for them
+when the other end cannot reference the contract value: a caller in another deployment, a script
+or admin tool poking the bus by name, a non-F# peer. Both registration styles coexist on one
+module, and a contract-registered handler answers a stringly ask (and vice versa) as long as the
+payload shape matches — which is exactly the drift the contract removes between two F# call sites
+and cannot remove from a hand-written one.
+
+When a payload does not decode — either direction — the failure comes back as
+`Error (HandlerFailed …)` whose message names the contract (`"Reports.latest"`) and which side
+failed, rather than as an opaque exception message. No new error case: the typed error channel is
+the `ModuleQueryError` the bus already returns.
+
 ## When to split a module into pages, vs new modules
 
 A page is part of one MVU; a new module is its own MVU. Use pages when:

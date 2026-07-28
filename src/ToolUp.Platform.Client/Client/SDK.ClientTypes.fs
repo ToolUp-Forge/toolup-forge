@@ -1994,6 +1994,37 @@ module ClientModule =
                 ClientQueryHandlers = handlers
         }
 
+    /// Answer a cross-module query declared as a `ModuleQueryContract`
+    /// (Phase 584) — the client mirror of `ServerModule.withQueryContract`
+    /// and the recommended shape for client-side handlers. The contract
+    /// carries the query key and both payload codecs as one value shared
+    /// with every caller, so a key typo or a payload-shape drift is a
+    /// compile error rather than a request-time `NoHandler`.
+    ///
+    /// **No new registration shape.** The contract lowers immediately
+    /// onto the existing `ClientQueryHandlers` list
+    /// (`ModuleQueryContract.handler`), so `SDK.Client.run`'s registry
+    /// build, the Phase 579 duplicate rejection and the server-fallback
+    /// path see exactly what `withQueryHandlers` produces (GP 11).
+    /// Unlike `withQueryHandlers` (which sets the list) this one
+    /// *appends*, so several contracts compose.
+    ///
+    /// The module's `Definition.Id` must equal the contract's
+    /// `TargetModule` — `SDK.Client.run` files client handlers under the
+    /// module's id, so a mismatch would register under a key no caller
+    /// of the contract asks for. Rejected here at compose time.
+    let withQueryContract
+        (contract: ModuleQueryContract<'Req, 'Resp>)
+        (handle: ModuleQueryContext -> 'Req -> Async<'Resp>)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        ModuleQueryContract.ensureTargetMatches m.Definition.Id contract
+
+        {
+            m with
+                ClientQueryHandlers = m.ClientQueryHandlers @ [ ModuleQueryContract.handler contract handle ]
+        }
+
     /// Attach an action decoder to a strongly-typed `ClientModule` before
     /// erasure. The decoder receives `(actionKey, payloadJson)` for every
     /// `Notification.ModuleAction` targeted at this module's `Definition.Id`

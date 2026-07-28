@@ -215,6 +215,39 @@ module ServerModule =
             QueryHandlers = m.QueryHandlers @ handlers
     }
 
+    /// Answer a cross-module query declared as a `ModuleQueryContract`
+    /// (Phase 584) — the recommended shape. The contract carries the
+    /// query key and both payload codecs as one value shared with every
+    /// caller, so the key and the payload shape stop being two strings
+    /// that must agree by hand: `handle` is typed against the contract's
+    /// `'Req` / `'Resp`, and a caller using
+    /// `ModuleQueryBus.askContract` against the same value cannot drift
+    /// from it without a compile error.
+    ///
+    /// **No new registration shape.** The contract lowers immediately
+    /// onto the existing `QueryHandlers` list
+    /// (`ModuleQueryContract.handler`), so the registry, the Phase 579
+    /// duplicate rejection, `ModuleSurface` and the bus's tracing spans
+    /// see exactly what `withQueryHandlers` produces (GP 11). Stringly
+    /// registrations and contract registrations coexist on one module.
+    ///
+    /// The module's `Name` must equal the contract's `TargetModule` —
+    /// the bus routes on the registering module's name, so a mismatch
+    /// would register under a key no caller of the contract asks for.
+    /// That is rejected here, at compose time, rather than surfacing as
+    /// `NoHandler` at request time.
+    let withQueryContract
+        (contract: ModuleQueryContract<'Req, 'Resp>)
+        (handle: ModuleQueryContext -> 'Req -> Async<'Resp>)
+        (m: ServerModule)
+        : ServerModule =
+        ModuleQueryContract.ensureTargetMatches m.Name contract
+
+        {
+            m with
+                QueryHandlers = m.QueryHandlers @ [ ModuleQueryContract.handler contract handle ]
+        }
+
     /// Expose one or more AI tools the agent loop can invoke. Each
     /// entry pairs metadata (declared near the routine being exposed)
     /// with an executor (the wiring that calls the routine with parsed
