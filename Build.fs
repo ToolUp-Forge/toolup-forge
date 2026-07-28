@@ -38,6 +38,11 @@ let config = {
             // Chart prompt builder leaks zero Enterprise feature names + the
             // ~600-token bound + graceful no-op on a missing cookbook.
             TestPack.create "AICookbooks" "src/ToolUp.AICookbooks.Tests/ToolUp.AICookbooks.Tests.fsproj"
+            // Phase 11.E.2 — ToolUp.Algorithms: the six-portability-rule
+            // contract pack, the registry's duplicate-registration
+            // failure path, the dispatcher's typed error surface, and
+            // the AI tool edge. No env gating; no vendor dependency.
+            TestPack.create "Algorithms" "src/ToolUp.Algorithms.Tests/ToolUp.Algorithms.Tests.fsproj"
         ]
 }
 

@@ -46,6 +46,11 @@
     <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
 
+    <!-- Analytical-primitive catalog (Phase 11.E.2) -->
+    <PackageVersion Include="ToolUp.Algorithms.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Algorithms.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Algorithms.Client" Version="$(ToolUpSdkVersion)" />
+
     <!-- Module testing scaffold (Phase 11a) -->
     <PackageVersion Include="ToolUp.Platform.Testing" Version="$(ToolUpSdkVersion)" />
 

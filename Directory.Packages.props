@@ -298,6 +298,13 @@
     <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
 
+    <!-- Phase 11.E.2 — analytical-primitive catalog companion. Tier-suffixed
+         ids; there is no unsuffixed ToolUp.Algorithms package published from
+         this repository (see src/ToolUp.Algorithms/README.md). -->
+    <PackageVersion Include="ToolUp.Algorithms.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Algorithms.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Algorithms.Client" Version="$(ToolUpSdkVersion)" />
+
     <!-- Phase 520 — grounding fact store companion -->
     <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />

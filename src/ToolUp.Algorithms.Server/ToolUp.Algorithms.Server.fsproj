@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Algorithms Server — the analytical-primitive provider seam: IAlgorithmProvider, the four curated fitter interfaces (IRegressionFitter / IDescriptiveStats / IDistributionFitter / ITimeSeriesFilter), IAlgorithmCatalog, the dispatcher with compose-time duplicate rejection, the algorithm AI tool family, and the AlgorithmsCompose pipeline. Zero vendor dependency — numerics live in provider companions.</Description>
+        <PackageTags>fsharp;sdk;server;algorithms;statistics</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Core\ToolUp.Algorithms.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Algorithms\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Server\IAlgorithmFitters.fs" />
+        <Compile Include="Server\IAlgorithmProvider.fs" />
+        <Compile Include="Server\IAlgorithmCatalog.fs" />
+        <Compile Include="Server\AlgorithmDispatcher.fs" />
+        <Compile Include="Server\AlgorithmAITools.fs" />
+        <Compile Include="Server\AlgorithmCatalogContributor.fs" />
+        <Compile Include="Server\AlgorithmCatalogApiHandler.fs" />
+        <Compile Include="Server\AlgorithmsCompose.fs" />
+    </ItemGroup>
+    <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
+         FSharp.Core is implicit via the .NET SDK. -->
+</Project>

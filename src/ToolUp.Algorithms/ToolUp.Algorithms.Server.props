@@ -1,0 +1,11 @@
+<Project>
+  <!-- Phase 11.E.2 (2026-07-28): server source files ship as
+       ToolUp.Algorithms.Server.dll, referenced via <ProjectReference>
+       (in-repo) or <PackageReference> (downstream) from the consuming
+       server project. This file is an empty marker retained for
+       symmetry with the other cross-tier companions, whose consumers
+       still import a .Server.props. -->
+  <ItemGroup>
+    <!-- (No source items — DLL delivery.) -->
+  </ItemGroup>
+</Project>

@@ -1,0 +1,8 @@
+<Project>
+  <!-- Phase 11.E.2 (2026-07-28): client source ships packed under
+       fable/ in ToolUp.Algorithms.Client.nupkg. Empty marker, retained
+       for symmetry with the other cross-tier companions. -->
+  <ItemGroup>
+    <!-- (No source items — Fable source-in-nupkg delivery.) -->
+  </ItemGroup>
+</Project>

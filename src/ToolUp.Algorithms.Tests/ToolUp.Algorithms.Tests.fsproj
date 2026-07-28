@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 11.E.2 — contract packs for the four curated fitter
+         interfaces (the six portability rules), the registry's
+         duplicate-registration failure path, the dispatcher's typed
+         error surface, and the AI tool edge (the companion's only
+         untyped boundary). -->
+    <ItemGroup>
+        <Compile Include="InProcess\ReferenceProvider.fs" />
+        <Compile Include="Contracts\IAlgorithmProviderContract.fs" />
+        <Compile Include="InProcess\RegistryAndDispatcherTests.fs" />
+        <Compile Include="InProcess\AIToolSurfaceTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Core\ToolUp.Algorithms.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Server\ToolUp.Algorithms.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>
