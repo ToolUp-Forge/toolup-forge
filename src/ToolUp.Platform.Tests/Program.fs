@@ -363,6 +363,8 @@ let allTests =
         // Phase 599 — entity-write outbox (write-ahead intent + version
         // witness: happy path, deferred publish, ghost prevention).
         EntityOutboxTests.tests
+        // Phase 600 — blob conditional writes (the ETag CAS seam).
+        ConditionalBlobStorageTests.tests
         EntityQueryTests.tests
         // Phase 19c — declarative relationship edges.
         RelationshipTests.tests
