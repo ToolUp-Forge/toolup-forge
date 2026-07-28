@@ -183,6 +183,10 @@ ordering), and declared match precision.
 
 ## See also
 
+- [`../security/PLATFORM-SECURITY-RULES.md`](../security/PLATFORM-SECURITY-RULES.md)
+  — §6 states the data-subject rules in procurement-facing form, with an
+  evidence pointer per rule and the known limitations (declared-precision
+  matching, whole-payload lineage tombstoning) stated up front.
 - [`events.md`](events.md) — the event store + audit replication this
   builds on.
 - [`storage.md`](storage.md) — `IBlobStorage`, the substrate under most

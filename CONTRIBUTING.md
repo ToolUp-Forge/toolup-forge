@@ -13,8 +13,9 @@ maintenance commitment, and how to sign your work.
 4. [Contribution flow by type](#contribution-flow-by-type)
 5. [Promotion from community to first-party](#promotion-from-community-to-first-party)
 6. [Style and conventions](#style-and-conventions)
-7. [Maintainer setup](#maintainer-setup)
-8. [Where to ask questions](#where-to-ask-questions)
+7. [Security-affecting changes](#security-affecting-changes)
+8. [Maintainer setup](#maintainer-setup)
+9. [Where to ask questions](#where-to-ask-questions)
 
 ---
 
@@ -175,6 +176,39 @@ Highlights:
 - **Tests:** Server-side tests run on Expecto. Each public-surface
   interface should have a contract test pack that companion
   implementations can run against themselves.
+
+## Security-affecting changes
+
+The SDK publishes a versioned, evidence-cited statement of what it
+enforces:
+[`docs/security/PLATFORM-SECURITY-RULES.md`](docs/security/PLATFORM-SECURITY-RULES.md).
+Compliance officers and vendor-risk assessors cite it directly, and every
+rule in it carries an `Evidence:` line pointing at real paths in this
+repository. That only stays true if contributors keep it true.
+
+**If your change touches a rule documented there, refresh that rule's
+cited evidence in the same commit.** Concretely:
+
+- **Moving or renaming a cited file** — update every `Evidence:` line
+  naming it.
+- **Changing what a cited mechanism enforces** — update the rule text.
+  If the guarantee got *weaker*, say so explicitly and name the version.
+- **Adding a new structurally-enforced guarantee** (a new fail-closed
+  default, a new preflight refusal, a new always-on middleware) — add the
+  rule, with evidence, in the commit that ships the guarantee.
+- **Removing a guarantee** — move the rule into the out-of-scope section
+  rather than deleting it, so a reviewer comparing two ruleset versions
+  can see what changed.
+- **Bumping `<ToolUpSdkVersion>`** — restamp the `RulesetVersion` header.
+
+An evidence pointer that no longer resolves turns a compliance artefact
+into a liability, so treat a stale one as a defect rather than a
+documentation nit. The full versioning policy and the reasoning behind
+this cadence are in
+[`docs/security/README.md`](docs/security/README.md).
+
+Reporting a suspected vulnerability is a different path — do **not** open
+a public issue or PR. See [`SECURITY.md`](SECURITY.md).
 
 ## Maintainer setup
 

@@ -469,3 +469,5 @@ Carefully consider reversibility and blast radius. Local, reversible actions (ed
 ## Scope
 
 The job of this `CLAUDE.md` is to support OSS contributors using Claude Code (or any AI coding assistant) to read and modify SDK source. Architectural docs live in `docs/`; per-companion deep-dives in `docs/{ai,rag,knowledge-base,forms,scheduling}/` and `docs/companions/{auth-providers,storage-providers,ai-providers,embedding-providers,notification-channels}.md`.
+
+**A change touching a rule in [`docs/security/PLATFORM-SECURITY-RULES.md`](docs/security/PLATFORM-SECURITY-RULES.md) refreshes that rule's cited evidence in the same commit** — the artefact is version-stamped and every rule carries an `Evidence:` path, so a stale pointer is a defect, not a documentation nit. Cadence and versioning policy: [`docs/security/README.md`](docs/security/README.md).

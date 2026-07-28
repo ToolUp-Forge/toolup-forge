@@ -2,6 +2,8 @@
 
 This page is the platform-side security reference for operators composing a ToolUp deployment. The repo-root [`SECURITY.md`](../../SECURITY.md) covers vulnerability disclosure (where to send reports, embargo policy); this page covers the threat surfaces a deployment exposes and the SDK substrate available to harden them.
 
+> **Answering a vendor-risk questionnaire rather than tuning a deployment?** Read [`../security/PLATFORM-SECURITY-RULES.md`](../security/PLATFORM-SECURITY-RULES.md) instead — the versioned, evidence-cited statement of what the SDK enforces, with an explicit out-of-scope list. This page assumes you have already chosen to deploy and are hardening a specific composition.
+
 Most of the page is the **Mixed-mode threat surface** section below — the model documented in [`surfaces.md`](surfaces.md) lets a single deployment serve anonymous + authenticated subjects concurrently, and the threat surfaces that follow are not the union of the single-shape threats but a distinct shape worth reasoning about explicitly.
 
 ## Mixed-mode threat surface
@@ -201,6 +203,7 @@ Security defects in the SDK itself are reported via the process documented in [`
 
 ## Related references
 
+- [`../security/PLATFORM-SECURITY-RULES.md`](../security/PLATFORM-SECURITY-RULES.md) — the procurement-facing, version-stamped rule set: every structurally-enforced guarantee with an evidence pointer, plus the explicit out-of-scope list. Cite this in a questionnaire; cite this page when tuning.
 - [`surfaces.md`](surfaces.md) — the Subject / SurfaceProfile / SurfaceRequirement mental model and the five deployment archetypes referenced above.
 - [`auth.md`](auth.md) — `IAuthProvider` authoring; the request-resolution flow per subject kind.
 - [`composition-roots.md`](composition-roots.md) — `ServerApp` composition, the validator registry, env-var contracts.

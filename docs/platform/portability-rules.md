@@ -4,6 +4,8 @@ Many SDK interfaces (`IJobScheduler`, `IJobStore`, `IModuleQueryBus`, `INotifica
 
 The six rules below define that portability discipline. Any interface that *might* be implemented distributed-side **must** satisfy all six. The conformance test packs (`IJobSchedulerContract`, `IModuleQueryBusContract`, `IShareTokenStoreContract`, `IDataSourceContract`, `IEntityStoreContract`, etc.) are the executable enforcement bar — every implementation passes the same tests.
 
+> These six rules are also §7 of the procurement-facing [platform security rules](../security/PLATFORM-SECURITY-RULES.md) — several of them (statelessness across invocations, retry as data, the explicit ordering contract) are what keep an audit or erasure run correct across a process restart, so they are load-bearing for compliance and not only for vendor choice.
+
 ## Rule 1 — Identity by value
 
 Returns and parameters use `string`, `Guid`, or domain records — never live framework handles (`IActorRef`, `IGrainReference`, `Task<T>` you can't resume from a different process, etc.).

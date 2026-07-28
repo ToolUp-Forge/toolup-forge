@@ -68,6 +68,7 @@ The full docs site lives in [`docs/`](docs/):
 - [`docs/forms/`](docs/forms/) — `ToolUp.Forms`: schema-driven forms, workflows, publishable surveys.
 - [`docs/scheduling/`](docs/scheduling/) — `ToolUp.Scheduling`: booking with concurrency lock, recurrence, iCalendar.
 - [`docs/companions/`](docs/companions/) — provider-companion overviews (auth, storage, AI, embedding, notifications).
+- [`docs/security/`](docs/security/) — the versioned, evidence-cited **platform security rules** artefact: what the SDK enforces (tenant isolation, authentication, authorisation, encryption, audit, data-subject rights, portability, AI safety) and an explicit out-of-scope list. Written to be read cold by a compliance officer or vendor-risk assessor.
 
 ## In-tree client + transport forks
 

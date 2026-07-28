@@ -211,3 +211,8 @@ Every event carries the actor's userId, the affected userId (if different), the 
 - Encryption-at-rest decorator wired with `PerScopeKeyResolver` (for crypto-shred capability).
 
 The `IConfigValidator` preflight runs all of these at boot; missing pieces surface as `Warning` or `Error` (the latter refuses to start). The default policy is operator-friendly: most hardening knobs default to off, and the validator nudges you to opt in rather than failing closed.
+
+## See also
+
+- [`../security/PLATFORM-SECURITY-RULES.md`](../security/PLATFORM-SECURITY-RULES.md) — §2 (authentication) and §3 (authorisation) of the versioned rule set, with an evidence pointer per rule and each rule marked always-on / default-on / opt-in.
+- [`security.md`](security.md) — deployment-time threat surfaces and the per-archetype threat model.

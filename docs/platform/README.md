@@ -76,6 +76,8 @@ The SDK is split into independent packages so you can pull just what you need. E
 
 Plus a wide set of provider companions for the extension-point interfaces — see [`companions/`](../companions/).
 
+**Evaluating the platform for procurement?** [`../security/PLATFORM-SECURITY-RULES.md`](../security/PLATFORM-SECURITY-RULES.md) is the version-stamped statement of what the SDK enforces — tenant isolation, authentication, authorisation, encryption, audit, data-subject rights, portability, AI safety — with an evidence pointer into this source tree for every rule, and an explicit list of what is deliberately out of scope.
+
 > AI-driven UI control (set fields, click buttons, navigate, select rows) is **not** shipped as a forge OSS companion. forge keeps the `IClientToolAuthorizer` seam in `ToolUp.AI.Core` for any consumer wanting to gate AI tool dispatch; consumers register their own authorizer (default-deny allowlist) or accept the unconfigured "allow" behaviour at their own risk.
 
 ## Architecture

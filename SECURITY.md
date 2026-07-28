@@ -5,6 +5,16 @@ real consequences for deployments. This document covers how to report a
 security issue and what response timeline you can expect, by the
 affected package's [maintenance tier](CONTRIBUTING.md#three-tier-maintenance-model).
 
+> **Evaluating the platform rather than reporting a vulnerability?** The
+> versioned, evidence-cited statement of what the SDK enforces —
+> tenant isolation, authentication, authorisation, encryption, audit,
+> data-subject rights, portability, AI safety, and an explicit
+> out-of-scope list — is
+> [`docs/security/PLATFORM-SECURITY-RULES.md`](docs/security/PLATFORM-SECURITY-RULES.md).
+> It is written to be read cold by a compliance officer or vendor-risk
+> assessor. Versioning policy and maintenance cadence:
+> [`docs/security/README.md`](docs/security/README.md).
+
 ## Reporting a vulnerability
 
 **Do not open a public GitHub issue** for security-affecting reports.
@@ -108,6 +118,13 @@ Out of scope:
 
 These document security-relevant mechanisms a reviewer or deployment
 operator should understand. They are not vulnerability reports.
+
+The two notes below are kept here because both are cited directly from
+the disclosure scope above. The complete, versioned rule set — with an
+evidence pointer into the source tree for every rule — is
+[`docs/security/PLATFORM-SECURITY-RULES.md`](docs/security/PLATFORM-SECURITY-RULES.md);
+deployment-time threat surfaces and hardening knobs are
+[`docs/platform/security.md`](docs/platform/security.md).
 
 ### CSRF synchroniser token — client request-guard
 
