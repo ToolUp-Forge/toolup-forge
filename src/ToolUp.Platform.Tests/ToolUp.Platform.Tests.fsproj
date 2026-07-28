@@ -120,6 +120,13 @@
              registry, plus a self-test proving the pack fails a non-conforming
              registry. Test/build infra only. -->
         <Compile Include="Contracts\ComponentRegistryContract.fs" />
+        <!-- Phase 582 — IModuleContract conformance pack: the reusable
+             module-seam law suite (server/client id parity, wire-TypeName
+             uniqueness, NeedsData satisfiability, action emitter<->decoder
+             coverage, top-level-namespace convention) bound to the in-repo
+             samples/HelloWorld module, plus a self-test proving the pack
+             fails a non-conforming module. Test/build infra only. -->
+        <Compile Include="Contracts\ModuleContract.fs" />
         <Compile Include="Contracts\IClientToolDispatchContract.fs" />
         <!-- Phase 112 — scope-isolated live-session host conformance bar
              (structural cross-scope denial, single-session ordering,
@@ -1291,6 +1298,11 @@
              .NET build so the neutrality pack can drive its tier-neutral
              lowerings against the server-side seams the runner can reach. -->
         <ProjectReference Include="..\..\samples\ToyTreeBinding\ToyTreeBinding.fsproj" />
+        <!-- Phase 582 — the in-repo sample module is the IModuleContract
+             pack's reference binding; the namespace-root law measures its
+             real exported types, so the sample assembly is referenced
+             rather than restated. -->
+        <ProjectReference Include="..\..\samples\HelloWorld\HelloWorld.Module\HelloWorld.Module.fsproj" />
         <!-- Phase 57 follow-up — Build package reference brings in
              `ToolUp.Platform.Prerender.serialiseRoutes` /
              `nodeScript` / `PrerenderTargetOptions.defaults` for the

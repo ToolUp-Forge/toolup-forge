@@ -461,6 +461,65 @@ Nothing is built until a caller asks (GP 13), and the SDK names no module anywhe
 derivation (GP 9) — the shape carries only `ComponentId`s, companion-interface names, and
 strings drawn from the module's own registrations.
 
+## The module's conformance pack — `ModuleContract`
+
+A module is registered **twice** — once server-side as a `ServerModule`, once client-side as an
+`ErasedModule` — through two composition roots that never see each other. Nothing in the SDK checks
+that the two halves agree. `ModuleContract` is that check: a reusable law set, parameterised over a
+witness, that a module binds in **one test file**.
+
+```fsharp
+open ToolUp.Platform.Tests.Contracts
+
+let myModuleWitness =
+    ModuleContract.witness (
+        MyModule.Server.serverModule,       // the ServerModule registration
+        MyModule.ClientView.register (),    // the ErasedModule registration
+        "Contoso.Orders"                    // the declared top-level namespace root
+    )
+    |> ModuleContract.withExportedTypes (
+        ModuleContract.exportedTypesOf typeof<MyModule.SharedTypes.Order>.Assembly)
+
+let tests = ModuleContract.laws "Contoso.Orders module" myModuleWitness
+```
+
+The five laws:
+
+| Law | What it asserts | Why it matters |
+|---|---|---|
+| **Server/client id parity** | `ServerModule.Name` and `ClientModule.Definition.Id` resolve to the same `ComponentId` (Phase 580's `ModuleIdentity.componentIdOf`) | `Name` is an **id token**, not a display name: it is the RBAC permission key, the `ServerConfig.ModuleNames` entry, and the client's `Model.ModuleStates` map key. An id left unset on the client is derived from the display `Name` with spaces stripped — so a server module called `"Hello World"` and a client module called `"Hello World"` do **not** match. |
+| **Wire-`TypeName` uniqueness** | no two of the module's `DataType` / `DataTypeDisplay` registrations share an id | `DataType.Id` *is* the wire `TypeName` its `Process` stamps onto the emitted `ProcessedData`; a repeat collides silently. |
+| **NeedsData satisfiability** | the module's `NeedsData` gate is satisfied by the data types the composition advertises | a gate no composition can satisfy renders the module's empty state forever. |
+| **Action emitter↔decoder coverage** | every `EmitsActions` declaration targeting this module is decoded by this module's `ActionDecoder` | `ActionDeclaration` is an inspection surface, not an enforcement contract — an undeclared decoder drops the action silently. |
+| **Top-level-namespace convention** | every type the module package exports sits under one declared root | two packages each exporting a bare `DatasetView` cannot compose into one deployment. |
+
+**Where the laws read from.** The first two read the module's [`ModuleSurface`](#the-modules-label--modulesurface)
+descriptor, not ad-hoc reflection. The last three cannot fully: as the `Opaque` table above records,
+`NeedsData` is a predicate and `ActionDecoder` is a function, so neither has an enumerable key set.
+Those laws therefore **probe** what is observable — the predicate is *evaluated* against the
+advertised ids, and the decoder is *called* with each declared action key. That is an honest
+approximation rather than the full law, and the limits are explicit: behaviour outside the probed
+inputs is not covered, and the reverse direction (a decoder key no tool emits) is not observable at
+all.
+
+Three chainers widen the witness where a module legitimately needs it — each one a visible
+declaration, not a silent loosening:
+
+- `withExportedTypes` — **required.** The namespace law *fails* a witness that declares no exported
+  types rather than passing vacuously. Use `exportedTypesOf myAssembly`, or an explicit `typeof<…>`
+  list when the client tier is source-injected via `.Client.props` and has no assembly of its own.
+- `withAvailableDataTypes` — when the module consumes a data type another module registers.
+- `withActionProbePayload` — when the decoder validates payload shape and the default `"{}"` probe
+  would misreport.
+
+**Adoption.** The pack lives at `src/ToolUp.Platform.Tests/Contracts/ModuleContract.fs` beside the
+other contract packs. That project is `IsPackable=false`, so — as with every existing contract pack —
+an out-of-tree module repo copies the file into its own test project; it depends only on Expecto plus
+the `ToolUp.Platform.*` packages the module already references, and the SDK names no module anywhere
+in it (GP 9). The in-repo reference binding is `samples/HelloWorld`, and the pack's own self-test
+binds deliberately non-conforming modules to prove each law fails. Full detail:
+[`docs/migrations/582-module-contract-pack.md`](../migrations/582-module-contract-pack.md).
+
 ## Packaging a module for Fable consumers — the layout contract, checked
 
 The 4-file pattern above assumes the module lives *inside* the deployment: the consumer's client

@@ -943,6 +943,16 @@ let allTests =
         // registry. A regression fails `Build.fsproj -- VerifyAll`.
         ComponentRegistryContract.tests
         ComponentRegistryContract.selfTests
+        // Phase 582 — IModuleContract conformance pack: the reusable
+        // module-seam law suite (server/client id parity, wire-TypeName
+        // uniqueness, NeedsData satisfiability, action emitter<->decoder
+        // key coverage, top-level-namespace convention) bound to the
+        // in-repo samples/HelloWorld module and to a synthetic conforming
+        // reference, plus a self-test proving each law fails a
+        // deliberately non-conforming module.
+        ModuleContract.tests
+        ModuleContract.referenceTests
+        ModuleContract.selfTests
         // Phase 208 — codified threat-lens security-regression suite: the six
         // manual audit lenses as recurring red-team regression cases + a
         // reverted-control proof that the suite catches regressions, not just

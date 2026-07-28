@@ -153,8 +153,14 @@ let main _ =
     let logger = ConsoleLogger.fromEnv ()
     let config = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
 
+    // `ServerModule.Name` is the module's ID TOKEN, not its display name —
+    // it is the RBAC permission key, the `ServerConfig.ModuleNames` entry,
+    // and it must equal the client `ClientModule.Definition.Id` (which
+    // `ClientModule.create` derives from the display Name with spaces
+    // stripped: "Hello World" -> "HelloWorld"). Phase 582's
+    // `ModuleContract` parity law asserts the two agree.
     let helloWorldModule =
-        ServerModule.create "Hello World"
+        ServerModule.create "HelloWorld"
         |> ServerModule.withHandlers [ HelloWorldRoutes.routes ]
 
     ServerApp.empty

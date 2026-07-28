@@ -98,7 +98,7 @@ let register () : ErasedModule =
         Init = init
         Update = update
         Name = "Hello World"
-        Icon = Toolup.HelloWorld.Module.Icons.chart
+        Icon = HelloWorld.Module.Icons.chart
     }
     |> ClientModule.withView view
     |> ClientModule.withAvailability DebugOnly
