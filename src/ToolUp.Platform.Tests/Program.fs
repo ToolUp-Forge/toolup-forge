@@ -272,6 +272,11 @@ let allTests =
         // Phase 288 — component provenance: package/version/assembly per
         // composed companion, id-joined to the manifest; total resolution.
         ComponentProvenanceTests.tests
+        // Phase 588 — host envelope: what a deployment offers a module.
+        // Each axis is re-derived independently and asserted set-equal, so a
+        // composition the envelope misses fails here; plus deterministic
+        // canonical JSON and the SHA-256 staleness stamp.
+        HostEnvelopeTests.tests
         // Phase 290 — component health rollup: IHealthCheck results keyed by
         // ComponentId; unkeyed probes retained.
         ComponentHealthRollupTests.tests

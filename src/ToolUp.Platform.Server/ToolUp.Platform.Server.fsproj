@@ -954,6 +954,18 @@
              manifest carries (id-join, no manifest-shape change). After
              ServerApp (walks the composed companion set). -->
         <Compile Include="Server\ComponentProvenance.fs" />
+        <!-- Phase 588 — host-envelope descriptor: what THIS deployment offers
+             a module — composed capability layers, every companion slot marked
+             filled or open, each composed module's Phase 581 ModuleSurface, the
+             config-knob schemas with the values this deployment resolved, the
+             occupied route prefixes, and the platform build — plus canonical
+             JSON + a SHA-256 stamp so an external authoring tool pins a
+             snapshot and detects staleness. After ServerApp / CompositionManifest
+             (the composed instance it projects), ComposableSurface.fs (the slot
+             + knob universe it joins against), ModuleSurface.fs (the per-module
+             surfaces it aggregates) and ComponentProvenance.fs (the platform
+             version). Pure — registers nothing, decorates nothing (GP 11/13). -->
+        <Compile Include="Server\HostEnvelope.fs" />
         <!-- Phase 290 — component health rollup: IHealthCheck results keyed by
              ComponentId into a per-component rollup (+ an Unkeyed bucket).
              After ServerApp (reads app.HealthChecks). -->

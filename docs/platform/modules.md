@@ -461,6 +461,91 @@ Nothing is built until a caller asks (GP 13), and the SDK names no module anywhe
 derivation (GP 9) — the shape carries only `ComponentId`s, companion-interface names, and
 strings drawn from the module's own registrations.
 
+## Authoring against a deployment — `HostEnvelope`
+
+`ModuleSurface` answers *what does my module offer*. Writing a module **into an application that
+already exists** raises the mirror question first: *what can my module rely on here?* Which
+substrate is actually composed, which data-type wire names and query keys are already taken,
+which route prefixes are occupied, which config knobs this deployment resolved to what.
+
+`HostEnvelope.describe` is that answer — one read-only descriptor of a specific composition's
+**offer surface**. It is the type of the module-shaped hole.
+
+```fsharp
+open ToolUp.Platform
+
+let modules = [ Orders.Server.serverModule; Inventory.Server.serverModule ]
+let app = ServerApp.empty |> ServerApp.addModules modules |> ServerApp.withAuditSink mySink
+
+let envelope = HostEnvelope.describe (app, modules)
+```
+
+The modules are passed alongside the app because `addModule` *fans* a `ServerModule` into the
+app's accumulators and keeps no registration record — the same reason the other derived lenses
+take a `ServerModule list`. Everything else comes from the app. Pass each module's erased client
+registration too (`HostEnvelope.describeWith (app, [ m, Some (box (MyModule.ClientView.register ())) ])`)
+when the pages / feature-flag / event-topic side of each module surface matters.
+
+| Field | What it answers |
+|---|---|
+| `EnvelopeCapabilities` | how much of each kind this deployment composed — modules, companions, data types, tools, grounding metrics, subject hierarchies — with their `ComponentId`s. A kind with nothing composed still appears, count `0`. |
+| `EnvelopeSlots` | every companion slot forge can compose, each marked `FilledSlot` (with the impl sub-ids for a multi-impl slot) or `OpenSlot`. **The open slots are the load-bearing half** — they are exactly what a module may *not* rely on here. |
+| `EnvelopeModules` | each composed module's `ModuleSurface`, unchanged. The data-type ids (each *is* the wire `TypeName`), query-bus keys already answered, tool names already taken, and the substrate each module implies. |
+| `EnvelopeKnobs` | each composition-shaping `ServerConfig` knob with both its admissible value set *and* the value this deployment resolved. |
+| `EnvelopeRoutes` | the occupied route prefixes and exact routes, attributed to their declaring module, with the admit set guarding each — the prefix space a new module must not collide with. |
+| `EnvelopePlatform` | the platform assembly + version the envelope was derived under. |
+
+**Derived, never hand-listed.** Every axis is a projection of a derivation that already exists:
+the layers group the composition manifest and are *seeded* from the `ComponentKind` union; the
+slot universe is `ComposableSurface.slots ()` reflected off the `ServerApp` record, joined
+against the manifest's composed slots; the knob schemas are reflected off `ServerConfig`'s
+enum-like fields with the value read off the live config; the routes are *filtered from the
+module surfaces*, not re-derived. A drift-guard test re-derives each axis independently and
+asserts set-equality — **a composition that gains a companion slot, a config knob, a component
+kind, a module or a route, and an envelope that misses it, fails that test.**
+
+### Regenerating and diffing envelopes
+
+`HostEnvelope.toJson` (and the `describeJson` shorthand) projects the whole envelope to canonical
+JSON, so an external authoring tool consumes it as a pinned snapshot **without linking the server
+assembly**. Every list is emitted in a stable sort order and record fields serialise in
+declaration order, so the same composition always yields byte-identical output.
+
+```fsharp
+// In the deployment (an admin endpoint, a CLI target, a test):
+System.IO.File.WriteAllText("envelope.staging.json", HostEnvelope.describeJson (app, modules))
+```
+
+Pin the stamp beside whatever you generated from it:
+
+```fsharp
+let stamp = HostEnvelope.stampOf envelope
+// { StampSchemaVersion = 1; StampPlatformVersion = "0.9.4.0"; StampContentHash = "8f3c…" }
+```
+
+Later, against a live app, ask whether the snapshot is still true:
+
+```fsharp
+match HostEnvelope.staleness pinnedStamp (HostEnvelope.describe (app, modules)) with
+| [] -> () // still exactly true of this deployment
+| reasons -> printfn "envelope stale: %s" (String.concat ", " reasons)
+```
+
+The reasons are stable codes, one per axis that moved, so a consumer can tell the two cases
+apart: `HostEnvelope.ContentChangedReason` means *regenerate — the deployment changed*;
+`HostEnvelope.SchemaVersionMovedReason` means *the envelope shape itself changed, upgrade the
+tool*; `HostEnvelope.PlatformVersionMovedReason` means the forge build moved underneath.
+`HostEnvelope.isCurrent` is the boolean shorthand.
+
+Diffing two deployments is the same operation across environments rather than across time: derive
+an envelope per environment, write both JSON files, and diff them. Because the projection is
+canonical, the diff is the *composition* difference and nothing else — a slot that is filled in
+production and open in staging shows up as exactly that line.
+
+Nothing is built until a caller asks (GP 13), and the SDK names no module or vendor anywhere in
+the derivation (GP 9) — the shape carries only `ComponentId`s, companion-interface names, and
+strings drawn from the deployment's own registrations.
+
 ## The module's conformance pack — `ModuleContract`
 
 A module is registered **twice** — once server-side as a `ServerModule`, once client-side as an

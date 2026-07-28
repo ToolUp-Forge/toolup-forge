@@ -448,6 +448,15 @@
              the platform assembly + version; the provenance key id-joins the
              manifest companion slot; resolution is total (null → unknown). -->
         <Compile Include="InProcess\ComponentProvenanceTests.fs" />
+        <!-- Phase 588 — host-envelope descriptor: what a deployment offers a
+             module. The drift guard independently re-derives each axis (the
+             reflected ServerApp companion slots, the reflected ServerConfig
+             enum-like knobs, the ComponentKind union, the composed modules'
+             own route declarations) and asserts set-equality with the
+             envelope, so a composition that gains a slot / knob / kind /
+             route the envelope misses fails here. Plus determinism of the
+             canonical JSON and the SHA-256 staleness stamp. -->
+        <Compile Include="InProcess\HostEnvelopeTests.fs" />
         <!-- Phase 290 — component health rollup: a degraded probe surfaces
              under its ComponentId; an unkeyed probe is retained; empty app →
              empty rollup (GP 13). -->
