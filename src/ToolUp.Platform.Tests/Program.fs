@@ -289,6 +289,11 @@ let allTests =
         // Phase 436 — null-composition dry run: null-bind every companion slot,
         // rebuild, validate, drive the lifecycle; defects are typed findings.
         CompositionDryRunTests.tests
+        // Phase 435 — cross-version composition upgrade planner: an identical
+        // target surface (fixture + the Phase 287 golden baseline) plans empty;
+        // widened / changed / removed slots and knobs carry their severities;
+        // chained Phase 292 schema hops sequence in ascending order.
+        CompositionUpgradePlanTests.tests
         // Phase 302 — per-tenant composition presets: distinct variants from one
         // base preset; scope-isolated bindings; unbound-hole preflight failure.
         TenantCompositionPresetTests.tests

@@ -981,6 +981,22 @@
              registers into DI — a consumer that never calls it composes
              byte-for-byte what it did before (GP 11 / GP 13). -->
         <Compile Include="Server\CompositionDryRun.fs" />
+        <!-- Phase 435 — cross-version composition upgrade planner: given this
+             instance's Phase 280 manifest + Phase 288 provenance and the Phase
+             293 ComposableSurface of a NEWER version set (data, so no new
+             binaries need loading), compute a typed CompositionUpgradePlan —
+             which composed slots' contracts widened / changed / vanished, which
+             Phase 292 descriptor schema hops the jump crosses in what order,
+             and the convention-derived docs/migrations/<slug>.md pointer per
+             step. Phase 286's structural diff applied across versions rather
+             than across instances: both sides' slots are projected into the
+             ComponentEntry shape (contract fingerprinted into Impl) so
+             CompositionDiff.diff does the id-keyed pairing. After
+             CompositionDiff.fs, ComposableSurface.fs, ComponentProvenance.fs,
+             CompositionDescriptorVersion.fs (its migration-error rendering) and
+             CompositionDryRun.fs (its slotInterface parser). Pure — nothing
+             registers into DI, nothing runs at compose (GP 11 / GP 13). -->
+        <Compile Include="Server\CompositionUpgradePlan.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />

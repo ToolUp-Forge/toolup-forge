@@ -468,6 +468,14 @@
              yield the NAMED finding with ComponentId attribution rather than
              an exception; the minimal preset stays in unit-test time. -->
         <Compile Include="InProcess\CompositionDryRunTests.fs" />
+        <!-- Phase 435 — cross-version composition upgrade planner: an identical
+             target surface yields the empty plan (proved on a fixture AND on
+             the committed Phase 287 golden-file baseline manifest); a target
+             with one widened and one removed slot yields the expected steps at
+             the expected severities, each blocking finding named per composed
+             component with its Phase 288 provenance; a descriptor two Phase 292
+             schema versions behind sequences both hops in ascending order. -->
+        <Compile Include="InProcess\CompositionUpgradePlanTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->
