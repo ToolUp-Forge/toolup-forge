@@ -234,6 +234,10 @@ let allTests =
         // Phase 289 — component-scoped configuration binding: id-scoped
         // override reaches its component; stray override fails preflight.
         ComponentConfigTests.tests
+        // Phase 432 — component secret & config requirements manifest:
+        // derived knob requirements + declared secret requirements, presence
+        // preflight, and the no-value-in-any-report property.
+        ComponentRequirementsTests.tests
         // Phase 293 — composable-surface descriptor: companion slots / config
         // knob schemas / module contract derived from the live registry.
         ComposableSurfaceTests.tests

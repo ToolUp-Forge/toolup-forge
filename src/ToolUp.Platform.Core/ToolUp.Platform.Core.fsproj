@@ -79,6 +79,16 @@
              unchanged (GP 11). Fable-safe (DUs + Set only); after
              ComponentId.fs so it can key on the stable identity. -->
         <Compile Include="Shared\CompanionCapability.fs" />
+        <!-- Phase 432 — component secret & config requirement types: what a
+             composed component NEEDS (credential names + classes, config knob
+             paths + types), keyed by the same ComponentId. Names and classes
+             only — no field here can hold a secret value. Fable-safe (DUs +
+             records + Map); after ComponentId.fs (keys the sets) and beside
+             CompanionCapability.fs, whose CapabilitySignature the
+             RequirementsSignature parallels over the same id space. The
+             derivation + presence preflight live Server-side in
+             ComponentRequirementsPreflight. -->
+        <Compile Include="Shared\ComponentRequirements.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
              Phase 69d markers in ToolUp.Remoting.Server). Placed early so
              every later API record file can annotate its fields. The SDK's

@@ -384,6 +384,12 @@
              override reaches exactly its component; a stray override fails
              preflight with an id-named message; no overrides → byte-identical. -->
         <Compile Include="InProcess\ComponentConfigTests.fs" />
+        <!-- Phase 432 — component secret & config requirements manifest:
+             requirements derived from the Phase 289 config section; a missing
+             required secret fails preflight naming ComponentId + requirement;
+             a missing optional one warns; no secret VALUE ever reaches a
+             report (sentinel-asserted); nothing declared → nothing registered. -->
+        <Compile Include="InProcess\ComponentRequirementsTests.fs" />
         <!-- Phase 293 — composable-surface descriptor: companion slots + config
              knob schemas + module contract derived from the live ServerApp /
              ServerConfig registry (reflection); the slot set = the reflected

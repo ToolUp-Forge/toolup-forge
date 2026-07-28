@@ -863,6 +863,18 @@
              preflight. After ServerApp (validators wire through the Phase 9m
              aggregator) + the Core ComponentConfig type. -->
         <Compile Include="Server\ComponentConfigResolver.fs" />
+        <!-- Phase 432 — component secret & config requirements: derive a
+             component's knob requirements from its Phase 289 config section,
+             merge the residual declared secret requirements on top, and check
+             PRESENCE at preflight (required secrets resolve in ISecretStore —
+             existence only, never a value; required knobs bind). Two
+             IConfigValidators, split on the Phase 585 class boundary: the knob
+             check is structural-class (unbypassable), the secret probe is
+             external-probe class (skippable — the store may be a remote
+             vault). After ComponentConfigResolver.fs (reads the resolved
+             sections) and CompositionValidator.fs (reuses its defect
+             severity). -->
+        <Compile Include="Server\ComponentRequirements.fs" />
         <!-- Phase 293 — composable-surface descriptor: forge's AVAILABLE
              composition vocabulary (companion slots + substrate reqs + config
              knob schemas + module contract), derived by reflecting the live

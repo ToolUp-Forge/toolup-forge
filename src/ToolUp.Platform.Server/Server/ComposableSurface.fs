@@ -128,6 +128,32 @@ type ComposableSurface = {
     Grounding: GroundingSurface
 }
 
+/// Phase 432 — what filling one composable slot would REQUIRE: the
+/// credentials (names + classes, never values) and config knobs declared
+/// against that slot's `ComponentId`. Answers "composing X requires
+/// secrets A, B" *before* anything is composed, which is the question a
+/// cookbook preflight Q-table and a scaffolding tool both need answered
+/// at authoring time rather than at first boot.
+///
+/// A separate record rather than a field on `ComposableSlot`, for the
+/// reason Phase 585 recorded for `ClassifiedCompositionRule`: adding a
+/// field to an F# record changes its constructor signature, which is a
+/// breaking change for every consumer that constructs one (and a removal
+/// under the public-API baseline gate). Both projections read the same
+/// derived slot list, so they cannot diverge — `Slot` joins them.
+type SlotRequirementSet = {
+    /// The Phase 279 slot id (`companion:<interface>`) — the join key
+    /// against `ComposableSlot.Slot`.
+    Slot: ComponentId
+    /// The companion interface name, carried so a reader need not
+    /// re-join to render.
+    Interface: string
+    /// The credentials filling this slot requires — names + classes only.
+    Secrets: SecretRequirement list
+    /// The config knobs filling this slot binds.
+    Config: ConfigRequirement list
+}
+
 module ComposableSurface =
 
     /// Best-effort substrate-requirement metadata, keyed by interface
@@ -211,6 +237,34 @@ module ComposableSurface =
                 None)
         |> Array.toList
         |> List.sortBy _.Name
+
+    /// Phase 432 — the slot-level requirements projection: for every
+    /// companion slot forge can compose, the secrets + config knobs
+    /// declared against that slot's id in `signature`. Only slots with at
+    /// least one requirement are returned (a slot that requires nothing is
+    /// noise in an authoring tool's table), sorted by interface name so
+    /// the output is deterministic.
+    ///
+    /// An EMPTY signature yields `[]` — nothing is declared, so nothing is
+    /// required, and a caller that never builds a signature pays nothing
+    /// (GP 13). The slot list itself is the same derived enumeration
+    /// `slots ()` returns, so a newly-shipped slot surfaces here with no
+    /// change to this function.
+    let slotRequirements (signature: RequirementsSignature) : SlotRequirementSet list =
+        if Map.isEmpty signature then
+            []
+        else
+            slots ()
+            |> List.choose (fun slot ->
+                match Map.tryFind slot.Slot signature with
+                | Some reqs when not (ComponentRequirements.isEmpty reqs) ->
+                    Some {
+                        Slot = slot.Slot
+                        Interface = slot.Interface
+                        Secrets = reqs.Secrets
+                        Config = reqs.Config
+                    }
+                | _ -> None)
 
     /// The consumer module contract, as data.
     let moduleContract: ModuleContractShape = {
