@@ -241,6 +241,17 @@
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
         <Compile Include="Server\IJobScheduler.fs" />
+        <!-- Phase 437 — resource-envelope seam adapters: the concurrency
+             gate that decorates a budgeted component's IJobHandler, the
+             RouteLimit projection that folds a component's declared
+             requests-per-minute into the Phase 56 middleware's own policy
+             list, and the typed queue-depth admission. Reads the Core
+             EnvelopeSignature; adds no hosted service and no dependency.
+             After IJobHandler/IJobScheduler (decorates the handler) and
+             IMetricsSink (emits the refusal counter); before ServerApp,
+             which applies the gate where a module's ComponentId is in
+             scope. -->
+        <Compile Include="Server\ResourceEnvelopeEnforcement.fs" />
         <!-- Phase 7b — schema-migration IJobHandler binding: long-running
              MigrationPlan executions run through IJobScheduler and survive
              restarts. After IJobHandler/IJobScheduler + IUserSchemaStore. -->

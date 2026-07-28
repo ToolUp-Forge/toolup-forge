@@ -270,6 +270,12 @@ let allTests =
         // Phase 290 — component health rollup: IHealthCheck results keyed by
         // ComponentId; unkeyed probes retained.
         ComponentHealthRollupTests.tests
+        // Phase 437 — per-component resource envelopes: the concurrency gate
+        // holds a budgeted component to its ceiling and defers (never drops)
+        // the rest; unbudgeted composition is byte-for-byte unchanged; every
+        // refusal is observable; the rollup's pressure dimension is absent
+        // when nothing is declared.
+        ResourceEnvelopeTests.tests
         // Phase 291 — component lifecycle ordering: init-before partial order,
         // stable topo init/dispose, cycle rejected at compose.
         ComponentLifecycleTests.tests

@@ -37,6 +37,31 @@ type ComponentHealthRollup = {
     Unkeyed: (string * HealthResult) list
 }
 
+/// Phase 437 — the health rollup with a BUDGET-PRESSURE dimension
+/// attached: how close each component sits to the `ResourceEnvelope` it
+/// declared. A sidecar type rather than a third field on
+/// `ComponentHealthRollup`, for the reason recorded on `DataFootprint`
+/// and `AuthorizationSurface`: growing a shipped F# record breaks its
+/// constructor for every consumer.
+///
+/// **Absent means undeclared, and undeclared means absent.** A component
+/// with no envelope contributes NO entry — not an entry with an empty
+/// list, and never a zero limit that would read as "budgeted at nothing".
+/// A composition with no envelopes at all produces an empty
+/// `PressureByComponent`, so the pressure dimension is invisible to a
+/// pre-437 deployment (GP 11 / GP 13).
+///
+/// Field names are deliberately distinct from `ComponentHealthRollup`'s —
+/// two records sharing a full field-name set make every unannotated
+/// construction ambiguous under F#'s last-declared-wins inference.
+type ComponentPressureRollup = {
+    /// The Phase 290 rollup, verbatim and unmodified.
+    PressureHealth: ComponentHealthRollup
+    /// Per-component readings, only for components declaring a budget,
+    /// each list in `EnvelopeDimension.all` order.
+    PressureByComponent: Map<ComponentId, EnvelopePressure list>
+}
+
 module ComponentHealthRollup =
 
     /// The empty rollup — what an app with no health probes rolls up to.
@@ -110,3 +135,60 @@ module ComponentHealthRollup =
         |> List.sortByDescending rank
         |> List.tryHead
         |> Option.defaultValue Healthy
+
+    // ── Phase 437 — the budget-pressure dimension ────────────────────
+
+    /// Attach budget-pressure readings to a rollup. `observedBy` supplies
+    /// the current level for a `(component, dimension)` pair — the
+    /// in-flight job count, the requests served this minute, the queue
+    /// depth — from wherever the deployment already tracks it; nothing
+    /// here starts a probe or keeps a counter of its own (GP 13).
+    ///
+    /// Only components declaring an envelope appear, and within one
+    /// component only the dimensions it declares. An empty signature
+    /// yields an empty pressure map with the health rollup passed
+    /// through untouched, so a pre-437 deployment reads exactly as
+    /// before (GP 11).
+    let withPressure
+        (envelopes: EnvelopeSignature)
+        (observedBy: ComponentId -> EnvelopeDimension -> int)
+        (rollup: ComponentHealthRollup)
+        : ComponentPressureRollup =
+        let byComponent =
+            if Map.isEmpty envelopes then
+                Map.empty
+            else
+                ResourceEnvelope.all envelopes
+                |> List.choose (fun (componentId, envelope) ->
+                    match ResourceEnvelope.pressuresFor (observedBy componentId) componentId envelope with
+                    | [] -> None
+                    | pressures -> Some(componentId, pressures))
+                |> Map.ofList
+
+        {
+            PressureHealth = rollup
+            PressureByComponent = byComponent
+        }
+
+    /// The pressure readings at or above `thresholdPercent` utilisation,
+    /// in deterministic order — the "which component is about to hit its
+    /// ceiling" query an operator board asks. `100` reports only
+    /// saturated dimensions.
+    let underPressure (thresholdPercent: int) (rollup: ComponentPressureRollup) : EnvelopePressure list =
+        rollup.PressureByComponent
+        |> Map.toList
+        |> List.sortBy (fst >> ComponentId.value)
+        |> List.collect snd
+        |> List.filter (fun pressure -> ResourceEnvelope.utilisationPercent pressure >= thresholdPercent)
+
+    /// A deterministic, human-readable rendering of the pressure
+    /// dimension — one line per budgeted component. Empty for a
+    /// composition that declares no envelope.
+    let describePressure (rollup: ComponentPressureRollup) : string list =
+        rollup.PressureByComponent
+        |> Map.toList
+        |> List.sortBy (fst >> ComponentId.value)
+        |> List.map (fun (componentId, pressures) ->
+            ComponentId.value componentId
+            + ": "
+            + (pressures |> List.map ResourceEnvelope.describePressure |> String.concat ", "))

@@ -136,6 +136,7 @@ ClientModel+NoteEditorTarget+Tags (class)
 ClientModel+NoteEditorTarget+Tags.CreateNew : System.Int32 (literal)
 ClientModel+NoteEditorTarget+Tags.EditExisting : System.Int32 (literal)
 KnowledgeBaseView (class)
+KnowledgeBaseView.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.KnowledgeBase.KnowledgeBaseConfig]) : ToolUp.Platform.ErasedModule
 KnowledgeBaseView.narrativeCommitHandler : ToolUp.Platform.NarrativeCommitHandler { get }
 KnowledgeBaseView.register() : ToolUp.Platform.ErasedModule
 KnowledgeListView (class)
@@ -291,8 +292,34 @@ PlatformKnowledgeAdminUI+Msg+UploadFile.bytes : System.Byte[] { get }
 PlatformKnowledgeAdminUI+Msg+UploadFile.fileName : System.String { get }
 PlatformKnowledgeAdminUI+Msg+UploadResolved (class)
 PlatformKnowledgeAdminUI+Msg+UploadResolved.Item : Microsoft.FSharp.Core.FSharpResult`2[SharedTypes+KnowledgeDocument, System.String] { get }
+ToolUp.KnowledgeBase.Client.KnowledgeBaseClientConfig (class)
+ToolUp.KnowledgeBase.Client.KnowledgeBaseClientConfig.appendKnowledgeBaseModule(ToolUp.KnowledgeBase.KnowledgeBaseMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
+ToolUp.KnowledgeBase.Client.KnowledgeBaseClientConfig.withKnowledgeBase(ToolUp.KnowledgeBase.KnowledgeBaseMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Tuple`2[ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]]
+ToolUp.KnowledgeBase.Client.KnowledgeBaseClientConfig.withNarrativeCommitHandler(ToolUp.KnowledgeBase.KnowledgeBaseMode, ToolUp.Platform.ClientConfig) : ToolUp.Platform.ClientConfig
 ToolUp.KnowledgeBase.Icons (class)
 ToolUp.KnowledgeBase.Icons.aiContext : Fable.React.ReactElement { get }
 ToolUp.KnowledgeBase.Icons.document : Fable.React.ReactElement { get }
 ToolUp.KnowledgeBase.Icons.knowledge : Fable.React.ReactElement { get }
 ToolUp.KnowledgeBase.Icons.note : Fable.React.ReactElement { get }
+ToolUp.KnowledgeBase.KnowledgeBaseConfig (class)
+ToolUp.KnowledgeBase.KnowledgeBaseConfig..ctor(System.String, Fable.React.ReactElement, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.KnowledgeBase.KnowledgeBaseConfig.Group : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.KnowledgeBase.KnowledgeBaseConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.KnowledgeBase.KnowledgeBaseConfig.Name : System.String { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode (class)
+ToolUp.KnowledgeBase.KnowledgeBaseMode.DefaultKnowledgeBase : ToolUp.KnowledgeBase.KnowledgeBaseMode { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode.IsConfiguredKnowledgeBase : System.Boolean { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode.IsDefaultKnowledgeBase : System.Boolean { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode.IsExternalKnowledgeBase : System.Boolean { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode.IsNoKnowledgeBase : System.Boolean { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode.NoKnowledgeBase : ToolUp.KnowledgeBase.KnowledgeBaseMode { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode.Tag : System.Int32 { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode+ConfiguredKnowledgeBase (class)
+ToolUp.KnowledgeBase.KnowledgeBaseMode+ConfiguredKnowledgeBase.Item : ToolUp.KnowledgeBase.KnowledgeBaseConfig { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode+ExternalKnowledgeBase (class)
+ToolUp.KnowledgeBase.KnowledgeBaseMode+ExternalKnowledgeBase.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.KnowledgeBase.KnowledgeBaseMode+Tags (class)
+ToolUp.KnowledgeBase.KnowledgeBaseMode+Tags.ConfiguredKnowledgeBase : System.Int32 (literal)
+ToolUp.KnowledgeBase.KnowledgeBaseMode+Tags.DefaultKnowledgeBase : System.Int32 (literal)
+ToolUp.KnowledgeBase.KnowledgeBaseMode+Tags.ExternalKnowledgeBase : System.Int32 (literal)
+ToolUp.KnowledgeBase.KnowledgeBaseMode+Tags.NoKnowledgeBase : System.Int32 (literal)

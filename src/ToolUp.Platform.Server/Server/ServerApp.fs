@@ -1804,6 +1804,33 @@ module ServerApp =
                 let resolvedComponentId =
                     m.ComponentId |> Option.defaultValue (ComponentId.ofModule m.Name)
 
+                // Phase 437 — apply the module's declared resource envelope
+                // at the two seams whose owning component is only knowable
+                // HERE: its job declarations gain a concurrency gate, and
+                // its route prefixes gain a per-component requests-per-minute
+                // `RouteLimit` the Phase 56 middleware already enforces.
+                // Both return their input UNCHANGED (same reference / empty
+                // list) when the component declares no envelope, so a
+                // deployment with `ResourceEnvelopes = Map.empty` — the
+                // default — composes byte-for-byte its pre-437 self
+                // (GP 11 / GP 13). Envelopes are read from `app.Config`, so
+                // declare them on the `ServerConfig` before adding modules
+                // (the canonical `withConfig` |> `addModules` order).
+                let gatedJobHandlers =
+                    ResourceEnvelopeEnforcement.gateDeclarations
+                        None
+                        app.Logger
+                        app.Config.ResourceEnvelopes
+                        resolvedComponentId
+                        m.JobHandlers
+
+                let envelopeRouteLimits =
+                    ResourceEnvelopeEnforcement.routeLimitsFor
+                        app.Config.RateLimits
+                        app.Config.ResourceEnvelopes
+                        resolvedComponentId
+                        m.RoutePrefixes
+
                 {
                     app with
                         Handlers = app.Handlers @ m.Handlers
@@ -1824,7 +1851,9 @@ module ServerApp =
                         // declare no `JobHandlers`, so their contribution
                         // is the empty list and behaviour stays byte-
                         // identical.
-                        ScheduledJobs = app.ScheduledJobs @ m.JobHandlers
+                        // Phase 437 — gated where a budget is declared,
+                        // the same reference otherwise.
+                        ScheduledJobs = app.ScheduledJobs @ gatedJobHandlers
                         // Phase 169 — record the load outcome (registered /
                         // unbound-allowed) for the startup log.
                         ModuleLoadOutcomes = app.ModuleLoadOutcomes @ [ m.Name, loadOutcome ]
@@ -1834,6 +1863,9 @@ module ServerApp =
                         Config = {
                             app.Config with
                                 SlowRequestThresholdOverrides = mergedSlowRequestOverrides
+                                // Phase 437 — append-only; the empty list
+                                // when no envelope declares a request rate.
+                                RateLimits = app.Config.RateLimits @ envelopeRouteLimits
                         }
                 }
 

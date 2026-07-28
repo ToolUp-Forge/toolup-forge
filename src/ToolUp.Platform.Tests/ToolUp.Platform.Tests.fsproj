@@ -435,6 +435,16 @@
              under its ComponentId; an unkeyed probe is retained; empty app →
              empty rollup (GP 13). -->
         <Compile Include="InProcess\ComponentHealthRollupTests.fs" />
+        <!-- Phase 437 — per-component resource envelopes: a MaxJobConcurrency
+             of 2 never runs a third handler body concurrently (asserted off a
+             real peak-concurrency probe, released by an event rather than a
+             timer); an unbudgeted handler comes back as the SAME REFERENCE
+             and an unbudgeted composition projects no RouteLimit (GP 11 /
+             GP 13); every refusal reaches the metric sink tagged with its
+             component + dimension (GP 6); the Phase 290 pressure dimension is
+             absent for an undeclared component. After
+             ComponentHealthRollupTests (extends the same rollup). -->
+        <Compile Include="InProcess\ResourceEnvelopeTests.fs" />
         <!-- Phase 291 — component lifecycle ordering: a declared init-before
              order initialises in order + disposes in reverse; undeclared →
              registration order (GP 11); a cycle fails at compose. -->

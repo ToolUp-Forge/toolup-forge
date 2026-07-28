@@ -2897,6 +2897,19 @@ type ServerConfig = {
     /// `RouteLimit` shape declared above this record.
     RateLimits: RouteLimit list
 
+    /// Phase 437 — per-component resource envelopes: declared budgets
+    /// (job concurrency, request rate, queue depth, an advisory memory
+    /// hint) keyed by the stable `ComponentId`. Empty (default) = no
+    /// component is budgeted, every admission check short-circuits, and
+    /// the deployment is byte-for-byte its pre-437 self (GP 11 / GP 13).
+    /// Enforced at seams that already exist — the Phase 9b job
+    /// scheduler's handler registration, the Phase 56 rate-limit
+    /// middleware, and any queue that consults
+    /// `ResourceEnvelopeEnforcement`; nothing here starts a background
+    /// service or adds a dependency. An id absent from the map resolves
+    /// to `ResourceEnvelope.unconstrained`.
+    ResourceEnvelopes: EnvelopeSignature
+
     /// Phase 59 — server-side consent-audit opt-in. Default
     /// `NoConsentAudit` strips the
     /// `/api/_platform/consent-audit` endpoint. Client-side
@@ -3340,6 +3353,7 @@ module ServerConfig =
         ProcessProfile = AllInOne
         RateLimitStore = NoRateLimitStore
         RateLimits = []
+        ResourceEnvelopes = ResourceEnvelope.emptySignature
         ConsentAudit = NoConsentAudit
         ConsentStateStore = NoConsentStateStore
         AdAnalytics = NoAdAnalytics

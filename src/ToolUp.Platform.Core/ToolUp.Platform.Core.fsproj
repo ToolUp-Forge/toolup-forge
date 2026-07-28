@@ -101,6 +101,17 @@
              from live registrations + the preflight rules live Server-side in
              DataFootprintDerivation / DataFootprintPreflight. -->
         <Compile Include="Shared\DataFootprint.fs" />
+        <!-- Phase 437 — per-component resource envelopes: an opt-in budget
+             (job concurrency, request rate, queue depth, an advisory memory
+             hint) keyed by the same ComponentId in an EnvelopeSignature —
+             the fourth parallel projection beside CapabilitySignature (282),
+             RequirementsSignature (432) and FootprintSignature (433).
+             Carries the pure admission arithmetic every enforcement seam
+             shares and the Phase 290 pressure reading. Fable-safe (DUs +
+             records + Map, System.String only); after ComponentId.fs. The
+             seam adapters (Phase 9b scheduler / rate-limit / queue) live
+             Server-side in ResourceEnvelopeEnforcement. -->
+        <Compile Include="Shared\ResourceEnvelope.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
              Phase 69d markers in ToolUp.Remoting.Server). Placed early so
              every later API record file can annotate its fields. The SDK's
