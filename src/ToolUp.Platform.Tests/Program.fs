@@ -233,6 +233,10 @@ let allTests =
         // Phase 293 — composable-surface descriptor: companion slots / config
         // knob schemas / module contract derived from the live registry.
         ComposableSurfaceTests.tests
+        // Phase 581 — module-surface descriptor: one module's provides / needs
+        // derived from its own registrations; the coverage diff against the
+        // reflected ServerModule / ErasedModule fields is the drift guard.
+        ModuleSurfaceTests.tests
         // Phase 526 — composition introspection covers grounding: manifest
         // reports registered metric/subject ids + fact-store kind; the
         // composable-surface descriptor enumerates the grounding surface;

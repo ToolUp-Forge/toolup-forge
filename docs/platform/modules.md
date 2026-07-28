@@ -329,3 +329,61 @@ Use a new module when:
 - The data contracts differ enough that sharing a `Model` would be a Frankenstein.
 
 When unsure, start with pages; split into a separate module if the `Model` / `Msg` start sprouting cases that only one page cares about.
+
+## The module's label — `ModuleSurface`
+
+Every module registration already says what the module contributes; `ModuleSurface.describe`
+gathers that into one read-only descriptor — **the module's label.** It is what a composition
+(an admin dashboard, a scaffolding tool, a conformance check, a composition-time graph rule)
+can rely on without reading the module's source.
+
+```fsharp
+open ToolUp.Platform
+
+let surface = ModuleSurface.describe MyModule.Server.serverModule
+
+// or, with the client registration too — pages, flag keys and event
+// topics only exist on the client side:
+let full =
+    ModuleSurface.describeWith (MyModule.Server.serverModule, Some (box (MyModule.ClientView.register ())))
+```
+
+`Provides` is what the module offers a composition: its registered data types (each keyed by
+the wire `TypeName` its `Process` stamps onto the emitted `ProcessedData`), the query-bus keys
+it answers, the AI tools it exposes, the route prefixes and exact-match routes it owns with the
+`SurfaceRequirement` guarding each, the background jobs it schedules, the observability signals
+and grounding metrics / subject hierarchies it declares, the config fields it publishes, and
+its pages. `Needs` is what it requires back: the substrate interfaces its own registrations
+imply, plus the feature-flag keys and cross-module event topics it reads. Every entry carries
+the registration field it came from, and — where the kind has one — its Phase 279 `ComponentId`,
+so a surface joins directly against the composition manifest and the platform-level
+`ComposableSurface` descriptor (what forge *can* compose — this is the same idea one level
+down, for one module).
+
+**Derived, never hand-listed.** Every value comes out of the module's own `ServerModule` /
+`ErasedModule`; every registration-field name comes out of `nameof`, so a rename breaks the
+build. The descriptor also reports its own coverage — `Coverage` names every registration field
+it classifies, `Unclassified` names every field the live record carries that it does not, and
+`Stale` the reverse. Both lists are empty on a healthy build, and a drift-guard test asserts
+that: **add a field to a registration record without teaching the descriptor and the test
+fails**, rather than the label silently going short.
+
+**Honest about what a registration cannot expose.** Some fields carry a *function*, so there
+are no keys to enumerate, and those are reported in `Opaque` — named, counted, with the reason
+— instead of being guessed at or quietly dropped:
+
+| Field | Why it is opaque |
+|---|---|
+| `ServerModule.Handlers` | a Giraffe `HttpHandler` is a closure; its routes are unreachable. The declared route surface is `RoutePrefixes` / `RouteSurfaceRequirements` — a module that wants its routes on its label declares them. |
+| `ErasedModule.NeedsData` | a predicate `(DataTypeId -> bool) -> bool`, not a declared key set — the ids it accepts are not enumerable. |
+| `ErasedModule.ActionDecoder` | a `(actionKey, payloadJson) -> Msg option` function — the action keys it accepts are not enumerable. |
+| outbound queries | no registration field declares the `(TargetModule, QueryKey)` pairs a module *asks* for; those are ordinary `IModuleQueryBus.Ask` calls. The needs side reports the substrate it can derive and says so. |
+
+`ModuleSurface.toJson` (and the `describeJson` shorthand) projects the descriptor through the
+SDK's canonical JSON converter set, deterministically — the same registration always yields
+byte-identical output — so an external tool can snapshot a module's label without linking the
+server assembly.
+
+Nothing is built until a caller asks (GP 13), and the SDK names no module anywhere in the
+derivation (GP 9) — the shape carries only `ComponentId`s, companion-interface names, and
+strings drawn from the module's own registrations.

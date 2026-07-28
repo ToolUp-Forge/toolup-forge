@@ -869,6 +869,13 @@
              ServerApp / ServerConfig registry. After ServerApp (reflects its
              record fields); complements the Phase 280 instance manifest. -->
         <Compile Include="Server\ComposableSurface.fs" />
+        <!-- Phase 581 — module-surface descriptor: what ONE module provides
+             (data types + wire TypeNames, query keys, tools, routes, jobs,
+             metrics, config fields, pages) and needs (implied substrate, flag
+             keys, event topics), derived from its own registrations. After
+             ServerApp (reads / reflects ServerModule) and beside the Phase 293
+             platform-level ComposableSurface it mirrors one level down. -->
+        <Compile Include="Server\ModuleSurface.fs" />
         <!-- Phase 288 — component provenance: which package/assembly+version
              a composed companion came from, keyed by the same ComponentId the
              manifest carries (id-join, no manifest-shape change). After

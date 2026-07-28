@@ -385,6 +385,12 @@
              ServerConfig registry (reflection); the slot set = the reflected
              companion-interface set (derived, not hand-listed). -->
         <Compile Include="InProcess\ComposableSurfaceTests.fs" />
+        <!-- Phase 581 — module-surface descriptor: one module's provides /
+             needs derived from its own ServerModule (+ erased client)
+             registrations; the coverage diff against the reflected record
+             fields is the drift guard (a new registration field fails here
+             until the descriptor learns it). -->
+        <Compile Include="InProcess\ModuleSurfaceTests.fs" />
         <!-- Phase 526 — composition introspection covers grounding declarations. -->
         <Compile Include="InProcess\CompositionGroundingTests.fs" />
         <!-- Phase 288 — component provenance: a first-party companion reports
