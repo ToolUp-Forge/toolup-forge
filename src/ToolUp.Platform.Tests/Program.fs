@@ -529,6 +529,12 @@ let allTests =
         // role / focus-order break / heading skip) fails with a diagnostic;
         // the ToyNode witness is checkable. Runs under VerifyAll.
         HostedTreeA11yTests.tests
+        // Phase 180 — accessibility assertions in the module testing harness:
+        // the axe-style rule set over a rendered node tree, the Minimal /
+        // Strict profile split, the standalone `Accessibility.assert` entry,
+        // `ModuleHarness.AssertAccessible` chaining, and the SDK's own stock
+        // (BrandKit SSR) components regression-guarded through Minimal.
+        AccessibilityAssertionsTests.tests
         // Phase 278 — hosted-tree render-cost budget gate: evaluate trips
         // node/depth/render-time breaches with a readable report; measureTree
         // over the ToyNode witness; over-budget reports through the Phase 268

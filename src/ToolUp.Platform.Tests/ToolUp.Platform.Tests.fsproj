@@ -739,6 +739,15 @@
              focus-order break / heading skip) fails with a diagnostic; the
              ToyNode witness (Phase 202) is checkable; OSS grep-guard. -->
         <Compile Include="InProcess\HostedTreeA11yTests.fs" />
+        <!-- Phase 180 — accessibility assertions in the module testing
+             harness: per-rule proofs (accessible names / img alt / control
+             labels / valid ARIA / heading order / colour-only state), the
+             Minimal-vs-Strict profile split, the standalone
+             `Accessibility.assert` entry, `ModuleHarness.AssertAccessible`
+             chaining alongside AssertModel/AssertCmd, the SDK's own BrandKit
+             stock components through Minimal, and the ARIA-allowlist ⇄
+             AriaProp.fs coherence check. -->
+        <Compile Include="InProcess\AccessibilityAssertionsTests.fs" />
         <!-- Phase 278 — hosted-tree render-cost budget gate: evaluate trips
              node/depth/render-time breaches; measureTree over the ToyNode
              witness; over-budget reports through the Phase 268 sink (non-fatal)

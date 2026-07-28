@@ -82,6 +82,43 @@ type ModuleHarness<'Model, 'Msg>(model: 'Model, cmd: Cmd<'Msg>, update: 'Msg -> 
 
         this
 
+    // ─── Phase 180 — accessibility floor ──────────────────────────────
+    //
+    // `render` takes the harness's CURRENT model plus a dispatch and
+    // returns the rendered tree; the harness runs the profile's rules
+    // over it and fails on any finding fatal for that profile. Dispatch
+    // is `ignore` — rendering must not depend on dispatching, and a view
+    // that does is itself the defect.
+    //
+    // Why `render` is a parameter rather than "the module's `view`": a
+    // module's `view` produces a Fable-tier Feliz `ReactElement`, which
+    // the .NET Expecto runner cannot evaluate (the constraint
+    // `AriaPropTests` records for the whole Fable-only client tier). The
+    // caller therefore supplies whichever render it can actually run —
+    // an `A11yNode` built from the view's shape, an SSR fragment, or a
+    // browser-side `outerHTML` capture under a Fable test runner. See
+    // `Accessibility` for the full rationale.
+
+    /// Assert the module's rendered tree against an accessibility
+    /// profile (default `Minimal`). Throws with the consolidated
+    /// `A11yFinding` list — rule + element path + message — on any
+    /// finding fatal for that profile. Returns the same harness so it
+    /// chains alongside `AssertModel` / `AssertCmd`.
+    member this.AssertAccessible
+        (render: 'Model -> ('Msg -> unit) -> Accessibility.A11yNode, ?profile: Accessibility.A11yProfile)
+        =
+        let profile = defaultArg profile Accessibility.Minimal
+        render model ignore |> Accessibility.assertAccessible profile |> ignore
+        this
+
+    /// `AssertAccessible` for a render that produces an HTML fragment
+    /// string (an SSR view, or a mounted node's `outerHTML`) rather than
+    /// an `A11yNode` — parsed via `Accessibility.ofHtml`.
+    member this.AssertAccessibleHtml(render: 'Model -> ('Msg -> unit) -> string, ?profile: Accessibility.A11yProfile) =
+        let profile = defaultArg profile Accessibility.Minimal
+        render model ignore |> Accessibility.assertHtml profile |> ignore
+        this
+
 /// Build a harness from a `unit`-shaped `init`.
 let fromUnitInit
     (init: unit -> 'Model * Cmd<'Msg>)

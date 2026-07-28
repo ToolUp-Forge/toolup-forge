@@ -14,6 +14,11 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Testing\Fakes.fs" />
+        <!-- Phase 180 — axe-style accessibility assertions over a rendered
+             node tree (BCL-only, renderer-agnostic). Compiled BEFORE
+             ModuleHarness so its `AssertAccessible` member can reference
+             the `Accessibility` types. -->
+        <Compile Include="Testing\AccessibilityAssertions.fs" />
         <Compile Include="Testing\ModuleHarness.fs" />
         <Compile Include="Testing\ServerHarness.fs" />
         <Compile Include="Testing\DataTypeTestKit.fs" />
