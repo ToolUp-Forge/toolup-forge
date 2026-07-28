@@ -387,6 +387,7 @@ let allTests =
         S3ArchiveAuditSinkTests.tests
         SplunkHecAuditSinkTests.tests
         DatadogLogsAuditSinkTests.tests
+        CefAuditSinkTests.tests
         AuditReplicatorTests.tests
         Ed25519ArtifactSubstrateTests.tests
         ShareTokenStoreTests.tests

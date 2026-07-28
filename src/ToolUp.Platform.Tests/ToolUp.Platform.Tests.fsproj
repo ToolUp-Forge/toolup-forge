@@ -570,6 +570,7 @@
         <Compile Include="InProcess\S3ArchiveAuditSinkTests.fs" />
         <Compile Include="InProcess\SplunkHecAuditSinkTests.fs" />
         <Compile Include="InProcess\DatadogLogsAuditSinkTests.fs" />
+        <Compile Include="InProcess\CefAuditSinkTests.fs" />
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="InProcess\ShareTokenAuthMiddlewareTests.fs" />
@@ -1246,6 +1247,7 @@
         <ProjectReference Include="..\AuditSinks\S3Archive\ToolUp.AuditSinks.S3Archive.fsproj" />
         <ProjectReference Include="..\AuditSinks\SplunkHec\ToolUp.AuditSinks.SplunkHec.fsproj" />
         <ProjectReference Include="..\AuditSinks\DatadogLogs\ToolUp.AuditSinks.DatadogLogs.fsproj" />
+        <ProjectReference Include="..\AuditSinks\Cef\ToolUp.AuditSinks.Cef.fsproj" />
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <!-- Phase 46.B — Sample client-resident-tool reference companion.
              Tests project consumes Core + Server tiers; Client tier is

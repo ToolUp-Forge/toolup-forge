@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>CEF (Common Event Format) IAuditSink for ToolUp.Platform — renders audit envelopes as CEF lines and ships them over UDP / TCP / TLS syslog to ArcSight, QRadar, LogRhythm and other CEF-consuming SIEMs. Endpoint from ISecretStore; device identity from _platform/audit/cef.json.</Description>
+    <PackageTags>fsharp;sdk;audit;cef;syslog;siem;arcsight;qradar;sink</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 9g.A CEF IAuditSink companion. No vendor SDK and no
+       third-party syslog library — BCL sockets (UdpClient / TcpClient /
+       SslStream) and System.Text.Json only (GP 1). -->
+  <ItemGroup>
+    <Compile Include="CefFormatter.fs" />
+    <Compile Include="SyslogTransport.fs" />
+    <Compile Include="CefAuditSink.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- ToolUp.Remoting.Json (System.Text.Json-based) flows transitively from
+       ToolUp.Platform.Server. FSharp.Core is implicit via the .NET SDK. -->
+</Project>
