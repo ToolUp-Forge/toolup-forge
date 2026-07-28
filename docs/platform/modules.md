@@ -460,3 +460,117 @@ server assembly.
 Nothing is built until a caller asks (GP 13), and the SDK names no module anywhere in the
 derivation (GP 9) — the shape carries only `ComponentId`s, companion-interface names, and
 strings drawn from the module's own registrations.
+
+## Packaging a module for Fable consumers — the layout contract, checked
+
+The 4-file pattern above assumes the module lives *inside* the deployment: the consumer's client
+project imports `MyModule.Client.props` off disk, so the client compile list is a build-graph
+detail nobody ships. A module distributed as a **NuGet package** cannot do that. Its client tier
+has to travel *as source* — Fable compiles F#, not IL — so the `.fs` files and the project file
+that orders them are packed into the nupkg under `fable/`, and the consumer's Fable package
+loader extracts and compiles them alongside its own client code. That is the same
+source-in-nupkg convention every client-tier SDK package uses:
+
+```xml
+<Content Include="**\*.fsproj;**\*.fs;**\*.svg"
+         Exclude="**\*.fs.js;**\bin\**;**\obj\**"
+         PackagePath="fable\" />
+```
+
+The project file packed under `fable/` is the module's **shadow project** — the compile list the
+consumer's Fable build actually reads. For a single-project packaged module it is literally the
+module's own `.fsproj`, packed by the glob above; for a module that keeps the 4-file split (server
+files `<Compile>`d, client files `<None>`d) it is a second project file carrying just the client
+compile list. Either shape works. What neither shape has, on its own, is a guard.
+
+**Four ways the layout drifts, all silent, all discovered by the consumer:**
+
+| Drift | What the consumer sees |
+|---|---|
+| A client file the shadow project doesn't list | Fable fails on an unresolved module — in *their* build, naming *your* namespace |
+| A server-only file inside the Fable-compiled set | Fable chokes on a server-only API (`System.Data`, Giraffe, an `IBlobStorage` call) |
+| Compile-order drift between the two projects | F# compile order is semantic; a swap is a hard compile error downstream |
+| An asset (or the shadow project itself) with no `PackagePath` entry | A missing icon at runtime, or Fable never finding the source at all |
+
+None of these fail the module's own build, its own tests, or `dotnet pack`. The module ships,
+and the first person to find out is someone else.
+
+### The check
+
+`ToolUp.Platform.Build` states the contract as four **laws** and checks them over two parsed
+project files plus a pack manifest. It is a pure comparison — no MSBuild evaluation, no Fable
+invocation, no consumer app — so it runs in milliseconds, **before** `Pack`, in the module's own
+pipeline:
+
+| Law | Id in the failure message | What it requires |
+|---|---|---|
+| `ShadowSubsetLaw` | `shadow-subset` | The shadow's `Compile` set corresponds to the main project's declared client files — nothing extra, nothing missing |
+| `ShadowExclusionLaw` | `server-exclusion` | No file the module declares server-only is Fable-compiled *or* packed under `fable/` |
+| `ShadowCompileOrderLaw` | `compile-order` | Files common to both projects appear in the same relative order |
+| `ShadowAssetPathLaw` | `asset-path` | The shadow project file, every file it compiles, and every declared asset are present in the packed layout |
+
+Every failure renders as `[law-id] subject — explanation`, so a failed build says which law broke
+over which file, not just that something is wrong.
+
+**What the module declares** is a `PackagedModuleContract`: which files are server-only (by name or
+by directory prefix), which assets must ship, where the Fable root is (`fable` by convention), and
+what the shadow project file is called. Nothing is inferred — the laws check the projects and the
+pack against what the author declared, which is what keeps the check from being tautological.
+
+### Wiring it
+
+In the packaged module repo's own `Build.fs`, before `Pack`:
+
+```fsharp
+open ToolUp.Platform
+open ToolUp.Platform.Build
+
+let layout =
+    { PackagedModuleCheckOptions.forProject "src/My.Module/My.Module.fsproj" with
+        ShadowProject = "src/My.Module/My.Module.Fable.fsproj"   // omit for the single-project shape
+        Contract =
+            { PackagedModuleContract.create "My.Module" "My.Module.Fable.fsproj" with
+                ServerOnlyFiles = [ "Server.fs" ]
+                ServerOnlyDirectories = [ "Server/" ]
+                RequiredAssets = [ "icons/chart.svg" ] } }
+
+init args
+registerTargets config
+PackagedModuleConformance.registerTarget layout
+execute args
+```
+
+`dotnet run -- VerifyPackagedModule` then fails on any of the four laws.
+
+**Where the pack manifest comes from** is the `ManifestSource`, and the default is the interesting
+one:
+
+- `FromPackDeclarations` (the default) derives the manifest from the main project's own
+  `PackagePath`-bearing items, expanded against the project directory — *what the project says it
+  will pack*. Nothing has been packed yet, which is exactly why this is the pre-`Pack` gate.
+- `FromNupkg path` reads a produced `.nupkg`'s entry list — the post-`Pack` confirmation that what
+  shipped matches what was declared.
+- `FromStagedDirectory dir` reads a staged folder mirroring the package root.
+
+### Binding it as a test instead
+
+The same check binds in the module's own test project. `assertConformant` raises with the full
+report on any violation and is silent when conformant, so it needs no test-framework dependency
+(the Build package carries none):
+
+```fsharp
+test "the packaged layout is conformant" {
+    PackagedModuleConformance.assertConformant layout
+}
+```
+
+`verify layout` returns the `ShadowLayoutViolation list` when a test wants to assert on a specific
+law rather than on the whole report.
+
+### Wildcards
+
+Includes are expanded against the project directory, so the `**\*.fs` pack glob every client-tier
+package uses resolves to concrete files and the laws are decided on real paths. When a source list
+is built from XML *without* a root directory (`Load.sourceListFromXml label None xml`), wildcard
+includes stay unexpanded and the subset law reports each one as **undecidable** rather than
+passing on an empty comparison — a check that cannot see the files says so.

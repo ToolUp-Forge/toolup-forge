@@ -5,7 +5,8 @@ module ToolUp.Platform.Build.Tests.Program
 
 open Expecto
 
-let allTests = testList "ToolUp.Platform.Build.Tests" [ SbomTests.tests ]
+let allTests =
+    testList "ToolUp.Platform.Build.Tests" [ SbomTests.tests; PackagedModuleConformanceTests.tests ]
 
 [<EntryPoint>]
 let main argv = runTestsWithCLIArgs [] argv allTests

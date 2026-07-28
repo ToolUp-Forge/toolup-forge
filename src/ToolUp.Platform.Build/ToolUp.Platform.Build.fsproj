@@ -25,6 +25,14 @@
         <Compile Include="Build\SDK.Sbom.fs" />
         <Compile Include="Build\SDK.Build.fs" />
         <Compile Include="Build\SDK.HostPackaging.fs" />
+        <!-- Phase 586 — packaged-module shadow-project conformance: the
+             four packaging laws (subset / server-exclusion / compile-order
+             / asset-path) over two parsed project files plus a pack
+             manifest. Pure check + loaders + the `VerifyPackagedModule`
+             FAKE target a packaged-module repo calls pre-Pack. Independent
+             of SDK.Build.fs (it takes its own options record rather than
+             BuildConfig), so it may sit anywhere after SDK.BuildTypes.fs. -->
+        <Compile Include="Build\SDK.PackagedModuleConformance.fs" />
         <!-- Phase 57 follow-up — FAKE Prerender target factory.
              Consumers `open ToolUp.Platform.Build.Prerender` and
              call `registerTarget config options routes` from
