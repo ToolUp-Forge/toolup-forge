@@ -138,3 +138,55 @@ module ModuleQueryBusApi =
     /// Fable.Remoting endpoint prefix. Matches the pattern used by
     /// `IConfigApi`, `PlatformApi`, etc. — `/api/{typeName}/{methodName}`.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"
+
+/// Tier-shared registry construction for the module query buses. Both
+/// the server (`ModuleQueryBus.buildRegistry`) and the client
+/// (`ModuleQueryClient.buildRegistry`) route `(TargetModule, QueryKey)`
+/// to exactly one handler, so the duplicate check lives here once and
+/// both compose paths inherit the same failure shape — the check is
+/// purely structural over the registration list, so the SDK never names
+/// a module (GP 9).
+module ModuleQueryRegistry =
+    /// Render the compose-time failure text for the colliding
+    /// `(moduleName, queryKey, registrationCount)` triples. Every
+    /// collision is reported (not just the first) so one restart names
+    /// the whole misconfiguration.
+    let private renderCollisions (collisions: (string * string * int) list) : string =
+        collisions
+        |> List.map (fun (moduleName, queryKey, count) ->
+            sprintf
+                "Compose-time defect: duplicate module query handler for module \"%s\" on query key \"%s\" (%d registrations). The bus routes (TargetModule, QueryKey) to exactly one handler, so all but one registration would be silently shadowed and callers would see NoHandler or the wrong handler at request time. Give each handler a distinct QueryKey, or drop the redundant registration."
+                moduleName
+                queryKey
+                count)
+        |> String.concat "\n"
+
+    /// Build the `(module → queryKey → handler)` registry from a flat
+    /// `(moduleName, handler) list`, rejecting duplicate
+    /// `(moduleName, queryKey)` pairs as a fatal compose-time defect.
+    /// Mirrors the transactional-sink duplicate-`Kind` and audit-sink
+    /// duplicate-`Name` rejections: the deployment fails to start rather
+    /// than running with a handler silently shadowed. A registration
+    /// list with no duplicates produces byte-identical output to the
+    /// prior last-wins fold (GP 11).
+    let build (entries: (string * ModuleQueryHandler) list) : Map<string, Map<string, ModuleQueryHandler>> =
+        let grouped = entries |> List.groupBy fst
+
+        let collisions =
+            grouped
+            |> List.collect (fun (moduleName, pairs) ->
+                pairs
+                |> List.map (fun (_, h) -> h.QueryKey)
+                |> List.groupBy id
+                |> List.filter (fun (_, occurrences) -> List.length occurrences > 1)
+                |> List.map (fun (queryKey, occurrences) -> moduleName, queryKey, List.length occurrences))
+
+        if not (List.isEmpty collisions) then
+            failwith (renderCollisions collisions)
+
+        grouped
+        |> List.map (fun (moduleName, pairs) ->
+            let inner = pairs |> List.map (fun (_, h) -> h.QueryKey, h) |> Map.ofList
+
+            moduleName, inner)
+        |> Map.ofList

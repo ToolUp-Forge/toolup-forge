@@ -140,12 +140,11 @@ type ClientModuleQueryBus(registry: Map<string, Map<string, ModuleQueryHandler>>
 
 /// Build the per-module registry map from a flat
 /// `(moduleName, handler) list`. Duplicate `(moduleName, queryKey)`
-/// pairs overwrite silently — last registration wins.
-let buildRegistry (entries: (string * ModuleQueryHandler) list) =
-    entries
-    |> List.groupBy fst
-    |> List.map (fun (moduleName, pairs) ->
-        let inner = pairs |> List.map (fun (_, h) -> h.QueryKey, h) |> Map.ofList
-
-        moduleName, inner)
-    |> Map.ofList
+/// pairs are a fatal compose-time defect (Phase 579), raised out of
+/// `Client.run`'s `buildQueryBus` before the shell binds — the client
+/// bus routes each pair to exactly one handler, so a duplicate used to
+/// silently shadow all but the last registration and fall through to
+/// the server (or answer from the wrong handler) at request time. The
+/// check is tier-shared with the server bus; see
+/// `ModuleQueryRegistry.build`.
+let buildRegistry (entries: (string * ModuleQueryHandler) list) = ModuleQueryRegistry.build entries

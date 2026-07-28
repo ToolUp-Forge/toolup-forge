@@ -155,14 +155,10 @@ type InMemoryModuleQueryBus
 
 /// Build the registry map from a flat `(moduleName, handler) list`.
 /// Used by `ServerApp.addModule` to accumulate handlers across modules.
-/// Duplicate `(moduleName, queryKey)` pairs overwrite silently (the
-/// later registration wins) — apps that wire duplicates hit this at
-/// startup, not at request time.
-let buildRegistry (entries: (string * ModuleQueryHandler) list) =
-    entries
-    |> List.groupBy fst
-    |> List.map (fun (moduleName, pairs) ->
-        let inner = pairs |> List.map (fun (_, h) -> h.QueryKey, h) |> Map.ofList
-
-        moduleName, inner)
-    |> Map.ofList
+/// Duplicate `(moduleName, queryKey)` pairs are a fatal compose-time
+/// defect (Phase 579) — the bus routes each pair to exactly one handler,
+/// so a duplicate used to silently shadow all but the last registration
+/// and surface as `NoHandler` (or the wrong handler) at request time.
+/// The check is tier-shared with the client bus; see
+/// `ModuleQueryRegistry.build`.
+let buildRegistry (entries: (string * ModuleQueryHandler) list) = ModuleQueryRegistry.build entries
