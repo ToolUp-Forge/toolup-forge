@@ -311,6 +311,10 @@
         <Compile Include="InProcess\ErrorConfigValidatorTests.fs" />
         <Compile Include="InProcess\ConfigValidatorAggregatorTests.fs" />
         <Compile Include="InProcess\ConfigValidatorSecurityClassTests.fs" />
+        <!-- Phase 585 — preflight rule classes: structural identity /
+             integrity checks run unconditionally; SkipPreflight skips only
+             the external-probe class. -->
+        <Compile Include="InProcess\PreflightRuleClassTests.fs" />
         <!-- Phase 462 — CORS AllowCredentials × wildcard origins: boot
              refusal ahead of policy registration, explicit credentials-off
              on the wildcard path, legal credentialed configs unaffected. -->

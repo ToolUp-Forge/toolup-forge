@@ -28,12 +28,31 @@ open ToolUp.Platform.ConfigValidation
 // `ruleManifest` so an external pre-build checker validates against
 // forge's own rules with no re-encoding and no divergence.
 //
+// **Rule classes (Phase 585).** Every rule is declared in exactly one of
+// two lists — `structuralRules` (in-process identity / integrity
+// invariants; no external dependency; microseconds) and
+// `externalProbeRules` (anything that reaches a dependency which may be
+// down). `rules` is their concatenation, so a rule's class is fixed by
+// *where it is declared* and cannot be misdeclared or drift. Each class
+// registers its own `IConfigValidator`: the structural one carries the
+// `IStructuralClassValidator` marker and therefore runs even under
+// `ServerConfig.SkipPreflight`, while an external-probe one (none ship
+// today) stays unmarked and skippable. Before Phase 585 both rode the
+// single `SkipPreflight` switch, so an emergency boot taken to ride out a
+// storage-sentinel outage silently disabled `duplicate-component-id`,
+// `companion-slot-legality`, and `orphaned-tool-reference` as well —
+// booting an app whose composed identities collide, which is not a choice
+// any operator was asking for. `classifiedRuleManifest` exports the class
+// alongside the Phase 294 descriptor fields so an external checker knows
+// which invariants are unconditional.
+//
 // **GP 11 / GP 13.** The check is a pure in-memory sweep over a handful
 // of component entries; a well-formed composition yields no defects and
 // the validator returns `Ok` (logged at Info like every preflight probe).
-// It is registered as a non-security-class validator, so the existing
-// `ServerConfig.SkipPreflight` emergency-boot lever bypasses it — no new
-// always-on gate a deployment cannot switch off.
+// The default path (`SkipPreflight = false`) is byte-for-byte what it was
+// — the same single validator, over the same rules, in the same order.
+// Only the `SkipPreflight = true` path changes, and only by no longer
+// switching off checks that cost nothing to run.
 //
 // **Generic substrate (GP 1).** Zero vendor / domain / tree-language
 // vocabulary: the rules read only `ComponentId`, `ComponentKind`,
@@ -66,6 +85,48 @@ type CompositionRuleDescriptor = {
     Code: string
     Severity: CompositionDefectSeverity
     Description: string
+}
+
+/// Phase 585 — the security classification of a well-formedness rule: is
+/// it a structural invariant that must hold no matter how the deployment
+/// booted, or a probe whose dependency an emergency boot may need to ride
+/// past?
+///
+/// * `StructuralRule` — a pure in-process identity / integrity check over
+///   the composed surface. No socket, no external dependency,
+///   microseconds. Runs unconditionally: `ServerConfig.SkipPreflight`
+///   does not and must not switch it off, because a composition whose
+///   component identities collide is broken in a way no outage explains.
+/// * `ExternalProbeRule` — reaches something outside the process, so it
+///   can fail for reasons that have nothing to do with the composition
+///   being malformed. Skippable under `SkipPreflight`, which is exactly
+///   what that lever exists for.
+///
+/// The class is fixed by which declared list a rule appears in
+/// (`CompositionValidator.structuralRules` / `externalProbeRules`), never
+/// by a field a rule author could set wrongly.
+type CompositionRuleClass =
+    | StructuralRule
+    | ExternalProbeRule
+
+/// Phase 585 — the class-carrying projection of one well-formedness rule:
+/// the Phase 294 descriptor fields plus the rule's `Class`, so an external
+/// pre-build checker can tell which of forge's invariants a deployment can
+/// never switch off (and therefore must satisfy before it will boot at
+/// all) from those an emergency boot may skip. Exposed as
+/// `CompositionValidator.classifiedRuleManifest`.
+///
+/// A separate record rather than a fourth field on
+/// `CompositionRuleDescriptor`: adding a field to an F# record changes its
+/// constructor signature, which is a breaking change for every consumer
+/// that constructs one (and a removal under the public-API baseline gate).
+/// Both projections read the same declared rule lists, so they cannot
+/// diverge.
+type ClassifiedCompositionRule = {
+    Code: string
+    Severity: CompositionDefectSeverity
+    Description: string
+    Class: CompositionRuleClass
 }
 
 /// Cross-reference edges the bare `CompositionManifest` does not itself
@@ -107,9 +168,19 @@ module CompositionReferences =
 module CompositionValidator =
 
     /// Stable `IConfigValidator.Name` for the composition well-formedness
-    /// check. Non-security-class, so `SkipPreflight` bypasses it.
+    /// check — the structural-class rules. Structural-class (Phase 585),
+    /// so `SkipPreflight` does NOT bypass it.
     [<Literal>]
     let ValidatorName = "composition-well-formedness"
+
+    /// Phase 585 — stable `IConfigValidator.Name` for the external-probe
+    /// class of composition rules. Unmarked, so `SkipPreflight` skips it
+    /// like any other companion probe. No rule ships in this class today,
+    /// so the validator is not registered at all (GP 13) — the name is
+    /// declared here so the first such rule inherits a stable identity
+    /// rather than inventing one.
+    [<Literal>]
+    let ExternalProbeValidatorName = "composition-well-formedness (external probes)"
 
     /// A single declared well-formedness rule. `Evaluate` is pure: it maps
     /// the composed surface (+ its reference edges) to zero or more defect
@@ -292,10 +363,15 @@ module CompositionValidator =
                         )
                 | None -> None))
 
-    /// The declared rule set — the single source of truth the runtime check
-    /// is generated from and (Phase 294) the introspectable manifest
-    /// projects. Adding a rule here extends both readers in lock-step.
-    let rules: CompositionRule list = [
+    /// Phase 585 — the structural-class rules: pure in-process identity /
+    /// integrity invariants over the composed surface. Every rule shipped
+    /// to date is one. Declaring a rule here IS its classification —
+    /// there is no class field to set wrongly — and it makes the rule
+    /// unconditional, so the bar for adding one is that it must be
+    /// correct and fast on a machine with every external dependency
+    /// unreachable. A rule that can block belongs in
+    /// `externalProbeRules`, however important it is.
+    let structuralRules: CompositionRule list = [
         {
             Code = "duplicate-component-id"
             Severity = DefectError
@@ -333,6 +409,33 @@ module CompositionValidator =
         }
     ]
 
+    /// Phase 585 — the external-probe class: rules that reach a dependency
+    /// outside the process and can therefore fail for reasons unrelated to
+    /// the composition being malformed. Empty today, and deliberately so —
+    /// every shipped invariant is answerable from the manifest already in
+    /// memory. A rule declared here is skipped under
+    /// `ServerConfig.SkipPreflight`, which is the correct treatment for a
+    /// probe whose dependency an emergency boot is riding past.
+    let externalProbeRules: CompositionRule list = []
+
+    /// The declared rule set — the single source of truth the runtime check
+    /// is generated from and (Phase 294) the introspectable manifest
+    /// projects. Adding a rule to either class list extends every reader in
+    /// lock-step. Structural first, so the order the runtime check and the
+    /// manifest enumerate is stable.
+    let rules: CompositionRule list = structuralRules @ externalProbeRules
+
+    /// Phase 585 — the class of a rule, by code. `None` for a code this
+    /// build does not ship (an external checker holding a stale rule set
+    /// gets an honest "unknown", never a wrong classification).
+    let tryRuleClass (code: string) : CompositionRuleClass option =
+        if structuralRules |> List.exists (fun r -> r.Code = code) then
+            Some StructuralRule
+        elif externalProbeRules |> List.exists (fun r -> r.Code = code) then
+            Some ExternalProbeRule
+        else
+            None
+
     /// Phase 294 — the introspectable rule manifest: every shipped
     /// well-formedness invariant as data (code + severity + description),
     /// projected from the same `rules` list `checkWith` runs. One source of
@@ -348,10 +451,31 @@ module CompositionValidator =
             Description = rule.Description
         })
 
-    /// Run every rule against a composed surface + its reference edges,
+    /// Phase 585 — `ruleManifest` plus each rule's `Class`, so an external
+    /// checker can distinguish the invariants a deployment can never switch
+    /// off (structural — they hold even under `SkipPreflight`, so a
+    /// violation means the app will not boot at all) from those an
+    /// emergency boot may skip. Projected from the same two declared lists,
+    /// in the same order as `rules` / `ruleManifest`.
+    let classifiedRuleManifest: ClassifiedCompositionRule list = [
+        for cls, ruleSet in [ StructuralRule, structuralRules; ExternalProbeRule, externalProbeRules ] do
+            for rule in ruleSet ->
+                {
+                    Code = rule.Code
+                    Severity = rule.Severity
+                    Description = rule.Description
+                    Class = cls
+                }
+    ]
+
+    /// Run a rule list against a composed surface + its reference edges,
     /// returning the flat, rule-tagged defect list. Pure.
-    let checkWith (refs: CompositionReferences) (manifest: CompositionManifest) : CompositionDefect list =
-        rules
+    let private evaluateRules
+        (ruleSet: CompositionRule list)
+        (refs: CompositionReferences)
+        (manifest: CompositionManifest)
+        : CompositionDefect list =
+        ruleSet
         |> List.collect (fun rule ->
             rule.Evaluate manifest refs
             |> List.map (fun message -> {
@@ -359,6 +483,26 @@ module CompositionValidator =
                 Severity = rule.Severity
                 Message = message
             }))
+
+    /// Run every rule against a composed surface + its reference edges,
+    /// returning the flat, rule-tagged defect list. Pure.
+    let checkWith (refs: CompositionReferences) (manifest: CompositionManifest) : CompositionDefect list =
+        evaluateRules rules refs manifest
+
+    /// Phase 585 — `checkWith` restricted to one rule class. The two
+    /// class-specific `IConfigValidator`s run through this, so what each
+    /// evaluates is exactly what `classifiedRuleManifest` says it does.
+    let checkClassWith
+        (ruleClass: CompositionRuleClass)
+        (refs: CompositionReferences)
+        (manifest: CompositionManifest)
+        : CompositionDefect list =
+        let ruleSet =
+            match ruleClass with
+            | StructuralRule -> structuralRules
+            | ExternalProbeRule -> externalProbeRules
+
+        evaluateRules ruleSet refs manifest
 
     /// `checkWith` against the empty reference set — for a composition that
     /// declares no tool→module edges (the base case).
@@ -386,23 +530,53 @@ module CompositionValidator =
             | [] -> Ok
             | warnings -> Warning(renderDefects warnings)
 
-    /// The first-party `IConfigValidator` that runs the well-formedness
-    /// rules over the composed manifest at preflight. Non-security-class:
-    /// `SkipPreflight` bypasses it (the emergency-boot lever), so it adds
-    /// no always-on gate a deployment cannot switch off (GP 11).
+    /// The first-party `IConfigValidator` that runs the **structural**
+    /// well-formedness rules over the composed manifest at preflight.
+    ///
+    /// Structural-class (Phase 585): it carries the
+    /// `IStructuralClassValidator` marker, so `ServerConfig.SkipPreflight`
+    /// does not bypass it. The rules are a pure sweep over component
+    /// entries already in memory — no socket, no dependency, microseconds —
+    /// so an emergency boot loses nothing by running them, while skipping
+    /// them would mean booting a composition whose identities collide. This
+    /// is the same posture as the authorization classifier's unconditional
+    /// boot refusal, and it is not a new config knob: `SkipPreflight`
+    /// remains the only switch, it simply no longer reaches this class.
     type CompositionWellFormednessValidator(manifest: CompositionManifest, refs: CompositionReferences) =
         interface IConfigValidator with
             member _.Name = ValidatorName
             member _.Timeout = IConfigValidator.defaultTimeout
-            member _.Validate() = async { return toValidationResult (checkWith refs manifest) }
 
-    /// A `services` registration that adds the well-formedness validator so
-    /// the Phase 9m aggregator runs it alongside every companion
+            member _.Validate() = async { return toValidationResult (checkClassWith StructuralRule refs manifest) }
+
+        interface IStructuralClassValidator
+
+    /// Phase 585 — the `IConfigValidator` for the external-probe class of
+    /// composition rules. Deliberately unmarked, so `SkipPreflight` skips
+    /// it like any other companion probe. Registered only when
+    /// `externalProbeRules` is non-empty (it is empty today, so nothing is
+    /// registered and a deployment pays nothing — GP 13).
+    type CompositionExternalProbeValidator(manifest: CompositionManifest, refs: CompositionReferences) =
+        interface IConfigValidator with
+            member _.Name = ExternalProbeValidatorName
+            member _.Timeout = IConfigValidator.defaultTimeout
+
+            member _.Validate() = async { return toValidationResult (checkClassWith ExternalProbeRule refs manifest) }
+
+    /// A `services` registration that adds the well-formedness validator(s)
+    /// so the Phase 9m aggregator runs them alongside every companion
     /// `IConfigValidator`. Returned as an `IServiceCollection ->
     /// IServiceCollection` closure so the composition root folds it into
     /// the extension `ServiceConfig` hook the same way it registers other
     /// on-demand companions. Built from the live manifest + tool-reference
     /// edges, so it checks exactly what was composed.
+    ///
+    /// One registration per non-empty rule class (Phase 585) — the classes
+    /// differ in whether `SkipPreflight` reaches them, and a validator is
+    /// classified as a whole, so they cannot share one registration. With
+    /// `externalProbeRules` empty the second registration is elided
+    /// entirely, leaving the composed `services` byte-for-byte what it was
+    /// before the split.
     let serviceRegistration
         (manifest: CompositionManifest)
         (refs: CompositionReferences)
@@ -411,3 +585,12 @@ module CompositionValidator =
             services.AddSingleton<IConfigValidator>(
                 CompositionWellFormednessValidator(manifest, refs) :> IConfigValidator
             )
+            |> ignore
+
+            if not externalProbeRules.IsEmpty then
+                services.AddSingleton<IConfigValidator>(
+                    CompositionExternalProbeValidator(manifest, refs) :> IConfigValidator
+                )
+                |> ignore
+
+            services

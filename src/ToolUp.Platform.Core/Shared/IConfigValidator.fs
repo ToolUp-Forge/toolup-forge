@@ -14,11 +14,15 @@ open System
 // non-zero exit. Warnings log at `Warn` level and continue. Ok-results
 // are the silent default.
 //
-// `ServerConfig.SkipPreflight = true` skips only the non-security-class
-// validators; the auth / secret / cross-instance-auth-state guards
-// (every validator that also implements `ISecurityClassValidator`) always
-// run and still abort on `Error`. One boolean must not silently disable
-// the identity-spoofing / unauthenticated-access protection.
+// `ServerConfig.SkipPreflight = true` skips only the *external-probe*
+// class — the validators that reach a dependency which may be down. Two
+// marker-opted classes always run and still abort on `Error`:
+// `ISecurityClassValidator` (auth / secret / CSRF /
+// cross-instance-auth-state guards) and `IStructuralClassValidator`
+// (in-process identity / integrity invariants over the composed surface).
+// One boolean must not silently disable identity-spoofing /
+// unauthenticated-access protection, nor the checks that keep the
+// composition itself sound.
 //
 // The pattern is a near-clone of `IHealthCheck`, with two
 // intentional divergences:
@@ -114,6 +118,37 @@ type IConfigValidator =
 /// `interface ISecurityClassValidator` alongside its `IConfigValidator`
 /// implementation.
 type ISecurityClassValidator = interface end
+
+/// Opt-in marker for an `IConfigValidator` whose checks are *structural*:
+/// pure identity / integrity invariants over what the deployment composed
+/// (duplicate component ids, slot-local addressability, orphaned
+/// references), evaluated in-process against already-resident data. A
+/// structural validator touches no external dependency, opens no socket,
+/// and completes in microseconds — so it is not what
+/// `ServerConfig.SkipPreflight` was built to bypass. `SkipPreflight` is an
+/// emergency-boot lever for *external-probe* validators (storage
+/// sentinels, OIDC discovery, SMTP connects) whose dependency may be down;
+/// riding through such an outage is a legitimate operator choice, whereas
+/// booting a composition whose identities collide is not — the same
+/// posture as the authorization classifier's unconditional boot refusal.
+/// A validator that also implements this interface therefore runs even
+/// when `SkipPreflight` is set and still aborts on `Error`.
+///
+/// **Additive (GP 11).** Absence of the marker is the external-probe
+/// classification: an existing `IConfigValidator` implementer — in this
+/// repo or downstream — needs no change and keeps its prior
+/// `SkipPreflight` behaviour (bypassable) byte-for-byte. The marker has no
+/// members, so a validator opts in simply by adding
+/// `interface IStructuralClassValidator` alongside its `IConfigValidator`
+/// implementation. The aggregator derives its always-run set by testing
+/// for the two markers, never from a hand-maintained name set, so a newly
+/// authored structural validator cannot drift out of it.
+///
+/// **Cost is the classification test.** Mark a validator structural only
+/// if it would still be correct — and still fast — on a machine with every
+/// external dependency unreachable. If the probe can block, it belongs in
+/// the external class no matter how important it is.
+type IStructuralClassValidator = interface end
 
 module ValidationResult =
     /// String form of the variant — used in log lines, abort summary,

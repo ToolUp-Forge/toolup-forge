@@ -202,6 +202,10 @@ let allTests =
         // new one can't drift out of the SkipPreflight always-run set) +
         // the aggregator derives that set from the member.
         ConfigValidatorSecurityClassTests.tests
+        // Phase 585 — preflight rule classes: the composition validator's
+        // identity/integrity rules are structural-class and survive
+        // SkipPreflight; only the external-probe class is skippable.
+        PreflightRuleClassTests.tests
         // Phase 462 — CORS credentials × wildcard refused at boot, before
         // any policy is registered (was: warn + silent credentials drop).
         CorsCredentialsWildcardBootTests.tests

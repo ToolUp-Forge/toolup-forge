@@ -2391,13 +2391,21 @@ type ServerConfig = {
     /// not fail loud on the dependency that preflight would have
     /// caught.
     ///
-    /// NOTE: `SkipPreflight` does NOT bypass the security-class
-    /// validators (every validator that also implements
-    /// `ISecurityClassValidator` — the auth / secret / cross-instance-auth-state
-    /// guards). Those always run and still abort startup on `Error`; a single boolean
-    /// must not silently disable identity-spoofing / unauthenticated-
-    /// access protection. The skipped validators' names are logged at
-    /// `Warn` so the bypass is visible in the deployment log.
+    /// NOTE: `SkipPreflight` reaches only the *external-probe* class —
+    /// the validators that contact a dependency which may be down. Two
+    /// marker-opted classes always run and still abort startup on
+    /// `Error`: `ISecurityClassValidator` (auth / secret / CSRF /
+    /// cross-instance-auth-state guards) and, since Phase 585,
+    /// `IStructuralClassValidator` (in-process identity / integrity
+    /// invariants over the composed surface — duplicate component ids,
+    /// companion-slot legality, orphaned tool references). A single
+    /// boolean must not silently disable identity-spoofing /
+    /// unauthenticated-access protection, nor the checks that keep the
+    /// composition itself sound; the structural rules cost microseconds
+    /// and touch nothing external, so an emergency boot loses nothing by
+    /// running them. The skipped validators' names are logged at `Warn`,
+    /// alongside the always-run set and its classes, so the bypass is
+    /// visible in the deployment log.
     SkipPreflight: bool
     /// Opt-in periodic probe-state tracker. Default
     /// `false`. When `true`, `HealthStateTracker`

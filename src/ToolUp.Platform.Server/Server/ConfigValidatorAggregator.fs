@@ -14,13 +14,26 @@ open ToolUp.Platform.ConfigValidation
 // (capped at the 10s aggregator budget), captures outcomes for the
 // `/dev/inspect` validators panel, and aborts startup if any returns
 // `Error`. `ServerConfig.SkipPreflight = true` skips only the
-// non-security-class validators — every validator that also implements
-// the `ISecurityClassValidator` marker (auth / secret /
-// cross-instance-auth-state guards) always runs and still aborts on
-// `Error`, so one boolean cannot silently disable the auth-class safety
-// net. The always-run set is derived from the validators themselves (a
-// type-test for the marker), not a name set the aggregator maintains, so
-// a newly-authored security validator cannot drift out of it.
+// **external-probe** class — the validators that reach a dependency which
+// may be down (storage sentinels, OIDC discovery, SMTP connects), which
+// is the whole reason the lever exists. Two marker-opted classes always
+// run and still abort on `Error`:
+//
+//   * `ISecurityClassValidator` — auth / secret / CSRF /
+//     cross-instance-auth-state guards. Bypassing one is an
+//     identity-spoofing or unauthenticated-access hole.
+//   * `IStructuralClassValidator` (Phase 585) — in-process identity /
+//     integrity invariants over the composed surface (duplicate component
+//     ids, companion-slot legality, orphaned tool references). They cost
+//     microseconds and touch nothing external, so they were never what
+//     `SkipPreflight` was built to skip; riding through a dependency
+//     outage is a legitimate operator choice, booting a composition whose
+//     identities collide is not.
+//
+// The always-run set is derived from the validators themselves (a
+// type-test for the two markers), not a name set the aggregator
+// maintains, so a newly-authored security or structural validator cannot
+// drift out of it.
 //
 // **Registration timing**: must be called near the END of `compose`,
 // after every companion has had a chance to call
@@ -206,20 +219,53 @@ let private logOutcome (logger: ILogger option) (o: ValidatorOutcome) =
         | Warning msg -> l.Warn(sprintf "[preflight] %s: Warning — %s (%dms)" o.Name msg o.ElapsedMs)
         | Error msg -> l.Error(sprintf "[preflight] %s: Error — %s (%dms)" o.Name msg o.ElapsedMs, None)
 
-/// A validator is security-class when it opts in by also implementing
-/// the `ISecurityClassValidator` marker — its bypass is an
-/// identity-spoofing, unauthenticated-access, plaintext-secret, or
-/// cross-instance-auth-state hole. Security-class validators run even
-/// when `ServerConfig.SkipPreflight = true`. `SkipPreflight` is an
-/// emergency-boot lever for a noisy companion probe — it must never be
-/// the single switch that silently disables every auth-class guard at
-/// once. The classification is a type-test for the marker, not a name set
-/// here, so a newly-authored security validator can't drift out of the
-/// always-run set.
-let private isSecurityClass (v: IConfigValidator) =
+/// Phase 585 — the preflight class of a registered validator, derived by
+/// type-testing the opt-in markers rather than read from a name set the
+/// aggregator maintains (a name set drifts the moment someone authors a
+/// validator without updating it).
+///
+///   * `SecurityClass` — implements `ISecurityClassValidator`. Bypassing
+///     it is an identity-spoofing, unauthenticated-access,
+///     plaintext-secret, CSRF, or cross-instance-auth-state hole.
+///   * `StructuralClass` — implements `IStructuralClassValidator`. A pure
+///     in-process identity / integrity invariant over the composed
+///     surface; microseconds, no external dependency.
+///   * `ExternalProbeClass` — the unmarked default, and the only class
+///     `ServerConfig.SkipPreflight` skips. These reach a dependency that
+///     may be down, which is precisely what the emergency-boot lever
+///     exists to ride through.
+///
+/// A validator carrying both markers reads as `SecurityClass`: the two
+/// agree on the outcome that matters (always-run) and the security label
+/// is the one an operator needs to see in the log.
+type ValidatorClass =
+    | SecurityClass
+    | StructuralClass
+    | ExternalProbeClass
+
+/// Classify a validator from its markers. Unmarked ⇒ `ExternalProbeClass`,
+/// which preserves every pre-marker validator's prior `SkipPreflight`
+/// behaviour byte-for-byte (GP 11).
+let classify (v: IConfigValidator) : ValidatorClass =
     match box v with
-    | :? ISecurityClassValidator -> true
-    | _ -> false
+    | :? ISecurityClassValidator -> SecurityClass
+    | :? IStructuralClassValidator -> StructuralClass
+    | _ -> ExternalProbeClass
+
+/// Whether a class runs regardless of `SkipPreflight`. One boolean must
+/// never be the single switch that disables the auth-class guards or the
+/// composition-integrity checks.
+let alwaysRuns (cls: ValidatorClass) : bool =
+    match cls with
+    | SecurityClass
+    | StructuralClass -> true
+    | ExternalProbeClass -> false
+
+let private classLabel (cls: ValidatorClass) =
+    match cls with
+    | SecurityClass -> "security-class"
+    | StructuralClass -> "structural-class"
+    | ExternalProbeClass -> "external-probe-class"
 
 /// Run a validator list in parallel (per-validator + global timeout),
 /// log each outcome, throw `ConfigPreflightFailedException` if any
@@ -247,13 +293,15 @@ let private runSet (logger: ILogger option) (validators: IConfigValidator list) 
 /// in parallel with per-validator + global timeouts, log outcomes, and
 /// throw `ConfigPreflightFailedException` if any returned `Error`.
 ///
-/// `skipPreflight = true` skips the *non*-security-class validators
-/// (the emergency-boot lever for a noisy companion probe) but still
-/// runs every `ISecurityClassValidator` and still aborts on
-/// their `Error` — a single boolean must not silently disable the
-/// auth-class guards. The skipped validators' names are enumerated in
-/// the log so the bypass is visible at `Warn` level, not just in the
-/// `/dev/inspect` panel. Returns the outcomes so the caller can
+/// `skipPreflight = true` skips only the **external-probe** class (the
+/// emergency-boot lever for a companion probe whose dependency is down)
+/// but still runs every `ISecurityClassValidator` and every
+/// `IStructuralClassValidator`, and still aborts on their `Error` — a
+/// single boolean must not silently disable the auth-class guards or the
+/// composition-integrity checks. The skipped validators' names are
+/// enumerated in the log so the bypass is visible at `Warn` level, not
+/// just in the `/dev/inspect` panel, and the always-run set is listed
+/// beside it with its class. Returns the outcomes so the caller can
 /// populate the snapshot service.
 let validate (services: IServiceCollection) (logger: ILogger option) (skipPreflight: bool) : ValidatorOutcome list =
     let validators = collectValidators services
@@ -265,37 +313,45 @@ let validate (services: IServiceCollection) (logger: ILogger option) (skipPrefli
     assertUniqueValidatorNames validators
 
     if skipPreflight then
-        let securityClass, skipped = validators |> List.partition isSecurityClass
+        let classified = validators |> List.map (fun v -> classify v, v)
+
+        let alwaysRun, skipped =
+            classified |> List.partition (fun (cls, _) -> alwaysRuns cls)
 
         match logger with
         | Some l ->
             if skipped.IsEmpty then
-                l.Warn "[preflight] ServerConfig.SkipPreflight = true. 0 non-security-class validator(s) skipped."
+                l.Warn "[preflight] ServerConfig.SkipPreflight = true. 0 external-probe-class validator(s) skipped."
             else
-                let names = skipped |> List.map _.Name |> List.sort |> String.concat ", "
+                let names =
+                    skipped |> List.map (fun (_, v) -> v.Name) |> List.sort |> String.concat ", "
 
                 l.Warn(
                     sprintf
-                        "[preflight] ServerConfig.SkipPreflight = true. %d non-security-class validator(s) skipped: %s"
+                        "[preflight] ServerConfig.SkipPreflight = true. %d external-probe-class validator(s) skipped: %s"
                         skipped.Length
                         names
                 )
 
-            if not securityClass.IsEmpty then
-                let secNames = securityClass |> List.map _.Name |> List.sort |> String.concat ", "
+            if not alwaysRun.IsEmpty then
+                let alwaysNames =
+                    alwaysRun
+                    |> List.map (fun (cls, v) -> sprintf "%s [%s]" v.Name (classLabel cls))
+                    |> List.sort
+                    |> String.concat ", "
 
                 l.Warn(
                     sprintf
-                        "[preflight] %d security-class validator(s) run despite SkipPreflight (not bypassable): %s"
-                        securityClass.Length
-                        secNames
+                        "[preflight] %d validator(s) run despite SkipPreflight (not bypassable): %s"
+                        alwaysRun.Length
+                        alwaysNames
                 )
         | None -> ()
 
-        if securityClass.IsEmpty then
+        if alwaysRun.IsEmpty then
             []
         else
-            runSet logger securityClass
+            runSet logger (alwaysRun |> List.map snd)
     elif validators.IsEmpty then
         // GP 13 — lightweight default. Zero-config deployments stay
         // green and start normally with no log noise.

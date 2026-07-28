@@ -157,6 +157,26 @@ Before the explicit validator landed, the same misuse surfaced as a duplicate-en
 
 **Today.** `FormsCompose.withForms` and `AICompose.withAI` ship as the two additive extensions. `withRAG` is deferred — see the migration doc for why landing it before the prior refactor that lifts `composeWithRAG` onto `composeAI` would force AI's DI registrations to duplicate into the additive surface. A deployment that needs RAG today continues to use `RAGServerApp.run` as the terminal shape and composes Forms inside that pipeline via the inner `RAGServerApp.with*` helpers.
 
+## What `SkipPreflight` skips — and what it never skips
+
+`ServerConfig.SkipPreflight = true` is the emergency-boot lever: it lets a deployment start while a dependency that preflight would otherwise probe is unreachable (a storage sentinel write, OIDC discovery, an SMTP connect). It is a blunt instrument by design, so it is scoped to the one class of check that a dependency outage can legitimately make un-passable.
+
+Registered `IConfigValidator`s fall into three classes, derived from opt-in marker interfaces the validator itself implements — never from a name list the aggregator maintains, so a newly authored validator cannot drift out of the always-run set:
+
+| Class | Marker | Skipped by `SkipPreflight`? |
+|---|---|---|
+| **External probe** | *(none — the default)* | **Yes.** Reaches something outside the process; can fail for reasons unrelated to the deployment being wrong. |
+| **Security** | `ISecurityClassValidator` | No. Auth / secret / CSRF / cross-instance-auth-state guards; bypassing one is an identity-spoofing or unauthenticated-access hole. |
+| **Structural** | `IStructuralClassValidator` | No. Pure in-process identity / integrity invariants over the composed surface. |
+
+**The structural class is new in Phase 585, and it changes what a `SkipPreflight` boot does.** The composition well-formedness validator (`duplicate-component-id`, `companion-slot-legality`, `orphaned-tool-reference`, and the pinned-vocabulary rules) previously rode the same switch as the external probes, so an operator who set `SkipPreflight` to survive a storage outage also, silently, booted with those checks off. They are a sweep over component entries already in memory — no socket, no dependency, microseconds — so an emergency boot loses nothing by running them, whereas skipping them means starting an app whose composed identities collide, which no outage explains. This is the same posture the authorization classifier already takes when it refuses to boot on an unclassified API method.
+
+There is **no new configuration knob**: `SkipPreflight` is still the only switch, it simply no longer reaches the structural or security classes. The default path (`SkipPreflight = false`) is unchanged — every class runs, exactly as before (GP 11).
+
+The bypass is visible in the startup log at `Warn`: one line naming the skipped external-probe validators, and one naming the always-run set with each entry's class.
+
+**Which class a check belongs in.** Mark a validator structural only if it would still be correct *and still fast* on a machine with every external dependency unreachable. If it can block, it belongs in the external-probe class however important it is — importance is what the security marker is for. For the composition rules specifically, the class is fixed by which declared list a rule appears in (`CompositionValidator.structuralRules` / `externalProbeRules`), so there is no class field to set wrongly, and `CompositionValidator.classifiedRuleManifest` exports each rule's code, severity, description, and class for an external pre-build checker that wants to know which invariants a deployment can never switch off.
+
 ## See also
 
 - [`surfaces.md`](surfaces.md) — the Subject / `SurfaceProfile` / `SurfaceRequirement` model and the `TOOLUP_PLATFORM_SURFACES` env-var contract.
