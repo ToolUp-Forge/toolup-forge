@@ -286,6 +286,9 @@ let allTests =
         // Phase 295 — descriptor completeness round-trip + partial/preset holes:
         // lossless lowering; preset + hole-binding equivalence; unfilled hole fails.
         DescriptorCompletenessTests.tests
+        // Phase 436 — null-composition dry run: null-bind every companion slot,
+        // rebuild, validate, drive the lifecycle; defects are typed findings.
+        CompositionDryRunTests.tests
         // Phase 302 — per-tenant composition presets: distinct variants from one
         // base preset; scope-isolated bindings; unbound-hole preflight failure.
         TenantCompositionPresetTests.tests

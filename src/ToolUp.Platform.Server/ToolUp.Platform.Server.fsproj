@@ -965,6 +965,22 @@
              scope-isolated by construction. After CompositionDescriptor.fs
              (holes/apply) + ComponentConfigResolver.fs (Phase 289). -->
         <Compile Include="Server\TenantCompositionPreset.fs" />
+        <!-- Phase 436 — null-composition dry-run harness: rebind every
+             companion slot to the in-process default the slot already
+             declares (derived from the Phase 293 reflected slot set — leaving
+             a slot None IS selecting its default), rebuild through the Phase
+             284 / 292 versioned ofManifest, run the Phase 281 / 294
+             structural-class well-formedness rules, drive the Phase 291
+             init/dispose order, and return a typed DryRunReport — zero
+             external services, defects as findings rather than exceptions.
+             Plus the Expecto-shaped (Expecto-free) DryRun.shouldCompose
+             affordance for consumer suites + cookbook verification. After
+             CompositionDescriptorVersion.fs (the versioned build path it
+             drives), ComposableSurface.fs (the slot universe it null-binds),
+             ComponentLifecycle.fs and CompositionValidator.fs. Nothing
+             registers into DI — a consumer that never calls it composes
+             byte-for-byte what it did before (GP 11 / GP 13). -->
+        <Compile Include="Server\CompositionDryRun.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />

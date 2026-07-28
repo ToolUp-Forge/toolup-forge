@@ -460,6 +460,14 @@
              distinct variants from one base preset; bindings are
              scope-isolated; an unbound required hole fails preflight readably. -->
         <Compile Include="InProcess\TenantCompositionPresetTests.fs" />
+        <!-- Phase 436 — null-composition dry-run harness: a valid preset
+             dry-runs green with every companion slot rebound to its
+             in-process default; a companion interface with no such default,
+             an unresolved id, a schema-version gap, a failed well-formedness
+             rule, a cyclic lifecycle order and a throwing init probe each
+             yield the NAMED finding with ComponentId attribution rather than
+             an exception; the minimal preset stays in unit-test time. -->
+        <Compile Include="InProcess\CompositionDryRunTests.fs" />
         <!-- Phase 214 — config-key registry coverage + reference-doc golden. -->
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
         <!-- Phase 214 — print-config / validate-config startup-mode behaviour. -->
