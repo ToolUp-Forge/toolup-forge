@@ -65,17 +65,43 @@ RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
 
 Drop the `ToolUp.KnowledgeBase` `<PackageReference>` entries from the consuming project's `.fsproj`. The built-in KB module disappears; your replacement provides equivalent (or different) functionality.
 
-## A future `KnowledgeBaseMode` DU
+## `KnowledgeBaseMode` — first-class substitution
 
-The shipped pattern requires the consumer to drop the package + provide their own module. A future SDK addition (`KnowledgeBaseMode`) will allow first-class substitution via fluent API:
+Dropping the package reference is the heavy form of replacement. `KnowledgeBaseMode` (Phase 1e) is the light one: a four-case DU parallel to `DataManagerMode`, applied client-side, that lets a deployment swap the module while leaving the props imports and the project reference in place.
 
 ```fsharp
-RAGServerApp.create (...)
-|> RAGServerApp.withKnowledgeBase (ExternalKnowledgeBase myErasedModule)
-|> ...
+open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
+open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
+
+let kbMode = ExternalKnowledgeBase (MyConfluenceKb.register ())
+
+let clientConfig, modules =
+    KnowledgeBaseClientConfig.withKnowledgeBase kbMode clientConfig modules
+
+Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConfig modules
 ```
 
-(Not yet shipped; the structural contracts above are what would land.) Status: deferred.
+| Case | Sidebar module | `Handlers.NarrativeCommitHandler` |
+|---|---|---|
+| `NoKnowledgeBase` | none | untouched |
+| `DefaultKnowledgeBase` | built-in KB + `_sdk.PlatformKnowledgeAdmin` | the companion's, when the consumer supplied none |
+| `ConfiguredKnowledgeBase cfg` | built-in KB, re-branded (`Name` / `Icon` / `Group`) + the content admin | as above |
+| `ExternalKnowledgeBase m` | `m`, and nothing else | untouched — the external KB wires its own |
+
+Two properties worth stating explicitly:
+
+- **The DU lives in the companion, not in `ClientConfig`.** `ToolUp.Platform.Client` cannot reference `ToolUp.KnowledgeBase.Client` (the shell takes no companion dependency), and `DefaultKnowledgeBase` has to construct the companion's own module. So the transform is a companion-owned `ClientConfig * ErasedModule list` function, exactly as `AIClientConfig.appendAssistantModule` is for `AIAssistantMode`. It composes under either entry point.
+- **The mode governs the client only.** Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring how `DataManagerMode` governs the sidebar module while `fileManagementApi` is wired by hand.
+
+A deployment that never calls `withKnowledgeBase` is unchanged: there is no SDK-side default mode, and the direct `KnowledgeBaseView.register ()` registration keeps working.
+
+### The three integration contracts
+
+An `ExternalKnowledgeBase` is reached by the rest of the SDK through exactly three seams. Skip one and you degrade a surface you don't own; the build stays green either way, so they are listed here rather than enforced.
+
+1. **NarrativeCommit handler.** Other modules offer "Save to Knowledge Base" by rendering `NarrativeRenderer` and letting it dispatch through the global `Toolup.NarrativeCommit` broker — no module imports KB types directly. An external KB sets its own `ClientConfig.Handlers.NarrativeCommitHandler` (a record whose `Submit` takes the `NarrativeDocument` plus an overwrite flag and returns a `NarrativeCommitResult`). Left `None`, the button hides itself.
+2. **`IIngestionStatusObserver` registration.** The composition root passes an observer (from `ToolUp.RAG.IngestionTypes`) into `composeWithRAG`; `OnChunkIndexed` / `OnChunkFailed` drive the per-document status index and publish the status notifications. Identity is by-value (`IngestionJob.DocumentId : string`) and both members are `Async<unit>`, per the six portability rules (GP 12).
+3. **Notification-key contract.** `"KnowledgeBase.IngestionStatus"` — exposed as `[<Literal>] SharedTypes.IngestionStatusNotificationKey` — is a *published* key, not an imported one: the AI side panel subscribes to the literal directly so AI (the more foundational companion) never depends on KB. An external KB either publishes under the same key and inherits the stock AI side-panel surface, or defines its own and accepts that the stock surface won't subscribe.
 
 ## Adding a new format extractor
 

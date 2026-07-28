@@ -815,18 +815,37 @@ let private platformLibraryPage: PageConfig = {
     Icon = ToolUp.KnowledgeBase.Icons.knowledge
 }
 
-let register () : ToolUp.Platform.ErasedModule =
+/// Build the Knowledge Base `ErasedModule`, optionally re-branded.
+/// Phase 1e — the parameterised form behind `KnowledgeBaseMode`'s
+/// `DefaultKnowledgeBase` (`None`) and `ConfiguredKnowledgeBase`
+/// (`Some cfg`) cases, mirroring `FileManagerUI.create`'s
+/// `DataManagerConfig option` shape.
+///
+/// `create None` is byte-for-byte the historical `register ()` module —
+/// same name, icon, group, and therefore the same derived
+/// `Definition.Id` ("KnowledgeBase"), which is the RBAC key in
+/// `ServerConfig.ModuleNames` (GP 11).
+let create (config: ToolUp.KnowledgeBase.KnowledgeBaseConfig option) : ToolUp.Platform.ErasedModule =
     // Phase 102–107 tail — broker the "view original" affordance to the
     // AI Sources panel. Composing the Knowledge Base in is what makes a
     // citation's original openable; a deployment without it leaves the
     // bridge unregistered and the panel renders as before (GP 11).
     ToolUp.Platform.OriginalDocumentBridge.register ClientModel.originalDocumentOpener
 
+    let name = config |> Option.map _.Name |> Option.defaultValue "Knowledge Base"
+
+    let icon =
+        config
+        |> Option.map _.Icon
+        |> Option.defaultValue ToolUp.KnowledgeBase.Icons.knowledge
+
+    let group = config |> Option.bind _.Group |> Option.defaultValue "Knowledge"
+
     ToolUp.Platform.ClientModule.create {
         Init = ClientModel.init
         Update = ClientModel.update
-        Name = "Knowledge Base"
-        Icon = ToolUp.KnowledgeBase.Icons.knowledge
+        Name = name
+        Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withPages [
         documentsPage, documentsView
@@ -834,6 +853,11 @@ let register () : ToolUp.Platform.ErasedModule =
         platformLibraryPage, platformLibraryView
         aiContextPage, aiContextView
     ]
-    |> ToolUp.Platform.ClientModule.withGroup "Knowledge"
+    |> ToolUp.Platform.ClientModule.withGroup group
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
+
+/// The stock Knowledge Base module, unbranded. Kept as the direct
+/// registration path for consumers that list modules by hand; the
+/// `KnowledgeBaseMode`-driven path calls `create` instead.
+let register () : ToolUp.Platform.ErasedModule = create None

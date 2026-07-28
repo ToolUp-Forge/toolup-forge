@@ -188,21 +188,42 @@ let combinedPrompt =
 
 ## `ToolUp.KnowledgeBase.Client`
 
-### `KnowledgeBaseView.installNarrativeCommit`
+### `KnowledgeBaseView.narrativeCommitHandler`
 
 ```fsharp
-val installNarrativeCommit: unit -> unit
+val narrativeCommitHandler: NarrativeCommitHandler
 ```
 
-Install the global `Toolup.NarrativeCommit.submit` handler. Call once at app boot before module registrations.
+The companion's "Save to Knowledge Base" broker. Set it on `ClientConfig.Handlers.NarrativeCommitHandler` (or let `KnowledgeBaseClientConfig.withKnowledgeBase` do it) so other modules' Save buttons resolve. Phase 13a replaced the legacy `installNarrativeCommit ()` module-load side effect with this value.
 
-### `KnowledgeBaseView.register`
+### `KnowledgeBaseView.register` / `KnowledgeBaseView.create`
 
 ```fsharp
 val register: unit -> ErasedModule
+val create: KnowledgeBaseConfig option -> ErasedModule
 ```
 
-Returns the KB `ErasedModule` for SDK registration. Multi-page module with `/documents`, `/notes`, `/ai-context` pages.
+Returns the KB `ErasedModule` for SDK registration. Multi-page module with `/documents`, `/notes`, `/platform-library`, `/ai-context` pages. `create` is the re-brandable form behind `ConfiguredKnowledgeBase`; `create None` is `register ()`.
+
+### `KnowledgeBaseMode` / `KnowledgeBaseClientConfig.withKnowledgeBase`
+
+```fsharp
+// namespace ToolUp.KnowledgeBase
+type KnowledgeBaseConfig = { Name: string; Icon: ReactElement; Group: string option }
+
+type KnowledgeBaseMode =
+    | NoKnowledgeBase
+    | DefaultKnowledgeBase
+    | ConfiguredKnowledgeBase of KnowledgeBaseConfig
+    | ExternalKnowledgeBase of ErasedModule
+
+// module ToolUp.KnowledgeBase.Client.KnowledgeBaseClientConfig
+val appendKnowledgeBaseModule: KnowledgeBaseMode -> ErasedModule list -> ErasedModule list
+val withNarrativeCommitHandler: KnowledgeBaseMode -> ClientConfig -> ClientConfig
+val withKnowledgeBase: KnowledgeBaseMode -> ClientConfig -> ErasedModule list -> ClientConfig * ErasedModule list
+```
+
+The four-case override mode parallel to `DataManagerMode`. Applies client-side only; server wiring stays a composition-root concern. See [extending.md](extending.md#knowledgebasemode--first-class-substitution) for the per-case table and the three integration contracts an `ExternalKnowledgeBase` must honour.
 
 ### `Toolup.NarrativeCommit` (global submitter)
 

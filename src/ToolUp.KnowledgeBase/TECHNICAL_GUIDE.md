@@ -31,9 +31,11 @@ src/
 │       └── Api/                                handler wiring
 └── ToolUp.KnowledgeBase.Client/                Fable client tier
     └── Client/
-        ├── ClientModel.fs                      Elmish Model/Msg/init/update; installNarrativeCommit
-        ├── ClientView.fs                       Feliz views; KnowledgeBaseView.register()
+        ├── ClientModel.fs                      Elmish Model/Msg/init/update; narrativeCommitHandler
+        ├── KnowledgeBaseClientTypes.fs         KnowledgeBaseMode / KnowledgeBaseConfig
+        ├── ClientView.fs                       Feliz views; KnowledgeBaseView.create/register()
         ├── PlatformKnowledgeAdminUI.fs         admin UI surface
+        ├── KnowledgeBaseClientConfig.fs        withKnowledgeBase — the mode application seam
         ├── Icons.fs                            per-module icon registry
         └── icons/                              icon assets
 ```
@@ -46,17 +48,17 @@ tier holding Fable-compiled client surface.
 
 ## The three integration contracts
 
-A deployment that wires KB in (or replaces it via a future `ExternalKnowledgeBase`) must honour these three contracts.
+A deployment that wires KB in (or replaces it via `ExternalKnowledgeBase` — see [`KnowledgeBaseMode`](README.md#knowledgebasemode--swapping-the-kb-module-without-removing-imports)) must honour these three contracts.
 
 ### 1. NarrativeCommit handler
 
-`KnowledgeBaseView.installNarrativeCommit ()` calls `Toolup.NarrativeCommit.install` with a submit handler. Other modules that want to offer a "Save to Knowledge Base" button render `NarrativeRenderer` and let the renderer dispatch through the global hook — no module imports KB types directly. An external KB calls `Toolup.NarrativeCommit.install` with its own handler instead.
+`KnowledgeBaseView.narrativeCommitHandler` is the companion's `NarrativeCommitHandler` value; the deployment sets it on `ClientConfig.Handlers.NarrativeCommitHandler`. Other modules that want to offer a "Save to Knowledge Base" button render `NarrativeRenderer` and let the renderer dispatch through the global broker — no module imports KB types directly. An external KB sets its own handler value instead.
 
-The default KB's installation must be gated on the deployment having opted in to the default KB; once `KnowledgeBaseMode` ships in Phase 1e, the gate becomes `mode = DefaultKnowledgeBase | ConfiguredKnowledgeBase _` (an `ExternalKnowledgeBase` doesn't double-register).
+The gate is `mode = DefaultKnowledgeBase | ConfiguredKnowledgeBase _`, applied by `KnowledgeBaseClientConfig.withNarrativeCommitHandler`: an `ExternalKnowledgeBase` doesn't double-register, and an explicitly-supplied handler always wins over the implicit wiring.
 
 ### 2. `IIngestionStatusObserver` registration
 
-`KnowledgeBase.Server.makeIngestionStatusObserver` returns an `IIngestionStatusObserver` (interface from `ToolUp.RAG.IngestionTypes`). The composition root passes it into `composeWithRAG`. Server-side wiring stays explicit — the `KnowledgeBaseMode` DU (Phase 1e) only governs *client* auto-injection; the server side remains the deployment's responsibility, mirroring DataManager's `fileManagementApi` wiring.
+`KnowledgeBase.Server.makeIngestionStatusObserver` returns an `IIngestionStatusObserver` (interface from `ToolUp.RAG.IngestionTypes`). The composition root passes it into `composeWithRAG`. Server-side wiring stays explicit — the `KnowledgeBaseMode` DU governs *client* auto-injection only; the server side remains the deployment's responsibility, mirroring DataManager's `fileManagementApi` wiring.
 
 The observer's `OnChunkIndexed` updates the KB's per-document ingestion status index and publishes `IngestionStatusUpdate` notifications. `OnChunkFailed` records the error and publishes a failure notification. Both are `Async<unit>` and identity is by-value (`IngestionJob.DocumentId : string`), satisfying Phase 9c portability rules.
 

@@ -298,13 +298,19 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 
 // ─── Module registration ─────────────────────────────────────────────
 
-/// Register the Platform Knowledge Base admin module. Apps that have
-/// wired the KB companion call this in their `Client.fs` modules list
-/// alongside `KnowledgeBase.ClientView.register ()`. Auto-injection
-/// would require a new `ClientConfig.PlatformKnowledgeAdmin` mode
-/// (similar to `HealthMonitor` / `WebhookAdmin`); skipped for v1
-/// because the team-side KB module is also deployment-explicit, so
-/// the registration shape stays consistent.
+/// Register the Platform Knowledge Base admin module. Apps that list
+/// their modules by hand call this in `Client.fs` alongside
+/// `KnowledgeBaseView.register ()`.
+///
+/// Phase 1e — `KnowledgeBaseClientConfig.withKnowledgeBase` now appends
+/// this module alongside the team-side one on
+/// `DefaultKnowledgeBase` / `ConfiguredKnowledgeBase`. The v1 note here
+/// deferred auto-injection on the grounds that the team-side module was
+/// also deployment-explicit; `KnowledgeBaseMode` closes that, and the
+/// registration shape stays consistent by moving together. The append is
+/// unconditional because the sidebar entry is role-gated at render time
+/// by its "Platform Management" group — the same argument
+/// `AIClientConfig.appendAssistantModule` makes for `PlatformAIKeysAdminUI`.
 ///
 /// Reserved Id `_sdk.PlatformKnowledgeAdmin`. Group "Platform Admin".
 /// The shell-level role gate (commit 4f.2) hides the sidebar entry

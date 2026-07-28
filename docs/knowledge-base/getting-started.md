@@ -57,18 +57,20 @@ The vectorisation handler runs on every KB document save and turns the extracted
 ## 3. Wire the client wrapper + narrative-commit
 
 ```fsharp
-open ToolUp.KnowledgeBase
-
-// Install the narrative-commit handler before module registration —
-// other modules' "Save to Knowledge Base" buttons resolve through this.
-KnowledgeBaseView.installNarrativeCommit ()
+open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
+open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 
 let modules = [
-    KnowledgeBaseView.register ()
     // ... your other modules
 ]
 
-AIClientConfig.withAIAssistant aiMode clientConfig modules
+// Injects the KB module (+ the Platform-Admin content admin) and wires
+// the narrative-commit broker, so other modules' "Save to Knowledge
+// Base" buttons resolve. See extending.md for the other three modes.
+let clientConfig, modules =
+    KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
+
+AIClientConfig.program aiMode clientConfig modules
 |> Program.withReactSynchronous "elmish-app"
 |> Program.run
 ```
@@ -139,7 +141,7 @@ Html.button [
 ]
 ```
 
-The narrative-commit handler installed by `KnowledgeBaseView.installNarrativeCommit ()` receives the submit, persists the narrative, runs it through the vectorisation handler, and indexes the chunks. Appears in the user's Documents list with `KnowledgeSource.FromNarrative`.
+The narrative-commit handler (`KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers` by `withKnowledgeBase`) receives the submit, persists the narrative, runs it through the vectorisation handler, and indexes the chunks. Appears in the user's Documents list with `KnowledgeSource.FromNarrative`.
 
 ## 9. Notes
 

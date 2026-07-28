@@ -38,8 +38,10 @@ No cycles. RAG knows nothing about KB; KB depends on RAG (today). KB's server re
 - `standingContextBuilder : IBlobStorage -> ILogger option -> SystemPromptBuilder` — opt-in AI prompt builder that reads the team's standing context per outer turn. Composed by the deployment in `composeWithAI`'s prompt list — KB never auto-injects it (AI doesn't depend on KB; the deployment's composition root is the only place that sees both).
 
 **Client** (`module KnowledgeBase`):
-- `KnowledgeBaseView.installNarrativeCommit ()` — installs the global `Toolup.NarrativeCommit` handler so other modules' "Save to Knowledge Base" buttons resolve.
-- `KnowledgeBaseView.register ()` — returns the `ErasedModule` for SDK registration. Multi-page module with `/documents`, `/notes`, `/ai-context` pages.
+- `KnowledgeBaseView.narrativeCommitHandler : NarrativeCommitHandler` — the "Save to Knowledge Base" broker. Set on `ClientConfig.Handlers.NarrativeCommitHandler` so other modules' Save buttons resolve (Phase 13a replaced the legacy `installNarrativeCommit ()` module-load side effect with this value).
+- `KnowledgeBaseView.register ()` — returns the `ErasedModule` for SDK registration. Multi-page module with `/documents`, `/notes`, `/platform-library`, `/ai-context` pages.
+- `KnowledgeBaseView.create : KnowledgeBaseConfig option -> ErasedModule` — the parameterised form behind `ConfiguredKnowledgeBase`; `create None` is `register ()`.
+- `KnowledgeBaseMode` / `KnowledgeBaseConfig` (namespace `ToolUp.KnowledgeBase`) + `KnowledgeBaseClientConfig.withKnowledgeBase` (`ToolUp.KnowledgeBase.Client`) — the four-case override mode; see [below](#knowledgebasemode--swapping-the-kb-module-without-removing-imports).
 
 **Shared** (`module SharedTypes`):
 - `KnowledgeApi` record (ToolUp.Remoting contract) — adds `AddNote`, `UpdateNote`, `GetAIContext`, `SetAIContext`.
@@ -100,15 +102,42 @@ let aiAssistantConfig = {
 `src/ToolUpApp-Client/Client.fs` — register the module + narrative handler:
 
 ```fsharp
-KnowledgeBaseView.installNarrativeCommit ()
-Client.run config [ ...; KnowledgeBaseView.register (); ... ]
+let config, modules =
+    KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase config modules
+
+Client.run config modules
 ```
 
-To remove the knowledge base from a deployment: strip the two props imports + the project reference + the four lines above. The build is clean without them. Removing `standingContextBuilder` from the prompt-builder list leaves AI behaviour unchanged — the builder is opt-in.
+(The pre-Phase-1e shape — `Client.run config [ ...; KnowledgeBaseView.register (); ... ]` with `Handlers.NarrativeCommitHandler = Some KnowledgeBaseView.narrativeCommitHandler` set by hand — still works and is unchanged.)
 
-## Phase 1e (deferred): `KnowledgeBaseMode` DU
+To remove the knowledge base from a deployment: strip the two props imports + the project reference + the four lines above. The build is clean without them. Removing `standingContextBuilder` from the prompt-builder list leaves AI behaviour unchanged — the builder is opt-in. To keep the imports but swap the module, use `ExternalKnowledgeBase` instead.
 
-A four-case override mode (`No` / `Default` / `Configured` / `External`) parallel to `DataManagerMode` is planned for Phase 1e — it lets a deployment substitute a custom KB module (Confluence sync, Notion sync, custom dedup) without removing imports. Phase 1d (this extraction) is purely a directory move; the DU lands in a focused follow-up.
+## `KnowledgeBaseMode` — swapping the KB module without removing imports
+
+`KnowledgeBaseMode` (Phase 1e) is a four-case override mode parallel to `DataManagerMode`. It lets a deployment substitute a custom KB module — a Confluence sync, a Notion sync, custom dedup rules, a custom permission model — while leaving the props imports and the project reference in place.
+
+```fsharp
+open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
+open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
+
+let clientConfig, modules =
+    KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
+
+Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConfig modules
+```
+
+| Case | Sidebar module | `Handlers.NarrativeCommitHandler` |
+|---|---|---|
+| `NoKnowledgeBase` | none | untouched |
+| `DefaultKnowledgeBase` | built-in KB + `_sdk.PlatformKnowledgeAdmin` | the companion's, when the consumer supplied none |
+| `ConfiguredKnowledgeBase cfg` | built-in KB, re-branded (`Name` / `Icon` / `Group`) + the content admin | as above |
+| `ExternalKnowledgeBase m` | `m`, and nothing else | untouched — the external KB wires its own |
+
+The DU lives in the companion's client tier, not on `ClientConfig`: `ToolUp.Platform.Client` takes no dependency on a companion, and `DefaultKnowledgeBase` has to construct the companion's own module — the same reason `AIAssistantMode` lives in `ToolUp.AI.Client`. The transform is therefore a companion-owned `ClientConfig * ErasedModule list` function that composes under either entry point.
+
+The mode governs *client* auto-injection only. Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring `DataManagerMode`'s relationship to `fileManagementApi`.
+
+A deployment that never calls `withKnowledgeBase` is unchanged (GP 11): there is no SDK-side default mode, and the direct `KnowledgeBaseView.register ()` registration keeps working. The three integration contracts an `ExternalKnowledgeBase` must honour are documented on the DU case itself and in [`docs/knowledge-base/extending.md`](../../docs/knowledge-base/extending.md).
 
 ## Companion docs
 

@@ -153,7 +153,7 @@ Html.button [
 ]
 ```
 
-`Toolup.NarrativeCommit.submit` is a global function with no compile-time dependency on KB. The handler is installed by `KnowledgeBaseView.installNarrativeCommit ()` at app boot.
+`Toolup.NarrativeCommit.submit` is a global function with no compile-time dependency on KB. The handler is `KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers.NarrativeCommitHandler` at compose time (directly, or by `KnowledgeBaseClientConfig.withKnowledgeBase`).
 
 The handler:
 1. Sends the narrative + title via `KnowledgeApi.IngestNarrative` (ToolUp.Remoting).

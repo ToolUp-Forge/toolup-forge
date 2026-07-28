@@ -38,7 +38,7 @@ Three packages:
 |---|---|
 | `ToolUp.KnowledgeBase.Core` | Shared types: `KnowledgeApi` ToolUp.Remoting contract, `KnowledgeDocument`, `IngestionStatus`, `KnowledgeSource` (`UploadedFile \| FromNarrative \| Note`), `NoteSource`, `AddNoteRequest`, `UpdateNoteRequest`, `AIContextEntry`, `IngestionStatusUpdate`. Plus the wire-format literal `IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"`. |
 | `ToolUp.KnowledgeBase.Server` | Document upload + multi-format extraction (PDF / PPTX / DOCX / XLSX / CSV), ingestion observer, narrative-commit, notes / AI-context API, `KnowledgeBase.Server.knowledgeApi`. Depends on `ToolUp.AI.Server` + `ToolUp.RAG.Server`. Heavy NuGet deps (`PdfPig`, `DocumentFormat.OpenXml`) stay scoped here. |
-| `ToolUp.KnowledgeBase.Client` | Multi-page Feliz module: `/documents`, `/notes`, `/ai-context`. Narrative-commit installer (`KnowledgeBaseView.installNarrativeCommit`). KB icons. |
+| `ToolUp.KnowledgeBase.Client` | Multi-page Feliz module: `/documents`, `/notes`, `/platform-library`, `/ai-context`. Narrative-commit broker (`KnowledgeBaseView.narrativeCommitHandler`), the `KnowledgeBaseMode` override DU + `KnowledgeBaseClientConfig.withKnowledgeBase`. KB icons. |
 
 ## Quick start
 
@@ -72,16 +72,17 @@ RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
 Wire the client composition root:
 
 ```fsharp
-open ToolUp.KnowledgeBase
-
-KnowledgeBaseView.installNarrativeCommit ()
+open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
+open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 
 let modules = [
-    KnowledgeBaseView.register ()
     // ... other modules
 ]
 
-AIClientConfig.withAIAssistant aiMode clientConfig modules
+let clientConfig, modules =
+    KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
+
+AIClientConfig.program aiMode clientConfig modules
 |> Program.withReactSynchronous "elmish-app"
 |> Program.run
 ```

@@ -22,9 +22,11 @@
     <ItemGroup>
         <Compile Include="Client\ClientModel.fs" />
         <Compile Include="Client\Icons.fs" />
+        <Compile Include="Client\KnowledgeBaseClientTypes.fs" />
         <Compile Include="Client\KnowledgeListView.fs" />
         <Compile Include="Client\ClientView.fs" />
         <Compile Include="Client\PlatformKnowledgeAdminUI.fs" />
+        <Compile Include="Client\KnowledgeBaseClientConfig.fs" />
     </ItemGroup>
     <!-- Fable.* / Feliz / FSharp.Core resolved transitively via
          ToolUp.Platform.Client + the .NET SDK. -->
