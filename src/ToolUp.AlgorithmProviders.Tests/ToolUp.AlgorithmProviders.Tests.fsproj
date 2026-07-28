@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 11.E.3 — per-provider test pack for the shipped
+         AlgorithmProviders companions, mirroring the
+         `ToolUp.AIProviders.Tests` shape (one pack per provider family,
+         separate from the vendor-free SDK pack). It is separate from
+         `ToolUp.Algorithms.Tests` precisely because that pack carries NO
+         vendor dependency and should keep carrying none.
+
+         Two halves: the shared contract packs bound against the real
+         provider, and this companion's own known-answer numerical
+         fixtures. No env gating — the numerics are in-process, so a
+         fresh checkout runs every case. -->
+    <ItemGroup>
+        <Compile Include="Support\MathNetProviderFixtures.fs" />
+        <Compile Include="Tests\MathNetDescriptiveTests.fs" />
+        <Compile Include="Tests\MathNetRegressionTests.fs" />
+        <Compile Include="Tests\MathNetDistributionTests.fs" />
+        <Compile Include="Tests\MathNetSmoothingTests.fs" />
+        <Compile Include="Tests\MathNetProviderCompositionTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The seam + its in-tree contract packs. Referencing the SDK's
+             own test project is what makes "a provider companion
+             validates against the same bar" literal rather than a copy
+             of the cases that drifts. -->
+        <ProjectReference Include="..\ToolUp.Algorithms.Core\ToolUp.Algorithms.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Server\ToolUp.Algorithms.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Tests\ToolUp.Algorithms.Tests.fsproj" />
+        <!-- The provider companion under test. -->
+        <ProjectReference Include="..\AlgorithmProviders\MathNet\MathNetAlgorithmProvider.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

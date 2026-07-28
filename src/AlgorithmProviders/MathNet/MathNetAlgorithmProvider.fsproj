@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.AlgorithmProviders.MathNet</PackageId>
+        <AssemblyName>ToolUp.AlgorithmProviders.MathNet</AssemblyName>
+        <Description>Math.NET Numerics implementation of the ToolUp.Algorithms provider seam — IRegressionFitter / IDescriptiveStats / IDistributionFitter / ITimeSeriesFilter. Honours and echoes the four convention fields (quantile definition, smoothing alignment, estimation method, categorical reference levels) and refuses what it cannot serve as typed data rather than substituting silently.</Description>
+        <PackageTags>fsharp;sdk;algorithms;statistics;regression;quantile;mathnet;provider</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="MathNetAlgorithmSupport.fs" />
+        <Compile Include="MathNetDescriptiveStats.fs" />
+        <Compile Include="MathNetRegressionFitter.fs" />
+        <Compile Include="MathNetDistributionFitter.fs" />
+        <Compile Include="MathNetTimeSeriesFilter.fs" />
+        <Compile Include="MathNetAlgorithmProvider.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The seam this companion implements. `ToolUp.Algorithms.Server`
+             carries the four fitter interfaces, `AlgorithmProviderParts`
+             and the `AlgorithmsServerApp` compose surface; `.Core` carries
+             the request / result records. GP 1 — the vendor dependency
+             stops here and never reaches `ToolUp.Algorithms.*`. -->
+        <ProjectReference Include="..\..\ToolUp.Algorithms.Core\ToolUp.Algorithms.Core.fsproj" />
+        <ProjectReference Include="..\..\ToolUp.Algorithms.Server\ToolUp.Algorithms.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Math.NET Numerics 5.0 (MIT). The `.FSharp` package carries the
+             F#-facing modules and depends on the core assembly, so one
+             reference brings both. Versions are centrally managed in
+             Directory.Packages.props. -->
+        <PackageReference Include="Mathnet.Numerics.FSharp" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

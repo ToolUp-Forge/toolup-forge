@@ -43,6 +43,15 @@ let config = {
             // failure path, the dispatcher's typed error surface, and
             // the AI tool edge. No env gating; no vendor dependency.
             TestPack.create "Algorithms" "src/ToolUp.Algorithms.Tests/ToolUp.Algorithms.Tests.fsproj"
+            // Phase 11.E.3 — the Math.NET algorithm provider: the shared
+            // contract packs bound against a real vendor implementation,
+            // plus known-answer numerical fixtures for the hand-written
+            // estimators (R-7 quantiles, OLS + categorical encoding,
+            // each distribution's parameterisation, centred-vs-trailing
+            // alignment). No env gating — the numerics run in-process.
+            TestPack.create
+                "AlgorithmProviders"
+                "src/ToolUp.AlgorithmProviders.Tests/ToolUp.AlgorithmProviders.Tests.fsproj"
         ]
 }
 
