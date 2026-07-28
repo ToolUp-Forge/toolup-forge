@@ -54,6 +54,14 @@
              placed early so module / companion / datatype / tool
              registration surfaces in every later tier can reference it. -->
         <Compile Include="Shared\ComponentId.fs" />
+        <!-- Phase 580 — tier-shared module identity: the name→id
+             derivation both tiers apply, derived-vs-explicit
+             classification, and the compose-time duplicate-id gate the
+             client shell was missing (the server has run
+             ComponentId.ensureUnique since Phase 279). Pure + Fable-safe;
+             immediately after ComponentId.fs, whose ofModule derivation
+             it lifts ids through. -->
+        <Compile Include="Shared\ModuleIdentity.fs" />
         <!-- Phase 289 — component-scoped configuration section addressable
              by ComponentId + the pure, deterministic env-var-name
              derivation (TOOLUP_COMPONENT__<id>__<key>). Fable-safe (string

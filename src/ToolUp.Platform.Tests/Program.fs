@@ -676,6 +676,7 @@ let allTests =
         AdAnalyticsSinkTests.noOpTests
         UserClaimsTests.tests
         ModuleGroupingValidatorTests.tests
+        ModuleIdentityTests.tests
         AnonymousModeContractTests.tests
         // Phase 245 — per-team module exposure folded into
         // `computeAccessibleModules` (separate `[<Tests>]` binding that

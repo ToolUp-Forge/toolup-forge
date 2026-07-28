@@ -876,6 +876,12 @@
              tested against hand-built ErasedModule values; render
              machinery is never invoked. -->
         <Compile Include="InProcess\ModuleGroupingValidatorTests.fs" />
+        <!-- Phase 580 — client-shell module identity gate. Drives the
+             tier-shared ModuleIdentity derivation / classification /
+             duplicate-id gate `Client.prepareModules` invokes, plus the
+             cross-tier identity law against the real ServerApp.addModules
+             resolution. Hand-built ErasedModule values; no render. -->
+        <Compile Include="InProcess\ModuleIdentityTests.fs" />
         <!-- Phase 55 — AnonymousMode contract pack. Pins the
              intertwined branches of the extracted pure helper
              `computeAccessibleModules` (Anonymous short-circuit,

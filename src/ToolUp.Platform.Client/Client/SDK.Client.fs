@@ -2679,6 +2679,45 @@ module Client =
         view config modules chrome model dispatch
         |> AuthUIProvider.gate config.AuthUI resolvedSubjectKind
 
+    // ─── Phase 580 — client-shell module identity gate ────────────────
+    //
+    // `Model.ModuleStates` is a `Map<string, obj>` keyed by
+    // `Definition.Id`, so two registered modules sharing an id collapse
+    // into one entry: the second `Init` overwrites the first and both
+    // modules' `update` calls thereafter run against whichever `Model`
+    // won. The server has refused that shape since Phase 279
+    // (`ComponentId.ensureUnique` in `ServerApp.run`); the client shell
+    // had no equivalent. The gate below runs over the *composed* list
+    // (`prepareModules`' output — consumer modules plus SDK built-ins,
+    // exactly the list that keys `ModuleStates`) before the shell's
+    // `Program` is constructed, so a collision is a compose-time failure
+    // naming both display names rather than a silent state merge.
+    //
+    // The derivation + collision logic is tier-shared in
+    // `ToolUp.Platform.Core` (`Shared/ModuleIdentity.fs`) so the client
+    // and the server cannot drift on what a module's identity is.
+
+    /// The composed module-identity table: one row per module carrying
+    /// its declared id, display name, resolved `ComponentId`, and whether
+    /// the id was derived from `Name` (the `ClientModule.create` default,
+    /// spaces stripped) or explicitly declared via `ClientModule.withId`.
+    ///
+    /// Exposed so a consumer can audit the auto-derivation that would
+    /// otherwise be invisible — pass either the app's own module list or
+    /// `prepareModules config modules` for the fully-composed set.
+    let moduleIdentityTable (modules: ErasedModule list) : ModuleIdentityRow list =
+        modules
+        |> List.map (fun m -> m.Definition.Name, m.Definition.Id)
+        |> ModuleIdentity.table
+
+    /// `moduleIdentityTable` rendered as one line per module — the
+    /// human-readable derived-vs-explicit audit surface. Log it (or
+    /// assert on it) from a composition root when a module's identity is
+    /// in question; the same rendering is appended to the compose-time
+    /// duplicate-id failure.
+    let moduleIdentityReport (modules: ErasedModule list) : string =
+        modules |> moduleIdentityTable |> ModuleIdentity.render
+
     /// Inject the SDK built-in modules around the app's own list. The
     /// data manager is prepended so it sits near the top of the sidebar
     /// — the natural "where you add data" entry point. Every
@@ -2979,7 +3018,19 @@ module Client =
             @ tenantLifecycleAdmin
             @ platformUsers
 
-        home @ noActiveTeamLanding @ leading @ workApp @ trailing @ debugApp
+        let composed = home @ noActiveTeamLanding @ leading @ workApp @ trailing @ debugApp
+
+        // Phase 580 — refuse a composition where two modules resolve to
+        // the same id before the shell keys any state by it. Runs on the
+        // composed list (so a consumer module colliding with an SDK
+        // built-in is caught too) and on every composition path, since
+        // both `Client.program` and the companion composers that build
+        // their own `Program` (ToolUp.AI's `withSidePanel`) funnel
+        // through here. A composition with unique ids is unaffected —
+        // same list, same order (GP 11).
+        ModuleIdentity.ensureUnique "client module composition" (moduleIdentityTable composed)
+
+        composed
 
     /// Aggregate every module's `ClientQueryHandlers` into the per-module
     /// registry of the shared `ClientModuleQueryBus`. Modules are keyed by
@@ -3208,11 +3259,23 @@ module Client =
             else
                 "no"
 
+        // Phase 580 — the derived-vs-explicit id split, so the invisible
+        // `Name`-derivation is at least *countable* from the boot line.
+        // The full per-module table stays off the console by default
+        // (a table per boot is noise for a deployment that never asks);
+        // consumers audit it on demand via `Client.moduleIdentityReport`,
+        // and the compose-time duplicate-id failure prints it in full.
+        let derivedIds, explicitIds =
+            moduleIdentityTable modules
+            |> List.partition (fun r -> r.Origin = DerivedFromName)
+
         sprintf
-            "[ToolUp] composed | surfaces=%s | authUI=%s | modules=%d | credentialUIs=%s | extraHeaderProviders=%d | authBridge=%s | knowledgeBase=%s"
+            "[ToolUp] composed | surfaces=%s | authUI=%s | modules=%d | moduleIds=derived:%d,explicit:%d | credentialUIs=%s | extraHeaderProviders=%d | authBridge=%s | knowledgeBase=%s"
             surfacesLabel
             authUI
             (List.length modules)
+            (List.length derivedIds)
+            (List.length explicitIds)
             credKindsStr
             providers
             bridge
