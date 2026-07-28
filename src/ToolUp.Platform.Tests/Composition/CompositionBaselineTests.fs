@@ -69,6 +69,15 @@ let private baselinePath () =
 let private topologyBaselinePath () =
     Path.Combine(repoRoot (), "composition-baselines", "event-topology-baseline.json")
 
+/// Phase 433 — the data-footprint half of the same gate, in its own golden
+/// file beside the other two, for the same reason: a sidecar keyed by
+/// `ComponentId` rather than a field grown onto a shipped record. This is
+/// the baseline that makes "a component started persisting personal data" a
+/// reviewable change rather than a silent one — the delta renders the class
+/// with its `PII` marker, so the failure says what moved.
+let private footprintBaselinePath () =
+    Path.Combine(repoRoot (), "composition-baselines", "data-footprint-baseline.json")
+
 /// Regeneration path: `TOOLUP_APPROVE_COMPOSITION=1` rewrites the baseline
 /// instead of comparing.
 let private approveModeOn () =
@@ -173,6 +182,18 @@ let private referenceTopology () : EventTopology =
 let private serialiseTopology (topology: EventTopology) : string =
     JsonSerializer.Serialize(EventTopology.toWire topology, jsonOptions).Replace("\r\n", "\n")
 
+/// Phase 433 — the reference composition's derived data footprint. Same
+/// modules + audit sink, third lens: what each component leaves at rest and
+/// behind which store seam.
+let private referenceFootprint () : FootprintSignature =
+    DataFootprintDerivation.ofApp (referenceApp ())
+
+/// The footprint persisted through its plain-string wire projection, so the
+/// golden file never depends on the `Set` / union shapes round-tripping
+/// through a serialiser.
+let private serialiseFootprint (signature: FootprintSignature) : string =
+    JsonSerializer.Serialize(DataFootprint.toWire signature, jsonOptions).Replace("\r\n", "\n")
+
 // ── The gate ──
 
 let private gate = test "reference composition matches the committed baseline" {
@@ -227,6 +248,37 @@ let private topologyGate = test "reference event topology matches the committed 
             failtestf
                 "Event-topology drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the event-topology-baseline.json edit in the same PR so the messaging-graph change is reviewed."
                 (EventTopology.renderDelta delta)
+}
+
+/// Phase 433 — the same gate over the derived data footprint: a component
+/// that starts persisting a class, stops persisting one, or has its class
+/// re-classified as personal data fails CI until the change is acknowledged
+/// by regenerating the golden file in the same PR. The failure is rendered
+/// through `DataFootprint.renderDelta`, so an operator sees which component
+/// started storing what, and whether it is PII.
+let private footprintGate = test "reference data footprint matches the committed baseline" {
+    let signature = referenceFootprint ()
+    let rendered = serialiseFootprint signature
+    let path = footprintBaselinePath ()
+
+    if approveModeOn () then
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, rendered)
+    elif not (File.Exists path) then
+        failtestf
+            "no committed data-footprint baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/data-footprint-baseline.json in the same PR."
+            path
+    else
+        let baseline =
+            JsonSerializer.Deserialize<DataFootprintWireEntry list>(File.ReadAllText path, jsonOptions)
+            |> DataFootprint.ofWire
+
+        let delta = DataFootprint.diff baseline signature
+
+        if not (DataFootprint.isEmptyDelta delta) then
+            failtestf
+                "Data-footprint drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the data-footprint-baseline.json edit in the same PR so the data-at-rest change is reviewed."
+                (DataFootprint.renderDelta delta)
 }
 
 // ── Gate-mechanism fixtures: the load-bearing logic is the diff-driven
@@ -318,6 +370,42 @@ let private mechanism =
                 "Subscriptions"
                 "the readable failure names the Subscriptions section"
         }
+
+        // Phase 433 — the same two properties for the footprint gate.
+        test "the reference footprint diffs clean against itself" {
+            let f = referenceFootprint ()
+
+            Expect.isTrue (DataFootprint.isEmptyDelta (DataFootprint.diff f f)) "a footprint is identical to itself"
+        }
+
+        test "the footprint round-trips through the baseline JSON format" {
+            let f = referenceFootprint ()
+
+            let back =
+                JsonSerializer.Deserialize<DataFootprintWireEntry list>(serialiseFootprint f, jsonOptions)
+                |> DataFootprint.ofWire
+
+            Expect.isTrue
+                (DataFootprint.isEmptyDelta (DataFootprint.diff f back))
+                "serialize -> deserialize preserves the footprint structurally"
+        }
+
+        test "a newly-persisted PII class trips the footprint gate" {
+            let baseline = referenceFootprint ()
+
+            let regressed =
+                baseline
+                |> DataFootprint.reclassify [ DataClass.pii "SalesData" EntityClass DataObjectStoreSeam ]
+
+            let delta = DataFootprint.diff baseline regressed
+            Expect.isFalse (DataFootprint.isEmptyDelta delta) "a PII re-classification is not an empty diff"
+
+            Expect.stringContains
+                (DataFootprint.renderDelta delta)
+                "PII"
+                "the readable failure says the class now carries personal data"
+        }
     ]
 
-let tests = testList "CompositionBaseline" [ gate; topologyGate; mechanism ]
+let tests =
+    testList "CompositionBaseline" [ gate; topologyGate; footprintGate; mechanism ]

@@ -402,6 +402,14 @@
              rule at its configurable severity; and the id-keyed diff +
              wire projection the golden-file gate runs on. -->
         <Compile Include="InProcess\EventTopologyTests.fs" />
+        <!-- Phase 433 — component data-footprint manifest: per-ComponentId
+             read / write / persist sets derived from registered DataTypes and
+             composed audit sinks; the declared PII re-classification; the
+             composition join over the Phase 280 manifest (restricted to what
+             was actually composed); the DSR/offboarding coverage rule firing
+             on a synthetic gap; and the id-keyed diff + wire projection the
+             golden-file gate runs on. -->
+        <Compile Include="InProcess\DataFootprintTests.fs" />
         <!-- Phase 581 — module-surface descriptor: one module's provides /
              needs derived from its own ServerModule (+ erased client)
              registrations; the coverage diff against the reflected record

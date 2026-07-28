@@ -1,0 +1,62 @@
+[
+  {
+    "FootprintComponent": "companion:IAuditSink/primary-archive",
+    "Read": [],
+    "Written": [
+      {
+        "Name": "primary-archive",
+        "KindToken": "audit-record",
+        "SeamToken": "IAuditSink",
+        "Pii": false
+      }
+    ],
+    "Persisted": [
+      {
+        "Name": "primary-archive",
+        "KindToken": "audit-record",
+        "SeamToken": "IAuditSink",
+        "Pii": false
+      }
+    ]
+  },
+  {
+    "FootprintComponent": "module:inventory-service",
+    "Read": [],
+    "Written": [
+      {
+        "Name": "StockData",
+        "KindToken": "entity",
+        "SeamToken": "IDataObjectStore",
+        "Pii": false
+      }
+    ],
+    "Persisted": [
+      {
+        "Name": "StockData",
+        "KindToken": "entity",
+        "SeamToken": "IDataObjectStore",
+        "Pii": false
+      }
+    ]
+  },
+  {
+    "FootprintComponent": "module:orders-service",
+    "Read": [],
+    "Written": [
+      {
+        "Name": "SalesData",
+        "KindToken": "entity",
+        "SeamToken": "IDataObjectStore",
+        "Pii": false
+      }
+    ],
+    "Persisted": [
+      {
+        "Name": "SalesData",
+        "KindToken": "entity",
+        "SeamToken": "IDataObjectStore",
+        "Pii": false
+      }
+    ]
+  }
+]

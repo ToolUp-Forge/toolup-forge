@@ -89,6 +89,18 @@
              derivation + presence preflight live Server-side in
              ComponentRequirementsPreflight. -->
         <Compile Include="Shared\ComponentRequirements.fs" />
+        <!-- Phase 433 — component data-footprint types: what a composed
+             component STORES and where (data classes × store seam × a
+             declared ContainsPii marker), keyed by the same ComponentId in a
+             FootprintSignature — the third parallel projection beside
+             CapabilitySignature (282) and RequirementsSignature (432). Carries
+             the componentwise join (the Phase 296 shape applied to
+             data-at-rest), the composed-surface queries, the id-keyed diff and
+             wire projection, and the pure DSR-coverage evaluation. Fable-safe
+             (DUs + records + Set/Map); after ComponentId.fs. The derivation
+             from live registrations + the preflight rules live Server-side in
+             DataFootprintDerivation / DataFootprintPreflight. -->
+        <Compile Include="Shared\DataFootprint.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
              Phase 69d markers in ToolUp.Remoting.Server). Placed early so
              every later API record file can annotate its fields. The SDK's

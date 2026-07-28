@@ -900,6 +900,19 @@
              CompositionValidator (reuses its defect / rule-descriptor types);
              beside ModuleSurface, whose per-module lens it aggregates. -->
         <Compile Include="Server\EventTopology.fs" />
+        <!-- Phase 433 — component data-footprint manifest: what each composed
+             component stores and where, derived from the live registrations
+             (registered DataTypes attributed to their producing module,
+             composed audit sinks attributed to their own multi-impl id), with
+             the residual companion footprint + the ContainsPii judgement
+             declared on top. Plus the composition join over the Phase 280
+             manifest (the Phase 296 effect-join shape applied to data-at-rest)
+             and the opt-in structural-class DSR/offboarding completeness
+             preflight. After ServerApp (reads ServerModule / ServerApp
+             accumulators), CompositionManifest (the join restricts to it) and
+             CompositionValidator (reuses its defect / rule-descriptor types);
+             beside EventTopology, the sibling derived lens. -->
+        <Compile Include="Server\DataFootprint.fs" />
         <!-- Phase 288 — component provenance: which package/assembly+version
              a composed companion came from, keyed by the same ComponentId the
              manifest carries (id-join, no manifest-shape change). After
