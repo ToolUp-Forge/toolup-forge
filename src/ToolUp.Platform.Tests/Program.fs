@@ -249,6 +249,12 @@ let allTests =
         // stores and where, derived from the live registrations; the
         // composition join, the DSR/offboarding coverage rule, and the diff.
         DataFootprintTests.tests
+        // Phase 438 — authorization-surface manifest: what each component
+        // exposes and what each entry requires, derived from the live
+        // registrations + the dispatcher's own Phase 69d classifier; the
+        // anonymous-reachable headline, the policy resolution, and the
+        // severity-bearing diff.
+        AuthorizationSurfaceTests.tests
         // Phase 581 — module-surface descriptor: one module's provides / needs
         // derived from its own registrations; the coverage diff against the
         // reflected ServerModule / ErasedModule fields is the drift guard.

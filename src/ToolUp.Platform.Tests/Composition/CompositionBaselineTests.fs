@@ -78,6 +78,15 @@ let private topologyBaselinePath () =
 let private footprintBaselinePath () =
     Path.Combine(repoRoot (), "composition-baselines", "data-footprint-baseline.json")
 
+/// Phase 438 — the authorization-surface half of the same gate, in its own
+/// golden file beside the other three, for the same sidecar reason. This is
+/// the baseline that makes "an endpoint became reachable without
+/// authentication" or "a requirement was weakened" a CI failure rather than
+/// a pentest finding — the delta leads with its severity, so the failure
+/// says not just what moved but how loudly.
+let private authorizationBaselinePath () =
+    Path.Combine(repoRoot (), "composition-baselines", "authorization-surface-baseline.json")
+
 /// Regeneration path: `TOOLUP_APPROVE_COMPOSITION=1` rewrites the baseline
 /// instead of comparing.
 let private approveModeOn () =
@@ -133,12 +142,17 @@ type private StubJobHandler() =
 /// The job declaration and the tool's `EmitsActions` are read by the
 /// Phase 431 topology gate and by nothing in the Phase 280 manifest — the
 /// manifest enumerates modules / companions / datatypes / tools, so the
-/// composition baseline is unaffected by them.
+/// composition baseline is unaffected by them. The Phase 66 route
+/// declarations are the same story for the Phase 438 authorization gate:
+/// a route prefix under the strict default and one deliberately public
+/// endpoint, so the baseline carries at least one entry of each
+/// classification — including the anonymous-reachable headline class.
 let private referenceModules () : ServerModule list =
     let orders =
         ServerModule.create "Orders"
         |> ServerModule.withComponentId "orders-service"
         |> ServerModule.withDataTypes [ stubDataType "SalesData" ]
+        |> ServerModule.withRoutePrefix "/api/orders/"
         |> ServerModule.withAITools [
             stubTool
                 "orders.run"
@@ -156,6 +170,8 @@ let private referenceModules () : ServerModule list =
         ServerModule.create "Inventory"
         |> ServerModule.withComponentId "inventory-service"
         |> ServerModule.withDataTypes [ stubDataType "StockData" ]
+        |> ServerModule.withRoutePrefix "/api/inventory/"
+        |> ServerModule.withRouteSurfaceRequirement "GET" "/api/inventory/public/stock" SurfaceRequirement.public_
         |> ServerModule.withJobHandler ("inventory.on-order", StubJobHandler(), OnEvent "OrderPlaced")
 
     [ orders; inventory ]
@@ -193,6 +209,18 @@ let private referenceFootprint () : FootprintSignature =
 /// through a serialiser.
 let private serialiseFootprint (signature: FootprintSignature) : string =
     JsonSerializer.Serialize(DataFootprint.toWire signature, jsonOptions).Replace("\r\n", "\n")
+
+/// Phase 438 — the reference composition's derived authorization surface.
+/// Same modules, fourth lens: what each component exposes, and what each
+/// exposed entry requires.
+let private referenceAuthorizationSurface () : AuthorizationSurface =
+    AuthorizationSurface.ofModules (referenceModules ())
+
+/// The surface persisted through its plain-string wire projection, so the
+/// golden file never depends on the union shapes round-tripping through a
+/// serialiser.
+let private serialiseAuthorizationSurface (surface: AuthorizationSurface) : string =
+    JsonSerializer.Serialize(AuthorizationSurface.toWire surface, jsonOptions).Replace("\r\n", "\n")
 
 // ── The gate ──
 
@@ -279,6 +307,38 @@ let private footprintGate = test "reference data footprint matches the committed
             failtestf
                 "Data-footprint drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the data-footprint-baseline.json edit in the same PR so the data-at-rest change is reviewed."
                 (DataFootprint.renderDelta delta)
+}
+
+/// Phase 438 — the same gate over the derived authorization surface: an
+/// endpoint that becomes reachable without authentication, a requirement
+/// that is weakened, or a newly-exposed surface fails CI until the change
+/// is acknowledged by regenerating the golden file in the same PR. The
+/// failure is rendered through `AuthorizationSurface.renderDelta`, which
+/// leads with the severity and marks the anonymous-reachable additions —
+/// so the reviewer sees the attack-surface growth, not just a JSON diff.
+let private authorizationGate = test "reference authorization surface matches the committed baseline" {
+    let surface = referenceAuthorizationSurface ()
+    let rendered = serialiseAuthorizationSurface surface
+    let path = authorizationBaselinePath ()
+
+    if approveModeOn () then
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, rendered)
+    elif not (File.Exists path) then
+        failtestf
+            "no committed authorization-surface baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/authorization-surface-baseline.json in the same PR."
+            path
+    else
+        let baseline =
+            JsonSerializer.Deserialize<AuthorizationSurfaceWireEntry list>(File.ReadAllText path, jsonOptions)
+            |> AuthorizationSurface.ofWire
+
+        let delta = AuthorizationSurface.diff baseline surface
+
+        if not (AuthorizationSurface.isEmptyDelta delta) then
+            failtestf
+                "Authorization-surface drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the authorization-surface-baseline.json edit in the same PR so the exposure change is reviewed."
+                (AuthorizationSurface.renderDelta delta)
 }
 
 // ── Gate-mechanism fixtures: the load-bearing logic is the diff-driven
@@ -405,7 +465,59 @@ let private mechanism =
                 "PII"
                 "the readable failure says the class now carries personal data"
         }
+
+        // Phase 438 — the same two properties for the authorization gate.
+        test "the reference authorization surface diffs clean against itself" {
+            let s = referenceAuthorizationSurface ()
+
+            Expect.isTrue
+                (AuthorizationSurface.isEmptyDelta (AuthorizationSurface.diff s s))
+                "a surface is identical to itself"
+        }
+
+        test "the authorization surface round-trips through the baseline JSON format" {
+            let s = referenceAuthorizationSurface ()
+
+            let back =
+                JsonSerializer.Deserialize<AuthorizationSurfaceWireEntry list>(
+                    serialiseAuthorizationSurface s,
+                    jsonOptions
+                )
+                |> AuthorizationSurface.ofWire
+
+            Expect.isTrue
+                (AuthorizationSurface.isEmptyDelta (AuthorizationSurface.diff s back))
+                "serialize -> deserialize preserves the surface structurally"
+        }
+
+        test "a newly anonymous-reachable endpoint trips the authorization gate at critical severity" {
+            let baseline = referenceAuthorizationSurface ()
+
+            // The admin sub-tree is opened to anonymous callers — the
+            // single highest-signal change this gate exists to catch.
+            let regressed =
+                AuthorizationSurface.ofModules [
+                    ServerModule.create "Orders"
+                    |> ServerModule.withComponentId "orders-service"
+                    |> ServerModule.withRoutePrefix "/api/orders/admin/"
+                    |> ServerModule.withDefaultSurfaceRequirement SurfaceRequirement.public_
+                ]
+
+            let delta = AuthorizationSurface.diff baseline regressed
+
+            Expect.isFalse (AuthorizationSurface.isEmptyDelta delta) "an opened endpoint is not an empty diff"
+
+            Expect.equal
+                (AuthorizationSurface.severity delta)
+                CriticalAuthorizationDrift
+                "a new anonymous-reachable entry is the critical class"
+
+            let rendered = AuthorizationSurface.renderDelta delta
+            Expect.stringContains rendered "CRITICAL" "the readable failure leads with the severity"
+
+            Expect.stringContains rendered "/api/orders/admin/" "and names the endpoint that became reachable"
+        }
     ]
 
 let tests =
-    testList "CompositionBaseline" [ gate; topologyGate; footprintGate; mechanism ]
+    testList "CompositionBaseline" [ gate; topologyGate; footprintGate; authorizationGate; mechanism ]

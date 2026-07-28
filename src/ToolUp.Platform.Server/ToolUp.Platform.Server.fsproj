@@ -913,6 +913,20 @@
              CompositionValidator (reuses its defect / rule-descriptor types);
              beside EventTopology, the sibling derived lens. -->
         <Compile Include="Server\DataFootprint.fs" />
+        <!-- Phase 438 — authorization-surface manifest: every externally
+             reachable thing a component contributes (route prefixes + exact
+             route overrides under their Phase 66 admit sets, remoting API
+             record fields through the Phase 69d classifier, AI-drivable tools,
+             OnEvent job handlers) with its resolved default-deny
+             classification — explicit requirement / inherited default-deny /
+             anonymous-reachable. Plus the Phase 113 ActionPolicy resolution
+             over the floor entries, and a severity-bearing id-keyed diff for
+             the Phase 287 golden-file gate. After ServerApp (reads
+             ServerModule) and Remoting\Auth.fs (reads the dispatcher's own
+             AuthClassifier, so the manifest cannot drift from what is
+             enforced); beside EventTopology / DataFootprint, the sibling
+             derived lenses. -->
+        <Compile Include="Server\AuthorizationSurface.fs" />
         <!-- Phase 288 — component provenance: which package/assembly+version
              a composed companion came from, keyed by the same ComponentId the
              manifest carries (id-join, no manifest-shape change). After

@@ -1,0 +1,41 @@
+[
+  {
+    "ComponentIdentity": "module:inventory-service",
+    "KindLabel": "event-handler",
+    "EndpointPath": "inventory.on-order",
+    "Requirements": ["event:OrderPlaced"
+    ],
+    "Classification": "inherited-default-deny"
+  },
+  {
+    "ComponentIdentity": "module:inventory-service",
+    "KindLabel": "route",
+    "EndpointPath": "/api/inventory/",
+    "Requirements": ["subject:TeamMemberKind","subject:UserKind"
+    ],
+    "Classification": "inherited-default-deny"
+  },
+  {
+    "ComponentIdentity": "module:inventory-service",
+    "KindLabel": "route",
+    "EndpointPath": "GET /api/inventory/public/stock",
+    "Requirements": ["subject:AnonymousKind","subject:ClaimBearerKind","subject:TeamMemberKind","subject:UserKind"
+    ],
+    "Classification": "anonymous-reachable"
+  },
+  {
+    "ComponentIdentity": "module:orders-service",
+    "KindLabel": "ai-tool",
+    "EndpointPath": "orders.run",
+    "Requirements": [],
+    "Classification": "inherited-default-deny"
+  },
+  {
+    "ComponentIdentity": "module:orders-service",
+    "KindLabel": "route",
+    "EndpointPath": "/api/orders/",
+    "Requirements": ["subject:TeamMemberKind","subject:UserKind"
+    ],
+    "Classification": "inherited-default-deny"
+  }
+]
