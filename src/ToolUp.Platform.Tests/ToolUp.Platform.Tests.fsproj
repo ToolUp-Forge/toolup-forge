@@ -395,6 +395,13 @@
              ServerConfig registry (reflection); the slot set = the reflected
              companion-interface set (derived, not hand-listed). -->
         <Compile Include="InProcess\ComposableSurfaceTests.fs" />
+        <!-- Phase 431 — event-topology manifest: per-ComponentId emit /
+             subscribe sets derived from OnEvent job triggers, tool
+             EmitsActions declarations and observed IEventStore writes; the
+             dead-topic / orphan-subscription queries; the opt-in preflight
+             rule at its configurable severity; and the id-keyed diff +
+             wire projection the golden-file gate runs on. -->
+        <Compile Include="InProcess\EventTopologyTests.fs" />
         <!-- Phase 581 — module-surface descriptor: one module's provides /
              needs derived from its own ServerModule (+ erased client)
              registrations; the coverage diff against the reflected record

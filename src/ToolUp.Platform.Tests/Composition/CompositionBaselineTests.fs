@@ -58,6 +58,17 @@ let private repoRoot () =
 let private baselinePath () =
     Path.Combine(repoRoot (), "composition-baselines", "composition-baseline.json")
 
+/// Phase 431 — the event-topology half of the same gate, in its own
+/// golden file beside the manifest one. A separate file rather than a
+/// field grown onto `CompositionManifest`: growing a shipped F# record
+/// breaks its constructor (the reason recorded on `SlotRequirementSet`
+/// and `ClassifiedCompositionRule`), and the two baselines join on the
+/// `ComponentId`s they both key against. Both are approved by the same
+/// `TOOLUP_APPROVE_COMPOSITION` flag, so accepting a composition change
+/// accepts its topology consequence in the same act.
+let private topologyBaselinePath () =
+    Path.Combine(repoRoot (), "composition-baselines", "event-topology-baseline.json")
+
 /// Regeneration path: `TOOLUP_APPROVE_COMPOSITION=1` rewrites the baseline
 /// instead of comparing.
 let private approveModeOn () =
@@ -81,38 +92,68 @@ let private stubDataType (id: string) : DataType = {
     Process = fun _ -> async { return failwith "stub DataType.Process is never called by the manifest projector" }
 }
 
-let private stubTool (name: string) : AIToolDefinition * (HttpContext -> string -> Async<string>) =
+let private stubTool
+    (name: string)
+    (emits: ActionDeclaration list option)
+    : AIToolDefinition * (HttpContext -> string -> Async<string>) =
     {
         Name = name
         Description = ""
         Parameters = []
         SourceModule = "baseline-reference"
-        EmitsActions = None
+        EmitsActions = emits
         Location = ServerResident
         Surface = Both
     },
     (fun _ _ -> async { return "" })
 
-/// The reference composition the gate snapshots — a couple of modules
-/// (explicit stable ids), a datatype + tool on the first, and an audit-sink
-/// companion. Representative enough that an accidental drop / swap /
-/// datatype change in forge's compose surface is caught, small enough to
-/// stay stable across unrelated changes. Editing it is a deliberate act
-/// that regenerates the baseline.
-let private referenceApp () : ServerApp =
+/// A job handler that is never dispatched — the topology derivation reads
+/// the declaration's `Trigger`, never the handler.
+type private StubJobHandler() =
+    interface IJobHandler with
+        member _.Execute(_) = async { return JobResult.Success }
+
+/// The reference composition's modules — a couple of them (explicit
+/// stable ids), a datatype + an action-emitting tool on the first, and an
+/// `OnEvent` subscription on the second. Representative enough that an
+/// accidental drop / swap / datatype change (or a severed messaging edge)
+/// in forge's compose surface is caught, small enough to stay stable
+/// across unrelated changes. Editing it is a deliberate act that
+/// regenerates both baselines.
+///
+/// The job declaration and the tool's `EmitsActions` are read by the
+/// Phase 431 topology gate and by nothing in the Phase 280 manifest — the
+/// manifest enumerates modules / companions / datatypes / tools, so the
+/// composition baseline is unaffected by them.
+let private referenceModules () : ServerModule list =
     let orders =
         ServerModule.create "Orders"
         |> ServerModule.withComponentId "orders-service"
         |> ServerModule.withDataTypes [ stubDataType "SalesData" ]
-        |> ServerModule.withAITools [ stubTool "orders.run" ]
+        |> ServerModule.withAITools [
+            stubTool
+                "orders.run"
+                (Some [
+                    {
+                        ModuleId = "Inventory"
+                        ActionKey = "reserve-stock"
+                        Description = ""
+                        PayloadSchema = None
+                    }
+                ])
+        ]
 
     let inventory =
         ServerModule.create "Inventory"
         |> ServerModule.withComponentId "inventory-service"
         |> ServerModule.withDataTypes [ stubDataType "StockData" ]
+        |> ServerModule.withJobHandler ("inventory.on-order", StubJobHandler(), OnEvent "OrderPlaced")
 
+    [ orders; inventory ]
+
+let private referenceApp () : ServerApp =
     ServerApp.empty
-    |> ServerApp.addModules [ orders; inventory ]
+    |> ServerApp.addModules (referenceModules ())
     |> ServerApp.withAuditSink (InMemoryAuditSink "primary-archive")
 
 let private referenceManifest () : CompositionManifest =
@@ -120,6 +161,17 @@ let private referenceManifest () : CompositionManifest =
 
 let private serialise (m: CompositionManifest) : string =
     JsonSerializer.Serialize(m, jsonOptions).Replace("\r\n", "\n")
+
+/// Phase 431 — the reference composition's derived event topology. Same
+/// modules, second lens.
+let private referenceTopology () : EventTopology =
+    EventTopology.ofModules (referenceModules ())
+
+/// The topology persisted through its plain-string wire projection, so the
+/// golden file never depends on the `Set` / single-case-union shapes
+/// round-tripping through a serialiser.
+let private serialiseTopology (topology: EventTopology) : string =
+    JsonSerializer.Serialize(EventTopology.toWire topology, jsonOptions).Replace("\r\n", "\n")
 
 // ── The gate ──
 
@@ -145,6 +197,36 @@ let private gate = test "reference composition matches the committed baseline" {
             failtestf
                 "Composition drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the composition-baseline.json edit in the same PR so the change is reviewed."
                 (CompositionDiff.render delta)
+}
+
+/// Phase 431 — the same gate over the derived event topology: a new edge,
+/// a removed subscriber, or a dropped emitter fails CI until the change is
+/// acknowledged by regenerating the golden file in the same PR. The
+/// failure is rendered through `EventTopology.renderDelta`, so an operator
+/// sees which component stopped talking to which.
+let private topologyGate = test "reference event topology matches the committed baseline" {
+    let topology = referenceTopology ()
+    let rendered = serialiseTopology topology
+    let path = topologyBaselinePath ()
+
+    if approveModeOn () then
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, rendered)
+    elif not (File.Exists path) then
+        failtestf
+            "no committed event-topology baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/event-topology-baseline.json in the same PR."
+            path
+    else
+        let baseline =
+            JsonSerializer.Deserialize<EventTopologyWireEntry list>(File.ReadAllText path, jsonOptions)
+            |> EventTopology.ofWire
+
+        let delta = EventTopology.diff baseline topology
+
+        if not (EventTopology.isEmptyDelta delta) then
+            failtestf
+                "Event-topology drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the event-topology-baseline.json edit in the same PR so the messaging-graph change is reviewed."
+                (EventTopology.renderDelta delta)
 }
 
 // ── Gate-mechanism fixtures: the load-bearing logic is the diff-driven
@@ -201,6 +283,41 @@ let private mechanism =
             Expect.isFalse (CompositionDiff.isEmpty delta) "dropping the companion is not an empty diff"
             Expect.isNonEmpty delta.CompanionSlotsRemoved "the drop surfaces as a removed companion slot"
         }
+
+        // Phase 431 — the same two properties for the topology gate.
+        test "the reference topology diffs clean against itself" {
+            let t = referenceTopology ()
+
+            Expect.isTrue (EventTopology.isEmptyDelta (EventTopology.diff t t)) "a topology is identical to itself"
+        }
+
+        test "the topology round-trips through the baseline JSON format" {
+            let t = referenceTopology ()
+
+            let back =
+                JsonSerializer.Deserialize<EventTopologyWireEntry list>(serialiseTopology t, jsonOptions)
+                |> EventTopology.ofWire
+
+            Expect.isTrue
+                (EventTopology.isEmptyDelta (EventTopology.diff t back))
+                "serialize -> deserialize preserves the topology structurally"
+        }
+
+        test "a severed messaging edge trips the topology gate" {
+            let baseline = referenceTopology ()
+            // The subscriber module drops out of the composition.
+            let regressed = EventTopology.ofModules [ List.head (referenceModules ()) ]
+
+            let delta = EventTopology.diff baseline regressed
+            Expect.isFalse (EventTopology.isEmptyDelta delta) "a dropped subscriber is not an empty diff"
+
+            Expect.isNonEmpty delta.SubscriptionsRemoved "the drop surfaces as removed subscriptions"
+
+            Expect.stringContains
+                (EventTopology.renderDelta delta)
+                "Subscriptions"
+                "the readable failure names the Subscriptions section"
+        }
     ]
 
-let tests = testList "CompositionBaseline" [ gate; mechanism ]
+let tests = testList "CompositionBaseline" [ gate; topologyGate; mechanism ]

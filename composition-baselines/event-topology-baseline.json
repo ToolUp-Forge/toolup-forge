@@ -1,0 +1,14 @@
+[
+  {
+    "Component": "module:inventory-service",
+    "EmittedKinds": [],
+    "SubscribedKinds": ["action:Inventory/reserve-stock","event:OrderPlaced"
+    ]
+  },
+  {
+    "Component": "tool:orders.run",
+    "EmittedKinds": ["action:Inventory/reserve-stock"
+    ],
+    "SubscribedKinds": []
+  }
+]

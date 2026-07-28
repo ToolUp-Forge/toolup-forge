@@ -888,6 +888,18 @@
              ServerApp (reads / reflects ServerModule) and beside the Phase 293
              platform-level ComposableSurface it mirrors one level down. -->
         <Compile Include="Server\ModuleSurface.fs" />
+        <!-- Phase 431 — event-topology manifest: the inter-module messaging
+             graph as data (per-ComponentId Emits / SubscribesTo), derived from
+             live registrations — OnEvent job triggers (IEventStore
+             subscriptions), AIToolDefinition.EmitsActions (notification-channel
+             module actions), and an opt-in ObservingEventStore decorator that
+             records emissions off ModuleEvent.SourceModule. Plus the dead-topic
+             / orphan-subscription queries, an id-keyed diff for the Phase 287
+             golden-file gate, and the opt-in structural-class preflight
+             validator. After ServerApp (reads ServerModule) and
+             CompositionValidator (reuses its defect / rule-descriptor types);
+             beside ModuleSurface, whose per-module lens it aggregates. -->
+        <Compile Include="Server\EventTopology.fs" />
         <!-- Phase 288 — component provenance: which package/assembly+version
              a composed companion came from, keyed by the same ComponentId the
              manifest carries (id-join, no manifest-shape change). After
