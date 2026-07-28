@@ -227,6 +227,8 @@ let allTests =
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).
         InvariantRuleManifestTests.tests
+        // Phase 597 — rule-manifest versioning + errata channel (the prover's own lifecycle).
+        RuleVersioningTests.tests
         // Phase 594 — pinned data-vocabulary packs.
         DataVocabularyTests.tests
         // Phase 283 — component-id telemetry / audit correlation.

@@ -924,6 +924,17 @@
              CompositionValidator (reuses its defect / rule-descriptor types);
              beside EventTopology, the sibling derived lens. -->
         <Compile Include="Server\DataFootprint.fs" />
+        <!-- Phase 597 — the prover's own lifecycle: a manifest version +
+             per-rule semver over every rule family that exports in the Phase
+             294 CompositionRuleDescriptor vocabulary, preflight-result
+             stamping (what a conclusion was proven under), and the errata
+             channel (published data answering "was this stamped result
+             evaluated under an erratum-affected rule version?"). After
+             CompositionValidator, EventTopology and DataFootprint — it seeds
+             versions from all three exported manifests — and after
+             ConfigValidatorAggregator (stamps a ValidatorOutcome run). Pure:
+             registers nothing, decorates nothing. -->
+        <Compile Include="Server\CompositionRuleVersioning.fs" />
         <!-- Phase 438 — authorization-surface manifest: every externally
              reachable thing a component contributes (route prefixes + exact
              route overrides under their Phase 66 admit sets, remoting API

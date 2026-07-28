@@ -87,6 +87,20 @@ let private footprintBaselinePath () =
 let private authorizationBaselinePath () =
     Path.Combine(repoRoot (), "composition-baselines", "authorization-surface-baseline.json")
 
+/// Phase 597 — the rule-manifest half of the same gate. Unlike the other
+/// four this one is not derived from the reference *composition* at all:
+/// it pins the **prover**, not the proven. A rule added, removed,
+/// tightened (a minor bump), or reworded (a patch bump) changes what
+/// every consumer's preflight means, and before this file that change
+/// was invisible in review — the composition baseline is identical
+/// whether the rules moved or not. Pinning it here makes a rules-only
+/// change a reviewed diff, which is also what enforces the bump
+/// discipline: the version string sits beside the description it
+/// governs, so a message edit with no patch bump is visible in the same
+/// hunk.
+let private ruleManifestBaselinePath () =
+    Path.Combine(repoRoot (), "composition-baselines", "rule-manifest-baseline.json")
+
 /// Regeneration path: `TOOLUP_APPROVE_COMPOSITION=1` rewrites the baseline
 /// instead of comparing.
 let private approveModeOn () =
@@ -222,6 +236,79 @@ let private referenceAuthorizationSurface () : AuthorizationSurface =
 let private serialiseAuthorizationSurface (surface: AuthorizationSurface) : string =
     JsonSerializer.Serialize(AuthorizationSurface.toWire surface, jsonOptions).Replace("\r\n", "\n")
 
+/// Phase 597 — the shipped rule manifest with versions, as its published
+/// wire document. Composition-independent: this is the prover, so the
+/// reference app does not enter into it.
+let private ruleManifestDocument () : RuleManifestWireDocument =
+    CompositionRuleVersions.toWireDocument CompositionRuleVersions.allRules
+
+let private serialiseRuleManifest (document: RuleManifestWireDocument) : string =
+    JsonSerializer.Serialize(document, jsonOptions).Replace("\r\n", "\n")
+
+/// A readable delta between two rule manifests: added / removed rules,
+/// and — the case this gate exists for — a rule whose version moved,
+/// with the bump classified so the reviewer reads "tightened", not
+/// "1.0.0 became 1.1.0".
+let private renderRuleManifestDelta (baseline: RuleManifestWireDocument) (current: RuleManifestWireDocument) : string =
+    let byRule (doc: RuleManifestWireDocument) =
+        doc.Rules |> List.map (fun r -> r.Rule, r) |> Map.ofList
+
+    let before, after = byRule baseline, byRule current
+
+    let added =
+        current.Rules
+        |> List.filter (fun r -> not (before.ContainsKey r.Rule))
+        |> List.map (fun r -> sprintf "  + rule '%s' (%s) added at version %s" r.Rule r.Family r.Version)
+
+    let removed =
+        baseline.Rules
+        |> List.filter (fun r -> not (after.ContainsKey r.Rule))
+        |> List.map (fun r -> sprintf "  - rule '%s' (%s) removed (was version %s)" r.Rule r.Family r.Version)
+
+    let describeBump (fromVersion: string) (toVersion: string) =
+        match RuleVersion.tryParse fromVersion, RuleVersion.tryParse toVersion with
+        | Some a, Some b ->
+            match RuleVersion.bumpBetween a b with
+            | Some PatchBump -> "patch — message / implementation only, prior conclusions stand"
+            | Some MinorBump -> "MINOR — the rule TIGHTENED; prior passes are no longer evidence"
+            | Some MajorBump -> "MAJOR — the rule's meaning changed; prior conclusions do not carry over"
+            | None -> "not a forward bump"
+        | _ -> "unparseable version"
+
+    let changed =
+        current.Rules
+        |> List.choose (fun r ->
+            match before.TryFind r.Rule with
+            | Some prior when prior.Version <> r.Version ->
+                Some(
+                    sprintf
+                        "  ~ rule '%s' version %s -> %s (%s)"
+                        r.Rule
+                        prior.Version
+                        r.Version
+                        (describeBump prior.Version r.Version)
+                )
+            | Some prior when prior.RuleDescription <> r.RuleDescription ->
+                Some(
+                    sprintf
+                        "  ~ rule '%s' description changed with NO version bump (a message change is a patch bump) at version %s"
+                        r.Rule
+                        r.Version
+                )
+            | Some prior when prior.Severity <> r.Severity ->
+                Some(sprintf "  ~ rule '%s' severity %s -> %s" r.Rule prior.Severity r.Severity)
+            | _ -> None)
+
+    let manifestVersionLine =
+        if baseline.ManifestVersion <> current.ManifestVersion then
+            [
+                sprintf "  ~ manifest version %s -> %s" baseline.ManifestVersion current.ManifestVersion
+            ]
+        else
+            []
+
+    manifestVersionLine @ added @ removed @ changed |> String.concat "\n"
+
 // ── The gate ──
 
 let private gate = test "reference composition matches the committed baseline" {
@@ -339,6 +426,33 @@ let private authorizationGate = test "reference authorization surface matches th
             failtestf
                 "Authorization-surface drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the authorization-surface-baseline.json edit in the same PR so the exposure change is reviewed."
                 (AuthorizationSurface.renderDelta delta)
+}
+
+/// Phase 597 — the same gate over the versioned rule manifest: a rule
+/// added, removed, tightened, or reworded fails CI until the change is
+/// acknowledged by regenerating the golden file in the same PR. The
+/// failure classifies the bump, so the reviewer is told whether prior
+/// conclusions still hold — the whole reason the rules carry versions.
+let private ruleManifestGate = test "shipped rule manifest matches the committed baseline" {
+    let document = ruleManifestDocument ()
+    let rendered = serialiseRuleManifest document
+    let path = ruleManifestBaselinePath ()
+
+    if approveModeOn () then
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, rendered)
+    elif not (File.Exists path) then
+        failtestf
+            "no committed rule-manifest baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/rule-manifest-baseline.json in the same PR."
+            path
+    else
+        let baseline =
+            JsonSerializer.Deserialize<RuleManifestWireDocument>(File.ReadAllText path, jsonOptions)
+
+        if baseline <> document then
+            failtestf
+                "Rule-manifest drift vs the committed baseline:\n%s\n\nIf this change is intentional, bump the affected rule's version in CompositionRuleVersions.overrides per the discipline (patch = message / fix, minor = tightening, major = meaning change), regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the rule-manifest-baseline.json edit in the same PR so the change to what preflight MEANS is reviewed."
+                (renderRuleManifestDelta baseline document)
 }
 
 // ── Gate-mechanism fixtures: the load-bearing logic is the diff-driven
@@ -517,7 +631,70 @@ let private mechanism =
 
             Expect.stringContains rendered "/api/orders/admin/" "and names the endpoint that became reachable"
         }
+
+        // Phase 597 — the same two properties for the rule-manifest gate.
+        test "the rule manifest round-trips through the baseline JSON format" {
+            let document = ruleManifestDocument ()
+
+            let back =
+                JsonSerializer.Deserialize<RuleManifestWireDocument>(serialiseRuleManifest document, jsonOptions)
+
+            Expect.equal back document "serialize -> deserialize preserves the published rule manifest"
+        }
+
+        test "a tightened rule trips the rule-manifest gate and is reported as a tightening" {
+            let baseline = ruleManifestDocument ()
+
+            // The first rule tightens: strictly more compositions now
+            // fail, so every prior pass under 1.0.0 stops being evidence.
+            let regressed = {
+                baseline with
+                    Rules =
+                        match baseline.Rules with
+                        | first :: rest -> { first with Version = "1.1.0" } :: rest
+                        | [] -> []
+            }
+
+            Expect.notEqual regressed baseline "a version bump is not an empty diff"
+
+            let rendered = renderRuleManifestDelta baseline regressed
+
+            Expect.stringContains rendered "TIGHTENED" "the readable failure says prior passes are no longer evidence"
+
+            Expect.stringContains rendered (List.head baseline.Rules).Rule "and names the rule that moved"
+        }
+
+        test "a reworded rule with no version bump is reported as a missing patch bump" {
+            let baseline = ruleManifestDocument ()
+
+            let regressed = {
+                baseline with
+                    Rules =
+                        match baseline.Rules with
+                        | first :: rest ->
+                            {
+                                first with
+                                    RuleDescription = first.RuleDescription + " (reworded)"
+                            }
+                            :: rest
+                        | [] -> []
+            }
+
+            let rendered = renderRuleManifestDelta baseline regressed
+
+            Expect.stringContains
+                rendered
+                "NO version bump"
+                "a message change without a patch bump is called out, not silently accepted"
+        }
     ]
 
 let tests =
-    testList "CompositionBaseline" [ gate; topologyGate; footprintGate; authorizationGate; mechanism ]
+    testList "CompositionBaseline" [
+        gate
+        topologyGate
+        footprintGate
+        authorizationGate
+        ruleManifestGate
+        mechanism
+    ]

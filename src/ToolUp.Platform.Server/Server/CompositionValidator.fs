@@ -46,6 +46,20 @@ open ToolUp.Platform.ConfigValidation
 // alongside the Phase 294 descriptor fields so an external checker knows
 // which invariants are unconditional.
 //
+// **Rule versions + errata (Phase 597).** The manifest says *what* is
+// checked and *which class* it is in, but not **which version of the
+// check** — so a passing result records nothing about what it passed,
+// and a rule that tightens silently invalidates prior conclusions. The
+// prover's own lifecycle lives one file later, in
+// `Server/CompositionRuleVersioning.fs`: a per-rule semver +
+// bump discipline (`CompositionRuleVersions.allRules`), stamped results
+// (`checkStamped` — the same defects plus what produced them), and a
+// published errata channel (`RuleErrata`) answering "was this stamped
+// conclusion drawn under a rule version now known to be wrong?". It is
+// a sidecar for the reason `ClassifiedCompositionRule` is one — nothing
+// here grew a field — and it seeds versions from `ruleManifest` itself,
+// so a rule cannot ship unversioned.
+//
 // **GP 11 / GP 13.** The check is a pure in-memory sweep over a handful
 // of component entries; a well-formed composition yields no defects and
 // the validator returns `Ok` (logged at Info like every preflight probe).

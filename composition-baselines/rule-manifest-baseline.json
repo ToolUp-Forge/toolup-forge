@@ -1,0 +1,68 @@
+{
+  "ManifestVersion": "1.0.0",
+  "Rules": [
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "duplicate-component-id",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "Every composed unit (module, companion slot / impl, datatype, tool) must resolve to a unique ComponentId."
+    },
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "companion-slot-legality",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "Within a single multi-impl companion slot, every implementation must declare a unique sub-id (Name / Kind) so it is addressable by ComponentId, never by position."
+    },
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "orphaned-tool-reference",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A tool's declared SourceModule must resolve to a registered module or a reserved platform source."
+    },
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "vocabulary-typename-unknown",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A registered data type whose name falls under a pinned data-vocabulary pack's namespace must match a declared pack entry (a closed set); a governed name the pack does not sanction squats."
+    },
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "vocabulary-schema-mismatch",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A declared data-type schema whose TypeName matches a pinned data-vocabulary pack entry must not drift from it in fields, value-types, or units."
+    },
+    {
+      "Family": "event-topology",
+      "Rule": "event-topology-orphan-subscription",
+      "Version": "1.0.0",
+      "Severity": "warning",
+      "RuleDescription": "A component subscribing to an event kind that no composed component emits will never fire; the usual cause is a renamed event type or a producer module this deployment does not compose."
+    },
+    {
+      "Family": "event-topology",
+      "Rule": "event-topology-dead-topic",
+      "Version": "1.0.0",
+      "Severity": "warning",
+      "RuleDescription": "An event kind emitted by a composed component and consumed by none. Legitimate when the consumer is external (a webhook, an archive); otherwise a subscriber was renamed or never composed."
+    },
+    {
+      "Family": "data-footprint",
+      "Rule": "data-footprint-pii-uncovered",
+      "Version": "1.0.0",
+      "Severity": "warning",
+      "RuleDescription": "A data class flagged as containing personal data is persisted by a composed component, but no composed IDataExporter / IErasureHandler is claimed to cover it and no exemption is declared. A data-subject request cannot reach it."
+    },
+    {
+      "Family": "data-footprint",
+      "Rule": "data-footprint-dsr-path-unresolved",
+      "Version": "1.0.0",
+      "Severity": "warning",
+      "RuleDescription": "A DSR coverage claim names an IDataExporter / IErasureHandler that this deployment does not compose. The claim is stale — the path was renamed or removed — so the coverage it asserts is not real."
+    }
+  ]
+}
