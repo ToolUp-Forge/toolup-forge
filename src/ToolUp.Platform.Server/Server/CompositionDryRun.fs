@@ -660,13 +660,11 @@ module CompositionDryRun =
         | Ok app ->
             let manifest = ServerApp.compositionManifest app
 
-            let references: CompositionReferences = {
-                ToolSources =
-                    app.AITools
-                    |> List.map (fun (definition, _) -> definition.Name, definition.SourceModule)
-                PinnedVocabularyPacks = app.Config.PinnedVocabularyPacks
-                DataSchemas = app.Config.DeclaredDataSchemas
-            }
+            // Phase 583 — one builder, shared with the live composition
+            // root, so a dry-run evaluates the rules over exactly the
+            // reference edges a real boot would (including the
+            // module-graph registrations the manifest collapses).
+            let references: CompositionReferences = ServerApp.compositionReferences app
 
             let defects =
                 CompositionValidator.checkClassWith StructuralRule references manifest

@@ -37,6 +37,34 @@
       "RuleDescription": "A declared data-type schema whose TypeName matches a pinned data-vocabulary pack entry must not drift from it in fields, value-types, or units."
     },
     {
+      "Family": "composition-well-formedness",
+      "Rule": "duplicate-query-handler-key",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A module query bus key — the pair (module Name, QueryKey) — must be registered exactly once; two modules sharing a registration Name merge their query namespaces."
+    },
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "duplicate-datatype-typename",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "Two registry-distinct data-type registrations must not share a wire TypeName (DataType.Id), which would make detection order-dependent and the emitted ProcessedData's producer unknowable."
+    },
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "unsatisfied-needs-data",
+      "Version": "1.0.0",
+      "Severity": "warning",
+      "RuleDescription": "A data-type need declared by name on a composed module's registration should be provided by some composed module; needs declared as opaque predicates (ErasedModule.NeedsData) are not enumerable and are out of scope."
+    },
+    {
+      "Family": "composition-well-formedness",
+      "Rule": "client-server-module-parity",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "When the consumer declares an expected-module list (ServerConfig / ClientConfig ExpectedModules), the composed module set must equal it exactly; undeclared, the rule is dormant."
+    },
+    {
       "Family": "event-topology",
       "Rule": "event-topology-orphan-subscription",
       "Version": "1.0.0",

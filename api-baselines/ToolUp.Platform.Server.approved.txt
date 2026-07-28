@@ -1031,8 +1031,9 @@ ToolUp.Platform.CompositionManifestModule.subjectEntry(System.String) : ToolUp.P
 ToolUp.Platform.CompositionManifestModule.toolEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.withGrounding(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionReferences (class)
-ToolUp.Platform.CompositionReferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry])
+ToolUp.Platform.CompositionReferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], ToolUp.Platform.ModuleGraphReferences)
 ToolUp.Platform.CompositionReferences.DataSchemas : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry] { get }
+ToolUp.Platform.CompositionReferences.ModuleGraph : ToolUp.Platform.ModuleGraphReferences { get }
 ToolUp.Platform.CompositionReferences.PinnedVocabularyPacks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack] { get }
 ToolUp.Platform.CompositionReferences.ToolSources : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.CompositionReferencesModule (class)
@@ -3771,6 +3772,23 @@ ToolUp.Platform.ModuleContractShape.DataTypeSlotPrefix : System.String { get }
 ToolUp.Platform.ModuleContractShape.Files : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ModuleContractShape.ModuleSlotPrefix : System.String { get }
 ToolUp.Platform.ModuleContractShape.ToolSlotPrefix : System.String { get }
+ToolUp.Platform.ModuleDataNeed (class)
+ToolUp.Platform.ModuleDataNeed..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ModuleDataNeed.NeedField : System.String { get }
+ToolUp.Platform.ModuleDataNeed.NeededDataType : System.String { get }
+ToolUp.Platform.ModuleDataNeed.NeedingModule : System.String { get }
+ToolUp.Platform.ModuleGraphKey (class)
+ToolUp.Platform.ModuleGraphKey..ctor(System.String, System.String)
+ToolUp.Platform.ModuleGraphKey.DeclaringModule : System.String { get }
+ToolUp.Platform.ModuleGraphKey.RegisteredKey : System.String { get }
+ToolUp.Platform.ModuleGraphReferences (class)
+ToolUp.Platform.ModuleGraphReferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleGraphKey], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleGraphKey], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleDataNeed], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.ModuleGraphReferences.DataNeeds : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleDataNeed] { get }
+ToolUp.Platform.ModuleGraphReferences.DataTypeNames : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleGraphKey] { get }
+ToolUp.Platform.ModuleGraphReferences.ExpectedModules : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Platform.ModuleGraphReferences.QueryHandlerKeys : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleGraphKey] { get }
+ToolUp.Platform.ModuleGraphReferencesModule (class)
+ToolUp.Platform.ModuleGraphReferencesModule.empty : ToolUp.Platform.ModuleGraphReferences { get }
 ToolUp.Platform.ModuleLoadOutcome (class)
 ToolUp.Platform.ModuleLoadOutcome.IsModuleBindingRejected : System.Boolean { get }
 ToolUp.Platform.ModuleLoadOutcome.IsModuleFiltered : System.Boolean { get }
@@ -4751,6 +4769,7 @@ ToolUp.Platform.ServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.P
 ToolUp.Platform.ServerAppModule.addModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.componentIdForModule(System.String, ToolUp.Platform.ServerApp) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId]
 ToolUp.Platform.ServerAppModule.compositionManifest(ToolUp.Platform.ServerApp) : ToolUp.Platform.CompositionManifest
+ToolUp.Platform.ServerAppModule.compositionReferences(ToolUp.Platform.ServerApp) : ToolUp.Platform.CompositionReferences
 ToolUp.Platform.ServerAppModule.empty : ToolUp.Platform.ServerApp { get }
 ToolUp.Platform.ServerAppModule.ensureCompanionNotAlreadyComposed(System.String, ToolUp.Platform.ServerApp) : System.Void
 ToolUp.Platform.ServerAppModule.run(ToolUp.Platform.ServerApp) : System.Int32

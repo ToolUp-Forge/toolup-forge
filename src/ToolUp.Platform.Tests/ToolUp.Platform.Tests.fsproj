@@ -377,6 +377,9 @@
              rule appears in ruleManifest with a stable code; the runtime
              check + the manifest cannot diverge (bijection). -->
         <Compile Include="InProcess\InvariantRuleManifestTests.fs" />
+        <!-- Phase 583 — behavioural half of the module-graph rule family
+             (the bijection half is InvariantRuleManifestTests). -->
+        <Compile Include="InProcess\ModuleGraphRuleTests.fs" />
         <!-- Phase 597 — rule-manifest versioning + errata channel: every
              exported rule (all three families) carries a version; a check
              records what it was proven under; tightening bump semantics; an

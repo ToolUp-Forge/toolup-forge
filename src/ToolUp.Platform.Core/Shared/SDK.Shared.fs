@@ -3053,6 +3053,28 @@ type ServerConfig = {
     /// `TypeName`; the squatting rule (`vocabulary-typename-unknown`) needs
     /// no declaration — it reads the registered names from the manifest.
     DeclaredDataSchemas: VocabularyEntry list
+    /// Phase 583 — the module set this deployment expects to compose, as
+    /// the consumer declares it. `None` (the default) leaves the
+    /// composition validator's `client-server-module-parity` rule
+    /// **dormant** — it evaluates one `match` and yields nothing, so an
+    /// existing deployment is byte-for-byte unchanged (GP 11 + GP 13).
+    /// `Some names` makes the composed module set a checked assertion:
+    /// preflight fails naming what was declared-but-not-composed and
+    /// composed-but-not-declared.
+    ///
+    /// Parity between the two roots comes from declaring the SAME list on
+    /// `ClientConfig.ExpectedModules`, which `ModuleParityValidator`
+    /// checks at client boot — two sets equal to the same set are equal
+    /// to each other. The entries are the cross-tier identity token: the
+    /// server's `ServerModule.Name`, which is also the client's
+    /// `ModuleDefinition.Id` (the identity law on
+    /// `ModuleIdentity.componentIdOf`).
+    ///
+    /// Distinct from `ModuleNames`, which declares the RBAC-visible set
+    /// the permission system reports and filters on — legitimately a
+    /// subset of what a deployment composes, and therefore not usable as
+    /// a parity assertion.
+    ExpectedModules: string list option
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -3371,6 +3393,7 @@ module ServerConfig =
         Presence = NoPresence
         PinnedVocabularyPacks = []
         DeclaredDataSchemas = []
+        ExpectedModules = None
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

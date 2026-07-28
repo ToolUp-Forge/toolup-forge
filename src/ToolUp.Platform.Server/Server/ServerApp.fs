@@ -2000,6 +2000,60 @@ module ServerApp =
         CompositionManifest.build modules companionSlots dataTypes tools configKnobs
         |> CompositionManifest.withGrounding metricEntries subjectEntries
 
+    /// Phase 583 — project the live registry into the reference edges the
+    /// composition rules read but the `CompositionManifest` cannot carry.
+    ///
+    /// The manifest is keyed by `ComponentId`, and that keying *collapses*
+    /// exactly what the module-graph rules are about: two modules
+    /// registering a data type under one `TypeName` resolve to one
+    /// `ComponentId` and one manifest entry (the projector above even
+    /// `List.distinct`s them), so the collision is invisible where it
+    /// matters most. These are the pre-collapse registration edges,
+    /// attributed to their declaring module wherever the accumulator
+    /// carries the attribution.
+    ///
+    /// Pure and on demand, like the manifest — a deployment that never
+    /// composes the validator builds none of this (GP 13).
+    let compositionReferences (app: ServerApp) : CompositionReferences = {
+        ToolSources =
+            app.AITools
+            |> List.map (fun (definition, _) -> definition.Name, definition.SourceModule)
+        PinnedVocabularyPacks = app.Config.PinnedVocabularyPacks
+        DataSchemas = app.Config.DeclaredDataSchemas
+        ModuleGraph = {
+            QueryHandlerKeys =
+                app.QueryHandlerRegistrations
+                |> List.map (fun (moduleName, handler) -> {
+                    DeclaringModule = moduleName
+                    RegisteredKey = handler.QueryKey
+                })
+            DataTypeNames =
+                app.DataTypeRegistrations
+                |> List.map (fun (moduleName, dataType) -> {
+                    DeclaringModule = moduleName
+                    RegisteredKey = dataType.Id
+                })
+            // The one enumerable data-type need a server registration
+            // declares by NAME: a vectorisation handler names the
+            // `DataType.Id` whose processed payloads it indexes, and
+            // never fires unless that type is registered. `NeedingModule`
+            // is empty because the accumulator is flat — `addModule` fans
+            // each module's `VectorisationHandlers` onto one unattributed
+            // list and `VectorisationHandler` carries no owner field — so
+            // the honest value is "unattributed" rather than a guess; the
+            // defect message enumerates the registered types instead.
+            DataNeeds =
+                app.VectorisationHandlers
+                |> List.map (fun handler -> {
+                    NeedingModule = ""
+                    NeedField = "VectorisationHandlers"
+                    NeededDataType = handler.DataTypeId
+                })
+                |> List.distinct
+            ExpectedModules = app.Config.ExpectedModules
+        }
+    }
+
     /// Phase 283 — resolve a composed module's stable Phase 279 `ComponentId`
     /// from its display name (the label its audit events carry as
     /// `SourceModule`, and the dimension its metrics namespace under). This
@@ -2211,15 +2265,13 @@ module ServerApp =
             // vocabulary rules check exactly what the deployment pinned.
             // Both default empty (GP 11 / GP 13), so a deployment that pins
             // no pack is byte-for-byte unchanged.
-            let compositionReferences: CompositionReferences = {
-                ToolSources = app.AITools |> List.map (fun (def, _) -> def.Name, def.SourceModule)
-                PinnedVocabularyPacks = app.Config.PinnedVocabularyPacks
-                DataSchemas = app.Config.DeclaredDataSchemas
-            }
-
+            // Phase 583 — the module-graph registration edges ride the same
+            // reference set (see `compositionReferences`), so the four
+            // module-graph rules check exactly what was registered rather
+            // than the `ComponentId`-collapsed manifest projection.
             appendRegistration
                 withSeedPacks
-                (CompositionValidator.serviceRegistration (compositionManifest app) compositionReferences)
+                (CompositionValidator.serviceRegistration (compositionManifest app) (compositionReferences app))
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default
         // chains `RunBlocking()` to preserve `int` exit code semantics.

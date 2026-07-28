@@ -227,6 +227,9 @@ let allTests =
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).
         InvariantRuleManifestTests.tests
+        // Phase 583 — module-graph composition rules (bus keys, wire TypeNames,
+        // declared data needs, client/server module parity).
+        ModuleGraphRuleTests.tests
         // Phase 597 — rule-manifest versioning + errata channel (the prover's own lifecycle).
         RuleVersioningTests.tests
         // Phase 594 — pinned data-vocabulary packs.

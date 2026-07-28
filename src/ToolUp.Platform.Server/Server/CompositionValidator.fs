@@ -143,6 +143,107 @@ type ClassifiedCompositionRule = {
     Class: CompositionRuleClass
 }
 
+/// Phase 583 — one key a composed module registers into a shared,
+/// module-scoped namespace (a query-bus key; a data-type wire
+/// `TypeName`). Carries the declaring module so a collision names both
+/// sides rather than only the key that collided.
+///
+/// Field names are prefixed for the reason `RuleVersion`'s are: `Module`
+/// and `Key` are common enough field names in this codebase
+/// (`ModuleSurfaceEntry.Key`, `VocabularyField.Name`) that an
+/// unannotated record literal elsewhere could resolve here by accident.
+type ModuleGraphKey = {
+    /// The declaring module's registration `Name` — the cross-tier
+    /// identity token (`ModuleIdentity.componentIdOf`: the server's
+    /// `ServerModule.Name` and the client's `ModuleDefinition.Id` are
+    /// the same string).
+    DeclaringModule: string
+    /// The key registered into the shared namespace: a
+    /// `ModuleQueryHandler.QueryKey`, or a `DataType.Id` (which IS the
+    /// wire `TypeName` — `DataType.Process` stamps it onto the emitted
+    /// `ProcessedData`).
+    RegisteredKey: string
+}
+
+/// Phase 583 — one **enumerable** data-type need a composed module's
+/// registration declares: a registration field that NAMES a
+/// `DataType.Id` the module expects some composed module to provide.
+///
+/// "Enumerable" is load-bearing and is the honest scope of the
+/// `unsatisfied-needs-data` rule. The client-side `ErasedModule.NeedsData`
+/// is `(DataTypeId -> bool) -> bool` — a *predicate* over the available
+/// ids, not a declared set — so the ids it would accept cannot be listed
+/// without evaluating it against a candidate universe (the opacity
+/// [Phase 581] reports on its own `Opaque` surface, `client:NeedsData`).
+/// A rule cannot check a need it cannot enumerate, so the rule checks the
+/// needs that ARE declared by name, and says so; today that is
+/// `ServerModule.VectorisationHandlers`, whose `DataTypeId` must match a
+/// registered data type for the handler to ever fire. A second
+/// name-declaring registration field joins by appending here — no rule
+/// change.
+type ModuleDataNeed = {
+    /// The declaring module's registration `Name`, or `""` when the
+    /// registration carries no owner attribution. The accumulator behind
+    /// `VectorisationHandlers` is flat (`VectorisationHandler` has no
+    /// owner field and `ServerApp` fans the module's list onto a single
+    /// unattributed list), so the honest value there is `""` — the
+    /// defect message enumerates the registered names instead of naming
+    /// a module it cannot know.
+    NeedingModule: string
+    /// The registration field the reference was derived from — so the
+    /// operator knows where to look, not just what is missing.
+    NeedField: string
+    /// The referenced `DataType.Id` (the wire `TypeName`).
+    NeededDataType: string
+}
+
+/// Phase 583 — the module-graph facts a `CompositionRule` cannot reach
+/// from the bare `CompositionManifest`. The manifest enumerates composed
+/// units by `ComponentId`, which deliberately *collapses* the very thing
+/// these rules are about: two modules registering a data type under the
+/// same `TypeName` resolve to one `ComponentId` and therefore to one
+/// manifest entry, so the collision is invisible exactly where it
+/// matters. These are the pre-collapse registration edges, attributed to
+/// their declaring module.
+///
+/// Nested under one `CompositionReferences` field rather than spread
+/// across four: the module-graph rules extend as a family, and a family
+/// that grows inside its own record grows `CompositionReferences`'
+/// constructor once instead of once per fact.
+///
+/// Every field's empty value makes its rule a no-op (GP 13) — a
+/// composition that registers no query handlers, no data types, declares
+/// no data needs, and declares no expected-module list runs all four
+/// module-graph rules over empty input and yields nothing.
+type ModuleGraphReferences = {
+    /// `(module, QueryKey)` for every registered `ModuleQueryHandler` —
+    /// the bus's routing key, pre-`Map`.
+    QueryHandlerKeys: ModuleGraphKey list
+    /// `(module, DataType.Id)` for every registered data type,
+    /// pre-`List.distinct`.
+    DataTypeNames: ModuleGraphKey list
+    /// Enumerable data-type needs declared by composed registrations.
+    DataNeeds: ModuleDataNeed list
+    /// Phase 583 — the consumer's declared expected-module list
+    /// (`ServerConfig.ExpectedModules` / `ClientConfig.ExpectedModules`).
+    /// `None` — the default — leaves `client-server-module-parity`
+    /// dormant, and is why the rule costs an undeclared deployment
+    /// nothing (GP 13). `Some []` is a real declaration ("this
+    /// composition expects no modules"), distinct from `None`.
+    ExpectedModules: string list option
+}
+
+module ModuleGraphReferences =
+    /// The module-graph facts of a composition that registered no query
+    /// handlers, no data types, declared no data needs and no expected
+    /// module list — all four module-graph rules degrade to no-ops.
+    let empty: ModuleGraphReferences = {
+        QueryHandlerKeys = []
+        DataTypeNames = []
+        DataNeeds = []
+        ExpectedModules = None
+    }
+
 /// Cross-reference edges the bare `CompositionManifest` does not itself
 /// carry: which module each tool declares as its owning `SourceModule`.
 /// Supplied alongside the manifest so the orphaned-reference rule can
@@ -163,16 +264,21 @@ type CompositionReferences = {
     /// entry; empty makes that rule a no-op. The squatting rule needs no
     /// declaration — it reads the registered names off the manifest.
     DataSchemas: VocabularyEntry list
+    /// Phase 583 — the pre-collapse module-graph registration edges the
+    /// four module-graph rules read. `ModuleGraphReferences.empty` (the
+    /// base case) makes all four no-ops.
+    ModuleGraph: ModuleGraphReferences
 }
 
 module CompositionReferences =
     /// The reference set of a composition that declares no tool→module
-    /// edges and pins no vocabulary — the reference rules degrade to no-ops
-    /// against it.
+    /// edges, pins no vocabulary, and exposes no module graph — the
+    /// reference rules degrade to no-ops against it.
     let empty: CompositionReferences = {
         ToolSources = []
         PinnedVocabularyPacks = []
         DataSchemas = []
+        ModuleGraph = ModuleGraphReferences.empty
     }
 
 /// Composition well-formedness rule set + the `IConfigValidator` that runs
@@ -377,6 +483,208 @@ module CompositionValidator =
                         )
                 | None -> None))
 
+    // ── Phase 583 — module-graph rule evaluators (pure) ─────────────────
+    //
+    // Four rules over the composed MODULE GRAPH, all reading the
+    // pre-collapse registration edges on `refs.ModuleGraph` rather than
+    // the manifest's `ComponentId`-keyed entries — because the collapse
+    // IS the blind spot: two modules registering a data type under the
+    // same `TypeName` resolve to one `ComponentId`, so the manifest shows
+    // one entry and the existing `duplicate-component-id` rule sees
+    // nothing to flag.
+
+    /// A quoted, comma-separated list, or `"none"` for the empty case —
+    /// every module-graph message enumerates its alternatives.
+    let private enumerate (values: string list) : string =
+        match values |> List.distinct |> List.sort with
+        | [] -> "none"
+        | vs -> vs |> List.map (sprintf "'%s'") |> String.concat ", "
+
+    /// Bus-key collision. The `IModuleQueryBus` registry is
+    /// `Map<module, Map<queryKey, handler>>`, so a key is addressable
+    /// only as the PAIR `(TargetModule, QueryKey)` — which makes two
+    /// *different* modules sharing a `QueryKey` perfectly legal (distinct
+    /// bus keys), and two collisions real:
+    ///
+    /// * the same `(module, QueryKey)` registered more than once — all
+    ///   but one handler is shadowed;
+    /// * two registry-distinct composed modules sharing a registration
+    ///   `Name` while at least one registers query handlers — their bus
+    ///   namespaces MERGE, so a query addressed to one module can be
+    ///   answered by the other's handler.
+    ///
+    /// **This does not replace `ModuleQueryRegistry.build`'s fatal
+    /// rejection of the first case**, and is not redundant with it. That
+    /// rejection is a bare `failwith` reachable only by *composing the
+    /// app*; declaring the invariant here exports it through the
+    /// [Phase 294] rule manifest, so an external pre-build checker
+    /// reaches the same conclusion without running a composition. The
+    /// second case is not reachable there at all: by the time `build`
+    /// groups by module name the two modules' handlers are already one
+    /// bucket, so the merge is invisible to it and visible here.
+    let private evalDuplicateQueryHandlerKey
+        (manifest: CompositionManifest)
+        (refs: CompositionReferences)
+        : string list =
+        let shadowed =
+            refs.ModuleGraph.QueryHandlerKeys
+            |> List.countBy (fun k -> k.DeclaringModule, k.RegisteredKey)
+            |> List.choose (fun ((moduleName, queryKey), count) ->
+                if count > 1 then
+                    Some(
+                        sprintf
+                            "Module '%s' registers %d query handlers on bus key '%s'. The module query bus routes the pair (TargetModule, QueryKey) to exactly one handler, so all but one registration is silently shadowed and callers see the wrong handler (or NoHandler) at request time. Give each handler a distinct QueryKey, or drop the redundant registration. Keys registered by '%s': %s."
+                            moduleName
+                            count
+                            queryKey
+                            moduleName
+                            (refs.ModuleGraph.QueryHandlerKeys
+                             |> List.filter (fun k -> k.DeclaringModule = moduleName)
+                             |> List.map _.RegisteredKey
+                             |> enumerate)
+                    )
+                else
+                    None)
+
+        let queryOwners =
+            refs.ModuleGraph.QueryHandlerKeys |> List.map _.DeclaringModule |> Set.ofList
+
+        let mergedNamespaces =
+            manifest.Modules
+            |> List.groupBy _.Label
+            |> List.choose (fun (label, entries) ->
+                if List.length entries > 1 && queryOwners.Contains label then
+                    Some(
+                        sprintf
+                            "%d composed modules share the registration Name '%s' (ComponentIds: %s), and that name owns query handlers (%s). The bus registry is keyed by module Name, so the two modules' query namespaces merge into one bucket — a query addressed to either module can be answered by the other's handler, and the merge is invisible to the registry builder because it groups by the same name. Rename one module, or drop the duplicate registration."
+                            (List.length entries)
+                            label
+                            (entries |> List.map (_.Id >> ComponentId.value) |> enumerate)
+                            (refs.ModuleGraph.QueryHandlerKeys
+                             |> List.filter (fun k -> k.DeclaringModule = label)
+                             |> List.map _.RegisteredKey
+                             |> enumerate)
+                    )
+                else
+                    None)
+
+        shadowed @ mergedNamespaces
+
+    /// Wire-name collision across registry-distinct data types: two data
+    /// type registrations sharing a `DataType.Id`. The id IS the wire
+    /// `TypeName` — `DataType.Process` stamps it onto the emitted
+    /// `ProcessedData` and every downstream consumer (the data catalog,
+    /// `NeedsData` predicates, vectorisation dispatch, the AI context)
+    /// keys off it — so two registrations under one name make detection
+    /// order-dependent and the payload's producer unknowable.
+    ///
+    /// A live defect class rather than a theoretical one, and one no
+    /// shipped check catches: the registry accumulates registrations
+    /// flatly (no dedup, no rejection), and the manifest projector
+    /// `List.distinct`s the resulting entries — so the *manifest* shows
+    /// one datatype where the composition has two, and
+    /// `duplicate-component-id` (which reads the manifest) has nothing to
+    /// see. This rule reads the pre-collapse registrations, which is the
+    /// only place the collision still exists.
+    let private evalDuplicateDataTypeTypeName (_: CompositionManifest) (refs: CompositionReferences) : string list =
+        refs.ModuleGraph.DataTypeNames
+        |> List.groupBy _.RegisteredKey
+        |> List.choose (fun (typeName, entries) ->
+            if List.length entries > 1 then
+                let owners = entries |> List.map _.DeclaringModule
+
+                Some(
+                    sprintf
+                        "Wire TypeName '%s' is registered by %d distinct data-type registrations (declaring modules: %s). A DataType.Id IS the wire TypeName stamped onto every ProcessedData it produces, so two registrations under one name make detection order-dependent and leave the payload's producer unknowable to the data catalog, to NeedsData predicates, and to vectorisation dispatch. Rename one data type, or register it once and share it. Registered TypeNames: %s."
+                        typeName
+                        (List.length entries)
+                        (enumerate owners)
+                        (refs.ModuleGraph.DataTypeNames |> List.map _.RegisteredKey |> enumerate)
+                )
+            else
+                None)
+
+    /// A declared data-type need no composed module provides — a warning,
+    /// because the shape is legitimate while a producing module is staged
+    /// behind the consuming one, and because the need is only *partly*
+    /// enumerable (see `ModuleDataNeed`): a rule that cannot see every
+    /// need must not be able to block a boot on the subset it can.
+    ///
+    /// The provided set is every registered data-type name — the
+    /// manifest's `DataType` labels unioned with the pre-collapse
+    /// registrations, so a need satisfied by a registration the manifest
+    /// collapsed is still satisfied here.
+    let private evalUnsatisfiedNeedsData (manifest: CompositionManifest) (refs: CompositionReferences) : string list =
+        let provided =
+            (manifest.DataTypes |> List.map _.Label)
+            @ (refs.ModuleGraph.DataTypeNames |> List.map _.RegisteredKey)
+            |> Set.ofList
+
+        refs.ModuleGraph.DataNeeds
+        |> List.filter (fun need -> not (provided.Contains need.NeededDataType))
+        |> List.map (fun need ->
+            let declarer =
+                if String.IsNullOrWhiteSpace need.NeedingModule then
+                    sprintf "A composed module's %s registration" need.NeedField
+                else
+                    sprintf "Module '%s' (%s)" need.NeedingModule need.NeedField
+
+            sprintf
+                "%s declares a need for data type '%s', which no composed module registers. The declaration can never fire — nothing in this composition produces that wire TypeName. Register the producing module, correct the declared DataType.Id, or drop the declaration. Registered data types: %s."
+                declarer
+                need.NeededDataType
+                (provided |> Set.toList |> enumerate))
+
+    /// Client/server module parity against a consumer-declared expected
+    /// set. Dormant unless `ExpectedModules` is `Some` — an undeclared
+    /// deployment evaluates one `match` and yields nothing (GP 13).
+    ///
+    /// **How one declared list makes two roots agree.** The composition
+    /// validator runs server-side and can only see the server's composed
+    /// modules; the client root's module list is a separate compilation
+    /// unit the server tier does not (and must not) reference. So parity
+    /// is established transitively: BOTH roots declare the same expected
+    /// list — `ServerConfig.ExpectedModules` here,
+    /// `ClientConfig.ExpectedModules` checked by
+    /// `ModuleParityValidator` at client boot — and each is measured
+    /// against it. Two sets equal to the same set are equal to each
+    /// other. The comparison is sound across the tier boundary because
+    /// the identity token is the same on both sides: the cross-tier
+    /// identity law on `ModuleIdentity.componentIdOf` states that the
+    /// server's `ServerModule.Name` and the client's
+    /// `ModuleDefinition.Id` are one token.
+    ///
+    /// **Why `ServerConfig.ModuleNames` is not reused** even though it is
+    /// also a hand-declared module list: it means something else — the
+    /// RBAC-visible set the permission system reports and filters on —
+    /// and deployments legitimately declare a subset of what they
+    /// compose. Promoting it to a parity assertion would fail
+    /// compositions that are correct today, which GP 11 forbids.
+    let private evalClientServerModuleParity
+        (manifest: CompositionManifest)
+        (refs: CompositionReferences)
+        : string list =
+        match refs.ModuleGraph.ExpectedModules with
+        | None -> []
+        | Some expected ->
+            let expectedSet = Set.ofList expected
+            let composedSet = manifest.Modules |> List.map _.Label |> Set.ofList
+
+            let missing = Set.difference expectedSet composedSet |> Set.toList
+            let unexpected = Set.difference composedSet expectedSet |> Set.toList
+
+            if List.isEmpty missing && List.isEmpty unexpected then
+                []
+            else
+                [
+                    sprintf
+                        "Composed module set does not match the declared ExpectedModules. Declared but not composed: %s. Composed but not declared: %s. Both composition roots are measured against the same declared list (ServerConfig.ExpectedModules here, ClientConfig.ExpectedModules at client boot), so a mismatch on either side means the two roots do not compose the same modules — a module present server-side but absent client-side has routes and handlers no UI reaches, and the reverse renders a UI whose calls 404. Add the missing module to the composition, or amend the declared list. Declared: %s. Composed: %s."
+                        (enumerate missing)
+                        (enumerate unexpected)
+                        (enumerate expected)
+                        (composedSet |> Set.toList |> enumerate)
+                ]
+
     /// Phase 585 — the structural-class rules: pure in-process identity /
     /// integrity invariants over the composed surface. Every rule shipped
     /// to date is one. Declaring a rule here IS its classification —
@@ -420,6 +728,34 @@ module CompositionValidator =
             Description =
                 "A declared data-type schema whose TypeName matches a pinned data-vocabulary pack entry must not drift from it in fields, value-types, or units."
             Evaluate = evalVocabularySchemaMismatch
+        }
+        {
+            Code = "duplicate-query-handler-key"
+            Severity = DefectError
+            Description =
+                "A module query bus key — the pair (module Name, QueryKey) — must be registered exactly once; two modules sharing a registration Name merge their query namespaces."
+            Evaluate = evalDuplicateQueryHandlerKey
+        }
+        {
+            Code = "duplicate-datatype-typename"
+            Severity = DefectError
+            Description =
+                "Two registry-distinct data-type registrations must not share a wire TypeName (DataType.Id), which would make detection order-dependent and the emitted ProcessedData's producer unknowable."
+            Evaluate = evalDuplicateDataTypeTypeName
+        }
+        {
+            Code = "unsatisfied-needs-data"
+            Severity = DefectWarning
+            Description =
+                "A data-type need declared by name on a composed module's registration should be provided by some composed module; needs declared as opaque predicates (ErasedModule.NeedsData) are not enumerable and are out of scope."
+            Evaluate = evalUnsatisfiedNeedsData
+        }
+        {
+            Code = "client-server-module-parity"
+            Severity = DefectError
+            Description =
+                "When the consumer declares an expected-module list (ServerConfig / ClientConfig ExpectedModules), the composed module set must equal it exactly; undeclared, the rule is dormant."
+            Evaluate = evalClientServerModuleParity
         }
     ]
 

@@ -86,6 +86,15 @@
              sidebar shape `_other` collapses to). Sits adjacent to
              SDK.ClientTypes.fs since it only depends on ErasedModule. -->
         <Compile Include="Client\ModuleGroupingValidator.fs" />
+        <!-- Phase 583 — client half of `client-server-module-parity`.
+             Measures the consumer's module list against
+             ClientConfig.ExpectedModules; the server root measures its
+             composed set against the same declared list, so the two roots
+             are shown equal without either tier referencing the other.
+             Dormant (one `match`) when the list is undeclared. Same
+             position/dependency shape as ModuleGroupingValidator.fs —
+             ErasedModule + ClientConfig only. -->
+        <Compile Include="Client\ModuleParityValidator.fs" />
         <!-- Phase 11.G — Vite-injected constants surfaced as a single SDK
              helper; ClientConfig builder consumes them via overrides record. -->
         <Compile Include="Client\BundleConstants.fs" />

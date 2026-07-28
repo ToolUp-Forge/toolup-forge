@@ -1532,6 +1532,23 @@ type ClientConfig = {
     /// balanced split set `Wide`; consumers wanting today's natural-
     /// content-width behaviour byte-for-byte set `Auto`.
     InputsPaneWidth: InputsPaneWidth
+
+    /// Phase 583 — the module set this deployment expects to compose, as
+    /// the consumer declares it. The client-tier mirror of
+    /// `ServerConfig.ExpectedModules`: declare the SAME list on both and
+    /// each root is measured against it, so the two roots are shown to
+    /// compose the same modules without either tier referencing the
+    /// other. Entries are the cross-tier identity token — the client's
+    /// `ModuleDefinition.Id`, which is also the server's
+    /// `ServerModule.Name` (the identity law on
+    /// `ModuleIdentity.componentIdOf`), not the display `Name`.
+    ///
+    /// `None` (the default) leaves `ModuleParityValidator` dormant: boot
+    /// evaluates one `match` and continues, byte-for-byte the pre-583
+    /// path (GP 11 + GP 13). `Some ids` makes a mismatch a loud boot
+    /// failure naming both directions, in the same shape as the server
+    /// side's `client-server-module-parity` preflight defect.
+    ExpectedModules: string list option
 }
 
 module ClientConfig =
@@ -1603,6 +1620,9 @@ module ClientConfig =
         PremiumModel = AnonymousFirst
         PlatformAdminProfile = StandardPlatformAdminProfile
         InputsPaneWidth = Narrow
+        // Phase 583 — parity check dormant until the consumer declares
+        // an expected-module list on BOTH roots (GP 13).
+        ExpectedModules = None
     }
 
     /// Back-compat: `ClientConfig` with every field at the SDK default

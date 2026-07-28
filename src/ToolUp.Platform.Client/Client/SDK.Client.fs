@@ -3417,6 +3417,15 @@ module Client =
         // registered and accessible. See `ModuleGroupingValidator.fs`.
         ModuleGroupingValidator.validate modules
 
+        // Phase 583 — client half of `client-server-module-parity`. When
+        // the consumer declares `ClientConfig.ExpectedModules` (the same
+        // list it declares on `ServerConfig.ExpectedModules`), refuse a
+        // boot whose consumer module set does not match it exactly — the
+        // server root refuses the mirror-image mismatch at preflight, so
+        // one declaration makes both roots agree. Dormant (a single
+        // `match`) when undeclared. See `ModuleParityValidator.fs`.
+        ModuleParityValidator.validate config.ExpectedModules modules
+
         // Phase 13a — install the request seam if not already installed
         // (idempotent). Covers outer composers that bypass `Client.run`
         // and call `boot` directly.

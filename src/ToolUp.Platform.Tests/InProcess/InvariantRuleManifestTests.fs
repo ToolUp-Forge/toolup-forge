@@ -119,6 +119,85 @@ let private ruleFixtures: (string * CompositionManifest * CompositionReferences)
                 }
             ]
     }
+
+    // Phase 583 — one module registering two handlers on the same bus key
+    // (module, QueryKey); all but one is silently shadowed by the bus's
+    // Map<module, Map<key, handler>> registry.
+    "duplicate-query-handler-key",
+    CompositionManifest.build [ CompositionManifest.moduleEntry ("Reports", ComponentId.ofModule "Reports") ] [] [] [] [],
+    {
+        CompositionReferences.empty with
+            ModuleGraph = {
+                ModuleGraphReferences.empty with
+                    QueryHandlerKeys = [
+                        {
+                            DeclaringModule = "Reports"
+                            RegisteredKey = "latest"
+                        }
+                        {
+                            DeclaringModule = "Reports"
+                            RegisteredKey = "latest"
+                        }
+                    ]
+            }
+    }
+
+    // Phase 583 — two registry-distinct data-type registrations sharing a
+    // wire TypeName. The manifest collapses them to one ComponentId entry,
+    // which is precisely why the pre-collapse edges are what the rule reads.
+    "duplicate-datatype-typename",
+    CompositionManifest.build [] [] [ CompositionManifest.dataTypeEntry "SalesData" ] [] [],
+    {
+        CompositionReferences.empty with
+            ModuleGraph = {
+                ModuleGraphReferences.empty with
+                    DataTypeNames = [
+                        {
+                            DeclaringModule = "Sales"
+                            RegisteredKey = "SalesData"
+                        }
+                        {
+                            DeclaringModule = "Forecasting"
+                            RegisteredKey = "SalesData"
+                        }
+                    ]
+            }
+    }
+
+    // Phase 583 — a data-type need declared by name that no composed
+    // module registers (warning severity).
+    "unsatisfied-needs-data",
+    CompositionManifest.build [] [] [] [] [],
+    {
+        CompositionReferences.empty with
+            ModuleGraph = {
+                ModuleGraphReferences.empty with
+                    DataNeeds = [
+                        {
+                            NeedingModule = "Search"
+                            NeedField = "VectorisationHandlers"
+                            NeededDataType = "GhostData"
+                        }
+                    ]
+            }
+    }
+
+    // Phase 583 — a declared expected-module list the composed set does
+    // not match. Undeclared (`None`), this rule yields nothing at all.
+    "client-server-module-parity",
+    CompositionManifest.build
+        [
+            CompositionManifest.moduleEntry ("Composed", ComponentId.ofModule "Composed")
+        ]
+        []
+        [] [] [],
+    {
+        CompositionReferences.empty with
+            ModuleGraph = {
+                ModuleGraphReferences.empty with
+                    ExpectedModules = Some [ "Declared" ]
+            }
+    }
 ]
 
 let tests =
@@ -143,6 +222,11 @@ let tests =
                     "orphaned-tool-reference"
                     "vocabulary-typename-unknown"
                     "vocabulary-schema-mismatch"
+                    // Phase 583 — the module-graph family.
+                    "duplicate-query-handler-key"
+                    "duplicate-datatype-typename"
+                    "unsatisfied-needs-data"
+                    "client-server-module-parity"
                 ])
                 "the published rule codes are exactly the shipped invariant set"
 
