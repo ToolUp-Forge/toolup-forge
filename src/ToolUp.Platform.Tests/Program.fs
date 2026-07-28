@@ -202,6 +202,9 @@ let allTests =
         // new one can't drift out of the SkipPreflight always-run set) +
         // the aggregator derives that set from the member.
         ConfigValidatorSecurityClassTests.tests
+        // Phase 462 — CORS credentials × wildcard refused at boot, before
+        // any policy is registered (was: warn + silent credentials drop).
+        CorsCredentialsWildcardBootTests.tests
         // Phase 279 — stable component identity (ComponentId).
         ComponentIdentityTests.tests
         // Phase 280 — introspectable composition manifest.

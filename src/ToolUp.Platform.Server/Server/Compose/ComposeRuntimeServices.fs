@@ -115,6 +115,28 @@ let registerCoreSdkSingletons
         )
     |> ignore
 
+/// Phase 462 — refuse the `AllowCredentials = true` + wildcard-origins
+/// combination BEFORE `registerCors` registers a policy. `CorsConfigValidator`
+/// reports the same conflict at preflight, but preflight runs at the compose
+/// tail: until this landed the policy was already registered and credentials
+/// had already been silently dropped behind a single `Warn`, so operators met
+/// the misconfiguration as runtime 401s on credentialed cross-origin / SSE
+/// flows instead of a clean boot refusal.
+///
+/// Raises `ConfigPreflightFailedException` — the same exception preflight
+/// throws, so every consumer that already catches a config refusal keeps
+/// working. `SkipPreflight` deliberately does not bypass it: the validator is
+/// security-class, and this is the same refusal moved earlier.
+///
+/// No-op for every legal configuration (including `Cors = None`), so a valid
+/// deployment is byte-for-byte unchanged (GP 11).
+let assertCorsCredentialsCompatible (config: ServerConfig) (resolvedLogger: ILogger) : unit =
+    match CorsConfigValidator.credentialsWildcardConflict config with
+    | None -> ()
+    | Some message ->
+        resolvedLogger.Error(message, None)
+        raise (ConfigValidatorAggregator.ConfigPreflightFailedException message)
+
 /// Phase 1f — CORS service registration. `None` (default) skips both
 /// the service and the middleware so deployments without
 /// cross-origin needs carry zero CORS overhead. The supplied
@@ -122,26 +144,22 @@ let registerCoreSdkSingletons
 /// per-route policies or dynamic-origin validation use
 /// `ServerApp.withPreMiddleware` instead.
 ///
-/// Warns + falls back to non-credentialed mode when
-/// `AllowCredentials = true` is combined with a wildcard origin
-/// (incompatible per the CORS spec).
+/// `AllowCredentials = true` combined with a wildcard origin is refused at
+/// boot by `assertCorsCredentialsCompatible` (Phase 462), which the
+/// composition root calls immediately before this — there is no
+/// warn-and-downgrade path here any more.
 let registerCors (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
     match config.Cors with
     | None -> ()
     | Some cors ->
-        let credentialsConflict = cors.AllowCredentials && cors.Origins |> List.contains "*"
-
-        if credentialsConflict then
-            resolvedLogger.Warn(
-                "[CORS] AllowCredentials=true cannot combine with wildcard origins; falling back to non-credentialed mode."
-            )
-
         services.AddCors(fun options ->
             options.AddDefaultPolicy(fun (policy: Microsoft.AspNetCore.Cors.Infrastructure.CorsPolicyBuilder) ->
                 let isWildcardList xs =
                     xs |> List.exists (fun (s: string) -> s = "*")
 
-                if isWildcardList cors.Origins then
+                let wildcardOrigins = isWildcardList cors.Origins
+
+                if wildcardOrigins then
                     policy.AllowAnyOrigin() |> ignore
                 else
                     policy.WithOrigins(List.toArray cors.Origins) |> ignore
@@ -156,7 +174,16 @@ let registerCors (services: IServiceCollection) (config: ServerConfig) (resolved
                 else
                     policy.WithHeaders(List.toArray cors.Headers) |> ignore
 
-                if cors.AllowCredentials && not credentialsConflict then
+                // Phase 462 — state the credentials posture explicitly on both
+                // branches rather than leaning on ASP.NET's implicit
+                // `SupportsCredentials = false` default. `DisallowCredentials()`
+                // is the builder's spelling of `AllowCredentials(false)`.
+                // Wildcard origins can never carry credentials (CORS spec § 7.2)
+                // and that shape is already refused at boot, so this branch is
+                // reachable only for a legal wildcard-without-credentials policy.
+                if wildcardOrigins || not cors.AllowCredentials then
+                    policy.DisallowCredentials() |> ignore
+                else
                     policy.AllowCredentials() |> ignore))
         |> ignore
 

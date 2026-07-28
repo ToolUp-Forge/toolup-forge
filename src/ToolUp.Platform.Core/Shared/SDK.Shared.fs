@@ -1073,8 +1073,8 @@ module RateLimitConfig =
 /// as `AllowAnyOrigin`; otherwise the listed origins become the explicit
 /// allowlist. Same convention applies to `Methods` and `Headers`.
 /// `AllowCredentials` cannot combine with wildcard origins (browsers
-/// reject the combination); `compose` logs a warning and falls back to
-/// non-credentialed mode if the deployment misconfigures both.
+/// reject the combination); `compose` refuses to start — before any CORS
+/// policy is registered — if the deployment sets both.
 ///
 /// For CORS shapes that don't fit (per-route policies, dynamic origin
 /// validation, vary-by-header), use `ServerApp.withPreMiddleware` and

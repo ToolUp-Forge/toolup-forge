@@ -486,6 +486,17 @@ let compose
     // `ComposeRuntimeServices.registerCachingAndDataProtection`).
     registerCachingAndDataProtection services resolvedBlobStorage resolvedLogger
 
+    // Phase 462 — refuse `AllowCredentials = true` + wildcard origins here,
+    // before any CORS policy is registered. `CorsConfigValidator` reports the
+    // same conflict, but preflight runs at the compose tail — too late to stop
+    // the silent credentials downgrade `registerCors` used to perform.
+    // Skipped under the introspection startup modes: neither binds a listener,
+    // and both already have their own reporting path for a bad config
+    // (`--validate-config` surfaces this through the validator; `--print-config`
+    // deliberately dumps configs that fail validation — see the tail below).
+    if StartupModes.current () = StartupModes.NormalBoot then
+        assertCorsCredentialsCompatible config resolvedLogger
+
     // Phase 1f — CORS service registration (extracted to
     // `ComposeRuntimeServices.registerCors`).
     registerCors services config resolvedLogger

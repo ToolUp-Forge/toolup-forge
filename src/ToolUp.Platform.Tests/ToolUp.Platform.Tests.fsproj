@@ -311,6 +311,10 @@
         <Compile Include="InProcess\ErrorConfigValidatorTests.fs" />
         <Compile Include="InProcess\ConfigValidatorAggregatorTests.fs" />
         <Compile Include="InProcess\ConfigValidatorSecurityClassTests.fs" />
+        <!-- Phase 462 — CORS AllowCredentials × wildcard origins: boot
+             refusal ahead of policy registration, explicit credentials-off
+             on the wildcard path, legal credentialed configs unaffected. -->
+        <Compile Include="InProcess\CorsCredentialsWildcardBootTests.fs" />
         <!-- Phase 279 — stable component identity (ComponentId): derivation
              determinism, module id stable across rename + re-order,
              default-derived determinism, duplicate explicit id rejected at
