@@ -4,7 +4,7 @@
     <!-- Coordinated SDK version — bump in one place and every transitive
          ToolUp.* package moves in lockstep via the ToolUp.Sdk
          meta-manifest. -->
-    <ToolUpSdkVersion>0.12.0</ToolUpSdkVersion>
+    <ToolUpSdkVersion>0.13.0</ToolUpSdkVersion>
   </PropertyGroup>
   <!--
     The 4 ToolUp.Platform.* entries below are first-restore fallbacks:
