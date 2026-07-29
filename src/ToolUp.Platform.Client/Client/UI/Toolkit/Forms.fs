@@ -307,8 +307,14 @@ module Forms =
                     | Some element when not (element.contains (e.target :?> Browser.Types.Node)) -> setIsOpen false
                     | _ -> ()
 
-                Browser.Dom.document.addEventListener ("mousedown", handler)
-                FsReact.createDisposable (fun () -> Browser.Dom.document.removeEventListener ("mousedown", handler))),
+                // `removeEventListener` matches by REFERENCE — bind the JS
+                // function once so add and remove receive the identical
+                // object (Fable can emit a fresh wrapper per call site
+                // otherwise, leaking one listener per mount).
+                let listener: Browser.Types.Event -> unit = handler
+
+                Browser.Dom.document.addEventListener ("mousedown", listener)
+                FsReact.createDisposable (fun () -> Browser.Dom.document.removeEventListener ("mousedown", listener))),
             [||]
         )
 
