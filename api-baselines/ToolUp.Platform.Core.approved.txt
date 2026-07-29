@@ -5779,6 +5779,15 @@ ToolUp.Platform.Narrative.VideoSpec.Caption : Microsoft.FSharp.Core.FSharpOption
 ToolUp.Platform.Narrative.VideoSpec.Poster : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Narrative.VideoSpec.Sources : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.MediaSource] { get }
 ToolUp.Platform.Narrative.VideoSpec.Tracks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.MediaTrack] { get }
+ToolUp.Platform.NavRole (class)
+ToolUp.Platform.NavRole.IsPlatformAdminOnly : System.Boolean { get }
+ToolUp.Platform.NavRole.IsTeamOwnerAdmin : System.Boolean { get }
+ToolUp.Platform.NavRole.PlatformAdminOnly : ToolUp.Platform.NavRole { get }
+ToolUp.Platform.NavRole.Tag : System.Int32 { get }
+ToolUp.Platform.NavRole.TeamOwnerAdmin : ToolUp.Platform.NavRole { get }
+ToolUp.Platform.NavRole+Tags (class)
+ToolUp.Platform.NavRole+Tags.PlatformAdminOnly : System.Int32 (literal)
+ToolUp.Platform.NavRole+Tags.TeamOwnerAdmin : System.Int32 (literal)
 ToolUp.Platform.NoEvidencePackGenerator (class)
 ToolUp.Platform.NoEvidencePackGenerator..ctor()
 ToolUp.Platform.NoOpHostRenderTelemetrySink (class)

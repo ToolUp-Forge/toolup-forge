@@ -1343,5 +1343,6 @@ let create (config: PlatformAdminConfig option) (clientConfig: ClientConfig) : E
     |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformAdmin"
     |> ToolUp.Platform.ClientModule.withFullWidthView (viewWith clientConfig)
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
+    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

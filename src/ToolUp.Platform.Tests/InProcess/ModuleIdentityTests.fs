@@ -51,6 +51,7 @@ let private erasedModule (id: string) (name: string) : ErasedModule = {
     FeatureFlags = []
     Availability = Always
     Group = Some "Workflow"
+    NavRole = None
     Area = ModuleArea.Product
     ClientQueryHandlers = []
     ActionDecoder = None

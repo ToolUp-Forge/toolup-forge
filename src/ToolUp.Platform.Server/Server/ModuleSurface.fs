@@ -432,6 +432,7 @@ module ModuleSurface =
         "FeatureFlags", NeedsFacet
         "Availability", ProvidesFacet
         "Group", ProvidesFacet
+        "NavRole", ProvidesFacet
         "Area", ProvidesFacet
         "ClientQueryHandlers", ProvidesFacet
         "ActionDecoder", OpaqueFacet
@@ -514,6 +515,15 @@ module ModuleSurface =
                 one "Availability" (tryProp "Availability" registration |> Option.bind caseName)
                 one "Area" (tryProp "Area" registration |> Option.bind caseName)
                 one "Group" (tryProp "Group" registration |> Option.bind unwrapOption |> Option.map string)
+                // Phase 568 — the declared nav-role gate. Optional, so a
+                // module that declares none emits no placement entry (the
+                // `Group` line above is the same shape); the facet table
+                // above is what keeps the field CLASSIFIED either way.
+                one
+                    "NavRole"
+                    (tryProp "NavRole" registration
+                     |> Option.bind unwrapOption
+                     |> Option.bind caseName)
             ]
 
         List.concat [ pages; pageViews; dataTypes; configFields; queries; placement ]

@@ -65,6 +65,7 @@ let private baseModel: Client.Model = {
     ActiveTeamId = None
     ActiveTeamLoadCompleted = false
     PlatformRole = None
+    ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
     ConfigsPrefetch = Prefetch.none
     FlagsPrefetch = Prefetch.none

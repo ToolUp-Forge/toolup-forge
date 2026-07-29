@@ -394,5 +394,6 @@ let create () : ErasedModule =
     |> ToolUp.Platform.ClientModule.withId "_sdk.TenantLifecycleAdmin"
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
+    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

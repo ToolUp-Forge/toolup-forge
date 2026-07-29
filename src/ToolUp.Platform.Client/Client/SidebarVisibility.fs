@@ -37,6 +37,13 @@ module ToolUp.Platform.SidebarVisibility
 // Canonical home for the two group sets since Phase 570 — `ClientConfig`
 // re-exports both predicates unchanged so every existing call site (and
 // the Fable-tier `SidebarAdminGroupGateTests` pack) is untouched.
+//
+// **DEPRECATED as a GATE since Phase 568** (still current as the Phase
+// 567 area derivation and as stage 4's no-team admin escape). A module
+// declares its gate with `ClientModule.withNavRole` now; the group-name
+// match below survives only as the fallback for consumer modules built
+// against `withGroup "Platform Admin"` before the typed field existed.
+// Removal is deferred to the next major (GP 11) — see `effectiveNavRole`.
 
 /// Platform-scoped admin sidebar groups — visible ONLY to callers
 /// holding `PlatformRole.PlatformAdmin`. Mirrors the SDK built-ins'
@@ -85,7 +92,7 @@ let isAdminSidebarGroup (group: string option) : bool =
 
 // ─── Inputs ───────────────────────────────────────────────────────────
 
-/// The three per-module facts the visibility fold reads. Everything else
+/// The four per-module facts the visibility fold reads. Everything else
 /// on a registered module (views, init/update, data types, …) is
 /// irrelevant to whether it appears in the sidebar, so the fold is stated
 /// over this projection rather than over `ErasedModule` — which also
@@ -95,9 +102,16 @@ type SidebarModuleFacts = {
     /// response and the no-team landing target are both expressed in
     /// (never the display `Name`).
     Id: string
-    /// `ErasedModule.Group` — the `withGroup` label the Phase 4b role
-    /// gate and the no-team admin escape both key off.
+    /// `ErasedModule.Group` — the `withGroup` label. Since Phase 568 it
+    /// is read by the no-team admin escape (stage 4) and by the
+    /// DEPRECATED group-name fallback in `effectiveNavRole`; the gate
+    /// itself is `NavRole` below.
     Group: string option
+    /// `ErasedModule.NavRole` — the Phase 568 typed navigation-role
+    /// gate. `None` (the default, and every module that predates 568)
+    /// falls back to the group-name match, which for a non-admin group
+    /// is "ungated" — byte-identical to pre-568 (GP 11).
+    NavRole: NavRole option
     /// `ErasedModule.Visibility` — the Phase 66 Stream B.3 per-module
     /// predicate over the resolved `SubjectKind`. Defaults to
     /// `Visibility.visibleToAll` for modules that declare nothing.
@@ -114,9 +128,16 @@ type SidebarVisibilityInputs = {
     /// until the boot-time fetch resolves.
     Accessibility: AccessibleModulesResponse option
     /// `model.PlatformRole` — `Some PlatformRole.PlatformAdmin` unlocks
-    /// the admin group gate, the `ShowAllModules` escape, and the
-    /// no-team admin carve-out.
+    /// `NavRole.PlatformAdminOnly` (and, composing, `TeamOwnerAdmin`),
+    /// the `ShowAllModules` escape, and the no-team admin carve-out.
     PlatformRole: PlatformRole option
+    /// Phase 568 — `model.ActiveTeamRole`: the caller's `TeamRole` on
+    /// the ACTIVE team, loaded once at boot and re-read on
+    /// `TeamSwitched`. `None` means "not known" — no active team, a
+    /// deployment with no team scope, or the load still in flight — and
+    /// `NavRole.TeamOwnerAdmin` deliberately fails OPEN against it (see
+    /// that case's doc-comment).
+    ActiveTeamRole: TeamRole option
     /// `model.ShowAllModules` — the Phase 245 admin "show all modules"
     /// toggle.
     ShowAllModules: bool
@@ -144,6 +165,7 @@ type SidebarVisibilityInputs = {
 let defaults: SidebarVisibilityInputs = {
     Accessibility = None
     PlatformRole = None
+    ActiveTeamRole = None
     ShowAllModules = false
     SubjectKind = AnonymousKind
     HasTeamScope = false
@@ -183,27 +205,76 @@ let private rbacFiltered (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisib
             not (managed.Contains id) || accessible.Contains id)
     | None -> modules
 
-/// Stage 2 — the platform-admin role gate (Phase 4b).
+/// The gate a module is actually subject to (Phase 568).
 ///
-/// Hides the platform-scoped admin sidebar groups from callers without
-/// `PlatformRole.PlatformAdmin`. Group label is the contract: any module
-/// declaring `withGroup` with one of those labels is gated by the role.
-/// Distinct from stage 1's per-module `Managed` / `Accessible` filter —
-/// that targets app-domain modules; this targets SDK built-in admin
-/// modules whose Ids start with `_sdk.` and so bypass RBAC by design.
+/// A declared `NavRole` wins outright — that is the whole point of the
+/// phase: the gate is data on the module, so renaming its sidebar group
+/// changes nothing.
 ///
-/// "Team Management" is deliberately NOT gated here: its write surfaces
-/// are for team Owners/Admins, a TEAM role the shell model does not carry
-/// (`TeamInfo` has no role field; TeamManagerUI derives the caller's role
-/// module-internally via `GetTeamMembers`). Blanket-hiding the group on
-/// `PlatformRole` would strip team Owners of Team Manager / Permissions
-/// admin, so it stays visible to every authenticated caller and the
-/// server-side Owner/Admin guards remain the enforcement (GP 12).
-let private adminGroupFiltered (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (modules: 'm list) =
-    let isAdmin = isPlatformAdmin inputs
+/// **The `None` arm is the DEPRECATED group-name fallback** kept for
+/// consumer modules written against the pre-568 convention
+/// (`withGroup "Platform Admin"`, the label the Phase 4b gate has
+/// recognised since commit 4f.2). It maps a platform-scoped group — and
+/// ONLY a platform-scoped group — onto `PlatformAdminOnly`, so an
+/// undeclared module's gate is byte-identical to pre-568 (GP 11):
+/// "Team Management" was ungated then and stays ungated under the
+/// fallback, because inferring `TeamOwnerAdmin` from a group label would
+/// hide entries from Members that a consumer never asked to gate.
+///
+/// Removal is deferred to the next major. Migration is one line per
+/// module: `|> ClientModule.withNavRole NavRole.PlatformAdminOnly`.
+let private effectiveNavRole (f: SidebarModuleFacts) : NavRole option =
+    match f.NavRole with
+    | Some declared -> Some declared
+    | None ->
+        if isPlatformAdminSidebarGroup f.Group then
+            Some NavRole.PlatformAdminOnly
+        else
+            None
 
+/// Does this caller clear the given gate? See the `NavRole` cases for
+/// the reasoning behind each answer — in particular why `TeamOwnerAdmin`
+/// admits an UNKNOWN active-team role.
+let private admits (inputs: SidebarVisibilityInputs) (role: NavRole) : bool =
+    match role with
+    | NavRole.PlatformAdminOnly -> isPlatformAdmin inputs
+    | NavRole.TeamOwnerAdmin ->
+        isPlatformAdmin inputs
+        || (match inputs.ActiveTeamRole with
+            | Some TeamRole.Owner
+            | Some TeamRole.Admin -> true
+            | Some TeamRole.Member -> false
+            | None -> true)
+
+/// Stage 2 — the navigation-role gate (Phase 4b, typed by Phase 568).
+///
+/// Hides a module whose declared `NavRole` the caller does not hold.
+/// Distinct from stage 1's per-module `Managed` / `Accessible` filter —
+/// that targets app-domain modules; this targets the SDK's admin
+/// built-ins, whose `_sdk.` Ids are absent from `Managed` and so bypass
+/// RBAC by design.
+///
+/// Until Phase 568 the gate WAS the group label: "any module in the
+/// platform-scoped group set requires `PlatformRole.PlatformAdmin`". That
+/// coupling of a presentational name to an access decision drifted once
+/// already (the filter matched `"Platform Admin"`; every built-in
+/// declared `"Platform Management"`), so the gate is now a typed
+/// declaration and the group match survives only as
+/// `effectiveNavRole`'s documented fallback.
+///
+/// What this stage newly CAN express: "Team Management" was previously
+/// ungated here for a structural reason — the shell model carried no TEAM
+/// role, so the fold could not tell an Owner from a Member, and
+/// blanket-hiding on `PlatformRole` would have stripped team Owners of
+/// their own tools. Phase 568.B carries `ActiveTeamRole` on the model, so
+/// `NavRole.TeamOwnerAdmin` states that gate properly. GP 12 is unchanged
+/// throughout: the server-side Owner/Admin guards are the enforcement.
+let private navRoleFiltered (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (modules: 'm list) =
     modules
-    |> List.filter (fun m -> isAdmin || not (isPlatformAdminSidebarGroup (facts m).Group))
+    |> List.filter (fun m ->
+        match effectiveNavRole (facts m) with
+        | Some role -> admits inputs role
+        | None -> true)
 
 /// Stage 3 — the per-module `Visibility` gate (Phase 66 Stream B.3).
 ///
@@ -268,12 +339,12 @@ let private noActiveTeamCollapsed
 ///    stage reasons about an already-authorised set, and so that Phase
 ///    245 per-team exposure (folded into the same response server-side)
 ///    has applied before anything else looks at the list.
-/// 2. **The platform-admin role gate** — the SDK's admin built-ins carry
+/// 2. **The navigation-role gate** — the SDK's admin built-ins carry
 ///    `_sdk.` ids that are absent from `Managed` and therefore bypass
 ///    stage 1 by design; this stage is what gates them. It must run after
 ///    stage 1 so the two gates COMPOSE (pass RBAC **and**, if the module
-///    sits in a platform-scoped group, hold the role) rather than the
-///    role gate re-admitting something RBAC removed.
+///    declares a `NavRole`, hold that role) rather than the role gate
+///    re-admitting something RBAC removed.
 /// 3. **The per-module `Visibility` predicate** — module-author intent
 ///    over the resolved `SubjectKind`. Deployment-level authority
 ///    (stages 1–2) outranks module-level intent, so it runs after both:
@@ -296,7 +367,7 @@ let private noActiveTeamCollapsed
 let visible (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityInputs) (modules: 'm list) : 'm list =
     modules
     |> rbacFiltered facts inputs
-    |> adminGroupFiltered facts inputs
+    |> navRoleFiltered facts inputs
     |> kindVisible facts inputs
     |> noActiveTeamCollapsed facts inputs
 

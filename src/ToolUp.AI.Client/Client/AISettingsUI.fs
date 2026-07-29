@@ -1044,5 +1044,6 @@ let create () : ErasedModule =
     |> ToolUp.Platform.ClientModule.withId "_ai.AISettings"
     |> ToolUp.Platform.ClientModule.withView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
+    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

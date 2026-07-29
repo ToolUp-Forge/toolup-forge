@@ -204,7 +204,22 @@ type ErasedModule = {
     /// group). The structural taxonomy is module-declared; per-user
     /// ordering / pinning is a separate overlay (see
     /// `UserSidebarPreferences`).
+    ///
+    /// Phase 568 — **presentational again**. A module's access gate is
+    /// `NavRole` below; the group label only still decides access
+    /// through the deprecated fallback that covers modules predating
+    /// that field (`SidebarVisibility.effectiveNavRole`).
     Group: string option
+    /// Phase 568 — optional typed navigation-role gate. The shell hides
+    /// this module's sidebar entry from callers who do not hold the
+    /// declared role (`NavRole.PlatformAdminOnly` → platform admins;
+    /// `NavRole.TeamOwnerAdmin` → the active team's Owner/Admin, plus
+    /// platform admins). Default `None` — ungated, and for a module in a
+    /// platform-scoped sidebar group the deprecated group-name fallback
+    /// still applies, so pre-568 behaviour is preserved byte-for-byte
+    /// (GP 11). Construct via `ClientModule.withNavRole`. GP 12 — sidebar
+    /// shape only; the server-side guards are the enforcement.
+    NavRole: NavRole option
     /// Phase 567 — declared navigation area. Default `Product`; set to
     /// `Administration` via `ClientModule.withArea` to place a consumer
     /// module in the admin area under `AdminSurface = SeparateArea`. SDK
@@ -343,6 +358,9 @@ type ClientModule<'Model, 'Msg> = {
     Availability: ModuleAvailability
     /// Optional taxonomy group for sidebar grouping. See `ErasedModule.Group`.
     Group: string option
+    /// Phase 568 — typed navigation-role gate. See `ErasedModule.NavRole`;
+    /// set via `ClientModule.withNavRole`. Default `None` (ungated).
+    NavRole: NavRole option
     /// Phase 567 — declared navigation area. See `ErasedModule.Area`;
     /// set via `ClientModule.withArea`.
     Area: ModuleArea
@@ -679,10 +697,15 @@ type PlatformAdminMode =
     /// SDK built-in with custom name/icon.
     | ConfiguredPlatformAdmin of PlatformAdminConfig
     /// Deployment-provided custom module in place of the SDK default.
-    /// The custom module must declare `withGroup "Platform Admin"` (or
-    /// `withGroup "Platform Management"`) for the shell's sidebar gate
-    /// (4f.2, `ClientConfig.isPlatformAdminSidebarGroup`) to hide it
-    /// from non-admin callers.
+    /// Declare `withNavRole NavRole.PlatformAdminOnly` (Phase 568) so
+    /// the shell's sidebar gate hides it from non-admin callers — the
+    /// group label is then free to be anything.
+    ///
+    /// A module declaring `withGroup "Platform Admin"` /
+    /// `withGroup "Platform Management"` and no `NavRole` is still gated
+    /// by the deprecated group-name fallback (4f.2,
+    /// `ClientConfig.isPlatformAdminSidebarGroup`), which is removed in
+    /// the next major.
     | ExternalPlatformAdmin of ErasedModule
 
 /// Branding for the health-monitor admin module (Phase 9p). Auto-
@@ -1661,15 +1684,18 @@ module ClientConfig =
 
     /// True iff the (optional) sidebar group is platform-scoped — i.e.
     /// its entries should render only for `PlatformRole.PlatformAdmin`
-    /// callers. This is the predicate behind stage 2 of the sidebar
-    /// visibility fold (Phase 4b, commit 4f.2). Team-scoped groups
-    /// ("Team Management") return `false`: their visibility is a
-    /// team-role concern, not a platform-role one.
+    /// callers (Phase 4b, commit 4f.2).
     ///
     /// Phase 570 — the group sets and the decision now live in
     /// `SidebarVisibility`, beside the fold that consumes them and ahead
     /// of this file's Fable-only startup dependencies; this stays as the
     /// established call-site name and is behaviour-identical.
+    ///
+    /// Phase 568 — no longer the gate. Stage 2 of the fold evaluates the
+    /// module's typed `NavRole`; this predicate is what the DEPRECATED
+    /// group-name fallback consults for a module that declares none, and
+    /// it still drives the Phase 567 area derivation
+    /// (`effectiveArea`), which is presentation and stays group-keyed.
     let isPlatformAdminSidebarGroup (group: string option) : bool =
         SidebarVisibility.isPlatformAdminSidebarGroup group
 
@@ -1808,6 +1834,7 @@ module ClientModule =
             FeatureFlags = m.FeatureFlags
             Availability = m.Availability
             Group = m.Group
+            NavRole = m.NavRole
             Area = m.Area
             ClientQueryHandlers = m.ClientQueryHandlers
             ActionDecoder =
@@ -1868,6 +1895,7 @@ module ClientModule =
         FeatureFlags = []
         Availability = Always
         Group = None
+        NavRole = None
         Area = Product
         ClientQueryHandlers = []
         ActionDecoder = None
@@ -2074,9 +2102,37 @@ module ClientModule =
     /// Assign this module to a sidebar group. Modules sharing a group
     /// name are rendered together under a collapsible header in the
     /// sidebar.
+    ///
+    /// Phase 568 — the group name is a **display label**, not an access
+    /// gate. Declare gating with `withNavRole`. The one remaining
+    /// exception is the DEPRECATED fallback that keeps pre-568 consumer
+    /// modules working: a module with no `NavRole` whose group is
+    /// `"Platform Admin"` / `"Platform Management"` is still gated on
+    /// `PlatformRole.PlatformAdmin`. That fallback is removed in the next
+    /// major — a module relying on it should add
+    /// `withNavRole NavRole.PlatformAdminOnly`, after which its group may
+    /// be renamed freely.
     let withGroup (group: string) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
         m with
             Group = Some group
+    }
+
+    /// Phase 568 — declare the navigation role a caller must hold for
+    /// this module's sidebar entry to render:
+    ///
+    /// * `NavRole.PlatformAdminOnly` — platform admins only.
+    /// * `NavRole.TeamOwnerAdmin` — the active team's `Owner` / `Admin`,
+    ///   plus any platform admin; hidden from a plain `Member`, and
+    ///   rendered when the active-team role is not (yet) known.
+    ///
+    /// The typed replacement for gating on a sidebar group's display
+    /// name: with the role declared here, renaming the group changes zero
+    /// access behaviour. Undeclared modules are ungated (GP 11), so this
+    /// is purely opt-in; the shell's gate is UI shape only, and the
+    /// server-side per-route guards remain the enforcement (GP 12).
+    let withNavRole (role: NavRole) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
+        m with
+            NavRole = Some role
     }
 
     /// Phase 567 — place this module in the given navigation `area`. Only

@@ -103,6 +103,7 @@ let private erased (id: string) : ErasedModule = {
     FeatureFlags = []
     Availability = Always
     Group = Some "Work"
+    NavRole = None
     Area = ModuleArea.Product
     ClientQueryHandlers = []
     ActionDecoder = None

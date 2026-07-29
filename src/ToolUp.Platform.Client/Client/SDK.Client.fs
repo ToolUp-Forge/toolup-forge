@@ -152,6 +152,21 @@ module Client =
         /// the role is user-bound, not team-bound. Anonymous-mode
         /// deployments leave this `None` (the fetch returns false).
         PlatformRole: PlatformRole option
+        /// Phase 568 — the caller's `TeamRole` on the ACTIVE team, the
+        /// input `NavRole.TeamOwnerAdmin` is evaluated against. Loaded
+        /// once per active team (on `ActiveTeamLoaded` at boot and again
+        /// on `TeamSwitched`) by reading the team's membership list and
+        /// picking out the caller's own row — the same derivation
+        /// `TeamManagerUI` has always done module-internally, lifted to
+        /// the shell so the sidebar fold can see it.
+        ///
+        /// `None` = not known: no active team, a deployment with no team
+        /// scope (the load never fires), the membership read failed, or
+        /// it is still in flight. `NavRole.TeamOwnerAdmin` fails OPEN
+        /// against `None` — see that case's doc-comment. Team-bound, so
+        /// unlike `PlatformRole` it is cleared and re-read on every
+        /// switch.
+        ActiveTeamRole: TeamRole option
         /// Phase 567 — which navigation area the sidebar is currently
         /// showing under `ClientConfig.AdminSurface = SeparateArea`. Ignored
         /// under the default `InlineGroups`. Flipped by the area switcher
@@ -314,6 +329,12 @@ module Client =
         /// Anonymous mode, and any error path) leaves it `None` so the
         /// groups stay hidden.
         | PlatformRoleLoaded of bool
+        /// Phase 568 — the caller's own `TeamRole` on the active team
+        /// resolved (or was cleared, on a switch to no team). Drives
+        /// `NavRole.TeamOwnerAdmin` in the sidebar visibility fold.
+        /// `None` leaves the gate fail-open, exactly as before the role
+        /// was carried at all.
+        | ActiveTeamRoleLoaded of TeamRole option
         /// 0.5.5 — `UserSession.localStorage.toolup-auth-token`
         /// transitioned `None → Some`. Re-runs the boot-time API
         /// fetches (perms / configs / flags / role / team list /
@@ -528,6 +549,30 @@ module Client =
     /// `TeamSwitched`.
     let private loadPlatformRole = async { return! platformAdminApi.IsPlatformAdmin() }
 
+    /// Phase 568 — resolve the caller's own `TeamRole` on `teamId` so
+    /// the sidebar fold can evaluate `NavRole.TeamOwnerAdmin`.
+    ///
+    /// There is no "what is my role" endpoint and deliberately no new
+    /// one: `GetTeamMembers` already returns the team's membership rows
+    /// to any member (the handler's leak guard returns `[]` to a
+    /// non-member, the same shape as "no such team"), so the caller's
+    /// row is picked out locally against `UserSession.getUserId ()` —
+    /// the identical derivation `TeamManagerUI` has always performed
+    /// module-internally, now done once at the shell so every module's
+    /// nav gate reads one answer. One round-trip per active team: at
+    /// boot when `ActiveTeamLoaded` resolves, and again on
+    /// `TeamSwitched`.
+    ///
+    /// A caller with no matching row (non-member, or an id the server
+    /// records differently) yields `None`, which leaves the gate
+    /// fail-open — the pre-568 shape. GP 12: the server's Owner/Admin
+    /// guards are the enforcement; this only decides what renders.
+    let private loadActiveTeamRole (teamId: string) = async {
+        let! members = teamApi.GetTeamMembers teamId
+        let selfId = UserSession.getUserId ()
+        return members |> List.tryFind (fun m -> m.UserId = selfId) |> Option.map _.Role
+    }
+
     // ─── Phase 121 — boot-degradation plumbing ───────────────────────
 
     /// Wrap a boot loader so a thrown load surfaces as `BootLoadFailed`
@@ -536,6 +581,18 @@ module Client =
     /// distinguishable from empty data.
     let private bootLoadCmd (source: string) (loader: Async<'T>) (onLoaded: 'T -> Msg) : Cmd<Msg> =
         Cmd.OfAsync.either (fun () -> loader) () onLoaded (fun ex -> BootLoadFailed(source, ex.Message))
+
+    /// Phase 568 — re-read the caller's role on the (new) active team,
+    /// or clear it when there is no active team to have a role on. The
+    /// single place the role is refreshed, called from both arms that
+    /// can move the active team: `ActiveTeamLoaded` (boot) and
+    /// `TeamSwitched` (switch / revoke). Clearing goes through the same
+    /// message rather than an inline record update so the arm keeps one
+    /// definition of what the field means.
+    let private activeTeamRoleCmd (teamId: string option) : Cmd<Msg> =
+        match teamId with
+        | Some id -> bootLoadCmd "team-role" (withCsrf (loadActiveTeamRole id)) ActiveTeamRoleLoaded
+        | None -> Cmd.ofMsg (ActiveTeamRoleLoaded None)
 
     /// Banner row label per degradation source key.
     let private degradationLabel (source: string) =
@@ -547,6 +604,7 @@ module Client =
         | "configs" -> "Saved configuration"
         | "flags" -> "Feature flags"
         | "platform-role" -> "Platform-admin role"
+        | "team-role" -> "Team role"
         | "auth-bridge" -> "Session refresh"
         | other -> other
 
@@ -1095,6 +1153,7 @@ module Client =
             ActiveTeamId = None
             ActiveTeamLoadCompleted = false
             PlatformRole = None
+            ActiveTeamRole = None
             CurrentArea = ModuleArea.Product
             ConfigsPrefetch = Prefetch.none
             FlagsPrefetch = Prefetch.none
@@ -1404,6 +1463,13 @@ module Client =
                 let reset = {
                     model with
                         ActiveTeamId = newTeamIdOpt
+                        // Phase 568 — the role is TEAM-bound (unlike
+                        // `PlatformRole`), so it is stale the instant the
+                        // active team moves. Cleared here and re-read by
+                        // `activeTeamRoleCmd` below; the intervening
+                        // `None` fails the gate open, which is the same
+                        // shape as the pre-load window at boot.
+                        ActiveTeamRole = None
                         ModuleConfigs = Map.empty
                         PlatformConfig = Map.empty
                         ResolvedFlags = Map.empty
@@ -1425,6 +1491,7 @@ module Client =
                     bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
                     bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
                     bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
+                    activeTeamRoleCmd newTeamIdOpt
                 ]
 
             | MembershipRevoked teamId ->
@@ -1479,6 +1546,17 @@ module Client =
                 },
                 Cmd.none
 
+            | ActiveTeamRoleLoaded role ->
+                // Phase 568 — the caller's own role on the active team.
+                // Pure state: the sidebar fold reads it on the next
+                // render, so there is nothing to re-init.
+                {
+                    model with
+                        ActiveTeamRole = role
+                        Degradations = BootDegradation.remove "team-role" model.Degradations
+                },
+                Cmd.none
+
             | ActiveTeamLoaded teamId ->
                 let updated = {
                     model with
@@ -1501,7 +1579,13 @@ module Client =
                     | Prefetching
                     | Reprefetching -> updated, Cmd.none
 
-                reconciled, Cmd.batch [ reconcileCmd; maybeAutoSelectSoleTeam reconciled ]
+                // Phase 568 — this is the boot-time moment the active team
+                // becomes known, so it is where the caller's team role is
+                // first read. `TeamSwitched` covers every later move; the
+                // sole-team auto-select routes through that message, so a
+                // freshly-auto-selected team re-reads there rather than
+                // racing this call against a team id about to change.
+                reconciled, Cmd.batch [ reconcileCmd; activeTeamRoleCmd teamId; maybeAutoSelectSoleTeam reconciled ]
 
             | AuthTokenAcquired ->
                 // 0.5.5 — `UserSession.localStorage.toolup-auth-token`
@@ -1577,6 +1661,7 @@ module Client =
                     | "configs" -> bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
                     | "flags" -> bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
                     | "platform-role" -> bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
+                    | "team-role" -> activeTeamRoleCmd updated.ActiveTeamId
                     | "team-auto-select" -> maybeAutoSelectSoleTeam updated
                     | _ -> Cmd.none
 
@@ -2231,11 +2316,13 @@ module Client =
                     (fun m -> {
                         Id = m.Definition.Id
                         Group = m.Group
+                        NavRole = m.NavRole
                         Visibility = m.Visibility
                     })
                     {
                         Accessibility = model.AccessibleModules
                         PlatformRole = model.PlatformRole
+                        ActiveTeamRole = model.ActiveTeamRole
                         ShowAllModules = model.ShowAllModules
                         SubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
                         HasTeamScope = ClientConfig.hasTeamScope config
@@ -2299,8 +2386,10 @@ module Client =
                     | ModuleArea.Product ->
                         // The switcher appears only when there is an admin area
                         // to switch to. Stage 2 of `SidebarVisibility.visible`
-                        // already stripped platform-admin groups from
-                        // non-admins, so a plain user with no admin-area
+                        // already stripped every module whose declared
+                        // `NavRole` this caller does not hold (Phase 568; the
+                        // deprecated group-name fallback covers modules that
+                        // declare none), so a plain user with no admin-area
                         // modules sees no switcher (GP 12 — server enforcement
                         // is authoritative).
                         let switcher =

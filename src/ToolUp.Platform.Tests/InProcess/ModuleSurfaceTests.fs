@@ -174,6 +174,7 @@ let private referenceClient () : ErasedModule = {
     ]
     Availability = Always
     Group = Some "Analysis"
+    NavRole = None
     Area = ModuleArea.Product
     ClientQueryHandlers = []
     ActionDecoder = Some(fun _ -> None)
