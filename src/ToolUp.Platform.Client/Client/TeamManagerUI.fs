@@ -1595,3 +1595,30 @@ let create (config: TeamManagerConfig option) : ErasedModule =
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
+
+/// Phase 573.B — the administration-landing tile this built-in
+/// contributes (see `HealthMonitorUI.adminTile` for the full
+/// rationale). Team-scoped, so it carries the lightest weight of the
+/// SDK tiles and leads the grid — mirroring the rail, where the
+/// "Team Management" group sits above "Platform Management". Supply
+/// `"_sdk.admin.teams"` from an `IHomeWidgetDataProvider` to lead with
+/// a member count.
+let adminTile (config: TeamManagerConfig option) : AdminTile =
+    let name = config |> Option.map _.Name |> Option.defaultValue "Teams"
+
+    let icon =
+        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
+
+    {
+        OwnerModuleId = "_sdk.TeamManager"
+        Widget = {
+            Id = "_sdk.tile.teams"
+            Title = name
+            Icon = icon
+            Weight = 10
+            Body =
+                AdminTileBody.summary
+                    "_sdk.admin.teams"
+                    "Membership, invitations and roles for the teams you administer."
+        }
+    }

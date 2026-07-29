@@ -462,3 +462,30 @@ let create (config: ServiceStatusBoardConfig option) : ErasedModule =
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
+
+/// Phase 573.B — the administration-landing tile this built-in
+/// contributes (see `HealthMonitorUI.adminTile` for the full rationale:
+/// declared here so the landing page never names a module, added by the
+/// shell only for the SDK-owned modes, and `Title` / `Icon` following
+/// the same derivation `create` uses). Supply `"_sdk.admin.service-status"`
+/// from an `IHomeWidgetDataProvider` to lead the tile with a live
+/// headline.
+let adminTile (config: ServiceStatusBoardConfig option) : AdminTile =
+    let name = config |> Option.map _.Name |> Option.defaultValue "Service Status"
+
+    let icon =
+        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.health
+
+    {
+        OwnerModuleId = "_sdk.ServiceStatusBoard"
+        Widget = {
+            Id = "_sdk.tile.service-status"
+            Title = name
+            Icon = icon
+            Weight = 40
+            Body =
+                AdminTileBody.summary
+                    "_sdk.admin.service-status"
+                    "One snapshot across health, preflight, config drift, rate limits, the job queue and smoke tests."
+        }
+    }

@@ -1040,6 +1040,13 @@
              `Toolup.Sidebar`'s module initialiser reaches a Fable
              `importDefault` and cannot run under .NET. -->
         <Compile Include="InProcess\SidebarHidingContractTests.fs" />
+        <!-- Phase 573 — administration-landing composition: tile order,
+             the owning-module visibility filter (stated as the equation
+             with SidebarVisibility.visibleIds), the click-through target
+             and the two distinct empty states. The rendered surface
+             (AdminHome.fs) and the dressed tiles (AdminTile.fs, Icons)
+             are Fable-only, so this pins the fold they call. -->
+        <Compile Include="InProcess\AdminLandingContractTests.fs" />
         <!-- Phase 171 — Home/Overview landing-surface verification:
              count-affordance (IObjectCounter fast-path vs ListObjects
              default), prepareModules head-injection landing selection,

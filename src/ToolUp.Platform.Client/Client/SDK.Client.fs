@@ -1519,11 +1519,33 @@ module Client =
             // navigation area rather than navigating. Inert under the default
             // AdminSurface = InlineGroups (no switcher is ever rendered).
             | ModuleSelected sidebarId when sidebarId = Toolup.Sidebar.AdminAreaId ->
-                {
+                // Phase 573.A — the flip LANDS somewhere. Before this it
+                // only re-pointed the rail, leaving the content pane on
+                // whichever module was already open (a product module, as
+                // often as not). The landing module is registered only
+                // under `AdminSurface = SeparateArea`, so this is a
+                // guarded follow-up rather than an assumption: with no
+                // landing registered the flip behaves exactly as it did
+                // pre-573.
+                //
+                // Re-entering the generic `ModuleSelected` path (rather
+                // than open-coding the selection here) is deliberate —
+                // the route guard, the prefetch deferral and the
+                // area derivation all live there, and a second
+                // implementation of "select a module" is precisely the
+                // kind of drift Phases 568–571 kept closing.
+                let flipped = {
                     model with
                         CurrentArea = ModuleArea.Administration
-                },
-                Cmd.none
+                }
+
+                let landingCmd =
+                    if modules |> List.exists (fun m -> m.Definition.Id = AdminHome.moduleId) then
+                        Cmd.ofMsg (ModuleSelected AdminHome.moduleId)
+                    else
+                        Cmd.none
+
+                flipped, landingCmd
 
             | ModuleSelected sidebarId when sidebarId = Toolup.Sidebar.ProductAreaId ->
                 {
@@ -3052,12 +3074,37 @@ module Client =
         let withProcessedData =
             ProcessedDataContext.Context.Provider(model.ProcessedData, flagged)
 
+        // Phase 573.C — publish the administration tiles this caller may
+        // see. The filter is `AdminTiles.forOwners` over the ids of
+        // `visibleModules`, i.e. over the output of the SAME
+        // `SidebarVisibility.visible` fold that produced the rail (and
+        // that the route guard and the command palette run) — reusing
+        // the already-computed list rather than re-folding, so the two
+        // cannot disagree even transiently. A tile whose owning module
+        // this caller may not reach is therefore not merely hidden: it
+        // is absent for exactly the reason its module is.
+        //
+        // The landing module reads this through `AdminTileContext`
+        // rather than deriving it, because the decision needs the
+        // shell's navigation inputs and a module view has none — the
+        // same "shell distributes shared state" reason
+        // `ProcessedDataContext` exists. Empty (and free) for every
+        // deployment that contributes no tiles.
+        let withAdminTiles =
+            let tiles =
+                AdminTiles.forOwners
+                    AdminTileRegistry.facts
+                    (visibleModules |> List.map (fun m -> m.Definition.Id))
+                    (AdminTileRegistry.tiles ())
+
+            AdminTileContext.Context.Provider(tiles, withProcessedData)
+
         // Wrap in the loading-indicator provider — surfaces the configured
         // `ClientConfig.LoadingIndicator` to module views (e.g. the
         // built-in Data Manager renders it while its file list loads) via
         // the `LoadingIndicatorContext.useIndicator` hook.
         let withLoadingIndicator =
-            LoadingIndicatorContext.provider config.LoadingIndicator withProcessedData
+            LoadingIndicatorContext.provider config.LoadingIndicator withAdminTiles
 
         // Wrap in AgGridProvider — supplies AG Grid modules and optional license key
         // to all grid instances in the React tree via context.
@@ -3403,6 +3450,20 @@ module Client =
             | NoPlatformUsers -> []
             | DefaultPlatformUsers -> [ PlatformUsersUI.create None ]
 
+        // Phase 573.A — the Administration area's landing module. Only
+        // registered under `AdminSurface = SeparateArea`: under the
+        // default `InlineGroups` there are no areas, nothing to flip
+        // between, and therefore nothing to land on — the composed list
+        // is byte-for-byte pre-573 (GP 11). Listed first in `trailing`
+        // so it leads the administration partition; the sidebar
+        // additionally lifts it into its always-visible leading section
+        // (`Toolup.Sidebar.AdminHomeId`), which is what actually pins it
+        // to the top of the admin rail.
+        let adminHome =
+            match config.AdminSurface with
+            | InlineGroups -> []
+            | SeparateArea -> [ AdminHome.create () ]
+
         // Trailing order is load-bearing: the sidebar renders groups
         // in first-occurrence order across the full module list, so
         // whichever group is named first in `trailing` lands earlier in
@@ -3414,8 +3475,11 @@ module Client =
         // `SidebarPreferences.ModuleOrder` overlay still applies on
         // top for operators who reorder.
         let trailing =
+            // Phase 573 — the administration landing leads the admin
+            // partition (and is absent entirely under `InlineGroups`).
+            adminHome
             // Team Management group — appears first in trailing.
-            teamManager
+            @ teamManager
             @ teamConfig
             @ webhookAdmin
             @ permissionsAdmin
@@ -3443,6 +3507,64 @@ module Client =
         ModuleIdentity.ensureUnique "client module composition" (moduleIdentityTable composed)
 
         composed
+
+    /// Phase 573.B — the administration-landing tiles the SDK's own
+    /// built-ins contribute, each gated on the SAME `ClientConfig` mode
+    /// that decides whether its module is registered at all (the four
+    /// matches mirror `prepareModules`' injection blocks line for line,
+    /// so the two can be read side by side).
+    ///
+    /// Only the SDK-owned modes contribute. `No…` contributes nothing —
+    /// the module does not exist, so neither does its tile — and an
+    /// `External…` replacement contributes nothing either: it is a
+    /// different module with a different id, and a tile inheriting this
+    /// one's click-through would navigate to something unregistered. A
+    /// replacement wires its own tile through
+    /// `ClientConfig.Handlers.AdminTileContributors`, the same seam a
+    /// consumer module uses.
+    ///
+    /// Note this gate is belt AND braces: a tile is rendered only when
+    /// the caller may navigate to its owning module
+    /// (`AdminTiles.visible`), so a mode-off built-in has no tile on the
+    /// landing page even if something contributed one anyway.
+    let private builtInAdminTiles (config: ClientConfig) : AdminTile list =
+        let teams =
+            match config.TeamManager with
+            | DefaultTeamManager -> [ TeamManagerUI.adminTile None ]
+            | ConfiguredTeamManager cfg -> [ TeamManagerUI.adminTile (Some cfg) ]
+            | NoTeamManager
+            | ExternalTeamManager _ -> []
+
+        let usage =
+            match config.UsageDashboard with
+            | DefaultUsageDashboard -> [ UsageDashboard.adminTile None ]
+            | ConfiguredUsageDashboard cfg -> [ UsageDashboard.adminTile (Some cfg) ]
+            | NoUsageDashboard
+            | ExternalUsageDashboard _ -> []
+
+        let health =
+            match config.HealthMonitor with
+            | DefaultHealthMonitor -> [ HealthMonitorUI.adminTile None ]
+            | ConfiguredHealthMonitor cfg -> [ HealthMonitorUI.adminTile (Some cfg) ]
+            | NoHealthMonitor
+            | ExternalHealthMonitor _ -> []
+
+        let serviceStatus =
+            match config.ServiceStatusBoard with
+            | DefaultServiceStatusBoard -> [ ServiceStatusBoardUI.adminTile None ]
+            | ConfiguredServiceStatusBoard cfg -> [ ServiceStatusBoardUI.adminTile (Some cfg) ]
+            | NoServiceStatusBoard
+            | ExternalServiceStatusBoard _ -> []
+
+        teams @ usage @ health @ serviceStatus
+
+    /// The SDK built-ins as an `IAdminTileContributor`, so they enter the
+    /// registry through the same seam a consumer module does — the
+    /// registry has one kind of input, not two.
+    let private builtInAdminTileContributor (config: ClientConfig) : IAdminTileContributor =
+        { new IAdminTileContributor with
+            member _.Tiles() = builtInAdminTiles config
+        }
 
     /// Aggregate every module's `ClientQueryHandlers` into the per-module
     /// registry of the shared `ClientModuleQueryBus`. Modules are keyed by
@@ -3815,6 +3937,10 @@ module Client =
         DataSourceCredentialUIRegistry.setHandlers config.Handlers.DataSourceCredentialHandlers
         // Phase 217 — collect module-contributed Home widgets once.
         HomeWidgetRegistry.setContributors config.Handlers.HomeWidgetContributors
+        // Phase 573 — the same, for administration-landing tiles: the
+        // SDK's own mode-gated built-in tiles first (so they lead the
+        // grid at equal weight), then whatever the consumer wired.
+        AdminTileRegistry.setContributors (builtInAdminTileContributor config :: config.Handlers.AdminTileContributors)
         Toolup.NarrativeCommit.setHandler config.Handlers.NarrativeCommitHandler
 
         // Phase 13a — validate explicit composition against declared

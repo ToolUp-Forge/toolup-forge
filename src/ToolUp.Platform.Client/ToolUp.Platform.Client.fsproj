@@ -97,6 +97,15 @@
              .NET-testability reason that file documents
              (InProcess/CommandPaletteContractTests.fs). -->
         <Compile Include="Client\CommandPaletteNav.fs" />
+        <!-- Phase 573 — the administration-landing tile fold: which
+             contributed tiles a caller sees (SidebarVisibility.visibleIds
+             over each tile's owning module), their order, and which of
+             the two empty states applies. Same position + same reason as
+             its two neighbours above — ahead of SDK.ClientTypes.fs, no
+             ReactElement anywhere in it, so the decision is reachable
+             from the .NET harness
+             (InProcess/AdminLandingContractTests.fs). -->
+        <Compile Include="Client\AdminTiles.fs" />
         <Compile Include="Client\SDK.ClientTypes.fs" />
         <!-- Phase 55 — `withGroup` requirement preflight. Pure decision +
              failwithf wrapper used by Client.boot to refuse deployments
@@ -265,6 +274,12 @@
              Consumed by TeamManagerUI's "Invite a member" form; degrades
              to a plain text input when no IUserDirectory companion is
              registered server-side. -->
+        <!-- Phase 573 — administration-tile registry, the shell→landing
+             React context, and the default compact tile body. Must
+             precede the admin built-ins below: each of them declares the
+             tile it contributes beside its own `create`, so the landing
+             page never names a module (GP 9). -->
+        <Compile Include="Client\AdminTile.fs" />
         <Compile Include="Client\UserDirectoryTypeahead.fs" />
         <Compile Include="Client\TeamManagerUI.fs" />
         <Compile Include="Client\InviteAccept.fs" />
@@ -281,6 +296,10 @@
         <Compile Include="Client\HomeWidget.fs" />
         <!-- Phase 171 — Home / Overview landing module. -->
         <Compile Include="Client\Home.fs" />
+        <!-- Phase 573 — the Administration area's landing module: the
+             target of the Phase 567 area flip, rendered from whatever
+             AdminTileRegistry holds and the shell has filtered. -->
+        <Compile Include="Client\AdminHome.fs" />
         <!-- Parameterized SDK built-in no-active-team landing module. -->
         <Compile Include="Client\NoActiveTeamLandingUI.fs" />
         <Compile Include="Client\DataSourceCredentialUI.fs" />

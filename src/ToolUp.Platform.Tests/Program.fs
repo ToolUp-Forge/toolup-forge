@@ -776,6 +776,16 @@ let allTests =
         SidebarHidingContractTests.pinHideRuleTests
         SidebarHidingContractTests.legacyBlobTests
         SidebarHidingContractTests.paletteParityTests
+        // Phase 573 — the administration landing: tile composition +
+        // order, the owning-module visibility filter (and the equation
+        // pinning it to `SidebarVisibility.visibleIds`), click-through
+        // target, and the two distinct empty states. Four separate
+        // bindings; all must be listed here or they run as dormant
+        // `[<Tests>]` values nobody executes.
+        AdminLandingContractTests.compositionTests
+        AdminLandingContractTests.roleFilterTests
+        AdminLandingContractTests.clickThroughTests
+        AdminLandingContractTests.emptyStateTests
         // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
         // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
         // but constructs the SDK's built-in *client-side* UI modules

@@ -111,6 +111,15 @@ let HiddenKey = "_hidden"
 [<Literal>]
 let HomeId = "_sdk.home"
 
+/// Phase 573 — the Administration area's landing module id (see
+/// `AdminHome.create`). Lifted into the SAME leading section as `HomeId`
+/// below, which is what makes it first in the admin rail without anyone
+/// maintaining a sort order. At most one of the two is ever in the rail
+/// set at a time: under `AdminSurface = SeparateArea` the shell renders
+/// one area's modules, and this module belongs to the other one.
+[<Literal>]
+let AdminHomeId = "_sdk.admin-home"
+
 /// Phase 567 — reserved sidebar ids for the two-surface area switcher.
 /// These flow through the normal `onSelect` (`ModuleSelected`) path; the
 /// shell intercepts them to flip `Model.CurrentArea` rather than navigate.
@@ -133,14 +142,15 @@ let ProductAreaId = "_area.product"
 let private toolupForgeLogoUrl: string =
     importDefault "../icons/toolup-forge-dark.png"
 
-/// Ids that can never be hidden, whatever the persisted blob says: Home
-/// (the shell's guaranteed landing) and the two area-switcher rows (the
-/// only way back out of the administration area). A hand-edited
-/// localStorage blob naming one of these would otherwise strand the user
-/// with no route home and no visible way to restore it — the hidden-items
-/// section itself lives in the rail these ids anchor.
+/// Ids that can never be hidden, whatever the persisted blob says: the
+/// two landing modules (the shell's guaranteed landing in each area) and
+/// the two area-switcher rows (the only way back out of the
+/// administration area). A hand-edited localStorage blob naming one of
+/// these would otherwise strand the user with no route home and no
+/// visible way to restore it — the hidden-items section itself lives in
+/// the rail these ids anchor.
 let private isHideableId (id: string) =
-    id <> HomeId && id <> AdminAreaId && id <> ProductAreaId
+    id <> HomeId && id <> AdminHomeId && id <> AdminAreaId && id <> ProductAreaId
 
 /// Map an inbound page view to a rendered page, resolving its pinned
 /// overlay by the page's composite id.
@@ -239,23 +249,34 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
                 Pages = m.Pages |> List.filter (fun p -> not (hiddenSet.Contains p.Id))
         })
 
-    // Home is special — always-visible, never grouped, pinned, or
-    // collapsed. Lift it into a dedicated leading section before any
-    // bucketing so it can't fall into `_other` or hide behind a
-    // collapsed group. Everything else feeds the buckets below.
-    let homeSection =
-        rail
-        |> List.tryFind (fun m -> m.Id = HomeId)
-        |> Option.map (fun home -> {
-            Key = HomeKey
-            Title = None
-            IsCollapsed = false
-            IsPinnedSection = false
-            Modules = [ toSidebarModule pinnedSet expandedModules home ]
-        })
-        |> Option.toList
+    // A landing module is special — always-visible, never grouped,
+    // pinned, or collapsed. Lift it into a dedicated leading section
+    // before any bucketing so it can't fall into `_other` or hide behind
+    // a collapsed group. Everything else feeds the buckets below.
+    //
+    // Phase 573 — there are two landings now, one per navigation area,
+    // and they use the same section: under `AdminSurface = SeparateArea`
+    // the shell hands this fold one area's modules at a time, so the
+    // list below has at most one member; under `InlineGroups` the admin
+    // landing is never registered at all. Filtering (rather than
+    // `tryFind`-ing one id) keeps that an observation about the caller
+    // rather than an invariant this fold would break if it changed.
+    let isLandingId (id: string) = id = HomeId || id = AdminHomeId
 
-    let groupable = rail |> List.filter (fun m -> m.Id <> HomeId)
+    let homeSection =
+        match rail |> List.filter (fun m -> isLandingId m.Id) with
+        | [] -> []
+        | landings -> [
+            {
+                Key = HomeKey
+                Title = None
+                IsCollapsed = false
+                IsPinnedSection = false
+                Modules = landings |> List.map (toSidebarModule pinnedSet expandedModules)
+            }
+          ]
+
+    let groupable = rail |> List.filter (fun m -> not (isLandingId m.Id))
     let byId = groupable |> List.map (fun m -> m.Id, m) |> Map.ofList
 
     // Composite-page index — maps each multi-page module's page id to

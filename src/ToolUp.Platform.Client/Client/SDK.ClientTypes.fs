@@ -889,6 +889,54 @@ type IHomeWidgetContributor =
     /// `Weight`, and cached.
     abstract Widgets: unit -> HomeWidget list
 
+// ─── Module-contributed administration tiles (Phase 573) ─────────
+//
+// The administration-area analogue of the Phase 217 Home-widget seam,
+// and deliberately built ON it rather than beside it: an `AdminTile`
+// IS a `HomeWidget` (same id / title / icon / weight / context-taking
+// body, same `HomeWidgetContext.Data` bag, populated by the same
+// server-side `IHomeWidgetDataProvider`) plus the one fact a landing
+// tile needs and a Home widget does not — the id of the module it
+// fronts.
+//
+// That owner id is what makes the landing page role-correct without
+// naming a module (GP 9): the shell admits a tile iff the caller may
+// navigate to its owner (`AdminTiles.visible`, one call to the
+// canonical `SidebarVisibility` decision), and a tile click navigates
+// there. So a deployment with `NoHealthMonitor` has no health module,
+// therefore no health tile — the landing page never learns either name.
+//
+// Default-off by absence (GP 13): no contributor and no tile-
+// contributing built-in ⇒ the landing surface renders its designed
+// empty state, and under the default `AdminSurface = InlineGroups`
+// there is no landing surface at all.
+
+/// One module-contributed administration-landing tile. `Widget` is the
+/// Phase 217 payload verbatim — a tile author writes exactly what a
+/// Home-widget author writes — and `OwnerModuleId` is the module the
+/// tile fronts: the click-through target, and the id whose navigation
+/// decision gates the tile.
+type AdminTile = {
+    /// `ModuleDefinition.Id` of the module this tile fronts. The tile
+    /// renders only when the caller may navigate to that module, and a
+    /// click on the tile navigates to it.
+    OwnerModuleId: string
+    /// The tile's presentation + body, in the Phase 217 `HomeWidget`
+    /// shape. `Weight` orders tiles on the landing grid.
+    Widget: HomeWidget
+}
+
+/// Client-side erased-module seam (GP 9) for administration tiles —
+/// the `IHomeWidgetContributor` twin. A module (or an SDK built-in)
+/// exports a value of this type declaring the tiles it contributes to
+/// the administration landing surface; consumers add contributors to
+/// `ClientConfig.Handlers.AdminTileContributors` at compose time.
+type IAdminTileContributor =
+    /// The tiles this contributor surfaces on the administration
+    /// landing. Called once at boot; the result is flattened across
+    /// contributors and ordered by `Widget.Weight`.
+    abstract Tiles: unit -> AdminTile list
+
 /// Branding for the data-ingestion admin module (Phase 10b). Auto-
 /// injected in any non-Anonymous mode unless `NoDataIngestionAdmin`.
 type DataIngestionAdminConfig = { Name: string; Icon: ReactElement }
@@ -1107,6 +1155,17 @@ type ClientHandlerRegistry = {
     /// Phase 171 (GP 13).
     HomeWidgetContributors: IHomeWidgetContributor list
 
+    /// Phase 573 — module-contributed administration-landing tiles.
+    /// Each contributor declares the tiles it surfaces on the
+    /// administration area's landing page, each naming the module it
+    /// fronts; the SDK never names a contributing module (GP 9). The
+    /// SDK's own tile-contributing built-ins are added to this list at
+    /// boot, gated on their own `ClientConfig` modes. Default: empty —
+    /// with no contributor the landing renders its designed empty
+    /// state, and under `AdminSurface = InlineGroups` there is no
+    /// landing surface at all (GP 13).
+    AdminTileContributors: IAdminTileContributor list
+
     /// "Save to Knowledge Base" broker. `Some` when the
     /// KnowledgeBase companion is wired in. `NarrativeRenderer`
     /// reads this to decide whether to show the Save-to-KB button.
@@ -1138,6 +1197,7 @@ module ClientHandlerRegistry =
         AuthUIHandlers = []
         DataSourceCredentialHandlers = []
         HomeWidgetContributors = []
+        AdminTileContributors = []
         NarrativeCommitHandler = None
         SignOutHandler = None
     }

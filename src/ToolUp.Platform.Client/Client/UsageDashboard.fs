@@ -269,3 +269,28 @@ let create (config: UsageDashboardConfig option) : ErasedModule =
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
+
+/// Phase 573.B — the administration-landing tile this built-in
+/// contributes (see `HealthMonitorUI.adminTile` for the full
+/// rationale). Supply `"_sdk.admin.usage"` from an
+/// `IHomeWidgetDataProvider` to lead the tile with the period's
+/// headline figure.
+let adminTile (config: UsageDashboardConfig option) : AdminTile =
+    let name = config |> Option.map _.Name |> Option.defaultValue "Usage"
+
+    let icon =
+        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.usage
+
+    {
+        OwnerModuleId = "_sdk.UsageDashboard"
+        Widget = {
+            Id = "_sdk.tile.usage"
+            Title = name
+            Icon = icon
+            Weight = 20
+            Body =
+                AdminTileBody.summary
+                    "_sdk.admin.usage"
+                    "Per-scope consumption and cost telemetry for the current billing period."
+        }
+    }
