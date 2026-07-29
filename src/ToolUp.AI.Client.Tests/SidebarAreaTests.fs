@@ -14,7 +14,8 @@ module ToolUp.AI.Client.Tests.SidebarAreaTests
 // group (`isAdminSidebarGroup`) — so the SDK's admin built-ins move to
 // the admin area with NO registration change (GP 9). The switcher appears
 // only when the current (product) rail has an admin area to switch to;
-// because the shell's `adminGroupFiltered` already strips platform-scoped
+// because stage 2 of `SidebarVisibility.visible` (Phase 570 — the shell's
+// former inline `adminGroupFiltered`) already strips platform-scoped
 // groups from non-admins, a plain user's admin set is empty and no
 // switcher renders (GP 12 — server enforcement is authoritative). The
 // default `InlineGroups` never consults any of this (byte-identical to

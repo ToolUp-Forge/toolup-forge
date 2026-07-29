@@ -5,10 +5,15 @@ module ToolUp.AI.Client.Tests.SidebarAdminGroupGateTests
 
 // ─── Sidebar admin-group role gate (Phase 4b / commit 4f.2) ──────────
 //
-// Pins `ClientConfig.isPlatformAdminSidebarGroup` — the predicate
-// behind the shell's sidebar role filter (`adminGroupFiltered` in
-// `SDK.Client.fs`) — and its relationship to the pre-existing
-// `isAdminSidebarGroup` union used by the no-active-team landing gate.
+// Pins `ClientConfig.isPlatformAdminSidebarGroup` — the predicate behind
+// stage 2 of `SidebarVisibility.visible` (Phase 570; the shell's former
+// inline `adminGroupFiltered` in `SDK.Client.fs`) — and its relationship
+// to the pre-existing `isAdminSidebarGroup` union used by stage 4's
+// no-active-team landing collapse. Since Phase 570 both predicates are
+// defined in `SidebarVisibility` and re-exported here unchanged; this
+// pack keeps exercising the `ClientConfig` names because those are the
+// established call sites, and the .NET-tier matrix pack
+// (`SidebarVisibilityContractTests`) pins the same sets directly.
 //
 // Regression context: the filter originally matched only the literal
 // group `Some "Platform Admin"`, while the SDK's own admin built-ins

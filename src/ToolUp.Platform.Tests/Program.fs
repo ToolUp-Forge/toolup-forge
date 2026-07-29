@@ -744,6 +744,14 @@ let allTests =
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
         BuiltInModuleSurfaceTests.tests
+        // Phase 570 — sidebar visibility matrix over the pure
+        // `SidebarVisibility.visible` fold (role × mode × exposure), plus
+        // the filter-composition-order pins and the admin group sets.
+        // Three separate `[<Tests>]` bindings that `runTestsWithCLIArgs`
+        // would otherwise leave dormant.
+        SidebarVisibilityContractTests.tests
+        SidebarVisibilityContractTests.orderingTests
+        SidebarVisibilityContractTests.groupSetTests
         // NOTE — BuiltInModuleSurfaceTests.visibilityTests is deliberately NOT
         // wired here. It is orphaned (carries `[<Tests>]`, never in `allTests`)
         // but constructs the SDK's built-in *client-side* UI modules

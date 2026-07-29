@@ -79,6 +79,16 @@
              AgGrid / Icons / ClientConfig.defaults startup deps and stays
              .NET-testable; the Feliz factory is NoActiveTeamLandingUI.fs. -->
         <Compile Include="Client\NoActiveTeamLanding.fs" />
+        <!-- Phase 570 — the pure sidebar visibility fold (RBAC → admin
+             role gate → per-module Visibility → no-team collapse) plus
+             the admin sidebar-group sets ClientConfig re-exports. Same
+             position + same reason as NoActiveTeamLanding.fs above: ahead
+             of SDK.ClientTypes so it carries no AgGrid / Icons /
+             ClientConfig.defaults startup deps and stays .NET-testable
+             (InProcess/SidebarVisibilityContractTests.fs). Generic over a
+             `'m -> SidebarModuleFacts` projection precisely because
+             ErasedModule is declared below it. -->
+        <Compile Include="Client\SidebarVisibility.fs" />
         <Compile Include="Client\SDK.ClientTypes.fs" />
         <!-- Phase 55 — `withGroup` requirement preflight. Pure decision +
              failwithf wrapper used by Client.boot to refuse deployments

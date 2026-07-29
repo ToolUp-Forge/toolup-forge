@@ -1659,52 +1659,27 @@ module ClientConfig =
             | SurfaceProfile.Team _ -> true
             | _ -> false)
 
-    /// Platform-scoped admin sidebar groups — visible ONLY to callers
-    /// holding `PlatformRole.PlatformAdmin`. Mirrors the SDK built-ins'
-    /// `withGroup` labels (PlatformAdminUI / HealthMonitorUI /
-    /// ServiceStatusBoardUI / DataSubjectRequestAdminUI /
-    /// TenantLifecycleAdminUI / PlatformUsersUI → "Platform Management")
-    /// plus the consumer-convention "Platform Admin" group that the
-    /// Phase 4b role-gate has recognised since commit 4f.2.
-    let private platformAdminSidebarGroups: Set<string> =
-        Set.ofList [ "Platform Admin"; "Platform Management" ]
-
-    /// Team-scoped admin sidebar group(s) — the management surfaces a
-    /// team Owner/Admin legitimately uses (TeamManagerUI /
-    /// PermissionsAdminUI / DataIngestionUI / TeamConfigUI /
-    /// WebhookAdminUI / UsageDashboard → "Team Management"). NOT gated
-    /// on `PlatformRole` — hiding these from non-platform-admins would
-    /// strip team Owners of their own management tools.
-    let private teamAdminSidebarGroups: Set<string> = Set.ofList [ "Team Management" ]
-
-    /// Union of the platform-scoped and team-scoped admin groups — the
-    /// set kept visible for a `PlatformRole.PlatformAdmin` caller under
-    /// the `NoActiveTeamLandingModuleId` no-team gate, so a team-less
-    /// admin still reaches the team-assignment tools (Team Manager lives
-    /// in "Team Management"). A module with no group is never in the
-    /// admin set.
-    let private adminSidebarGroups: Set<string> =
-        Set.union platformAdminSidebarGroups teamAdminSidebarGroups
-
     /// True iff the (optional) sidebar group is platform-scoped — i.e.
     /// its entries should render only for `PlatformRole.PlatformAdmin`
-    /// callers. This is the predicate behind the shell's sidebar
-    /// role filter (Phase 4b, commit 4f.2). Team-scoped groups
+    /// callers. This is the predicate behind stage 2 of the sidebar
+    /// visibility fold (Phase 4b, commit 4f.2). Team-scoped groups
     /// ("Team Management") return `false`: their visibility is a
     /// team-role concern, not a platform-role one.
+    ///
+    /// Phase 570 — the group sets and the decision now live in
+    /// `SidebarVisibility`, beside the fold that consumes them and ahead
+    /// of this file's Fable-only startup dependencies; this stays as the
+    /// established call-site name and is behaviour-identical.
     let isPlatformAdminSidebarGroup (group: string option) : bool =
-        match group with
-        | Some g -> platformAdminSidebarGroups.Contains g
-        | None -> false
+        SidebarVisibility.isPlatformAdminSidebarGroup group
 
     /// True iff the (optional) sidebar group is an admin / management
     /// group (platform- OR team-scoped) kept visible to a team-less
-    /// platform admin under the no-team gate. See `adminSidebarGroups`
-    /// and `NoActiveTeamLandingModuleId`.
+    /// platform admin under the no-team gate. See
+    /// `SidebarVisibility.isAdminSidebarGroup` and
+    /// `NoActiveTeamLandingModuleId`.
     let isAdminSidebarGroup (group: string option) : bool =
-        match group with
-        | Some g -> adminSidebarGroups.Contains g
-        | None -> false
+        SidebarVisibility.isAdminSidebarGroup group
 
     /// Phase 567 — a module's *effective* navigation area. A module is in
     /// the `Administration` area if it declares it (`ClientModule.withArea

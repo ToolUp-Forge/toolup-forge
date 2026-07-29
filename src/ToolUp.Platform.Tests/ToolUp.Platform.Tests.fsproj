@@ -1006,6 +1006,15 @@
              declared `teamScoped` per design §3.3's "Per-endpoint
              overrides" caveat on the `PlatformApi` row. -->
         <Compile Include="InProcess\BuiltInModuleSurfaceTests.fs" />
+        <!-- Phase 570 — sidebar visibility matrix contract pack. Drives
+             the pure `SidebarVisibility.visible` fold extracted from the
+             shell's `sidebarSections` binding: subject (anonymous /
+             Member / team Owner-Admin / platform admin) × mode
+             (Anonymous / Individual / Team, with and without an active
+             team) × Phase 245 exposure (exposed / hidden / not-yet-
+             loaded), asserting the exact visible-module-id list, plus the
+             filter-composition-order pins and the admin group sets. -->
+        <Compile Include="InProcess\SidebarVisibilityContractTests.fs" />
         <!-- Phase 171 — Home/Overview landing-surface verification:
              count-affordance (IObjectCounter fast-path vs ListObjects
              default), prepareModules head-injection landing selection,

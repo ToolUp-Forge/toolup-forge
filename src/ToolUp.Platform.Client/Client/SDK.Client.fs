@@ -2202,129 +2202,46 @@ module Client =
             let hasDataForType dt =
                 model.ProcessedData |> List.exists (fun e -> e.DataType = dt && e.Error.IsNone)
 
-            // Filter sidebar by the server's accessible-modules list
-            // when it's been loaded. Not a security boundary — the
-            // server's per-module permission guard is the enforcement.
-            // Pre-load (None): show everything so the sidebar doesn't
-            // flicker empty while the fetch is in flight.
+            // Phase 570.A — the four-filter visibility fold (RBAC
+            // accessibility → the Phase 4b platform-admin role gate →
+            // the Phase 66 B.3 per-module `Visibility` predicate → the
+            // no-active-team landing collapse) was lifted out of this
+            // let-binding into `SidebarVisibility.visible`, which is its
+            // single definition site. **The filter order and the reason
+            // for it are documented there, on `SidebarVisibility.visible`
+            // — read that doc-comment, not the fragments this comment
+            // replaced.** The prose that used to sit beside each inline
+            // `List.filter` here had drifted from the code it described
+            // (the role gate matched a group label no built-in declared),
+            // which is why the decision now lives somewhere a contract
+            // pack can pin it: `ToolUp.Platform.Tests`'
+            // `InProcess/SidebarVisibilityContractTests.fs` asserts the
+            // visible-id set across role × mode × exposure.
             //
-            // The filter operates on module Id (stable permission key),
-            // not Name (display). Modules whose Id is in `Managed` but
-            // not in `Accessible` are hidden. Modules whose Id is NOT
-            // in `Managed` — SDK-built-ins (FileManager, TeamManager)
-            // and debug-only modules — bypass the filter and stay
-            // visible regardless of RBAC config.
-            let rbacFiltered =
-                let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
-
-                match model.AccessibleModules with
-                | Some _ when isAdmin && model.ShowAllModules ->
-                    // Phase 245 — admin "show all modules" escape: reveal
-                    // every managed module, including ones the active team
-                    // hides, for triage/configuration. The per-route guard
-                    // still governs what the admin can actually do.
-                    modules
-                | Some response ->
-                    let managed = Set.ofList response.Managed
-                    let accessible = Set.ofList response.Accessible
-
-                    modules
-                    |> List.filter (fun m ->
-                        not (managed.Contains m.Definition.Id) || accessible.Contains m.Definition.Id)
-                | None -> modules
-
-            // Phase 4b — hide the platform-scoped admin sidebar groups
-            // ("Platform Admin" / "Platform Management" — see
-            // `ClientConfig.isPlatformAdminSidebarGroup`) from callers
-            // without `PlatformRole.PlatformAdmin`. Group label is the
-            // contract: any module declaring `withGroup` with one of
-            // those labels is gated by the role. Distinct from RBAC's
-            // per-module `Managed` / `Accessible` filter — that filter
-            // targets app-domain modules; the platform-admin gate
-            // targets SDK-built-in admin modules whose Ids start with
-            // `_sdk.` and so bypass RBAC by design. Both gates compose:
-            // the user must pass RBAC AND (if the module is in a
-            // platform-scoped group) hold the role.
-            //
-            // "Team Management" is deliberately NOT gated here: its
-            // write surfaces are for team Owners/Admins, a TEAM role the
-            // shell model doesn't carry (`TeamInfo` has no role field;
-            // TeamManagerUI derives the caller's role module-internally
-            // via `GetTeamMembers`). Blanket-hiding the group on
-            // `PlatformRole` would strip team Owners of Team Manager /
-            // Permissions admin, so it stays visible to every
-            // authenticated caller and the server-side Owner/Admin
-            // guards remain the enforcement (GP 12 — UI shape only).
-            let adminGroupFiltered =
-                let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
-
-                rbacFiltered
-                |> List.filter (fun m -> isAdmin || not (ClientConfig.isPlatformAdminSidebarGroup m.Group))
-
-            // Phase 66 Stream B.3 — per-module `Visibility` gate over the
-            // resolved `SubjectKind`. Structurally replaces the
-            // deployment-wide sidebar blanket-hide Phase 55 introduced as
-            // a partial fix in `PlatformApiHandler.fs:497`: modules now
-            // own their per-subject visibility, so an Anonymous-mode
-            // deployment shows the (visible-to-anonymous) modules the
-            // module-author intended rather than the empty-sidebar
-            // failure mode that motivated the `Mode = Individual`
-            // workaround.
-            //
-            // Phase 66 Stream B.8 — derivation now reads from
-            // `config.Surfaces` via `ClientConfig.resolveSubjectKind`
-            // (the canonical projection that also drives storage
-            // selection in `UserSession` and the sign-in UI mount in
-            // `AuthUIProvider`). Single-surface deployments collapse
-            // to the same `SubjectKind` the pre-B.8 `config.Mode`
-            // derivation produced: `Surfaces.anonymous` → `AnonymousKind`;
-            // `Surfaces.individual` / `Surfaces.trial` → `UserKind`;
-            // `Surfaces.team` / `Surfaces.multiTeam` with `ActiveTeamId
-            // = Some _` → `TeamMemberKind` (else `UserKind`); single-
-            // shape `claimBearer` → `ClaimBearerKind`. Mixed-mode
-            // deployments fall back to the most-authenticated shape
-            // present (per-request `Subject` resolution catches up
-            // server-side, the client mirrors on the next render).
-            //
-            // GP 12 — this is UI shape only; server-side
-            // `SurfaceEnforcementMiddleware` is the authoritative gate.
-            //
-            // Default `Visibility.visibleToAll` is byte-identical to
-            // pre-B.3: modules declaring nothing pass every kind.
-            let resolvedSubjectKind: SubjectKind =
-                ClientConfig.resolveSubjectKind model.ActiveTeamId config
-
-            let kindVisibleModules =
-                adminGroupFiltered |> List.filter (fun m -> m.Visibility resolvedSubjectKind)
-
-            // No-active-team gate (opt-in via `ClientConfig.NoActiveTeamLandingModuleId`
-            // for a custom module, or `ClientConfig.NoActiveTeamLanding` for the
-            // SDK built-in landing — `effectiveNoActiveTeamLandingId` unifies both).
-            // When the deployment declares a `Team` surface and the caller
-            // has no active team (resolved `SubjectKind = UserKind` — the
-            // post-sign-in / pre-team-pick window), collapse the sidebar to
-            // just the named landing module so a freshly-signed-in user sees
-            // only the "you have no team yet" surface. Platform admins
-            // additionally keep their admin / management groups
-            // (`isAdminSidebarGroup`) so they can reach the team-assignment
-            // tools and unblock themselves. Inert (no filtering) once an
-            // active team upgrades the subject to `TeamMemberKind`, on
-            // non-team surfaces, and for every deployment that leaves the
-            // field `None`. The header team switcher is rendered separately,
-            // so a multi-team member with an unpicked team still gets the
-            // affordance to select one. Structurally a refined, opt-in,
-            // admin-aware revival of the Phase 55 blanket-hide; GP 12 — UI
-            // shape only, the server's `[<TenantScoped>]` gate is authoritative.
+            // The three `ClientConfig` reads stay here — `SubjectKind`
+            // resolution (B.8's canonical projection over
+            // `config.Surfaces`, shared with `UserSession` storage
+            // selection and the `AuthUIProvider` sign-in mount), the
+            // team-scope predicate, and the unified landing-module id —
+            // because `ClientConfig` itself is Fable-only at runtime.
+            // Passing their resolved values keeps the fold pure data.
             let visibleModules =
-                match ClientConfig.effectiveNoActiveTeamLandingId config with
-                | Some landingId when ClientConfig.hasTeamScope config && model.ActiveTeamId.IsNone ->
-                    let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
-
-                    kindVisibleModules
-                    |> List.filter (fun m ->
-                        m.Definition.Id = landingId
-                        || (isAdmin && ClientConfig.isAdminSidebarGroup m.Group))
-                | _ -> kindVisibleModules
+                modules
+                |> SidebarVisibility.visible
+                    (fun m -> {
+                        Id = m.Definition.Id
+                        Group = m.Group
+                        Visibility = m.Visibility
+                    })
+                    {
+                        Accessibility = model.AccessibleModules
+                        PlatformRole = model.PlatformRole
+                        ShowAllModules = model.ShowAllModules
+                        SubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
+                        HasTeamScope = ClientConfig.hasTeamScope config
+                        ActiveTeamId = model.ActiveTeamId
+                        NoActiveTeamLandingId = ClientConfig.effectiveNoActiveTeamLandingId config
+                    }
 
             // One sidebar *view* per module. A single-page (or legacy)
             // module carries no `Pages` and renders as a leaf whose
@@ -2346,15 +2263,16 @@ module Client =
             // untouched (byte-identical to pre-567).
             //
             // 567.E compose-order: the area split runs LAST, over
-            // `visibleModules` — i.e. AFTER RBAC (`rbacFiltered`), the
-            // platform-admin role gate (`adminGroupFiltered`), the per-subject
-            // `Visibility` gate (`kindVisibleModules`), and the no-active-team
-            // landing collapse (`visibleModules`). So the admin partition only
-            // ever contains modules the caller may already see: a non-admin has
-            // had the platform-scoped groups stripped upstream (empty admin
-            // partition ⇒ no switcher), and Phase 245 per-team exposure /
-            // `ShowAllModules` have already applied. No double-hiding: the split
-            // re-buckets an already-authorised set, it does not re-filter.
+            // `visibleModules` — i.e. AFTER all four stages of
+            // `SidebarVisibility.visible` (RBAC → platform-admin role gate →
+            // per-subject `Visibility` → no-active-team landing collapse; the
+            // canonical order + rationale is the doc-comment on that function).
+            // So the admin partition only ever contains modules the caller may
+            // already see: a non-admin has had the platform-scoped groups
+            // stripped upstream (empty admin partition ⇒ no switcher), and
+            // Phase 245 per-team exposure / `ShowAllModules` have already
+            // applied. No double-hiding: the split re-buckets an
+            // already-authorised set, it does not re-filter.
             let areaFilteredModules, switcherViews =
                 match config.AdminSurface with
                 | InlineGroups -> visibleModules, []
@@ -2380,10 +2298,11 @@ module Client =
                         ]
                     | ModuleArea.Product ->
                         // The switcher appears only when there is an admin area
-                        // to switch to. `adminGroupFiltered` already stripped
-                        // platform-admin groups from non-admins, so a plain
-                        // user with no admin-area modules sees no switcher
-                        // (GP 12 — server enforcement is authoritative).
+                        // to switch to. Stage 2 of `SidebarVisibility.visible`
+                        // already stripped platform-admin groups from
+                        // non-admins, so a plain user with no admin-area
+                        // modules sees no switcher (GP 12 — server enforcement
+                        // is authoritative).
                         let switcher =
                             if List.isEmpty adminModules then
                                 []
