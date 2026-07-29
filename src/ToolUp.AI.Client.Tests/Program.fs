@@ -36,6 +36,11 @@ let allTests =
         // Hidden items reveal section, and the legacy-blob load path
         // (Platform.Client).
         SidebarHidingTests.tests
+        // Phase 573 follow-up — shell program-lifetime effects: the
+        // outer-composer contract (withSidePanel must re-attach the
+        // shell's background subscriptions; the admin-tile click-through
+        // silent-no-op regression).
+        ShellLifetimeEffectsTests.tests
     ]
 
 [<EntryPoint>]

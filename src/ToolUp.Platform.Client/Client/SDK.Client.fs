@@ -4012,57 +4012,25 @@ module Client =
         // composition without dev tools.
         log.Info(bootSummary config modules)
 
-    /// Build the shell Elmish Program without running it. Outer composition
-    /// (e.g. AIClientConfig.withAIAssistant) consumes this to layer
-    /// additional state, messages, subscriptions, and view chrome on top.
-    let program (config: ClientConfig) (modules: ErasedModule list) : Program<unit, Model, Msg, ReactElement> =
-        boot config modules
-
-        let allModules = prepareModules config modules
-        let queryBus = buildQueryBus allModules
-
-        // AuthUI gating is driven by ClientConfig.AuthUI — default
-        // NoAuthUI is pass-through, so DEBUG and RELEASE behave the
-        // same unless the app opts into a sign-in mode. Apps that
-        // want the old "no sign-in in DEBUG, sign-in in RELEASE"
-        // behaviour set AuthUI conditionally in their own Client.fs.
-        // Structured Elmish error reporter (ToolUp.Elmish 0.4.0 primitive).
-        // Routes runtime exceptions through `ClientConfig.OnElmishError`
-        // when set; otherwise falls back to the categorised default
-        // logger so devtools still surface them. Replaces the previous
-        // unstructured `(string * exn) -> unit` `onError` shape.
-        let elmishLog = Logger.forCategory "client.elmish"
-
-        let elmishReporter (ctx: ErrorContext) =
-            match config.OnElmishError with
-            | Some sink ->
-                try
-                    sink ctx
-                with ex ->
-                    // Defensive: a throwing sink mustn't crash the reporter.
-                    elmishLog.Error("OnElmishError sink raised", Some ex)
-            | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
-
-        // 0.4.1 — `withConsoleTrace` is [<Obsolete>]; replaced by an
-        // update interceptor that logs each transition through the
-        // category logger. Same shape (initial state / message /
-        // updated state) but now grep-able by category.
-        let traceLog = Logger.forCategory "client.elmish.trace"
-
-        let traceUpdate (msg: Msg) (model: Model) =
-            let nextModel, nextCmd = update config queryBus allModules msg model
-            traceLog.Debug(sprintf "msg=%A activeModule=%s" msg nextModel.ActiveModuleId)
-            nextModel, nextCmd
-
-        let prog =
-            Program.mkProgram
-                (init config queryBus allModules)
-                (if config.EnableElmishConsoleTrace then
-                     traceUpdate
-                 else
-                     update config queryBus allModules)
-                (fun model dispatch -> viewWithSignIn config allModules emptyChrome model dispatch)
-
+    /// The shell's boot-time background subscriptions — the
+    /// NavigationRequest bus (deep links, Home tool cards, admin-landing
+    /// tiles, AI navigate tools), the cross-module client event bus, the
+    /// SSE notification stream, the auth-token-acquired watcher, and the
+    /// auth-bridge health observer — as lifetime-aware `EffectHandle`s.
+    ///
+    /// `Client.program` attaches every one of these (via
+    /// `withShellLifetimeEffects` below). **So must any outer composer
+    /// that rebuilds the Program from the shell's `init`/`update`/`view`
+    /// pieces** (e.g. ToolUp.AI's `withSidePanel`), mapping each handle
+    /// into its outer Msg with `EffectHandle.map` — Elmish does not expose
+    /// a built Program's internals post-construction, so a composer that
+    /// stitches the shell's pieces into an outer Program starts from an
+    /// EMPTY effect list. Dropping them silently severs every seam listed
+    /// above: the failure mode is not an error but a bus with no
+    /// subscriber (`NavigationRequest.request` is a documented no-op with
+    /// zero subscribers — an admin-landing tile click simply does
+    /// nothing).
+    let programLifetimeEffects (config: ClientConfig) : EffectHandle<Msg> list =
         // 0.4.1 — boot-time NavigationRequest + NotificationClient
         // subscriptions registered as lifetime-aware `EffectHandle`s.
         // The runtime disposes them on `IDispatcher.Terminate()` (which
@@ -4233,13 +4201,82 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        [
+            navigationEffect
+            moduleEventsEffect
+            notificationsEffect
+            authTokenAcquiredEffect
+            bridgeHealthEffect
+        ]
+
+    /// Attach every shell program-lifetime effect to `prog`, lifting each
+    /// into the program's message type via `wrap`. `Client.program` calls
+    /// this with `id`; an outer composer wrapping the shell calls it with
+    /// its shell-message constructor (e.g. `ShellMsg`). One definition
+    /// site, so the shell and every composer attach the same set and a
+    /// new shell effect cannot be silently missing from a composed app.
+    let withShellLifetimeEffects
+        (config: ClientConfig)
+        (wrap: Msg -> 'msg)
+        (prog: Program<'arg, 'model, 'msg, 'view>)
+        : Program<'arg, 'model, 'msg, 'view> =
+        (prog, programLifetimeEffects config)
+        ||> List.fold (fun p effect -> p |> Program.withEffect (EffectHandle.map wrap effect))
+
+    /// Build the shell Elmish Program without running it. Outer composition
+    /// (e.g. AIClientConfig.withAIAssistant) consumes this to layer
+    /// additional state, messages, subscriptions, and view chrome on top.
+    let program (config: ClientConfig) (modules: ErasedModule list) : Program<unit, Model, Msg, ReactElement> =
+        boot config modules
+
+        let allModules = prepareModules config modules
+        let queryBus = buildQueryBus allModules
+
+        // AuthUI gating is driven by ClientConfig.AuthUI — default
+        // NoAuthUI is pass-through, so DEBUG and RELEASE behave the
+        // same unless the app opts into a sign-in mode. Apps that
+        // want the old "no sign-in in DEBUG, sign-in in RELEASE"
+        // behaviour set AuthUI conditionally in their own Client.fs.
+        // Structured Elmish error reporter (ToolUp.Elmish 0.4.0 primitive).
+        // Routes runtime exceptions through `ClientConfig.OnElmishError`
+        // when set; otherwise falls back to the categorised default
+        // logger so devtools still surface them. Replaces the previous
+        // unstructured `(string * exn) -> unit` `onError` shape.
+        let elmishLog = Logger.forCategory "client.elmish"
+
+        let elmishReporter (ctx: ErrorContext) =
+            match config.OnElmishError with
+            | Some sink ->
+                try
+                    sink ctx
+                with ex ->
+                    // Defensive: a throwing sink mustn't crash the reporter.
+                    elmishLog.Error("OnElmishError sink raised", Some ex)
+            | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
+
+        // 0.4.1 — `withConsoleTrace` is [<Obsolete>]; replaced by an
+        // update interceptor that logs each transition through the
+        // category logger. Same shape (initial state / message /
+        // updated state) but now grep-able by category.
+        let traceLog = Logger.forCategory "client.elmish.trace"
+
+        let traceUpdate (msg: Msg) (model: Model) =
+            let nextModel, nextCmd = update config queryBus allModules msg model
+            traceLog.Debug(sprintf "msg=%A activeModule=%s" msg nextModel.ActiveModuleId)
+            nextModel, nextCmd
+
+        let prog =
+            Program.mkProgram
+                (init config queryBus allModules)
+                (if config.EnableElmishConsoleTrace then
+                     traceUpdate
+                 else
+                     update config queryBus allModules)
+                (fun model dispatch -> viewWithSignIn config allModules emptyChrome model dispatch)
+
         prog
         |> Program.withErrorReporter elmishReporter
-        |> Program.withEffect navigationEffect
-        |> Program.withEffect moduleEventsEffect
-        |> Program.withEffect notificationsEffect
-        |> Program.withEffect authTokenAcquiredEffect
-        |> Program.withEffect bridgeHealthEffect
+        |> withShellLifetimeEffects config id
 
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
     /// the full shell bootstrap (the dispatcher has rendered its own program).

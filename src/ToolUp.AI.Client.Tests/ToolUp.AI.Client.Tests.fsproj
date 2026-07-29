@@ -84,6 +84,13 @@
              The pure preference algebra is pinned .NET-side in
              ToolUp.Platform.Tests/InProcess/SidebarHidingContractTests.fs. -->
         <Compile Include="SidebarHidingTests.fs" />
+        <!-- Shell program-lifetime effects: the outer-composer contract
+             (programLifetimeEffects / withShellLifetimeEffects /
+             EffectHandle.map) — pins that an outer Program composer
+             (AIClientConfig.withSidePanel) re-attaches the shell's
+             background subscriptions, the admin-tile click-through
+             regression class. -->
+        <Compile Include="ShellLifetimeEffectsTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

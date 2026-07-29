@@ -129,6 +129,14 @@ module Program =
             effects = effect :: program.effects
     }
 
+    /// The ids of every registered lifetime-aware effect, in attach order.
+    /// Read-only diagnostic accessor (the record itself stays private) —
+    /// lets a composition test pin that an outer composer re-attached the
+    /// inner program's effects rather than silently dropping them, which
+    /// is otherwise invisible until a bus fires with no subscriber.
+    let effectIds (program: Program<'arg, 'model, 'msg, 'view>) : string list =
+        program.effects |> List.rev |> List.map _.Id
+
     /// Trace every message and model transition to the platform console.
     /// Kept as an `[<Obsolete>]` shim for source-compat with consumers
     /// migrating from upstream Elmish; prefer composing

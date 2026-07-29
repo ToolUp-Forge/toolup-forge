@@ -72,6 +72,20 @@ module EffectHandle =
         Lifetime = EffectLifetime.Manual
     }
 
+    /// Lift an effect into an outer message type — the `Cmd.map`
+    /// analogue for effect handles. An outer-program composer (a side
+    /// panel wrapping the shell, chrome layered over an inner program)
+    /// rebuilds its `Program` around the inner one's pieces, so any
+    /// inner `EffectHandle<'inner>` it re-attaches needs its dispatch
+    /// lifted into the outer `'msg`. `Id` and `Lifetime` are preserved:
+    /// the effect is the same subscription with the same disposal
+    /// story, only the message envelope changes.
+    let map (wrap: 'a -> 'msg) (handle: EffectHandle<'a>) : EffectHandle<'msg> = {
+        Id = handle.Id
+        Start = fun dispatch -> handle.Start(wrap >> dispatch)
+        Lifetime = handle.Lifetime
+    }
+
     /// Lift a `Dispatch -> unit` (the non-disposable shape) into an
     /// `EffectHandle` by giving it an empty disposer. Use when the
     /// underlying subscription truly lives for the page lifetime and

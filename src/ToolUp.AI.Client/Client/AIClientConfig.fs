@@ -823,9 +823,24 @@ let withSidePanel
 
     let progWithReporter = prog |> Program.withErrorReporter elmishReporter
 
+    // The shell's own program-lifetime effects — the NavigationRequest
+    // bus (admin-landing tiles, Home tool cards, deep links, the
+    // client-resident navigate AI tool), the cross-module event bus,
+    // the notification stream, the auth-token-acquired watcher, and
+    // the auth-bridge health observer — must ride this outer Program
+    // too. This composer builds the Program from the shell's
+    // init/update/view pieces, so nothing else attaches them: without
+    // this fold every one of those seams is silently severed (the bus
+    // has no subscriber, so e.g. an admin-landing tile click is a
+    // no-op with no error). One shared definition site
+    // (`Client.programLifetimeEffects`) keeps this composer and
+    // `Client.program` attaching the same set.
+    let progWithShellEffects =
+        progWithReporter |> Client.withShellLifetimeEffects config ShellMsg
+
     match sseEffect with
-    | Some effect -> progWithReporter |> Program.withEffect effect
-    | None -> progWithReporter
+    | Some effect -> progWithShellEffects |> Program.withEffect effect
+    | None -> progWithShellEffects
 
 /// Build the Elmish `Program` with the AI assistant module prepended,
 /// the side-panel state machine wrapped around the shell, the SSE
