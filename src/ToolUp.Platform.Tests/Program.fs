@@ -752,6 +752,7 @@ let allTests =
         SidebarVisibilityContractTests.tests
         SidebarVisibilityContractTests.orderingTests
         SidebarVisibilityContractTests.groupSetTests
+        SidebarVisibilityContractTests.navRoleTests
         // Phase 569 — the same decision in its reasoned form: which gate
         // refused a deep-linked route, and the equation pinning the
         // sidebar and the router to one predicate.
